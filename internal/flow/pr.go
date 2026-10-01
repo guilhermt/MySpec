@@ -823,7 +823,8 @@ func (s *Service) markPRCommit(ctx context.Context, id string, key session.Key, 
 
 // startReview opens the conversation that reviews the pull request of a task
 // and hands it the prompt of the pass it is about to write, with what the app
-// read from GitHub before it.
+// read from GitHub before it. The pass it asks is a structured one: its row is
+// created here and dropped when the start fails.
 func (s *Service) startReview(
 	ctx context.Context, t task.Task, wt worktree.Worktree, run task.PRRun, checks *gh.PRChecks,
 ) {
@@ -837,8 +838,15 @@ func (s *Service) startReview(
 	// The pass that opens the conversation is a pass asked for: a report the
 	// task already has decides nothing until this one writes its own.
 	s.setPassAsked(t.ID, cmp.Or(s.headOf(ctx, wt), passAskedWithoutHead))
+	if _, err := s.tasks.AskPRPass(ctx, t.ID, pass); err != nil {
+		s.setPassAsked(t.ID, "")
+		s.log.Error("record pr review pass failed", "task", t.ID, "pass", pass, "error", err)
+		return
+	}
+	s.setUnreadable(t.ID, "")
 	if err := s.sessions.Start(ctx, prReviewInfo(t, wt, base, repo, run.PR, pass, checks), false); err != nil {
 		s.setPassAsked(t.ID, "")
+		s.unaskPass(ctx, t.ID, pass)
 		// The session records a process that fails in the conversation itself.
 		s.log.Error("start pr review session failed", "task", t.ID, "error", err)
 		return
@@ -880,7 +888,8 @@ func (s *Service) finishReview(ctx context.Context, t task.Task, run task.PRRun,
 }
 
 // askPass asks the review session for a new pass over the commit the approval
-// produced.
+// produced. The pass it asks is a structured one: its row is created before
+// the send and dropped when the send fails.
 func (s *Service) askPass(
 	ctx context.Context, t task.Task, wt worktree.Worktree, run task.PRRun, key session.Key, head string,
 	checks *gh.PRChecks,
@@ -901,15 +910,29 @@ func (s *Service) askPass(
 	// One commit asks for one pass, however many evaluations it takes for the
 	// report of that pass to land.
 	s.setPassAsked(t.ID, head)
+	if _, err := s.tasks.AskPRPass(ctx, t.ID, pass); err != nil {
+		s.setPassAsked(t.ID, "")
+		s.log.Error("record pr review pass failed", "task", t.ID, "pass", pass, "error", err)
+		return
+	}
+	s.setUnreadable(t.ID, "")
 	s.markChecks(ctx, key, pass, checks)
 	app := session.AppMessage{Text: message, Kind: session.AppPRPass, Pass: pass}
 	if err := s.sessions.SendFromApp(ctx, key, app); err != nil {
 		s.setPassAsked(t.ID, "")
+		s.unaskPass(ctx, t.ID, pass)
 		s.log.Error("send pr review prompt failed", "task", t.ID, "error", err)
 		return
 	}
 	s.recordBaseline(ctx, t.ID, checks)
 	s.log.Info("pr review pass asked", "task", t.ID, "pass", pass)
+}
+
+// unaskPass drops the row of a pass that was never asked.
+func (s *Service) unaskPass(ctx context.Context, id string, pass int) {
+	if err := s.tasks.UnaskPRPass(ctx, id, pass); err != nil {
+		s.log.Error("drop pr review pass failed", "task", id, "pass", pass, "error", err)
+	}
 }
 
 // markChecks records in the conversation of the review the checks a pass is

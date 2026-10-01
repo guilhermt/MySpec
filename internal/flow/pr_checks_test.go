@@ -165,7 +165,7 @@ func TestAReadingWithoutChecksRightAfterAPushIsReadAgain(t *testing.T) {
 
 		f := newFixture(t)
 		underReview(t, f)
-		reportsWritten(f, reports(1, true))
+		reportsWritten(t, f, reports(1, true))
 		f.waitPRRun(t, "the pull request to be closed", func(run task.PRRun) bool { return run.Status == task.PRDone })
 		f.gh.setPR("task-1", withChecks(noChecks()))
 		before := f.gh.viewCount("task-1")
@@ -175,7 +175,7 @@ func TestAReadingWithoutChecksRightAfterAPushIsReadAgain(t *testing.T) {
 		}
 		waitFor(t, "the session of the second pass", func() bool {
 			info, ok := f.sessions.info(reviewKeyOf)
-			return ok && info.ReviewPath == "/data/task-1/pr/review-2.md"
+			return ok && info.ReviewPath == f.reviewPath(2)
 		})
 		if got := f.gh.viewCount("task-1") - before; got != 1 {
 			t.Errorf("readings = %d, want 1", got)
@@ -188,8 +188,9 @@ func TestThePassAfterACommitWaitsForTheChecksOfTheNewHead(t *testing.T) {
 
 	f := newFixture(t)
 	underReview(t, f)
-	reportsWritten(f, reports(1, false))
+	reportsWritten(t, f, reports(1, false))
 	f.waitPRRun(t, "the report of the first pass", func(run task.PRRun) bool { return run.ReportedPass == 1 })
+	applied(t, f, 1)
 	f.reviews.setSnapshot(staged(3, 3))
 	f.sessions.goIdle("task-1")
 	if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
@@ -206,7 +207,7 @@ func TestThePassAfterACommitWaitsForTheChecksOfTheNewHead(t *testing.T) {
 
 	f.waitPRRun(t, "the wait for the checks", func(run task.PRRun) bool { return run.Status == task.PRWaitingChecks })
 	f.waitRead(t, before)
-	second := reviewPrompt("/data/task-1/pr/review-2.md")
+	second := reviewPrompt(f.reviewPath(2))
 	if f.sessions.sentCount(second) != 0 {
 		t.Error("the second pass was asked for while a check was pending")
 	}
@@ -238,7 +239,7 @@ func TestReviewAgainWaitsForTheChecks(t *testing.T) {
 
 			f := newFixture(t)
 			underReview(t, f)
-			reportsWritten(f, reports(1, c.clean))
+			reportsWritten(t, f, reports(1, c.clean))
 			f.waitPRRun(t, "the report of the first pass", func(run task.PRRun) bool {
 				return run.ReportedPass == 1 && run.Status == c.from
 			})
@@ -259,7 +260,7 @@ func TestReviewAgainWaitsForTheChecks(t *testing.T) {
 			f.gh.setPR("task-1", withChecks(passedChecks()))
 			f.pollUntil(t, "the session of the second pass", func() bool {
 				info, ok := f.sessions.info(reviewKeyOf)
-				return ok && f.reviewOpen() && info.ReviewPath == "/data/task-1/pr/review-2.md"
+				return ok && f.reviewOpen() && info.ReviewPath == f.reviewPath(2)
 			})
 		})
 	}
@@ -270,7 +271,7 @@ func TestReviewAgainSaysWhenTheWaitIsNotRecorded(t *testing.T) {
 
 	f := newFixture(t)
 	underReview(t, f)
-	reportsWritten(f, reports(1, true))
+	reportsWritten(t, f, reports(1, true))
 	f.waitPRRun(t, "the pull request to be closed", func(run task.PRRun) bool { return run.Status == task.PRDone })
 
 	errDisk := errors.New("disk full")
@@ -420,8 +421,9 @@ func TestAPassRecordsTheTroubleOfTheReadingItStartsFrom(t *testing.T) {
 
 		f := newFixture(t)
 		underReview(t, f)
-		reportsWritten(f, reports(1, false))
+		reportsWritten(t, f, reports(1, false))
 		f.waitPRRun(t, "the report of the first pass", func(run task.PRRun) bool { return run.ReportedPass == 1 })
+		applied(t, f, 1)
 		f.reviews.setSnapshot(staged(3, 3))
 		f.sessions.goIdle("task-1")
 		if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
@@ -438,7 +440,7 @@ func TestAPassRecordsTheTroubleOfTheReadingItStartsFrom(t *testing.T) {
 		f.waitPRRun(t, "the baseline of the second pass", func(run task.PRRun) bool {
 			return run.TroubleBaseline.Equal(want)
 		})
-		if f.sessions.sentCount(reviewPrompt("/data/task-1/pr/review-2.md")) != 1 {
+		if f.sessions.sentCount(reviewPrompt(f.reviewPath(2))) != 1 {
 			t.Error("the second pass was not asked for")
 		}
 		marked := f.sessions.marked(session.MarkerChecksRead)

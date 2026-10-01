@@ -981,3 +981,174 @@ func TestTearingDownThePullRequestForgetsItsStructuredPasses(t *testing.T) {
 		t.Errorf("passes = %+v, want them cleared with the pull request", passes)
 	}
 }
+
+// passRows is how many times the fake of the tasks was asked to record the
+// start of a pass, and to forget it.
+func passRows(f *fixture) (asked, unasked int) {
+	for _, call := range f.tasks.recorded() {
+		switch {
+		case strings.HasPrefix(call, "askPRPass:"):
+			asked++
+		case strings.HasPrefix(call, "unaskPRPass:"):
+			unasked++
+		}
+	}
+	return asked, unasked
+}
+
+func TestTheReviewOfATaskStartsWithAStructuredPass(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	underReview(t, f)
+
+	passes := f.tasks.PRPasses("task-1")
+	if len(passes) != 1 || passes[0].Pass != 1 || passes[0].Recorded {
+		t.Errorf("passes = %+v, want the first pass asked for and not recorded", passes)
+	}
+	info, _ := f.sessions.info(reviewKeyOf)
+	if info.ReviewPath != f.reviewPath(1) {
+		t.Errorf("review path = %q, want %q", info.ReviewPath, f.reviewPath(1))
+	}
+}
+
+func TestAReviewThatCannotStartLeavesNoPassBehind(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	tk := f.tasks.add("task-1", task.StagePR, prArtifacts(task.PRArtifacts{}))
+	f.tasks.useDir("task-1", t.TempDir())
+	f.worktrees.seed(tk)
+	f.worktrees.setStatus(git.Status{Head: startCommit})
+	f.tasks.setPRRun("task-1", task.PRRun{Status: task.PRReviewing, PR: openPR()})
+	f.gh.setPR("task-1", samePR)
+	f.sessions.failWith(errStart)
+
+	f.service.Check("task-1")
+	waitFor(t, "the pass to be forgotten", func() bool {
+		asked, unasked := passRows(f)
+		return asked == 1 && unasked == 1
+	})
+	if passes := f.tasks.PRPasses("task-1"); len(passes) != 0 {
+		t.Errorf("passes = %+v, want none", passes)
+	}
+}
+
+func TestThePassAfterACommitIsStructuredAndForgottenWhenItCannotBeSent(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	underReview(t, f)
+	reportsWritten(t, f, reports(1, false))
+	f.waitPRRun(t, "the report of the first pass", func(run task.PRRun) bool { return run.ReportedPass == 1 })
+	applied(t, f, 1)
+	f.reviews.setSnapshot(staged(3, 3))
+	f.sessions.goIdle("task-1")
+	if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
+		t.Fatalf("ApprovePR() = %v, want nil", err)
+	}
+
+	// The agent committed, but the app cannot reach it to ask for the pass.
+	f.sessions.failWith(errStart)
+	f.worktrees.setStatus(git.Status{Head: commitSHA})
+	f.reviews.setSnapshot(review.Snapshot{Head: commitSHA})
+	f.sessions.goIdle("task-1")
+	f.service.Check("task-1")
+
+	waitFor(t, "the second pass to be forgotten", func() bool {
+		asked, unasked := passRows(f)
+		return asked == 2 && unasked >= 1
+	})
+	passes := f.tasks.PRPasses("task-1")
+	if len(passes) != 1 || passes[0].Pass != 1 {
+		t.Errorf("passes = %+v, want only the first pass", passes)
+	}
+	if f.sessions.sentCount(reviewPrompt(f.reviewPath(2))) != 0 {
+		t.Error("the second pass was sent, want the send to have failed")
+	}
+}
+
+func TestThePassAfterACommitOfAPassInTextIsStructured(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	inPR(f, "task-1", plan(), task.PRReviewing)
+	f.tasks.useDir("task-1", t.TempDir())
+	f.tasks.setArtifacts("task-1", prArtifacts(task.PRArtifacts{Reports: reports(1, false)}))
+	f.tasks.setPRRun("task-1", task.PRRun{
+		Status: task.PRReviewing, PR: openPR(), ReportedPass: 1, ReviewedCommit: startCommit,
+	})
+	f.worktrees.setStatus(git.Status{Head: startCommit})
+	f.sessions.setSummary("task-1", session.Summary{
+		Stage: session.PRReviewStage, Status: session.StatusWaiting, Idle: true,
+	})
+	f.gh.setPR("task-1", samePR)
+	f.service.Sync(t.Context())
+	f.reviews.setSnapshot(staged(3, 3))
+	f.sessions.goIdle("task-1")
+	if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
+		t.Fatalf("ApprovePR() = %v, want nil", err)
+	}
+
+	f.worktrees.setStatus(git.Status{Head: commitSHA})
+	f.reviews.setSnapshot(review.Snapshot{Head: commitSHA})
+	f.sessions.goIdle("task-1")
+	f.service.Check("task-1")
+
+	waitFor(t, "the prompt of the second pass", func() bool {
+		return f.sessions.sentCount(reviewPrompt(f.reviewPath(2))) > 0
+	})
+	passes := f.tasks.PRPasses("task-1")
+	if len(passes) != 1 || passes[0].Pass != 2 || passes[0].Recorded {
+		t.Errorf("passes = %+v, want the second pass asked for in the structured format", passes)
+	}
+}
+
+func TestReviewingAgainAfterAnUnreadableReportReplacesThePassNotRecorded(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	structured(t, f, askedPass(1))
+	f.tasks.setPRRun("task-1", task.PRRun{Status: task.PRReviewing, PR: openPR(), ReviewedCommit: startCommit})
+	f.service.Sync(t.Context())
+	writeReport(t, f, 1, "---\nstatus: maybe\n---\n\nThe summary.\n")
+	f.service.Check("task-1")
+	waitFor(t, "the reason the report can't be read", func() bool { return f.prState(t, "task-1").Unreadable != "" })
+	f.gh.setPR("task-1", withChecks(noChecks()))
+
+	if err := f.service.ReviewAgain(t.Context(), "task-1"); err != nil {
+		t.Fatalf("ReviewAgain() = %v, want nil", err)
+	}
+
+	waitFor(t, "the pass to be asked for again", func() bool {
+		asked, _ := passRows(f)
+		return asked == 1 && f.prState(t, "task-1").Unreadable == ""
+	})
+	passes := f.tasks.PRPasses("task-1")
+	if len(passes) != 1 || passes[0].Pass != 1 || passes[0].Recorded {
+		t.Errorf("passes = %+v, want the first pass replaced and not recorded", passes)
+	}
+}
+
+func TestAPassWhoseReportIsRecordedIsNotAskedAgain(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	inPR(f, "task-1", plan(), task.PRReviewing)
+	f.tasks.setPRRun("task-1", task.PRRun{Status: task.PRReviewing, PR: openPR()})
+	f.tasks.setPRPasses("task-1", recordedPass(1, reportedFinding(1)))
+	f.worktrees.setStatus(git.Status{Head: startCommit})
+	f.gh.setPR("task-1", samePR)
+	f.service.Sync(t.Context())
+
+	waitFor(t, "the ask to be refused", func() bool {
+		asked, _ := passRows(f)
+		return asked > 0
+	})
+	if got := f.sessions.recorded(); slices.Contains(got, "start:task-1:pr_review:restarted=false") {
+		t.Errorf("session calls = %q, want no review started over a recorded pass", got)
+	}
+	if passes := f.tasks.PRPasses("task-1"); len(passes) != 1 || !passes[0].Recorded {
+		t.Errorf("passes = %+v, want the recorded pass untouched", passes)
+	}
+}

@@ -981,9 +981,9 @@ func TestRenderOfAStructuredTaskSaysNothingAboutOneShot(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Render() = %v, want nil", err)
 			}
-			// The review of a pull request ends with the GitHub sections, which
-			// other tests cover.
-			got, _, _ = strings.Cut(got, "\n\n## GitHub checks and conflicts")
+			// The review of a pull request ends with the sections of the
+			// findings and of GitHub, which other tests cover.
+			got, _, _ = strings.Cut(got, "\n\n## Findings format")
 			if got != test.want {
 				t.Errorf("Render() = %q, want %q", got, test.want)
 			}
@@ -1179,7 +1179,7 @@ func TestRenderAppendsTheSectionsOfAReviewOfAPullRequestWithoutATaskInOrder(t *t
 	}
 }
 
-func TestTheReportFormatOfAnExternalReviewAsksForTheTitleOfEachFinding(t *testing.T) {
+func TestTheReportFormatOfAReviewAsksForTheTitleOfEachFinding(t *testing.T) {
 	t.Parallel()
 
 	const heading = "### 1 · <a short title of what is wrong, one line, no Markdown>"
@@ -1201,8 +1201,8 @@ func TestTheReportFormatOfAnExternalReviewAsksForTheTitleOfEachFinding(t *testin
 	if err != nil {
 		t.Fatalf("Render() of a task = %v, want nil", err)
 	}
-	if strings.Contains(task, heading) {
-		t.Errorf("Render() of a task = %q, want no format of findings", task)
+	if !strings.Contains(task, heading) {
+		t.Errorf("Render() of a task = %q, want the example of a finding to carry %q", task, heading)
 	}
 }
 
@@ -1336,20 +1336,46 @@ func TestRenderGivesTheReviewOfThePullRequestOfATaskTheGitHubSectionsAndTheInstr
 		t.Fatalf("Render() = %v, want nil", err)
 	}
 
-	if want := "review it\n\n## GitHub checks and conflicts\n\n"; !strings.HasPrefix(got, want) {
-		t.Errorf("Render() = %q, want it to start with %q", got, want)
-	}
+	assertInOrder(t, got, "## Findings format", "## Applying", "## GitHub checks and conflicts", "## GitHub status", "## Review instructions")
 	if want := noReadingEnding + "\n\n## Review instructions\n\nNever change a published migration."; !strings.HasSuffix(got, want) {
 		t.Errorf("Render() = %q, want it to end with %q", got, want)
 	}
-	for _, unwanted := range []string{"## Pull request without a task", "## Findings format", "## Publishing", "## Applying"} {
+	for _, unwanted := range []string{"## Pull request without a task", "## Publishing"} {
 		if strings.Contains(got, unwanted) {
 			t.Errorf("Render() = %q, want no section %q in the review of a task", got, unwanted)
 		}
 	}
 }
 
-func TestRenderAppendsOnlyTheGitHubSectionsToAReviewWithoutInstructions(t *testing.T) {
+func TestRenderGivesTheReviewOfAOneShotTaskItsNoteBeforeTheFindingsFormat(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StagePRReview, "review it")
+
+	got, err := prompts.Render(dataDir, prompts.StagePRReview, oneShotVars())
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+	assertInOrder(t, got, "## One-Shot task", "## Findings format", "## Applying", "## GitHub checks and conflicts")
+}
+
+// assertInOrder fails unless each of the sections appears in got, after the
+// one before it.
+func assertInOrder(t *testing.T, got string, sections ...string) {
+	t.Helper()
+
+	from := 0
+	for _, section := range sections {
+		index := strings.Index(got[from:], "\n\n"+section+"\n\n")
+		if index < 0 {
+			t.Fatalf("Render() = %q, want the section %q after position %d", got, section, from)
+		}
+		from += index + len(section)
+	}
+}
+
+func TestRenderAppendsOnlyTheFindingsAndGitHubSectionsToAReviewWithoutInstructions(t *testing.T) {
 	t.Parallel()
 
 	dataDir := t.TempDir()
@@ -1359,14 +1385,12 @@ func TestRenderAppendsOnlyTheGitHubSectionsToAReviewWithoutInstructions(t *testi
 	if err != nil {
 		t.Fatalf("Render() = %v, want nil", err)
 	}
-	if want := "review it\n\n## GitHub checks and conflicts\n\n"; !strings.HasPrefix(got, want) {
-		t.Errorf("Render() = %q, want it to start with %q", got, want)
-	}
+	assertInOrder(t, got, "## Findings format", "## Applying", "## GitHub checks and conflicts", "## GitHub status")
 	if !strings.HasSuffix(got, noReadingEnding) {
 		t.Errorf("Render() = %q, want it to end with %q", got, noReadingEnding)
 	}
-	if count := strings.Count(got, "\n\n## "); count != 2 {
-		t.Errorf("Render() has %d sections, want the 2 GitHub sections", count)
+	if count := strings.Count(got, "\n\n## "); count != 4 {
+		t.Errorf("Render() has %d sections, want the 4 of the findings and of GitHub", count)
 	}
 }
 

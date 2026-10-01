@@ -475,7 +475,7 @@ type Vars struct {
 	// specification; "" for the review of the pull request of a task.
 	ContextPath  string
 	External     bool   // PR review only: the pull request comes from no task of the product
-	Publish      bool   // external only: the findings are published on GitHub, not applied
+	Publish      bool   // PR review: the findings are published on GitHub, not applied; a task never publishes
 	Instructions string // PR review only: the fixed review instructions of the repository
 	// Checks is what the app read from GitHub about the head of the pull
 	// request before the pass: its checks and whether it merges clean. PR
@@ -630,20 +630,22 @@ func discussionSections(vars Vars) string {
 
 // reviewSections are the sections the app appends to the prompt of the review
 // of a pull request: what the review is about when the pull request comes from
-// no task, then, always, what to do about the checks and conflicts and what
-// the app read of them on GitHub, and the instructions the pass runs with.
+// no task, then, always, the format of the report and what happens to its
+// findings (applied, or published when the pull request comes from no task),
+// what to do about the checks and conflicts and what the app read of them on
+// GitHub, and the instructions the pass runs with.
 // Like the others, they depend on no placeholder, so an edited prompt receives
 // them too.
 func reviewSections(vars Vars) string {
 	var b strings.Builder
 	if vars.External {
 		b.WriteString(externalHeading + reviewNote(externalNote, vars))
-		b.WriteString(findingsFormatHeading + reviewNote(findingsFormatNote, vars))
-		if vars.Publish {
-			b.WriteString(publishHeading + reviewNote(publishNote, vars))
-		} else {
-			b.WriteString(applyHeading + reviewNote(applyNote, vars))
-		}
+	}
+	b.WriteString(findingsFormatHeading + reviewNote(findingsFormatNote, vars))
+	if vars.Publish {
+		b.WriteString(publishHeading + reviewNote(publishNote, vars))
+	} else {
+		b.WriteString(applyHeading + reviewNote(applyNote, vars))
 	}
 	b.WriteString(checksHeading + reviewNote(checksNote, vars))
 	b.WriteString(githubStatusHeading + reviewNote(PRChecksSection(vars.Checks, vars.MergeBase), vars))
