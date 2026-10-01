@@ -17,6 +17,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewmode"
@@ -114,7 +115,8 @@ type memTasks struct {
 	artifacts map[string]task.Artifacts
 	runs      map[string][]task.StepRun
 	prs       map[string]task.PRRun
-	seeded    map[string]task.Models // the choices a test made for a task, by id
+	passes    map[string][]task.PRPass // the structured passes of the review, by task, in order of pass
+	seeded    map[string]task.Models   // the choices a test made for a task, by id
 	// seededModes are the review modes a test made for a task, by id.
 	seededModes map[string]task.ReviewModes
 	// seededTaskModes are the modes a test created a task in, by id.
@@ -130,6 +132,7 @@ func newTasks() *memTasks {
 		artifacts: map[string]task.Artifacts{},
 		runs:      map[string][]task.StepRun{},
 		prs:       map[string]task.PRRun{},
+		passes:    map[string][]task.PRPass{},
 		seeded:    map[string]task.Models{},
 
 		seededModes:     map[string]task.ReviewModes{},
@@ -476,7 +479,193 @@ func (m *memTasks) ClearPRRun(_ context.Context, id string) error {
 		return m.err
 	}
 	delete(m.prs, id)
+	delete(m.passes, id)
 	return nil
+}
+
+func (m *memTasks) PRPasses(id string) []task.PRPass {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return clonePasses(m.passes[id])
+}
+
+// clonePasses copies passes with their findings, so that a caller never shares
+// them with the fake.
+func clonePasses(passes []task.PRPass) []task.PRPass {
+	out := slices.Clone(passes)
+	for i := range out {
+		out[i].Findings = slices.Clone(out[i].Findings)
+	}
+	return out
+}
+
+// setPRPasses seeds the structured passes of a task, which is how a test says
+// what the app asked for and recorded.
+func (m *memTasks) setPRPasses(id string, passes ...task.PRPass) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	passes = clonePasses(passes)
+	for i := range passes {
+		passes[i].TaskID = id
+	}
+	m.passes[id] = passes
+}
+
+// writePass stores a pass the way task.Service does: the row of the same pass
+// is replaced, and the rows are kept in order of pass. The caller holds the lock.
+func (m *memTasks) writePass(pass task.PRPass) {
+	passes := m.passes[pass.TaskID]
+	if index := slices.IndexFunc(passes, func(p task.PRPass) bool { return p.Pass == pass.Pass }); index >= 0 {
+		passes[index] = pass
+		return
+	}
+	passes = append(passes, pass)
+	slices.SortFunc(passes, func(a, b task.PRPass) int { return a.Pass - b.Pass })
+	m.passes[pass.TaskID] = passes
+}
+
+// mutatePass changes a stored pass and records the call, failing like the
+// store does.
+func (m *memTasks) mutatePass(id string, pass int, label string, mutate func(*task.PRPass) error) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, label+":"+id+":"+strconv.Itoa(pass))
+	if m.err != nil {
+		return m.err
+	}
+	index := slices.IndexFunc(m.passes[id], func(p task.PRPass) bool { return p.Pass == pass })
+	if index < 0 {
+		return task.ErrNotFound
+	}
+	stored := m.passes[id][index]
+	stored.Findings = slices.Clone(stored.Findings)
+	if err := mutate(&stored); err != nil {
+		return err
+	}
+	m.passes[id][index] = stored
+	return nil
+}
+
+func (m *memTasks) AskPRPass(_ context.Context, id string, pass int) (task.PRPass, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "askPRPass:"+id+":"+strconv.Itoa(pass))
+	if m.err != nil {
+		return task.PRPass{}, m.err
+	}
+	if index := slices.IndexFunc(m.passes[id], func(p task.PRPass) bool { return p.Pass == pass }); index >= 0 &&
+		m.passes[id][index].Recorded {
+		return task.PRPass{}, task.ErrPRPassRecorded
+	}
+	asked := task.PRPass{TaskID: id, Pass: pass, AskedAt: time.Now().UTC()}
+	m.writePass(asked)
+	return asked, nil
+}
+
+func (m *memTasks) UnaskPRPass(_ context.Context, id string, pass int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "unaskPRPass:"+id+":"+strconv.Itoa(pass))
+	if m.err != nil {
+		return m.err
+	}
+	m.passes[id] = slices.DeleteFunc(m.passes[id], func(p task.PRPass) bool { return p.Pass == pass && !p.Recorded })
+	return nil
+}
+
+func (m *memTasks) RecordPRReport(
+	_ context.Context, id string, report prreport.Report,
+) (task.PRPass, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "recordPRReport:"+id+":"+strconv.Itoa(report.Pass))
+	if m.err != nil {
+		return task.PRPass{}, false, m.err
+	}
+	index := slices.IndexFunc(m.passes[id], func(p task.PRPass) bool { return p.Pass == report.Pass })
+	if index < 0 {
+		return task.PRPass{}, false, task.ErrNotFound
+	}
+	stored := m.passes[id][index]
+	stored.Findings = slices.Clone(stored.Findings)
+	switch {
+	case stored.Sent():
+		return stored, false, nil
+	case !stored.Recorded:
+		stored.Recorded, stored.Clean, stored.SummaryOriginal = true, report.Clean, report.Summary
+		stored.Revision, stored.RecordedAt = 1, time.Now().UTC()
+		stored.Findings = prreport.Fresh(report.Findings)
+	case prreport.Same(stored.SummaryOriginal, stored.Findings, report):
+		return stored, false, nil
+	default:
+		stored.SummaryOriginal, stored.Clean = report.Summary, report.Clean
+		stored.Findings = prreport.Inherit(stored.Findings, report.Findings)
+		stored.Revision++
+	}
+	m.passes[id][index] = stored
+	return stored, true, nil
+}
+
+func (m *memTasks) DecidePRFinding(
+	_ context.Context, id string, pass, number int, d prreport.Decision,
+) error {
+	return m.mutatePass(id, pass, "decidePRFinding:"+strconv.Itoa(number), func(p *task.PRPass) error {
+		if _, err := prreport.ParseDecision(string(d)); err != nil {
+			return err
+		}
+		index := slices.IndexFunc(p.Findings, func(f prreport.Finding) bool { return f.Number == number })
+		if index < 0 {
+			return task.ErrNotFound
+		}
+		p.Findings[index].Decision = d
+		return nil
+	})
+}
+
+func (m *memTasks) SetPRFindingText(_ context.Context, id string, pass, number int, text string) error {
+	return m.mutatePass(id, pass, "setPRFindingText:"+strconv.Itoa(number), func(p *task.PRPass) error {
+		text = strings.TrimSpace(text)
+		if text == "" {
+			return prreport.ErrEmptyText
+		}
+		index := slices.IndexFunc(p.Findings, func(f prreport.Finding) bool { return f.Number == number })
+		if index < 0 {
+			return task.ErrNotFound
+		}
+		p.Findings[index].Text = text
+		return nil
+	})
+}
+
+func (m *memTasks) ApproveRestOfPRFindings(_ context.Context, id string, pass int) error {
+	return m.mutatePass(id, pass, "approveRestOfPRFindings", func(p *task.PRPass) error {
+		for i := range p.Findings {
+			if p.Findings[i].Decision == prreport.DecisionNone {
+				p.Findings[i].Decision = prreport.DecisionApproved
+			}
+		}
+		return nil
+	})
+}
+
+func (m *memTasks) MarkPRPassSent(_ context.Context, id string, pass int) error {
+	return m.mutatePass(id, pass, "markPRPassSent", func(p *task.PRPass) error {
+		p.SentAt = time.Now().UTC()
+		return nil
+	})
+}
+
+func (m *memTasks) UnmarkPRPassSent(_ context.Context, id string, pass int) error {
+	return m.mutatePass(id, pass, "unmarkPRPassSent", func(p *task.PRPass) error {
+		p.SentAt = time.Time{}
+		return nil
+	})
 }
 
 // updatePRRun records the state of the PR stage the way task.Service does:
@@ -682,6 +871,7 @@ func (m *memTasks) Delete(_ context.Context, id string) error {
 	if m.err != nil {
 		return m.err
 	}
+	delete(m.passes, id)
 	if index := m.indexOf(id); index >= 0 {
 		m.items = slices.Delete(m.items, index, index+1)
 	}
@@ -1011,12 +1201,49 @@ func (m *memSessions) SendCorrection(_ context.Context, k session.Key, msg sessi
 	return m.send(k, msg, true)
 }
 
-func (m *memSessions) MarkPRReview(_ context.Context, k session.Key, pass int, clean bool, _ int) {
+func (m *memSessions) MarkPRReview(_ context.Context, k session.Key, pass int, clean bool, findings int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.calls = append(m.calls,
 		"mark:"+k.TaskID+":"+k.Stage+":pass="+strconv.Itoa(pass)+":clean="+strconv.FormatBool(clean))
+	m.markers = append(m.markers, keyedMarker{
+		Key: k, Marker: reportMarker(session.MarkerPRReviewWritten, pass, clean, findings),
+	})
+}
+
+func (m *memSessions) MarkPRReviewRevised(_ context.Context, k session.Key, pass int, clean bool, findings int) {
+	m.mark(k, reportMarker(session.MarkerPRReviewRevised, pass, clean, findings))
+}
+
+// reportMarker is the marker of a written or revised report, with the count of
+// findings when there is one (-1 unknown).
+func reportMarker(t session.MarkerType, pass int, clean bool, findings int) session.MarkerEntry {
+	marker := session.MarkerEntry{Type: t, Pass: pass, Clean: clean}
+	if findings >= 0 {
+		marker.Findings = &findings
+	}
+	return marker
+}
+
+// MarkFindingsDecided records nothing when the last marker of the pass says the
+// same, as the session service does.
+func (m *memSessions) MarkFindingsDecided(_ context.Context, k session.Key, pass, approved, discarded int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, km := range slices.Backward(m.markers) {
+		if km.Key != k || km.Marker.Type != session.MarkerFindingsDecided || km.Marker.Pass != pass {
+			continue
+		}
+		if km.Marker.Approved == approved && km.Marker.Discarded == discarded {
+			return
+		}
+		break
+	}
+	m.markers = append(m.markers, keyedMarker{Key: k, Marker: session.MarkerEntry{
+		Type: session.MarkerFindingsDecided, Pass: pass, Approved: approved, Discarded: discarded,
+	}})
 }
 
 func (m *memSessions) MarkStepReview(_ context.Context, k session.Key, pass int, clean bool, findings int) {

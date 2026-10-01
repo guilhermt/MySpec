@@ -19,6 +19,12 @@ func (s *Service) SetFindingText(ctx context.Context, id string, pass, number in
 	return s.deciding(id, func() error { return s.reviews.SetFindingText(ctx, id, pass, number, text) })
 }
 
+// ApproveRest approves every finding of the pass the user is deciding on that
+// has no decision yet.
+func (s *Service) ApproveRest(ctx context.Context, id string, pass int) error {
+	return s.deciding(id, func() error { return s.reviews.ApproveRest(ctx, id, pass) })
+}
+
 // SetSummary records the summary of the pass as the user left it, which is
 // what the body of a published review opens with.
 func (s *Service) SetSummary(ctx context.Context, id string, pass int, text string) error {

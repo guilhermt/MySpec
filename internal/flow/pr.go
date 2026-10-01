@@ -39,8 +39,8 @@ const (
 	PRInReview         PRStatus = "in_review"         // the applied changes are being reviewed
 	PRReadyToApprove   PRStatus = "ready_to_approve"
 	PRCommitting       PRStatus = "committing"
-	PRDone             PRStatus = "done"      // the review closed clean and the pull request is still open
-	PRTrouble          PRStatus = "trouble"   // the review closed clean, and a check failed or a conflict with the base came up since
+	PRDone             PRStatus = "done"      // the review closed clean, or with every finding of its pass discarded, and the pull request is still open
+	PRTrouble          PRStatus = "trouble"   // as done, and a check failed or a conflict with the base came up since
 	PRMerged           PRStatus = "merged"    // the pull request was merged; the task awaits closing
 	PRClosedUnmerged   PRStatus = "pr_closed" // the pull request was closed without a merge
 	PRClosing          PRStatus = "closing"
@@ -57,8 +57,16 @@ type PullRequest struct {
 
 	Draft   *task.Draft
 	Reports []task.ReviewReport
-	PR      task.PRDetails
-	Review  *review.Snapshot
+	// Passes are the passes asked for with the structured format, in order.
+	Passes []task.PRPass
+	// Pass is the current structured pass, the last of Passes; nil when the
+	// review runs a pass in text, asked before the format, or none yet.
+	Pass *task.PRPass
+	// Unreadable is why the report of the current structured pass, or its
+	// rewrite, can't be read, in the words of the product; "" otherwise.
+	Unreadable string
+	PR         task.PRDetails
+	Review     *review.Snapshot
 	// Trouble is what went wrong with the pull request since its last review
 	// pass; meaningful in PRTrouble.
 	Trouble gh.Trouble
@@ -133,6 +141,13 @@ func (s *Service) prState(t task.Task, run task.PRRun, art task.PRArtifacts) Pul
 			pr.SessionStage, pr.Session = stage, sum
 		}
 	}
+	passes := s.tasks.PRPasses(t.ID)
+	pr.Passes = passes
+	if len(passes) > 0 {
+		current := passes[len(passes)-1]
+		pr.Pass = &current
+		pr.Unreadable = s.unreadable(t.ID)
+	}
 	snap, read := s.review.Snapshot(t.ID)
 	pr.Review = reading(snap, read)
 	pr.CommitFailed = s.prNoCommit(t.ID)
@@ -140,6 +155,7 @@ func (s *Service) prState(t task.Task, run task.PRRun, art task.PRArtifacts) Pul
 		idle:       pr.Session.Idle && pr.SessionStage != "",
 		openFailed: s.openFailed(t.ID),
 		passAsked:  s.passAsked(t.ID) != "",
+		pass:       pr.Pass,
 	}
 	pr.Status = prStatus(run, art, facts, snap, read)
 	pr.CanClose = canClose(pr.Status, pr.CheckError) && !pr.CloneMissing
@@ -179,9 +195,10 @@ func prSessionStage(status task.PRStatus) string {
 // prFacts is what the app knows about the PR stage of a task beyond its record
 // and its artifacts.
 type prFacts struct {
-	idle       bool // the session of the stage is open and at rest
-	openFailed bool // the last opening of the pull request ended without one
-	passAsked  bool // a review pass was asked for and its report is not in yet
+	idle       bool         // the session of the stage is open and at rest
+	openFailed bool         // the last opening of the pull request ended without one
+	passAsked  bool         // a review pass was asked for and its report is not in yet
+	pass       *task.PRPass // the current structured pass; nil for a pass in text or none
 }
 
 // prStatus turns what the app recorded, the artifacts on disk, what else it
@@ -205,25 +222,13 @@ func prStatus(run task.PRRun, art task.PRArtifacts, facts prFacts, snap review.S
 	case task.PROpening:
 		return PROpening
 	case task.PRReviewing:
-		return reviewingStatus(art, facts, snap, read)
+		return reviewingStatus(run, art, facts, snap, read)
 	case task.PRWaitingChecks:
 		return PRWaitingChecks
 	case task.PRCommitting:
 		return PRCommitting
 	case task.PRDone:
-		// The pull request is out of the app's hands: what GitHub says about it
-		// is what the stage is shown as.
-		switch run.PR.State {
-		case task.PRStateMerged:
-			return PRMerged
-		case task.PRStateClosed:
-			return PRClosedUnmerged
-		default:
-			if run.Trouble.Any() {
-				return PRTrouble
-			}
-			return PRDone
-		}
+		return awaitingStatus(run)
 	case task.PRClosing:
 		return PRClosing
 	case task.PRClosed:
@@ -233,12 +238,34 @@ func prStatus(run task.PRRun, art task.PRArtifacts, facts prFacts, snap review.S
 	}
 }
 
+// awaitingStatus is a pull request out of the app's hands, whose review is
+// over: what GitHub says about it is what the stage is shown as.
+func awaitingStatus(run task.PRRun) PRStatus {
+	switch run.PR.State {
+	case task.PRStateMerged:
+		return PRMerged
+	case task.PRStateClosed:
+		return PRClosedUnmerged
+	default:
+		if run.Trouble.Any() {
+			return PRTrouble
+		}
+		return PRDone
+	}
+}
+
 // reviewingStatus is what a pull request under review is shown as: the pass
 // that runs, the report the agent still owes, the report that closed it, or how
-// far the user got with the changes it asked for.
-func reviewingStatus(art task.PRArtifacts, facts prFacts, snap review.Snapshot, read bool) PRStatus {
+// far the user got with the changes it asked for. A structured pass is shown by
+// structuredStatus.
+func reviewingStatus(
+	run task.PRRun, art task.PRArtifacts, facts prFacts, snap review.Snapshot, read bool,
+) PRStatus {
 	if !facts.idle {
 		return PRReviewing
+	}
+	if facts.pass != nil {
+		return structuredStatus(run, *facts.pass, snap, read)
 	}
 	last, ok := lastReport(art)
 	if !ok || facts.passAsked {
@@ -249,14 +276,18 @@ func reviewingStatus(art task.PRArtifacts, facts prFacts, snap review.Snapshot, 
 		// Transient: the evaluation that follows records it.
 		return PRDone
 	}
-	switch {
-	case !read || snap.Err != "" || snap.Total == 0:
+	if !read || snap.Err != "" || snap.Total == 0 {
 		return PRAwaitingDecision
-	case snap.Staged < snap.Total:
-		return PRInReview
-	default:
-		return PRReadyToApprove
 	}
+	return changesStatus(snap)
+}
+
+// changesStatus is how far the user got with the changes of a pass.
+func changesStatus(snap review.Snapshot) PRStatus {
+	if snap.Staged < snap.Total {
+		return PRInReview
+	}
+	return PRReadyToApprove
 }
 
 // lastReport is the report of the pass that ran last, if any was written.
@@ -397,7 +428,7 @@ func (s *Service) checkPR(ctx context.Context, id string) {
 	run, hasRun := s.tasks.PRRun(id)
 	// A task whose review closed clean is waiting for the merge: the reading
 	// tells what became of the pull request, not what the app does next.
-	awaiting := hasRun && run.Status == task.PRDone
+	awaiting := hasRun && awaitingMerge(run, currentPassPtr(s.tasks.PRPasses(id)))
 
 	pr, err := s.viewPR(ctx, wt)
 	if err == nil {
@@ -686,25 +717,37 @@ func (s *Service) evaluateReview(ctx context.Context, t task.Task, run task.PRRu
 		return
 	}
 
-	if report, isNew := newReport(art, run.ReportedPass); isNew {
-		updated, recorded := s.recordReport(ctx, t, wt, key, report)
-		if !recorded {
+	if pass, structured := currentPass(s.tasks.PRPasses(t.ID)); structured {
+		updated, recorded, ok := s.evaluateReport(ctx, t, wt, run, key, sum.Idle, pass)
+		if !ok {
 			return
 		}
-		run = updated
-	}
-	last, hasReport := lastReport(art)
-	if !hasReport {
-		return
-	}
-	if last.Clean {
-		if s.passAsked(t.ID) != "" {
-			// A pass was asked for after this report: the task waits for the
-			// report of that one.
+		run, pass = updated, recorded
+		if pass.Clean || (pass.AllDiscarded() && prOver(run)) {
+			s.finishReview(ctx, t, run, key)
 			return
 		}
-		s.finishReview(ctx, t, run, key)
-		return
+	} else {
+		if report, isNew := newReport(art, run.ReportedPass); isNew {
+			updated, recorded := s.recordReport(ctx, t, wt, key, report)
+			if !recorded {
+				return
+			}
+			run = updated
+		}
+		last, hasReport := lastReport(art)
+		if !hasReport {
+			return
+		}
+		if last.Clean {
+			if s.passAsked(t.ID) != "" {
+				// A pass was asked for after this report: the task waits for the
+				// report of that one.
+				return
+			}
+			s.finishReview(ctx, t, run, key)
+			return
+		}
 	}
 
 	// A pass that asks for changes is reviewed like a step: the user reads what
@@ -1027,6 +1070,12 @@ func (s *Service) resumePR(ctx context.Context, t task.Task) {
 		s.reopenPRSession(ctx, t, run, false)
 	case task.PRReviewing, task.PRCommitting:
 		s.reopenPRSession(ctx, t, run, true)
+		// A review whose pass was all discarded waits for the merge, which may
+		// have happened while the app was closed.
+		if run.Status == task.PRReviewing && awaitingMerge(run, currentPassPtr(s.tasks.PRPasses(t.ID))) &&
+			run.PR.Number > 0 && run.PR.State == task.PRStateOpen {
+			s.spawnPRWork(t.ID, s.checkPR)
+		}
 	case task.PRWaitingChecks:
 		s.resumeChecksWait(ctx, t, run)
 	case task.PRDone:
@@ -1094,6 +1143,7 @@ func (s *Service) tearDownPR(ctx context.Context, t task.Task) error {
 	// A PR stage started again later begins from nothing this one left.
 	s.setOpenFailed(t.ID, false)
 	s.setPassAsked(t.ID, "")
+	s.setUnreadable(t.ID, "")
 	s.forgetChecks(t.ID)
 
 	if err := s.sessions.Discard(ctx, t.ID, session.PRStage, session.PRReviewStage); err != nil {
@@ -1274,7 +1324,12 @@ func (s *Service) ApprovePR(ctx context.Context, id string) error {
 		return err
 	}
 	last, hasReport := lastReport(a.PR)
-	if run.Status != task.PRReviewing || !hasReport || last.Clean {
+	if pass, structured := currentPass(s.tasks.PRPasses(id)); structured {
+		if run.Status != task.PRReviewing || !pass.Recorded || pass.Clean ||
+			(!pass.Sent() && (!pass.Decided() || len(pass.Approved()) > 0)) {
+			return fmt.Errorf("approve the review of task %s: %w", id, ErrStepNotReady)
+		}
+	} else if run.Status != task.PRReviewing || !hasReport || last.Clean {
 		return fmt.Errorf("approve the review of task %s: %w", id, ErrStepNotReady)
 	}
 	snap, read := s.review.Snapshot(id)
@@ -1470,15 +1525,15 @@ func (s *Service) PollPRs() {
 		switch run.Status {
 		case task.PRWaitingChecks:
 			s.spawnPRWork(t.ID, s.readChecks)
-		case task.PRDone:
-			if run.PR.Number == 0 || run.PR.State == task.PRStateMerged || run.PR.State == task.PRStateClosed {
+		default:
+			if !awaitingMerge(run, currentPassPtr(s.tasks.PRPasses(t.ID))) || run.PR.Number == 0 ||
+				run.PR.State == task.PRStateMerged || run.PR.State == task.PRStateClosed {
 				// A merged pull request has nothing more to say; a closed one is
-				// asked again only when the user says so.
+				// asked again only when the user says so. Nothing else is read on
+				// a timer.
 				continue
 			}
 			s.spawnPRWork(t.ID, s.checkPR)
-		default:
-			// Nothing else is read on a timer.
 		}
 	}
 }

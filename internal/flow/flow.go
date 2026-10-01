@@ -15,6 +15,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewmode"
@@ -48,6 +49,15 @@ type Tasks interface {
 	SetPRBaseline(ctx context.Context, id string, baseline gh.Trouble) (task.PRRun, error)
 	SetPRTrouble(ctx context.Context, id string, trouble gh.Trouble) (task.PRRun, error)
 	ClearPRRun(ctx context.Context, id string) error
+	PRPasses(id string) []task.PRPass
+	AskPRPass(ctx context.Context, id string, pass int) (task.PRPass, error)
+	UnaskPRPass(ctx context.Context, id string, pass int) error
+	RecordPRReport(ctx context.Context, id string, report prreport.Report) (task.PRPass, bool, error)
+	DecidePRFinding(ctx context.Context, id string, pass, number int, d prreport.Decision) error
+	SetPRFindingText(ctx context.Context, id string, pass, number int, text string) error
+	ApproveRestOfPRFindings(ctx context.Context, id string, pass int) error
+	MarkPRPassSent(ctx context.Context, id string, pass int) error
+	UnmarkPRPassSent(ctx context.Context, id string, pass int) error
 	StepRuns(id string) []task.StepRun
 	SetStepRun(ctx context.Context, id string, number int, status task.StepStatus, block *task.StepBlock) (task.StepRun, error)
 	SetStepStarted(ctx context.Context, id string, number int, startCommit string) (task.StepRun, error)
@@ -81,6 +91,8 @@ type Sessions interface {
 	SendFromApp(ctx context.Context, k session.Key, m session.AppMessage) error
 	SendCorrection(ctx context.Context, k session.Key, m session.AppMessage) error
 	MarkPRReview(ctx context.Context, k session.Key, pass int, clean bool, findings int)
+	MarkPRReviewRevised(ctx context.Context, k session.Key, pass int, clean bool, findings int)
+	MarkFindingsDecided(ctx context.Context, k session.Key, pass, approved, discarded int)
 	MarkStepReview(ctx context.Context, k session.Key, pass int, clean bool, findings int)
 	MarkCommitted(ctx context.Context, k session.Key, sha, subject string, pushed bool, number int)
 	MarkPROpened(ctx context.Context, k session.Key, number int, base string)
@@ -202,6 +214,9 @@ type taskLock struct {
 	// passAsked is the commit the app asked a review pass about: one commit asks
 	// for one pass.
 	passAsked string
+	// unreadable is why the report of the current structured pass, or its
+	// rewrite, can't be read; "" once one is read.
+	unreadable string
 	// prNoCommit says the last approval of the review of the pull request ended
 	// without a commit. Like noCommit, it is transient on purpose.
 	prNoCommit bool
