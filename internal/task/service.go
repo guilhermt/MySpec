@@ -19,6 +19,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/reviewmode"
 )
@@ -48,7 +49,11 @@ type Store interface {
 	DeleteStepRuns(ctx context.Context, taskID string) error
 	GetPRRun(ctx context.Context, taskID string) (PRRun, bool, error)
 	UpsertPRRun(ctx context.Context, run PRRun) error
-	DeletePRRun(ctx context.Context, taskID string) error
+	DeletePRRun(ctx context.Context, taskID string) error // the structured passes of the review go with it
+	ListPRPasses(ctx context.Context, taskID string) ([]PRPass, error)
+	WritePRPass(ctx context.Context, pass PRPass) error // the pass with its findings, all or nothing
+	UpdatePRFinding(ctx context.Context, taskID string, pass int, finding prreport.Finding) error
+	DeletePRPass(ctx context.Context, taskID string, pass int) error
 }
 
 // Deps are what Service needs from the outside.
@@ -85,6 +90,7 @@ type Service struct {
 	artifacts map[string]Artifacts // by task id, archived included, what the last inspection saw
 	stepRuns  map[string][]StepRun // by task id, archived included, ordered by number
 	prRuns    map[string]PRRun     // by task id, archived included; absent before the PR stage
+	prPasses  map[string][]PRPass  // by task id, archived included, ordered by pass
 }
 
 // New builds a Service from deps, with the artifact watcher running.
@@ -101,6 +107,7 @@ func New(deps Deps) (*Service, error) {
 		artifacts:    map[string]Artifacts{},
 		stepRuns:     map[string][]StepRun{},
 		prRuns:       map[string]PRRun{},
+		prPasses:     map[string][]PRPass{},
 	}
 	if s.now == nil {
 		s.now = time.Now
@@ -138,6 +145,7 @@ func (s *Service) Sync(ctx context.Context) error {
 	artifacts := make(map[string]Artifacts, len(loaded))
 	stepRuns := make(map[string][]StepRun, len(loaded))
 	prRuns := make(map[string]PRRun, len(loaded))
+	prPasses := make(map[string][]PRPass, len(loaded))
 	for _, t := range loaded {
 		artifacts[t.ID] = s.inspect(t)
 		runs, err := s.repo.ListStepRuns(ctx, t.ID)
@@ -153,6 +161,14 @@ func (s *Service) Sync(ctx context.Context) error {
 		if ok {
 			prRuns[t.ID] = run
 		}
+
+		passes, err := s.repo.ListPRPasses(ctx, t.ID)
+		if err != nil {
+			return fmt.Errorf("list pr passes of task %s: %w", t.ID, err)
+		}
+		if len(passes) > 0 {
+			prPasses[t.ID] = passes
+		}
 	}
 
 	s.mu.Lock()
@@ -162,6 +178,7 @@ func (s *Service) Sync(ctx context.Context) error {
 	s.artifacts = artifacts
 	s.stepRuns = stepRuns
 	s.prRuns = prRuns
+	s.prPasses = prPasses
 	s.mu.Unlock()
 
 	for _, t := range previous {
@@ -482,6 +499,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	delete(s.artifacts, id)
 	delete(s.stepRuns, id)
 	delete(s.prRuns, id)
+	delete(s.prPasses, id)
 	s.mu.Unlock()
 
 	s.log.Info("task deleted", "task", t.ID, "name", t.Name)
@@ -964,6 +982,7 @@ func (s *Service) ClearPRRun(ctx context.Context, id string) error {
 
 	s.mu.Lock()
 	delete(s.prRuns, id)
+	delete(s.prPasses, id)
 	s.mu.Unlock()
 
 	s.log.Info("pr run cleared", "task", id)

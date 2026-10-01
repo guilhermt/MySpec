@@ -86,12 +86,26 @@ func (r *TasksRepo) UpsertPRRun(ctx context.Context, run task.PRRun) error {
 	return nil
 }
 
-// DeletePRRun removes the PR stage of a task. A missing row is not an error.
+// DeletePRRun removes the PR stage of a task, with the structured passes of its
+// review. A missing row is not an error.
 func (r *TasksRepo) DeletePRRun(ctx context.Context, taskID string) error {
-	const stmt = `DELETE FROM pr_runs WHERE task_id = ?`
+	const deleteReviewRounds = `DELETE FROM pr_passes WHERE task_id = ?`
+	const deleteRun = `DELETE FROM pr_runs WHERE task_id = ?`
 
-	if _, err := r.db.ExecContext(ctx, stmt, taskID); err != nil {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin delete pr run of task %s: %w", taskID, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err = tx.ExecContext(ctx, deleteReviewRounds, taskID); err != nil {
+		return fmt.Errorf("delete pr passes of task %s: %w", taskID, err)
+	}
+	if _, err = tx.ExecContext(ctx, deleteRun, taskID); err != nil {
 		return fmt.Errorf("delete pr run of task %s: %w", taskID, err)
+	}
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit delete pr run of task %s: %w", taskID, err)
 	}
 	return nil
 }

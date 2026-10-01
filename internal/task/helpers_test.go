@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/task"
 )
@@ -87,6 +88,7 @@ type memRepo struct {
 	items       []task.Task
 	runs        map[string][]task.StepRun // step runs by task id
 	prs         map[string]task.PRRun     // the pr run of each task
+	prPasses    map[string][]task.PRPass  // the structured passes of each task, by pass
 	listErr     error
 	archivedErr error
 	runsErr     error
@@ -353,7 +355,97 @@ func (r *memRepo) DeletePRRun(_ context.Context, taskID string) error {
 		return r.deleteErr
 	}
 	delete(r.prs, taskID)
+	delete(r.prPasses, taskID)
 	return nil
+}
+
+func (r *memRepo) ListPRPasses(_ context.Context, taskID string) ([]task.PRPass, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.prRunsErr != nil {
+		return nil, r.prRunsErr
+	}
+	var out []task.PRPass
+	for _, pass := range r.prPasses[taskID] {
+		pass.Findings = slices.Clone(pass.Findings)
+		out = append(out, pass)
+	}
+	return out, nil
+}
+
+func (r *memRepo) WritePRPass(_ context.Context, pass task.PRPass) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.updateErr != nil {
+		return r.updateErr
+	}
+	if r.prPasses == nil {
+		r.prPasses = map[string][]task.PRPass{}
+	}
+	pass.Findings = slices.Clone(pass.Findings)
+	passes := r.prPasses[pass.TaskID]
+	if i := slices.IndexFunc(passes, func(p task.PRPass) bool { return p.Pass == pass.Pass }); i >= 0 {
+		passes[i] = pass
+		return nil
+	}
+	passes = append(passes, pass)
+	slices.SortFunc(passes, func(a, b task.PRPass) int { return a.Pass - b.Pass })
+	r.prPasses[pass.TaskID] = passes
+	return nil
+}
+
+func (r *memRepo) UpdatePRFinding(_ context.Context, taskID string, pass int, finding prreport.Finding) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.updateErr != nil {
+		return r.updateErr
+	}
+	for i := range r.prPasses[taskID] {
+		if r.prPasses[taskID][i].Pass != pass {
+			continue
+		}
+		for j := range r.prPasses[taskID][i].Findings {
+			if r.prPasses[taskID][i].Findings[j].Number == finding.Number {
+				r.prPasses[taskID][i].Findings[j] = finding
+			}
+		}
+	}
+	return nil
+}
+
+func (r *memRepo) DeletePRPass(_ context.Context, taskID string, pass int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.deleteErr != nil {
+		return r.deleteErr
+	}
+	r.prPasses[taskID] = slices.DeleteFunc(r.prPasses[taskID], func(p task.PRPass) bool { return p.Pass == pass })
+	return nil
+}
+
+// storedPRPasses are the structured passes the store holds for a task.
+func (r *memRepo) storedPRPasses(taskID string) []task.PRPass {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var out []task.PRPass
+	if len(r.prPasses[taskID]) > 0 {
+		out = make([]task.PRPass, 0, len(r.prPasses[taskID]))
+	}
+	for _, pass := range r.prPasses[taskID] {
+		pass.Findings = slices.Clone(pass.Findings)
+		out = append(out, pass)
+	}
+	return out
+}
+
+// seedPRPass stores a structured pass directly, bypassing the service.
+func (r *memRepo) seedPRPass(pass task.PRPass) {
+	_ = r.WritePRPass(context.Background(), pass)
 }
 
 // seedPRRun stores a pr run directly, bypassing the service.

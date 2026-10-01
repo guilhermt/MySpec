@@ -42,7 +42,7 @@ const (
 	itemsVersion        = 15
 	taskScreenVersion   = 19
 	reviewScreenVersion = 21
-	latestVersion       = 21
+	latestVersion       = 22
 )
 
 // upgradeTime is the instant the repositories of the fake upgrades are stamped
