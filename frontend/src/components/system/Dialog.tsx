@@ -200,7 +200,16 @@ export function DialogFooter({ children, back, reason, refusal }: DialogFooterPr
 export type DialogCancelProps = Omit<ButtonBaseProps, "variant" | "children"> &
   ButtonLoading & { children?: ReactNode };
 
-/** DialogCancel is the secondary Cancel of a footer: it closes the dialog, and an alert opens on it. */
+/** DialogCancel is the ghost Cancel of a footer: it closes the dialog, and an alert opens on it. */
 export function DialogCancel({ children = "Cancel", ...props }: DialogCancelProps) {
-  return <UIDialogClose data-dialog-cancel="" render={<Button {...props}>{children}</Button>} />;
+  return (
+    <UIDialogClose
+      data-dialog-cancel=""
+      render={
+        <Button variant="ghost" {...props}>
+          {children}
+        </Button>
+      }
+    />
+  );
 }
