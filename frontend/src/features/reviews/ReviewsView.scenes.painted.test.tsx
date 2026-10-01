@@ -92,19 +92,29 @@ async function draw(scene: ReviewScene, width: number, { after = true } = {}) {
 const rowOf = (reference: string) =>
   screen.getByRole("treeitem", { name: new RegExp(`^${reference} `) });
 
-// piecesOf are the title, the second line and the keys of a row: its second, third and last child.
+// piecesOf are the column of the title, the title itself, its tags, the second line and the keys of a
+// row: the column is its second child, with the title first and the tags after it, the second line
+// its third child and the keys its last.
 function piecesOf(row: HTMLElement) {
-  const [, title, meta] = row.children;
+  const [, column, meta] = row.children;
+  const title = column?.firstElementChild;
   const keys = row.lastElementChild;
   if (
+    !(column instanceof HTMLElement) ||
     !(title instanceof HTMLElement) ||
     !(meta instanceof HTMLElement) ||
     !(keys instanceof HTMLElement)
   ) {
     throw new Error(`${row.getAttribute("aria-label")} has no title, second line or keys`);
   }
-  return { title, meta, keys };
+  const tags = [...(title.nextElementSibling?.children ?? [])].map((tag) => tag.textContent);
+  return { column, title, tags, meta, keys };
 }
+
+// leastTitle is the least room the title of a row takes: its whole text, or a third of the row when
+// the text is longer than that.
+const leastTitle = (row: HTMLElement, title: HTMLElement) =>
+  Math.min(title.scrollWidth, row.getBoundingClientRect().width / 3);
 
 // dialog is the dialog open over the screen, null when none is.
 const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
@@ -174,13 +184,15 @@ describe.each(THEMES)("ReviewsView, the scenes in the %s theme", (theme) => {
       // Every box of the screen stands on whole pixels.
       expect(offWholePixels(parts(area))).toEqual([]);
 
-      // A title is never squeezed under a third of its row, and the keys keep their column.
+      // A title is whole or never squeezed under a third of its row, its tags are never cut, and the
+      // keys keep their column.
       for (const row of area.querySelectorAll<HTMLElement>("[data-row-key]")) {
-        const { title, keys } = piecesOf(row);
+        const { column, title, keys } = piecesOf(row);
         const reference = row.getAttribute("aria-label") ?? "";
         expect(title.getBoundingClientRect().width, `${reference} title`).toBeGreaterThanOrEqual(
-          row.getBoundingClientRect().width / 3,
+          leastTitle(row, title),
         );
+        expect(spillsOut(column), `${reference} tags`).toBe(false);
         expect(keys.getBoundingClientRect().width, `${reference} keys`).toBe(px("--col-keys"));
         expect(spillsOut(keys), `${reference} keys`).toBe(false);
       }
@@ -219,7 +231,7 @@ describe.each(THEMES)("ReviewsView, the scenes in the %s theme", (theme) => {
           `${label} on two lines`,
         ).toBe(second);
         if (!second) {
-          expect(piecesOf(row).title.getBoundingClientRect().width, label).toBe(425);
+          expect(piecesOf(row).column.getBoundingClientRect().width, label).toBe(425);
         }
       }
     });
@@ -233,12 +245,12 @@ describe.each(THEMES)("ReviewsView, the scenes in the %s theme", (theme) => {
       expect(edgesOf(screen.getByRole("complementary")).left).toBe(edgesOf(list as Element).right);
       for (const row of rowsOf(area, scene)) {
         const label = row.getAttribute("aria-label") ?? "";
-        const { title, meta } = piecesOf(row);
+        const { column, meta } = piecesOf(row);
         const line = meta.getBoundingClientRect();
-        expect(title.getBoundingClientRect().width, `${label} title`).toBe(156);
+        expect(column.getBoundingClientRect().width, `${label} title`).toBe(156);
         expect(line.width, `${label} second line`).toBe(284);
         expect(line.top, `${label} second line`).toBeGreaterThanOrEqual(
-          title.getBoundingClientRect().bottom,
+          column.getBoundingClientRect().bottom,
         );
         // The author and the state sit whole inside the second line, nothing of them cut.
         for (const cell of meta.children) {
@@ -278,6 +290,36 @@ describe.each(THEMES)("ReviewsView, the scenes in the %s theme", (theme) => {
       expect(cut.map((one) => one.textContent)).toEqual([short]);
       expect(await withoutTooltip(cut)).toEqual([]);
     });
+
+    // api#1298 by dependabot has two labels: dependabot, which repeats the author, and dependencies.
+    // Before its title would go under a third of the row, they fold into +2, and then go.
+    it.each([
+      [WIDE_MAIN, ["dependencies", "+1"]],
+      [HALF_MAIN, ["+2"]],
+      [NARROW_MAIN, []],
+    ])(
+      "gives the labels of api#1298 way before its title, at the main area of %ipx",
+      async (width, shown) => {
+        setTheme(theme);
+        await draw(scene, width);
+
+        const row = rowOf("api#1298");
+        const { column, title, tags } = piecesOf(row);
+        expect(tags).toEqual(shown);
+        // The title is whole beside the tags at the wide area, and keeps a third of the row, cut, at
+        // the narrow ones.
+        const cut = cutTexts(column).includes(title);
+        expect(cut).toBe(width !== WIDE_MAIN);
+        expect(title.getBoundingClientRect().width).toBeGreaterThanOrEqual(
+          cut ? row.getBoundingClientRect().width / 3 : title.scrollWidth,
+        );
+        expect(spillsOut(column)).toBe(false);
+        const folded = [...column.querySelectorAll<HTMLElement>("span")].filter(
+          (tag) => tag.textContent === "+2",
+        );
+        expect(await withoutTooltip(folded)).toEqual([]);
+      },
+    );
 
     it("covers the list with the panel at 790px", async () => {
       setTheme(theme);

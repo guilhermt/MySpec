@@ -202,6 +202,30 @@ describe("pullRequestRowModel", () => {
     expect(model(overrides).tags).toEqual(tags);
   });
 
+  it.each([
+    ["no tag", { labels: [] }, null],
+    [
+      "only a label that repeats the author",
+      { author: "bot", labels: [{ name: "bot", color: "" }] },
+      null,
+    ],
+    ["a draft", { draft: true }, { text: "+1", tooltip: "Draft" }],
+    [
+      "Draft and every label, the one that repeats the author too",
+      {
+        author: "dependabot",
+        draft: true,
+        labels: [
+          { name: "Dependabot", color: "" },
+          { name: "dependencies", color: "" },
+        ],
+      },
+      { text: "+3", tooltip: "Draft\nDependabot\ndependencies" },
+    ],
+  ])("folds the tags into one +N, %s", (_, overrides, folded) => {
+    expect(model(overrides).folded).toEqual(folded);
+  });
+
   it("writes you for the author of your own pull request", () => {
     expect(model({ own: true, author: "dev" }).author).toBe("you");
     expect(model({ author: "rsouza" }).author).toBe("rsouza");

@@ -189,6 +189,7 @@ const PR: PullRequestRowView = {
   referenceTooltip: "acme/web#2291",
   title: "Move the billing page to the new layout",
   tags: [{ text: "Draft", tooltip: null }],
+  folded: { text: "+1", tooltip: "Draft" },
   author: "dependabot",
   state: REVIEW,
   keys: "review",
@@ -314,6 +315,33 @@ describe.each(THEMES)("PullRequestRow in the %s theme", (theme) => {
     expect(paintOf(tag, { border: "" })).toEqual({ border: token("--line-2") });
     expect(getComputedStyle(tag).fontSize).toBe(resolve("var(--text-micro)", "font-size"));
     expect(tag.scrollWidth).toBeLessThanOrEqual(tag.clientWidth);
+  });
+
+  // The title, longer than a third of the row at the narrow lists, keeps that third: the tags give
+  // way first, folded into +3 and then gone, and none of them cuts.
+  it.each([
+    [1200, ["Draft", "dependencies", "+1"]],
+    [600, ["+3"]],
+    [400, []],
+  ])("at a list of %ipx shows the tags %j beside the title", (width, tags) => {
+    setTheme(theme);
+    const row = drawPR(width, {
+      tags: [
+        { text: "Draft", tooltip: null },
+        { text: "dependencies", tooltip: null },
+        { text: "+1", tooltip: "dependabot\ndependencies" },
+      ],
+      folded: { text: "+3", tooltip: "Draft\ndependabot\ndependencies" },
+    });
+    const title = cell("Move the billing page to the new layout");
+    const column = title.parentElement as HTMLElement;
+    expect([...(title.nextElementSibling?.children ?? [])].map((tag) => tag.textContent)).toEqual(
+      tags,
+    );
+    expect(box(title).width).toBeGreaterThanOrEqual(
+      Math.min(title.scrollWidth, box(row).width / 3),
+    );
+    expect(spillsOut(column)).toBe(false);
   });
 
   it("writes the author in the third ink", () => {

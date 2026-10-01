@@ -326,7 +326,8 @@ interface Spec {
   body?: string;
 }
 
-// SPECS are the nine open pull requests of the mock, in its order.
+// SPECS are the nine open pull requests of the mock, in its order. api#1298 carries dependencies besides
+// the mock's dependabot, so a row has labels to give way at the narrow lists.
 const SPECS: Spec[] = [
   {
     repository: "web",
@@ -391,7 +392,7 @@ const SPECS: Spec[] = [
     updated: 300,
     checks: passedChecks(5),
     head: "dependabot/go_modules/golang.org/x/net-0.33.0",
-    labels: ["dependabot"],
+    labels: ["dependabot", "dependencies"],
   },
   {
     repository: "web",
@@ -1058,7 +1059,7 @@ function stateOf(now: string, web: ReviewSummary | null, fields: Partial<State> 
       readAt,
       pendingCount: 4,
       authors: [...new Set(SPECS.map((spec) => spec.author))].sort(),
-      labels: ["dependabot"],
+      labels: ["dependabot", "dependencies"],
     }),
     cloneFolder: "/home/dev/code",
     ...fields,

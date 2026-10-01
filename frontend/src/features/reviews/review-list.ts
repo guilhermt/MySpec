@@ -246,6 +246,17 @@ function tagsOf(row: PullRequestRow): PullRequestRowView["tags"] {
   return tags;
 }
 
+// foldedOf is the one tag the tags fold into when the title would go under a third of its row: +N,
+// N for Draft and every label, all of them in the tooltip; null without a tag.
+function foldedOf(
+  row: PullRequestRow,
+  tags: PullRequestRowView["tags"],
+): PullRequestRowView["folded"] {
+  if (tags.length === 0) return null;
+  const all = [...(row.draft ? ["Draft"] : []), ...(row.labels ?? []).map((label) => label.name)];
+  return { text: `+${all.length}`, tooltip: all.join("\n") };
+}
+
 function keysOf(row: PullRequestRow): PullRequestRowView["keys"] {
   switch (asPullRequestAction(row.action)) {
     case "review":
@@ -275,12 +286,14 @@ export function pullRequestRowModel(
     ...(row.labels ?? []).map((one) => `label ${one.name}`),
     spoken,
   ].join(". ");
+  const tags = tagsOf(row);
   return {
     key: row.key,
     reference,
     referenceTooltip: `${row.repository}#${row.number}`,
     title: row.title,
-    tags: tagsOf(row),
+    tags,
+    folded: foldedOf(row, tags),
     author,
     state,
     keys: keysOf(row),

@@ -1,7 +1,7 @@
-import { type ReactElement, useRef } from "react";
+import { type ReactElement, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { CheckboxSign } from "./Checkbox";
-import { useFits } from "./fits";
+import { observeSize, useFits } from "./fits";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons";
 import { Kbd } from "./Kbd";
@@ -48,6 +48,8 @@ export interface PullRequestRowView {
   referenceTooltip: string;
   title: string;
   tags: { text: string; tooltip: string | null }[];
+  /** folded is the one tag the tags fold into before the title goes under a third of the row; null without tags. */
+  folded: { text: string; tooltip: string } | null;
   author: string;
   state: PullRequestRowState;
   /** keys is what R does on the row: "review", "open", "open task"; null where R does nothing. */
@@ -394,6 +396,92 @@ function StateCell({ state }: { state: PullRequestRowState }): ReactElement {
   }
 }
 
+/** Tag is a tag after the title of a pull request row: outlined, micro, never cut. */
+function Tag({ text, tooltip }: { text: string; tooltip: string | null }): ReactElement {
+  const drawn = (
+    <span className="inline-flex shrink-0 items-center rounded-xs border border-line-2 px-(--space-1) text-(length:--text-micro) leading-(--leading-micro) whitespace-nowrap text-ink-3">
+      {text}
+    </span>
+  );
+  return tooltip === null ? drawn : <Tooltip content={tooltip}>{drawn}</Tooltip>;
+}
+
+/** TagsForm is how the tags of a pull request row show: whole, folded into one +N, or not at all. */
+type TagsForm = "whole" | "folded" | "none";
+
+/**
+ * useTagsForm is how the tags of a row show beside the title, the first child of the column, so the
+ * title is whole or has a third of the row, the parent of the column, at least: whole while that
+ * holds beside them, else folded into one +N while it holds beside that, else none, since a tag never
+ * cuts. Each form's width is taken while it is drawn; the caller draws a row with other tags anew.
+ */
+function useTagsForm(
+  column: RefObject<HTMLElement | null>,
+  tags: RefObject<HTMLElement | null>,
+  hasTags: boolean,
+): TagsForm {
+  const [form, setForm] = useState<TagsForm>("whole");
+  // widths are the room each form takes beside the title, the gap before it included; 0 until drawn.
+  const widths = useRef({ whole: 0, folded: 0 });
+
+  useLayoutEffect(() => {
+    const box = column.current;
+    const title = box?.firstElementChild;
+    const row = box?.parentElement;
+    if (!hasTags || box == null || title == null || row == null) {
+      return;
+    }
+    const check = () => {
+      const drawn = tags.current;
+      if (form !== "none" && drawn !== null) {
+        const gap = parseFloat(getComputedStyle(box).columnGap) || 0;
+        widths.current[form] = drawn.getBoundingClientRect().width + gap;
+      }
+      // The title needs its whole text, or a third of the row when its text is longer than that.
+      const least = Math.min(title.scrollWidth, row.getBoundingClientRect().width / 3);
+      const keeps = (width: number) => box.getBoundingClientRect().width - width >= least;
+      const { whole, folded } = widths.current;
+      setForm(keeps(whole) ? "whole" : folded === 0 || keeps(folded) ? "folded" : "none");
+    };
+    check();
+    return observeSize(box, check);
+  }, [column, tags, hasTags, form]);
+
+  return form;
+}
+
+/**
+ * TitleCell is the title of a pull request row and its tags after it. The title is whole or has a
+ * third of the row at least, and a tag never cuts: the tags give way first, folded into one +N that
+ * names them all in its tooltip, and then gone, still in the accessible name of the row.
+ */
+function TitleCell({ model }: { model: PullRequestRowView }): ReactElement {
+  const column = useRef<HTMLSpanElement>(null);
+  const tags = useRef<HTMLSpanElement>(null);
+  const form = useTagsForm(column, tags, model.tags.length > 0);
+  return (
+    <span
+      ref={column}
+      className="col-start-2 row-start-1 flex min-w-0 items-center gap-(--space-2) overflow-hidden"
+    >
+      <Cell
+        text={model.title}
+        tooltip={model.title}
+        className={model.dashed ? "text-ink-4" : "text-ink-1"}
+      />
+      {model.tags.length > 0 && form !== "none" && (
+        <span ref={tags} className="inline-flex shrink-0 items-center gap-(--space-2)">
+          {form === "folded" && model.folded !== null ? (
+            <Tag text={model.folded.text} tooltip={model.folded.tooltip} />
+          ) : (
+            model.tags.map((tag) => <Tag key={tag.text} text={tag.text} tooltip={tag.tooltip} />)
+          )}
+        </span>
+      )}
+    </span>
+  );
+}
+
 /**
  * PullRequestRow is the row of a pull request in the list of reviews: a treeitem of level 2 on a
  * fixed grid of columns, with the author and the state under the title on a narrow list.
@@ -436,30 +524,8 @@ export function PullRequestRow({
           open ? "text-ink-3" : "text-ink-4",
         )}
       />
-      <span className="col-start-2 row-start-1 flex min-w-0 items-center gap-(--space-2) overflow-hidden">
-        <Cell
-          text={model.title}
-          tooltip={model.title}
-          className={cn("min-w-[calc(100%/3)]", model.dashed ? "text-ink-4" : "text-ink-1")}
-        />
-        {model.tags.map((tag) => {
-          const drawn = (
-            <span
-              key={tag.text}
-              className="inline-flex shrink-0 items-center rounded-xs border border-line-2 px-(--space-1) text-(length:--text-micro) leading-(--leading-micro) whitespace-nowrap text-ink-3"
-            >
-              {tag.text}
-            </span>
-          );
-          return tag.tooltip === null ? (
-            drawn
-          ) : (
-            <Tooltip key={tag.text} content={tag.tooltip}>
-              {drawn}
-            </Tooltip>
-          );
-        })}
-      </span>
+      {/* Other tags are other widths: the title cell is drawn anew to measure them. */}
+      <TitleCell key={model.tags.map((tag) => tag.text).join("\n")} model={model} />
       <span className="contents @max-[1041px]/list:col-[2/-1] @max-[1041px]/list:row-start-2 @max-[1041px]/list:flex @max-[1041px]/list:h-(--leading-meta) @max-[1041px]/list:flex-nowrap @max-[1041px]/list:gap-x-(--space-4) @max-[1041px]/list:overflow-hidden">
         <Cell
           text={model.author}

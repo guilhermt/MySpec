@@ -172,6 +172,7 @@ const PR: PullRequestRowView = {
     { text: "Draft", tooltip: null },
     { text: "Fork", tooltip: "From jdoe/web" },
   ],
+  folded: { text: "+2", tooltip: "Draft\nFork" },
   author: "dependabot",
   state: { kind: "text", text: "Not reviewed", tone: "ink-3", tooltip: null },
   keys: "review",
