@@ -71,7 +71,7 @@ const NEXT_TO_DECIDE = {
   action: "nextToDecide",
   label: "Next to decide",
   variant: "secondary",
-  shortcut: "Alt+↓",
+  shortcut: "Alt ↓",
   tooltip: "The next finding to decide",
   loadingLabel: "",
 } as const;
@@ -80,7 +80,7 @@ const PUBLISH = {
   action: "publish",
   label: "Publish review…",
   variant: "primary",
-  shortcut: "Ctrl+Enter",
+  shortcut: "Ctrl ↵",
   loadingLabel: "",
 } as const;
 
@@ -249,7 +249,7 @@ describe("reviewRequestOf, the situations of the review", () => {
             action: "openInEditor",
             label: "Open in VS Code",
             variant: "secondary",
-            shortcut: "Ctrl+E",
+            shortcut: "Ctrl E",
             loadingLabel: "",
           },
           {
@@ -283,7 +283,7 @@ describe("reviewRequestOf, the situations of the review", () => {
             action: "openInEditor",
             label: "Open in VS Code",
             variant: "secondary",
-            shortcut: "Ctrl+E",
+            shortcut: "Ctrl E",
             loadingLabel: "",
           },
           { action: "approve", label: "Approve", variant: "primary", loadingLabel: "Approving…" },

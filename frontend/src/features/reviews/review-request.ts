@@ -79,7 +79,7 @@ const NEXT_TO_DECIDE: ReviewButton = {
   action: "nextToDecide",
   label: "Next to decide",
   variant: "secondary",
-  shortcut: "Alt+↓",
+  shortcut: "Alt ↓",
   tooltip: "The next finding to decide",
   loadingLabel: "",
 };
@@ -88,7 +88,7 @@ const OPEN_IN_EDITOR: ReviewButton = {
   action: "openInEditor",
   label: "Open in VS Code",
   variant: "secondary",
-  shortcut: "Ctrl+E",
+  shortcut: "Ctrl E",
   loadingLabel: "",
 };
 
@@ -105,7 +105,7 @@ function publishButton(disabledReason?: string): ReviewButton {
     label: "Publish review…",
     variant: "primary",
     loadingLabel: "",
-    ...(disabledReason === undefined ? { shortcut: "Ctrl+Enter" } : { disabledReason }),
+    ...(disabledReason === undefined ? { shortcut: "Ctrl ↵" } : { disabledReason }),
   };
 }
 

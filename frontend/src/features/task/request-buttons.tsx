@@ -12,9 +12,9 @@ export interface RequestButtonsProps<A extends string> {
 }
 
 /**
- * RequestButtons are the buttons of a request bar, each keyed by its action, with its key or what
- * it does in a tooltip when its label doesn't say it. It is called, not rendered: the bar takes the
- * list as its actions.
+ * RequestButtons are the buttons of a request bar, each keyed by its action, with its key written on
+ * it and what it does in a tooltip when its label doesn't say it. It is called, not rendered: the bar
+ * takes the list as its actions.
  */
 export function RequestButtons<A extends string>({
   buttons,
@@ -33,21 +33,18 @@ export function RequestButtons<A extends string>({
         {...(button.loadingLabel !== ""
           ? { loading: running === button.action, loadingLabel: button.loadingLabel }
           : {})}
+        {...(button.shortcut !== undefined ? { shortcut: button.shortcut } : {})}
         onClick={() => onPress(button)}
       >
         {button.label}
       </Button>
     );
-    // The key of the action, or what it does when its label doesn't say, is in its tooltip.
-    if (button.shortcut === undefined && button.tooltip === undefined) {
+    // What the action does, when its label doesn't say, is in its tooltip.
+    if (button.tooltip === undefined) {
       return control;
     }
     return (
-      <Tooltip
-        key={button.action}
-        content={button.tooltip ?? button.label}
-        {...(button.shortcut !== undefined ? { shortcut: button.shortcut } : {})}
-      >
+      <Tooltip key={button.action} content={button.tooltip}>
         {control}
       </Tooltip>
     );

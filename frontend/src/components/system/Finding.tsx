@@ -233,6 +233,7 @@ export function Finding({
             <Button
               size="sm"
               icon={ICONS.done}
+              shortcut="A"
               pressed={model.decision === "approved"}
               onClick={() => onDecide?.(model.decision === "approved" ? "" : "approved")}
             >
@@ -240,6 +241,7 @@ export function Finding({
             </Button>
             <Button
               size="sm"
+              shortcut="D"
               pressed={discarded}
               onClick={() => onDecide?.(discarded ? "" : "discarded")}
             >

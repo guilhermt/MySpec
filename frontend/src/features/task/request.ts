@@ -155,7 +155,7 @@ function openInEditor(): TaskRequestButton {
     action: "openInEditor",
     label: "Open in VS Code",
     variant: "secondary",
-    shortcut: "Ctrl+E",
+    shortcut: "Ctrl E",
     loadingLabel: "",
   };
 }

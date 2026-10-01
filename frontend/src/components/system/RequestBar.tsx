@@ -14,7 +14,7 @@ export interface RequestButton<A extends string> {
   /** label is "Approve", "Discard step 4…". */
   label: string;
   variant: "primary" | "secondary";
-  /** shortcut is the key in the tooltip: "Ctrl+E" on Open in VS Code. */
+  /** shortcut is the key written on the button: "Alt ↓" on Next to decide, "Ctrl E" on Open in VS Code. */
   shortcut?: string;
   /** disabledReason is why the button can't be pressed: "Stage 2 more files". */
   disabledReason?: string;

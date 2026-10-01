@@ -426,11 +426,6 @@ describe("the keyboard of Reviews", () => {
       within(screen.getByRole("complementary"))
         .getByRole("button", { name: /^Start review/ })
         .focus();
-      // The focus opens the tooltip with the key, which the first Esc closes.
-      expect(await screen.findByRole("tooltip")).toHaveTextContent("Start reviewR");
-      await user.keyboard("{Escape}");
-      await waitFor(() => expect(screen.queryByRole("tooltip")).not.toBeInTheDocument());
-      expect(screen.getByRole("complementary")).toBeInTheDocument();
 
       await user.keyboard("{Escape}");
 

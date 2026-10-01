@@ -76,11 +76,9 @@ export function PullRequestActions({ row, action, reference, app, now }: PullReq
     case "start":
     case "start-own":
       control = (
-        <Tooltip content="Start review" shortcut="R">
-          <Button {...common} {...describedBy} onClick={start}>
-            Start review
-          </Button>
-        </Tooltip>
+        <Button {...common} {...describedBy} shortcut="R" onClick={start}>
+          Start review
+        </Button>
       );
       break;
     case "fork":
@@ -114,16 +112,20 @@ export function PullRequestActions({ row, action, reference, app, now }: PullReq
         );
       } else if (action.state === "failed") {
         control = (
-          <Tooltip content="Try the clone again" shortcut="R">
-            <Button {...common} {...describedBy} onClick={() => void clone()}>
-              Try the clone again
-            </Button>
-          </Tooltip>
+          <Button {...common} {...describedBy} shortcut="R" onClick={() => void clone()}>
+            Try the clone again
+          </Button>
         );
       } else {
         control = (
           <Tooltip content="Clone, then open the start dialog" shortcut="R">
-            <Button {...common} icon={ICONS.clone} {...describedBy} onClick={() => void clone()}>
+            <Button
+              {...common}
+              icon={ICONS.clone}
+              {...describedBy}
+              shortcut="R"
+              onClick={() => void clone()}
+            >
               Clone and continue
             </Button>
           </Tooltip>

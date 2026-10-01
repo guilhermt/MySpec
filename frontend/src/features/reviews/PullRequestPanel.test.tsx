@@ -92,14 +92,12 @@ describe("PullRequestPanel", () => {
   });
 
   describe("the action", () => {
-    it("is Start review, the one primary, with R in its tooltip, which opens the dialog", async () => {
+    it("is Start review, the one primary, with R written on it, which opens the dialog", async () => {
       const { user } = panel();
 
       const start = screen.getByRole("button", { name: "Start review" });
       expect(start).toHaveAttribute("data-variant", "primary");
-      expect(start).toHaveTextContent(/^Start review$/);
-      await user.hover(start);
-      expect(await screen.findByRole("tooltip")).toHaveTextContent("Start reviewR");
+      expect(start).toHaveTextContent(/^Start reviewR$/);
       await user.click(start);
 
       expect(useAppStore.getState().startReview).toEqual({ repositoryId: "repo-1", number: 1302 });
@@ -289,8 +287,8 @@ describe("PullRequestPanel", () => {
         expect(clone).toHaveAccessibleDescription(
           "acme/api isn't cloned yet. A review needs a clone.",
         );
-        // The key is in the tooltip only, once.
-        expect(clone).toHaveTextContent(/^Clone and continue$/);
+        // The key is written on the button, and the tooltip says what it does with the key.
+        expect(clone).toHaveTextContent(/^Clone and continueR$/);
         await user.hover(clone);
         expect(await screen.findByRole("tooltip")).toHaveTextContent(
           /^Clone, then open the start dialogR$/,
@@ -334,7 +332,7 @@ describe("PullRequestPanel", () => {
         });
 
         expect(screen.getByRole("button", { name: "Try the clone again" })).toHaveTextContent(
-          /^Try the clone again$/,
+          /^Try the clone againR$/,
         );
         expect(screen.getByRole("alert")).toHaveTextContent("gh: repository not found");
       });

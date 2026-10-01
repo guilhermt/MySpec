@@ -69,19 +69,42 @@ describe("RequestButtons", () => {
     expect(button).toHaveAccessibleDescription("Stage 2 more files");
   });
 
-  it("puts the key of an action in its tooltip", async () => {
+  it("writes the key of an action on its button, out of its name, with no tooltip", async () => {
     const user = userEvent.setup();
     render(
       <Bar
-        buttons={[{ ...APPROVE, action: "open", label: "Open in VS Code", shortcut: "Ctrl+E" }]}
+        buttons={[{ ...APPROVE, action: "open", label: "Open in VS Code", shortcut: "Ctrl E" }]}
       />,
     );
 
-    await user.hover(screen.getByRole("button", { name: "Open in VS Code" }));
+    const button = screen.getByRole("button", { name: "Open in VS Code" });
+    expect(button).toHaveTextContent(/^Open in VS CodeCtrl E$/);
+    await user.hover(button);
 
-    const tooltip = await screen.findByRole("tooltip");
-    expect(tooltip).toHaveTextContent("Open in VS Code");
-    expect(tooltip).toHaveTextContent("Ctrl+E");
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("writes the key on a button whose tooltip says what it does", async () => {
+    const user = userEvent.setup();
+    render(
+      <Bar
+        buttons={[
+          {
+            ...APPROVE,
+            action: "open",
+            label: "Next to decide",
+            shortcut: "Alt ↓",
+            tooltip: "The next finding to decide",
+          },
+        ]}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Next to decide" });
+    expect(button).toHaveTextContent(/^Next to decideAlt ↓$/);
+    await user.hover(button);
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(/^The next finding to decide$/);
   });
 
   it("says what a button does in its tooltip when its label doesn't", async () => {

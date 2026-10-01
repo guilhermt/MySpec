@@ -78,7 +78,7 @@ const OPEN_IN_EDITOR = {
   action: "openInEditor",
   label: "Open in VS Code",
   variant: "secondary",
-  shortcut: "Ctrl+E",
+  shortcut: "Ctrl E",
   loadingLabel: "",
 } as const;
 const OPEN_PR = {

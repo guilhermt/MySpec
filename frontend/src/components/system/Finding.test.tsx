@@ -123,6 +123,13 @@ describe("Finding", () => {
       expect(props.onDecide.mock.calls).toEqual([["approved"], ["discarded"]]);
     });
 
+    it("writes A and D on Approve and Discard, out of their names", () => {
+      open();
+
+      expect(screen.getByRole("button", { name: "Approve" })).toHaveTextContent(/^ApproveA$/);
+      expect(screen.getByRole("button", { name: "Discard" })).toHaveTextContent(/^DiscardD$/);
+    });
+
     it("undoes the decision it already holds", async () => {
       const props = open({}, { decision: "approved" });
 
