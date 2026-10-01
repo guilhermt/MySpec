@@ -118,7 +118,7 @@ Lendo vence quando dois estados valem; as faixas e um vazio convivem, as faixas 
 | Coluna | Conteúdo |
 |---|---|
 | Referência | `web#2291` (o nome curto do repositório, `#` e o número) em `--text-meta` `--ink-4` tabular; `--ink-3` na aberta; cortado com tooltip `acme/marketing-site#1234` (a mais longa medida, 123 px, passa de 96) |
-| Título | `--ink-1`, cortado com tooltip; depois dele, `--space-2`, até duas etiquetas (`components.md` Etiqueta): `Draft` e a primeira label que não repete o autor, com `+N` quando há mais (tooltip com todas); as etiquetas não cortam e cedem antes do título: quando ele ficaria abaixo de um terço da linha, viram um só `+N` (N são todas, `Draft` incluída, com todas no tooltip), e, quando nem ele cabe ao lado do terço, saem da linha |
+| Título | `--ink-1`, cortado com tooltip; depois dele, `--space-2`, até duas etiquetas (`components.md` Etiqueta): `Draft` e a primeira label que não repete o autor, com `+N` quando há mais (tooltip com todas); as etiquetas não cortam e cedem antes do título: quando ele ficaria abaixo de um terço da linha, viram um só `+N` (N são todas, `Draft` incluída, com todas no tooltip), e, quando nem ele cabe ao lado do terço, saem da linha e ficam no nome acessível dela; o painel aberto as mostra |
 | Autor | O login em `--text-meta` `--ink-3`, `you` na sua; cortado com tooltip |
 | Estado | Ver a tabela seguinte, em `--text-meta` |
 | Teclas | Só na linha com o foco visível: `R review`, `R open`, `R open task` (a tecla `Kbd sm`, o texto em `--text-micro` `--ink-3`); nenhuma numa PR de fork ou de clone inexistente, porque `R` não age ali |

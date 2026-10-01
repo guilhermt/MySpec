@@ -269,11 +269,9 @@ export function Finding({
               </span>
             )}
             <span className="ml-auto">
-              <Tooltip content="Edit" shortcut="E">
-                <Button variant="ghost" size="xs" onClick={() => onEdit?.()}>
-                  Edit
-                </Button>
-              </Tooltip>
+              <Button variant="ghost" size="xs" shortcut="E" onClick={() => onEdit?.()}>
+                Edit
+              </Button>
             </span>
           </div>
         )}
