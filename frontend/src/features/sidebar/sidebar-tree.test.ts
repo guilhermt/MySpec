@@ -307,6 +307,11 @@ describe("the line 2 of a review with a situation", () => {
   it.each<[Partial<Situation>, string, string]>([
     [{ kind: "question", place: REVIEW_PLACE }, "Question · pass 2", "Question · pass 2"],
     [
+      { kind: "reply", place: REVIEW_PLACE },
+      "Waiting for the report · pass 2",
+      "Waiting for the report · pass 2",
+    ],
+    [
       { kind: "review_report", form: "decide", place: REVIEW_PLACE },
       "Decide findings · pass 2 · 1 of 2",
       "Decide findings · 1/2",
@@ -656,6 +661,29 @@ describe("the line of an item without a situation", () => {
       "github",
       "Pass 2 · checks 3/6",
       "checks 3/6",
+    ],
+    [
+      "the first pass waiting for the checks, before GitHub's first reading",
+      reviewWith({ status: "waiting_checks", passes: [] }),
+      "github",
+      "Pass 1 · checking GitHub",
+      "Pass 1 · checking GitHub",
+    ],
+    [
+      "the first pass waiting for the checks, four of six passed",
+      reviewWith({
+        status: "waiting_checks",
+        passes: [],
+        checkedAt: "2026-09-05T11:59:00Z",
+        checks: [
+          ...["lint", "unit", "build", "docs"].map((name) => makePRCheck({ name })),
+          makePRCheck({ name: "e2e", state: "running", conclusion: "", completedAt: "" }),
+          makePRCheck({ name: "deploy", state: "queued", conclusion: "", completedAt: "" }),
+        ],
+      }),
+      "github",
+      "Pass 1 · checks 4/6",
+      "checks 4/6",
     ],
     [
       "a review applying",

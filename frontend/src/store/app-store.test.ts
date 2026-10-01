@@ -1711,7 +1711,7 @@ describe("reviews", () => {
     expect(result.current).toBeNull();
   });
 
-  it("opens the review a situation is in, and ignores one that is gone", () => {
+  it("opens the review a situation is in, the focus going to what it asks, and ignores one that is gone", () => {
     useAppStore.getState().applyState(withReviews());
 
     useAppStore.getState().openSituation("review-gone", REVIEW_PLACE);
@@ -1719,7 +1719,7 @@ describe("reviews", () => {
 
     useAppStore.getState().openSituation(REVIEW.id, REVIEW_PLACE);
     expect(location()).toEqual({ kind: "review", id: REVIEW.id });
-    expect(useAppStore.getState().pendingFocus).toBe("title");
+    expect(useAppStore.getState().pendingFocus).toBe("request");
   });
 
   it("is the situation of the open review on screen", () => {

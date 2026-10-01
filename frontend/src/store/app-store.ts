@@ -192,7 +192,8 @@ export interface AppStore {
   earlierConversation: EarlierConversation | null;
   /**
    * pendingFocus is where the focus goes once the new place is on screen: its title, the back or
-   * forward button, or what the situation of a task asks (request), which the task screen settles.
+   * forward button, or what the situation of a task or a review asks (request), which the screen of
+   * the item settles.
    */
   pendingFocus: "title" | "back" | "forward" | "request" | null;
   /** sidebarRail is the sidebar collapsed into its strip; kept across runs. */
@@ -1158,10 +1159,10 @@ export const useAppStore = create<AppStore>()((set, get) => {
       if (location === null) {
         return;
       }
-      // A task takes the focus to what its situation asks; a review and a discussion, to the title.
+      // A task and a review take the focus to what their situation asks; a discussion, to the title.
       leave(() =>
         set((state) => ({
-          ...navigate(state, location, location.kind === "task" ? "request" : "title"),
+          ...navigate(state, location, location.kind === "discussion" ? "title" : "request"),
           openStepTab:
             location.kind === "task"
               ? withStepTab(state.openStepTab, itemId, place)

@@ -334,7 +334,11 @@ function situationText(owner: Owner, situation: Situation): RowText {
     case "question":
     case "reply": {
       const place = conversationPlace(owner, situation);
-      const label = CONVERSATION_LABELS[kind];
+      // A review waits on its reviewer for the report of a pass, as its bar says.
+      const label =
+        kind === "reply" && owner.kind === "review"
+          ? "Waiting for the report"
+          : CONVERSATION_LABELS[kind];
       return { long: `${label} · ${place.long}`, short: `${label} · ${place.short}` };
     }
     case "step_blocked": {

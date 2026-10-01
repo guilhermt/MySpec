@@ -401,6 +401,24 @@ describe("the keyboard of Reviews", () => {
       expect(row(12)).toHaveFocus();
     });
 
+    it("closes the Filter menu before the panel", async () => {
+      const { user } = view();
+      row(12).focus();
+      await user.keyboard("{Enter}");
+      await user.click(screen.getByRole("button", { name: "Filter" }));
+      expect(await screen.findByRole("menu")).toBeInTheDocument();
+
+      await user.keyboard("{Escape}");
+
+      await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+      expect(screen.getByRole("complementary")).toBeInTheDocument();
+
+      row(12).focus();
+      await user.keyboard("{Escape}");
+
+      await waitFor(() => expect(screen.queryByRole("complementary")).not.toBeInTheDocument());
+    });
+
     it("closes the panel, with the focus going back to the row when it was in the panel", async () => {
       const { user } = view();
       row(12).focus();

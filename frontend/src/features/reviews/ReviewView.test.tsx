@@ -1,8 +1,9 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { useGlobalShortcuts } from "@/app/useGlobalShortcuts";
 import { ReviewView } from "@/features/reviews/ReviewView";
 import { api, type ReviewSummary } from "@/lib/wails";
-import { useAppStore } from "@/store/app-store";
+import { useAppStore, useLocation } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import {
   makeEntry,
@@ -30,6 +31,18 @@ const REPORT = makeSituation({
   taskId: "review-1",
   place: { kind: "review", stage: "review", step: 0 },
 });
+
+// situationOf is a situation of the review, of the kind and the form given.
+function situationOf(kind: string, form = "", group = "waiting") {
+  return makeSituation({
+    id: `s-${kind}`,
+    taskId: "review-1",
+    kind,
+    form,
+    group,
+    place: { kind: "review", stage: "review", step: 0 },
+  });
+}
 
 function view(overrides: Partial<ReviewSummary> = {}) {
   return renderWithStore(<ReviewView reviewId="review-1" />, {
@@ -279,5 +292,280 @@ describe("ReviewView, the focus on arriving at a situation", () => {
     arrive({ status: "published", sessionStatus: "waiting", turnRunning: false });
 
     await waitFor(() => expect(document.getElementById("composer-input")).toHaveFocus());
+  });
+
+  const resting = { sessionStatus: "waiting", turnRunning: false, processRunning: false };
+
+  it.each<[string, Partial<ReviewSummary>, () => HTMLElement | null]>([
+    [
+      "Retry reviewer, the session stopped",
+      {
+        status: "reviewing",
+        sessionStatus: "error",
+        lastError: "claude exited",
+        situations: [situationOf("session_error", "", "error")],
+      },
+      () => screen.getByRole("button", { name: "Retry reviewer" }),
+    ],
+    [
+      "the composer, a turn that failed",
+      {
+        ...resting,
+        status: "reviewing",
+        turnFailed: true,
+        situations: [situationOf("session_error", "", "error")],
+      },
+      () => document.getElementById("composer-input"),
+    ],
+    [
+      "the composer, the report to write again",
+      {
+        ...resting,
+        status: "awaiting_reply",
+        unreadableReport: "The report has no findings section.",
+        situations: [situationOf("reply")],
+      },
+      () => document.getElementById("composer-input"),
+    ],
+    [
+      "Publish review…, the publication failed",
+      {
+        ...resting,
+        status: "publish_failed",
+        canPublish: true,
+        publishError: "Couldn't publish to GitHub: 422",
+        passes: [makeReviewPass()],
+        situations: [situationOf("publish_failed", "", "error")],
+      },
+      () => screen.getByRole("button", { name: "Publish review…" }),
+    ],
+    [
+      "Apply approved, ready to apply",
+      {
+        ...resting,
+        mode: "apply",
+        status: "ready_to_apply",
+        canApply: true,
+        passes: [makeReviewPass({ findings: [makeReviewFinding({ decision: "approved" })] })],
+        situations: [situationOf("review_report", "apply")],
+      },
+      () => screen.getByRole("button", { name: "Apply approved" }),
+    ],
+    [
+      "Approve, the changes ready to approve",
+      {
+        ...resting,
+        mode: "apply",
+        status: "ready_to_approve",
+        canApprove: true,
+        review: makeReview({ staged: 2, total: 2, percent: 100 }),
+        situations: [situationOf("changes_review", "approve")],
+      },
+      () => screen.getByRole("button", { name: "Approve" }),
+    ],
+    [
+      "Open PR, ready to merge",
+      {
+        ...resting,
+        mode: "apply",
+        status: "ready_to_merge",
+        passes: [makeReviewPass({ clean: true, findings: [] })],
+        situations: [situationOf("merge", "merge", "closing")],
+      },
+      () => screen.getByRole("button", { name: "Open PR" }),
+    ],
+    [
+      "Review again…, new commits",
+      {
+        ...resting,
+        status: "new_commits",
+        newCommits: 3,
+        canReviewAgain: true,
+        passes: [makeReviewPass({ published: true })],
+        situations: [situationOf("new_commits")],
+      },
+      () => screen.getByRole("button", { name: "Review again…" }),
+    ],
+    [
+      "Review again…, in trouble",
+      {
+        ...resting,
+        status: "trouble",
+        canReviewAgain: true,
+        trouble: { failedChecks: ["build"], conflict: false },
+        situations: [situationOf("pr_trouble", "checks", "error")],
+      },
+      () => screen.getByRole("button", { name: "Review again…" }),
+    ],
+    [
+      "Review again…, a pass blocked",
+      {
+        ...resting,
+        status: "pass_blocked",
+        canReviewAgain: true,
+        passBlocked: "The worktree couldn't be updated.",
+        situations: [situationOf("pass_blocked", "", "error")],
+      },
+      () => screen.getByRole("button", { name: "Review again…" }),
+    ],
+  ])("goes to %s", async (_name, overrides, target) => {
+    arrive(overrides);
+
+    await waitFor(() => expect(target()).toHaveFocus());
+    expect(useAppStore.getState().pendingFocus).toBeNull();
+  });
+
+  it.each<[string, string, () => HTMLElement]>([
+    [
+      "the first option of a question",
+      "question",
+      () => screen.getByRole("radio", { name: /SQLite/ }),
+    ],
+    ["Allow of a permission", "permission", () => screen.getByRole("button", { name: /^Allow/ })],
+  ])("goes to %s the conversation holds pending", async (_name, kind, target) => {
+    renderWithStore(<ReviewView reviewId="review-1" />, {
+      state: makeState({
+        reviews: [makeReviewSummary({ ...resting, situations: [situationOf(kind)] })],
+      }),
+      ui: {
+        location: { kind: "review", id: "review-1" },
+        pendingFocus: "request",
+        transcripts: {
+          "review-1|review": {
+            status: "ready",
+            error: "",
+            entries: [makeEntry(kind === "question" ? "question" : "permission")],
+            pending: [],
+            buffered: [],
+          },
+        },
+      },
+    });
+
+    await waitFor(() => expect(target()).toHaveFocus());
+  });
+});
+
+// Shell is the review screen where the app draws it, with the shortcuts of the app.
+function Shell() {
+  useGlobalShortcuts();
+  const location = useLocation();
+  return location.kind === "review" ? <ReviewView reviewId={location.id} /> : null;
+}
+
+describe("ReviewView, arriving from elsewhere", () => {
+  const waiting = () =>
+    makeState({
+      reviews: [
+        makeReviewSummary({
+          status: "ready_to_publish",
+          canPublish: true,
+          sessionStatus: "waiting",
+          turnRunning: false,
+          passes: [makeReviewPass()],
+          situations: [REPORT],
+        }),
+      ],
+    });
+
+  it("takes the focus to what the situation asks on Ctrl+J", async () => {
+    const { user } = renderWithStore(<Shell />, { state: waiting() });
+
+    await user.keyboard("{Control>}j{/Control}");
+
+    expect(useAppStore.getState().location).toEqual({ kind: "review", id: "review-1" });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Publish review…" })).toHaveFocus(),
+    );
+  });
+
+  it("takes the focus to what the situation asks from the notification", async () => {
+    renderWithStore(<Shell />, { state: waiting() });
+
+    act(() => useAppStore.getState().openSituation("review-1", REPORT.place));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Publish review…" })).toHaveFocus(),
+    );
+  });
+});
+
+describe("ReviewView, a situation born with the screen open", () => {
+  it("blinks the bar and announces it", async () => {
+    const before = makeReviewSummary({ status: "reviewing" });
+    view({ status: "reviewing" });
+    expect(screen.queryByRole("region", { name: "Request" })).not.toBeInTheDocument();
+
+    act(() => {
+      useAppStore.getState().applyState(
+        makeState({
+          reviews: [
+            {
+              ...before,
+              status: "ready_to_publish",
+              canPublish: true,
+              sessionStatus: "waiting",
+              turnRunning: false,
+              passes: [makeReviewPass()],
+              situations: [REPORT],
+            },
+          ],
+        }),
+      );
+      useAppStore.getState().flashSituation(REPORT.id);
+    });
+
+    const bar = screen.getByRole("region", { name: "Request" });
+    expect(bar).toHaveAttribute("data-flash", "wait");
+    expect(within(bar).getByRole("status")).toHaveTextContent("Ready to publish · pass 1");
+    expect(useAppStore.getState().announcement?.text).toBe(
+      "web#31: waiting for you: ready to publish in pass 1",
+    );
+  });
+});
+
+describe("ReviewView, the apply mode and the strip", () => {
+  it("asks to review the changes in the bar, with the changed files at the end of the conversation", async () => {
+    view({
+      mode: "apply",
+      status: "in_review",
+      sessionStatus: "waiting",
+      turnRunning: false,
+      review: makeReview(),
+      situations: [situationOf("changes_review", "staged")],
+    });
+
+    const bar = screen.getByRole("region", { name: "Request" });
+    expect(bar).toHaveTextContent("Review changes");
+    expect(within(bar).getByRole("button", { name: "Open in VS Code" })).toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: "Approve" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(await screen.findByRole("article", { name: "Changed files · 2" })).toBeInTheDocument();
+  });
+
+  it("says a reading of GitHub that failed in a strip under the header", () => {
+    view({
+      checkError: "GitHub's rate limit was reached.",
+      checkErrorAt: new Date().toISOString(),
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't check GitHub");
+  });
+
+  it("leaves the failure to the bar of a blocked pass, without the strip", () => {
+    view({
+      status: "pass_blocked",
+      sessionStatus: "waiting",
+      turnRunning: false,
+      checkError: "GitHub's rate limit was reached.",
+      checkErrorAt: new Date().toISOString(),
+      passBlocked: "GitHub's rate limit was reached.",
+      situations: [situationOf("pass_blocked", "", "error")],
+    });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Request" })).toHaveTextContent("Pass blocked");
   });
 });
