@@ -15,6 +15,7 @@ import {
   settle,
   stepperText,
   THEMES,
+  token,
   visiblePrimaries,
   withoutTooltip,
 } from "@/test/painted";
@@ -150,6 +151,17 @@ describe.each(THEMES)("ReviewView, the scenes in the %s theme", (theme) => {
 
       // The top layer has one primary at most: the dialog when one is open, else the screen.
       expect(visiblePrimaries(open ?? document).length).toBeLessThanOrEqual(1);
+
+      // The findings are decided with the focus on the second, the current one, ringed in the brand.
+      if (one.name === "findings") {
+        const second = within(area).getByRole("group", { name: /^Finding 2 of 3/ });
+        expect(document.activeElement).toBe(second);
+        expect(getComputedStyle(second).boxShadow).toContain(token("--brand-ring"));
+      }
+      // The page of the review that left names it by its pull request.
+      if (one.name === "merged") {
+        expect(within(area).getByText("web#2291 was merged, and its review ended")).toBeVisible();
+      }
 
       await capture(`review-${one.label.replace("?", "-")}-${width}-${theme}`, area);
     });

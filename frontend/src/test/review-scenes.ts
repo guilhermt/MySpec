@@ -1146,7 +1146,8 @@ export function reviewScene(name: ReviewSceneName, flags: ReviewFlags = {}): Rev
     case "merged":
       return {
         state: stateOf(now, null, { reviewHistory: [archivedWeb()] }),
-        location: { kind: "gone", item: "review", id: REVIEW_ID, name: WEB_TITLE, boardId: "" },
+        // The store names a review that left by its pull request, as reviewName does.
+        location: { kind: "gone", item: "review", id: REVIEW_ID, name: "web#2291", boardId: "" },
         transcripts: {},
         storage: {},
         now,
@@ -1160,6 +1161,12 @@ export function reviewScene(name: ReviewSceneName, flags: ReviewFlags = {}): Rev
         storage: {},
         now,
       };
+      // The findings are decided with the focus on the second, the first one not decided yet.
+      if (name === "findings") {
+        scene.after = async () => {
+          act(() => screen.getByRole("group", { name: /^Finding 2 of 3/ }).focus());
+        };
+      }
       // In the Apply mode nothing is published: the bar sends the approved findings to the agent.
       if ((name === "publish" || name === "clean") && flags.apply !== true) {
         scene.after = async () => {
