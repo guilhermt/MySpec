@@ -259,6 +259,18 @@ describe("stepperOf, the pill", () => {
       pill("PR review", "PR agent working", { ...working, position: "pass 2" }),
     ],
     [
+      "PR review reviewing a structured pass, working",
+      inPR({
+        status: "reviewing",
+        prNumber: 1284,
+        sessionStage: "pr_review",
+        sessionStatus: "working",
+        currentPass: 2,
+        reports: reports(2),
+      }),
+      pill("PR review", "PR agent working", { ...working, position: "pass 2" }),
+    ],
+    [
       "PR review awaiting_reply of a pass",
       inPR({
         status: "awaiting_reply",

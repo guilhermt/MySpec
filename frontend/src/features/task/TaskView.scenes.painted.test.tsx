@@ -7,21 +7,27 @@ import { fromTranscript } from "@/store/transcript";
 import {
   capture,
   conversationEdges,
+  cutTexts,
   edgesOf,
   mainArea,
+  offWholePixels,
   overlaps,
   placeHeaderOneLine,
   placeHeaderPieces,
   resolve,
   setTheme,
+  settle,
   stepperText,
   THEMES,
+  visiblePrimaries,
+  withoutTooltip,
 } from "@/test/painted";
 import { renderWithStore } from "@/test/render";
 import {
   type FixedCardName,
   fixedCardScene,
   fixSceneClock,
+  SCENES,
   type Scene,
   type SceneName,
   sceneTask,
@@ -69,6 +75,41 @@ const STEPPERS: [SceneName, string, string][] = [
     "github",
   ],
   ["findings", "✓ PRD ✓ Tech spec ✓ Plan ✓ Implementation ✓ PR PR review pass 1 ○ Closing", "wait"],
+  [
+    "findings-apply",
+    "✓ PRD ✓ Tech spec ✓ Plan ✓ Implementation ✓ PR PR review pass 1 ○ Closing",
+    "wait",
+  ],
+  [
+    "findings-discarded",
+    "✓ PRD ✓ Tech spec ✓ Plan ✓ Implementation ✓ PR ✓ PR review Closing",
+    "close",
+  ],
+  [
+    "findings-edit",
+    "✓ PRD ✓ Tech spec ✓ Plan ✓ Implementation ✓ PR PR review pass 1 ○ Closing",
+    "wait",
+  ],
+  [
+    "findings-revised",
+    "✓ PRD ✓ Tech spec ✓ Plan ✓ Implementation ✓ PR PR review pass 1 ○ Closing",
+    "wait",
+  ],
+  [
+    "findings-sent",
+    "✓ PRD ✓ Tech spec ✓ Plan ✓ Implementation ✓ PR PR review pass 1 working ○ Closing",
+    "work",
+  ],
+  [
+    "findings-text",
+    "✓ PRD ✓ Tech spec ✓ Plan ✓ Implementation ✓ PR PR review pass 1 ○ Closing",
+    "wait",
+  ],
+  [
+    "findings-unreadable",
+    "✓ PRD ✓ Tech spec ✓ Plan ✓ Implementation ✓ PR PR review pass 2 ○ Closing",
+    "wait",
+  ],
   ["close", "✓ PRD ✓ Tech spec ✓ Plan ✓ Implementation ✓ PR ✓ PR review Closing", "close"],
 ];
 
@@ -85,12 +126,17 @@ const WIDE_MAIN = 2180;
 const COLUMN_WIDTHS = [HALF_MAIN, 1567, WIDE_MAIN];
 
 /**
- * PLACES are the moments whose conversation ends in a fixed card or that have no conversation: the
+ * PLACES are the moments whose conversation ends in a fixed card or that have no conversation, and
+ * the ones of the findings, whose card stands in the conversation: the
  * changed files of the Manual step, the step blocked with its error block, the empty place with the
  * live checks, the merge line of the close, the draft of the pull request and the live checks at
  * the end of the review.
  */
 const PLACES: [string, () => Scene][] = [
+  ...SCENES.filter((name) => name.startsWith("findings")).map((name): [string, () => Scene] => [
+    name,
+    () => sceneTask(name),
+  ]),
   ["manual", () => sceneTask("manual")],
   ["blocked", () => sceneTask("blocked")],
   ["checks", () => sceneTask("checks")],
@@ -99,6 +145,34 @@ const PLACES: [string, () => Scene][] = [
     (name: FixedCardName): [string, () => Scene] => [name, () => fixedCardScene(name)],
   ),
 ];
+
+/** FINDING_SCENES are the scenes of the findings of the review of the pull request. */
+const FINDING_SCENES = SCENES.filter((name) => name.startsWith("findings"));
+
+/** CARDS are the scenes whose conversation holds the card of the findings. */
+const CARDS: SceneName[] = [
+  "findings",
+  "findings-apply",
+  "findings-discarded",
+  "findings-edit",
+  "findings-revised",
+];
+
+/** PRIMARY is the primary each scene of the findings draws (PRD §13), none where Send is not written. */
+const PRIMARY: Record<string, string[]> = {
+  findings: ["Apply approved"],
+  "findings-apply": ["Apply approved"],
+  "findings-discarded": [],
+  "findings-edit": ["Apply approved"],
+  "findings-revised": ["Apply approved"],
+  "findings-sent": [],
+  "findings-text": [],
+  "findings-unreadable": [],
+};
+
+// nameOf is what names an element in a failure: its label, else the start of its text.
+const nameOf = (element: Element) =>
+  element.getAttribute("aria-label") ?? element.textContent?.trim().slice(0, 48) ?? "";
 
 // px is a length token in pixels.
 const px = (name: `--${string}`) => parseFloat(resolve(`var(${name})`, "width"));
@@ -146,6 +220,23 @@ function drawScene(
   return { area, band: screen.getByRole("banner") };
 }
 
+/**
+ * prepare puts the scene where the mock holds it: the focus on finding 2 in the findings scene, and
+ * its inline editor open in findings-edit. Every other scene is as it is drawn.
+ */
+async function prepare(name: SceneName): Promise<void> {
+  if (name !== "findings" && name !== "findings-edit") {
+    return;
+  }
+  const second = await screen.findByRole("group", { name: /^Finding 2 of / });
+  if (name === "findings") {
+    second.focus();
+    return;
+  }
+  await userEvent.click(within(second).getByRole("button", { name: /^Edit/ }));
+  await screen.findByRole("textbox", { name: "Text of finding 2" });
+}
+
 // barAndComposer are the bar of the request and the box of the composer, the ones the scene has.
 function barAndComposer(): HTMLElement[] {
   const bar = document.querySelector<HTMLElement>('section[aria-label="Request"]');
@@ -182,6 +273,7 @@ describe.each(THEMES)("TaskView, the nine scenes in the %s theme", (theme) => {
   it.each(STEPPERS)("draws the %s scene", async (name, text, glyph) => {
     setTheme(theme);
     const { area, band } = scene(name);
+    await prepare(name);
 
     expect(placeHeaderOneLine(band)).toBe(true);
     expect(overlaps(placeHeaderPieces(band))).toBe(false);
@@ -197,6 +289,7 @@ describe.each(THEMES)("TaskView, the nine scenes in the %s theme", (theme) => {
   )("captures the %s scene at the main area of %ipx", async (name, width) => {
     setTheme(theme);
     const { area } = scene(name, { width });
+    await prepare(name);
     await capture(`scene-${name}-${width}-${theme}`, area);
   });
 
@@ -239,6 +332,7 @@ describe.each(THEMES)("TaskView, the nine scenes in the %s theme", (theme) => {
     async (name) => {
       setTheme(theme);
       scene(name);
+      await prepare(name);
 
       // Waiting for its checks, the pull request asks nothing and has no conversation to write in.
       const pieces = barAndComposer();
@@ -248,6 +342,54 @@ describe.each(THEMES)("TaskView, the nine scenes in the %s theme", (theme) => {
       }
     },
   );
+
+  describe.each(FINDING_SCENES)("the findings of the %s scene", (name) => {
+    it.each(COLUMN_WIDTHS)(
+      "keeps the card and every finding on whole pixels in the column at %ipx",
+      async (width) => {
+        setTheme(theme);
+        const { area } = drawScene(sceneTask(name), { width });
+        await prepare(name);
+        await settle();
+
+        const edges = conversationEdges(area);
+        const card = screen.queryByRole("group", { name: /^Findings of pass/ });
+        expect(card === null).toBe(!CARDS.includes(name));
+        if (card !== null) {
+          const findings = [...card.querySelectorAll("[data-finding]")];
+          expect(findings.length).toBeGreaterThan(0);
+          expect(edgesOf(card)).toEqual(edges);
+          // Each finding stands inside the card, in the padding of its column.
+          for (const finding of findings) {
+            const inner = edgesOf(finding);
+            expect([nameOf(finding), inner.left > edges.left, inner.right < edges.right]).toEqual([
+              nameOf(finding),
+              true,
+              true,
+            ]);
+          }
+          expect(offWholePixels([card, ...findings])).toEqual([]);
+        }
+      },
+    );
+
+    it("gives every cut text a tooltip", async () => {
+      setTheme(theme);
+      const { area } = scene(name);
+      await prepare(name);
+      await settle();
+      expect(await withoutTooltip(cutTexts(area).slice(0, 8))).toEqual([]);
+    });
+
+    it("draws one primary at most, the one of the table", async () => {
+      setTheme(theme);
+      scene(name);
+      await prepare(name);
+      await settle();
+      const primaries = visiblePrimaries().map(nameOf);
+      expect(primaries).toEqual(PRIMARY[name]);
+    });
+  });
 
   it("draws the bar of the close scene inside the main area", () => {
     setTheme(theme);

@@ -4,11 +4,14 @@ import { TaskView } from "@/features/task/TaskView";
 import type { Entry, PullRequest, Situation, Step, TaskSummary } from "@/lib/wails";
 import type { TranscriptState } from "@/store/transcript";
 import { renderWithStore } from "@/test/render";
+import { SCENE_FINDINGS } from "@/test/task-scenes";
 import {
   makeEntry,
+  makePRReport,
   makePullRequest,
   makeRepository,
   makeReview,
+  makeReviewFinding,
   makeSituation,
   makeState,
   makeStep,
@@ -64,7 +67,10 @@ interface Row {
     | "PermissionCard"
     | "ReviewStrip"
     | "PausedNotice"
-    | "PendingMessage";
+    | "PendingMessage"
+    | "FindingsCard"
+    | "FindingsBar"
+    | "ReviewMenu";
   button: string;
   state: string;
   task: TaskSummary;
@@ -78,8 +84,10 @@ interface Row {
   card?: RegExp;
   /** entry names the entry of the conversation that holds the control. */
   entry?: RegExp;
+  /** group names the groups, one inside the other, that hold the control: the card of findings, a finding. */
+  group?: RegExp[];
   /** role is the role of the control in the card, a button when not given. */
-  role?: "radio";
+  role?: "radio" | "link";
   /** transcripts are the conversations the screen reads, with the pending card of a row. */
   transcripts?: Record<string, TranscriptState>;
 }
@@ -133,6 +141,56 @@ const DELETED = makeReview({
   total: 1,
   percent: 0,
 });
+
+// The review of the pull request with its findings: the card of pass 1 in the conversation.
+const FINDINGS_PASS = {
+  ...OPENED,
+  sessionStage: "pr_review",
+  currentPass: 1,
+};
+
+// reviewed is the pull request waiting for the decision of the findings given, each decided as said.
+function reviewed(decisions: string[], pr: Partial<PullRequest> = {}): Partial<PullRequest> {
+  return {
+    ...FINDINGS_PASS,
+    status: "awaiting_decision",
+    reports: [
+      makePRReport({
+        findings: SCENE_FINDINGS.slice(0, decisions.length).map((finding, index) =>
+          makeReviewFinding({ ...finding, decision: decisions[index] ?? "" }),
+        ),
+      }),
+    ],
+    ...pr,
+  };
+}
+
+const TO_DECIDE = reviewed(["approved", "", "", ""]);
+const ALL_DECIDED = reviewed(["approved", "approved", "discarded", "approved"]);
+const ALL_DISCARDED = reviewed(["discarded", "discarded", "discarded", "discarded"], {
+  status: "done",
+});
+const FIRST_FINDING = [/^Findings of pass 1$/, /^Finding 1 of 4/];
+
+// REPORTED is the conversation of the review with the milestone of the report, the one that opens it.
+const REPORTED: Record<string, TranscriptState> = {
+  "task-1|pr_review": {
+    status: "ready",
+    error: "",
+    entries: [
+      makeEntry("marker", {
+        marker: {
+          ...(makeEntry("marker").marker as NonNullable<Entry["marker"]>),
+          type: "pr_review_written",
+          pass: 1,
+          findings: 4,
+        },
+      }),
+    ],
+    pending: [],
+    buffered: [],
+  },
+};
 
 const ROWS: Row[] = [
   {
@@ -819,6 +877,137 @@ const ROWS: Row[] = [
     name: /^Conversation model:/,
   },
   {
+    origin: "FindingsCard",
+    button: "Approve",
+    state: "findings to decide",
+    task: inPR(TO_DECIDE, "findings", "decide"),
+    where: "card",
+    group: FIRST_FINDING,
+    name: /^Approve/,
+  },
+  {
+    origin: "FindingsCard",
+    button: "Discard",
+    state: "findings to decide",
+    task: inPR(TO_DECIDE, "findings", "decide"),
+    where: "card",
+    group: FIRST_FINDING,
+    name: /^Discard/,
+  },
+  {
+    origin: "FindingsCard",
+    button: "Edit",
+    state: "findings to decide",
+    task: inPR(TO_DECIDE, "findings", "decide"),
+    where: "card",
+    group: FIRST_FINDING,
+    name: /^Edit/,
+  },
+  {
+    origin: "FindingsCard",
+    button: "bucket.go:31",
+    state: "a finding on a line",
+    task: inPR(TO_DECIDE, "findings", "decide"),
+    where: "card",
+    group: FIRST_FINDING,
+    role: "link",
+    name: /bucket\.go:31/,
+  },
+  {
+    origin: "FindingsCard",
+    button: "Open in VS Code",
+    state: "a finding on a line",
+    task: inPR(TO_DECIDE, "findings", "decide"),
+    where: "card",
+    group: FIRST_FINDING,
+    name: /^Open line 31 of bucket\.go in VS Code$/,
+  },
+  {
+    origin: "FindingsBar",
+    button: "Next to decide",
+    state: "findings to decide",
+    task: inPR(TO_DECIDE, "findings", "decide"),
+    where: "bar",
+    name: /^Next to decide/,
+  },
+  {
+    origin: "FindingsBar",
+    button: "Approve the rest",
+    state: "findings to decide",
+    task: inPR(TO_DECIDE, "findings", "decide"),
+    where: "bar",
+    name: /^Approve the rest/,
+  },
+  {
+    origin: "FindingsBar",
+    button: "Apply approved",
+    state: "findings to decide",
+    task: inPR(TO_DECIDE, "findings", "decide"),
+    where: "bar",
+    name: /^Apply approved/,
+    disabled: true,
+  },
+  {
+    origin: "FindingsBar",
+    button: "Apply approved",
+    state: "every finding decided",
+    task: inPR(ALL_DECIDED, "findings", "apply"),
+    where: "bar",
+    name: /^Apply approved/,
+  },
+  {
+    origin: "FindingsBar",
+    button: "Open PR",
+    state: "every finding discarded",
+    task: inPR(ALL_DISCARDED, "merge", "merge"),
+    where: "bar",
+    name: /^Open PR$/,
+  },
+  {
+    origin: "FindingsBar",
+    button: "Approve",
+    state: "the pass sent, no file changed",
+    task: inPR(
+      {
+        ...FINDINGS_PASS,
+        status: "in_review",
+        review: makeReview({ files: [], staged: 0, total: 0, percent: 0 }),
+        reports: ALL_DECIDED.reports ?? [],
+      },
+      "changes_review",
+      "review",
+    ),
+    where: "bar",
+    name: /^Approve$/,
+    disabled: true,
+  },
+  {
+    origin: "ReviewMenu",
+    button: "Review again",
+    state: "findings to decide",
+    task: inPR(TO_DECIDE, "findings", "decide"),
+    where: "menu",
+    name: /^Review again/,
+  },
+  {
+    origin: "ReviewMenu",
+    button: "Refresh PR",
+    state: "findings to decide",
+    task: inPR(TO_DECIDE, "findings", "decide"),
+    where: "menu",
+    name: /^Refresh PR/,
+  },
+  {
+    origin: "FindingsCard",
+    button: "Review 1 written",
+    state: "the report written",
+    task: inPR(TO_DECIDE, "findings", "decide"),
+    transcripts: REPORTED,
+    where: "entry",
+    entry: /^Review 1 written/,
+    name: /^Review 1 written/,
+  },
+  {
     origin: "PendingMessage",
     button: "Remove",
     state: "a message queued",
@@ -833,7 +1022,18 @@ const ROWS: Row[] = [
 describe("where the actions of the bars that left went", () => {
   it.each(ROWS)(
     "$origin: $button, $state, is in the $where",
-    async ({ task, where, name, trigger, disabled, card: cardName, entry, role, transcripts }) => {
+    async ({
+      task,
+      where,
+      name,
+      trigger,
+      disabled,
+      card: cardName,
+      entry,
+      role,
+      group,
+      transcripts,
+    }) => {
       const { user } = renderWithStore(<TaskView taskId={task.id} />, {
         state: makeState({
           tasks: [task],
@@ -856,6 +1056,17 @@ describe("where the actions of the bars that left went", () => {
         found = await screen.findByRole("tooltip");
         expect(found).toHaveTextContent(name);
         return;
+      } else if (where === "card" && group !== undefined) {
+        let holder: HTMLElement | null = null;
+        for (const groupName of group) {
+          holder = await (holder === null
+            ? screen.findByRole("group", { name: groupName })
+            : within(holder).findByRole("group", { name: groupName }));
+        }
+        if (holder === null) {
+          throw new Error("the row names no group");
+        }
+        found = within(holder).getByRole(role ?? "button", { name });
       } else if (where === "card") {
         const card =
           cardName === undefined
@@ -976,6 +1187,22 @@ const SITUATIONS: [string, TaskSummary][] = [
     "findings",
     inPR({ ...OPENED, status: "awaiting_decision", sessionStage: "pr_review" }, "findings"),
   ],
+  ["findings decide", inPR(TO_DECIDE, "findings", "decide")],
+  ["findings apply", inPR(ALL_DECIDED, "findings", "apply")],
+  ["merge, every finding discarded", inPR(ALL_DISCARDED, "merge", "merge")],
+  [
+    "changes_review, no file changed",
+    inPR(
+      {
+        ...FINDINGS_PASS,
+        status: "in_review",
+        review: makeReview({ files: [], staged: 0, total: 0, percent: 0 }),
+        reports: ALL_DECIDED.reports ?? [],
+      },
+      "changes_review",
+      "review",
+    ),
+  ],
   [
     "paused",
     inStep({ status: "ready_to_approve", review: REVIEWING }, { sessionStatus: "paused" }),
@@ -1029,7 +1256,13 @@ describe("the primary of the task screen", () => {
 const SEND_IS_PRIMARY: [string, TaskSummary][] = [
   ["reply without a draft", inPR({ status: "awaiting_reply", sessionStage: "pr" }, "reply")],
   ...SITUATIONS.filter(([kind]) =>
-    ["plan_invalid", "findings", "worktree_unreadable", "step_empty"].includes(kind),
+    [
+      "plan_invalid",
+      "findings",
+      "worktree_unreadable",
+      "step_empty",
+      "merge, every finding discarded",
+    ].includes(kind),
   ),
   [
     "session_error of a turn that failed",

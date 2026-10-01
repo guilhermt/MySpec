@@ -1,6 +1,6 @@
 /**
  * The scenes of the task screen (design/screens/task.md §11): the reference task, Rate limit per API
- * key, at nine moments, with the conversations on screen already read. The scene tests and the width
+ * key, at its moments, with the conversations on screen already read. The scene tests and the width
  * tests draw TaskView from them.
  */
 
@@ -8,7 +8,9 @@ import { afterEach, beforeEach, vi } from "vitest";
 import type {
   Entry,
   ModelStage,
+  PRReport,
   PullRequest,
+  ReviewFinding,
   Situation,
   State,
   Step,
@@ -27,6 +29,7 @@ import {
   makePRReport,
   makePullRequest,
   makeRepository,
+  makeReviewFinding,
   makeSituation,
   makeState,
   makeStep,
@@ -35,10 +38,11 @@ import {
   makeTaskCard,
   makeTaskConversation,
   makeTaskModels,
+  makeTextPRReport,
   makeTranscript,
 } from "@/test/wails-mock";
 
-/** SCENES are the nine moments of the reference task. */
+/** SCENES are the moments of the reference task: the nine of the mock and the ones of the findings. */
 export const SCENES = [
   "plan",
   "run",
@@ -48,6 +52,13 @@ export const SCENES = [
   "blocked",
   "checks",
   "findings",
+  "findings-apply",
+  "findings-discarded",
+  "findings-edit",
+  "findings-revised",
+  "findings-sent",
+  "findings-text",
+  "findings-unreadable",
   "close",
 ] as const;
 
@@ -303,6 +314,27 @@ function inPR(
   );
 }
 
+// inReview is the task whose review of the pull request waits for the decision of the findings,
+// 12 minutes: the report in the pull request given, the situation of its form.
+function inReview(
+  pr: Partial<PullRequest>,
+  kind: string,
+  form: string,
+  longName: boolean,
+): TaskSummary {
+  return inPR(
+    {
+      status: "awaiting_decision",
+      sessionStage: "pr_review",
+      contextPercent: 33,
+      currentPass: 1,
+      ...pr,
+    },
+    { situations: [situation(kind, "waiting", prPlace, 12, { form })] },
+    longName,
+  );
+}
+
 // CHECKS are the checks of the pull request in the checks scene: three passed, one running, one queued.
 const CHECKS = [
   makePRCheck({ name: "build", startedAt: at(12), completedAt: at(10) }),
@@ -323,6 +355,91 @@ const CHECKS = [
     completedAt: "",
   }),
 ];
+
+// FILES is the address of Files changed of the pull request, where the line of a finding is.
+const FILES = "https://github.com/acme/api/pull/1284/files#diff-";
+
+/**
+ * SCENE_FINDINGS are the findings of the review of the pull request, none decided: the four of the
+ * mock and, the fifth, the one the rewritten report adds. The line of each is the one
+ * `internal/bindings` gives it: the sha256 of the path, then R and the line.
+ */
+export const SCENE_FINDINGS: ReviewFinding[] = [
+  makeReviewFinding({
+    number: 1,
+    title: "A new bucket lets 21 requests through",
+    path: "internal/ratelimit/bucket.go",
+    line: 31,
+    lineUrl: `${FILES}f769211c8b9a825bda7baadb3d9595d21f2f0b2f69c014f04e4e830b5064a809R31`,
+    text: "**e2e / rate-limit-burst failed.** A new bucket refills from the zero time on its first read, so a burst of 20 lets 21 requests through. Start `last` at creation.",
+  }),
+  makeReviewFinding({
+    number: 2,
+    title: "Retry-After rounds down to 0 s",
+    path: "internal/http/middleware/ratelimit.go",
+    line: 58,
+    lineUrl: `${FILES}588dbf7d67e5ec2ab90b605b7c369de30fd7fb17032683de46598215938b7089R58`,
+    text: "`Retry-After` rounds down: a client told to wait 0 s retries at once and gets another 429. Round up to whole seconds.",
+  }),
+  makeReviewFinding({
+    number: 3,
+    title: "Enterprise rows fall back to the Free burst",
+    path: "",
+    line: 0,
+    lineUrl: "",
+    text: "No migration sets `plans.burst` for the 14 existing Enterprise rows; they fall back to the Free burst of 20.",
+  }),
+  makeReviewFinding({
+    number: 4,
+    title: "The docs give Pro 600 requests per minute",
+    path: "docs/rate-limits.md",
+    line: 12,
+    lineUrl: `${FILES}1af327e299bed27b176abac197191cced6025f6c68685a9033776d3723831a8fR12`,
+    text: "The table says 600 requests per minute for Pro; `config/plans.yaml` ships 500.",
+  }),
+  makeReviewFinding({
+    number: 5,
+    title: "The burst test sleeps a whole second",
+    path: "e2e/ratelimit_test.go",
+    line: 44,
+    lineUrl: `${FILES}a0d0a619700eea6abccb2ad31d7eeb9af04384cecaf706cf0ab68ea52d1dcd7bR44`,
+    text: "The test waits `time.Sleep(time.Second)` for the refill. With the clock `bucket.go` already takes, it can move the clock and run in milliseconds.",
+  }),
+];
+
+/** Decisions are the decisions of the findings of a pass, by number. */
+type Decisions = Record<number, "approved" | "discarded">;
+
+// findingsOf are the first n findings of the review with their decisions.
+function findingsOf(n: number, decisions: Decisions): ReviewFinding[] {
+  return SCENE_FINDINGS.slice(0, n).map((finding) => ({
+    ...finding,
+    decision: decisions[finding.number] ?? "",
+  }));
+}
+
+/** ONE_APPROVED is the pass of the findings scene: the first approved, the others to decide. */
+const ONE_APPROVED: Decisions = { 1: "approved" };
+
+/** DECIDED is the decision that goes to the agent: 1, 2 and 4 approved, 3 discarded. */
+const DECIDED: Decisions = { 1: "approved", 2: "approved", 3: "discarded", 4: "approved" };
+
+// structuredReport is a pass recorded in the format of findings, written minutes before the scene.
+function structuredReport(pass: number, overrides: Partial<PRReport>): PRReport {
+  return makePRReport({
+    pass,
+    file: `${pass}.md`,
+    clean: false,
+    structured: true,
+    recorded: true,
+    findings: [],
+    revision: 1,
+    edited: false,
+    recordedAt: at(12),
+    sentAt: "",
+    ...overrides,
+  });
+}
 
 const reviewer = (overrides: Parameters<typeof makeStepReviewer>[0]) =>
   makeStepReviewer({ sessionStage: "step_review:3", ...overrides });
@@ -358,6 +475,65 @@ function talk(ask: string, answer: string, ...rest: Entry[]): Entry[] {
     ...rest,
   ];
 }
+
+// said is a message of the agent.
+function said(text: string): Entry {
+  return talk("", text)[1] as Entry;
+}
+
+// reviewTalk is the conversation of the review of the pull request: the prompt, the answer and the
+// milestones that follow.
+function reviewTalk(...rest: Entry[]): Entry[] {
+  return talk("Review the pull request #1284.", "Report 1 written.", ...rest);
+}
+
+// USER is the user entry of a message: the fields none of them sets.
+const USER = {
+  text: "",
+  pending: false,
+  prompt: false,
+  app: false,
+  sent: "",
+  appKind: "",
+  appPass: 0,
+  appRound: 0,
+  appRounds: 0,
+  appCount: 0,
+};
+
+// milestone is a marker of the conversation, made minutes before the scene.
+function milestone(
+  type: string,
+  minutes: number,
+  fields: Partial<NonNullable<Entry["marker"]>> = {},
+): Entry {
+  const entry = makeEntry("marker", { createdAt: at(minutes) });
+  if (entry.marker === null) {
+    throw new Error("the marker is not made");
+  }
+  return { ...entry, marker: { ...entry.marker, type, ...fields } };
+}
+
+// productMessage is a message the product sent the agent, made minutes before the scene.
+function productMessage(
+  appKind: string,
+  text: string,
+  minutes: number,
+  fields: Partial<NonNullable<Entry["user"]>> = {},
+): Entry {
+  return makeEntry("user", {
+    createdAt: at(minutes),
+    user: { ...USER, text, app: true, appKind, ...fields },
+  });
+}
+
+// the milestones of a pass of the review of the pull request, as the mock says them.
+const written = (pass: number, findings: number, minutes: number) =>
+  milestone("pr_review_written", minutes, { pass, findings });
+const decidedOf = (pass: number, minutes: number) =>
+  milestone("findings_decided", minutes, { pass, approved: 3, discarded: 1 });
+const applied = (minutes: number) =>
+  productMessage("apply", "Apply the three approved findings.", minutes, { appCount: 3 });
 
 // the task of each scene, as the snapshot gives it.
 function taskOf(name: SceneName, longName: boolean): TaskSummary {
@@ -462,25 +638,102 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
         longName,
       );
     case "findings":
+    case "findings-edit":
+      return inReview(
+        { reports: [structuredReport(1, { findings: findingsOf(4, ONE_APPROVED) })] },
+        "findings",
+        "decide",
+        longName,
+      );
+    case "findings-apply":
+      return inReview(
+        { reports: [structuredReport(1, { findings: findingsOf(4, DECIDED) })] },
+        "findings",
+        "apply",
+        longName,
+      );
+    case "findings-discarded":
+      return inPR(
+        {
+          status: "done",
+          sessionStage: "pr_review",
+          contextPercent: 33,
+          currentPass: 1,
+          reports: [
+            structuredReport(1, {
+              findings: findingsOf(4, {
+                1: "discarded",
+                2: "discarded",
+                3: "discarded",
+                4: "discarded",
+              }),
+            }),
+          ],
+        },
+        { situations: [situation("merge", "closing", prPlace, 2, { form: "merge" })] },
+        longName,
+      );
+    case "findings-revised":
+      return inReview(
+        {
+          reports: [
+            structuredReport(1, {
+              revision: 2,
+              recordedAt: at(6),
+              findings: findingsOf(5, ONE_APPROVED),
+            }),
+          ],
+        },
+        "findings",
+        "decide",
+        longName,
+      );
+    case "findings-sent":
+      return inPR(
+        {
+          status: "reviewing",
+          sessionStage: "pr_review",
+          sessionStatus: "working",
+          turnRunning: true,
+          processRunning: true,
+          turnStartedAt: at(4),
+          contextPercent: 33,
+          currentPass: 1,
+          reports: [structuredReport(1, { findings: findingsOf(4, DECIDED), sentAt: at(4) })],
+        },
+        {},
+        longName,
+      );
+    case "findings-text":
       return inPR(
         {
           status: "awaiting_decision",
           sessionStage: "pr_review",
           contextPercent: 33,
-          reports: [
-            makePRReport({
-              pass: 1,
-              file: "1.md",
-              clean: false,
-              structured: false,
-              recorded: false,
-              findings: [],
-              revision: 0,
-              recordedAt: "",
-            }),
-          ],
+          currentPass: 0,
+          reports: [makeTextPRReport(1, false)],
         },
         { situations: [situation("findings", "waiting", prPlace, 12)] },
+        longName,
+      );
+    case "findings-unreadable":
+      return inPR(
+        {
+          status: "reviewing",
+          sessionStage: "pr_review",
+          contextPercent: 36,
+          currentPass: 2,
+          unreadableReport: "The report can't be read: finding 2 does not open with its location.",
+          reports: [
+            structuredReport(1, {
+              recordedAt: at(50),
+              sentAt: at(38),
+              findings: findingsOf(4, DECIDED),
+            }),
+            structuredReport(2, { recorded: false, file: "", revision: 0, recordedAt: "" }),
+          ],
+        },
+        { situations: [situation("reply", "waiting", prPlace, 3)] },
         longName,
       );
     case "close":
@@ -493,17 +746,10 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
           sessionStage: "pr_review",
           canClose: true,
           contextPercent: 36,
+          currentPass: 2,
           reports: [
-            makePRReport({
-              pass: 1,
-              file: "1.md",
-              clean: true,
-              structured: false,
-              recorded: false,
-              findings: [],
-              revision: 0,
-              recordedAt: "",
-            }),
+            structuredReport(1, { findings: findingsOf(4, DECIDED), sentAt: at(-25) }),
+            structuredReport(2, { clean: true, recordedAt: at(-60) }),
           ],
         },
         { situations: [situation("merge", "closing", prPlace, 120, { form: "close" })] },
@@ -558,11 +804,60 @@ function conversationsOf(name: SceneName): Record<string, Entry[]> {
     case "checks":
       return {};
     case "findings":
+    case "findings-apply":
+    case "findings-edit":
+      return { pr_review: reviewTalk(written(1, 4, 12)) };
+    case "findings-discarded":
+      return { pr_review: reviewTalk(written(1, 4, 12)) };
+    case "findings-revised":
       return {
-        pr_review: talk("Review the pull request #1284.", "Report 1 written · 4 findings."),
+        pr_review: reviewTalk(
+          written(1, 4, 12),
+          milestone("pr_review_revised", 6, { pass: 1, findings: 5 }),
+        ),
+      };
+    case "findings-sent":
+      return {
+        pr_review: reviewTalk(written(1, 4, 12), decidedOf(1, 4), applied(4)),
+      };
+    case "findings-text":
+      return { pr_review: reviewTalk(written(1, -1, 12)) };
+    case "findings-unreadable":
+      return {
+        pr_review: reviewTalk(
+          written(1, 4, 50),
+          decidedOf(1, 38),
+          applied(38),
+          makeEntry("action", { createdAt: at(30) }),
+          milestone("changes_approved", 22, { files: 3 }),
+          milestone("committed", 20, {
+            sha: "4b7e0aa",
+            subject: "Fix the burst off-by-one and round Retry-After up",
+            pushed: true,
+            number: 1284,
+          }),
+          milestone("checks_read", 10, { pass: 2, passed: 5, total: 5 }),
+          productMessage("pr_pass", "Review the pull request again.", 9, { appPass: 2 }),
+          said("Report 2 written."),
+        ),
       };
     case "close":
-      return { pr_review: talk("Review the pull request #1284.", "Clean: nothing to change.") };
+      return {
+        pr_review: reviewTalk(
+          written(1, 4, 12),
+          decidedOf(1, -25),
+          applied(-25),
+          makeEntry("action", { createdAt: at(-30) }),
+          milestone("changes_approved", -49, { files: 3 }),
+          milestone("committed", -51, {
+            sha: "4b7e0aa",
+            subject: "Fix the burst off-by-one and round Retry-After up",
+            pushed: true,
+            number: 1284,
+          }),
+          written(2, 0, -60),
+        ),
+      };
   }
 }
 
