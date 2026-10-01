@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { DeleteReviewDialog } from "@/features/reviews/DeleteReviewDialog";
 import { api } from "@/lib/wails";
@@ -28,7 +28,8 @@ describe("DeleteReviewDialog", () => {
   it("opens on Cancel, not on the deletion", async () => {
     dialog();
 
-    expect(await screen.findByRole("button", { name: "Cancel" })).toHaveFocus();
+    // The dialog moves the focus once it opens, after the button is drawn.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus());
   });
 
   it("deletes the review and closes", async () => {
