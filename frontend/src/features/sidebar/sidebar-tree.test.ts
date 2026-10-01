@@ -245,6 +245,34 @@ describe("the line 2 of a task with a situation", () => {
       "Decide findings · PR review",
     ],
     [
+      "findings to decide, counted",
+      { kind: "findings", form: "decide", place: PR_PLACE },
+      {
+        pr: makePullRequest({
+          currentPass: 3,
+          reports: [
+            makePRReport({
+              pass: 3,
+              findings: [
+                makeReviewFinding({ number: 1, decision: "approved" }),
+                makeReviewFinding({ number: 2 }),
+                makeReviewFinding({ number: 3 }),
+              ],
+            }),
+          ],
+        }),
+      },
+      "Decide findings · PR review · pass 3 · 1 of 3",
+      "Decide findings · 1/3",
+    ],
+    [
+      "findings ready to apply",
+      { kind: "findings", form: "apply", place: PR_PLACE },
+      { pr: makePullRequest({ currentPass: 3 }) },
+      "Ready to apply · PR review · pass 3",
+      "Ready to apply · PR review",
+    ],
+    [
       "changes to review",
       { kind: "changes_review", form: "review", place: PR_PLACE },
       {},

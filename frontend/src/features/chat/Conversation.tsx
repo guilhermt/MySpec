@@ -31,7 +31,7 @@ import {
 import type { SessionState } from "@/features/chat/session";
 import { useAutoScroll } from "@/features/chat/useAutoScroll";
 import { useFeed } from "@/features/chat/useFeed";
-import { reportMarkerIds } from "@/features/reviews/review-conversation";
+import { decidedMarkerIds, reportMarkerIds } from "@/features/reviews/review-conversation";
 import { asSituationKind, asTaskMode, type Entry } from "@/lib/wails";
 import { useAppStore, useFlashing, useReview, useTask, useTranscript } from "@/store/app-store";
 
@@ -264,15 +264,17 @@ export function Conversation({
   const railKey = replyWaiting ? lastCompleteSpeech(rows) : "";
   const waiting = useMemo(() => waitingToolUseId(entries), [entries]);
   const latestReport = useMemo(() => reportMarkerIds(entries), [entries]);
+  const latestDecided = useMemo(() => decidedMarkerIds(entries), [entries]);
   const ctx = useMemo<MarkerContext>(
     () => ({
       stage,
       task,
       review,
       latestReport,
+      latestDecided,
       oneShot: task !== null && asTaskMode(task.mode) === "one_shot",
     }),
-    [stage, task, review, latestReport],
+    [stage, task, review, latestReport, latestDecided],
   );
   // The stretches that fold are settled once, when the entries first arrive: a stretch that stops
   // being the last on screen stays open, so nothing folds under the reader.

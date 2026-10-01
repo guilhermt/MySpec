@@ -1,5 +1,5 @@
 import type { FindingView } from "@/components/system/Finding";
-import { fileName, findingName, headingOf, locationText } from "@/lib/findings";
+import { findingViewsOf } from "@/lib/findings";
 import { type ChecksReading, unfinishedChecks } from "@/lib/pull-requests";
 import { shortName } from "@/lib/repositories";
 import type { Entry, ReviewFinding, ReviewPass, ReviewSummary } from "@/lib/wails";
@@ -96,6 +96,17 @@ export function reportMarkerIds(entries: readonly Entry[]): Map<number, string> 
   return ids;
 }
 
+/** decidedMarkerIds is, for each pass, the id of its latest findings_decided marker: the one that holds the findings. */
+export function decidedMarkerIds(entries: readonly Entry[]): Map<number, string> {
+  const ids = new Map<number, string>();
+  for (const entry of entries) {
+    if (entry.marker !== null && entry.marker.type === "findings_decided") {
+      ids.set(entry.marker.pass, entry.id);
+    }
+  }
+  return ids;
+}
+
 /** decidedMarkerPasses are the passes whose decisions the conversation recorded with a findings_decided marker. */
 export function decidedMarkerPasses(entries: readonly Entry[]): Set<number> {
   const passes = new Set<number>();
@@ -163,31 +174,10 @@ export function findingViews(
   now: number,
   disabled = false,
 ): FindingView[] {
-  const findings = pass.findings ?? [];
-  return findings.map((finding) => {
-    const { title, locationAsTitle } = headingOf(finding);
-    return {
-      id: String(finding.number),
-      number: finding.number,
-      name: findingName(finding, findings.length),
-      title,
-      locationAsTitle,
-      location:
-        finding.path === ""
-          ? { kind: "general", text: locationText(finding) }
-          : {
-              kind: "anchored",
-              text: locationText(finding),
-              url: finding.lineUrl,
-              line: finding.line,
-              fileName: fileName(finding.path),
-            },
-      text: finding.text,
-      decision:
-        finding.decision === "approved" || finding.decision === "discarded" ? finding.decision : "",
-      disabled: disabled ? disabledFindingNote(review, pass, finding, now) : null,
-    };
-  });
+  return findingViewsOf(
+    pass.findings ?? [],
+    disabled ? (finding) => disabledFindingNote(review, pass, finding, now) : null,
+  );
 }
 
 /**

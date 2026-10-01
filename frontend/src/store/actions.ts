@@ -769,6 +769,14 @@ export function openFindingInEditor(id: string, pass: number, number: number): P
   );
 }
 
+/** openPRFindingInEditor opens the line a finding of the review of the pull request of a task points at, in the editor of the user. */
+export function openPRFindingInEditor(taskId: string, pass: number, number: number): Promise<void> {
+  return run(
+    fail(`Couldn't open finding ${number} of ${theItem(taskId)} in the editor`, null),
+    () => api.openPRFindingInEditor(taskId, pass, number),
+  );
+}
+
 /** deleteReview removes the review for good and reports what stayed on disk. */
 export function deleteReview(id: string): Promise<void> {
   return runRemoval(id, fail(withItem("Couldn't delete", itemName(id)), TRY), async () => {

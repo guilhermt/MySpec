@@ -41,11 +41,11 @@ export interface ComposerContext {
   permission: boolean;
   /** chips are the quick replies of the question in text, empty without one. */
   chips: QuickReply[];
-  /** findings is the pull request of the task waiting for its findings to be decided. */
+  /** findings is the pull request of the task waiting for the findings of a pass in text to be decided. */
   findings: boolean;
   /** askForChange is the step on screen in review by the user, or without changes. */
   askForChange: boolean;
-  /** reviseFindings is a pass of the review with findings not published. */
+  /** reviseFindings is a pass with findings not sent or published yet: the review center, or the pull request of a task. */
   reviseFindings: boolean;
   /** item is what a paused conversation resumes: task, review. */
   item: string;

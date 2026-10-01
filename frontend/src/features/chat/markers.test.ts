@@ -10,12 +10,20 @@ import {
   voiceInSentence,
   voiceOf,
 } from "@/features/chat/markers";
-import type { Entry, MarkerEntry, PullRequest, TaskSummary, UserEntry } from "@/lib/wails";
+import type {
+  Entry,
+  MarkerEntry,
+  PRReport,
+  PullRequest,
+  TaskSummary,
+  UserEntry,
+} from "@/lib/wails";
 import { clockTime } from "@/lib/when";
 import {
   makeEntry,
   makeMarkerCommit,
   makePRCheck,
+  makePRReport,
   makePullRequest,
   makeReviewFinding,
   makeReviewPass,
@@ -104,11 +112,18 @@ const task: TaskSummary = makeTask({
   }),
 });
 
+// LATEST_PASSES says the marker read with no id is the latest of passes 1 and 2.
+const LATEST_PASSES = new Map([
+  [1, ""],
+  [2, ""],
+]);
+
 const ctx = (stage: string, rest: Partial<MarkerContext> = {}): MarkerContext => ({
   stage,
   task,
   review: null,
   latestReport: new Map(),
+  latestDecided: new Map(),
   oneShot: false,
   ...rest,
 });
@@ -489,7 +504,7 @@ describe("markerOf", () => {
     [
       "a report of the PR review with changes",
       { type: "pr_review_written", pass: 1 },
-      ctx("pr_review"),
+      ctx("pr_review", { latestReport: LATEST_PASSES }),
       view("file", "Review 1 written", {
         complement: "changes",
         body: { kind: "artifact", name: "pr/review-1.md", openIn: "details" },
@@ -498,7 +513,7 @@ describe("markerOf", () => {
     [
       "a clean report of the PR review",
       { type: "pr_review_written", pass: 2, clean: true },
-      ctx("pr_review"),
+      ctx("pr_review", { latestReport: LATEST_PASSES }),
       view("file", "Review 2 written", {
         complement: "clean",
         body: { kind: "artifact", name: "pr/review-2.md", openIn: "details" },
@@ -716,6 +731,7 @@ describe("markerOf in a review", () => {
     task: null,
     review,
     latestReport: new Map([[1, "entry-9"]]),
+    latestDecided: new Map([[1, "entry-4"]]),
   });
 
   it.each([
@@ -830,7 +846,7 @@ describe("markerOf in a review", () => {
     });
     const read = markerOf(
       marker({ type: "findings_decided", pass: 1, approved: 2, discarded: 1 }),
-      ctx("review", { task: null, review: applying }),
+      ctx("review", { task: null, review: applying, latestDecided: new Map([[1, "e"]]) }),
       "e",
       NOW,
     );
@@ -1002,5 +1018,94 @@ describe("mergedLineOf", () => {
     ["a pull request not opened", { prNumber: 0, prState: "" }, null],
   ])("draws %s", (_, fields, expected) => {
     expect(mergedLineOf(pr(fields))).toEqual(expected);
+  });
+});
+
+describe("markerOf in the PR review of a task", () => {
+  const NOW = Date.parse("2026-09-30T15:00:00Z");
+  const sent = makePRReport({
+    pass: 1,
+    file: "review-1.md",
+    sentAt: "2026-09-30T14:36:00Z",
+    findings: [
+      makeReviewFinding({ number: 1, decision: "approved" }),
+      makeReviewFinding({ number: 2, decision: "discarded" }),
+    ],
+  });
+  const inTask = (reports: PRReport[], rest: Partial<MarkerContext> = {}) =>
+    ctx("pr_review", { task: makeTask({ pr: pr({ reports }) }), ...rest });
+
+  it.each([
+    { fields: { findings: 4 }, want: "changes · 4 findings" },
+    { fields: { findings: 1 }, want: "changes · 1 finding" },
+    { fields: { findings: -1 }, want: "changes" },
+    { fields: { clean: true, findings: 0 }, want: "clean" },
+  ])("reads a structured report with $fields as $want", ({ fields, want }) => {
+    const read = markerOf(
+      marker({ type: "pr_review_written", pass: 1, ...fields }),
+      inTask([sent]),
+      "e",
+      NOW,
+    );
+
+    expect(read?.complement).toBe(want);
+  });
+
+  it("reads a revised report and opens only the latest one", () => {
+    const context = inTask([sent], { latestReport: new Map([[1, "e2"]]) });
+    const revised = marker({ type: "pr_review_revised", pass: 1, findings: 5 });
+
+    expect(markerOf(revised, context, "e2", NOW)).toMatchObject({
+      text: "Review 1 revised",
+      complement: "changes · 5 findings",
+      body: { kind: "artifact", name: "pr/review-1.md", openIn: "details" },
+    });
+    expect(markerOf(revised, context, "e1", NOW)?.body).toEqual({ kind: "none" });
+  });
+
+  it("opens no report for a pass whose file isn't written", () => {
+    const context = inTask([makePRReport({ file: "", recorded: false })], {
+      latestReport: new Map([[1, "e"]]),
+    });
+
+    expect(
+      markerOf(marker({ type: "pr_review_written", pass: 1 }), context, "e", NOW)?.body,
+    ).toEqual({ kind: "none" });
+  });
+
+  it("reads a pass in text as changes", () => {
+    const read = markerOf(
+      marker({ type: "pr_review_written", pass: 1 }),
+      inTask([makeTextPRReport(1, false)]),
+      "e",
+      NOW,
+    );
+
+    expect(read?.complement).toBe("changes");
+  });
+
+  it("opens the findings of a decision disabled with where each went, only at the latest line", () => {
+    const decided = marker({ type: "findings_decided", pass: 1, approved: 1, discarded: 1 });
+    const context = inTask([sent], { latestDecided: new Map([[1, "e2"]]) });
+
+    const latest = markerOf(decided, context, "e2", NOW);
+    const shown = latest?.body.kind === "findings" ? latest.body.findings : [];
+    expect(latest?.complement).toBe("1 approved · 1 discarded");
+    expect(shown.map((finding) => finding.disabled)).toEqual([
+      `Sent to the agent · ${clockTime(sent.sentAt, NOW)}`,
+      "Not sent",
+    ]);
+    expect(markerOf(decided, context, "e1", NOW)?.body).toEqual({ kind: "none" });
+  });
+
+  it("reads the message that applies the approved findings", () => {
+    const read = productMessageOf(
+      user({ app: true, appKind: "apply", appCount: 3 }),
+      "PR agent",
+      inTask([sent]),
+    );
+
+    expect(read.text).toBe("MySpec → PR agent");
+    expect(read.complement).toBe("apply 3 approved findings");
   });
 });

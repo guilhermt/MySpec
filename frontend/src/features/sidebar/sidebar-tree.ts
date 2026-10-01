@@ -6,6 +6,7 @@ import {
   taskSessions,
   workingSession,
 } from "@/features/sidebar/sessions";
+import { currentReport } from "@/features/task/pr-findings";
 import { boardOfRepository } from "@/lib/boards";
 import { checkCounts, prChecks } from "@/lib/pull-requests";
 import { ALL_REPOSITORIES, findRepository, shortName, tasksInFilter } from "@/lib/repositories";
@@ -239,6 +240,9 @@ const stepCount = (task: TaskSummary, number: number) =>
 
 // The pass of the review of the pull request of a task: the one running, or the last one.
 function prPass(task: TaskSummary): number {
+  if (task.pr !== null && task.pr.currentPass > 0) {
+    return task.pr.currentPass;
+  }
   const reports = (task.pr?.reports ?? []).length;
   if (task.pr !== null && asPRStatus(task.pr.status) === "reviewing") {
     return reports + 1;
@@ -376,11 +380,26 @@ function situationText(owner: Owner, situation: Situation): RowText {
     }
     case "draft":
       return { long: "Draft to approve · PR", short: "Draft · PR" };
-    case "findings":
+    case "findings": {
+      const pass = task === null ? 1 : prPass(task);
+      if (form === "apply") {
+        return {
+          long: `Ready to apply · PR review · pass ${pass}`,
+          short: "Ready to apply · PR review",
+        };
+      }
+      if (form === "decide" && task !== null && task.pr !== null) {
+        const { a, b } = decided(currentReport(task.pr)?.findings ?? []);
+        return {
+          long: `Decide findings · PR review · pass ${pass} · ${a} of ${b}`,
+          short: `Decide findings · ${a}/${b}`,
+        };
+      }
       return {
-        long: `Decide findings · PR review · pass ${task === null ? 1 : prPass(task)}`,
+        long: `Decide findings · PR review · pass ${pass}`,
         short: "Decide findings · PR review",
       };
+    }
     case "changes_review": {
       const place = task === null ? passText(owner) : "PR review";
       if (form === "approve") {

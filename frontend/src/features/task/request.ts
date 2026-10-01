@@ -1,6 +1,13 @@
 import type { RequestButton, RequestModel } from "@/components/system/RequestBar";
 import { pendingOf } from "@/features/chat/composer";
 import { voiceInSentence, voiceOf } from "@/features/chat/markers";
+import {
+  currentReport,
+  discardedPass,
+  findingsBar,
+  findingsFormOf,
+  noFileChanged,
+} from "@/features/task/pr-findings";
 import { canCloseTask, closeHint, draftAtHand } from "@/features/task/pr-status";
 import {
   currentStepOf,
@@ -69,7 +76,10 @@ export type TaskRequestAction =
   | "changePath"
   | "retryStep"
   | "retryPR"
-  | "showProblems";
+  | "showProblems"
+  | "nextToDecide"
+  | "approveRest"
+  | "applyFindings";
 
 /** TaskRequestButton is one button of the request bar of a task. */
 export type TaskRequestButton = RequestButton<TaskRequestAction>;
@@ -109,13 +119,14 @@ export type RequestKind = Extract<
   | "merge"
   | "pr_trouble"
   | "pr_closed"
+  | "findings"
 >;
 
 /** Want is what the bar asks for: the kind of the request and its form, from a situation or from the state. */
 interface Want {
   kind: RequestKind;
-  /** approve is the review with every file staged; close, the merge whose closing is offered. */
-  form: "" | "approve" | "close";
+  /** approve is the review with every file staged; close, the merge whose closing is offered; decide, apply and text are the findings. */
+  form: "" | "approve" | "close" | "decide" | "apply" | "text";
 }
 
 /**
@@ -320,14 +331,25 @@ function mergeBar(pr: PullRequest, want: Want, repository: Repository | null): B
       actions: [OPEN_PR, closeTaskButton("primary")],
     };
   }
-  return {
-    form: "tinted",
-    label: "Ready to merge",
-    place: number,
-    progress: pr.cloneMissing ? closeHint(pr, repository) : "",
-    status: `Ready to merge · ${number}`,
-    actions: [OPEN_PR],
-  };
+  const base = { form: "tinted" as const, label: "Ready to merge", place: number };
+  const status = `Ready to merge · ${number}`;
+  if (pr.cloneMissing) {
+    return { ...base, progress: closeHint(pr, repository), status, actions: [OPEN_PR] };
+  }
+  if (discardedPass(pr)) {
+    const unreadable = pr.unreadableReport !== "";
+    return {
+      ...base,
+      progress: joined([
+        `Nothing approved in pass ${pr.currentPass}`,
+        ...(unreadable ? ["the rewritten report can't be read"] : []),
+      ]),
+      ...(unreadable ? { progressTooltip: pr.unreadableReport } : {}),
+      status,
+      actions: [OPEN_PR],
+    };
+  }
+  return { ...base, progress: "", status, actions: [OPEN_PR] };
 }
 
 /** REVIEW_AGAIN_TOOLTIP is what Review again does to a pull request in trouble. */
@@ -397,14 +419,24 @@ function prBar(
         notes.push("the last approval didn't produce a commit");
       }
       const label = want.form === "approve" ? "Approve changes" : "Review changes";
+      const place = "PR review";
+      const empty = noFileChanged(pr);
       return {
         form: "tinted",
         label,
-        progress: joined(notes),
-        status: label,
-        actions: [openInEditor(), approveButton("approvePR", pr.review)],
+        place,
+        progress: empty ? "No file changed" : joined(notes),
+        status: statusOf(label, place),
+        actions: [
+          openInEditor(),
+          empty
+            ? { ...approveButton("approvePR", null), disabledReason: "No change to approve" }
+            : approveButton("approvePR", pr.review),
+        ],
       };
     }
+    case "findings":
+      return findingsBar(pr, want.form === "decide" || want.form === "apply" ? want.form : "text");
     case "merge":
       return mergeBar(pr, want, repository);
     case "pr_trouble":
@@ -480,6 +512,10 @@ function formOf(situation: Situation): Want["form"] {
       return "approve";
     case "close":
       return "close";
+    case "decide":
+      return "decide";
+    case "apply":
+      return "apply";
     default:
       return "";
   }
@@ -562,6 +598,8 @@ function pausedWant(task: TaskSummary): Want | null {
       return { kind: "pr_trouble", form: "" };
     case "pr_closed":
       return { kind: "pr_closed", form: "" };
+    case "awaiting_decision":
+      return { kind: "findings", form: findingsFormOf(pr) };
     default:
       return null;
   }
@@ -598,8 +636,16 @@ function situationRequestOf(
         asPlaceKind(situation.place.kind) === "pr" && pr !== null && draftAtHand(pr)
           ? [approveDraftButton(pr, editedDraft)]
           : [];
+      const unreadable =
+        asPlaceKind(situation.place.kind) === "pr" &&
+        pr !== null &&
+        pr.unreadableReport !== "" &&
+        currentReport(pr)?.recorded !== true
+          ? pr.unreadableReport
+          : "";
       return sessionRequestOf(situation, session, conversationName(session.stage), pending, {
         label: "Waiting for reply",
+        ...(unreadable === "" ? {} : { progress: unreadable }),
         actions,
       });
     }
@@ -609,12 +655,11 @@ function situationRequestOf(
       return blockRequestOf(situation, task);
     case "plan_invalid":
       return planRequestOf(situation, task);
-    case "findings":
-      return findingsRequestOf(situation, task);
     default: {
+      const form = formOf(situation);
       const bar = barOf(
         task,
-        { kind: kind as RequestKind, form: formOf(situation) },
+        { kind: kind as RequestKind, form: kind === "findings" && form === "" ? "text" : form },
         repository,
         editedDraft,
       );
@@ -967,21 +1012,6 @@ export function planRequestOf(s: Situation, task: TaskSummary): TaskRequestModel
         loadingLabel: "",
       },
     ],
-    focus: "composer",
-  });
-}
-
-/**
- * findingsRequestOf is the bar of the findings of the PR review to decide: tinted, without an
- * action, the answer going through the composer. Without the wait, which taskRequestOf adds.
- */
-export function findingsRequestOf(s: Situation, _task: TaskSummary): TaskRequestModel {
-  return drawn(s, {
-    form: "tinted",
-    label: "Decide findings",
-    place: "PR review",
-    status: statusOf("Decide findings", "PR review"),
-    actions: [],
     focus: "composer",
   });
 }
