@@ -99,6 +99,20 @@ describe.each(THEMES)("Button in the %s theme", (theme) => {
     },
   );
 
+  it("says what is missing before the dashed button, on its line", () => {
+    setTheme(theme);
+    render(
+      <Button variant="primary" shortcut="Ctrl ↵" disabled disabledReason="Decide 2 more">
+        Publish review…
+      </Button>,
+    );
+    const button = screen.getByRole("button", { name: "Publish review…" }).getBoundingClientRect();
+    const reason = screen.getByText("Decide 2 more").getBoundingClientRect();
+    expect(reason.right).toBeLessThanOrEqual(button.left);
+    expect(reason.top).toBeGreaterThanOrEqual(button.top);
+    expect(reason.bottom).toBeLessThanOrEqual(button.bottom);
+  });
+
   it("keeps the key of a dashed primary in sight, as the key of a dashed secondary", () => {
     setTheme(theme);
     render(

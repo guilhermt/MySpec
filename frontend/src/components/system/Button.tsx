@@ -137,15 +137,16 @@ export function Button({
   );
 
   if (!disabled || disabledReason === undefined || reasonId !== undefined) return control;
+  // What is missing reads before the button it holds back: Decide 2 more, then Publish review….
   return (
     <span className="inline-flex items-center gap-2">
-      {control}
       <span
         id={ownReasonId}
         className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
       >
         {disabledReason}
       </span>
+      {control}
     </span>
   );
 }
