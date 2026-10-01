@@ -489,12 +489,3 @@ func TestALaterPassKeepsTheChecksOfItsOwnReading(t *testing.T) {
 		t.Errorf("checks of the first pass = %+v, want the ones of the pass before left alone", first.Checks)
 	}
 }
-
-func TestOnlyTheChecksThatFinishedWithoutFailingCountAsPassed(t *testing.T) {
-	t.Parallel()
-
-	checks := gh.PRChecks{Checks: []gh.Check{passedCheck, failedCheck, pendingCheck}}
-	if passed, total := reviewflow.ChecksCount(checks); passed != 1 || total != 3 {
-		t.Errorf("checks count = %d of %d, want 1 of 3: neither the failed nor the pending one passed", passed, total)
-	}
-}

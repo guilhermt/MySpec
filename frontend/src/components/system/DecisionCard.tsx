@@ -84,9 +84,16 @@ export function DecisionCard({
       data-decision-card=""
       data-feed-item=""
       data-feed-keys="own"
+      data-feed-stop="inner"
       tabIndex={-1}
       onKeyDown={onKeyDown}
       onFocus={(event) => {
+        // The card is never the stop itself: focus that lands on it, from the feed's arrows or a
+        // click between the items, goes on to the current item.
+        if (event.target === event.currentTarget) {
+          if (current !== null) focusItem(current);
+          return;
+        }
         const id = (event.target as HTMLElement).closest<HTMLElement>("[data-finding-id]")?.dataset
           .findingId;
         if (id !== undefined) setFocused(id);

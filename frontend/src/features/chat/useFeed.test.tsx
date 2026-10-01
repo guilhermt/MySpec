@@ -11,10 +11,12 @@ function Feed({
   pending = false,
   composer = true,
   own = false,
+  innerStop = false,
 }: {
   pending?: boolean;
   composer?: boolean;
   own?: boolean;
+  innerStop?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useFeed(ref);
@@ -33,6 +35,7 @@ function Feed({
           aria-label="Card"
           {...(pending ? { "data-pending-card": "question" } : {})}
           {...(own ? { "data-feed-keys": "own" } : {})}
+          {...(innerStop ? { "data-feed-stop": "inner" } : {})}
         >
           <button type="button">Allow</button>
         </article>
@@ -214,6 +217,15 @@ describe("useFeed", () => {
     stepFeed(entry("Card"), -1);
     expect(group()).toHaveFocus();
     expect(group()).toHaveAttribute("tabindex", "0");
+  });
+
+  it("keeps an entry whose stop is inside it out of Tab, its stop a control of its own", () => {
+    renderWithStore(<Feed own innerStop />);
+
+    expect(entry("Card")).toHaveAttribute("tabindex", "-1");
+    expect(control("Allow")).not.toHaveAttribute("tabindex");
+    control("Allow").focus();
+    expect(entry("Card")).toHaveAttribute("tabindex", "-1");
   });
 
   it("opens and folds an entry with → and ←, and goes from an inner entry to its own", () => {

@@ -1108,7 +1108,8 @@ type ReviewCenter struct {
 	ReadAt   string         `json:"readAt"` // "" before the first reading
 	Reading  bool           `json:"reading"`
 	Filters  ReviewFilters  `json:"filters"`
-	// PendingCount is how many pending pull requests pass the filters.
+	// PendingCount is how many pending pull requests pass the filters and have no
+	// active review.
 	PendingCount int `json:"pendingCount"`
 	// Authors and Labels are what the reading found, of every pull request and
 	// not only the ones the filters keep, in alphabetical order; never nil.

@@ -260,6 +260,9 @@ func TestPRChecksListTheFailedInOrderAndTheConflict(t *testing.T) {
 	if !checks.Conflicting() {
 		t.Error("Conflicting() = false, want true")
 	}
+	if got := checks.Passed(); got != 1 {
+		t.Errorf("Passed() = %d, want 1: neither the failed nor the pending ones passed", got)
+	}
 	if got := (gh.PRChecks{Mergeable: gh.MergeableClean}).Failed(); got == nil {
 		t.Error("Failed() = nil, want an empty list")
 	}

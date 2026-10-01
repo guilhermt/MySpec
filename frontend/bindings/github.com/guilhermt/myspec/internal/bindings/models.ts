@@ -2012,7 +2012,8 @@ export interface ReviewCenter {
     "filters": ReviewFilters;
 
     /**
-     * PendingCount is how many pending pull requests pass the filters.
+     * PendingCount is how many pending pull requests pass the filters and have no
+     * active review.
      */
     "pendingCount": number;
 

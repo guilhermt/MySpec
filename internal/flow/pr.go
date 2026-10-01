@@ -875,14 +875,8 @@ func (s *Service) markChecks(ctx context.Context, key session.Key, pass int, che
 	if checks == nil {
 		return
 	}
-	passed := 0
-	for _, check := range checks.Checks {
-		if !check.Failed() && !check.Pending {
-			passed++
-		}
-	}
 	trouble := checks.Trouble()
-	s.sessions.MarkChecksRead(ctx, key, pass, passed, len(checks.Checks), trouble.FailedChecks, trouble.Conflict)
+	s.sessions.MarkChecksRead(ctx, key, pass, checks.Passed(), len(checks.Checks), trouble.FailedChecks, trouble.Conflict)
 }
 
 // newReport is the report of a pass the app has not recorded yet.

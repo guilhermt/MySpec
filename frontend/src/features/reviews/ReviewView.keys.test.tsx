@@ -1,16 +1,18 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { useGlobalShortcuts } from "@/app/useGlobalShortcuts";
 import { ReviewView } from "@/features/reviews/ReviewView";
 import { api, type ReviewSummary } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import {
+  makeEntry,
   makeReviewFinding,
   makeReviewPass,
   makeReviewSummary,
   makeSituation,
   makeState,
+  makeTranscript,
 } from "@/test/wails-mock";
 
 const DECIDE = makeSituation({
@@ -251,6 +253,52 @@ describe("ReviewView, the keys of a finding on the screen", () => {
     fireEvent.keyDown(finding(1), { key: "a", repeat: true });
 
     expect(api.decideFinding).not.toHaveBeenCalled();
+    expect(finding(1)).toHaveFocus();
+  });
+
+  it("enters the card with ↓ from the report on the finding it holds, which A then decides", async () => {
+    const marker = makeEntry("marker");
+    vi.mocked(api.getTranscript).mockResolvedValueOnce(
+      makeTranscript({
+        taskId: "review-1",
+        stage: "review",
+        entries: [
+          marker.marker === null
+            ? marker
+            : { ...marker, marker: { ...marker.marker, type: "pr_review_written", pass: 1 } },
+          makeEntry("assistant"),
+        ],
+      }),
+    );
+    const { user } = screenOf();
+    const card = await screen.findByRole("group", { name: "Findings of pass 1" });
+
+    finding(1).focus();
+    await user.keyboard("{ArrowUp}");
+    expect(document.activeElement).toHaveTextContent("Review 1 written");
+    expect(card.contains(document.activeElement)).toBe(false);
+
+    await user.keyboard("{ArrowDown}");
+    expect(finding(1)).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(finding(2)).toHaveFocus();
+    await user.keyboard("{ArrowUp}a");
+
+    expect(api.decideFinding).toHaveBeenCalledWith("review-1", 1, 1, "approved");
+    expect(finding(3)).toHaveFocus();
+  });
+
+  it("is one stop of Tab, the finding, never the card around it", async () => {
+    const { user } = screenOf();
+    const card = await screen.findByRole("group", { name: "Findings of pass 1" });
+
+    expect(card).toHaveAttribute("tabindex", "-1");
+    finding(1).focus();
+    expect(card).toHaveAttribute("tabindex", "-1");
+
+    await user.tab({ shift: true });
+    expect(card.contains(document.activeElement)).toBe(false);
+    await user.tab();
     expect(finding(1)).toHaveFocus();
   });
 

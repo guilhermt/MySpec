@@ -295,9 +295,8 @@ func (s *Service) sendPass(
 	if err = s.reviews.MarkChecks(ctx, stored.ID, pass, checks, readAt); err != nil {
 		s.log.Error("record review pass checks failed", "review", stored.ID, "pass", pass, "error", err)
 	}
-	passed, total := checksCount(checks)
 	trouble := checks.Trouble()
-	s.sessions.MarkChecksRead(ctx, sessionKey(stored.ID), pass, passed, total, trouble.FailedChecks, trouble.Conflict)
+	s.sessions.MarkChecksRead(ctx, sessionKey(stored.ID), pass, checks.Passed(), len(checks.Checks), trouble.FailedChecks, trouble.Conflict)
 	s.recordBaseline(ctx, stored.ID, checks)
 
 	s.log.Info("review pass asked", "review", stored.ID, "pass", pass)
