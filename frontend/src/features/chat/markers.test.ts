@@ -23,6 +23,7 @@ import {
   makeStep,
   makeTask,
   makeTaskCard,
+  makeTextPRReport,
 } from "@/test/wails-mock";
 
 // A marker and a message as an old transcript keeps them: every field at its zero.
@@ -98,10 +99,7 @@ const task: TaskSummary = makeTask({
     }),
   ],
   pr: pr({
-    reports: [
-      { pass: 1, file: "review-1.md", clean: false },
-      { pass: 2, file: "review-2.md", clean: true },
-    ],
+    reports: [makeTextPRReport(1, false), makeTextPRReport(2, true)],
     draft: { title: "Limit requests per API key", body: "", file: "draft.md" },
   }),
 });

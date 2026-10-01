@@ -1406,16 +1406,54 @@ export interface PRPreview {
 }
 
 /**
- * PRReport is one pass of the review of a pull request.
+ * PRReport is one pass of the review of the pull request of a task: one with
+ * a report on disk or asked for with the structured format.
  */
 export interface PRReport {
     "pass": number;
 
     /**
-     * name inside the pr folder, for ReadArtifact
+     * name inside the pr folder, for ReadArtifact; "" while the report of a structured pass isn't written
      */
     "file": string;
+
+    /**
+     * Clean is the verdict: of the recorded pass when there is one, else of
+     * the file.
+     */
     "clean": boolean;
+
+    /**
+     * Structured says the app asked for the pass with the format of findings;
+     * a pass in text has no findings and is decided in the conversation.
+     */
+    "structured": boolean;
+
+    /**
+     * a readable report was recorded; structured only
+     */
+    "recorded": boolean;
+
+    /**
+     * never nil; empty for a pass in text
+     */
+    "findings": ReviewFinding[] | null;
+    "revision": number;
+
+    /**
+     * Edited says the user decided a finding or changed its text.
+     */
+    "edited": boolean;
+
+    /**
+     * RFC 3339; "" before
+     */
+    "recordedAt": string;
+
+    /**
+     * RFC 3339; "" before Apply approved
+     */
+    "sentAt": string;
 }
 
 /**
@@ -1575,6 +1613,18 @@ export interface PullRequest {
      * never nil
      */
     "reports": PRReport[] | null;
+
+    /**
+     * CurrentPass is the current structured pass, the highest asked for with the
+     * format of findings; 0 while the review runs a pass in text or none.
+     */
+    "currentPass": number;
+
+    /**
+     * UnreadableReport is why the report of the current pass, or its rewrite,
+     * can't be read; "" otherwise.
+     */
+    "unreadableReport": string;
 
     /**
      * the review states and committing only

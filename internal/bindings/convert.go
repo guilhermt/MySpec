@@ -1,6 +1,7 @@
 package bindings
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"fmt"
 	"slices"
@@ -307,10 +308,12 @@ func fromPullRequest(pr *flow.PullRequest) *PullRequest {
 		Branch:       pr.Branch,
 		BaseBranch:   pr.BaseBranch,
 
-		Draft:        fromPRDraft(pr.Draft),
-		Reports:      fromReports(pr.Reports),
-		Review:       fromReview(pr.Review),
-		CommitFailed: pr.CommitFailed,
+		Draft:            fromPRDraft(pr.Draft),
+		Reports:          fromReports(pr.Reports, pr.Passes, pr.PR.URL),
+		CurrentPass:      currentPassNumber(pr.Pass),
+		UnreadableReport: pr.Unreadable,
+		Review:           fromReview(pr.Review),
+		CommitFailed:     pr.CommitFailed,
 
 		PRNumber:     pr.PR.Number,
 		PRURL:        pr.PR.URL,
@@ -511,12 +514,72 @@ func fromPRDraft(draft *task.Draft) *PRDraft {
 	return &PRDraft{Title: draft.Title, Body: draft.Body, File: task.DraftFile}
 }
 
-// fromReports converts the passes of a review, always returning a slice so the
+// currentPassNumber is the number of the current structured pass, 0 when there
+// is none.
+func currentPassNumber(pass *task.PRPass) int {
+	if pass == nil {
+		return 0
+	}
+	return pass.Pass
+}
+
+// fromReports converts the passes of a review, one per number that has a report
+// file or a recorded row, in ascending order. It always returns a slice so the
 // frontend never sees null.
-func fromReports(reports []task.ReviewReport) []PRReport {
-	converted := make([]PRReport, len(reports))
-	for i, report := range reports {
-		converted[i] = PRReport{Pass: report.Pass, File: report.File, Clean: report.Clean}
+func fromReports(reports []task.ReviewReport, passes []task.PRPass, prURL string) []PRReport {
+	byNumber := make(map[int]*PRReport, len(reports)+len(passes))
+	for _, report := range reports {
+		byNumber[report.Pass] = &PRReport{
+			Pass: report.Pass, File: report.File, Clean: report.Clean, Findings: []ReviewFinding{},
+		}
+	}
+	for _, pass := range passes {
+		converted, ok := byNumber[pass.Pass]
+		if !ok {
+			converted = &PRReport{Pass: pass.Pass}
+			byNumber[pass.Pass] = converted
+		}
+		if pass.Recorded {
+			converted.Clean = pass.Clean
+		}
+		converted.Structured = true
+		converted.Recorded = pass.Recorded
+		converted.Findings = fromPRFindings(pass.Findings, prURL)
+		converted.Revision = pass.Revision
+		converted.Edited = editedPRPass(pass)
+		converted.RecordedAt = timeOrEmpty(pass.RecordedAt)
+		converted.SentAt = timeOrEmpty(pass.SentAt)
+	}
+	converted := make([]PRReport, 0, len(byNumber))
+	for _, report := range byNumber {
+		converted = append(converted, *report)
+	}
+	slices.SortFunc(converted, func(a, b PRReport) int { return cmp.Compare(a.Pass, b.Pass) })
+	return converted
+}
+
+// editedPRPass tells whether the user decided a finding of the pass or changed
+// its text.
+func editedPRPass(pass task.PRPass) bool {
+	return slices.ContainsFunc(pass.Findings, func(f prreport.Finding) bool {
+		return f.Decision != prreport.DecisionNone || f.Text != f.Original
+	})
+}
+
+// fromPRFindings converts the findings of a pass of a task, always returning a
+// slice so the frontend never sees null.
+func fromPRFindings(findings []prreport.Finding, prURL string) []ReviewFinding {
+	converted := make([]ReviewFinding, len(findings))
+	for i, finding := range findings {
+		converted[i] = ReviewFinding{
+			Number:   finding.Number,
+			Title:    finding.Title,
+			Path:     finding.Path,
+			Line:     finding.Line,
+			LineURL:  lineURL(prURL, finding),
+			Text:     finding.Text,
+			Decision: string(finding.Decision),
+		}
 	}
 	return converted
 }

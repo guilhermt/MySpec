@@ -15,6 +15,7 @@ import {
   makeTask,
   makeTaskCard,
   makeTaskConversation,
+  makeTextPRReport,
 } from "@/test/wails-mock";
 
 const AT = "2026-09-27T09:14:00Z";
@@ -257,10 +258,7 @@ describe("detailsOf, Pull request", () => {
         prState: "open",
         prBase: "dev",
         sessionStage: "pr_review",
-        reports: [
-          { pass: 1, file: "review-1.md", clean: false },
-          { pass: 2, file: "review-2.md", clean: true },
-        ],
+        reports: [makeTextPRReport(1, false), makeTextPRReport(2, true)],
       }),
     });
 
@@ -426,7 +424,7 @@ describe("reportOf", () => {
         stage: "pr",
         pr: makePullRequest({
           prNumber: 1284,
-          reports: [{ pass: 1, file: "review-1.md", clean: true }],
+          reports: [makeTextPRReport(1, true)],
         }),
       }),
       null,

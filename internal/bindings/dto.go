@@ -246,11 +246,24 @@ type PRDraft struct {
 	File  string `json:"file"` // name inside the pr folder, for ReadArtifact
 }
 
-// PRReport is one pass of the review of a pull request.
+// PRReport is one pass of the review of the pull request of a task: one with
+// a report on disk or asked for with the structured format.
 type PRReport struct {
-	Pass  int    `json:"pass"`
-	File  string `json:"file"` // name inside the pr folder, for ReadArtifact
-	Clean bool   `json:"clean"`
+	Pass int    `json:"pass"`
+	File string `json:"file"` // name inside the pr folder, for ReadArtifact; "" while the report of a structured pass isn't written
+	// Clean is the verdict: of the recorded pass when there is one, else of
+	// the file.
+	Clean bool `json:"clean"`
+	// Structured says the app asked for the pass with the format of findings;
+	// a pass in text has no findings and is decided in the conversation.
+	Structured bool            `json:"structured"`
+	Recorded   bool            `json:"recorded"` // a readable report was recorded; structured only
+	Findings   []ReviewFinding `json:"findings"` // never nil; empty for a pass in text
+	Revision   int             `json:"revision"`
+	// Edited says the user decided a finding or changed its text.
+	Edited     bool   `json:"edited"`
+	RecordedAt string `json:"recordedAt"` // RFC 3339; "" before
+	SentAt     string `json:"sentAt"`     // RFC 3339; "" before Apply approved
 }
 
 // CloseStep is one part of the closing of a task.
@@ -290,7 +303,13 @@ type PullRequest struct {
 
 	Draft   *PRDraft   `json:"draft"`   // nil until the draft is written
 	Reports []PRReport `json:"reports"` // never nil
-	Review  *Review    `json:"review"`  // the review states and committing only
+	// CurrentPass is the current structured pass, the highest asked for with the
+	// format of findings; 0 while the review runs a pass in text or none.
+	CurrentPass int `json:"currentPass"`
+	// UnreadableReport is why the report of the current pass, or its rewrite,
+	// can't be read; "" otherwise.
+	UnreadableReport string  `json:"unreadableReport"`
+	Review           *Review `json:"review"` // the review states and committing only
 	// CommitFailed says the last approval of the review ended without a commit.
 	CommitFailed bool `json:"commitFailed"`
 

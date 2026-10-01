@@ -32,11 +32,26 @@ export function AnswerQuestion(taskID: string, stage: string, requestID: string,
 }
 
 /**
+ * ApplyPRFindings sends the approved findings of the current pass to the agent.
+ */
+export function ApplyPRFindings(taskID: string): $CancellablePromise<void> {
+    return $Call.ByID(269594546, taskID);
+}
+
+/**
  * ApprovePR approves the review of the changes a pass of the pull request
  * review produced and asks the agent to commit and push them.
  */
 export function ApprovePR(taskID: string): $CancellablePromise<void> {
     return $Call.ByID(1918022829, taskID);
+}
+
+/**
+ * ApproveRestOfPRFindings approves every finding of the pass that has no
+ * decision.
+ */
+export function ApproveRestOfPRFindings(taskID: string, pass: number): $CancellablePromise<void> {
+    return $Call.ByID(294768288, taskID, pass);
 }
 
 /**
@@ -94,6 +109,15 @@ export function ContinueStage(taskID: string): $CancellablePromise<void> {
  */
 export function CreateTask(req: $models.CreateTaskRequest): $CancellablePromise<string> {
     return $Call.ByID(624645295, req);
+}
+
+/**
+ * DecidePRFinding records what the user decided about a finding of the
+ * current pass of the review of the pull request: "approved", "discarded",
+ * or "" to take the decision back.
+ */
+export function DecidePRFinding(taskID: string, pass: number, $number: number, decision: string): $CancellablePromise<void> {
+    return $Call.ByID(1334251705, taskID, pass, $number, decision);
 }
 
 /**
@@ -173,6 +197,14 @@ export function OpenInEditor(taskID: string): $CancellablePromise<void> {
  */
 export function OpenPR(taskID: string, title: string, body: string): $CancellablePromise<void> {
     return $Call.ByID(1566738704, taskID, title, body);
+}
+
+/**
+ * OpenPRFindingInEditor opens VS Code on the worktree of the task at the line
+ * of a finding of the review of its pull request.
+ */
+export function OpenPRFindingInEditor(taskID: string, pass: number, $number: number): $CancellablePromise<void> {
+    return $Call.ByID(3724138311, taskID, pass, $number);
 }
 
 /**
@@ -263,6 +295,14 @@ export function ReviewStepMyself(taskID: string): $CancellablePromise<void> {
  */
 export function SendMessage(taskID: string, stage: string, text: string): $CancellablePromise<void> {
     return $Call.ByID(2431074491, taskID, stage, text);
+}
+
+/**
+ * SetPRFindingText replaces the text of a finding of the current pass of the
+ * review of the pull request.
+ */
+export function SetPRFindingText(taskID: string, pass: number, $number: number, text: string): $CancellablePromise<void> {
+    return $Call.ByID(4113891214, taskID, pass, $number, text);
 }
 
 /**

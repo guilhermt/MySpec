@@ -1379,6 +1379,19 @@ export const api = {
   openPR: (taskId: string, title: string, body: string): Promise<void> =>
     TaskService.OpenPR(taskId, title, body),
   approvePR: (taskId: string): Promise<void> => TaskService.ApprovePR(taskId),
+  decidePRFinding: (
+    taskId: string,
+    pass: number,
+    number: number,
+    decision: FindingDecision,
+  ): Promise<void> => TaskService.DecidePRFinding(taskId, pass, number, decision),
+  setPRFindingText: (taskId: string, pass: number, number: number, text: string): Promise<void> =>
+    TaskService.SetPRFindingText(taskId, pass, number, text),
+  approveRestOfPRFindings: (taskId: string, pass: number): Promise<void> =>
+    TaskService.ApproveRestOfPRFindings(taskId, pass),
+  applyPRFindings: (taskId: string): Promise<void> => TaskService.ApplyPRFindings(taskId),
+  openPRFindingInEditor: (taskId: string, pass: number, number: number): Promise<void> =>
+    TaskService.OpenPRFindingInEditor(taskId, pass, number),
   reviewAgain: (taskId: string): Promise<void> => TaskService.ReviewAgain(taskId),
   discardDraft: (taskId: string): Promise<void> => TaskService.DiscardDraft(taskId),
   retryPR: (taskId: string): Promise<void> => TaskService.RetryPR(taskId),
@@ -1411,6 +1424,8 @@ export const api = {
   refreshReviewPR: (id: string): Promise<void> => ReviewService.RefreshPR(id),
   applyReview: (id: string): Promise<void> => ReviewService.ApplyReview(id),
   approveReview: (id: string): Promise<void> => ReviewService.ApproveReview(id),
+  approveRestOfFindings: (id: string, pass: number): Promise<void> =>
+    ReviewService.ApproveRestOfFindings(id, pass),
   deleteReview: (id: string): Promise<DeleteResult> => ReviewService.DeleteReview(id),
   readReviewArtifact: (id: string, name: string): Promise<string> =>
     ReviewService.ReadReviewArtifact(id, name),

@@ -17,6 +17,7 @@ import {
   makeTask,
   makeTaskCard,
   makeTaskConversation,
+  makeTextPRReport,
   makeTranscript,
 } from "@/test/wails-mock";
 
@@ -97,7 +98,7 @@ function inPR(pr: Parameters<typeof makePullRequest>[0] = {}) {
       prState: "open",
       prBase: "dev",
       checkedAt: new Date(Date.now() - 2 * 60_000).toISOString(),
-      reports: [{ pass: 1, file: "review-1.md", clean: false }],
+      reports: [makeTextPRReport(1, false)],
       checks: [
         makePRCheck({ name: "lint" }),
         makePRCheck({ name: "e2e", state: "running", conclusion: "", completedAt: "" }),

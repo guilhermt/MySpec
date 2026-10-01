@@ -25,6 +25,13 @@ export function ApplyReview(id: string): $CancellablePromise<void> {
 }
 
 /**
+ * ApproveRestOfFindings approves every finding of a pass that has no decision.
+ */
+export function ApproveRestOfFindings(id: string, pass: number): $CancellablePromise<void> {
+    return $Call.ByID(3565188877, id, pass);
+}
+
+/**
  * ApproveReview approves the changes the agent made and asks it to commit them
  * and push them to the pull request.
  */
