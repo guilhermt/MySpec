@@ -4,7 +4,7 @@ A frente de redesenho vira uma sequência de tasks do MySpec, conduzidas no pró
 
 Fontes, na ordem de precedência quando divergem: `screens/*.md` › `system/components.md` › `system/tokens.css` › `structure.md` e `principles.md` › o mock da rodada. Cada documento de tela diz onde ele e o mock divergem, e vale o documento.
 
-Tamanhos: **P** até 4 steps, **M** de 5 a 8, **G** de 9 a 14. Um step é um commit que deixa `task check` verde.
+Tamanhos: **P** até 4 steps, **M** de 5 a 8, **G** de 9 a 14. Um step é um commit que deixa `task check` verde. Um step muda até umas 1,5 mil linhas; o que passa disso se divide em dois, em especial os steps de design system e os de cenas pintadas, porque é neles que o review vai e volta.
 
 ## 1. Princípios da implementação
 
