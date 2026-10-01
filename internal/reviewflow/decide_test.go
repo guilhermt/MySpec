@@ -3,6 +3,7 @@ package reviewflow_test
 import (
 	"testing"
 
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/reviewflow"
 )
@@ -13,7 +14,7 @@ func TestTheUserDecidesOnAFindingAndLeavesTheTextTheyWant(t *testing.T) {
 	f := newFixture(t)
 	id := asked(t, f)
 	f.record(t, id, changesReport(1, "One thing to fix.",
-		prreview.ParsedFinding{Number: 1, Path: "internal/board/service.go", Line: 12, Text: "The reading is never cached."},
+		prreport.ParsedFinding{Number: 1, Path: "internal/board/service.go", Line: 12, Text: "The reading is never cached."},
 	), headHash)
 
 	if err := f.service.SetFindingText(t.Context(), id, 1, 1, "Cache the reading, as the boards do."); err != nil {

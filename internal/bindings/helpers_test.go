@@ -28,6 +28,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git/gittest"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/repository"
@@ -974,10 +975,10 @@ func (f *fixture) seedReview(t *testing.T, repositoryID string) prreview.Review 
 	if _, err = f.prReviews.AskPass(t.Context(), created.ID, 1, "Look at the error handling."); err != nil {
 		t.Fatalf("AskPass() = %v, want nil", err)
 	}
-	report := prreview.Report{
+	report := prreport.Report{
 		Pass:    1,
 		Summary: "Two things to look at.",
-		Findings: []prreview.ParsedFinding{
+		Findings: []prreport.ParsedFinding{
 			{Number: 1, Path: "main.go", Line: 12, Text: "Handle the error."},
 			{Number: 2, Text: "The pull request has no tests."},
 		},

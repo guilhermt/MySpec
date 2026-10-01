@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/worktree"
@@ -55,7 +56,7 @@ func (s *Service) recordAsked(
 	ctx context.Context, stored prreview.Review, wt worktree.Worktree, key session.Key,
 ) {
 	pass := stored.AskedPass
-	report, ok, err := prreview.ReadReport(stored.ReportPath(pass), pass)
+	report, ok, err := prreport.ReadReport(stored.ReportPath(pass), pass)
 	if err != nil {
 		s.reportUnreadable(stored.ID, pass, err)
 		return
@@ -84,7 +85,7 @@ func (s *Service) rereadPass(ctx context.Context, stored prreview.Review) {
 	if !ok || last.Published() {
 		return
 	}
-	report, ok, err := prreview.ReadReport(stored.ReportPath(pass), pass)
+	report, ok, err := prreport.ReadReport(stored.ReportPath(pass), pass)
 	if err != nil {
 		// What was recorded stays: a rewrite the app cannot read changes
 		// nothing about the findings the user is deciding on.
@@ -124,12 +125,12 @@ func (s *Service) rereadPass(ctx context.Context, stored prreview.Review) {
 // reportUnreadable keeps why the report of a pass could not be read, so that
 // the review says it instead of waiting for a report that will never come.
 func (s *Service) reportUnreadable(id string, pass int, err error) {
-	if !errors.Is(err, prreview.ErrUnreadable) {
+	if !errors.Is(err, prreport.ErrUnreadable) {
 		s.log.Error("read review report failed", "review", id, "pass", pass, "error", err)
 		return
 	}
 	s.log.Warn("review report is unreadable", "review", id, "pass", pass, "error", err)
-	if s.setUnreadable(id, prreview.Reason(err)) {
+	if s.setUnreadable(id, prreport.Reason(err)) {
 		s.notify(id)
 	}
 }

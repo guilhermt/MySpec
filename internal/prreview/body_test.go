@@ -3,6 +3,7 @@ package prreview_test
 import (
 	"testing"
 
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 )
 
@@ -18,8 +19,8 @@ func TestTheBodyOfAReviewWithoutFindingsIsTheSummary(t *testing.T) {
 func TestTheGeneralFindingsComeBeforeTheDemotedOnesInOneNumberedList(t *testing.T) {
 	t.Parallel()
 
-	general := []prreview.Finding{{Number: 3, Text: "The commits mix two changes."}}
-	demoted := []prreview.Finding{{Number: 1, Path: "internal/task/service.go", Line: 12, Text: "No test covers it."}}
+	general := []prreview.Finding{{Finding: prreport.Finding{Number: 3, Text: "The commits mix two changes."}}}
+	demoted := []prreview.Finding{{Finding: prreport.Finding{Number: 1, Path: "internal/task/service.go", Line: 12, Text: "No test covers it."}}}
 
 	got := prreview.PublishedBody("Two things stand out.", general, demoted)
 	want := "Two things stand out.\n\n**Other findings**\n\n" +
@@ -33,7 +34,7 @@ func TestTheGeneralFindingsComeBeforeTheDemotedOnesInOneNumberedList(t *testing.
 func TestAFindingOfSeveralLinesStaysInsideItsItem(t *testing.T) {
 	t.Parallel()
 
-	general := []prreview.Finding{{Number: 1, Text: "It fails on empty input.\n\nThe second line explains why."}}
+	general := []prreview.Finding{{Finding: prreport.Finding{Number: 1, Text: "It fails on empty input.\n\nThe second line explains why."}}}
 
 	got := prreview.PublishedBody("", general, nil)
 	want := "**Other findings**\n\n" +
@@ -46,7 +47,7 @@ func TestAFindingOfSeveralLinesStaysInsideItsItem(t *testing.T) {
 func TestABodyWithoutASummaryStartsAtTheFindings(t *testing.T) {
 	t.Parallel()
 
-	got := prreview.PublishedBody("   ", []prreview.Finding{{Number: 1, Text: "One thing."}}, nil)
+	got := prreview.PublishedBody("   ", []prreview.Finding{{Finding: prreport.Finding{Number: 1, Text: "One thing."}}}, nil)
 	if want := "**Other findings**\n\n1. One thing."; got != want {
 		t.Errorf("body = %q, want %q", got, want)
 	}

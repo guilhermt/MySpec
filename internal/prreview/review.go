@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"time"
 
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/prreport"
 )
 
 // Mode is what the product does with the findings the user approves.
@@ -57,13 +59,13 @@ const (
 )
 
 // Decision is what the user decided about a finding.
-type Decision string
+type Decision = prreport.Decision
 
 // The decisions of a finding; DecisionNone is a finding still to decide.
 const (
-	DecisionNone      Decision = ""
-	DecisionApproved  Decision = "approved"
-	DecisionDiscarded Decision = "discarded"
+	DecisionNone      = prreport.DecisionNone
+	DecisionApproved  = prreport.DecisionApproved
+	DecisionDiscarded = prreport.DecisionDiscarded
 )
 
 // Placement is where a published finding went in the review.
@@ -139,16 +141,21 @@ type End struct {
 	ClosedAt time.Time
 }
 
-// Finding is one numbered finding of a pass.
+// Finding is one numbered finding of a pass, with where it went when the
+// pass was published.
 type Finding struct {
-	Number    int
-	Title     string // as the report has it; "" when it has none
-	Path      string // the file it is anchored to; "" for a general finding
-	Line      int    // the line of the new side of the diff; 0 for a general finding
-	Original  string // as the report has it
-	Text      string // as the user left it
-	Decision  Decision
+	prreport.Finding
 	Placement Placement
+}
+
+// ReportFindings are the findings of a pass as the report owns them, without
+// where a publication put them.
+func ReportFindings(findings []Finding) []prreport.Finding {
+	reported := make([]prreport.Finding, 0, len(findings))
+	for _, finding := range findings {
+		reported = append(reported, finding.Finding)
+	}
+	return reported
 }
 
 // Pass is one pass of the agent over the pull request, with the report it
@@ -203,18 +210,9 @@ func ParseVerdict(value string) (Verdict, error) {
 	return Verdict(value), nil
 }
 
-// decisions lists the decisions a finding is stored with, the undecided one
-// included.
-var decisions = []Decision{DecisionNone, DecisionApproved, DecisionDiscarded}
-
 // ParseDecision narrows a stored or received string to a decision. The empty
 // string is a finding still to decide.
-func ParseDecision(value string) (Decision, error) {
-	if !slices.Contains(decisions, Decision(value)) {
-		return "", fmt.Errorf("parse decision %q: %w", value, ErrUnknownDecision)
-	}
-	return Decision(value), nil
-}
+func ParseDecision(value string) (Decision, error) { return prreport.ParseDecision(value) }
 
 // Archived reports whether the review left the list for the history.
 func (r Review) Archived() bool { return !r.ArchivedAt.IsZero() }
@@ -233,10 +231,6 @@ func (r Review) ContextPath() string {
 func (r Review) Reference(fullName string) string {
 	return fmt.Sprintf("%s#%d", fullName, r.Number)
 }
-
-// Anchored reports whether the finding points at a line of the pull request,
-// which is what an inline comment needs.
-func (f Finding) Anchored() bool { return f.Path != "" && f.Line > 0 }
 
 // Published reports whether the pass was sent to GitHub.
 func (p Pass) Published() bool { return !p.PublishedAt.IsZero() }
@@ -276,6 +270,9 @@ const idPrefixLen = 8
 // review.
 const ContextFile = "context.md"
 
+// reportFileName is the name a report of a pass may have: review-<pass>.md.
+var reportFileName = regexp.MustCompile(`^review-\d+\.md$`)
+
 // ReportFile is the name of the report of one pass.
 func ReportFile(pass int) string { return fmt.Sprintf("review-%d.md", pass) }
 
@@ -295,9 +292,7 @@ var (
 	ErrNotFound        = errors.New("prreview: not found")
 	ErrActiveExists    = errors.New("prreview: the pull request already has an active review")
 	ErrNotDeciding     = errors.New("prreview: the pass is not the one being decided")
-	ErrEmptyText       = errors.New("prreview: the text of a finding is required")
 	ErrUnknownMode     = errors.New("prreview: unknown mode")
 	ErrUnknownVerdict  = errors.New("prreview: unknown verdict")
-	ErrUnknownDecision = errors.New("prreview: unknown decision")
 	ErrUnknownArtifact = errors.New("prreview: unknown artifact")
 )

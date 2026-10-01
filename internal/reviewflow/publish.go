@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/repository"
@@ -55,7 +56,7 @@ func (s *Service) Publish(ctx context.Context, id string, verdict prreview.Verdi
 		summaryGoes, url, input.CommitID, placements); err != nil {
 		return err
 	}
-	approved, discarded := countDecisions(pass)
+	approved, discarded := prreport.Counts(prreview.ReportFindings(pass.Findings))
 	key := sessionKey(id)
 	s.sessions.MarkFindingsDecided(ctx, key, pass.Number, approved, discarded)
 	inBody := 0

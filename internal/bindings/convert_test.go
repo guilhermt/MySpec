@@ -18,6 +18,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/repository"
@@ -2341,10 +2342,10 @@ func recordedPass(number int, decision prreview.Decision) prreview.Pass {
 	return prreview.Pass{
 		ReviewID: "review-1", Number: number, Recorded: true, Revision: 1,
 		SummaryOriginal: "Two things to look at.", Summary: "Two things to look at.",
-		Findings: []prreview.Finding{{
+		Findings: []prreview.Finding{{Finding: prreport.Finding{
 			Number: 1, Path: "main.go", Line: 12, Original: "Handle the error.",
 			Text: "Handle the error.", Decision: decision,
-		}},
+		}}},
 		CreatedAt: readAt,
 	}
 }
@@ -3312,8 +3313,8 @@ func TestFromReviewsCarriesTheTitleAndTheLineOnGitHubOfAFinding(t *testing.T) {
 
 	pass := recordedPass(1, prreview.DecisionNone)
 	pass.Findings = []prreview.Finding{
-		{Number: 1, Title: "The error is dropped", Path: "main.go", Line: 12, Original: "a", Text: "a"},
-		{Number: 2, Title: "No tests", Original: "b", Text: "b"},
+		{Finding: prreport.Finding{Number: 1, Title: "The error is dropped", Path: "main.go", Line: 12, Original: "a", Text: "a"}},
+		{Finding: prreport.Finding{Number: 2, Title: "No tests", Original: "b", Text: "b"}},
 	}
 	state := reviewState(reviewflow.StatusReadyToPublish, pass)
 

@@ -1,13 +1,14 @@
-package prreview_test
+package prreport_test
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/guilhermt/myspec/internal/prreview"
+	"github.com/guilhermt/myspec/internal/prreport"
 )
 
 // report wraps a body in the header the agent writes.
@@ -35,15 +36,15 @@ Location: general
 The commits mix two changes.
 `)
 
-	got, err := prreview.ParseReport(content, 2)
+	got, err := prreport.ParseReport(content, 2)
 	if err != nil {
 		t.Fatalf("parse report: %v", err)
 	}
 
-	want := prreview.Report{
+	want := prreport.Report{
 		Pass:    2,
 		Summary: "The branch is close, two things stand out.",
-		Findings: []prreview.ParsedFinding{
+		Findings: []prreport.ParsedFinding{
 			{
 				Number: 1,
 				Title:  "Missing test",
@@ -62,12 +63,12 @@ The commits mix two changes.
 func TestACleanReportIsAllSummary(t *testing.T) {
 	t.Parallel()
 
-	got, err := prreview.ParseReport(report("clean", "Nothing to change.\n"), 1)
+	got, err := prreport.ParseReport(report("clean", "Nothing to change.\n"), 1)
 	if err != nil {
 		t.Fatalf("parse report: %v", err)
 	}
 
-	want := prreview.Report{Pass: 1, Clean: true, Summary: "Nothing to change."}
+	want := prreport.Report{Pass: 1, Clean: true, Summary: "Nothing to change."}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("report (-want +got):\n%s", diff)
 	}
@@ -77,7 +78,7 @@ func TestAReportThatDeclaresItsOwnPassIsReadWhenItAgrees(t *testing.T) {
 	t.Parallel()
 
 	content := "---\nstatus: clean\npass: 3\n---\n\nAll good.\n"
-	got, err := prreview.ParseReport(content, 3)
+	got, err := prreport.ParseReport(content, 3)
 	if err != nil {
 		t.Fatalf("parse report: %v", err)
 	}
@@ -120,7 +121,7 @@ func TestAReportTheProductCannotActOnIsUnreadable(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 
-			if _, err := prreview.ParseReport(c.content, 1); !errors.Is(err, prreview.ErrUnreadable) {
+			if _, err := prreport.ParseReport(c.content, 1); !errors.Is(err, prreport.ErrUnreadable) {
 				t.Errorf("error = %v, want ErrUnreadable", err)
 			}
 		})
@@ -151,7 +152,7 @@ func TestTheTitleOfAFindingIsWhatFollowsItsNumber(t *testing.T) {
 			t.Parallel()
 
 			content := report("changes", "## Findings\n\n"+c.heading+"\nLocation: general\n\nA thing.\n")
-			got, err := prreview.ParseReport(content, 1)
+			got, err := prreport.ParseReport(content, 1)
 			if err != nil {
 				t.Fatalf("parse report: %v", err)
 			}
@@ -205,8 +206,8 @@ func TestReasonSaysTheRuleOfAnUnreadableReport(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "review-1.md")
 			writeFile(t, filepath.Dir(path), filepath.Base(path), c.content)
 
-			_, _, err := prreview.ReadReport(path, 1)
-			if got := prreview.Reason(err); got != c.want {
+			_, _, err := prreport.ReadReport(path, 1)
+			if got := prreport.Reason(err); got != c.want {
 				t.Errorf("Reason() = %q, want %q", got, c.want)
 			}
 		})
@@ -219,10 +220,10 @@ func TestReasonOfAnErrorThatIsNotAboutTheFormatIsTheGenericSentence(t *testing.T
 	const generic = "The report can't be read."
 	for name, err := range map[string]error{
 		"an I/O error":    errors.New("read report /x: permission denied"),
-		"a bare sentinel": prreview.ErrUnreadable,
+		"a bare sentinel": prreport.ErrUnreadable,
 		"a nil error":     nil,
 	} {
-		if got := prreview.Reason(err); got != generic {
+		if got := prreport.Reason(err); got != generic {
 			t.Errorf("Reason(%s) = %q, want %q", name, got, generic)
 		}
 	}
@@ -232,12 +233,12 @@ func TestALocationInBackticksPointsAtTheSameLine(t *testing.T) {
 	t.Parallel()
 
 	content := report("changes", "## Findings\n\n### 1\nLocation: `main.go:12`\n\nA thing.\n")
-	got, err := prreview.ParseReport(content, 1)
+	got, err := prreport.ParseReport(content, 1)
 	if err != nil {
 		t.Fatalf("parse report: %v", err)
 	}
 
-	want := []prreview.ParsedFinding{{Number: 1, Path: "main.go", Line: 12, Text: "A thing."}}
+	want := []prreport.ParsedFinding{{Number: 1, Path: "main.go", Line: 12, Text: "A thing."}}
 	if diff := cmp.Diff(want, got.Findings); diff != "" {
 		t.Errorf("findings (-want +got):\n%s", diff)
 	}
@@ -246,7 +247,7 @@ func TestALocationInBackticksPointsAtTheSameLine(t *testing.T) {
 func TestAReportThatIsNotThereIsNoPass(t *testing.T) {
 	t.Parallel()
 
-	_, ok, err := prreview.ReadReport(filepath.Join(t.TempDir(), "review-1.md"), 1)
+	_, ok, err := prreport.ReadReport(filepath.Join(t.TempDir(), "review-1.md"), 1)
 	if err != nil {
 		t.Fatalf("read report: %v", err)
 	}
@@ -261,7 +262,7 @@ func TestAReportOnDiskIsReadFromItsFile(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "review-1.md", report("clean", "Nothing to change.\n"))
 
-	got, ok, err := prreview.ReadReport(filepath.Join(dir, "review-1.md"), 1)
+	got, ok, err := prreport.ReadReport(filepath.Join(dir, "review-1.md"), 1)
 	if err != nil {
 		t.Fatalf("read report: %v", err)
 	}
@@ -279,7 +280,16 @@ func TestAReportOnDiskTheProductCannotActOnIsUnreadable(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "review-1.md", "no front matter here\n")
 
-	if _, _, err := prreview.ReadReport(filepath.Join(dir, "review-1.md"), 1); !errors.Is(err, prreview.ErrUnreadable) {
+	if _, _, err := prreport.ReadReport(filepath.Join(dir, "review-1.md"), 1); !errors.Is(err, prreport.ErrUnreadable) {
 		t.Errorf("error = %v, want ErrUnreadable", err)
+	}
+}
+
+// writeFile puts a report in a folder.
+func writeFile(t *testing.T, dir, name, content string) {
+	t.Helper()
+
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+		t.Fatalf("write %s: %v", name, err)
 	}
 }

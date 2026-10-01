@@ -9,6 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/session"
@@ -23,8 +24,8 @@ func decided(t *testing.T, f *fixture) string {
 	id := asked(t, f)
 	f.sessions.goIdle(id)
 	f.record(t, id, changesReport(1, "Two things to fix.",
-		prreview.ParsedFinding{Number: 1, Path: "internal/board/service.go", Line: 12, Text: "The reading is never cached."},
-		prreview.ParsedFinding{Number: 2, Text: "The cache has no test."},
+		prreport.ParsedFinding{Number: 1, Path: "internal/board/service.go", Line: 12, Text: "The reading is never cached."},
+		prreport.ParsedFinding{Number: 2, Text: "The cache has no test."},
 	), headHash)
 	f.decide(t, id, 1, 1, prreview.DecisionApproved)
 	f.decide(t, id, 1, 2, prreview.DecisionDiscarded)

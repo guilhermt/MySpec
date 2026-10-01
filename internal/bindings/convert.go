@@ -16,6 +16,7 @@ import (
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/repository"
@@ -1726,7 +1727,7 @@ func fromFindings(findings []prreview.Finding, prURL string) []ReviewFinding {
 			Title:     finding.Title,
 			Path:      finding.Path,
 			Line:      finding.Line,
-			LineURL:   lineURL(prURL, finding),
+			LineURL:   lineURL(prURL, finding.Finding),
 			Text:      finding.Text,
 			Decision:  string(finding.Decision),
 			Placement: string(finding.Placement),
@@ -1738,7 +1739,7 @@ func fromFindings(findings []prreview.Finding, prURL string) []ReviewFinding {
 // lineURL is the line of an anchored finding in Files changed on GitHub: the
 // anchor of a file there is the SHA-256 of its path, and R the line of the new
 // side. "" for a general finding.
-func lineURL(prURL string, f prreview.Finding) string {
+func lineURL(prURL string, f prreport.Finding) string {
 	if !f.Anchored() {
 		return ""
 	}

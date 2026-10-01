@@ -7,6 +7,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/store"
 )
@@ -51,7 +52,7 @@ func newPass(reviewID string, number int, findings ...prreview.Finding) prreview
 // newFinding builds a finding anchored to a file and a line.
 func newFinding(number int, path string, line int) prreview.Finding {
 	text := "the line is wrong"
-	return prreview.Finding{Number: number, Path: path, Line: line, Original: text, Text: text}
+	return prreview.Finding{Finding: prreport.Finding{Number: number, Path: path, Line: line, Original: text, Text: text}}
 }
 
 // insertReview stores a review, failing the test on error.
@@ -257,7 +258,7 @@ func TestThePassesOfAReviewComeInOrderWithTheirFindings(t *testing.T) {
 	review := newReview("review-1", webRepo, 7, fixedTime)
 	insertReview(t, s, review)
 
-	general := prreview.Finding{Number: 3, Original: "no test", Text: "no test"}
+	general := prreview.Finding{Finding: prreport.Finding{Number: 3, Original: "no test", Text: "no test"}}
 	first := newPass(review.ID, 1, newFinding(2, "internal/store/reviews.go", 12), newFinding(1, "main.go", 3), general)
 	second := newPass(review.ID, 2)
 	second.Clean = true

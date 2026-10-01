@@ -20,6 +20,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/repository"
@@ -817,10 +818,10 @@ var userMessages = []struct {
 	{prreview.ErrNotFound, "This review no longer exists."},
 	{prreview.ErrActiveExists, "This pull request already has a review in MySpec."},
 	{prreview.ErrNotDeciding, "This pass is not the one being decided."},
-	{prreview.ErrEmptyText, "Write the text of the finding."},
+	{prreport.ErrEmptyText, "Write the finding, or discard it."},
 	{prreview.ErrUnknownMode, "Unknown review mode."},
 	{prreview.ErrUnknownVerdict, "Unknown verdict."},
-	{prreview.ErrUnknownDecision, "Unknown decision."},
+	{prreport.ErrUnknownDecision, "Unknown decision."},
 	{prreview.ErrUnknownArtifact, "Unknown artifact."},
 	{reviewflow.ErrPullRequestGone, reviewflow.GoneMessage},
 	{reviewflow.ErrNotOpen, reviewflow.NotOpenMessage},

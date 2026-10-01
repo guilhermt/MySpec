@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/reviewflow"
@@ -86,7 +87,7 @@ func TestAFindingWhoseLineLeftTheDiffGoesInTheBody(t *testing.T) {
 	f.gh.diff = prDiff
 	id := asked(t, f)
 	f.record(t, id, changesReport(1, "One thing to fix.",
-		prreview.ParsedFinding{Number: 1, Path: "internal/board/service.go", Line: 99, Text: "The cache is never cleared."},
+		prreport.ParsedFinding{Number: 1, Path: "internal/board/service.go", Line: 99, Text: "The cache is never cleared."},
 	), headHash)
 	f.decide(t, id, 1, 1, prreview.DecisionApproved)
 
@@ -134,7 +135,7 @@ func TestAReviewWithNothingToSayIsRefused(t *testing.T) {
 	f := newFixture(t)
 	f.gh.diff = prDiff
 	id := asked(t, f)
-	f.record(t, id, changesReport(1, "", prreview.ParsedFinding{Number: 1, Text: "The cache has no test."}), headHash)
+	f.record(t, id, changesReport(1, "", prreport.ParsedFinding{Number: 1, Text: "The cache has no test."}), headHash)
 	f.decide(t, id, 1, 1, prreview.DecisionDiscarded)
 
 	wantErrIs(t, f.service.Publish(t.Context(), id, prreview.VerdictComment, true), reviewflow.ErrEmptyReview)
@@ -221,7 +222,7 @@ func TestPublishingIsRefusedUntilEveryFindingIsDecided(t *testing.T) {
 	f.gh.diff = prDiff
 	id := asked(t, f)
 	f.record(t, id, changesReport(1, "One thing to fix.",
-		prreview.ParsedFinding{Number: 1, Text: "The cache has no test."},
+		prreport.ParsedFinding{Number: 1, Text: "The cache has no test."},
 	), headHash)
 
 	wantErrIs(t, f.service.Publish(t.Context(), id, prreview.VerdictComment, true), reviewflow.ErrNotReady)
@@ -375,21 +376,21 @@ func TestAnEmptySummaryCountsAsNoSummaryEvenWhenItIsAsked(t *testing.T) {
 func TestAReviewWithOnlyInlineCommentsGoesWithTheMinimalBody(t *testing.T) {
 	t.Parallel()
 
-	inline := func(number, line int) prreview.ParsedFinding {
-		return prreview.ParsedFinding{
+	inline := func(number, line int) prreport.ParsedFinding {
+		return prreport.ParsedFinding{
 			Number: number, Path: "internal/board/service.go", Line: line, Text: "Look at this line.",
 		}
 	}
 	cases := []struct {
 		name     string
-		findings []prreview.ParsedFinding
+		findings []prreport.ParsedFinding
 		verdict  prreview.Verdict
 		want     string
 	}{
-		{"one comment", []prreview.ParsedFinding{inline(1, 12)}, prreview.VerdictRequestChanges, "Review with 1 inline comment."},
+		{"one comment", []prreport.ParsedFinding{inline(1, 12)}, prreview.VerdictRequestChanges, "Review with 1 inline comment."},
 		{
 			"two comments",
-			[]prreview.ParsedFinding{inline(1, 12), inline(2, 11)},
+			[]prreport.ParsedFinding{inline(1, 12), inline(2, 11)},
 			prreview.VerdictComment,
 			"Review with 2 inline comments.",
 		},
@@ -467,7 +468,7 @@ func TestAReviewPublishedWithTheMinimalBodyIsMarkedAsSuch(t *testing.T) {
 	f := newFixture(t)
 	f.gh.diff = prDiff
 	id := asked(t, f)
-	finding := prreview.ParsedFinding{Number: 1, Path: "internal/board/service.go", Line: 12, Text: "Look at this line."}
+	finding := prreport.ParsedFinding{Number: 1, Path: "internal/board/service.go", Line: 12, Text: "Look at this line."}
 	f.record(t, id, changesReport(1, "Some things.", finding), headHash)
 	f.decide(t, id, 1, 1, prreview.DecisionApproved)
 

@@ -681,7 +681,7 @@ Uma passada que espera os checks e não pode começar, porque a leitura de cada 
 Numa pull request do próprio usuário que não é de uma task do produto, o modo **Apply** leva o review pelo ciclo do review da pull request de uma task:
 
 1. o agente revisa e escreve o relatório, e o usuário decide apontamento a apontamento, como no modo publicar;
-2. **Apply approved** envia ao agente os apontamentos aprovados, com o texto como o usuário o deixou, e ele corrige na worktree só isso, sem commitar;
+2. **Apply approved** envia ao agente os apontamentos aprovados, com o texto como o usuário o deixou, e os descartados, para que ele não os aponte de novo, e ele corrige na worktree só os aprovados, sem commitar;
 3. as mudanças passam pelo review do produto: stage arquivo a arquivo no editor, progresso em tempo real, **Approve** em 100%;
 4. o agente commita com o prompt de commit e sobe o commit para a branch da pull request;
 5. o produto pede uma nova passada sozinho, que espera os checks do commit que subiu, e o ciclo se repete.

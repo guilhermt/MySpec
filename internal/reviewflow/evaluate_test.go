@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/session"
@@ -70,11 +71,11 @@ func TestTheReportOfAPassIsRecordedWithTheCommitTheWorktreeIsOn(t *testing.T) {
 		t.Errorf("summary = %q, want the one of the report", pass.Summary)
 	}
 	want := []prreview.Finding{
-		{
+		{Finding: prreport.Finding{
 			Number: 1, Path: "internal/board/service.go", Line: 12,
 			Original: "The reading is never cached.", Text: "The reading is never cached.",
-		},
-		{Number: 2, Original: "The cache has no test.", Text: "The cache has no test."},
+		}},
+		{Finding: prreport.Finding{Number: 2, Original: "The cache has no test.", Text: "The cache has no test."}},
 	}
 	if diff := cmp.Diff(want, pass.Findings); diff != "" {
 		t.Errorf("findings (-want +got):\n%s", diff)

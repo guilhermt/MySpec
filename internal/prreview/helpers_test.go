@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/repository"
 )
@@ -357,7 +358,7 @@ func (f *fixture) asked(t *testing.T, number int) prreview.Review {
 }
 
 // recorded is a review whose first pass holds the report given.
-func (f *fixture) recorded(t *testing.T, number int, report prreview.Report, commit string) prreview.Review {
+func (f *fixture) recorded(t *testing.T, number int, report prreport.Report, commit string) prreview.Review {
 	t.Helper()
 
 	review := f.asked(t, number)
@@ -392,13 +393,13 @@ func (f *fixture) review(t *testing.T, id string) prreview.Review {
 }
 
 // changesReport is a report with findings, as the agent writes it.
-func changesReport(pass int, summary string, findings ...prreview.ParsedFinding) prreview.Report {
-	return prreview.Report{Pass: pass, Summary: summary, Findings: findings}
+func changesReport(pass int, summary string, findings ...prreport.ParsedFinding) prreport.Report {
+	return prreport.Report{Pass: pass, Summary: summary, Findings: findings}
 }
 
 // cleanReport is a report that found nothing to change.
-func cleanReport(pass int, summary string) prreview.Report {
-	return prreview.Report{Pass: pass, Clean: true, Summary: summary}
+func cleanReport(pass int, summary string) prreport.Report {
+	return prreport.Report{Pass: pass, Clean: true, Summary: summary}
 }
 
 // writeFile puts an artifact in the folder of a review.

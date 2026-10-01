@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 )
 
@@ -55,16 +56,16 @@ func TestAPassIsDecidedOnceEveryFindingHasADecision(t *testing.T) {
 		{
 			"with one still to decide",
 			prreview.Pass{Findings: []prreview.Finding{
-				{Number: 1, Decision: prreview.DecisionApproved},
-				{Number: 2},
+				{Finding: prreport.Finding{Number: 1, Decision: prreview.DecisionApproved}},
+				{Finding: prreport.Finding{Number: 2}},
 			}},
 			false,
 		},
 		{
 			"with every one decided",
 			prreview.Pass{Findings: []prreview.Finding{
-				{Number: 1, Decision: prreview.DecisionApproved},
-				{Number: 2, Decision: prreview.DecisionDiscarded},
+				{Finding: prreport.Finding{Number: 1, Decision: prreview.DecisionApproved}},
+				{Finding: prreport.Finding{Number: 2, Decision: prreview.DecisionDiscarded}},
 			}},
 			true,
 		},
@@ -85,14 +86,14 @@ func TestTheApprovedFindingsAreTheOnesTheUserKept(t *testing.T) {
 	t.Parallel()
 
 	pass := prreview.Pass{Findings: []prreview.Finding{
-		{Number: 1, Decision: prreview.DecisionApproved},
-		{Number: 2, Decision: prreview.DecisionDiscarded},
-		{Number: 3, Decision: prreview.DecisionApproved},
+		{Finding: prreport.Finding{Number: 1, Decision: prreview.DecisionApproved}},
+		{Finding: prreport.Finding{Number: 2, Decision: prreview.DecisionDiscarded}},
+		{Finding: prreport.Finding{Number: 3, Decision: prreview.DecisionApproved}},
 	}}
 
 	want := []prreview.Finding{
-		{Number: 1, Decision: prreview.DecisionApproved},
-		{Number: 3, Decision: prreview.DecisionApproved},
+		{Finding: prreport.Finding{Number: 1, Decision: prreview.DecisionApproved}},
+		{Finding: prreport.Finding{Number: 3, Decision: prreview.DecisionApproved}},
 	}
 	if diff := cmp.Diff(want, pass.Approved()); diff != "" {
 		t.Errorf("approved (-want +got):\n%s", diff)
@@ -119,9 +120,9 @@ func TestOnlyAFindingWithAFileAndALineIsAnchored(t *testing.T) {
 		want    bool
 	}{
 		{"general", prreview.Finding{}, false},
-		{"with a file and no line", prreview.Finding{Path: "main.go"}, false},
-		{"with a line and no file", prreview.Finding{Line: 12}, false},
-		{"with both", prreview.Finding{Path: "main.go", Line: 12}, true},
+		{"with a file and no line", prreview.Finding{Finding: prreport.Finding{Path: "main.go"}}, false},
+		{"with a line and no file", prreview.Finding{Finding: prreport.Finding{Line: 12}}, false},
+		{"with both", prreview.Finding{Finding: prreport.Finding{Path: "main.go", Line: 12}}, true},
 	}
 
 	for _, c := range cases {
@@ -153,7 +154,7 @@ func TestAStoredValueThatIsNotOneOfTheProductIsRefused(t *testing.T) {
 	if got, err := prreview.ParseDecision(""); err != nil || got != prreview.DecisionNone {
 		t.Errorf("parse decision of an undecided finding = %q, %v", got, err)
 	}
-	if _, err := prreview.ParseDecision("maybe"); !errors.Is(err, prreview.ErrUnknownDecision) {
+	if _, err := prreview.ParseDecision("maybe"); !errors.Is(err, prreport.ErrUnknownDecision) {
 		t.Errorf("error = %v, want ErrUnknownDecision", err)
 	}
 }
