@@ -122,6 +122,8 @@ func TestNoEditPutsADraftInTheRun(t *testing.T) {
 			},
 		},
 		{
+			// No repository puts a held card in the run; the case is here for
+			// the table of what takes an approval back.
 			name:    "a card of its own held by a dependency changes its repository",
 			approve: []string{"held-a"},
 			edit: func(t *testing.T, f *fixture, id string) {
@@ -142,6 +144,8 @@ func TestNoEditPutsADraftInTheRun(t *testing.T) {
 			},
 		},
 		{
+			// The epic grouping them is born undecided, so nothing of it can
+			// go; the case is here for the table of what takes an approval back.
 			name:    "two cards of their own held by a dependency are grouped",
 			approve: []string{"held-a", "held-b"},
 			edit: func(t *testing.T, f *fixture, id string) {
@@ -152,15 +156,20 @@ func TestNoEditPutsADraftInTheRun(t *testing.T) {
 			},
 		},
 		{
-			name:    "the agent rewrites the artifact without the epic of an approved card",
+			name:    "the agent drops the card to decide of an epic whose other cards are approved",
 			approve: []string{"epic", "in-one", "in-two"},
 			edit: func(t *testing.T, f *fixture, id string) {
 				t.Helper()
-				rewritten := strings.Replace(heldArtifact, "- Epic: epic\n\n### Title\nIn two", "\n### Title\nIn two", 1)
+				dropped := "## Draft: in-three\n- Kind: new\n- Repository: acme/web\n- Epic: epic\n\n" +
+					"### Title\nIn three\n\n### Body\nCard three.\n\n"
+				rewritten := strings.Replace(heldArtifact, dropped, "", 1)
+				if rewritten == heldArtifact {
+					t.Fatal("the rewrite left the card to decide in the artifact")
+				}
 				f.write(id, discussion.DraftsFile, rewritten)
 				f.flow.Check(id)
 				f.waitFor(id, func(s discussionflow.State) bool {
-					return f.draftIn(s, "in-two").Epic == ""
+					return f.draftIn(s, "in-three").ID == ""
 				})
 			},
 		},
