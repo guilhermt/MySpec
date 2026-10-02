@@ -304,6 +304,13 @@ func TestTheChainSaysWhatGoesAndWhatHoldsEachDraft(t *testing.T) {
 			publishing: true,
 			want:       at(discussionflow.StatusPublishing, "", runningHint, discussionflow.ChainView{Due: ids("l1")}),
 		},
+		{
+			name:       "29c a run under way shows over a failure, which stands",
+			drafts:     list(card("a", "", approved, failed), card("b", "", approved)),
+			publishing: true,
+			want: at(discussionflow.StatusPublishing, discussionflow.StatusPublishFailed, failedHint,
+				discussionflow.ChainView{Due: ids("b")}),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
