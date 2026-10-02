@@ -11,7 +11,7 @@ import {
   approvePR,
   approveReview,
   approveStep,
-  archiveDiscussion,
+  archiveDiscussionInPlace,
   askReviewAgain,
   backToStage,
   browseRepository,
@@ -27,7 +27,7 @@ import {
   createTask,
   decideDraft,
   decideFindingInPlace,
-  deleteDiscussion,
+  deleteDiscussionInPlace,
   deleteReview,
   deleteTask,
   discardDraft,
@@ -211,15 +211,6 @@ describe("the app notice of a failed action", () => {
     expect(useAppStore.getState().error?.label).toBe(
       "Couldn't go back to the tech spec of add-login",
     );
-  });
-
-  it("names a discussion", async () => {
-    withState();
-    vi.mocked(api.archiveDiscussion).mockRejectedValueOnce(new Error("publishing"));
-
-    await archiveDiscussion("discussion-1");
-
-    expect(useAppStore.getState().error?.label).toBe("Couldn't archive Pricing tiers");
   });
 
   it("says to change the path of a missing clone", async () => {
@@ -535,8 +526,8 @@ describe("task actions", () => {
     ["deleteTask", () => deleteTask("item-1")],
     ["closeTask", () => closeTask("item-1")],
     ["deleteReview", () => deleteReview("item-1")],
-    ["archiveDiscussion", () => archiveDiscussion("item-1")],
-    ["deleteDiscussion", () => deleteDiscussion("item-1")],
+    ["archiveDiscussionInPlace", () => archiveDiscussionInPlace("item-1")],
+    ["deleteDiscussionInPlace", () => deleteDiscussionInPlace("item-1")],
   ])("%s marks the item whose page is not announced", async (_name, action) => {
     await action();
 
@@ -559,16 +550,6 @@ describe("task actions", () => {
       () => vi.mocked(api.deleteReview).mockRejectedValueOnce(new Error("busy")),
       () => deleteReview("item-1"),
     ],
-    [
-      "archiveDiscussion",
-      () => vi.mocked(api.archiveDiscussion).mockRejectedValueOnce(new Error("busy")),
-      () => archiveDiscussion("item-1"),
-    ],
-    [
-      "deleteDiscussion",
-      () => vi.mocked(api.deleteDiscussion).mockRejectedValueOnce(new Error("busy")),
-      () => deleteDiscussion("item-1"),
-    ],
   ])("%s forgets the mark when the removal fails", async (_name, refuse, action) => {
     refuse();
 
@@ -578,11 +559,35 @@ describe("task actions", () => {
     expect(useAppStore.getState().error?.detail).toBe("busy. Try again.");
   });
 
+  it.each([
+    [
+      "archiveDiscussionInPlace",
+      () => vi.mocked(api.archiveDiscussion).mockRejectedValueOnce(new Error("busy")),
+      () => archiveDiscussionInPlace("item-1"),
+    ],
+    [
+      "deleteDiscussionInPlace",
+      () => vi.mocked(api.deleteDiscussion).mockRejectedValueOnce(new Error("busy")),
+      () => deleteDiscussionInPlace("item-1"),
+    ],
+  ])("%s answers the refusal and forgets the mark", async (_name, refuse, action) => {
+    refuse();
+
+    expect(await action()).toBe("busy");
+    expect(useAppStore.getState().expectGone).toBeNull();
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("answers null when the removal of a discussion goes through", async () => {
+    expect(await archiveDiscussionInPlace("item-1")).toBeNull();
+    expect(await deleteDiscussionInPlace("item-1")).toBeNull();
+  });
+
   it("keeps the mark of a later removal when an earlier one fails", async () => {
     vi.mocked(api.deleteTask).mockRejectedValueOnce(new Error("busy"));
 
     const first = deleteTask("item-1");
-    await deleteDiscussion("item-2");
+    await deleteDiscussionInPlace("item-2");
     await first;
 
     expect(useAppStore.getState().expectGone).toBe("item-2");
@@ -1019,8 +1024,8 @@ describe("discussion actions reported in the app notice", () => {
     await removeDraftDependency("discussion-1", "draft-1", "draft-3");
     await decideDraft("discussion-1", "draft-1", "approved");
     await retryPublish("discussion-1", "draft-1");
-    await archiveDiscussion("discussion-1");
-    await deleteDiscussion("discussion-1");
+    await archiveDiscussionInPlace("discussion-1");
+    await deleteDiscussionInPlace("discussion-1");
 
     expect(api.setDraftText).toHaveBeenCalledWith(
       "discussion-1",
@@ -1037,19 +1042,6 @@ describe("discussion actions reported in the app notice", () => {
     expect(api.archiveDiscussion).toHaveBeenCalledWith("discussion-1");
     expect(api.deleteDiscussion).toHaveBeenCalledWith("discussion-1");
     expect(useAppStore.getState().error).toBeNull();
-  });
-
-  it("report a failed discussion action in the app notice", async () => {
-    vi.mocked(api.archiveDiscussion).mockRejectedValueOnce(
-      new Error("a draft is still publishing"),
-    );
-
-    await archiveDiscussion("discussion-1");
-
-    expect(useAppStore.getState().error).toEqual({
-      label: "Couldn't archive",
-      detail: "a draft is still publishing. Try again.",
-    });
   });
 
   it("answer the id of the epic the drafts were grouped into", async () => {

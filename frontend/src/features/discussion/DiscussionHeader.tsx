@@ -1,106 +1,92 @@
-import { Archive, Trash2 } from "lucide-react";
-import { useState } from "react";
-import { PauseButton } from "@/components/PauseButton";
+import { ItemPause } from "@/components/ItemPause";
 import { PanelGroup } from "@/components/system/AuxPanel";
+import { ContextMeter } from "@/components/system/ContextMeter";
 import { ICONS } from "@/components/system/icons";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArchiveDiscussionDialog } from "@/features/discussion/ArchiveDiscussionDialog";
-import { DeleteDiscussionDialog } from "@/features/discussion/DeleteDiscussionDialog";
-import { discussionDotTone, discussionStatusLabel } from "@/features/discussion/discussion-status";
+import { Stepper } from "@/components/system/Stepper";
+import { useNow } from "@/features/attention/useNow";
+import { DiscussionMenu } from "@/features/discussion/DiscussionMenu";
+import { discussionPauseRefusal, discussionStepper } from "@/features/discussion/discussion-header";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
-import { ContextGauge } from "@/features/task/ContextGauge";
-import { ToneDot } from "@/features/task/StatusDot";
-import { asSessionStatus, type DiscussionSummary } from "@/lib/wails";
-import { pause, resume } from "@/store/actions";
+import { asSessionStatus, DISCUSSION_STAGE, type DiscussionSummary, sessionKey } from "@/lib/wails";
 import { useAppStore, usePanel } from "@/store/app-store";
+
+/** PANELS are the panels of a discussion, in their order, each with what it shows. */
+const PANELS = [
+  {
+    id: "details",
+    label: "Details",
+    tooltip: "The board, the cards, the repositories read, the rounds",
+    icon: ICONS.details,
+  },
+  {
+    id: "documents",
+    label: "Documents",
+    tooltip: "The context and the document of the discussion",
+    icon: ICONS.file,
+  },
+] as const;
+
+// MINUTE is how often the times in the header are read again.
+const MINUTE = 60_000;
 
 export interface DiscussionHeaderProps {
   discussion: DiscussionSummary;
 }
 
 /**
- * DiscussionHeader is the header of the place of a discussion, with what the user can do to it on
- * the right.
+ * DiscussionHeader is the header of the place of a discussion: the title, the pill of its round, and
+ * on the right the context meter, Pause or Resume, the panels and the ⋯. The meter and Pause are
+ * there only while the discussion has a session.
  */
 export function DiscussionHeader({ discussion }: DiscussionHeaderProps) {
-  const [archiving, setArchiving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const now = useNow(MINUTE, true);
   const panel = usePanel();
   const openPanel = useAppStore((state) => state.openPanel);
-
-  // The dot: see discussionDotTone.
-  const tone = discussionDotTone(discussion);
-  const status = asSessionStatus(discussion.sessionStatus);
-  const paused = status === "paused";
-  const running = discussion.sessionStage !== "";
-
-  const archiveButton = (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      aria-label="Archive discussion"
-      disabled={!discussion.canArchive}
-      onClick={() => setArchiving(true)}
-    >
-      <Archive />
-    </Button>
-  );
+  // A conversation that couldn't be read is settled too: the pill stops glowing.
+  const transcriptSettled = useAppStore((state) => {
+    const status = state.transcripts[sessionKey(discussion.id, DISCUSSION_STAGE)]?.status;
+    return status === "ready" || status === "error";
+  });
+  const stepper = discussionStepper(discussion, now);
+  const hasSession = discussion.sessionStage !== "";
 
   return (
-    <LocationHeader>
-      <Badge variant="outline" className="gap-1.5">
-        <ToneDot tone={tone} />
-        {discussionStatusLabel(discussion)}
-      </Badge>
-      <ContextGauge percent={discussion.contextPercent} />
-      {running && (
-        <PauseButton
-          paused={paused}
-          disabled={!paused && status === "error"}
-          onClick={() =>
-            void (paused
-              ? resume(discussion.id, discussion.sessionStage)
-              : pause(discussion.id, discussion.sessionStage))
-          }
+    <LocationHeader
+      progress={
+        <Stepper
+          steps={stepper.steps}
+          pill={stepper.pill}
+          label={stepper.label}
+          tooltip={stepper.tooltip}
+          loading={!transcriptSettled}
+        />
+      }
+    >
+      {hasSession && (
+        <ContextMeter
+          percent={discussion.contextPercent === 0 ? null : discussion.contextPercent}
+          paused={asSessionStatus(discussion.sessionStatus) === "paused"}
+          compact="narrow"
+          detail={`Context used by the discussion: ${discussion.contextPercent === 0 ? "…" : `${Math.round(discussion.contextPercent)}%`}`}
         />
       )}
-      <PanelGroup
-        panels={[
-          {
-            id: "documents",
-            label: "Documents",
-            tooltip: "The document and the context",
-            icon: ICONS.file,
-          },
-        ]}
-        open={panel}
-        onOpenChange={openPanel}
+      <ItemPause
+        id={discussion.id}
+        item="the discussion"
+        session={
+          hasSession
+            ? {
+                stage: discussion.sessionStage,
+                sessionStatus: discussion.sessionStatus,
+                pausedAt: discussion.pausedAt,
+              }
+            : null
+        }
+        refusal={() => discussionPauseRefusal(discussion)}
+        now={now}
       />
-      {discussion.canArchive || discussion.archiveHint === "" ? (
-        archiveButton
-      ) : (
-        <Tooltip>
-          <TooltipTrigger render={<span />}>{archiveButton}</TooltipTrigger>
-          <TooltipContent>{discussion.archiveHint}</TooltipContent>
-        </Tooltip>
-      )}
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Delete discussion"
-        onClick={() => setDeleting(true)}
-      >
-        <Trash2 />
-      </Button>
-
-      <ArchiveDiscussionDialog
-        discussion={discussion}
-        open={archiving}
-        onOpenChange={setArchiving}
-      />
-      <DeleteDiscussionDialog discussion={discussion} open={deleting} onOpenChange={setDeleting} />
+      <PanelGroup panels={PANELS} open={panel} onOpenChange={openPanel} />
+      <DiscussionMenu discussion={discussion} />
     </LocationHeader>
   );
 }

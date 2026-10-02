@@ -955,16 +955,27 @@ export async function retryPublish(id: string, draftId: string): Promise<void> {
   );
 }
 
-/** archiveDiscussion ends the conversation and sends the discussion to the history. */
-export function archiveDiscussion(id: string): Promise<void> {
-  return runRemoval(id, fail(withItem("Couldn't archive", itemName(id)), TRY), () =>
-    api.archiveDiscussion(id),
-  );
+// removalInPlace runs the removal of an item whose refusal has a place of its own on screen: it
+// marks the item as runRemoval does, and answers the message of the failure, or null.
+async function removalInPlace(id: string, operation: () => Promise<void>): Promise<string | null> {
+  useAppStore.setState({ expectGone: id });
+  try {
+    await operation();
+    return null;
+  } catch (error) {
+    if (useAppStore.getState().expectGone === id) {
+      useAppStore.setState({ expectGone: null });
+    }
+    return messageOf(error);
+  }
 }
 
-/** deleteDiscussion removes the discussion for good. */
-export function deleteDiscussion(id: string): Promise<void> {
-  return runRemoval(id, fail(withItem("Couldn't delete", itemName(id)), TRY), () =>
-    api.deleteDiscussion(id),
-  );
+/** archiveDiscussionInPlace ends the conversation and sends the discussion to the history; it answers the refusal, or null. */
+export function archiveDiscussionInPlace(id: string): Promise<string | null> {
+  return removalInPlace(id, () => api.archiveDiscussion(id));
+}
+
+/** deleteDiscussionInPlace removes the discussion for good; it answers the refusal, or null. */
+export function deleteDiscussionInPlace(id: string): Promise<string | null> {
+  return removalInPlace(id, () => api.deleteDiscussion(id));
 }

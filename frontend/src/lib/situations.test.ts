@@ -328,8 +328,17 @@ describe("announcement", () => {
     expect(announcement("Login", situation)).toBe(expected);
   });
 
-  it("names no place for a review or a discussion", () => {
+  it("names no place for a review or a discussion before its first round", () => {
     expect(announcePlace(makeSituation({ place: REVIEW_PLACE }))).toBeNull();
+    expect(announcePlace(makeSituation({ place: DISCUSSION_PLACE }))).toBeNull();
+  });
+
+  it("names the round of a discussion", () => {
+    const situation = makeSituation({ kind: "drafts", place: DISCUSSION_PLACE });
+
+    expect(announcePlace(situation, 2)).toBe("round 2");
+    expect(announcement("Invoices", situation, 2)).toBe("Invoices: decide drafts in round 2");
+    expect(situationFragment(situation, 1)).toBe("decide drafts in round 1");
   });
 });
 

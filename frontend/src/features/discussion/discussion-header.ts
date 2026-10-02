@@ -1,7 +1,7 @@
 import type { MenuRowItem } from "@/components/MenuRow";
 import type { PillView, StepperGlyph } from "@/components/system/Pill";
 import type { StepperStepView } from "@/components/system/Stepper";
-import { groupable } from "@/features/discussion/drafts-card";
+import { draftTitle, groupable } from "@/features/discussion/drafts-card";
 import { modelLabel } from "@/lib/models";
 import { counted, lowerFirst, situationPillState } from "@/lib/situations";
 import type { Board, DiscussionSummary, Draft, Repository, SituationGroup } from "@/lib/wails";
@@ -339,4 +339,32 @@ export function discussionDetails(
       },
     ],
   };
+}
+
+/**
+ * archiveSummary is the line of the archive dialog: what was published, "Published: 5 issues in
+ * round 1: 4 created, 1 updated", "Published: 7 issues in 3 rounds: 6 created, 1 updated" or
+ * "Published: nothing", and what is left out, " · Not published: <titles>", the drafts neither
+ * published nor discarded.
+ */
+export function archiveSummary(drafts: readonly Draft[]): string {
+  const published = drafts.filter((draft) => draft.published);
+  let line = "Published: nothing";
+  if (published.length > 0) {
+    const rounds = new Set(published.map((draft) => draft.round)).size;
+    const created = published.filter((draft) => asDraftOutcome(draft.outcome) === "created").length;
+    const updated = published.filter((draft) => asDraftOutcome(draft.outcome) === "updated").length;
+    const outcome = [
+      created > 0 ? `${created} created` : "",
+      updated > 0 ? `${updated} updated` : "",
+    ]
+      .filter((part) => part !== "")
+      .join(", ");
+    const where = rounds === 1 ? `round ${published[0]?.round ?? 0}` : counted(rounds, "round");
+    line = `Published: ${counted(published.length, "issue")} in ${where}: ${outcome}`;
+  }
+  const left = drafts.filter((draft) => !draft.published && draft.decision !== "discarded");
+  return left.length === 0
+    ? line
+    : `${line} · Not published: ${left.map((draft) => draftTitle(draft)).join(", ")}`;
 }

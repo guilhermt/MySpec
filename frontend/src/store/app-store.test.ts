@@ -2827,6 +2827,23 @@ describe("the dialogs of a review", () => {
     expect(useAppStore.getState().reviewDialog).toBeNull();
   });
 
+  it("opens and closes the dialog of a discussion", () => {
+    act(() => useAppStore.getState().openDiscussionDialog("discussion-1", "archive"));
+    expect(useAppStore.getState().discussionDialog).toEqual({
+      discussionId: "discussion-1",
+      kind: "archive",
+    });
+
+    act(() => useAppStore.getState().openDiscussionDialog("discussion-1", "delete"));
+    expect(useAppStore.getState().discussionDialog).toEqual({
+      discussionId: "discussion-1",
+      kind: "delete",
+    });
+
+    act(() => useAppStore.getState().closeDiscussionDialog());
+    expect(useAppStore.getState().discussionDialog).toBeNull();
+  });
+
   it("drops the attempt and the dialog of a review a snapshot no longer has", () => {
     act(() => {
       useAppStore.getState().applyState(withReviews({}));

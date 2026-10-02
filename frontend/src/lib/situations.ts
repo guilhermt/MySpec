@@ -221,8 +221,8 @@ export function nextWaiting(app: State | null, openItemId: string | null): Waiti
   return next;
 }
 
-/** announcePlace is where a situation is, as the announcement of a new one says it; null when the item says enough. */
-export function announcePlace(situation: Situation): string | null {
+/** announcePlace is where a situation is, as the announcement of a new one says it, with the round of a discussion; null when the item says enough. */
+export function announcePlace(situation: Situation, round = 0): string | null {
   const { place } = situation;
   switch (asPlaceKind(place.kind)) {
     case "stage":
@@ -243,8 +243,9 @@ export function announcePlace(situation: Situation): string | null {
     case "pr":
       return "PR";
     case "review":
-    case "discussion":
       return null;
+    case "discussion":
+      return round > 0 ? `round ${round}` : null;
   }
 }
 
@@ -256,8 +257,8 @@ const PLACE_IN_LABEL: readonly SituationKind[] = [
   "plan_invalid",
 ];
 
-/** situationFragment is what a situation asks and where, as a sentence goes on after a name or a tone: `question in Reviewer`. */
-export function situationFragment(situation: Situation): string {
+/** situationFragment is what a situation asks and where, as a sentence goes on after a name or a tone: `question in Reviewer`, `decide drafts in round 2`. */
+export function situationFragment(situation: Situation, round = 0): string {
   const kind = asSituationKind(situation.kind);
   if (kind === "findings") {
     return asSituationForm(situation.form) === "apply"
@@ -269,7 +270,7 @@ export function situationFragment(situation: Situation): string {
   if (PLACE_IN_LABEL.includes(kind)) {
     return asks;
   }
-  const place = announcePlace(situation);
+  const place = announcePlace(situation, round);
   return place === null ? asks : `${asks} in ${place}`;
 }
 
@@ -289,9 +290,12 @@ export function situationPillState(situation: Situation, count: number): string 
   }
 }
 
-/** announcement is what the live region says of a new situation: `<name>: <what it asks> in <where>`. */
-export function announcement(name: string, situation: Situation): string {
-  return `${name}: ${situationFragment(situation)}`;
+/**
+ * announcement is what the live region says of a new situation: `<name>: <what it asks> in <where>`.
+ * round is the round of a discussion, which is where its situations are.
+ */
+export function announcement(name: string, situation: Situation, round = 0): string {
+  return `${name}: ${situationFragment(situation, round)}`;
 }
 
 /** stageSituation is the situation of the planning stage of a task, null when it has none. */

@@ -10,6 +10,7 @@ import {
   makeArchivedReview,
   makeArchivedTask,
   makeBoard,
+  makeDraft,
   makeRepository,
   makeReviewFinding,
   makeReviewPass,
@@ -204,10 +205,38 @@ describe("GoneView", () => {
     expect(actions()).toEqual(["Next that needs you", "Open in History", "Open Platform Roadmap"]);
   });
 
+  it("tells the rounds of an archived discussion", () => {
+    page(
+      gone("discussion", "discussion-1", "Invoices", "board-1"),
+      stateWith({
+        discussionHistory: [
+          makeArchivedDiscussion({
+            id: "discussion-1",
+            drafts: [
+              makeDraft({ id: "a", round: 1, published: true, outcome: "created" }),
+              makeDraft({ id: "b", round: 2 }),
+            ],
+          }),
+        ],
+      }),
+    );
+
+    expect(screen.getByText(/^The conversation ended/)).toBeInTheDocument();
+    const rounds = within(screen.getByRole("list", { name: "Rounds" })).getAllByRole("listitem");
+    expect(rounds.map((round) => round.textContent)).toEqual([
+      expect.stringMatching(/^Round 1 · 1 created/),
+      "Round 2 · nothing published",
+    ]);
+  });
+
   it("shows a discussion that was deleted, going back Home once its board is gone", () => {
     page(gone("discussion", "discussion-1", "Invoices", "board-9"), stateWith());
 
     expect(screen.getByText("Invoices was deleted")).toBeInTheDocument();
+    expect(
+      screen.getByText(/^The conversation, the document and the drafts are gone/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Rounds" })).not.toBeInTheDocument();
     expect(actions()).toEqual(["Next that needs you", "Back to Home"]);
   });
 

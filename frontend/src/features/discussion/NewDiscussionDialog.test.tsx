@@ -127,7 +127,7 @@ describe("NewDiscussionDialog", () => {
 
     expect(screen.getByText("The clone at /home/dev/projects/web is missing.")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Change path" }));
+    await user.click(screen.getByRole("button", { name: "Change path…" }));
 
     expect(api.changeRepositoryPath).toHaveBeenCalledWith("repo-1");
   });

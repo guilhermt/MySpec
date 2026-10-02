@@ -1,5 +1,6 @@
 import type { RequestButton, RequestModel } from "@/components/system/RequestBar";
 import type { ComposerContext } from "@/features/chat/composer";
+import type { DiscussionInput } from "@/features/chat/discussion-markers";
 import { readyToArchiveDetail, standingDetail } from "@/features/discussion/discussion-status";
 import {
   cardEntries,
@@ -305,6 +306,17 @@ export function discussionAnnouncement(
   const tone = request.glyph === "error" ? "error" : "waiting for you";
   const where = request.place === undefined ? "" : ` in ${request.place}`;
   return `${discussion.title}: ${tone}: ${lowerFirst(request.label)}${where}`;
+}
+
+/** discussionInputOf is what the conversation of a discussion knows of it, for its markers. */
+export function discussionInputOf(discussion: DiscussionSummary): DiscussionInput {
+  return {
+    id: discussion.id,
+    drafts: discussion.drafts ?? [],
+    text: discussion.text,
+    cards: discussion.cards ?? [],
+    documentRevision: discussion.documentRevision,
+  };
 }
 
 /** DraftsComposer is what the composer offers about the drafts: to fix an unreadable file, to ask for changes, or the way to more cards. */

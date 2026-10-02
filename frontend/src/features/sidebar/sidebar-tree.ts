@@ -1,3 +1,4 @@
+import { isDecided, roundDrafts } from "@/features/discussion/drafts-card";
 import { reviewChecks, reviewPass, VERDICT_WORDS } from "@/features/reviews/review-header";
 import {
   discussionSessions,
@@ -22,7 +23,6 @@ import type {
   TaskSummary,
 } from "@/lib/wails";
 import {
-  asDiscussionStatus,
   asPlaceKind,
   asPRStatus,
   asPullReviewStatus,
@@ -246,13 +246,18 @@ function decided<T extends { decision: string }>(items: readonly T[]): { a: numb
 
 const prNumber = (task: TaskSummary) => task.pr?.prNumber ?? 0;
 
+/** discussionPosition is where a discussion stands: Discussing before its first drafts, the round after. */
+function discussionPosition(discussion: DiscussionSummary): string {
+  return discussion.round === 0 ? "Discussing" : `Round ${discussion.round}`;
+}
+
 /** position is where an item stands, as the accessible name and the paused line say it. */
 function position(owner: Owner): string {
   switch (owner.kind) {
     case "review":
       return `Pass ${reviewPass(owner.review)}`;
     case "discussion":
-      return "Discussing";
+      return discussionPosition(owner.discussion);
     case "task":
       return taskPosition(owner.task);
   }
@@ -301,7 +306,9 @@ function conversationPlace(owner: Owner, situation: Situation): RowText {
     case "review":
       return same(owner.kind === "review" ? `pass ${reviewPass(owner.review)}` : "pass 1");
     case "discussion":
-      return same("Discussing");
+      return same(
+        owner.kind === "discussion" ? discussionPosition(owner.discussion) : "Discussing",
+      );
   }
 }
 
@@ -315,6 +322,13 @@ const CONVERSATION_LABELS = {
 // passText is `pass K` of the owner, for the situations of a review.
 const passText = (owner: Owner) =>
   owner.kind === "review" ? `pass ${reviewPass(owner.review)}` : "pass 1";
+
+// roundText is a situation of a discussion with its round in the long form, as Epic discarded · Round 1.
+function roundText(text: string, owner: Owner): RowText {
+  return owner.kind === "discussion" && owner.discussion.round > 0
+    ? { long: `${text} · Round ${owner.discussion.round}`, short: text }
+    : same(text);
+}
 
 /** situationText is line 2 for one situation of an item, in its long and short forms. */
 function situationText(owner: Owner, situation: Situation): RowText {
@@ -447,18 +461,25 @@ function situationText(owner: Owner, situation: Situation): RowText {
     case "pass_blocked":
       return same(`Pass blocked · ${passText(owner)}`);
     case "publish_failed":
-      return same(
-        owner.kind === "review" ? `Publish failed · ${passText(owner)}` : "Publish failed",
-      );
+      return owner.kind === "discussion"
+        ? roundText("Publish failed", owner)
+        : same(owner.kind === "review" ? `Publish failed · ${passText(owner)}` : "Publish failed");
     case "drafts": {
-      const drafts = owner.kind === "discussion" ? (owner.discussion.drafts ?? []) : [];
-      const { a, b } = decided(drafts);
-      return { long: `Decide drafts · ${a} of ${b}`, short: `Decide drafts · ${a}/${b}` };
+      // Only the current round is counted, as the bar counts it.
+      const round = owner.kind === "discussion" ? owner.discussion.round : 0;
+      const mine =
+        owner.kind === "discussion" ? roundDrafts(owner.discussion.drafts ?? [], round) : [];
+      const a = mine.filter(isDecided).length;
+      const b = mine.length;
+      return {
+        long: `Decide drafts · Round ${round} · ${a} of ${b}`,
+        short: `Decide drafts · ${a}/${b}`,
+      };
     }
     case "epic_cant_publish":
-      return same("Epic can't publish");
+      return roundText("Epic can't publish", owner);
     case "epic_discarded":
-      return same("Epic discarded");
+      return roundText("Epic discarded", owner);
     case "ready_to_archive": {
       const drafts = owner.kind === "discussion" ? (owner.discussion.drafts ?? []) : [];
       const published = drafts.filter((draft) => draft.published).length;
@@ -626,12 +647,11 @@ function reviewStanding(review: ReviewSummary): Standing {
 }
 
 function discussionStanding(discussion: DiscussionSummary): Standing {
-  switch (asDiscussionStatus(discussion.status)) {
-    case "publishing":
-      return appWork(same("Publishing"));
-    default:
-      return sessionStanding(discussionSessions(discussion), "Discussing", same("Discussing"));
+  const place = discussionPosition(discussion);
+  if (discussion.publishing) {
+    return appWork({ long: `${place} · publishing`, short: "publishing" });
   }
+  return sessionStanding(discussionSessions(discussion), place, same(place));
 }
 
 /** shortAction is the target of an action cut to what tells it apart: the command and its subcommand, or the last segment of a path. */

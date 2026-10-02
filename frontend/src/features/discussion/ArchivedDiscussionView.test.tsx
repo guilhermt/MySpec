@@ -123,7 +123,7 @@ describe("ArchivedDiscussionView", () => {
 
     await user.click(screen.getByRole("button", { name: "Delete discussion" }));
 
-    expect(await screen.findByRole("alertdialog")).toHaveTextContent('Delete "Invoices"?');
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent("Delete “Invoices”?");
   });
 
   it("reads the conversation as a feed of the discussion agent", async () => {

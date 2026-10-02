@@ -1,4 +1,4 @@
-import { LoaderCircle, X } from "lucide-react";
+import { X } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Field } from "@/components/system/Field";
 import { Select } from "@/components/system/Select";
@@ -26,13 +26,13 @@ import {
   titleError,
   unclonedRepositories,
 } from "@/features/discussion/new-discussion";
+import { UnclonedRepository } from "@/features/discussion/UnclonedRepository";
 import { ModelPicker } from "@/features/models/ModelPicker";
 import { issueLabel } from "@/lib/boards";
 import { messageOf } from "@/lib/errors";
 import { choiceOf, type ModelChoice } from "@/lib/models";
-import { cloneMissingText } from "@/lib/repositories";
-import type { Board, BoardCard, Repository, StageModel } from "@/lib/wails";
-import { changeRepositoryPath, cloneRepository, startDiscussion } from "@/store/actions";
+import type { Board, BoardCard, StageModel } from "@/lib/wails";
+import { startDiscussion } from "@/store/actions";
 import {
   type NewDiscussionRef,
   useAppStore,
@@ -276,7 +276,9 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
           <ul className="flex flex-col divide-y rounded-lg border">
             {uncloned.map((repository) => (
               <li key={repository.id}>
-                <UnclonedRepository repository={repository} />
+                <div className="px-3 py-2 text-sm">
+                  <UnclonedRepository repository={repository} />
+                </div>
               </li>
             ))}
           </ul>
@@ -302,61 +304,5 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
         {nothingToDiscuss && <p className="text-xs text-muted-foreground">{NOTHING_TO_DISCUSS}</p>}
       </DialogFooter>
     </form>
-  );
-}
-
-/** UnclonedRepository offers the clone, or the path, a repository of the board is missing. */
-function UnclonedRepository({ repository }: { repository: Repository }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const act = (run: () => Promise<unknown>) => {
-    setBusy(true);
-    setError(null);
-    run()
-      .catch((reason: unknown) => setError(messageOf(reason)))
-      .finally(() => setBusy(false));
-  };
-
-  return (
-    <div className="flex flex-col gap-1.5 px-3 py-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="min-w-0 truncate text-sm">{repository.fullName}</span>
-        {repository.cloning ? (
-          <p role="status" className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
-            Cloning…
-          </p>
-        ) : repository.missing ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => act(() => changeRepositoryPath(repository.id))}
-          >
-            Change path
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => act(() => cloneRepository(repository.id))}
-          >
-            Clone
-          </Button>
-        )}
-      </div>
-      {repository.missing && (
-        <p className="break-all text-xs text-muted-foreground">{cloneMissingText(repository)}</p>
-      )}
-      {(error ?? (repository.cloneError === "" ? null : repository.cloneError)) !== null && (
-        <p role="alert" className="break-all text-xs text-destructive">
-          {error ?? repository.cloneError}
-        </p>
-      )}
-    </div>
   );
 }

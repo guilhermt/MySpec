@@ -143,6 +143,12 @@ export interface ReviewDialog {
   kind: "publish" | "again";
 }
 
+/** DiscussionDialog is the dialog of a discussion that is open: archiving, deleting or grouping drafts. */
+export interface DiscussionDialog {
+  discussionId: string;
+  kind: "archive" | "delete" | "group";
+}
+
 /** PullRef names one pull request: the repository it belongs to and its number. */
 export interface PullRef {
   repositoryId: string;
@@ -253,6 +259,12 @@ export interface AppStore {
    * ⋯ and Ctrl+Enter open them, so the state lives here; it is neither in the stack nor stored.
    */
   reviewDialog: ReviewDialog | null;
+  /**
+   * discussionDialog is the archive, delete or group dialog of a discussion that is open, null when
+   * none is. The bar and the ⋯ open them, so the state lives here; it is neither in the stack nor
+   * stored.
+   */
+  discussionDialog: DiscussionDialog | null;
   /** newDiscussion is what the dialog that creates a discussion is open for, null when it is closed. */
   newDiscussion: NewDiscussionRef | null;
   /**
@@ -326,6 +338,8 @@ export interface AppStore {
   setPublishAttempt: (reviewId: string, attempt: PublishAttempt | null) => void;
   openReviewDialog: (reviewId: string, kind: ReviewDialog["kind"]) => void;
   closeReviewDialog: () => void;
+  openDiscussionDialog: (discussionId: string, kind: DiscussionDialog["kind"]) => void;
+  closeDiscussionDialog: () => void;
   setPendingReview: (pending: PullRef | null) => void;
   openDiscussion: (id: string) => void;
   openArchivedDiscussion: (id: string) => void;
@@ -583,6 +597,7 @@ function initialTaskUi(): Pick<
   | "pendingReview"
   | "publishAttempts"
   | "reviewDialog"
+  | "discussionDialog"
   | "newDiscussion"
   | "textDrafts"
   | "lastRepositoryId"
@@ -606,6 +621,7 @@ function initialTaskUi(): Pick<
     pendingReview: null,
     publishAttempts: {},
     reviewDialog: null,
+    discussionDialog: null,
     newDiscussion: null,
     textDrafts: {},
     lastRepositoryId: null,
@@ -975,6 +991,10 @@ export const useAppStore = create<AppStore>()((set, get) => {
     openReviewDialog: (reviewId, kind) => set({ reviewDialog: { reviewId, kind } }),
 
     closeReviewDialog: () => set({ reviewDialog: null }),
+
+    openDiscussionDialog: (discussionId, kind) => set({ discussionDialog: { discussionId, kind } }),
+
+    closeDiscussionDialog: () => set({ discussionDialog: null }),
 
     setPendingReview: (pending) => set({ pendingReview: pending }),
 

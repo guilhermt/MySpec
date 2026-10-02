@@ -93,7 +93,7 @@ export function ArchivedDiscussionView({ discussionId }: ArchivedDiscussionViewP
   const discussion = useArchivedDiscussion(discussionId);
   const [deleting, setDeleting] = useState(false);
   // The document never changes again, so it is read once, at revision zero.
-  const artifact = useDiscussionArtifact(discussionId, DOCUMENT_FILE, 0);
+  const artifact = useDiscussionArtifact(discussionId, DOCUMENT_FILE, 0, 0);
 
   // The conversation of a discussion of the history is fetched when it opens;
   // nothing arrives after that.
@@ -124,7 +124,8 @@ export function ArchivedDiscussionView({ discussionId }: ArchivedDiscussionViewP
         </Button>
 
         <DeleteDiscussionDialog
-          discussion={discussion}
+          discussion={{ id: discussion.id, title: discussion.title, drafts }}
+          archived
           open={deleting}
           onOpenChange={setDeleting}
         />

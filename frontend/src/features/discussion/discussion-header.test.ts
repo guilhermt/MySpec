@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  archiveSummary,
   type DiscussionMenuGroup,
   discussionDetails,
   discussionMenu,
@@ -577,5 +578,56 @@ describe("discussionDetails", () => {
       { name: "context.md", label: "Context", enabled: true },
       { name: "discussion.md", label: "Document · discussion.md", enabled: true },
     ]);
+  });
+});
+
+describe("archiveSummary", () => {
+  const published = (id: string, round: number, outcome: "created" | "updated") =>
+    makeDraft({ id, round, published: true, outcome });
+
+  it("says what a single round published", () => {
+    const drafts = [
+      published("a", 1, "created"),
+      published("b", 1, "created"),
+      published("c", 1, "created"),
+      published("d", 1, "created"),
+      published("e", 1, "updated"),
+    ];
+
+    expect(archiveSummary(drafts)).toBe("Published: 5 issues in round 1: 4 created, 1 updated");
+  });
+
+  it("counts the rounds when there are more", () => {
+    const drafts = [
+      published("a", 1, "created"),
+      published("b", 2, "created"),
+      published("c", 3, "updated"),
+    ];
+
+    expect(archiveSummary(drafts)).toBe("Published: 3 issues in 3 rounds: 2 created, 1 updated");
+  });
+
+  it("says one kind of outcome alone", () => {
+    expect(archiveSummary([published("a", 2, "created")])).toBe(
+      "Published: 1 issue in round 2: 1 created",
+    );
+  });
+
+  it("says nothing without a publication", () => {
+    expect(archiveSummary([])).toBe("Published: nothing");
+    expect(archiveSummary([makeDraft({ decision: "discarded" })])).toBe("Published: nothing");
+  });
+
+  it("lists what is left out, the discarded not among it", () => {
+    const drafts = [
+      published("a", 1, "created"),
+      makeDraft({ id: "b", title: "Overage", decision: "approved" }),
+      makeDraft({ id: "c", title: "Credits" }),
+      makeDraft({ id: "d", title: "Refunds", decision: "discarded" }),
+    ];
+
+    expect(archiveSummary(drafts)).toBe(
+      "Published: 1 issue in round 1: 1 created · Not published: Overage, Credits",
+    );
   });
 });

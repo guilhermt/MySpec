@@ -1,7 +1,8 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { DiscussionView } from "@/features/discussion/DiscussionView";
 import { api, type DiscussionSummary } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makeDiscussion, makeDraft, makeEntry, makeState, makeTranscript } from "@/test/wails-mock";
 
@@ -44,6 +45,37 @@ describe("DiscussionView", () => {
     await user.click(within(panel).getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("complementary", { name: "Documents" })).not.toBeInTheDocument();
     expect(button()).toHaveFocus();
+  });
+
+  it("opens Details and Documents one at a time", async () => {
+    const { user } = view();
+
+    await user.click(screen.getByRole("button", { name: "Details" }));
+    expect(screen.getByRole("complementary", { name: "Details" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Documents" }));
+    expect(screen.queryByRole("complementary", { name: "Details" })).not.toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Documents" })).toBeInTheDocument();
+  });
+
+  it("opens the dialog the store asks for, and closes it when the screen goes away", async () => {
+    const { unmount } = view();
+
+    act(() => useAppStore.getState().openDiscussionDialog("discussion-1", "archive"));
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent("Archive “Invoices”?");
+
+    unmount();
+
+    expect(useAppStore.getState().discussionDialog).toBeNull();
+  });
+
+  it("archives from the menu of its header", async () => {
+    const { user } = view();
+
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Archive…" }));
+
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent("Archive “Invoices”?");
   });
 
   it("shows nothing at all for a discussion that is no longer there", () => {

@@ -411,24 +411,56 @@ describe("the line 2 of a discussion with a situation", () => {
   it.each<[Partial<Situation>, Partial<DiscussionSummary>, string, string]>([
     [{ kind: "reply", place: DISCUSSION_PLACE }, {}, "Reply · Discussing", "Reply · Discussing"],
     [
+      { kind: "question", place: DISCUSSION_PLACE },
+      { round: 2 },
+      "Question · Round 2",
+      "Question · Round 2",
+    ],
+    [
       { kind: "drafts", place: DISCUSSION_PLACE },
       {
+        round: 1,
         drafts: [
           makeDraft({ id: "a", decision: "approved" }),
           makeDraft({ id: "b" }),
           makeDraft({ id: "c" }),
         ],
       },
-      "Decide drafts · 1 of 3",
+      "Decide drafts · Round 1 · 1 of 3",
       "Decide drafts · 1/3",
     ],
     [
+      { kind: "drafts", place: DISCUSSION_PLACE },
+      {
+        round: 2,
+        drafts: [
+          makeDraft({ id: "a", round: 1, published: true }),
+          makeDraft({ id: "b", round: 1, decision: "discarded" }),
+          makeDraft({ id: "c", round: 2, decision: "approved" }),
+          makeDraft({ id: "d", round: 2 }),
+        ],
+      },
+      "Decide drafts · Round 2 · 1 of 2",
+      "Decide drafts · 1/2",
+    ],
+    [
       { kind: "epic_cant_publish", place: DISCUSSION_PLACE },
-      {},
-      "Epic can't publish",
+      { round: 1 },
+      "Epic can't publish · Round 1",
       "Epic can't publish",
     ],
-    [{ kind: "epic_discarded", place: DISCUSSION_PLACE }, {}, "Epic discarded", "Epic discarded"],
+    [
+      { kind: "epic_discarded", place: DISCUSSION_PLACE },
+      { round: 1 },
+      "Epic discarded · Round 1",
+      "Epic discarded",
+    ],
+    [
+      { kind: "publish_failed", group: "error", place: DISCUSSION_PLACE },
+      { round: 1 },
+      "Publish failed · Round 1",
+      "Publish failed",
+    ],
     [
       { kind: "ready_to_archive", group: "closing", place: DISCUSSION_PLACE },
       {
@@ -804,10 +836,29 @@ describe("the line of an item without a situation", () => {
       "agent",
       "Discussing",
     ],
-    ["a discussion publishing", discussionWith({ status: "publishing" }), "app", "Publishing"],
     ["a quiet discussion", discussionWith({}), "idle", "Discussing"],
+    ["a quiet discussion in a round", discussionWith({ round: 2 }), "idle", "Round 2"],
+    [
+      "a discussion in a round with its agent working",
+      discussionWith({ round: 1, sessionStatus: "working" }),
+      "agent",
+      "Round 1",
+    ],
+    [
+      "a paused discussion in a round",
+      discussionWith({ round: 1, sessionStatus: "paused" }),
+      "paused",
+      "Paused · Round 1",
+    ],
   ])("reads %s", (_case, discussion, tone, long) => {
     expect(discussionRow(discussion, NOW)).toMatchObject({ tone, line2: { long, short: long } });
+  });
+
+  it("tells a publication in the round, short without it", () => {
+    expect(discussionRow(discussionWith({ round: 1, publishing: true }), NOW)).toMatchObject({
+      tone: "app",
+      line2: { long: "Round 1 · publishing", short: "publishing" },
+    });
   });
 });
 

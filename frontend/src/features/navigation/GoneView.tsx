@@ -2,6 +2,11 @@ import type { GoneAction } from "@/components/system/GonePage";
 import { GonePage } from "@/components/system/GonePage";
 import { ICONS, type IconGlyph } from "@/components/system/icons";
 import { gonePassLines, goneReviewText } from "@/features/navigation/gone-passes";
+import {
+  DELETED_DISCUSSION_TEXT,
+  goneDiscussionText,
+  goneRoundLines,
+} from "@/features/navigation/gone-rounds";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { findBoard } from "@/lib/boards";
 import {
@@ -13,7 +18,12 @@ import {
   locationTitle,
 } from "@/lib/locations";
 import { nextWaiting } from "@/lib/situations";
-import { useAppStore, useArchivedReview, useBackTarget } from "@/store/app-store";
+import {
+  useAppStore,
+  useArchivedDiscussion,
+  useArchivedReview,
+  useBackTarget,
+} from "@/store/app-store";
 
 export interface GoneViewProps {
   location: GoneLocation;
@@ -39,11 +49,17 @@ function archivedOf(item: Exclude<GoneLocation["item"], "board">, id: string): L
   }
 }
 
-/** GonePasses is the result of each pass of a review that ended: what went to GitHub or to the agent, and when. */
-function GonePasses({ lines }: { lines: readonly { text: string; time: string }[] }) {
+/** GonePasses is the result of each pass of a review that ended, or of each round of a discussion: what went to GitHub or to the agent, and when. */
+function GonePasses({
+  label,
+  lines,
+}: {
+  label: string;
+  lines: readonly { text: string; time: string }[];
+}) {
   return (
     <ul
-      aria-label="Passes"
+      aria-label={label}
       className="flex w-full max-w-(--measure-read) flex-col gap-(--space-1-5) rounded-md bg-surface-0 px-(--space-4) py-(--space-3) text-(length:--text-meta) leading-(--leading-meta) text-ink-1 shadow-[inset_0_0_0_var(--border)_var(--line-1)]"
     >
       {lines.map((line) => (
@@ -73,8 +89,12 @@ export function GoneView({ location }: GoneViewProps) {
   const outcome = goneOutcome(app, location);
   // A review that ended says how, from the archive; a deleted one has nothing to say.
   const archived = useArchivedReview(location.item === "review" ? location.id : null);
+  const archivedDiscussion = useArchivedDiscussion(
+    location.item === "discussion" ? location.id : null,
+  );
   const now = Date.now();
   const passes = archived === null ? [] : gonePassLines(archived, now);
+  const rounds = archivedDiscussion === null ? [] : goneRoundLines(archivedDiscussion, now);
 
   const actions: GoneAction[] = [];
   if (location.item === "board") {
@@ -119,9 +139,18 @@ export function GoneView({ location }: GoneViewProps) {
         icon={ICON[outcome]}
         title={goneTitle(location, outcome)}
         {...(archived !== null ? { description: goneReviewText(archived, now) } : {})}
+        {...(location.item === "discussion"
+          ? {
+              description:
+                archivedDiscussion === null
+                  ? DELETED_DISCUSSION_TEXT
+                  : goneDiscussionText(archivedDiscussion, now),
+            }
+          : {})}
         actions={actions}
       >
-        {passes.length > 0 && <GonePasses lines={passes} />}
+        {passes.length > 0 && <GonePasses label="Passes" lines={passes} />}
+        {rounds.length > 0 && <GonePasses label="Rounds" lines={rounds} />}
       </GonePage>
     </section>
   );
