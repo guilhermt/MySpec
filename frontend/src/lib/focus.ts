@@ -112,3 +112,40 @@ export function focusFindingToDecide(findings: readonly FindingLike[] | null, by
   target.scrollIntoView({ block: "center" });
   return true;
 }
+
+/** DRAFT is the focusable element of a draft of the drafts card, open or folded. */
+const DRAFT = "[data-decision-card] [data-card-item]";
+
+/** activeDraftId is the draft of the drafts card around the focus; null when the focus is elsewhere. */
+export function activeDraftId(): string | null {
+  const focused = document.activeElement?.closest<HTMLElement>(DRAFT);
+  return focused?.dataset.cardItem ?? null;
+}
+
+/** currentDraftId is the draft of the drafts card that is the current one, open; null without a card. */
+export function currentDraftId(): string | null {
+  const current = document.querySelector<HTMLElement>(`${DRAFT}[data-current]`);
+  return current?.dataset.cardItem ?? null;
+}
+
+/**
+ * focusDraft takes the focus to a draft of the drafts card, scrolled to the centre: the draft opens
+ * as it takes the focus. With retry, on the next frame it goes on to the Retry of the draft, which
+ * only exists once the draft is open. False when the draft is not on screen.
+ */
+export function focusDraft(id: string, retry: boolean): boolean {
+  const selector = `[data-decision-card] [data-card-item="${id}"]`;
+  const element = document.querySelector<HTMLElement>(selector);
+  if (element === null) {
+    return false;
+  }
+  element.focus();
+  element.scrollIntoView({ block: "center" });
+  if (retry) {
+    requestAnimationFrame(() => {
+      const button = document.querySelector<HTMLElement>(`${selector} [data-retry]`);
+      button?.focus();
+    });
+  }
+  return true;
+}

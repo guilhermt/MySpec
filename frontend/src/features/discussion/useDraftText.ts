@@ -31,8 +31,9 @@ export type { EditedText };
 
 /**
  * useDraftText holds the title or the body of a draft while the user edits it,
- * as useEditedText does it: neither is ever left blank, and a draft the agent
- * wrote again drops what was typed on the old one.
+ * as useEditedText does it: a required text is never left blank (the body of an
+ * epic the user wrote is not), and a draft the agent wrote again drops what was
+ * typed on the old one.
  */
 export function useDraftText(
   discussionId: string,
@@ -41,13 +42,14 @@ export function useDraftText(
   stored: string,
   revision: number,
   save: (text: string) => void,
+  required: boolean,
 ): EditedText {
   return useEditedText(
     draftTextKey(discussionId, draftId, field),
     stored,
     revision,
     save,
-    true,
+    required,
     () => draftRevision(discussionId, draftId),
   );
 }

@@ -899,6 +899,19 @@ describe("marker request", () => {
   });
 });
 
+describe("draft request", () => {
+  it("asks the drafts card of a discussion to open a draft, until it is cleared", () => {
+    useAppStore.getState().requestDraft("discussion-1", "draft-epic");
+    expect(useAppStore.getState().draftRequest).toEqual({
+      discussionId: "discussion-1",
+      draftId: "draft-epic",
+    });
+
+    useAppStore.getState().clearDraftRequest();
+    expect(useAppStore.getState().draftRequest).toBeNull();
+  });
+});
+
 describe("board card request", () => {
   const BOARD_PLACE: Location = { kind: "board", id: BOARD.id };
 

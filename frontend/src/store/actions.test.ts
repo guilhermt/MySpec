@@ -35,7 +35,7 @@ import {
   discardStep,
   discussionContext,
   followTaskReviewMode,
-  groupIntoEpic,
+  groupIntoEpicInPlace,
   interrupt,
   loadTranscript,
   openExternal,
@@ -74,6 +74,7 @@ import {
   scanRepositories,
   sendMessageInPlace,
   setDraftEpic,
+  setDraftEpicInPlace,
   setDraftModule,
   setDraftRepository,
   setRepositoryFilter,
@@ -98,6 +99,7 @@ import {
   makeBoardPreview,
   makeBoardRepositoryOption,
   makeDiscussion,
+  makeDraft,
   makeEntry,
   makeRepository,
   makeReviewFilters,
@@ -1044,28 +1046,69 @@ describe("discussion actions reported in the app notice", () => {
     expect(useAppStore.getState().error).toBeNull();
   });
 
+  it("name the draft by its title when a decision fails", async () => {
+    const discussion = makeDiscussion({
+      drafts: [makeDraft({ id: "draft-1", title: "Overage on the invoice" })],
+    });
+    useAppStore.setState({ app: makeState({ discussions: [discussion] }) });
+    vi.mocked(api.decideDraft).mockRejectedValueOnce(new Error("A publication is running."));
+
+    expect(await decideDraft("discussion-1", "draft-1", "approved")).toBe(false);
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't decide Overage on the invoice",
+      detail: "A publication is running. Try again.",
+    });
+  });
+
+  it("name the item when the draft of a failed decision is gone", async () => {
+    vi.mocked(api.decideDraft).mockRejectedValueOnce(new Error("no such draft"));
+
+    expect(await decideDraft("discussion-1", "draft-9", "approved")).toBe(false);
+    expect(useAppStore.getState().error?.label).toBe("Couldn't decide a draft of the item");
+  });
+
+  it("answer whether the decision went through", async () => {
+    expect(await decideDraft("discussion-1", "draft-1", "approved")).toBe(true);
+    expect(useAppStore.getState().error).toBeNull();
+  });
+});
+
+// The dialog and the cards of the drafts show the refusal where the user is, so
+// these reject instead of filling the app notice.
+describe("grouping and the epic of a draft shown in place", () => {
   it("answer the id of the epic the drafts were grouped into", async () => {
     vi.mocked(api.groupIntoEpic).mockResolvedValueOnce("draft-epic");
 
-    expect(await groupIntoEpic("discussion-1", ["draft-1", "draft-2"], "Epic", "repo-1")).toBe(
-      "draft-epic",
-    );
+    expect(
+      await groupIntoEpicInPlace("discussion-1", ["draft-1", "draft-2"], "Pricing", "repo-1"),
+    ).toEqual({ epicId: "draft-epic" });
     expect(api.groupIntoEpic).toHaveBeenCalledWith(
       "discussion-1",
       ["draft-1", "draft-2"],
-      "Epic",
+      "Pricing",
       "repo-1",
     );
   });
 
-  it("answer an empty id when the drafts could not be grouped", async () => {
-    vi.mocked(api.groupIntoEpic).mockRejectedValueOnce(new Error("a draft is published"));
+  it("answer the refusal of a grouping without raising the app notice", async () => {
+    vi.mocked(api.groupIntoEpic).mockRejectedValueOnce(new Error("A publication is running."));
 
-    expect(await groupIntoEpic("discussion-1", ["draft-1"], "Epic", "repo-1")).toBe("");
-    expect(useAppStore.getState().error).toEqual({
-      label: "Couldn't group the drafts of the item into an epic",
-      detail: "a draft is published. Try again.",
+    expect(await groupIntoEpicInPlace("discussion-1", ["draft-1"], "Pricing", "repo-1")).toEqual({
+      error: "A publication is running.",
     });
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("answer the refusal of the epic of a draft, or null", async () => {
+    expect(await setDraftEpicInPlace("discussion-1", "draft-1", "dev/web#3")).toBeNull();
+    expect(api.setDraftEpic).toHaveBeenCalledWith("discussion-1", "draft-1", "dev/web#3");
+
+    vi.mocked(api.setDraftEpic).mockRejectedValueOnce(new Error("dev/web#3 isn't an epic."));
+
+    expect(await setDraftEpicInPlace("discussion-1", "draft-1", "dev/web#3")).toBe(
+      "dev/web#3 isn't an epic.",
+    );
+    expect(useAppStore.getState().error).toBeNull();
   });
 });
 

@@ -4,7 +4,7 @@ import { DiscussionMenu } from "@/features/discussion/DiscussionMenu";
 import type { DiscussionSummary } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeBoard, makeDiscussion, makeState } from "@/test/wails-mock";
+import { makeBoard, makeDiscussion, makeDraft, makeState } from "@/test/wails-mock";
 
 function menu(overrides: Partial<DiscussionSummary> = {}) {
   const discussion = makeDiscussion(overrides);
@@ -20,18 +20,41 @@ async function openMenu(user: ReturnType<typeof menu>["user"]) {
 }
 
 describe("DiscussionMenu", () => {
-  it("groups the discussion, the deletion last after a separator, with no item to group yet", async () => {
+  it("groups the discussion, the deletion last after a separator", async () => {
     const { user } = menu();
 
     const opened = await openMenu(user);
 
     const groups = within(opened).getAllByRole("group");
     expect(groups.map((group) => group.textContent)).toEqual([
-      expect.stringMatching(/^DiscussionOpen RoadmapArchive…/),
+      expect.stringMatching(/^DiscussionOpen RoadmapGroup drafts into an epic…[\s\S]*Archive…/),
       "Delete discussion…",
     ]);
     expect(within(opened).getByRole("separator")).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Group drafts/ })).not.toBeInTheDocument();
+  });
+
+  it("dashes Group drafts into an epic with fewer than two loose drafts", async () => {
+    const { user } = menu({ drafts: [makeDraft()], round: 1 });
+    await openMenu(user);
+
+    const item = screen.getByRole("menuitem", { name: /^Group drafts into an epic…/ });
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(item).toHaveTextContent("needs two loose drafts not published");
+  });
+
+  it("opens the dialog to group through the store", async () => {
+    const { user } = menu({
+      drafts: [makeDraft({ id: "draft-1" }), makeDraft({ id: "draft-2", position: 1 })],
+      round: 1,
+    });
+    await openMenu(user);
+
+    await user.click(screen.getByRole("menuitem", { name: "Group drafts into an epic…" }));
+
+    expect(useAppStore.getState().discussionDialog).toEqual({
+      discussionId: "discussion-1",
+      kind: "group",
+    });
   });
 
   it("opens the board", async () => {

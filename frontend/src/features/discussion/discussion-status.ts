@@ -1,12 +1,6 @@
 import type { StatusTone } from "@/features/task/status";
 import { counted, discussionSituation, situationTone, summaryLabel } from "@/lib/situations";
-import type {
-  DiscussionRepository,
-  DiscussionSummary,
-  Draft,
-  DraftDependency,
-  DraftRef,
-} from "@/lib/wails";
+import type { DiscussionSummary, Draft, DraftDependency, DraftRef } from "@/lib/wails";
 import {
   asDiscussionStatus,
   asDraftKind,
@@ -185,19 +179,6 @@ export function standingDetail(discussion: DiscussionSummary): string | null {
   }
 }
 
-/**
- * decidedCount is how many drafts the user has already approved or discarded.
- * A published draft is decided by definition: it only got there approved.
- */
-export function decidedCount(drafts: readonly Draft[]): number {
-  return drafts.filter((draft) => draft.decision !== "" || draft.published).length;
-}
-
-/** draftsSummary is how far the user is through the drafts. */
-export function draftsSummary(drafts: readonly Draft[]): string {
-  return `${decidedCount(drafts)} of ${drafts.length} decided`;
-}
-
 /** kindLabel names what a draft would do on GitHub. */
 export function kindLabel(draft: Draft): string {
   switch (asDraftKind(draft.kind)) {
@@ -274,23 +255,6 @@ export function dependencyLabel(dependency: DependencyRef): string {
   return dependency.title === ""
     ? dependency.reference
     : `${dependency.reference} · ${dependency.title}`;
-}
-
-/**
- * repositoryOf is the repository of the board a draft is created in, null when
- * the draft points at none the board still has.
- */
-export function repositoryOf(
-  draft: Draft,
-  discussion: DiscussionSummary,
-): DiscussionRepository | null {
-  if (draft.repositoryId === "") {
-    return null;
-  }
-  return (
-    (discussion.repositories ?? []).find((repository) => repository.id === draft.repositoryId) ??
-    null
-  );
 }
 
 /**

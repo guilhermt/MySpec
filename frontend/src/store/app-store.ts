@@ -216,6 +216,11 @@ export interface AppStore {
   /** markerRequest is a marker of a task the conversation opens and focuses: the last one of its type. */
   markerRequest: { taskId: string; type: MarkerType } | null;
   /**
+   * draftRequest is a draft of a discussion the drafts card opens and focuses once it holds it: the
+   * epic a grouping just made. The card takes it and clears it.
+   */
+  draftRequest: { discussionId: string; draftId: string } | null;
+  /**
    * boardCardRequest is a card of a board the board view opens in its panel once it is on screen,
    * with its section expanded and the focus on its row; the view takes it and clears it. It is
    * never stacked nor stored.
@@ -307,6 +312,9 @@ export interface AppStore {
   /** requestMarkerOpen asks the conversation of a task to open and focus its last marker of a type. */
   requestMarkerOpen: (taskId: string, type: MarkerType) => void;
   clearMarkerRequest: () => void;
+  /** requestDraft asks the drafts card of a discussion to open and focus one of its drafts. */
+  requestDraft: (discussionId: string, draftId: string) => void;
+  clearDraftRequest: () => void;
   /** openBoardCard opens a board with one of its cards in the panel. */
   openBoardCard: (boardId: string, key: string) => void;
   clearBoardCardRequest: () => void;
@@ -585,6 +593,7 @@ function initialTaskUi(): Pick<
   | "transcripts"
   | "drafts"
   | "markerRequest"
+  | "draftRequest"
   | "boardCardRequest"
   | "openStepTab"
   | "prDrafts"
@@ -609,6 +618,7 @@ function initialTaskUi(): Pick<
     transcripts: {},
     drafts: {},
     markerRequest: null,
+    draftRequest: null,
     boardCardRequest: null,
     openStepTab: {},
     prDrafts: {},
@@ -931,6 +941,10 @@ export const useAppStore = create<AppStore>()((set, get) => {
     requestMarkerOpen: (taskId, type) => set({ markerRequest: { taskId, type } }),
 
     clearMarkerRequest: () => set({ markerRequest: null }),
+
+    requestDraft: (discussionId, draftId) => set({ draftRequest: { discussionId, draftId } }),
+
+    clearDraftRequest: () => set({ draftRequest: null }),
 
     openBoardCard: (boardId, key) =>
       leave(() =>

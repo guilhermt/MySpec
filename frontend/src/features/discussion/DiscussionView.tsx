@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { type KeyboardEvent, useEffect, useMemo, useRef } from "react";
 import { PanelLayout } from "@/components/system/AuxPanel";
 import { Conversation } from "@/features/chat/Conversation";
 import { ConversationComposer } from "@/features/chat/ConversationComposer";
@@ -7,10 +7,14 @@ import { DiscussionDetails } from "@/features/discussion/DiscussionDetails";
 import { DiscussionDialogs } from "@/features/discussion/DiscussionDialogs";
 import { DiscussionHeader } from "@/features/discussion/DiscussionHeader";
 import { DocumentsPanel } from "@/features/discussion/DocumentsPanel";
-import { DraftsPanel } from "@/features/discussion/DraftsPanel";
+import { DraftsCard } from "@/features/discussion/DraftsCard";
 import { discussionInputOf } from "@/features/discussion/discussion-request";
+import { cardEntries, nextToDecide } from "@/features/discussion/drafts-card";
 import { useDiscussionAnchors } from "@/features/discussion/useDiscussionAnchors";
+import { useDiscussionRequest } from "@/features/discussion/useDiscussionRequest";
 import { useFocusRescue } from "@/features/task/request-focus";
+import { activeDraftId, currentDraftId, focusDraft } from "@/lib/focus";
+import { modalOpen } from "@/lib/layers";
 import { discussionSituation } from "@/lib/situations";
 import { asSituationKind, DISCUSSION_STAGE, type DiscussionSummary, sessionKey } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
@@ -25,8 +29,15 @@ function DiscussionConversation({ discussion }: { discussion: DiscussionSummary 
     asSituationKind(situation.kind) === "reply" &&
     discussion.unreadableDrafts === "";
   const input = useMemo(() => discussionInputOf(discussion), [discussion]);
-  // The card of drafts enters the anchors with the card itself.
-  const { after, before } = useDiscussionAnchors(discussion, null);
+  const target = useDiscussionRequest(discussion)?.target ?? null;
+  const card = useMemo(
+    () =>
+      cardEntries(discussion).length === 0 ? null : (
+        <DraftsCard discussion={discussion} target={target} />
+      ),
+    [discussion, target],
+  );
+  const { after, before } = useDiscussionAnchors(discussion, card);
   return (
     <Conversation
       key="conversation:discussion"
@@ -66,10 +77,31 @@ export function DiscussionView({ discussionId }: DiscussionViewProps) {
     return <section ref={rescue} className="min-h-0 flex-1 bg-background" />;
   }
 
+  // Alt+↓ and Alt+↑ go to the next and the previous draft to decide from anywhere on the screen,
+  // the composer included, with no dialog open.
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.defaultPrevented || modalOpen()) {
+      return;
+    }
+    if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+      return;
+    }
+    const from = activeDraftId() ?? currentDraftId();
+    const id = nextToDecide(cardEntries(discussion), from, event.key === "ArrowDown" ? 1 : -1);
+    if (id !== null) {
+      event.preventDefault();
+      focusDraft(id, false);
+    }
+  };
+
   return (
     <section
       ref={rescue}
       aria-label={discussion.title}
+      onKeyDown={onKeyDown}
       className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
     >
       <DiscussionHeader discussion={discussion} />
@@ -83,7 +115,6 @@ export function DiscussionView({ discussionId }: DiscussionViewProps) {
           ) : null
         }
       >
-        <DraftsPanel discussion={discussion} />
         <DiscussionConversation discussion={discussion} />
         <ConversationComposer
           taskId={discussion.id}

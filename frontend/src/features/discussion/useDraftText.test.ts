@@ -23,12 +23,12 @@ function standAt(revision: number) {
   useAppStore.setState({ app: makeState({ discussions: [discussion] }) });
 }
 
-function edit(stored = "Export the invoices", revision = 1) {
+function edit(stored = "Export the invoices", revision = 1, required = true) {
   standAt(revision);
   const save = vi.fn();
   const view = renderHook(
     ({ text, rev }: { text: string; rev: number }) =>
-      useDraftText("discussion-1", "draft-1", "title", text, rev, save),
+      useDraftText("discussion-1", "draft-1", "title", text, rev, save, required),
     { initialProps: { text: stored, rev: revision } },
   );
   return { ...view, save };
@@ -71,6 +71,19 @@ describe("useDraftText", () => {
 
     expect(save).not.toHaveBeenCalled();
     expect(result.current.value).toBe("Export the invoices");
+  });
+
+  it("records the text blank when it is not required", () => {
+    const { result, save } = edit("A body", 1, false);
+
+    act(() => {
+      result.current.onChange("");
+    });
+    act(() => {
+      vi.advanceTimersByTime(SAVE_DELAY_MS);
+    });
+
+    expect(save).toHaveBeenCalledExactlyOnceWith("");
   });
 
   it("drops what was typed when the agent writes the draft again", () => {

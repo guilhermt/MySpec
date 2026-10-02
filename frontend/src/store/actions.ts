@@ -1,3 +1,5 @@
+import { draftTitle } from "@/features/discussion/drafts-card";
+import { storedDraft } from "@/features/discussion/useDraftText";
 import { messageOf, noticeDetail, type Remedy } from "@/lib/errors";
 import { locationTitle } from "@/lib/locations";
 import type { ModelChoice } from "@/lib/models";
@@ -905,6 +907,18 @@ export async function setDraftEpic(id: string, draftId: string, ref: string): Pr
 }
 
 /**
+ * setDraftEpicInPlace is setDraftEpic for the field of an existing issue: the refusal has its place
+ * under the field, so it is answered, or null, instead of raised in the app notice.
+ */
+export function setDraftEpicInPlace(
+  id: string,
+  draftId: string,
+  ref: string,
+): Promise<string | null> {
+  return inPlace(() => api.setDraftEpic(id, draftId, ref));
+}
+
+/**
  * addDraftDependency does not swallow its failure: the card of the draft shows
  * the refusal next to the field.
  */
@@ -923,29 +937,38 @@ export async function removeDraftDependency(
   );
 }
 
-/** decideDraft records what the user decided about one draft. */
-export async function decideDraft(
+/**
+ * decideDraft records what the user decided about one draft and answers whether it went through;
+ * the notice names the draft by its title.
+ */
+export function decideDraft(
   id: string,
   draftId: string,
   decision: DraftDecision,
-): Promise<void> {
-  await run(fail(`Couldn't decide a draft of ${theItem(id)}`, TRY), () =>
-    api.decideDraft(id, draftId, decision),
-  );
+): Promise<boolean> {
+  const draft = storedDraft(id, draftId);
+  const label =
+    draft === null
+      ? `Couldn't decide a draft of ${theItem(id)}`
+      : `Couldn't decide ${draftTitle(draft)}`;
+  return run(fail(label, TRY), () => api.decideDraft(id, draftId, decision));
 }
 
-/** groupIntoEpic puts the drafts under a new epic and answers its id; "" when it failed. */
-export async function groupIntoEpic(
+/**
+ * groupIntoEpicInPlace puts the drafts under a new epic: it answers the id of the epic, or the
+ * refusal for the footer of the dialog.
+ */
+export async function groupIntoEpicInPlace(
   id: string,
   draftIds: string[],
   title: string,
   repositoryId: string,
-): Promise<string> {
-  let epicId = "";
-  await run(fail(`Couldn't group the drafts of ${theItem(id)} into an epic`, TRY), async () => {
-    epicId = await api.groupIntoEpic(id, draftIds, title, repositoryId);
-  });
-  return epicId;
+): Promise<{ epicId: string } | { error: string }> {
+  try {
+    return { epicId: await api.groupIntoEpic(id, draftIds, title, repositoryId) };
+  } catch (error) {
+    return { error: messageOf(error) };
+  }
 }
 
 /** retryPublish publishes a draft again, after a failure. */

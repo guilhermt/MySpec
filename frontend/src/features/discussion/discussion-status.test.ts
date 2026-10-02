@@ -1,12 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  decidedCount,
   dependencyLabel,
   discussionDotTone,
   discussionRowLabel,
   discussionStatusLabel,
   discussionStatusTone,
-  draftsSummary,
   epicDiscardedDetail,
   epicGroups,
   epicRepositoryOf,
@@ -19,7 +17,6 @@ import {
   readyToArchiveDetail,
   refKey,
   refValue,
-  repositoryOf,
   standingDetail,
 } from "@/features/discussion/discussion-status";
 import type { Draft, Situation } from "@/lib/wails";
@@ -91,19 +88,6 @@ describe("discussionRowLabel", () => {
       "Decide drafts",
     );
     expect(discussionRowLabel(makeDiscussion({ status: "discussing" }))).toBe("Discussing");
-  });
-});
-
-describe("decidedCount and draftsSummary", () => {
-  it("counts the drafts the user decided and the ones already published", () => {
-    const drafts = [
-      makeDraft({ id: "a", decision: "approved" }),
-      makeDraft({ id: "b", decision: "" }),
-      makeDraft({ id: "c", decision: "", published: true }),
-    ];
-
-    expect(decidedCount(drafts)).toBe(2);
-    expect(draftsSummary(drafts)).toBe("2 of 3 decided");
   });
 });
 
@@ -185,16 +169,6 @@ describe("dependencyLabel", () => {
         detail: "",
       }),
     ).toBe("dev/web#9 · Export");
-  });
-});
-
-describe("repositoryOf", () => {
-  it("finds the repository a draft is created in", () => {
-    const discussion = makeDiscussion();
-
-    expect(repositoryOf(makeDraft(), discussion)?.fullName).toBe("dev/web");
-    expect(repositoryOf(makeDraft({ repositoryId: "" }), discussion)).toBeNull();
-    expect(repositoryOf(makeDraft({ repositoryId: "repo-9" }), discussion)).toBeNull();
   });
 });
 

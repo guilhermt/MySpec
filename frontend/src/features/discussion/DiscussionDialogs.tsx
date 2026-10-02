@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { ArchiveDiscussionDialog } from "@/features/discussion/ArchiveDiscussionDialog";
 import { DeleteDiscussionDialog } from "@/features/discussion/DeleteDiscussionDialog";
+import { GroupEpicDialog } from "@/features/discussion/GroupEpicDialog";
 import type { DiscussionSummary } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 
@@ -30,6 +31,11 @@ export function DiscussionDialogs({ discussion }: DiscussionDialogsProps) {
       <ArchiveDiscussionDialog
         discussion={subject}
         open={kind === "archive"}
+        onOpenChange={onOpenChange}
+      />
+      <GroupEpicDialog
+        discussion={discussion}
+        open={kind === "group"}
         onOpenChange={onOpenChange}
       />
       <DeleteDiscussionDialog

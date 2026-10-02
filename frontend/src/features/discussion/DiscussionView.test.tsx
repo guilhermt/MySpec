@@ -25,11 +25,56 @@ describe("DiscussionView", () => {
     });
   });
 
-  it("puts the drafts above the conversation", () => {
-    view({ status: "deciding", drafts: [makeDraft()] });
+  it("puts the drafts of the round in a card of the conversation", async () => {
+    view({ status: "deciding", round: 1, drafts: [makeDraft()] });
 
-    expect(screen.getByText("Drafts")).toBeInTheDocument();
-    expect(screen.getByRole("article", { name: "Draft Export the invoices" })).toBeInTheDocument();
+    expect(await screen.findByRole("group", { name: "Drafts of round 1" })).toHaveTextContent(
+      "Round 1 · drafts",
+    );
+    expect(
+      screen.getByRole("group", { name: /^Draft 1 of 1: New card\. Export the invoices\./ }),
+    ).toBeInTheDocument();
+  });
+
+  it("goes to the next draft to decide with Alt+↓ and to the previous with Alt+↑", async () => {
+    const { user } = view({
+      status: "deciding",
+      round: 1,
+      drafts: [
+        makeDraft({ id: "draft-1", title: "One", position: 0, decision: "approved" }),
+        makeDraft({ id: "draft-2", title: "Two", position: 1 }),
+        makeDraft({ id: "draft-3", title: "Three", position: 2 }),
+      ],
+    });
+    const item = (id: string) => document.querySelector<HTMLElement>(`[data-card-item="${id}"]`);
+    await screen.findByRole("group", { name: "Drafts of round 1" });
+    await user.click(screen.getByRole("textbox"));
+
+    // The current draft is the first to decide, so the next one is the one after it.
+    await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    expect(item("draft-3")).toHaveFocus();
+
+    await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    expect(item("draft-2")).toHaveFocus();
+
+    await user.keyboard("{Alt>}{ArrowUp}{/Alt}");
+    expect(item("draft-3")).toHaveFocus();
+  });
+
+  it("leaves Alt+↓ alone with a dialog open", async () => {
+    const { user } = view({
+      status: "deciding",
+      round: 1,
+      drafts: [makeDraft({ id: "draft-1" }), makeDraft({ id: "draft-2", position: 1 })],
+    });
+    await screen.findByRole("group", { name: "Drafts of round 1" });
+    await user.click(screen.getByRole("textbox"));
+    act(() => useAppStore.getState().openDiscussionDialog("discussion-1", "archive"));
+    await screen.findByRole("alertdialog");
+
+    await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
+
+    expect(document.querySelector("[data-card-item]:focus")).toBeNull();
   });
 
   it("opens the documents panel from its button, and closes it with ×", async () => {
