@@ -26,6 +26,7 @@ type Sessions interface {
 	Open(ctx context.Context, t session.TaskInfo) error
 	Start(ctx context.Context, t session.TaskInfo, restarted bool) error
 	Close(ctx context.Context, k session.Key) error
+	MarkDiscussion(ctx context.Context, k session.Key, marker *session.MarkerEntry)
 	DiscardTask(ctx context.Context, taskID string) error
 	Summary(k session.Key) (session.Summary, bool)
 	Exists(ctx context.Context, k session.Key) (bool, error)

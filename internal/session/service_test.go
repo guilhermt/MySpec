@@ -2367,7 +2367,9 @@ func TestStartOfADiscussionMarksItSendsTheInitialContextAndOpensTheClones(t *tes
 	if len(tr.Entries) != 3 {
 		t.Fatalf("entries = %d, want the discussion marker, the prompt and its answer", len(tr.Entries))
 	}
-	wantMarker := &session.MarkerEntry{Type: session.MarkerDiscussionStarted}
+	wantMarker := &session.MarkerEntry{
+		Type: session.MarkerDiscussionStarted, Model: string(info.Choice.Model), Effort: string(info.Choice.Effort),
+	}
 	if diff := cmp.Diff(wantMarker, tr.Entries[0].Marker); diff != "" {
 		t.Errorf("marker mismatch (-want +got):\n%s", diff)
 	}
@@ -2857,5 +2859,164 @@ func TestTheConversationsOfATaskAreLoadedAtStart(t *testing.T) {
 	want := []session.Conversation{{Stage: string(prompts.StagePRD), StartedAt: base}}
 	if diff := cmp.Diff(want, next.service.Conversations("t1")); diff != "" {
 		t.Errorf("Conversations() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+// discussionMarkers are the markers of a discussion in its conversation, but
+// the one that starts it.
+func (f *fixture) discussionMarkers(t *testing.T, k session.Key) []session.MarkerEntry {
+	t.Helper()
+
+	var got []session.MarkerEntry
+	for _, entry := range f.entriesOf(t, k, session.KindMarker) {
+		if entry.Marker.Type != session.MarkerDiscussionStarted {
+			got = append(got, *entry.Marker)
+		}
+	}
+	return got
+}
+
+func TestMarkDiscussionRecordsEachMarkerOnce(t *testing.T) {
+	t.Parallel()
+
+	revised := session.MarkerEntry{Type: session.MarkerDraftsRevised, Round: 1, Changed: 1}
+	tests := []struct {
+		name string
+		mark []session.MarkerEntry
+		want []session.MarkerEntry
+	}{
+		{
+			name: "a document by its stamp",
+			mark: []session.MarkerEntry{
+				{Type: session.MarkerDiscussionDocument, Stamp: "a"},
+				{Type: session.MarkerDiscussionDocument, Stamp: "a"},
+				{Type: session.MarkerDiscussionDocument, Stamp: "b"},
+				{Type: session.MarkerDiscussionDocument, Stamp: "b"},
+			},
+			want: []session.MarkerEntry{
+				{Type: session.MarkerDiscussionDocument, Stamp: "a", First: true},
+				{Type: session.MarkerDiscussionDocument, Stamp: "b"},
+			},
+		},
+		{
+			name: "the drafts written by their round",
+			mark: []session.MarkerEntry{
+				{Type: session.MarkerDraftsWritten, Round: 1, Count: 3},
+				{Type: session.MarkerDraftsWritten, Round: 1, Count: 4},
+				{Type: session.MarkerDraftsWritten, Round: 2, Count: 1},
+			},
+			want: []session.MarkerEntry{
+				{Type: session.MarkerDraftsWritten, Round: 1, Count: 3},
+				{Type: session.MarkerDraftsWritten, Round: 2, Count: 1},
+			},
+		},
+		{
+			name: "a publication by its round",
+			mark: []session.MarkerEntry{
+				{Type: session.MarkerDraftsPublished, Round: 1},
+				{Type: session.MarkerDraftsPublished, Round: 1},
+				{Type: session.MarkerDraftsPublished, Round: 2},
+			},
+			want: []session.MarkerEntry{
+				{Type: session.MarkerDraftsPublished, Round: 1},
+				{Type: session.MarkerDraftsPublished, Round: 2},
+			},
+		},
+		{
+			name: "unreadable drafts by their reason against the last marker of the drafts",
+			mark: []session.MarkerEntry{
+				{Type: session.MarkerDraftsUnreadable, Reason: "It has no title."},
+				{Type: session.MarkerDraftsUnreadable, Reason: "It has no title."},
+				{Type: session.MarkerDraftsUnreadable, Reason: "It has no body."},
+				{Type: session.MarkerDraftsWritten, Round: 1, Count: 2},
+				{Type: session.MarkerDraftsUnreadable, Reason: "It has no body."},
+				{Type: session.MarkerDraftsUnreadable, Reason: "It has no body."},
+			},
+			want: []session.MarkerEntry{
+				{Type: session.MarkerDraftsUnreadable, Reason: "It has no title."},
+				{Type: session.MarkerDraftsUnreadable, Reason: "It has no body."},
+				{Type: session.MarkerDraftsWritten, Round: 1, Count: 2},
+				{Type: session.MarkerDraftsUnreadable, Reason: "It has no body."},
+			},
+		},
+		{
+			name: "a revision every time",
+			mark: []session.MarkerEntry{revised, revised},
+			want: []session.MarkerEntry{revised, revised},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t, "echo")
+			info := atDiscussion(t, taskInfo(t, "d1"))
+			f.start(t, info)
+			f.waitIdle(t, info.Key())
+
+			for _, marker := range tt.mark {
+				f.service.MarkDiscussion(t.Context(), info.Key(), &marker)
+			}
+
+			if diff := cmp.Diff(tt.want, f.discussionMarkers(t, info.Key())); diff != "" {
+				t.Errorf("markers mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestMarkDiscussionOfASessionThatIsNotOpenRecordsNothing(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+
+	f.service.MarkDiscussion(t.Context(), session.Key{TaskID: "d1", Stage: session.DiscussionStage},
+		&session.MarkerEntry{Type: session.MarkerDraftsWritten, Round: 1})
+
+	if _, err := f.service.Transcript(t.Context(), session.Key{TaskID: "d1", Stage: session.DiscussionStage}); err == nil {
+		t.Error("Transcript() = nil, want the session to be absent")
+	}
+}
+
+func TestMarkDiscussionSurvivesARestart(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := atDiscussion(t, taskInfo(t, "d1"))
+	f.start(t, info)
+	f.waitIdle(t, info.Key())
+	document := session.MarkerEntry{Type: session.MarkerDiscussionDocument, Stamp: "a"}
+	written := session.MarkerEntry{Type: session.MarkerDraftsWritten, Round: 1, Count: 2}
+	f.service.MarkDiscussion(t.Context(), info.Key(), &document)
+	f.service.MarkDiscussion(t.Context(), info.Key(), &written)
+	want := f.discussionMarkers(t, info.Key())
+
+	next := f.restart(t)
+	next.open(t, info)
+	next.service.MarkDiscussion(t.Context(), info.Key(), &document)
+	next.service.MarkDiscussion(t.Context(), info.Key(), &written)
+
+	if diff := cmp.Diff(want, next.discussionMarkers(t, info.Key())); diff != "" {
+		t.Errorf("markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestStartOfADiscussionCarriesTheModelTheBoardAndTheEpics(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := atDiscussion(t, taskInfo(t, "d1"))
+	info.Choice = models.Choice{Model: models.Opus55, Effort: models.Medium}
+	info.BoardTitle = "Roadmap"
+	info.Epics = []string{"acme/api#12", "acme/web#3"}
+	f.start(t, info)
+	f.waitIdle(t, info.Key())
+
+	want := &session.MarkerEntry{
+		Type: session.MarkerDiscussionStarted, Model: string(models.Opus55), Effort: string(models.Medium),
+		Board: "Roadmap", Epics: []string{"acme/api#12", "acme/web#3"},
+	}
+	if diff := cmp.Diff(want, f.entriesOf(t, info.Key(), session.KindMarker)[0].Marker); diff != "" {
+		t.Errorf("marker mismatch (-want +got):\n%s", diff)
 	}
 }

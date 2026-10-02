@@ -623,6 +623,14 @@ export function markerOf(
     case "review_started":
     case "discussion_started":
       return startView(marker, null, ctx);
+    // The conversation draws the markers of the discussion from the step that
+    // draws them on.
+    case "discussion_document":
+    case "drafts_written":
+    case "drafts_revised":
+    case "drafts_unreadable":
+    case "drafts_published":
+      return null;
   }
 }
 

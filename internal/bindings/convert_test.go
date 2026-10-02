@@ -955,6 +955,12 @@ func markerDTO(m bindings.MarkerEntry) *bindings.MarkerEntry {
 	if m.Commits == nil {
 		m.Commits = []bindings.MarkerCommit{}
 	}
+	if m.Epics == nil {
+		m.Epics = []string{}
+	}
+	if m.Before == nil {
+		m.Before = []bindings.DraftBefore{}
+	}
 	return &m
 }
 
@@ -1046,6 +1052,52 @@ func TestFromEntryCarriesTheNewMarkerFields(t *testing.T) {
 				Type: "new_commits", Findings: -1, Count: -1,
 				Commits: []bindings.MarkerCommit{{SHA: "c19f02e", Subject: "Fix the time zone rule", Author: "rsouza"}},
 			}),
+		},
+		"discussion_started": {
+			marker: &session.MarkerEntry{
+				Type: session.MarkerDiscussionStarted, Model: "opus-5-5", Effort: "high",
+				Board: "Roadmap", Epics: []string{"acme/web#1"},
+			},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "discussion_started", Findings: -1, Model: "opus-5-5", Effort: "high",
+				Board: "Roadmap", Epics: []string{"acme/web#1"},
+			}),
+		},
+		"discussion_document": {
+			marker: &session.MarkerEntry{Type: session.MarkerDiscussionDocument, First: true, Stamp: "1-2"},
+			want:   markerDTO(bindings.MarkerEntry{Type: "discussion_document", Findings: -1, First: true}),
+		},
+		"drafts_written": {
+			marker: &session.MarkerEntry{Type: session.MarkerDraftsWritten, Round: 2, Count: 3},
+			want:   markerDTO(bindings.MarkerEntry{Type: "drafts_written", Findings: -1, Round: 2, Count: 3}),
+		},
+		"drafts_revised": {
+			marker: &session.MarkerEntry{
+				Type: session.MarkerDraftsRevised, Round: 1, Changed: 1, Added: 1, Dropped: 1,
+				Before: []session.DraftBefore{
+					{Title: "Export invoices", Kind: "new", Decision: "approved", Changes: []string{"title"}, ApprovalCleared: true},
+					{Title: "Invoice schema", Kind: "update", Dropped: true},
+					{Title: "Audit log", Kind: "new", Added: true},
+				},
+			},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "drafts_revised", Findings: -1, Round: 1, Changed: 1, Added: 1, Dropped: 1,
+				Before: []bindings.DraftBefore{
+					{Title: "Export invoices", Kind: "new", Decision: "approved", Changes: []string{"title"}, ApprovalCleared: true},
+					{Title: "Invoice schema", Kind: "update", Changes: []string{}, Dropped: true},
+					{Title: "Audit log", Kind: "new", Changes: []string{}, Added: true},
+				},
+			}),
+		},
+		"drafts_unreadable": {
+			marker: &session.MarkerEntry{Type: session.MarkerDraftsUnreadable, Round: 1, Reason: "It has no title."},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "drafts_unreadable", Findings: -1, Round: 1, Reason: "It has no title.",
+			}),
+		},
+		"drafts_published": {
+			marker: &session.MarkerEntry{Type: session.MarkerDraftsPublished, Round: 2},
+			want:   markerDTO(bindings.MarkerEntry{Type: "drafts_published", Findings: -1, Round: 2}),
 		},
 		"interrupted": {
 			marker: &session.MarkerEntry{Type: session.MarkerInterrupted, InterruptedBy: "user"},

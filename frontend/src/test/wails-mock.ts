@@ -1349,6 +1349,14 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
           url: "",
           commits: [],
           count: 0,
+          board: "",
+          epics: [],
+          round: 0,
+          first: false,
+          changed: 0,
+          added: 0,
+          dropped: 0,
+          before: [],
         },
       };
     case "error":

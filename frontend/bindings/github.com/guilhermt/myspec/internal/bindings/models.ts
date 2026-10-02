@@ -1001,6 +1001,26 @@ export interface Draft {
 }
 
 /**
+ * DraftBefore is a draft of a round as it was before a revision, or one the
+ * revision added.
+ */
+export interface DraftBefore {
+    "title": string;
+    "kind": string;
+    "decision": string;
+    "outcome": string;
+    "reference": string;
+
+    /**
+     * never nil
+     */
+    "changes": string[] | null;
+    "dropped": boolean;
+    "added": boolean;
+    "approvalCleared": boolean;
+}
+
+/**
  * DraftCurrent is the card an update draft changes, as the stored reading has
  * it.
  */
@@ -1214,7 +1234,9 @@ export interface MarkerEntry {
      * review_published, new_commits, step_review_started,
      * step_review_written, review_started, discussion_started, stage_started,
      * step_started, compacted, interrupted, retried, committed, pr_opened,
-     * checks_read, draft_approved, changes_approved, paused or plan_invalid.
+     * checks_read, draft_approved, changes_approved, paused, plan_invalid,
+     * discussion_document, drafts_written, drafts_revised, drafts_unreadable
+     * or drafts_published.
      */
     "type": string;
     "preTokens": number;
@@ -1283,6 +1305,49 @@ export interface MarkerEntry {
     "url": string;
     "commits": MarkerCommit[] | null;
     "count": number;
+
+    /**
+     * The markers of a discussion: Model and Effort also belong to
+     * discussion_started, Count to drafts_written and Reason to
+     * drafts_unreadable.
+     * discussion_started
+     */
+    "board": string;
+
+    /**
+     * discussion_started; never nil
+     */
+    "epics": string[] | null;
+
+    /**
+     * drafts_*
+     */
+    "round": number;
+
+    /**
+     * discussion_document
+     */
+    "first": boolean;
+
+    /**
+     * drafts_revised
+     */
+    "changed": number;
+
+    /**
+     * drafts_revised
+     */
+    "added": number;
+
+    /**
+     * drafts_revised
+     */
+    "dropped": number;
+
+    /**
+     * drafts_revised; never nil
+     */
+    "before": DraftBefore[] | null;
 }
 
 /**

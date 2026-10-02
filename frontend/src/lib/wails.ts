@@ -343,6 +343,11 @@ export type MarkerType =
   | "step_review_written"
   | "review_started"
   | "discussion_started"
+  | "discussion_document"
+  | "drafts_written"
+  | "drafts_revised"
+  | "drafts_unreadable"
+  | "drafts_published"
   | "stage_started"
   | "step_started"
   | "compacted"
@@ -847,6 +852,11 @@ export function asMarkerType(value: string): MarkerType {
     case "step_review_written":
     case "review_started":
     case "discussion_started":
+    case "discussion_document":
+    case "drafts_written":
+    case "drafts_revised":
+    case "drafts_unreadable":
+    case "drafts_published":
     case "stage_started":
     case "step_started":
     case "compacted":

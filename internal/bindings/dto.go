@@ -742,7 +742,9 @@ type MarkerEntry struct {
 	// review_published, new_commits, step_review_started,
 	// step_review_written, review_started, discussion_started, stage_started,
 	// step_started, compacted, interrupted, retried, committed, pr_opened,
-	// checks_read, draft_approved, changes_approved, paused or plan_invalid.
+	// checks_read, draft_approved, changes_approved, paused, plan_invalid,
+	// discussion_document, drafts_written, drafts_revised, drafts_unreadable
+	// or drafts_published.
 	Type      string `json:"type"`
 	PreTokens int    `json:"preTokens"`
 	// Stage belongs to stage_started alone, Step to the markers of a step
@@ -798,6 +800,31 @@ type MarkerEntry struct {
 	URL       string         `json:"url"`
 	Commits   []MarkerCommit `json:"commits"`
 	Count     int            `json:"count"`
+	// The markers of a discussion: Model and Effort also belong to
+	// discussion_started, Count to drafts_written and Reason to
+	// drafts_unreadable.
+	Board   string        `json:"board"`   // discussion_started
+	Epics   []string      `json:"epics"`   // discussion_started; never nil
+	Round   int           `json:"round"`   // drafts_*
+	First   bool          `json:"first"`   // discussion_document
+	Changed int           `json:"changed"` // drafts_revised
+	Added   int           `json:"added"`   // drafts_revised
+	Dropped int           `json:"dropped"` // drafts_revised
+	Before  []DraftBefore `json:"before"`  // drafts_revised; never nil
+}
+
+// DraftBefore is a draft of a round as it was before a revision, or one the
+// revision added.
+type DraftBefore struct {
+	Title           string   `json:"title"`
+	Kind            string   `json:"kind"`
+	Decision        string   `json:"decision"`
+	Outcome         string   `json:"outcome"`
+	Reference       string   `json:"reference"`
+	Changes         []string `json:"changes"` // never nil
+	Dropped         bool     `json:"dropped"`
+	Added           bool     `json:"added"`
+	ApprovalCleared bool     `json:"approvalCleared"`
 }
 
 // MarkerCommit is a commit of a new_commits marker; the SHA is the short one.

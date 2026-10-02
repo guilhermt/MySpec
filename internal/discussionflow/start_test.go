@@ -51,6 +51,7 @@ func TestStartingADiscussionWritesTheInitialContextAndOpensTheConversation(t *te
 		InitialContext: stored.InitialContext,
 		DocumentPath:   stored.DocumentPath(),
 		DraftsPath:     stored.DraftsPath(),
+		BoardTitle:     "Roadmap",
 		Board: strings.Join([]string{
 			"- Board: Roadmap",
 			"- Repositories managed by the board: acme/api, acme/web",

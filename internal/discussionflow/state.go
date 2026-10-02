@@ -276,11 +276,17 @@ func draftOf(drafts []discussion.Draft, id string) (discussion.Draft, bool) {
 	return drafts[index], true
 }
 
-// titleOf names a draft to the user: the title it has, or its id while it has
-// none.
+// titleOf names a draft to the user: the title it has, or the sentence that
+// says it has none.
 func titleOf(draft discussion.Draft) string {
-	if draft.Title == "" {
-		return draft.ID
+	return discussion.DisplayTitle(draft)
+}
+
+// maxRound is the highest round of the drafts, 0 without any.
+func maxRound(drafts []discussion.Draft) int {
+	highest := 0
+	for _, d := range drafts {
+		highest = max(highest, d.Round)
 	}
-	return draft.Title
+	return highest
 }

@@ -521,7 +521,7 @@ func TestADependencyGitHubRefusesIsDroppedWithAWarning(t *testing.T) {
 	if card.Dependencies[0].Detail != detail {
 		t.Errorf("the dependency says %q about GitHub", card.Dependencies[0].Detail)
 	}
-	want := []string{"Couldn't record the dependency on invoice-schema: " + detail}
+	want := []string{"Couldn't record the dependency on Invoice schema: " + detail}
 	if diff := cmp.Diff(want, card.Warnings); diff != "" {
 		t.Errorf("the card says the wrong thing about the dependency (-want +got):\n%s", diff)
 	}

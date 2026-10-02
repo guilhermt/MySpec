@@ -56,6 +56,7 @@ export type {
     DiscussionRepository,
     DiscussionSummary,
     Draft,
+    DraftBefore,
     DraftCurrent,
     DraftDependency,
     DraftHold,

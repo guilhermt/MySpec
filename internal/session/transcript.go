@@ -209,35 +209,40 @@ type MarkerType string
 
 // The markers the conversation shows between messages.
 const (
-	MarkerPRDWritten        MarkerType = "prd_written"
-	MarkerPRDUpdated        MarkerType = "prd_updated"
-	MarkerTechSpecWritten   MarkerType = "tech_spec_written"
-	MarkerTechSpecUpdated   MarkerType = "tech_spec_updated"
-	MarkerPlanWritten       MarkerType = "plan_written"
-	MarkerPlanUpdated       MarkerType = "plan_updated"
-	MarkerOneShotWritten    MarkerType = "one_shot_written"
-	MarkerOneShotUpdated    MarkerType = "one_shot_updated"
-	MarkerPRReviewWritten   MarkerType = "pr_review_written"
-	MarkerPRReviewRevised   MarkerType = "pr_review_revised"
-	MarkerFindingsDecided   MarkerType = "findings_decided"
-	MarkerReviewPublished   MarkerType = "review_published"
-	MarkerNewCommits        MarkerType = "new_commits"
-	MarkerReviewStarted     MarkerType = "review_started"
-	MarkerDiscussionStarted MarkerType = "discussion_started"
-	MarkerStepReviewStarted MarkerType = "step_review_started"
-	MarkerStepReviewWritten MarkerType = "step_review_written"
-	MarkerStageStarted      MarkerType = "stage_started"
-	MarkerStepStarted       MarkerType = "step_started"
-	MarkerCompacted         MarkerType = "compacted"
-	MarkerInterrupted       MarkerType = "interrupted"
-	MarkerRetried           MarkerType = "retried"
-	MarkerCommitted         MarkerType = "committed"
-	MarkerPROpened          MarkerType = "pr_opened"
-	MarkerChecksRead        MarkerType = "checks_read"
-	MarkerDraftApproved     MarkerType = "draft_approved"
-	MarkerChangesApproved   MarkerType = "changes_approved"
-	MarkerPaused            MarkerType = "paused"
-	MarkerPlanInvalid       MarkerType = "plan_invalid"
+	MarkerPRDWritten         MarkerType = "prd_written"
+	MarkerPRDUpdated         MarkerType = "prd_updated"
+	MarkerTechSpecWritten    MarkerType = "tech_spec_written"
+	MarkerTechSpecUpdated    MarkerType = "tech_spec_updated"
+	MarkerPlanWritten        MarkerType = "plan_written"
+	MarkerPlanUpdated        MarkerType = "plan_updated"
+	MarkerOneShotWritten     MarkerType = "one_shot_written"
+	MarkerOneShotUpdated     MarkerType = "one_shot_updated"
+	MarkerPRReviewWritten    MarkerType = "pr_review_written"
+	MarkerPRReviewRevised    MarkerType = "pr_review_revised"
+	MarkerFindingsDecided    MarkerType = "findings_decided"
+	MarkerReviewPublished    MarkerType = "review_published"
+	MarkerNewCommits         MarkerType = "new_commits"
+	MarkerReviewStarted      MarkerType = "review_started"
+	MarkerDiscussionStarted  MarkerType = "discussion_started"
+	MarkerDiscussionDocument MarkerType = "discussion_document"
+	MarkerDraftsWritten      MarkerType = "drafts_written"
+	MarkerDraftsRevised      MarkerType = "drafts_revised"
+	MarkerDraftsUnreadable   MarkerType = "drafts_unreadable"
+	MarkerDraftsPublished    MarkerType = "drafts_published"
+	MarkerStepReviewStarted  MarkerType = "step_review_started"
+	MarkerStepReviewWritten  MarkerType = "step_review_written"
+	MarkerStageStarted       MarkerType = "stage_started"
+	MarkerStepStarted        MarkerType = "step_started"
+	MarkerCompacted          MarkerType = "compacted"
+	MarkerInterrupted        MarkerType = "interrupted"
+	MarkerRetried            MarkerType = "retried"
+	MarkerCommitted          MarkerType = "committed"
+	MarkerPROpened           MarkerType = "pr_opened"
+	MarkerChecksRead         MarkerType = "checks_read"
+	MarkerDraftApproved      MarkerType = "draft_approved"
+	MarkerChangesApproved    MarkerType = "changes_approved"
+	MarkerPaused             MarkerType = "paused"
+	MarkerPlanInvalid        MarkerType = "plan_invalid"
 )
 
 // ArtifactKind is the artifact a marker refers to. The values are the ones of
@@ -329,6 +334,18 @@ type MarkerEntry struct {
 	URL       string         `json:"url"`       // review_published: the review on GitHub
 	Commits   []MarkerCommit `json:"commits"`   // new_commits: the commits between the two heads, oldest first
 	Count     int            `json:"count"`     // new_commits: how many came, -1 when the head before is not among the ones read
+
+	// Discussion. Model and Effort above also go on discussion_started; Count
+	// is the drafts of drafts_written; Reason the rule drafts_unreadable broke.
+	Board   string        `json:"board,omitempty"`   // discussion_started: the title of the board
+	Epics   []string      `json:"epics,omitempty"`   // discussion_started: owner/name#number of the epics of the cards
+	Round   int           `json:"round,omitempty"`   // drafts_*: the round
+	First   bool          `json:"first,omitempty"`   // discussion_document: the first one of the conversation
+	Stamp   string        `json:"stamp,omitempty"`   // discussion_document: the modification time and the size of the file
+	Changed int           `json:"changed,omitempty"` // drafts_revised
+	Added   int           `json:"added,omitempty"`   // drafts_revised
+	Dropped int           `json:"dropped,omitempty"` // drafts_revised
+	Before  []DraftBefore `json:"before,omitempty"`  // drafts_revised: the round as it was
 }
 
 // MarkerCommit is a commit of a new_commits marker; the SHA is the short one.
@@ -336,6 +353,20 @@ type MarkerCommit struct {
 	SHA     string `json:"sha"`
 	Subject string `json:"subject"`
 	Author  string `json:"author"`
+}
+
+// DraftBefore is a draft of a round as it was before a revision, or one the
+// revision added.
+type DraftBefore struct {
+	Title           string   `json:"title"`
+	Kind            string   `json:"kind"`
+	Decision        string   `json:"decision"`
+	Outcome         string   `json:"outcome"`
+	Reference       string   `json:"reference"`
+	Changes         []string `json:"changes"`
+	Dropped         bool     `json:"dropped"`
+	Added           bool     `json:"added"`
+	ApprovalCleared bool     `json:"approvalCleared"`
 }
 
 // PublishedReview is what a review published on GitHub says of itself, for the
