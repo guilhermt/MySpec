@@ -2066,14 +2066,17 @@ func fromDraft(
 		Published:    d.Published.Done(),
 		Publishing:   state.Publishing,
 		PublishError: d.PublishError,
-		Waits:        state.Waits,
-		CanPublish:   state.CanPublish,
-		Hint:         state.Hint,
+		Hold:         fromHold(state.Hold),
 	}
 	if d.Published.Done() {
 		converted.PublishedAt = d.Published.At.Format(time.RFC3339)
 	}
 	return converted
+}
+
+// fromHold converts what keeps a draft out of the next publication.
+func fromHold(h discussionflow.Hold) DraftHold {
+	return DraftHold{Reason: string(h.Reason), Title: h.Title, Left: h.Left, Approved: h.Approved, Cards: h.Cards}
 }
 
 // fromDraftCard converts the card an update draft changes, keeping nil for a

@@ -47,7 +47,7 @@ func TestEditingAndDecidingTheDraftsOfADiscussionReachesTheState(t *testing.T) {
 	if err := f.discussionSvc.SetDraftRepository(d.ID, "export-invoices", repoID); err != nil {
 		t.Fatalf("SetDraftRepository() = %v, want nil", err)
 	}
-	for _, draftID := range []string{"billing", "export-invoices", "email-invoices"} {
+	for _, draftID := range []string{"billing", "export-invoices"} {
 		if err := f.discussionSvc.DecideDraft(d.ID, draftID, "approved"); err != nil {
 			t.Fatalf("DecideDraft(%s) = %v, want nil", draftID, err)
 		}
@@ -68,8 +68,8 @@ func TestEditingAndDecidingTheDraftsOfADiscussionReachesTheState(t *testing.T) {
 		t.Errorf("decision = %q, want approved", card.Decision)
 	}
 	epic := f.draftOf(t, d.ID, "billing")
-	if !epic.CanPublish || epic.Hint != "" {
-		t.Errorf("epic = %+v, want one ready to publish", epic)
+	if epic.Hold.Reason != "cards" || epic.Hold.Left != 1 {
+		t.Errorf("epic hold = %+v, want one that waits for the card left to decide", epic.Hold)
 	}
 }
 
@@ -125,6 +125,7 @@ func TestGroupingDraftsIntoAnEpicPointsThemAtIt(t *testing.T) {
 	d := f.seedDiscussion(t,
 		webDraft("export-invoices", "Export the invoices"),
 		webDraft("email-invoices", "Email the invoices"),
+		webDraft("sms-invoices", "Text the invoices"),
 	)
 
 	epicID, err := f.discussionSvc.GroupIntoEpic(d.ID, []string{"export-invoices", "email-invoices"})
@@ -142,30 +143,9 @@ func TestGroupingDraftsIntoAnEpicPointsThemAtIt(t *testing.T) {
 			t.Errorf("draft %s = epic %+v, want the epic just created", draftID, card.Epic)
 		}
 	}
-	if _, err = f.discussionSvc.GroupIntoEpic(d.ID, []string{"export-invoices"}); err == nil ||
+	if _, err = f.discussionSvc.GroupIntoEpic(d.ID, []string{"sms-invoices"}); err == nil ||
 		err.Error() != "Select at least two cards." {
 		t.Errorf("GroupIntoEpic(one card) = %v, want the sentence about two cards", err)
-	}
-}
-
-func TestPublishingAnEpicIsRefusedUntilItIsReady(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	f.register(t, t.TempDir())
-	f.registerBoard(t, true)
-	d := f.seedDiscussion(t,
-		epicDraft("billing", "Billing"),
-		inEpic(webDraft("export-invoices", "Export the invoices"), "billing"),
-	)
-
-	err := f.discussionSvc.PublishEpic(d.ID, "billing")
-
-	if want := "The epic isn't ready to publish."; err == nil || err.Error() != want {
-		t.Errorf("PublishEpic() = %v, want %q", err, want)
-	}
-	if epic := f.draftOf(t, d.ID, "billing"); epic.CanPublish || epic.Hint != "An epic needs at least two cards." {
-		t.Errorf("epic = %+v, want one waiting for a second card", epic)
 	}
 }
 
@@ -185,10 +165,10 @@ func TestArchivingADiscussionIsRefusedWhileADraftWaitsToBePublished(t *testing.T
 
 	err := f.discussionSvc.ArchiveDiscussion(d.ID)
 
-	if want := "Approved drafts are waiting to be published."; err == nil || err.Error() != want {
+	if want := "Approved drafts wait to be published."; err == nil || err.Error() != want {
 		t.Errorf("ArchiveDiscussion() = %v, want %q", err, want)
 	}
-	if got := f.discussionOf(t, d.ID); got.CanArchive || got.ArchiveHint != "Approved drafts are waiting to be published." {
+	if got := f.discussionOf(t, d.ID); got.CanArchive || got.ArchiveHint != "Approved drafts wait to be published." {
 		t.Errorf("discussion = %+v, want one that cannot be archived yet", got)
 	}
 	if f.logged(t, "binding failed") {
@@ -411,5 +391,30 @@ func TestATaskCreatedFromACardStartsWithTheDocumentOfItsDiscussion(t *testing.T)
 	}
 	if want := board.Context(card, discussionDocument, "Keep the form short."); created.InitialContext != want {
 		t.Errorf("initial context = %q, want %q", created.InitialContext, want)
+	}
+}
+
+func TestApprovingADraftWithoutATitleGetsItsSentence(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+	f.registerBoard(t, true)
+	d := f.seedDiscussion(t,
+		webDraft("export-invoices", "Export the invoices"),
+		webDraft("email-invoices", "Email the invoices"),
+	)
+	epicID, err := f.discussionSvc.GroupIntoEpic(d.ID, []string{"export-invoices", "email-invoices"})
+	if err != nil {
+		t.Fatalf("GroupIntoEpic() = %v, want nil", err)
+	}
+
+	err = f.discussionSvc.DecideDraft(d.ID, epicID, "approved")
+
+	if err == nil || err.Error() != "Name the draft to approve it." {
+		t.Errorf("DecideDraft(untitled epic) = %v, want the sentence about the name", err)
+	}
+	if f.logged(t, "binding failed") {
+		t.Error("a refusal the user can read was logged as a failure")
 	}
 }

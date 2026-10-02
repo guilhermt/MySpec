@@ -312,6 +312,9 @@ func (s *Service) SetDraftRepository(ctx context.Context, id, draftID, owner, na
 		if d.Kind == KindUpdate {
 			return fmt.Errorf("set repository of draft %s of discussion %s: %w", draftID, id, ErrInvalidRef)
 		}
+		if d.Owner != owner || d.Name != name {
+			unapprove(d)
+		}
 		d.Owner, d.Name = owner, name
 		return nil
 	})
@@ -329,30 +332,70 @@ func (s *Service) SetDraftModule(ctx context.Context, id, draftID, module string
 }
 
 // SetDraftEpic records the epic of a card: an epic draft of the discussion, an
-// issue that exists, or "" for none.
+// issue that exists, or "" for none. Moving a card takes back the approval of
+// the card, of the epic it leaves and of the epic it enters, all in one write:
+// the epics are no longer what the user approved.
 func (s *Service) SetDraftEpic(ctx context.Context, id, draftID, value string) error {
-	return s.editDraft(ctx, id, draftID, func(d *Draft) error {
-		if !d.IsCard() {
-			return fmt.Errorf("set epic of draft %s of discussion %s: %w", draftID, id, ErrInvalidRef)
-		}
-		if strings.TrimSpace(value) == "" {
-			d.Epic = ""
-			return nil
-		}
+	if _, err := s.editable(id); err != nil {
+		return err
+	}
+	drafts := s.Drafts(id)
+	i := slices.IndexFunc(drafts, func(d Draft) bool { return d.ID == draftID })
+	if i < 0 {
+		return fmt.Errorf("set epic of draft %s of discussion %s: %w", draftID, id, ErrDraftNotFound)
+	}
+	card := &drafts[i]
+	if card.Published.Started() {
+		return fmt.Errorf("set epic of draft %s of discussion %s: %w", draftID, id, ErrPublished)
+	}
+	if !card.IsCard() {
+		return fmt.Errorf("set epic of draft %s of discussion %s: %w", draftID, id, ErrInvalidRef)
+	}
+	epic, err := s.epicValue(id, draftID, value)
+	if err != nil {
+		return err
+	}
+	if epic == card.Epic {
+		return nil
+	}
 
-		ref, ok := ParseRef(value)
-		if !ok {
-			return fmt.Errorf("set epic %q of draft %s of discussion %s: %w", value, draftID, id, ErrInvalidRef)
-		}
-		if ref.IsDraft() {
-			epic, found := s.draft(id, ref.Draft)
-			if !found || epic.Kind != KindEpic {
-				return fmt.Errorf("set epic %s of draft %s of discussion %s: %w", ref, draftID, id, ErrNotEpic)
+	for _, value := range []string{card.Epic, epic} {
+		if ref, ok := ParseRef(value); ok && ref.IsDraft() {
+			if j := slices.IndexFunc(drafts, func(d Draft) bool { return d.ID == ref.Draft }); j >= 0 {
+				unapprove(&drafts[j])
 			}
 		}
-		d.Epic = ref.String()
-		return nil
-	})
+	}
+	card.Epic = epic
+	unapprove(card)
+
+	if err = s.store.WriteDrafts(ctx, id, drafts, nil); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.drafts[id] = drafts
+	s.mu.Unlock()
+	s.changed()
+	return nil
+}
+
+// epicValue is the epic a card is moved to, as a draft stores it: "" for none,
+// the id of an epic draft of the discussion, or owner/name#number.
+func (s *Service) epicValue(id, draftID, value string) (string, error) {
+	if strings.TrimSpace(value) == "" {
+		return "", nil
+	}
+	ref, ok := ParseRef(value)
+	if !ok {
+		return "", fmt.Errorf("set epic %q of draft %s of discussion %s: %w", value, draftID, id, ErrInvalidRef)
+	}
+	if ref.IsDraft() {
+		epic, found := s.draft(id, ref.Draft)
+		if !found || epic.Kind != KindEpic {
+			return "", fmt.Errorf("set epic %s of draft %s of discussion %s: %w", ref, draftID, id, ErrNotEpic)
+		}
+	}
+	return ref.String(), nil
 }
 
 // AddDraftDependency records that a card can only start after another card:
@@ -377,6 +420,7 @@ func (s *Service) AddDraftDependency(ctx context.Context, id, draftID, value str
 		}
 
 		d.Dependencies = append(d.Dependencies, Dependency{Ref: ref, Original: false})
+		unapprove(d)
 		return nil
 	})
 }
@@ -399,18 +443,25 @@ func (s *Service) RemoveDraftDependency(ctx context.Context, id, draftID, value 
 		}
 
 		d.Dependencies = slices.Delete(d.Dependencies, index, index+1)
+		unapprove(d)
 		return nil
 	})
 }
 
-// Decide records what the user decided about one draft.
+// Decide records what the user decided about one draft. A draft without a
+// title is not approved, and a new decision clears the failure of a draft
+// nothing was written for.
 func (s *Service) Decide(ctx context.Context, id, draftID string, decision Decision) error {
 	decided, err := ParseDecision(string(decision))
 	if err != nil {
 		return err
 	}
 	return s.editDraft(ctx, id, draftID, func(d *Draft) error {
+		if decided == DecisionApproved && d.Title == "" {
+			return fmt.Errorf("approve draft %s of discussion %s: %w", draftID, id, ErrUntitled)
+		}
 		d.Decision = decided
+		d.PublishError = ""
 		return nil
 	})
 }
@@ -443,6 +494,7 @@ func (s *Service) GroupIntoEpic(ctx context.Context, id string, draftIDs []strin
 	for i := range drafts {
 		if members[drafts[i].ID] {
 			drafts[i].Epic = epic.ID
+			unapprove(&drafts[i])
 		}
 	}
 	epic.Position = len(drafts)
@@ -471,6 +523,9 @@ func epicMembers(id string, drafts []Draft, draftIDs []string) (map[string]bool,
 		}
 		if drafts[index].Published.Started() {
 			return nil, fmt.Errorf("group draft %s of discussion %s: %w", draftID, id, ErrPublished)
+		}
+		if drafts[index].InEpicDraft() {
+			return nil, fmt.Errorf("group draft %s of discussion %s: %w", draftID, id, ErrInvalidRef)
 		}
 		members[draftID] = true
 	}
@@ -744,6 +799,18 @@ func (s *Service) writeDraft(ctx context.Context, id, draftID string, refusePubl
 	s.saveDraft(draft)
 	s.changed()
 	return nil
+}
+
+// unapprove takes back the approval of a draft nothing was written for: a
+// change of what it is published with, or of when, asks for the decision
+// again. The failure goes with it, so that no draft is left undecided with a
+// failure standing.
+func unapprove(d *Draft) {
+	if d.Decision != DecisionApproved || d.Published.Started() {
+		return
+	}
+	d.Decision = DecisionNone
+	d.PublishError = ""
 }
 
 // editable is the discussion an edit of the user may reach: one that is

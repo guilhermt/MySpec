@@ -787,8 +787,11 @@ func TestKindsBelongToTheirGroup(t *testing.T) {
 		attention.KindNewCommits:      attention.GroupWaiting,
 		attention.KindDrafts:          attention.GroupWaiting,
 		attention.KindPRTrouble:       attention.GroupWaiting,
+		attention.KindEpicCantPublish: attention.GroupWaiting,
+		attention.KindEpicDiscarded:   attention.GroupWaiting,
 
-		attention.KindMerge: attention.GroupClosing,
+		attention.KindMerge:          attention.GroupClosing,
+		attention.KindReadyToArchive: attention.GroupClosing,
 	}
 	for kind, want := range groups {
 		if got := kind.Group(); got != want {

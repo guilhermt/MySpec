@@ -37,6 +37,93 @@ Invoice report
 The report of the invoices.
 `
 
+// looseCardsArtifact holds two cards of their own that depend on nothing.
+const looseCardsArtifact = `---
+status: drafts
+---
+
+## Draft: invoice-report
+- Kind: new
+- Repository: acme/api
+
+### Title
+Invoice report
+
+### Body
+The report of the invoices.
+
+## Draft: audit-log
+- Kind: new
+- Repository: acme/api
+
+### Title
+Audit log
+
+### Body
+The log of what the users did.
+`
+
+// chainArtifact holds an epic of two cards, a card of its own that depends on
+// the second one, and another that depends on nothing.
+const chainArtifact = `---
+status: drafts
+---
+
+## Draft: invoices-epic
+- Kind: epic
+- Repository: acme/web
+
+### Title
+Invoices
+
+### Body
+The invoices of the customer.
+
+## Draft: invoice-schema
+- Kind: new
+- Repository: acme/web
+- Epic: invoices-epic
+
+### Title
+Invoice schema
+
+### Body
+The schema of an invoice.
+
+## Draft: export-invoices
+- Kind: new
+- Repository: acme/web
+- Epic: invoices-epic
+- Depends on: invoice-schema
+
+### Title
+Export invoices as CSV
+
+### Body
+The user exports the invoices.
+
+## Draft: invoice-report
+- Kind: new
+- Repository: acme/api
+- Depends on: export-invoices
+
+### Title
+Invoice report
+
+### Body
+The report of the invoices.
+
+## Draft: audit-log
+- Kind: new
+- Repository: acme/api
+
+### Title
+Audit log
+
+### Body
+The log of what the users did.
+`
+
 func TestApprovingACardRewritesTheIssueAndPutsItOnTheBoard(t *testing.T) {
 	t.Parallel()
 
@@ -68,8 +155,9 @@ func TestACardIsPublishedOnlyAfterTheDraftItDependsOn(t *testing.T) {
 	f.record(id, draftsArtifact)
 
 	f.approve(id, "export-invoices")
-	if got := f.draftState(id, "export-invoices"); got.Waits != "Invoice schema" {
-		t.Fatalf("the card waits for %q, want the draft it depends on", got.Waits)
+	wantHold := discussionflow.Hold{Reason: discussionflow.HoldDraft, Title: "Invoice schema"}
+	if got := f.draftState(id, "export-invoices"); got.Hold != wantHold {
+		t.Fatalf("the card is held by %+v, want %+v", got.Hold, wantHold)
 	}
 	if calls := f.gh.made(); len(calls) != 0 {
 		t.Fatalf("a card that waits was published anyway: %v", calls)
@@ -121,100 +209,295 @@ func TestADependencyOnADiscardedDraftIsDroppedWithAWarning(t *testing.T) {
 	}
 }
 
-func TestPublishingAnEpicCreatesItAndTheCardsUnderItInOrder(t *testing.T) {
+// wantEpicRun is what GitHub is asked for the epic of epicArtifact: the epic,
+// then each card under it, the second after the first.
+var wantEpicRun = []string{
+	"createIssue:R_acme/web:Invoices",
+	"createIssue:R_acme/web:Invoice schema",
+	"addSubIssue:I_Invoices:I_Invoice schema",
+	"createIssue:R_acme/web:Export invoices as CSV",
+	"addSubIssue:I_Invoices:I_Export invoices as CSV",
+	"addBlockedBy:I_Export invoices as CSV:I_Invoice schema",
+}
+
+func TestAnEpicIsPublishedWithItsCardsOnTheGestureThatDecidesTheLastCard(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	id := f.start(cardKey)
 	f.record(id, epicArtifact)
 
-	for _, draftID := range []string{"invoices-epic", "invoice-schema", "export-invoices"} {
-		f.approve(id, draftID)
+	f.approve(id, "invoices-epic")
+	f.approve(id, "invoice-schema")
+	if calls := f.gh.made(); len(calls) != 0 {
+		t.Fatalf("an epic with a card to decide wrote on GitHub: %v", calls)
 	}
-	if err := f.flow.PublishEpic(t.Context(), id, "invoices-epic"); err != nil {
-		t.Fatalf("publish epic: %v", err)
-	}
+	f.approve(id, "export-invoices")
 
 	for _, draftID := range []string{"invoices-epic", "invoice-schema", "export-invoices"} {
 		f.waitPublished(id, draftID)
 	}
-	want := []string{
-		"createIssue:R_acme/web:Invoices",
-		"createIssue:R_acme/web:Invoice schema",
-		"addSubIssue:I_Invoices:I_Invoice schema",
-		"createIssue:R_acme/web:Export invoices as CSV",
-		"addSubIssue:I_Invoices:I_Export invoices as CSV",
-		"addBlockedBy:I_Export invoices as CSV:I_Invoice schema",
-	}
-	if diff := cmp.Diff(want, issueCalls(f.gh.made())); diff != "" {
+	if diff := cmp.Diff(wantEpicRun, issueCalls(f.gh.made())); diff != "" {
 		t.Errorf("the epic went to GitHub in the wrong order (-want +got):\n%s", diff)
 	}
 }
 
-func TestAFailureInTheMiddleStopsTheRunAndARetryDoesNotCreateTwice(t *testing.T) {
+func TestApprovingTheEpicLastPublishesTheChain(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	id := f.start(cardKey)
 	f.record(id, epicArtifact)
-	f.gh.failCreate("Export invoices as CSV", errGitHub)
+
+	f.approve(id, "invoice-schema")
+	f.approve(id, "export-invoices")
+	if calls := f.gh.made(); len(calls) != 0 {
+		t.Fatalf("cards of an epic nobody approved wrote on GitHub: %v", calls)
+	}
+	f.approve(id, "invoices-epic")
+
+	for _, draftID := range []string{"invoices-epic", "invoice-schema", "export-invoices"} {
+		f.waitPublished(id, draftID)
+	}
+	if diff := cmp.Diff(wantEpicRun, issueCalls(f.gh.made())); diff != "" {
+		t.Errorf("the epic went to GitHub in the wrong order (-want +got):\n%s", diff)
+	}
+}
+
+func TestAnEpicWithOneApprovedCardWritesNothingUntilAnotherIsApproved(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, epicArtifact)
+
+	f.approve(id, "invoices-epic")
+	f.approve(id, "invoice-schema")
+	f.decide(id, "export-invoices", discussion.DecisionDiscarded)
+
+	state := f.state(id)
+	if state.Status != discussionflow.StatusEpicCantPublish {
+		t.Errorf("the discussion is %s, want %s", state.Status, discussionflow.StatusEpicCantPublish)
+	}
+	wantHold := discussionflow.Hold{Reason: discussionflow.HoldEpicShort, Approved: 1, Cards: 2}
+	if got := f.draftIn(state, "invoices-epic"); got.Published.Started() {
+		t.Errorf("the epic went to GitHub with one approved card")
+	}
+	if got := f.draftStateIn(state, "invoices-epic").Hold; got != wantHold {
+		t.Errorf("the epic is held by %+v, want %+v", got, wantHold)
+	}
+	if calls := f.gh.made(); len(calls) != 0 {
+		t.Fatalf("an epic that can't publish wrote on GitHub: %v", calls)
+	}
+
+	f.approve(id, "export-invoices")
+
+	f.waitPublished(id, "export-invoices")
+	f.waitPublished(id, "invoices-epic")
+}
+
+func TestDiscardingTheLastCardToDecidePublishesTheEpic(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, wideEpicArtifact)
 
 	for _, draftID := range []string{"invoices-epic", "invoice-schema", "export-invoices"} {
 		f.approve(id, draftID)
 	}
-	if err := f.flow.PublishEpic(t.Context(), id, "invoices-epic"); err != nil {
-		t.Fatalf("publish epic: %v", err)
+	if calls := f.gh.made(); len(calls) != 0 {
+		t.Fatalf("an epic with a card to decide wrote on GitHub: %v", calls)
 	}
+	f.decide(id, "invoice-report", discussion.DecisionDiscarded)
+
+	for _, draftID := range []string{"invoices-epic", "invoice-schema", "export-invoices"} {
+		f.waitPublished(id, draftID)
+	}
+	if f.draftState(id, "invoice-report").Draft.Published.Started() {
+		t.Errorf("the discarded card went to GitHub")
+	}
+}
+
+func TestACardOutsideTheEpicThatDependsOnOneOfItsCardsGoesInTheSameRun(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, chainArtifact)
+	f.approve(id, "invoice-report")
+	f.approve(id, "invoices-epic")
+	f.approve(id, "invoice-schema")
+	f.approve(id, "export-invoices")
+
+	for _, draftID := range []string{"invoices-epic", "invoice-schema", "export-invoices", "invoice-report"} {
+		f.waitPublished(id, draftID)
+	}
+	got := issueCalls(f.gh.made())
+	for _, title := range []string{"Invoices", "Invoice schema", "Export invoices as CSV", "Invoice report"} {
+		if n := count(got, "createIssue:R_acme/"+repositoryOf(title)+":"+title); n != 1 {
+			t.Errorf("the issue %s was created %d times, want once", title, n)
+		}
+	}
+	if !slices.Contains(got, "addBlockedBy:I_Invoice report:I_Export invoices as CSV") {
+		t.Errorf("the card outside the epic was not blocked by the card of it: %v", got)
+	}
+}
+
+func TestADiscardedEpicWritesNothingAndItsApprovedCardsArchiveAsNotPublished(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, epicArtifact)
+
+	f.decide(id, "invoices-epic", discussion.DecisionDiscarded)
+	f.approve(id, "invoice-schema")
+	f.approve(id, "export-invoices")
+
+	state := f.waitFor(id, func(s discussionflow.State) bool { return !s.Publishing })
+	if state.Status != discussionflow.StatusEpicDiscarded || !state.CanArchive {
+		t.Errorf("the discussion is %s and can be archived: %t (%q), want %s and archivable",
+			state.Status, state.CanArchive, state.ArchiveHint, discussionflow.StatusEpicDiscarded)
+	}
+	if calls := f.gh.made(); len(calls) != 0 {
+		t.Errorf("the cards of a discarded epic wrote on GitHub: %v", calls)
+	}
+	if err := f.flow.Archive(t.Context(), id); err != nil {
+		t.Fatalf("archive discussion: %v", err)
+	}
+}
+
+func TestAFailureHoldsWhatDependsOnItAndLetsTheRestGo(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, chainArtifact)
+	f.gh.failCreate("Export invoices as CSV", errGitHub)
+	f.approveQuietly(id, "invoices-epic", "invoice-schema", "export-invoices", "invoice-report")
+
+	f.flow.Check(id)
 
 	failed := f.waitFailed(id, "export-invoices")
 	if failed.PublishError != "Couldn't write to GitHub: gh: the server said no" {
 		t.Errorf("the card says %q about the failure", failed.PublishError)
 	}
+	// A card of its own approved while the failure stands goes all the same.
+	f.approve(id, "audit-log")
+	f.waitPublished(id, "audit-log")
 	if !f.draftState(id, "invoices-epic").Draft.Published.Done() {
 		t.Errorf("the epic written before the failure was not kept")
 	}
-
-	if err := f.flow.Retry(t.Context(), id, "invoices-epic"); err != nil {
-		t.Fatalf("retry the epic: %v", err)
+	wantHold := discussionflow.Hold{Reason: discussionflow.HoldDraft, Title: "Export invoices as CSV"}
+	if got := f.draftState(id, "invoice-report").Hold; got != wantHold {
+		t.Errorf("what depends on the failure is held by %+v, want %+v", got, wantHold)
+	}
+	if got := count(f.gh.made(), "createIssue:R_acme/api:Invoice report"); got != 0 {
+		t.Errorf("what depends on the failure was created %d times, want none", got)
 	}
 
-	f.waitPublished(id, "export-invoices")
+	if err := f.flow.Retry(t.Context(), id, "export-invoices"); err != nil {
+		t.Fatalf("retry the card: %v", err)
+	}
+
+	f.waitPublished(id, "invoice-report")
+	card := f.waitPublished(id, "export-invoices")
+	if !card.Published.ParentSet {
+		t.Errorf("the card was published outside the epic it belongs to")
+	}
 	for _, title := range []string{"Invoices", "Invoice schema", "Export invoices as CSV"} {
 		if got := count(f.gh.made(), "createIssue:R_acme/web:"+title); got != 1 {
 			t.Errorf("the issue %s was created %d times, want once", title, got)
 		}
 	}
-	if got := f.draftState(id, "export-invoices").Draft.PublishError; got != "" {
-		t.Errorf("the card still says %q after the retry", got)
+}
+
+func TestOneRetryClearsEveryFailureOfTheDiscussion(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, looseCardsArtifact)
+	f.gh.failCreate("Invoice report", errGitHub)
+	f.gh.failCreate("Audit log", errGitHub)
+	f.approveQuietly(id, "invoice-report", "audit-log")
+
+	f.flow.Check(id)
+
+	f.waitFailed(id, "invoice-report")
+	f.waitFailed(id, "audit-log")
+
+	if err := f.flow.Retry(t.Context(), id, "invoice-report"); err != nil {
+		t.Fatalf("retry the card: %v", err)
+	}
+
+	f.waitPublished(id, "invoice-report")
+	f.waitPublished(id, "audit-log")
+}
+
+func TestOneRetryWritesDownWhatMemoryHoldsOfEveryDraft(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, looseCardsArtifact)
+	// GitHub creates both cards, and the store refuses the write of each
+	// issue and of the failure with it: only memory knows they are started.
+	f.store.failWrites(4, errStore, onTheIssue)
+	f.approveQuietly(id, "invoice-report", "audit-log")
+
+	f.flow.Check(id)
+
+	f.waitFailed(id, "invoice-report")
+	f.waitFailed(id, "audit-log")
+	for _, d := range f.discussions.Drafts(id) {
+		if d.Published.Started() || d.PublishError != "" {
+			t.Fatalf("the store holds the publication of %s: %+v, %q", d.ID, d.Published, d.PublishError)
+		}
+	}
+
+	if err := f.flow.Retry(t.Context(), id, "invoice-report"); err != nil {
+		t.Fatalf("retry the card: %v", err)
+	}
+
+	f.waitPublished(id, "invoice-report")
+	f.waitPublished(id, "audit-log")
+	for _, title := range []string{"Invoice report", "Audit log"} {
+		if got := count(f.gh.made(), "createIssue:R_acme/api:"+title); got != 1 {
+			t.Errorf("the issue %s was created %d times, want once", title, got)
+		}
 	}
 }
 
-func TestRetryingTheCardThatFailedSendsTheEpicOfItAgain(t *testing.T) {
+func TestAClosedConversationStillPublishes(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, looseArtifact)
+	f.sessions.shut(id)
+
+	f.approve(id, "invoice-report")
+
+	f.waitPublished(id, "invoice-report")
+}
+
+func TestSyncPublishesAChainLeftUnwrittenBeforeARestart(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	id := f.start(cardKey)
 	f.record(id, epicArtifact)
-	f.gh.failCreate("Export invoices as CSV", errGitHub)
+	f.approveQuietly(id, "invoices-epic", "invoice-schema", "export-invoices")
+
+	f.flow.Sync(t.Context())
 
 	for _, draftID := range []string{"invoices-epic", "invoice-schema", "export-invoices"} {
-		f.approve(id, draftID)
+		f.waitPublished(id, draftID)
 	}
-	if err := f.flow.PublishEpic(t.Context(), id, "invoices-epic"); err != nil {
-		t.Fatalf("publish epic: %v", err)
-	}
-	f.waitFailed(id, "export-invoices")
-
-	if err := f.flow.Retry(t.Context(), id, "export-invoices"); err != nil {
-		t.Fatalf("retry the card of the epic: %v", err)
-	}
-
-	card := f.waitPublished(id, "export-invoices")
-	if !card.Published.ParentSet {
-		t.Errorf("the card was published outside the epic it belongs to")
-	}
-	if got := count(f.gh.made(), "createIssue:R_acme/web:Invoice schema"); got != 1 {
-		t.Errorf("the card published before the failure was created %d times, want once", got)
+	if diff := cmp.Diff(wantEpicRun, issueCalls(f.gh.made())); diff != "" {
+		t.Errorf("the chain went to GitHub in the wrong order (-want +got):\n%s", diff)
 	}
 }
 
@@ -297,9 +580,6 @@ func TestACycleIsBrokenByPositionAndTheDependencyItDropsIsAWarning(t *testing.T)
 
 	for _, draftID := range []string{"invoices-epic", "invoice-schema", "export-invoices"} {
 		f.approve(id, draftID)
-	}
-	if err := f.flow.PublishEpic(t.Context(), id, "invoices-epic"); err != nil {
-		t.Fatalf("publish epic: %v", err)
 	}
 
 	first := f.waitPublished(id, "invoice-schema")
@@ -438,7 +718,7 @@ func TestADiscussionWhoseDraftNoWriteHeldCannotBeArchived(t *testing.T) {
 	state := f.waitFor(id, func(s discussionflow.State) bool {
 		return s.Status == discussionflow.StatusPublishFailed
 	})
-	if state.CanArchive || state.ArchiveHint != "A publication failed." {
+	if state.CanArchive || state.ArchiveHint != "A publication failed: Retry it, or discard the draft." {
 		t.Errorf("the discussion says %q about the archive and can be archived: %t",
 			state.ArchiveHint, state.CanArchive)
 	}
@@ -453,7 +733,7 @@ func TestOnlyTheDraftsOfTheRunUnderWaySayTheyArePublishing(t *testing.T) {
 	if err := f.flow.SetDraftEpic(t.Context(), id, "invoice-report", ""); err != nil {
 		t.Fatalf("take the card out of the epic: %v", err)
 	}
-	for _, draftID := range []string{"invoices-epic", "invoice-schema", "export-invoices"} {
+	for _, draftID := range []string{"invoices-epic", "invoice-schema"} {
 		f.approve(id, draftID)
 	}
 	release := f.gh.holdCreate("Invoice report")
@@ -466,9 +746,9 @@ func TestOnlyTheDraftsOfTheRunUnderWaySayTheyArePublishing(t *testing.T) {
 		return s.Publishing && f.draftStateIn(s, "invoice-report").Publishing
 	})
 
-	if epic := f.draftState(id, "invoices-epic"); epic.Publishing || !epic.CanPublish {
-		t.Errorf("the epic nobody asked to publish says it is publishing: %t, ready: %t",
-			epic.Publishing, epic.CanPublish)
+	if epic := f.draftState(id, "invoices-epic"); epic.Publishing || epic.Hold.Reason != discussionflow.HoldCards {
+		t.Errorf("the epic with a card to decide says it is publishing: %t, held by %+v",
+			epic.Publishing, epic.Hold)
 	}
 	for _, draftID := range []string{"invoice-schema", "export-invoices"} {
 		if f.draftState(id, draftID).Publishing {
@@ -491,9 +771,6 @@ func TestACardOfAnEpicAlreadyPublishedGoesOnItsOwnUnderIt(t *testing.T) {
 	}
 	for _, draftID := range []string{"invoices-epic", "invoice-schema", "export-invoices"} {
 		f.approve(id, draftID)
-	}
-	if err := f.flow.PublishEpic(t.Context(), id, "invoices-epic"); err != nil {
-		t.Fatalf("publish epic: %v", err)
 	}
 	epic := f.waitPublished(id, "invoices-epic")
 	f.waitPublished(id, "export-invoices")
@@ -567,4 +844,13 @@ func count(calls []string, call string) int {
 		}
 	}
 	return total
+}
+
+// repositoryOf is the repository the cards of chainArtifact with that title
+// are created in.
+func repositoryOf(title string) string {
+	if title == "Invoice report" || title == "Audit log" {
+		return "api"
+	}
+	return "web"
 }

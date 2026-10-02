@@ -330,4 +330,5 @@ var (
 	ErrTooFewCards      = errors.New("discussion: an epic needs at least two cards")
 	ErrDependencyLinked = errors.New("discussion: the dependency is already on GitHub")
 	ErrArchived         = errors.New("discussion: the discussion is archived")
+	ErrUntitled         = errors.New("discussion: a draft needs a title to be approved")
 )

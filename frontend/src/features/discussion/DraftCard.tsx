@@ -20,12 +20,13 @@ import { DependencyList } from "@/features/discussion/DependencyList";
 import { DraftDiff } from "@/features/discussion/DraftDiff";
 import {
   dependencyLabel,
+  holdLabel,
+  holdStands,
   kindLabel,
   outcomeLabel,
   refKey,
   refValue,
   repositoryOf,
-  waitsLabel,
 } from "@/features/discussion/discussion-status";
 import { type DraftField, storedDraft, useDraftText } from "@/features/discussion/useDraftText";
 import { formatDate } from "@/features/history/history-format";
@@ -108,6 +109,7 @@ export function DraftCard({ discussion, draft }: DraftCardProps) {
   // changes any more, whether every step of it is done or not.
   const readOnly = draft.published || draft.outcome !== "";
   const label = `Draft ${draft.title}`;
+  const hold = holdLabel(draft);
   const [bodyTab, setBodyTab] = useState<BodyTab>("edit");
   const [epicIssue, setEpicIssue] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -218,11 +220,17 @@ export function DraftCard({ discussion, draft }: DraftCardProps) {
               <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
               Publishing…
             </span>
-          ) : draft.waits !== "" ? (
-            <span className="text-xs text-[var(--status-attention)]">{waitsLabel(draft)}</span>
           ) : (
-            isCard &&
-            draft.hint !== "" && <span className="text-xs text-muted-foreground">{draft.hint}</span>
+            hold !== null && (
+              <span
+                className={cn(
+                  "text-xs",
+                  holdStands(draft) ? "font-medium text-foreground" : "text-muted-foreground",
+                )}
+              >
+                {hold}
+              </span>
+            )
           ))}
       </div>
 

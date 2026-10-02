@@ -112,6 +112,12 @@ export function situationLabel(situation: Situation): string {
       return "New commits";
     case "drafts":
       return "Decide drafts";
+    case "epic_cant_publish":
+      return "Epic can't publish";
+    case "epic_discarded":
+      return "Epic discarded";
+    case "ready_to_archive":
+      return "Ready to archive";
     case "publish_failed":
       return "Publish failed";
     case "pass_blocked":

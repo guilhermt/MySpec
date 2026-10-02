@@ -96,7 +96,7 @@ func TestTheStatusOfADiscussionIsWhatItsDraftsAndItsConversationSay(t *testing.T
 			want: discussionflow.StatusDeciding,
 		},
 		{
-			name: "a discussion whose every draft is settled and one published is published",
+			name: "a discussion whose every draft is settled and one published is ready to archive",
 			setup: func(t *testing.T, f *fixture) string {
 				t.Helper()
 				id := f.start(cardKey)
@@ -105,10 +105,10 @@ func TestTheStatusOfADiscussionIsWhatItsDraftsAndItsConversationSay(t *testing.T
 				f.waitPublished(id, "invoice-report")
 				return id
 			},
-			want: discussionflow.StatusPublished,
+			want: discussionflow.StatusReadyToArchive,
 		},
 		{
-			name: "a discussion whose every draft was discarded is back in the conversation",
+			name: "a discussion whose every draft was discarded is ready to archive",
 			setup: func(t *testing.T, f *fixture) string {
 				t.Helper()
 				id := f.start(cardKey)
@@ -116,7 +116,32 @@ func TestTheStatusOfADiscussionIsWhatItsDraftsAndItsConversationSay(t *testing.T
 				f.decide(id, "invoice-report", discussion.DecisionDiscarded)
 				return id
 			},
-			want: discussionflow.StatusDiscussing,
+			want: discussionflow.StatusReadyToArchive,
+		},
+		{
+			name: "an approved epic with fewer than two approved cards can't publish",
+			setup: func(t *testing.T, f *fixture) string {
+				t.Helper()
+				id := f.start(cardKey)
+				f.record(id, epicArtifact)
+				f.approve(id, "invoices-epic")
+				f.approve(id, "invoice-schema")
+				f.decide(id, "export-invoices", discussion.DecisionDiscarded)
+				return id
+			},
+			want: discussionflow.StatusEpicCantPublish,
+		},
+		{
+			name: "a discarded epic with an approved card says so",
+			setup: func(t *testing.T, f *fixture) string {
+				t.Helper()
+				id := f.start(cardKey)
+				f.record(id, epicArtifact)
+				f.decide(id, "invoices-epic", discussion.DecisionDiscarded)
+				f.approve(id, "invoice-schema")
+				return id
+			},
+			want: discussionflow.StatusEpicDiscarded,
 		},
 	}
 
@@ -131,4 +156,25 @@ func TestTheStatusOfADiscussionIsWhatItsDraftsAndItsConversationSay(t *testing.T
 			}
 		})
 	}
+}
+
+func TestAnUndecidedDraftStaysWaitedForDuringARun(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, looseCardsArtifact)
+	release := f.gh.holdCreate("Invoice report")
+	t.Cleanup(release)
+
+	f.approve(id, "invoice-report")
+	state := f.waitFor(id, func(s discussionflow.State) bool { return s.Publishing })
+
+	if state.Status != discussionflow.StatusPublishing || state.Waiting != discussionflow.StatusDeciding {
+		t.Errorf("the discussion is %s and waits in %q, want publishing and %s",
+			state.Status, state.Waiting, discussionflow.StatusDeciding)
+	}
+
+	release()
+	f.waitPublished(id, "invoice-report")
 }

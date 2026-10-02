@@ -1,9 +1,9 @@
 import {
-  discussionStatusLabel,
-  discussionStatusTone,
+  discussionBarLabel,
+  discussionDotTone,
+  standingDetail,
 } from "@/features/discussion/discussion-status";
 import { ToneDot } from "@/features/task/StatusDot";
-import { discussionSituation, situationTone } from "@/lib/situations";
 import { asDiscussionStatus, type DiscussionSummary } from "@/lib/wails";
 
 export interface DiscussionBarProps {
@@ -12,20 +12,30 @@ export interface DiscussionBarProps {
 
 /** DiscussionBar says where the discussion stands and what is in its way. */
 export function DiscussionBar({ discussion }: DiscussionBarProps) {
-  const situation = discussionSituation(discussion);
-  // What waits on the user takes the colour of its situation; without one, the
-  // dot shows what the discussion is doing.
-  const tone = situation !== null ? situationTone(situation) : discussionStatusTone(discussion);
+  // The dot: see discussionDotTone.
+  const tone = discussionDotTone(discussion);
+  const detail = standingDetail(discussion);
 
   return (
     <div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
+      {/* The middle is the way out, so it is announced with the label it explains. */}
       <span
         role="status"
         aria-live="polite"
-        className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
+        className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"
       >
-        <ToneDot tone={tone} />
-        {discussionStatusLabel(discussion)}
+        <span className="flex shrink-0 items-center gap-1.5">
+          <ToneDot tone={tone} />
+          {discussionBarLabel(discussion)}
+        </span>
+        {detail !== null && (
+          <>
+            {" "}
+            <span className="min-w-0 truncate" title={detail}>
+              {detail}
+            </span>
+          </>
+        )}
       </span>
       {discussion.unreadableDrafts !== "" && (
         <span

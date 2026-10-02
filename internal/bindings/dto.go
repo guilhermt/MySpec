@@ -1457,6 +1457,17 @@ type DraftCurrent struct {
 	ReadAt       string     `json:"readAt"`
 }
 
+// DraftHold is what keeps an approved draft out of the next publication.
+type DraftHold struct {
+	// Reason is "", epic_discarded, cards, epic_short, epic or draft, a string
+	// for the same reason as State.Theme.
+	Reason   string `json:"reason"`
+	Title    string `json:"title"`    // draft: the draft it waits for
+	Left     int    `json:"left"`     // cards: the cards of the epic still to decide
+	Approved int    `json:"approved"` // epic_short: the approved cards of the epic
+	Cards    int    `json:"cards"`    // epic_short: every card of the epic
+}
+
 // Draft is one card a discussion produced: as the user left it, and what
 // became of it on GitHub.
 type Draft struct {
@@ -1490,14 +1501,8 @@ type Draft struct {
 	PublishedAt  string `json:"publishedAt"`
 	Publishing   bool   `json:"publishing"`   // the draft is in the publication under way
 	PublishError string `json:"publishError"` // why the last publication failed; "" otherwise
-	// Waits is the title of the draft this one waits for before it is
-	// published; "" when it waits for none.
-	Waits string `json:"waits"`
-	// CanPublish says Publish epic is enabled; epics only.
-	CanPublish bool `json:"canPublish"`
-	// Hint is why an epic can't be published, or why a card of a discarded
-	// epic goes nowhere.
-	Hint string `json:"hint"`
+	// Hold is what keeps the draft out of the next publication; Reason "" when nothing does.
+	Hold DraftHold `json:"hold"`
 }
 
 // DiscussionRepository is a repository of the board a new card can be created
@@ -1517,8 +1522,9 @@ type DiscussionSummary struct {
 	Board   string `json:"board"` // the title of the board
 	Title   string `json:"title"`
 	Text    string `json:"text"` // what the user wrote when creating it; "" for none
-	// Status is discussing, awaiting_drafts, deciding, publishing,
-	// publish_failed or published, a string for the same reason as State.Theme.
+	// Status is discussing, awaiting_drafts, deciding, publishing, publish_failed,
+	// epic_discarded, epic_cant_publish or ready_to_archive, a string for the
+	// same reason as State.Theme.
 	Status string           `json:"status"`
 	Cards  []DiscussionCard `json:"cards"`  // the cards it started from; never nil
 	Drafts []Draft          `json:"drafts"` // in position order; never nil

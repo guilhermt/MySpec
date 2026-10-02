@@ -65,15 +65,6 @@ export function GroupIntoEpic(id: string, draftIDs: string[] | null): $Cancellab
 }
 
 /**
- * PublishEpic asks for an epic and the cards under it to go to GitHub
- * together. It returns as soon as the publication is asked for; what it writes
- * arrives as state.
- */
-export function PublishEpic(id: string, draftID: string): $CancellablePromise<void> {
-    return $Call.ByID(3576975, id, draftID);
-}
-
-/**
  * ReadDiscussionArtifact returns the content of an artifact of a discussion by
  * file name: context.md, discussion.md or drafts.md.
  */

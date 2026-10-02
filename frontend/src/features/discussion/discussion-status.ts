@@ -1,5 +1,5 @@
 import type { StatusTone } from "@/features/task/status";
-import { summaryLabel } from "@/lib/situations";
+import { counted, discussionSituation, situationTone, summaryLabel } from "@/lib/situations";
 import type {
   DiscussionRepository,
   DiscussionSummary,
@@ -7,7 +7,14 @@ import type {
   DraftDependency,
   DraftRef,
 } from "@/lib/wails";
-import { asDiscussionStatus, asDraftKind, asDraftOutcome } from "@/lib/wails";
+import {
+  asDiscussionStatus,
+  asDraftKind,
+  asDraftOutcome,
+  asHoldReason,
+  asSituationGroup,
+  asSituationKind,
+} from "@/lib/wails";
 
 /** EpicGroup is an epic of a discussion with the cards that belong to it. */
 export interface EpicGroup {
@@ -28,9 +35,25 @@ export function discussionStatusLabel(discussion: DiscussionSummary): string {
       return "Publishing";
     case "publish_failed":
       return "Publish failed";
-    case "published":
-      return "Drafts published";
+    case "epic_cant_publish":
+      return "Epic can't publish";
+    case "epic_discarded":
+      return "Epic discarded";
+    case "ready_to_archive":
+      return "Ready to archive";
   }
+}
+
+/**
+ * discussionBarLabel is the label of the bar: the state, except that a failure that stands says
+ * so through a run of the independent drafts, where the state reads Publishing.
+ */
+export function discussionBarLabel(discussion: DiscussionSummary): string {
+  const situation = discussionSituation(discussion);
+  if (situation !== null && asSituationKind(situation.kind) === "publish_failed") {
+    return "Publish failed";
+  }
+  return discussionStatusLabel(discussion);
 }
 
 /**
@@ -42,12 +65,14 @@ export function discussionStatusTone(discussion: DiscussionSummary): StatusTone 
   switch (asDiscussionStatus(discussion.status)) {
     case "publishing":
       return "working";
-    case "published":
+    case "ready_to_archive":
       return "done";
     case "discussing":
     case "awaiting_drafts":
     case "deciding":
     case "publish_failed":
+    case "epic_cant_publish":
+    case "epic_discarded":
       return "idle";
   }
 }
@@ -58,6 +83,105 @@ export function discussionStatusTone(discussion: DiscussionSummary): StatusTone 
  */
 export function discussionRowLabel(discussion: DiscussionSummary): string {
   return summaryLabel(discussion.situations ?? []) ?? discussionStatusLabel(discussion);
+}
+
+/**
+ * discussionDotTone is the colour of the dot of a discussion: what waits on the user takes the
+ * colour of its situation, a closing one reads as done here, and without one the dot shows what
+ * the discussion is doing.
+ */
+export function discussionDotTone(discussion: DiscussionSummary): StatusTone {
+  const situation = discussionSituation(discussion);
+  if (situation === null) {
+    return discussionStatusTone(discussion);
+  }
+  return asSituationGroup(situation.group) === "closing" ? "done" : situationTone(situation);
+}
+
+/** holdLabel is what keeps an approved draft out of the next publication, null when nothing does. */
+export function holdLabel(draft: Draft): string | null {
+  const { hold } = draft;
+  switch (asHoldReason(hold.reason)) {
+    case "epic_discarded":
+      return "The epic is discarded · this card won't publish";
+    case "cards":
+      return `Approved · waits for ${counted(hold.left, "more card")} of the epic to be decided`;
+    case "epic_short":
+      return hold.cards === 0
+        ? "Approved · the epic has no cards"
+        : `Approved · the epic needs two approved cards · ${hold.approved} of ${hold.cards}`;
+    case "epic":
+      return "Approved · waits for the epic";
+    case "draft":
+      return `Approved · waits for ${hold.title}`;
+    case "":
+      return null;
+  }
+}
+
+/** holdStands says the hold of a draft is a way out the user takes, which reads stronger. */
+export function holdStands(draft: Draft): boolean {
+  const reason = asHoldReason(draft.hold.reason);
+  return reason === "epic_short" || reason === "epic_discarded";
+}
+
+/** epicWayOut is what the bar says of an epic that can't publish: how far it is, and the way out. */
+export function epicWayOut(approved: number, cards: number): string {
+  if (cards === 0) {
+    return "No cards · move two cards into it, or discard the epic";
+  }
+  if (cards === 1) {
+    return `${approved} of 1 card approved · move another card into it, or discard the epic`;
+  }
+  const more = approved === 1 ? "one" : "two";
+  return `${approved} of ${cards} cards approved · approve ${more} more, or discard the epic`;
+}
+
+/** epicDiscardedDetail is what the bar says of the approved cards of a discarded epic. */
+export function epicDiscardedDetail(approvedCards: number): string {
+  return approvedCards === 1
+    ? "1 approved card of it won't publish · approve the epic again, or discard it"
+    : `${approvedCards} approved cards of it won't publish · approve the epic again, or discard them`;
+}
+
+/** readyToArchiveDetail is what the bar says of a discussion ready to archive. */
+export function readyToArchiveDetail(published: number): string {
+  return `${published === 0 ? "nothing" : published} published · or ask the agent for more cards below`;
+}
+
+/** standingDetail is the middle of the bar of a discussion, by the situation it is in; null for the others. */
+export function standingDetail(discussion: DiscussionSummary): string | null {
+  const situation = discussionSituation(discussion);
+  const drafts = discussion.drafts ?? [];
+  switch (situation === null ? null : asSituationKind(situation.kind)) {
+    case "epic_cant_publish": {
+      const epic = drafts.find(
+        (draft) =>
+          asDraftKind(draft.kind) === "epic" && asHoldReason(draft.hold.reason) === "epic_short",
+      );
+      return epic === undefined ? null : epicWayOut(epic.hold.approved, epic.hold.cards);
+    }
+    case "epic_discarded": {
+      for (const epic of drafts.filter(
+        (draft) => asDraftKind(draft.kind) === "epic" && draft.decision === "discarded",
+      )) {
+        const approved = drafts.filter(
+          (draft) =>
+            draft.epic?.draft === epic.id &&
+            draft.decision === "approved" &&
+            asHoldReason(draft.hold.reason) === "epic_discarded",
+        ).length;
+        if (approved > 0) {
+          return epicDiscardedDetail(approved);
+        }
+      }
+      return null;
+    }
+    case "ready_to_archive":
+      return readyToArchiveDetail(drafts.filter((draft) => draft.published).length);
+    default:
+      return null;
+  }
 }
 
 /**
@@ -149,11 +273,6 @@ export function dependencyLabel(dependency: DependencyRef): string {
   return dependency.title === ""
     ? dependency.reference
     : `${dependency.reference} · ${dependency.title}`;
-}
-
-/** waitsLabel says what holds the publication of a draft back. */
-export function waitsLabel(draft: Draft): string {
-  return `Waits for ${draft.waits}`;
 }
 
 /**

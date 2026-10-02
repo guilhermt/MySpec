@@ -19,6 +19,7 @@ import {
   asErrorKind,
   asFindingDecision,
   asFindingPlacement,
+  asHoldReason,
   asInterruptedBy,
   asIssueState,
   asMarkerType,
@@ -334,7 +335,9 @@ describe("narrowing", () => {
       "deciding",
       "publishing",
       "publish_failed",
-      "published",
+      "epic_discarded",
+      "epic_cant_publish",
+      "ready_to_archive",
     ]) {
       expect(asDiscussionStatus(status)).toBe(status);
     }
@@ -351,6 +354,15 @@ describe("narrowing", () => {
     }
     for (const dropped of ["", "discarded", "unavailable"]) {
       expect(asDependencyDrop(dropped)).toBe(dropped);
+    }
+    for (const reason of ["", "epic_discarded", "cards", "epic_short", "epic", "draft"]) {
+      expect(asHoldReason(reason)).toBe(reason);
+    }
+    for (const status of ["epic_discarded", "epic_cant_publish", "ready_to_archive"]) {
+      expect(asDiscussionStatus(status)).toBe(status);
+    }
+    for (const kind of ["epic_cant_publish", "epic_discarded", "ready_to_archive"]) {
+      expect(asSituationKind(kind)).toBe(kind);
     }
     for (const failure of ["not_found", "unsupported", "failed"]) {
       expect(asCatalogFailure(failure)).toBe(failure);
@@ -407,6 +419,7 @@ describe("narrowing", () => {
     expect(asDraftDecision("deferred")).toBe("");
     expect(asDraftOutcome("closed")).toBe("");
     expect(asDependencyDrop("cycle")).toBe("");
+    expect(asHoldReason("waiting")).toBe("");
     // A message of the user, or of the app in a transcript that has no kind.
     expect(asAppKind("")).toBe("");
     expect(asAppKind("merge")).toBe("");
@@ -567,15 +580,14 @@ describe("api", () => {
     await wails.api.removeDraftDependency("discussion-1", "draft-1", "dev/web#12");
     await wails.api.decideDraft("discussion-1", "draft-1", "approved");
     await wails.api.groupIntoEpic("discussion-1", ["draft-1", "draft-2"]);
-    await wails.api.publishEpic("discussion-1", "draft-epic");
     await wails.api.retryPublish("discussion-1", "draft-1");
     await wails.api.archiveDiscussion("discussion-1");
     await wails.api.deleteDiscussion("discussion-1");
     await wails.api.readDiscussionArtifact("discussion-1", "discussion.md");
 
-    expect(Call.ByID).toHaveBeenCalledTimes(93);
+    expect(Call.ByID).toHaveBeenCalledTimes(92);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);
-    expect(new Set(ids).size).toBe(93);
+    expect(new Set(ids).size).toBe(92);
   });
 
   it("opens a link in the browser of the desktop, never in the webview", async () => {

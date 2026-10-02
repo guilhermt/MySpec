@@ -24,10 +24,10 @@ func TestArchivingIsRefusedWhileAnApprovedDraftIsWaitingToBePublished(t *testing
 		t.Fatalf("archive discussion: got %v, want %v", err, discussionflow.ErrCannotArchive)
 	}
 	var refusal *discussionflow.ArchiveRefusal
-	if !errors.As(err, &refusal) || refusal.Hint != "Approved drafts are waiting to be published." {
+	if !errors.As(err, &refusal) || refusal.Hint != "Approved drafts wait to be published." {
 		t.Errorf("the refusal says %q, want the reason the user reads", err)
 	}
-	if !strings.Contains(err.Error(), "Approved drafts are waiting to be published.") {
+	if !strings.Contains(err.Error(), "Approved drafts wait to be published.") {
 		t.Errorf("the refusal reads %q, want the reason in it", err)
 	}
 	if _, ok := f.discussions.Get(id); !ok {

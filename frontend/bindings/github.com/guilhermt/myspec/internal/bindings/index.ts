@@ -58,6 +58,7 @@ export type {
     Draft,
     DraftCurrent,
     DraftDependency,
+    DraftHold,
     DraftRef,
     Entry,
     ErrorEntry,

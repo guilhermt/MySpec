@@ -32,6 +32,7 @@ func reconcile(discussionID string, stored []Draft, a Artifact) []Draft {
 	}
 
 	normalize(drafts)
+	unapproveMoved(stored, drafts)
 	for i := range drafts {
 		drafts[i].Position = i
 	}
@@ -198,4 +199,47 @@ func warn(draft *Draft, warning string) {
 	if !slices.Contains(draft.Warnings, warning) {
 		draft.Warnings = append(slices.Clone(draft.Warnings), warning)
 	}
+}
+
+// unapproveMoved takes back the approval of a draft the rewrite kept but moved
+// in the chain: a card whose epic or dependency left with a draft that left
+// the artifact, and an epic whose cards are no longer the ones the user
+// approved it with.
+func unapproveMoved(stored, drafts []Draft) {
+	for i := range drafts {
+		draft := &drafts[i]
+		j := slices.IndexFunc(stored, func(d Draft) bool { return d.ID == draft.ID })
+		if j < 0 {
+			continue
+		}
+		before := stored[j]
+		moved := draft.Epic != before.Epic || !slices.Equal(dependencyKeys(*draft), dependencyKeys(before))
+		if draft.Kind == KindEpic {
+			moved = !slices.Equal(memberIDs(draft.ID, drafts), memberIDs(draft.ID, stored))
+		}
+		if moved {
+			unapprove(draft)
+		}
+	}
+}
+
+// dependencyKeys are what the dependencies of a draft point at, in order.
+func dependencyKeys(d Draft) []string {
+	keys := make([]string, 0, len(d.Dependencies))
+	for _, dependency := range d.Dependencies {
+		keys = append(keys, dependency.Key())
+	}
+	return keys
+}
+
+// memberIDs are the cards that point at an epic draft, sorted.
+func memberIDs(epicID string, drafts []Draft) []string {
+	var ids []string
+	for _, d := range drafts {
+		if d.IsCard() && d.Epic == epicID {
+			ids = append(ids, d.ID)
+		}
+	}
+	slices.Sort(ids)
+	return ids
 }

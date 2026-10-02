@@ -423,6 +423,33 @@ describe("the line 2 of a discussion with a situation", () => {
       "Decide drafts · 1/3",
     ],
     [
+      { kind: "epic_cant_publish", place: DISCUSSION_PLACE },
+      {},
+      "Epic can't publish",
+      "Epic can't publish",
+    ],
+    [{ kind: "epic_discarded", place: DISCUSSION_PLACE }, {}, "Epic discarded", "Epic discarded"],
+    [
+      { kind: "ready_to_archive", group: "closing", place: DISCUSSION_PLACE },
+      {
+        drafts: [
+          makeDraft({ id: "a", published: true }),
+          makeDraft({ id: "b", published: true }),
+          makeDraft({ id: "c", published: true }),
+          makeDraft({ id: "d", published: true }),
+          makeDraft({ id: "e", published: true }),
+        ],
+      },
+      "Ready to archive · 5 published",
+      "Ready to archive",
+    ],
+    [
+      { kind: "ready_to_archive", group: "closing", place: DISCUSSION_PLACE },
+      { drafts: [makeDraft({ id: "a", decision: "discarded" })] },
+      "Ready to archive · nothing published",
+      "Ready to archive",
+    ],
+    [
       { kind: "publish_failed", group: "error", place: DISCUSSION_PLACE },
       {},
       "Publish failed",
@@ -782,16 +809,6 @@ describe("the line of an item without a situation", () => {
   ])("reads %s", (_case, discussion, tone, long) => {
     expect(discussionRow(discussion, NOW)).toMatchObject({ tone, line2: { long, short: long } });
   });
-
-  it("shows a published discussion as ready to archive, with no clock and no wait", () => {
-    expect(discussionRow(discussionWith({ status: "published" }), NOW)).toMatchObject({
-      tone: "archive",
-      waiting: false,
-      line2: { long: "Ready to archive", short: "Ready to archive" },
-      clock: null,
-      situationIds: [],
-    });
-  });
 });
 
 describe("line 3", () => {
@@ -938,11 +955,30 @@ describe("the accessible name", () => {
       "discussion Invoices. agent working, Discussing. Discussion agent working for less than a minute: thinking. context 0% used. #12 #14.",
     );
   });
+});
 
-  it("tells a published discussion as ready to close", () => {
-    expect(discussionRow(discussionWith({ status: "published", cards: [] }), NOW).label).toBe(
-      "discussion Invoices. ready to close, Ready to archive.",
+describe("a discussion ready to archive", () => {
+  const ready = () =>
+    discussionRow(
+      discussionWith({
+        status: "ready_to_archive",
+        situations: [
+          situation({ kind: "ready_to_archive", group: "closing", place: DISCUSSION_PLACE }),
+        ],
+      }),
+      NOW,
     );
+
+  it("takes the close tone with the chip of its situation", () => {
+    expect(ready()).toMatchObject({
+      tone: "close",
+      clock: { kind: "chip", tone: "close" },
+      line2: { short: "Ready to archive" },
+    });
+  });
+
+  it("counts in a collapsed node as ready to close", () => {
+    expect(nodeSummary([ready()])?.label).toBe("1 ready to close");
   });
 });
 
@@ -975,7 +1011,6 @@ describe("the severity", () => {
       "idle",
     ]);
     expect(TONE_RANK.app).toBe(TONE_RANK.agent);
-    expect(TONE_RANK.archive).toBe(TONE_RANK.idle);
   });
 });
 
@@ -1031,7 +1066,6 @@ describe("nodeSummary", () => {
       row("paused", "g"),
       row("close", "h"),
       row("idle", "i"),
-      row("archive", "j"),
     ];
 
     expect(nodeSummary(rows)).toEqual({
@@ -1045,7 +1079,7 @@ describe("nodeSummary", () => {
       ],
       word: "error",
       label: "1 error, 2 waiting, 1 ready to close, 2 working, 1 on GitHub, 1 paused",
-      situationIds: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"],
+      situationIds: ["a", "b", "c", "d", "e", "f", "g", "h", "i"],
     });
   });
 
@@ -1064,7 +1098,7 @@ describe("nodeSummary", () => {
   });
 
   it("is null when nothing counts", () => {
-    expect(nodeSummary([row("idle", "a"), row("archive", "b")])).toBeNull();
+    expect(nodeSummary([row("idle", "a")])).toBeNull();
   });
 });
 

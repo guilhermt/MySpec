@@ -781,8 +781,9 @@ export interface DiscussionSummary {
     "text": string;
 
     /**
-     * Status is discussing, awaiting_drafts, deciding, publishing,
-     * publish_failed or published, a string for the same reason as State.Theme.
+     * Status is discussing, awaiting_drafts, deciding, publishing, publish_failed,
+     * epic_discarded, epic_cant_publish or ready_to_archive, a string for the
+     * same reason as State.Theme.
      */
     "status": string;
 
@@ -994,21 +995,9 @@ export interface Draft {
     "publishError": string;
 
     /**
-     * Waits is the title of the draft this one waits for before it is
-     * published; "" when it waits for none.
+     * Hold is what keeps the draft out of the next publication; Reason "" when nothing does.
      */
-    "waits": string;
-
-    /**
-     * CanPublish says Publish epic is enabled; epics only.
-     */
-    "canPublish": boolean;
-
-    /**
-     * Hint is why an epic can't be published, or why a card of a discarded
-     * epic goes nowhere.
-     */
-    "hint": string;
+    "hold": DraftHold;
 }
 
 /**
@@ -1086,6 +1075,37 @@ export interface DraftDependency {
      * unavailable only: what gh said
      */
     "detail": string;
+}
+
+/**
+ * DraftHold is what keeps an approved draft out of the next publication.
+ */
+export interface DraftHold {
+    /**
+     * Reason is "", epic_discarded, cards, epic_short, epic or draft, a string
+     * for the same reason as State.Theme.
+     */
+    "reason": string;
+
+    /**
+     * draft: the draft it waits for
+     */
+    "title": string;
+
+    /**
+     * cards: the cards of the epic still to decide
+     */
+    "left": number;
+
+    /**
+     * epic_short: the approved cards of the epic
+     */
+    "approved": number;
+
+    /**
+     * epic_short: every card of the epic
+     */
+    "cards": number;
 }
 
 /**

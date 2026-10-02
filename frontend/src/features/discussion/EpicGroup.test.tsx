@@ -43,34 +43,10 @@ describe("EpicGroup", () => {
     ]);
   });
 
-  it("publishes the epic once everything under it is decided", async () => {
-    const { user } = group({ canPublish: true });
+  it("has no Publish epic button", () => {
+    group({ decision: "approved" });
 
-    await user.click(screen.getByRole("button", { name: "Publish epic" }));
-
-    expect(api.publishEpic).toHaveBeenCalledWith("discussion-1", "epic-1");
-  });
-
-  it("says why the epic can't be published yet", () => {
-    group({ canPublish: false, hint: "Decide every card of the epic first." });
-
-    expect(screen.getByRole("button", { name: "Publish epic" })).toBeDisabled();
-    expect(screen.getByText("Decide every card of the epic first.")).toBeInTheDocument();
-  });
-
-  it("holds Publish epic while the run of the epic is under way", () => {
-    group({ canPublish: true, publishing: true });
-
-    expect(screen.getByRole("button", { name: "Publish epic" })).toBeDisabled();
-  });
-
-  it("shows the refusal of a publication where the button is", async () => {
-    vi.mocked(api.publishEpic).mockRejectedValueOnce(new Error("the epic has a dependency cycle"));
-    const { user } = group({ canPublish: true });
-
-    await user.click(screen.getByRole("button", { name: "Publish epic" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("the epic has a dependency cycle");
+    expect(screen.queryByRole("button", { name: "Publish epic" })).toBeNull();
   });
 
   it("links the issue of an epic that was published", () => {
@@ -102,9 +78,9 @@ describe("EpicGroup", () => {
     expect(api.retryPublish).toHaveBeenCalledWith("discussion-1", "epic-1");
   });
 
-  it("marks an epic the user discarded", () => {
+  it("dims an epic the user discarded", () => {
     group({ decision: "discarded" });
 
-    expect(screen.getByRole("region", { name: "Epic Invoices" })).toHaveTextContent("Discarded");
+    expect(screen.getByRole("region", { name: "Epic Invoices" })).toHaveClass("opacity-60");
   });
 });

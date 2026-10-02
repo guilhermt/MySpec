@@ -48,7 +48,6 @@ import {
   previewBoard,
   previewEditBoard,
   previewRemoveBoard,
-  publishEpic,
   publishReview,
   readActionOutput,
   readEarlierConversation,
@@ -1091,12 +1090,10 @@ describe("discussion actions shown in place", () => {
     expect(await startDiscussion(request)).toBe("discussion-9");
     expect(await discussionContext(context)).toBe("## Board\nRoadmap");
     await addDraftDependency("discussion-1", "draft-1", "draft-2");
-    await publishEpic("discussion-1", "draft-epic");
 
     expect(api.startDiscussion).toHaveBeenCalledWith(request);
     expect(api.discussionContext).toHaveBeenCalledWith(context);
     expect(api.addDraftDependency).toHaveBeenCalledWith("discussion-1", "draft-1", "draft-2");
-    expect(api.publishEpic).toHaveBeenCalledWith("discussion-1", "draft-epic");
   });
 
   it("reject instead of using the app notice", async () => {

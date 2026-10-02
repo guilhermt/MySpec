@@ -74,7 +74,6 @@ const evaluateTimeout = 10 * time.Second
 
 // The ways the flow of a discussion refuses what it was asked for.
 var (
-	ErrNotReady      = errors.New("discussionflow: the epic isn't ready to publish")
 	ErrPublishing    = errors.New("discussionflow: wait for the publication to finish")
 	ErrCannotArchive = errors.New("discussionflow: the discussion can't be archived")
 	ErrNoReading     = errors.New("discussionflow: the board hasn't been read yet")
@@ -117,9 +116,6 @@ type discussionLock struct {
 	// are the drafts of it.
 	publishing bool
 	running    map[string]bool
-	// epicsRequested are the epics the user asked to publish and that have not
-	// finished yet.
-	epicsRequested map[string]bool
 	// unrecorded are the publications no write of the app could hold, by draft
 	// id: what the state answers with until a retry writes them down.
 	unrecorded map[string]unrecorded
@@ -213,7 +209,7 @@ func (s *Service) lockOf(id string) *discussionLock {
 
 	l, ok := s.locks[id]
 	if !ok {
-		l = &discussionLock{epicsRequested: map[string]bool{}, unrecorded: map[string]unrecorded{}}
+		l = &discussionLock{unrecorded: map[string]unrecorded{}}
 		s.locks[id] = l
 	}
 	return l
