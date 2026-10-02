@@ -108,12 +108,9 @@ func TestACardThatLeavesAnEpicTakesBackTheApprovalOfTheEpicAndOfItself(t *testin
 	f := newFixture(t)
 	id := f.start(cardKey)
 	f.record(id, wideEpicArtifact)
-	// The conversation is closed while the user decides, so that nothing
-	// publishes before the evaluation the test asks for.
-	f.sessions.shut(id)
-	for _, draftID := range []string{"invoices-epic", "invoice-schema", "export-invoices", "invoice-report"} {
-		f.approve(id, draftID)
-	}
+	// The approvals are quiet so that no run starts before the edit the test
+	// asks for: with the evaluation, the last approval would publish the epic.
+	f.approveQuietly(id, "invoices-epic", "invoice-schema", "export-invoices", "invoice-report")
 
 	if err := f.flow.SetDraftEpic(t.Context(), id, "invoice-report", ""); err != nil {
 		t.Fatalf("set the epic of a card: %v", err)
