@@ -1920,7 +1920,7 @@ describe("discussions", () => {
 
     useAppStore.getState().openSituation(DISCUSSION.id, DISCUSSION_PLACE);
     expect(location()).toEqual({ kind: "discussion", id: DISCUSSION.id });
-    expect(useAppStore.getState().pendingFocus).toBe("title");
+    expect(useAppStore.getState().pendingFocus).toBe("request");
   });
 
   it("is the situation of the open discussion on screen", () => {

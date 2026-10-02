@@ -33,18 +33,15 @@ import {
 /** DiscussionRequestAction is what a button of the request bar of a discussion does. */
 export type DiscussionRequestAction = "show" | "retrySession" | "nextToDecide" | "archive";
 
-/** DiscussionFocus is where the focus goes on arriving at the bar: what the others have, and a draft. */
-export type DiscussionFocus = RequestFocus | "draft";
-
 /** DiscussionRequestModel is the request bar of the discussion screen. */
-export type DiscussionRequestModel = RequestModel<DiscussionRequestAction, DiscussionFocus> & {
+export type DiscussionRequestModel = RequestModel<DiscussionRequestAction, RequestFocus> & {
   /** target is the draft Show opens and the arrival focuses, with its Retry; null for none. */
   target: { draft: string; retry: boolean } | null;
 };
 
 type DiscussionButton = RequestButton<DiscussionRequestAction>;
 type DiscussionBar = Omit<Bar<DiscussionRequestAction>, "focus"> & {
-  focus: DiscussionFocus;
+  focus: RequestFocus;
   target: DiscussionRequestModel["target"];
 };
 

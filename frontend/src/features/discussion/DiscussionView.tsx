@@ -1,11 +1,12 @@
 import { type KeyboardEvent, useEffect, useMemo, useRef } from "react";
+import { ArrivalFocus } from "@/components/ArrivalFocus";
 import { PanelLayout } from "@/components/system/AuxPanel";
 import { Conversation } from "@/features/chat/Conversation";
-import { ConversationComposer } from "@/features/chat/ConversationComposer";
-import { DiscussionBar } from "@/features/discussion/DiscussionBar";
+import { DiscussionComposer } from "@/features/discussion/DiscussionComposer";
 import { DiscussionDetails } from "@/features/discussion/DiscussionDetails";
 import { DiscussionDialogs } from "@/features/discussion/DiscussionDialogs";
 import { DiscussionHeader } from "@/features/discussion/DiscussionHeader";
+import { DiscussionRequest } from "@/features/discussion/DiscussionRequest";
 import { DocumentsPanel } from "@/features/discussion/DocumentsPanel";
 import { DraftsCard } from "@/features/discussion/DraftsCard";
 import { discussionInputOf } from "@/features/discussion/discussion-request";
@@ -52,6 +53,19 @@ function DiscussionConversation({ discussion }: { discussion: DiscussionSummary 
   );
 }
 
+// DiscussionArrival is the focus on arriving at a situation of the discussion, apart from
+// DiscussionView so only it follows the clock of the request.
+function DiscussionArrival({
+  discussion,
+  ready,
+}: {
+  discussion: DiscussionSummary;
+  ready: boolean;
+}) {
+  const request = useDiscussionRequest(discussion);
+  return <ArrivalFocus target={request?.focus ?? null} ready={ready} />;
+}
+
 export interface DiscussionViewProps {
   discussionId: string;
 }
@@ -62,6 +76,11 @@ export function DiscussionView({ discussionId }: DiscussionViewProps) {
   const panel = usePanel();
   const rescue = useRef<HTMLElement>(null);
   useFocusRescue(rescue);
+  // A conversation that couldn't be read is settled too: the focus lands without it.
+  const transcriptSettled = useAppStore((state) => {
+    const status = state.transcripts[sessionKey(discussionId, DISCUSSION_STAGE)]?.status;
+    return status === "ready" || status === "error";
+  });
 
   // The conversation is fetched once and then kept: leaving the discussion and
   // coming back costs nothing, and the events keep being applied while it is
@@ -105,7 +124,7 @@ export function DiscussionView({ discussionId }: DiscussionViewProps) {
       className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
     >
       <DiscussionHeader discussion={discussion} />
-      <DiscussionBar discussion={discussion} />
+      <DiscussionArrival discussion={discussion} ready={transcriptSettled} />
       <PanelLayout
         panel={
           panel === "details" ? (
@@ -116,11 +135,8 @@ export function DiscussionView({ discussionId }: DiscussionViewProps) {
         }
       >
         <DiscussionConversation discussion={discussion} />
-        <ConversationComposer
-          taskId={discussion.id}
-          stage={DISCUSSION_STAGE}
-          session={discussion}
-        />
+        <DiscussionRequest discussion={discussion} />
+        <DiscussionComposer discussion={discussion} />
       </PanelLayout>
       <DiscussionDialogs discussion={discussion} />
     </section>

@@ -3,13 +3,23 @@ import { type FindingLike, nextToDecide, previousToDecide } from "@/lib/findings
 /**
  * RequestFocus is where the focus goes on arriving at the request, and on Show: the pending card
  * (its first question without a choice, or its default answer), the first finding to decide of the
- * card of findings, the primary of the bar, the composer, or the bar itself when none of its
- * actions can be pressed.
+ * card of findings, the draft the bar asks for in the drafts card, the primary of the bar, the
+ * composer, or the bar itself when none of its actions can be pressed.
  */
-export type RequestFocus = "question" | "permission" | "finding" | "primary" | "composer" | "bar";
+export type RequestFocus =
+  | "question"
+  | "permission"
+  | "finding"
+  | "draft"
+  | "primary"
+  | "composer"
+  | "bar";
 
 /** COMPOSER is the field of the composer of the place on screen. */
 export const COMPOSER = "#composer-input";
+
+/** REQUEST_TARGET is the draft of the drafts card the bar asks for: the card gives it the attribute. */
+const REQUEST_TARGET = "[data-decision-card] [data-request-target]";
 
 /** BAR is the request bar of the place on screen. */
 const BAR = "[aria-label=Request]";
@@ -49,6 +59,8 @@ function targetOf(target: RequestFocus): HTMLElement | null {
           `${FINDING}[data-decided="false"]:not([data-disabled])`,
         ) ?? document.querySelector<HTMLElement>(FINDING)
       );
+    case "draft":
+      return document.querySelector<HTMLElement>(REQUEST_TARGET);
     case "primary":
       return (
         document.querySelector<HTMLElement>(
@@ -65,7 +77,7 @@ function targetOf(target: RequestFocus): HTMLElement | null {
 /**
  * focusRequest takes the focus to where the request asks it, scrolled into view: the first
  * question without a choice of the pending card, the default answer of the pending permission, the
- * first finding to decide, centred, the primary of the bar, the composer or the bar itself. False
+ * first finding to decide or the draft the bar asks for, centred, the primary of the bar, the composer or the bar itself. False
  * when the target isn't on screen.
  */
 export function focusRequest(target: RequestFocus): boolean {
@@ -74,7 +86,9 @@ export function focusRequest(target: RequestFocus): boolean {
     return false;
   }
   element.focus();
-  element.scrollIntoView({ block: target === "finding" ? "center" : "nearest" });
+  element.scrollIntoView({
+    block: target === "finding" || target === "draft" ? "center" : "nearest",
+  });
   return true;
 }
 

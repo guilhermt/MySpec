@@ -145,6 +145,24 @@ describe("focusRequest", () => {
     scroll.mockRestore();
   });
 
+  it("takes the focus to the draft the bar asks for, centred", () => {
+    render(
+      <div data-decision-card>
+        <button type="button" data-card-item="d1" />
+        <button type="button" data-card-item="d2" data-request-target="" />
+      </div>,
+    );
+    const target = document.querySelector<HTMLElement>('[data-card-item="d2"]');
+    const scroll = vi.fn();
+    if (target !== null) {
+      target.scrollIntoView = scroll;
+    }
+
+    expect(focusRequest("draft")).toBe(true);
+    expect(target).toHaveFocus();
+    expect(scroll).toHaveBeenCalledWith({ block: "center" });
+  });
+
   it("answers false without the target on screen", () => {
     render(<Screen />);
 

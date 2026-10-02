@@ -1193,10 +1193,10 @@ export const useAppStore = create<AppStore>()((set, get) => {
       if (location === null) {
         return;
       }
-      // A task and a review take the focus to what their situation asks; a discussion, to the title.
+      // A task, a review and a discussion take the focus to what their situation asks.
       leave(() =>
         set((state) => ({
-          ...navigate(state, location, location.kind === "discussion" ? "title" : "request"),
+          ...navigate(state, location, "request"),
           openStepTab:
             location.kind === "task"
               ? withStepTab(state.openStepTab, itemId, place)
