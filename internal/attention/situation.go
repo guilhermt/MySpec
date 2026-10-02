@@ -37,11 +37,14 @@ const (
 	KindNewCommits      Kind = "new_commits"
 	KindPRTrouble       Kind = "pr_trouble"
 	KindDrafts          Kind = "drafts"
+	KindEpicCantPublish Kind = "epic_cant_publish"
+	KindEpicDiscarded   Kind = "epic_discarded"
 
 	KindPublishFailed Kind = "publish_failed"
 	KindPassBlocked   Kind = "pass_blocked"
 
-	KindMerge Kind = "merge"
+	KindMerge          Kind = "merge"
+	KindReadyToArchive Kind = "ready_to_archive"
 )
 
 // Group is how urgent a situation is.
@@ -60,7 +63,7 @@ func (k Kind) Group() Group {
 	case KindSessionError, KindStepBlocked, KindWorktreeUnreadable, KindPRBlocked, KindPlanInvalid,
 		KindPRClosed, KindPublishFailed, KindPassBlocked:
 		return GroupError
-	case KindMerge:
+	case KindMerge, KindReadyToArchive:
 		return GroupClosing
 	default:
 		return GroupWaiting

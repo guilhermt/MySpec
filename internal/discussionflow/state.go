@@ -21,9 +21,6 @@ const (
 	StatusPublished      Status = "published" // every draft is published or discarded, and at least one was published
 )
 
-// minEpicCards is how many approved cards an epic needs to be worth one.
-const minEpicCards = 2
-
 // The sentences a draft says about why it is not ready to be published.
 const (
 	hintTooFewCards     = "An epic needs at least two cards."
@@ -50,6 +47,8 @@ type DraftState struct {
 	// Hint is why an epic can't be published, or why a card of a discarded
 	// epic goes nowhere.
 	Hint string
+	// Hold is what keeps an approved draft out of the next run.
+	Hold Hold
 	// Publishing says the draft is in the publication under way.
 	Publishing bool
 }
@@ -164,9 +163,10 @@ func pending(d discussion.Draft) bool {
 // draftStates is every draft with what can be done to it now, with running
 // saying which of them the publication under way writes.
 func draftStates(drafts []discussion.Draft, running map[string]bool) []DraftState {
+	c := chainOf(drafts)
 	states := make([]DraftState, 0, len(drafts))
 	for _, draft := range drafts {
-		state := DraftState{Draft: draft, Publishing: running[draft.ID]}
+		state := DraftState{Draft: draft, Hold: c.hold(draft.ID), Publishing: running[draft.ID]}
 		if draft.Kind == discussion.KindEpic {
 			state.CanPublish, state.Hint = epicReady(draft, drafts)
 		} else {

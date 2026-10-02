@@ -1457,6 +1457,17 @@ type DraftCurrent struct {
 	ReadAt       string     `json:"readAt"`
 }
 
+// DraftHold is what keeps an approved draft out of the next publication.
+type DraftHold struct {
+	// Reason is "", epic_discarded, cards, epic_short, epic or draft, a string
+	// for the same reason as State.Theme.
+	Reason   string `json:"reason"`
+	Title    string `json:"title"`    // draft: the draft it waits for
+	Left     int    `json:"left"`     // cards: the cards of the epic still to decide
+	Approved int    `json:"approved"` // epic_short: the approved cards of the epic
+	Cards    int    `json:"cards"`    // epic_short: every card of the epic
+}
+
 // Draft is one card a discussion produced: as the user left it, and what
 // became of it on GitHub.
 type Draft struct {
@@ -1490,6 +1501,8 @@ type Draft struct {
 	PublishedAt  string `json:"publishedAt"`
 	Publishing   bool   `json:"publishing"`   // the draft is in the publication under way
 	PublishError string `json:"publishError"` // why the last publication failed; "" otherwise
+	// Hold is what keeps the draft out of the next publication; Reason "" when nothing does.
+	Hold DraftHold `json:"hold"`
 	// Waits is the title of the draft this one waits for before it is
 	// published; "" when it waits for none.
 	Waits string `json:"waits"`

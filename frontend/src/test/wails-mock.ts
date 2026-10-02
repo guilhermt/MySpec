@@ -1184,6 +1184,7 @@ export function makeDraft(overrides: Partial<Draft> = {}): Draft {
     published: false,
     publishedAt: "",
     publishError: "",
+    hold: { reason: "", title: "", left: 0, approved: 0, cards: 0 },
     publishing: false,
     waits: "",
     canPublish: false,

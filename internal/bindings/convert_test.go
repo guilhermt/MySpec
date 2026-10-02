@@ -2722,7 +2722,7 @@ func discussionDrafts() []discussionflow.DraftState {
 	}
 	return []discussionflow.DraftState{
 		{Draft: update},
-		{Draft: export, Waits: "Add the login screen"},
+		{Draft: export, Waits: "Add the login screen", Hold: discussionflow.Hold{Reason: discussionflow.HoldDraft, Title: "Add the login screen"}},
 		{Draft: epic, Hint: "Approve the epic."},
 	}
 }
@@ -2802,6 +2802,7 @@ func TestFromDiscussionsCarriesEveryDraftWithWhatTheReadingKnows(t *testing.T) {
 			}},
 			Warnings:     []string{},
 			PublishError: "gh: the issue could not be created",
+			Hold:         bindings.DraftHold{Reason: "draft", Title: "Add the login screen"},
 			Waits:        "Add the login screen",
 		},
 		{
@@ -2815,6 +2816,54 @@ func TestFromDiscussionsCarriesEveryDraftWithWhatTheReadingKnows(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got.Drafts); diff != "" {
 		t.Errorf("drafts (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromDiscussionsCarriesWhatHoldsEachDraft(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		hold discussionflow.Hold
+		want bindings.DraftHold
+	}{
+		{"none", discussionflow.Hold{}, bindings.DraftHold{}},
+		{
+			"epic discarded",
+			discussionflow.Hold{Reason: discussionflow.HoldEpicDiscarded},
+			bindings.DraftHold{Reason: "epic_discarded"},
+		},
+		{
+			"cards",
+			discussionflow.Hold{Reason: discussionflow.HoldCards, Left: 2},
+			bindings.DraftHold{Reason: "cards", Left: 2},
+		},
+		{
+			"epic short",
+			discussionflow.Hold{Reason: discussionflow.HoldEpicShort, Approved: 1, Cards: 3},
+			bindings.DraftHold{Reason: "epic_short", Approved: 1, Cards: 3},
+		},
+		{"epic", discussionflow.Hold{Reason: discussionflow.HoldEpic}, bindings.DraftHold{Reason: "epic"}},
+		{
+			"draft",
+			discussionflow.Hold{Reason: discussionflow.HoldDraft, Title: "Add the login screen"},
+			bindings.DraftHold{Reason: "draft", Title: "Add the login screen"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			states := discussionDrafts()
+			states[0].Hold = tt.hold
+			state := discussionState(discussionflow.StatusDeciding, states...)
+
+			got := convertDiscussion(state, discussionReading(), true, nil)
+
+			if diff := cmp.Diff(tt.want, got.Drafts[0].Hold); diff != "" {
+				t.Errorf("hold (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
 

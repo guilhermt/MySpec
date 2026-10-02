@@ -994,6 +994,11 @@ export interface Draft {
     "publishError": string;
 
     /**
+     * Hold is what keeps the draft out of the next publication; Reason "" when nothing does.
+     */
+    "hold": DraftHold;
+
+    /**
      * Waits is the title of the draft this one waits for before it is
      * published; "" when it waits for none.
      */
@@ -1086,6 +1091,37 @@ export interface DraftDependency {
      * unavailable only: what gh said
      */
     "detail": string;
+}
+
+/**
+ * DraftHold is what keeps an approved draft out of the next publication.
+ */
+export interface DraftHold {
+    /**
+     * Reason is "", epic_discarded, cards, epic_short, epic or draft, a string
+     * for the same reason as State.Theme.
+     */
+    "reason": string;
+
+    /**
+     * draft: the draft it waits for
+     */
+    "title": string;
+
+    /**
+     * cards: the cards of the epic still to decide
+     */
+    "left": number;
+
+    /**
+     * epic_short: the approved cards of the epic
+     */
+    "approved": number;
+
+    /**
+     * epic_short: every card of the epic
+     */
+    "cards": number;
 }
 
 /**
