@@ -24,20 +24,18 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 	s.stampDocument(l, stored)
 
 	// The conversation is opened by Start and by Sync: an evaluation never
-	// opens one.
+	// opens one, and reads the artifact only while it rests. A run writes the
+	// drafts it publishes without the lock of the discussion, so nothing reads
+	// the artifact over it; the check at the end of the run reads it right
+	// after. While memory holds a publication the store could not, the artifact
+	// is not read either, or the reconciliation would replace or drop the draft
+	// under it; the Retry that writes the entry down calls Check, which reads
+	// the artifact then.
 	sum, open := s.sessions.Summary(sessionKey(id))
-	if !open {
-		return
-	}
-	// A run writes the drafts it publishes without the lock of the discussion,
-	// so nothing reads the artifact over it; the check at the end of the run
-	// reads it right after. While memory holds a publication the store could
-	// not, the artifact is not read either, or the reconciliation would
-	// replace or drop the draft under it; the Retry that writes the entry down
-	// calls Check, which reads the artifact then.
-	if sum.Idle && !s.publishing(l) && !s.hasUnrecorded(id) {
+	if open && sum.Idle && !s.publishing(l) && !s.hasUnrecorded(id) {
 		s.readDrafts(ctx, stored)
 	}
+	// What the user decided goes to GitHub whatever the conversation does.
 	s.publishDue(stored)
 }
 

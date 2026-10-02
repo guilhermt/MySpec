@@ -81,7 +81,7 @@ describe("ArchivedDiscussionView", () => {
   it("gathers the cards of an epic under it", () => {
     view({
       drafts: [
-        makeDraft({ id: "epic-1", kind: "epic", title: "Invoicing", canPublish: true }),
+        makeDraft({ id: "epic-1", kind: "epic", title: "Invoicing" }),
         makeDraft({
           id: "draft-2",
           position: 2,

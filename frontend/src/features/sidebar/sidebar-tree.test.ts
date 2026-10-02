@@ -809,16 +809,6 @@ describe("the line of an item without a situation", () => {
   ])("reads %s", (_case, discussion, tone, long) => {
     expect(discussionRow(discussion, NOW)).toMatchObject({ tone, line2: { long, short: long } });
   });
-
-  it("shows a published discussion as ready to archive, with no clock and no wait", () => {
-    expect(discussionRow(discussionWith({ status: "published" }), NOW)).toMatchObject({
-      tone: "archive",
-      waiting: false,
-      line2: { long: "Ready to archive", short: "Ready to archive" },
-      clock: null,
-      situationIds: [],
-    });
-  });
 });
 
 describe("line 3", () => {
@@ -965,12 +955,6 @@ describe("the accessible name", () => {
       "discussion Invoices. agent working, Discussing. Discussion agent working for less than a minute: thinking. context 0% used. #12 #14.",
     );
   });
-
-  it("tells a published discussion as ready to close", () => {
-    expect(discussionRow(discussionWith({ status: "published", cards: [] }), NOW).label).toBe(
-      "discussion Invoices. ready to close, Ready to archive.",
-    );
-  });
 });
 
 describe("a discussion ready to archive", () => {
@@ -1027,7 +1011,6 @@ describe("the severity", () => {
       "idle",
     ]);
     expect(TONE_RANK.app).toBe(TONE_RANK.agent);
-    expect(TONE_RANK.archive).toBe(TONE_RANK.idle);
   });
 });
 
@@ -1083,7 +1066,6 @@ describe("nodeSummary", () => {
       row("paused", "g"),
       row("close", "h"),
       row("idle", "i"),
-      row("archive", "j"),
     ];
 
     expect(nodeSummary(rows)).toEqual({
@@ -1097,7 +1079,7 @@ describe("nodeSummary", () => {
       ],
       word: "error",
       label: "1 error, 2 waiting, 1 ready to close, 2 working, 1 on GitHub, 1 paused",
-      situationIds: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"],
+      situationIds: ["a", "b", "c", "d", "e", "f", "g", "h", "i"],
     });
   });
 
@@ -1116,7 +1098,7 @@ describe("nodeSummary", () => {
   });
 
   it("is null when nothing counts", () => {
-    expect(nodeSummary([row("idle", "a"), row("archive", "b")])).toBeNull();
+    expect(nodeSummary([row("idle", "a")])).toBeNull();
   });
 });
 

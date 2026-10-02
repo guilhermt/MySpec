@@ -30,7 +30,9 @@ import (
 // boards, itemsVersion the one that brought the items and the reviews,
 // taskScreenVersion the one that brought the pause time, the commit time and
 // the checks, reviewScreenVersion the one that brought the title of a finding
-// and the summary of a pass that was published, and latestVersion the version the embedded migrations end at.
+// and the summary of a pass that was published, chainVersion the one that took
+// back the approval of the epics of the active discussions, and latestVersion
+// the version the embedded migrations end at.
 const (
 	stagesVersion       = 3
 	commitsVersion      = 5
@@ -42,7 +44,8 @@ const (
 	itemsVersion        = 15
 	taskScreenVersion   = 19
 	reviewScreenVersion = 21
-	latestVersion       = 22
+	chainVersion        = 23
+	latestVersion       = 23
 )
 
 // upgradeTime is the instant the repositories of the fake upgrades are stamped
@@ -1122,5 +1125,59 @@ func TestMigrateMarksTheSummaryOfThePassesPublishedBeforeIt(t *testing.T) {
 	}
 	if got := readOne(t, db, `SELECT title FROM review_findings WHERE number = 1`); got != "" {
 		t.Errorf("title of a finding recorded before the column = %q, want it empty", got)
+	}
+}
+
+func TestTheChainMigrationTakesBackTheApprovalOfAnEpicNeverStarted(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, chainVersion-1)
+	const insertDiscussion = `INSERT INTO discussions
+		(id, board_id, board_title, title, initial_context, artifacts_dir, archived_at, created_at, updated_at)
+		VALUES (?, 'board-1', 'Board', 'Discussion', 'context', '/data/discussions/x', ?,
+			'2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`
+	const insertDraft = `INSERT INTO discussion_drafts
+		(discussion_id, draft_id, position, kind, source, owner, name, repository_original, decision, publish_error, outcome)
+		VALUES (?, ?, 0, ?, 'agent', 'acme', 'web', 'acme/web', ?, ?, ?)`
+	for _, d := range []struct {
+		id       string
+		archived any
+	}{{"active", nil}, {"archived", "2026-09-07T10:00:00Z"}} {
+		if _, err := db.ExecContext(t.Context(), insertDiscussion, d.id, d.archived); err != nil {
+			t.Fatalf("insert discussion %s: %v", d.id, err)
+		}
+	}
+	drafts := []struct {
+		discussion, id, kind, decision, failure, outcome string
+	}{
+		{"active", "failed", "epic", "approved", "Couldn't write to GitHub: boom", ""},
+		{"active", "waiting", "epic", "approved", "", ""},
+		{"active", "started", "epic", "approved", "", "created"},
+		{"active", "card", "new", "approved", "", ""},
+		{"active", "discarded", "epic", "discarded", "", ""},
+		{"archived", "old", "epic", "approved", "", ""},
+	}
+	for _, d := range drafts {
+		if _, err := db.ExecContext(t.Context(), insertDraft, d.discussion, d.id, d.kind, d.decision, d.failure, d.outcome); err != nil {
+			t.Fatalf("insert draft %s: %v", d.id, err)
+		}
+	}
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), carryOver(t)); err != nil {
+		t.Fatalf("migrate() = %v, want nil", err)
+	}
+
+	for id, want := range map[string]string{
+		"failed":    "|",
+		"waiting":   "|",
+		"started":   "approved|",
+		"card":      "approved|",
+		"discarded": "discarded|",
+		"old":       "approved|",
+	} {
+		query := fmt.Sprintf(`SELECT decision || '|' || publish_error FROM discussion_drafts WHERE draft_id = '%s'`, id)
+		if got := readOne(t, db, query); got != want {
+			t.Errorf("decision|publish_error of %s = %q, want %q", id, got, want)
+		}
 	}
 }

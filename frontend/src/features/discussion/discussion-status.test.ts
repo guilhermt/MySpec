@@ -20,7 +20,6 @@ import {
   refValue,
   repositoryOf,
   standingDetail,
-  waitsLabel,
 } from "@/features/discussion/discussion-status";
 import type { Draft, Situation } from "@/lib/wails";
 import { makeDiscussion, makeDraft, makeDraftRef, makeSituation } from "@/test/wails-mock";
@@ -49,7 +48,6 @@ describe("discussionStatusLabel", () => {
     expect(discussionStatusLabel(makeDiscussion({ status: "publish_failed" }))).toBe(
       "Publish failed",
     );
-    expect(discussionStatusLabel(makeDiscussion({ status: "published" }))).toBe("Drafts published");
   });
 
   it.each([
@@ -64,7 +62,7 @@ describe("discussionStatusLabel", () => {
 describe("discussionStatusTone", () => {
   it("works while it publishes and rests when it is done", () => {
     expect(discussionStatusTone(makeDiscussion({ status: "publishing" }))).toBe("working");
-    expect(discussionStatusTone(makeDiscussion({ status: "published" }))).toBe("done");
+    expect(discussionStatusTone(makeDiscussion({ status: "ready_to_archive" }))).toBe("done");
     expect(discussionStatusTone(makeDiscussion({ status: "deciding" }))).toBe("idle");
   });
 
@@ -159,7 +157,7 @@ describe("refKey and refValue", () => {
   });
 });
 
-describe("dependencyLabel and waitsLabel", () => {
+describe("dependencyLabel", () => {
   it("names a draft by its title and an issue by its reference", () => {
     expect(
       dependencyLabel({
@@ -186,10 +184,6 @@ describe("dependencyLabel and waitsLabel", () => {
         detail: "",
       }),
     ).toBe("dev/web#9 · Export");
-  });
-
-  it("says what holds a draft back", () => {
-    expect(waitsLabel(makeDraft({ waits: "The epic" }))).toBe("Waits for The epic");
   });
 });
 

@@ -950,7 +950,6 @@ var userMessages = []struct {
 	{discussion.ErrDependencyLinked, "This dependency is already on GitHub."},
 	{discussion.ErrArchived, "This discussion is archived."},
 	{discussion.ErrUntitled, "Name the draft to approve it."},
-	{discussionflow.ErrNotReady, "The epic isn't ready to publish."},
 	{discussionflow.ErrPublishing, "Wait for the publication to finish."},
 	{discussionflow.ErrNoReading, "The board hasn't been read yet."},
 	{discussionflow.ErrCannotArchive, "This discussion can't be archived yet."},

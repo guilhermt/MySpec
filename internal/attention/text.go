@@ -215,6 +215,36 @@ func draftsPublishFailedBody() string {
 	return "The drafts couldn't be published."
 }
 
+// epicCantPublishBody is the notification of a discussion whose epic can't
+// publish: what is missing, by how many of its cards are approved, of how many.
+func epicCantPublishBody(approved, cards int) string {
+	switch {
+	case cards == 0:
+		return "The epic can't publish: it has no cards. Move two into it, or discard it."
+	case cards == 1:
+		return "The epic can't publish: it has one card. Move another into it, or discard it."
+	case approved == 1:
+		return "The epic can't publish: approve one more of its cards, or discard it."
+	default:
+		return "The epic can't publish: approve two more of its cards, or discard it."
+	}
+}
+
+// epicDiscardedBody is the notification of a discussion whose discarded epic
+// has approved cards that won't publish.
+func epicDiscardedBody(approvedCards int) string {
+	if approvedCards == 1 {
+		return "The epic is discarded, and its approved card won't publish."
+	}
+	return fmt.Sprintf("The epic is discarded, and %d of its approved cards won't publish.", approvedCards)
+}
+
+// readyToArchiveBody is the notification of a discussion every draft of which
+// is published or discarded.
+func readyToArchiveBody() string {
+	return "Every draft is published or discarded. The discussion is ready to archive."
+}
+
 // publishFailedBody is the notification of a review GitHub did not take.
 func publishFailedBody() string {
 	return "The review couldn't be published."

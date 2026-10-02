@@ -13,40 +13,42 @@ type Status string
 
 // The states a discussion is shown in.
 const (
-	StatusDiscussing     Status = "discussing"      // the conversation goes on; no drafts to act on
-	StatusAwaitingDrafts Status = "awaiting_drafts" // the agent rested with a drafts artifact the app can't read
-	StatusDeciding       Status = "deciding"        // a draft is still to decide, or an epic is ready to publish
-	StatusPublishing     Status = "publishing"
-	StatusPublishFailed  Status = "publish_failed"
-	StatusPublished      Status = "published" // every draft is published or discarded, and at least one was published
-)
-
-// The sentences a draft says about why it is not ready to be published.
-const (
-	hintTooFewCards     = "An epic needs at least two cards."
-	hintDecideEveryCard = "Approve or discard every card of the epic."
-	hintApproveTheEpic  = "Approve the epic."
-	hintEpicDiscarded   = "The epic is discarded."
-	hintWaitsFor        = "Waits for "
+	StatusNone            Status = ""                // Waiting only: nothing waits for the user
+	StatusDiscussing      Status = "discussing"      // the conversation goes on; no drafts to act on
+	StatusAwaitingDrafts  Status = "awaiting_drafts" // the agent rested with a drafts artifact the app can't read
+	StatusDeciding        Status = "deciding"        // a draft is still to decide
+	StatusPublishing      Status = "publishing"      // a run writes on GitHub, or is about to
+	StatusPublishFailed   Status = "publish_failed"
+	StatusEpicDiscarded   Status = "epic_discarded"    // a discarded epic has an approved card that won't publish
+	StatusEpicCantPublish Status = "epic_cant_publish" // an approved epic has every card decided and fewer than two approved
+	StatusReadyToArchive  Status = "ready_to_archive"  // every draft is published or discarded
 )
 
 // The sentences a discussion says about why it cannot be archived yet.
 const (
-	hintWaitingPublication = "Approved drafts are waiting to be published."
-	hintPublicationFailed  = "A publication failed."
+	hintPublicationFailed  = "A publication failed: Retry it, or discard the draft."
+	hintPublicationRunning = "A publication is running."
+	hintWaitingPublication = "Approved drafts wait to be published."
 )
+
+// epicShortHint is why a discussion with an epic that can't publish is not
+// archived yet, and how out of it.
+func epicShortHint(approved, cards int) string {
+	switch {
+	case cards == 0:
+		return "The epic can't publish: move two cards into it, or discard the epic."
+	case cards == 1:
+		return "The epic can't publish: move another card into it, or discard the epic."
+	case approved == 1:
+		return "The epic can't publish: approve one more card, or discard the epic."
+	default:
+		return "The epic can't publish: approve two more cards, or discard the epic."
+	}
+}
 
 // DraftState is one draft with what the interface needs to offer around it.
 type DraftState struct {
 	Draft discussion.Draft
-	// Waits is the title of the draft this one waits for before it is
-	// published; "" when it waits for none.
-	Waits string
-	// CanPublish says Publish epic is enabled; epics only.
-	CanPublish bool
-	// Hint is why an epic can't be published, or why a card of a discarded
-	// epic goes nowhere.
-	Hint string
 	// Hold is what keeps an approved draft out of the next run.
 	Hold Hold
 	// Publishing says the draft is in the publication under way.
@@ -56,8 +58,13 @@ type DraftState struct {
 // State is everything the app knows about a discussion: what it recorded, the
 // drafts with what can be done to each one, and what the conversation is doing.
 type State struct {
-	Discussion  discussion.Discussion
-	Status      Status
+	Discussion discussion.Discussion
+	Status     Status
+	// Waiting is the state the situation of the discussion comes from: Status
+	// without a run, so that what waits for the user stands through one, and
+	// StatusNone while a run is under way or about to start with nothing else
+	// waiting.
+	Waiting     Status
 	Drafts      []DraftState
 	Session     session.Summary
 	SessionOpen bool
@@ -101,10 +108,50 @@ func (s *Service) State(id string) (State, bool) {
 	s.mu.Unlock()
 
 	drafts := s.effectiveDrafts(id, s.discussions.Drafts(id))
-	state.Drafts = draftStates(drafts, running)
-	state.Status = status(state)
-	state.CanArchive, state.ArchiveHint = canArchive(drafts)
+	settle(&state, drafts, running)
 	return state, true
+}
+
+// ShortEpic is the first epic, by position, that can't publish for want of
+// approved cards: how many of its cards are approved, of how many.
+func (s State) ShortEpic() (approved, cards int, ok bool) {
+	for _, d := range s.Drafts {
+		if d.Draft.Kind == discussion.KindEpic && d.Hold.Reason == HoldEpicShort {
+			return d.Hold.Approved, d.Hold.Cards, true
+		}
+	}
+	return 0, 0, false
+}
+
+// DiscardedEpic is the first discarded epic, by position, with approved cards
+// that won't publish, and how many they are.
+func (s State) DiscardedEpic() (approvedCards int, ok bool) {
+	for _, e := range s.Drafts {
+		if e.Draft.Kind != discussion.KindEpic || e.Draft.Decision != discussion.DecisionDiscarded || e.Draft.Published.Done() {
+			continue
+		}
+		count := 0
+		for _, d := range s.Drafts {
+			if d.Draft.IsCard() && d.Draft.Epic == e.Draft.ID && d.Draft.Decision == discussion.DecisionApproved && !d.Draft.Published.Done() {
+				count++
+			}
+		}
+		if count > 0 {
+			return count, true
+		}
+	}
+	return 0, false
+}
+
+// settle fills in what the drafts say about a discussion: the chain of them,
+// what holds each one, the status, what waits for the user, and whether it
+// can be archived.
+func settle(state *State, drafts []discussion.Draft, running map[string]bool) {
+	c := chainOf(drafts)
+	state.Drafts = draftStates(c, running)
+	state.Status = standing(*state, c, true)
+	state.Waiting = standing(*state, c, false)
+	state.CanArchive, state.ArchiveHint = canArchive(*state, c)
 }
 
 // effectiveDrafts are the drafts as the app knows them: what it recorded, with
@@ -127,156 +174,74 @@ func (s *Service) effectiveDrafts(id string, drafts []discussion.Draft) []discus
 	return drafts
 }
 
-// status is the state a discussion is shown in. The conversation comes first:
-// while the agent works, what it works on is what the discussion is.
-func status(in State) Status {
+// standing is where a discussion stands: the first that holds of the
+// conversation at work, a run, a failure, an unreadable artifact, no drafts
+// yet, a discarded epic with approved cards, a draft to decide, an epic that
+// can't publish, a run about to start, and every draft settled. run says
+// whether a run counts: Waiting leaves it out, so that a situation stands
+// through it.
+func standing(in State, c chain, run bool) Status {
+	_, _, short := in.ShortEpic()
+	_, discarded := in.DiscardedEpic()
 	switch {
 	case in.SessionOpen && !in.Session.Idle:
 		return StatusDiscussing
-	case in.Publishing:
+	case run && in.Publishing:
 		return StatusPublishing
 	case slices.ContainsFunc(in.Drafts, func(d DraftState) bool { return d.Draft.PublishError != "" }):
 		return StatusPublishFailed
 	case in.UnreadableDrafts != "":
 		return StatusAwaitingDrafts
 	case !in.Discussion.DraftsRead || len(in.Drafts) == 0:
-		// The agent has not written a readable artifact yet: there is nothing
-		// to decide on.
 		return StatusDiscussing
-	case slices.ContainsFunc(in.Drafts, func(d DraftState) bool { return pending(d.Draft) }):
+	case discarded:
+		return StatusEpicDiscarded
+	case slices.ContainsFunc(in.Drafts, func(d DraftState) bool { return !d.Draft.Decided() }):
 		return StatusDeciding
-	case slices.ContainsFunc(in.Drafts, func(d DraftState) bool { return d.Draft.Published.Done() }):
-		return StatusPublished
+	case short:
+		return StatusEpicCantPublish
+	case run && len(c.due()) > 0:
+		return StatusPublishing
+	case !slices.ContainsFunc(in.Drafts, func(d DraftState) bool { return pending(d.Draft) }):
+		return StatusReadyToArchive
 	default:
-		// Every draft was discarded, so the conversation is where the
-		// discussion is again.
-		return StatusDiscussing
+		return StatusNone
 	}
 }
 
-// pending reports whether a draft still asks something of the user or of a
-// publication: one to decide on, or an approved one that did not finish.
+// pending reports whether a draft is still to reach GitHub or to be
+// discarded.
 func pending(d discussion.Draft) bool {
-	return !d.Published.Done() && (d.Decision == discussion.DecisionNone || d.Decision == discussion.DecisionApproved)
+	return !d.Published.Done() && d.Decision != discussion.DecisionDiscarded
 }
 
-// draftStates is every draft with what can be done to it now, with running
-// saying which of them the publication under way writes.
-func draftStates(drafts []discussion.Draft, running map[string]bool) []DraftState {
-	c := chainOf(drafts)
-	states := make([]DraftState, 0, len(drafts))
-	for _, draft := range drafts {
-		state := DraftState{Draft: draft, Hold: c.hold(draft.ID), Publishing: running[draft.ID]}
-		if draft.Kind == discussion.KindEpic {
-			state.CanPublish, state.Hint = epicReady(draft, drafts)
-		} else {
-			state.Waits = waits(draft, drafts)
-			if epic, ok := epicDraftOf(draft, drafts); ok && epic.Decision == discussion.DecisionDiscarded {
-				state.Hint = hintEpicDiscarded
-			}
-		}
-		states = append(states, state)
+// draftStates is every draft with what keeps it out of the next run, with
+// running saying which of them the publication under way writes.
+func draftStates(c chain, running map[string]bool) []DraftState {
+	states := make([]DraftState, 0, len(c.drafts))
+	for _, d := range c.drafts {
+		states = append(states, DraftState{Draft: d, Hold: c.hold(d.ID), Publishing: running[d.ID]})
 	}
 	return states
 }
 
-// waits is the draft an approved card of its own waits for before it is
-// published: the first dependency of the discussion that is neither published
-// nor discarded.
-func waits(draft discussion.Draft, drafts []discussion.Draft) string {
-	if !standsAlone(draft, drafts) || draft.Decision != discussion.DecisionApproved || draft.Published.Done() {
-		return ""
-	}
-	for _, dependency := range draft.Dependencies {
-		if !dependency.IsDraft() || dependency.Dropped != discussion.DropNone {
-			continue
-		}
-		on, ok := draftOf(drafts, dependency.Draft)
-		if !ok || on.Published.Done() || on.Decision == discussion.DecisionDiscarded {
-			continue
-		}
-		return titleOf(on)
-	}
-	return ""
-}
-
-// epicReady says whether an epic can be published now, and why it cannot: its
-// cards are all settled, at least two of them are approved, and nothing they
-// depend on is still to come.
-func epicReady(epic discussion.Draft, drafts []discussion.Draft) (canPublish bool, hint string) {
-	if epic.Published.Done() || epic.PublishError != "" {
-		return false, ""
-	}
-
-	return epicSettled(epic, membersOf(epic, drafts), drafts)
-}
-
-// epicSettled says whether every card of an epic is where the run of it needs
-// them, and what is missing while they are not.
-func epicSettled(epic discussion.Draft, members, drafts []discussion.Draft) (canPublish bool, hint string) {
-	approved, undecided := 0, false
-	for _, member := range members {
-		switch member.Decision {
-		case discussion.DecisionApproved:
-			approved++
-		case discussion.DecisionDiscarded:
-		default:
-			undecided = true
-		}
-	}
-	switch {
-	case approved < minEpicCards:
-		return false, hintTooFewCards
-	case undecided:
-		return false, hintDecideEveryCard
-	case epic.Decision != discussion.DecisionApproved:
-		return false, hintApproveTheEpic
-	}
-	if outside := epicWaits(members, drafts); outside != "" {
-		return false, hintWaitsFor + outside
-	}
-	return true, ""
-}
-
-// epicWaits is the title of the first draft an approved card of the epic
-// depends on and that neither the run of the epic nor an earlier one settles.
-func epicWaits(members, drafts []discussion.Draft) string {
-	inRun := map[string]bool{}
-	for _, member := range members {
-		if member.Decision == discussion.DecisionApproved {
-			inRun[member.ID] = true
-		}
-	}
-	for _, member := range members {
-		if member.Decision != discussion.DecisionApproved {
-			continue
-		}
-		for _, dependency := range member.Dependencies {
-			if !dependency.IsDraft() || inRun[dependency.Draft] || dependency.Dropped != discussion.DropNone {
-				continue
-			}
-			on, ok := draftOf(drafts, dependency.Draft)
-			if !ok || on.Published.Done() || on.Decision == discussion.DecisionDiscarded {
-				continue
-			}
-			return titleOf(on)
-		}
-	}
-	return ""
-}
-
 // canArchive says whether a discussion can leave the list for the history, and
 // why it cannot: what was approved goes to GitHub first.
-func canArchive(drafts []discussion.Draft) (bool, string) {
-	for _, draft := range drafts {
-		if draft.PublishError != "" {
-			return false, hintPublicationFailed
-		}
+func canArchive(in State, c chain) (bool, string) {
+	if slices.ContainsFunc(in.Drafts, func(d DraftState) bool { return d.Draft.PublishError != "" }) {
+		return false, hintPublicationFailed
 	}
-	for _, draft := range drafts {
-		if draft.Decision == discussion.DecisionApproved && !draft.Published.Done() {
-			return false, hintWaitingPublication
-		}
+	if in.Publishing {
+		return false, hintPublicationRunning
+	}
+	if approved, cards, ok := in.ShortEpic(); ok {
+		return false, epicShortHint(approved, cards)
+	}
+	waiting := slices.ContainsFunc(in.Drafts, func(d DraftState) bool {
+		return d.Draft.Decision == discussion.DecisionApproved && !d.Draft.Published.Done() && !c.wontPublish(d.Draft.ID)
+	})
+	if waiting {
+		return false, hintWaitingPublication
 	}
 	return true, ""
 }

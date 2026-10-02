@@ -2067,9 +2067,6 @@ func fromDraft(
 		Publishing:   state.Publishing,
 		PublishError: d.PublishError,
 		Hold:         fromHold(state.Hold),
-		Waits:        state.Waits,
-		CanPublish:   state.CanPublish,
-		Hint:         state.Hint,
 	}
 	if d.Published.Done() {
 		converted.PublishedAt = d.Published.At.Format(time.RFC3339)

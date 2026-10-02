@@ -194,10 +194,23 @@ describe("TreeRow", () => {
       "discussion Invoices. idle, Discussing. #12.",
     ],
     [
-      "a published discussion",
-      discussionRow(makeDiscussion({ status: "published", cards: [] }), NOW),
-      "archive",
-      "discussion Invoices. ready to close, Ready to archive.",
+      "a discussion ready to archive",
+      discussionRow(
+        makeDiscussion({
+          status: "ready_to_archive",
+          cards: [],
+          situations: [
+            makeSituation({
+              kind: "ready_to_archive",
+              group: "closing",
+              place: { kind: "discussion", stage: "", step: 0 },
+            }),
+          ],
+        }),
+        NOW,
+      ),
+      "close",
+      "discussion Invoices. ready to close: Ready to archive · nothing published, for 2 hours. Discussing.",
     ],
   ])("draws %s under its whole sentence", (_, row, tone, sentence) => {
     renderRow(row);

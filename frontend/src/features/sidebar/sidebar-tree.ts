@@ -35,16 +35,7 @@ import {
 } from "@/lib/wails";
 
 /** RowTone is what a row says about its item, from the most severe: the three situation groups, then the states without a situation. */
-export type RowTone =
-  | "error"
-  | "wait"
-  | "close"
-  | "agent"
-  | "app"
-  | "github"
-  | "paused"
-  | "idle"
-  | "archive";
+export type RowTone = "error" | "wait" | "close" | "agent" | "app" | "github" | "paused" | "idle";
 
 /** ItemKind is the type glyph of a row. */
 export type ItemKind = "task" | "one-shot" | "review" | "discussion";
@@ -149,7 +140,7 @@ export type TreeEntry =
 
 /** NodeSummary is what a collapsed node says: a count per state, the most severe first. */
 export interface NodeSummary {
-  parts: { tone: Exclude<RowTone, "idle" | "archive">; count: number }[];
+  parts: { tone: Exclude<RowTone, "idle">; count: number }[];
   /** word names the first part: error or errors, waiting, to close, working, checks, paused. */
   word: string;
   /** label is every part in words: `1 error, 2 waiting, 1 ready to close, 1 working, 1 on GitHub, 1 paused`. */
@@ -157,7 +148,7 @@ export interface NodeSummary {
   situationIds: string[];
 }
 
-/** TONE_RANK orders the tones from the most severe; the agent and the app weigh the same, and so do idle and archive. */
+/** TONE_RANK orders the tones from the most severe; the agent and the app weigh the same. */
 export const TONE_RANK: Record<RowTone, number> = {
   error: 0,
   wait: 1,
@@ -167,7 +158,6 @@ export const TONE_RANK: Record<RowTone, number> = {
   github: 4,
   paused: 5,
   idle: 6,
-  archive: 6,
 };
 
 const REVIEWS_ID = "reviews";
@@ -637,8 +627,6 @@ function reviewStanding(review: ReviewSummary): Standing {
 
 function discussionStanding(discussion: DiscussionSummary): Standing {
   switch (asDiscussionStatus(discussion.status)) {
-    case "published":
-      return { tone: "archive", line2: same("Ready to archive"), clock: null };
     case "publishing":
       return appWork(same("Publishing"));
     default:
@@ -704,7 +692,6 @@ const TONE_WORDS: Record<RowTone, string> = {
   github: "waiting on GitHub",
   paused: "paused",
   idle: "idle",
-  archive: "ready to close",
 };
 
 interface RowParts {
@@ -1061,7 +1048,7 @@ const SUMMARY_WORDS: Record<SummaryTone, { word: string; label: string }> = {
 export function nodeSummary(rows: readonly ItemRow[]): NodeSummary | null {
   const counts = new Map<SummaryTone, number>();
   for (const row of rows) {
-    if (row.tone === "idle" || row.tone === "archive") {
+    if (row.tone === "idle") {
       continue;
     }
     const tone = row.tone === "app" ? "agent" : row.tone;

@@ -285,7 +285,6 @@ export const api = {
   groupIntoEpic: vi.fn<(id: string, draftIds: string[]) => Promise<string>>(() =>
     Promise.resolve("draft-epic"),
   ),
-  publishEpic: vi.fn<(id: string, draftId: string) => Promise<void>>(() => Promise.resolve()),
   retryPublish: vi.fn<(id: string, draftId: string) => Promise<void>>(() => Promise.resolve()),
   archiveDiscussion: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   deleteDiscussion: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
@@ -1186,9 +1185,6 @@ export function makeDraft(overrides: Partial<Draft> = {}): Draft {
     publishError: "",
     hold: { reason: "", title: "", left: 0, approved: 0, cards: 0 },
     publishing: false,
-    waits: "",
-    canPublish: false,
-    hint: "",
     ...overrides,
   };
 }

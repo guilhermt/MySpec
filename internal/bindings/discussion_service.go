@@ -187,19 +187,6 @@ func (s *DiscussionService) GroupIntoEpic(id string, draftIDs []string) (string,
 	return epic.ID, nil
 }
 
-// PublishEpic asks for an epic and the cards under it to go to GitHub
-// together. It returns as soon as the publication is asked for; what it writes
-// arrives as state.
-func (s *DiscussionService) PublishEpic(id, draftID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
-	defer cancel()
-
-	if err := s.flow.PublishEpic(ctx, id, draftID); err != nil {
-		return s.fail("PublishEpic", err)
-	}
-	return nil
-}
-
 // RetryPublish sends a draft whose publication failed to GitHub again, from
 // the step it stopped at.
 func (s *DiscussionService) RetryPublish(id, draftID string) error {

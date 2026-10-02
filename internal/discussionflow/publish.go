@@ -29,15 +29,14 @@ const (
 	msgNotRecorded       = "Couldn't record the publication: "
 )
 
-// publishDue writes on GitHub everything a discussion is ready to write: the
-// approved cards of their own that nothing waits for, and the epics the user
-// asked to publish with the cards under them. It answers at once: the run goes
-// on a goroutine of its own, so an evaluation never waits for GitHub.
+// publishDue writes on GitHub what the chain of a discussion lets go. It
+// answers at once: the run goes on a goroutine of its own, so an evaluation
+// never waits for GitHub.
 func (s *Service) publishDue(stored discussion.Discussion) {
 	if s.isClosed() {
 		return
 	}
-	if len(s.dueTargets(stored.ID)) == 0 {
+	if len(s.chain(stored.ID).due()) == 0 {
 		return
 	}
 
@@ -57,43 +56,11 @@ func (s *Service) publishDue(stored discussion.Discussion) {
 	go s.publishRun(stored)
 }
 
-// dueTargets are the drafts of a run: the cards of their own that can go now,
-// and the epics the user asked for that still have something to write. An epic
-// the discussion moved past is no longer the one the user asked to publish, so
-// the request goes. A draft whose publication only memory holds says so like
-// any other failure, and no run takes it.
-func (s *Service) dueTargets(id string) []discussion.Draft {
-	drafts := s.effectiveDrafts(id, s.discussions.Drafts(id))
-
-	var targets []discussion.Draft
-	for _, draft := range drafts {
-		if looseDue(draft, drafts) {
-			targets = append(targets, draft)
-		}
-	}
-	for _, epic := range drafts {
-		if epic.Kind != discussion.KindEpic || !s.epicRequested(id, epic.ID) {
-			continue
-		}
-		if !epicDue(epic, drafts) {
-			s.forgetEpic(id, epic.ID)
-			continue
-		}
-		if !epic.Published.Done() {
-			targets = append(targets, epic)
-		}
-		for _, member := range membersOf(epic, drafts) {
-			// A card whose epic is already on GitHub is published on its own,
-			// and the loop above answers for it.
-			if standsAlone(member, drafts) {
-				continue
-			}
-			if member.Decision == discussion.DecisionApproved && !member.Published.Done() {
-				targets = append(targets, member)
-			}
-		}
-	}
-	return targets
+// chain is the chain of a discussion as the app knows its drafts, a
+// publication only memory holds included: such a draft says so like any
+// other failure, and no run takes it.
+func (s *Service) chain(id string) chain {
+	return chainOf(s.effectiveDrafts(id, s.discussions.Drafts(id)))
 }
 
 // runningSet are the drafts of a run by id, which is what the interface reads
@@ -147,53 +114,6 @@ func (s *Service) dropUnrecorded(id, draftID string) {
 	defer s.mu.Unlock()
 
 	delete(l.unrecorded, draftID)
-}
-
-// looseDue reports whether a card of its own goes to GitHub now: the user
-// approved it, nothing was left half written and every draft it waits for is
-// settled.
-func looseDue(draft discussion.Draft, drafts []discussion.Draft) bool {
-	if draft.PublishError != "" {
-		return false
-	}
-	return standsAlone(draft, drafts) && draft.Decision == discussion.DecisionApproved &&
-		!draft.Published.Done() && waits(draft, drafts) == ""
-}
-
-// standsAlone reports whether a card is published on its own: it belongs to no
-// epic draft of the discussion, or to one that is already on GitHub and that
-// it only becomes a sub-issue of.
-func standsAlone(draft discussion.Draft, drafts []discussion.Draft) bool {
-	if !draft.IsCard() {
-		return false
-	}
-	if draft.Loose() {
-		return true
-	}
-	epic, ok := epicDraftOf(draft, drafts)
-	return ok && epic.Kind == discussion.KindEpic && epic.Published.Done()
-}
-
-// epicDue reports whether the run of an epic the user asked for still has
-// something to write: a failure waits for the user to retry, and an epic every
-// card of which is published is over.
-func epicDue(epic discussion.Draft, drafts []discussion.Draft) bool {
-	if epic.PublishError != "" {
-		return false
-	}
-	members := membersOf(epic, drafts)
-	if slices.ContainsFunc(members, func(m discussion.Draft) bool { return m.PublishError != "" }) {
-		return false
-	}
-	if settled, _ := epicSettled(epic, members, drafts); !settled {
-		return false
-	}
-	if !epic.Published.Done() {
-		return true
-	}
-	return slices.ContainsFunc(members, func(m discussion.Draft) bool {
-		return m.Decision == discussion.DecisionApproved && !m.Published.Done()
-	})
 }
 
 // orderTargets puts the drafts of a run in the order GitHub takes them: each
@@ -256,8 +176,9 @@ func (s *Service) publishRun(stored discussion.Discussion) {
 	ctx, cancel := context.WithTimeout(context.Background(), publishTimeout)
 	defer cancel()
 
-	targets, cycle := orderTargets(s.dueTargets(stored.ID))
-	if cycle {
+	c := s.chain(stored.ID)
+	targets := c.due()
+	if c.cycle {
 		s.log.Warn("discussion drafts have a dependency cycle", "discussion", stored.ID)
 	}
 

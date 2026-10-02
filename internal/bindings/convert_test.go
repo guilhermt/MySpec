@@ -2722,8 +2722,8 @@ func discussionDrafts() []discussionflow.DraftState {
 	}
 	return []discussionflow.DraftState{
 		{Draft: update},
-		{Draft: export, Waits: "Add the login screen", Hold: discussionflow.Hold{Reason: discussionflow.HoldDraft, Title: "Add the login screen"}},
-		{Draft: epic, Hint: "Approve the epic."},
+		{Draft: export, Hold: discussionflow.Hold{Reason: discussionflow.HoldDraft, Title: "Add the login screen"}},
+		{Draft: epic},
 	}
 }
 
@@ -2803,7 +2803,6 @@ func TestFromDiscussionsCarriesEveryDraftWithWhatTheReadingKnows(t *testing.T) {
 			Warnings:     []string{},
 			PublishError: "gh: the issue could not be created",
 			Hold:         bindings.DraftHold{Reason: "draft", Title: "Add the login screen"},
-			Waits:        "Add the login screen",
 		},
 		{
 			ID: "the-epic", Position: 3, Kind: "epic", Source: "user",
@@ -2811,7 +2810,6 @@ func TestFromDiscussionsCarriesEveryDraftWithWhatTheReadingKnows(t *testing.T) {
 			Title:      "The invoices", Body: "Everything about them.",
 			Dependencies: []bindings.DraftDependency{},
 			Warnings:     []string{},
-			Hint:         "Approve the epic.",
 		},
 	}
 	if diff := cmp.Diff(want, got.Drafts); diff != "" {
@@ -2964,7 +2962,7 @@ func TestFromDiscussionsLeavesADiscussionOfABoardThatIsGoneWithWhatItRecorded(t 
 func TestFromArchivedDiscussionsCountsWhatWasPublishedAndTheRepositoriesItTouched(t *testing.T) {
 	t.Parallel()
 
-	archived := discussionState(discussionflow.StatusPublished).Discussion
+	archived := discussionState(discussionflow.StatusReadyToArchive).Discussion
 	archived.ArchivedAt = readAt.Add(time.Hour)
 	stored := []discussion.Draft{discussionDrafts()[0].Draft, discussionDrafts()[1].Draft}
 	stored[1].Published = discussion.Publication{
@@ -3012,7 +3010,7 @@ func TestFromArchivedDiscussionsCountsWhatWasPublishedAndTheRepositoriesItTouche
 func TestFromArchivedDiscussionsKeepsTheRepositoriesOfADiscussionOfABoardThatIsGone(t *testing.T) {
 	t.Parallel()
 
-	archived := discussionState(discussionflow.StatusPublished).Discussion
+	archived := discussionState(discussionflow.StatusReadyToArchive).Discussion
 	archived.ArchivedAt = readAt.Add(time.Hour)
 	published := discussionDrafts()[1].Draft
 	published.Published = discussion.Publication{

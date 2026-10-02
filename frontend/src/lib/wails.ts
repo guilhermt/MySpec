@@ -524,8 +524,7 @@ export type DiscussionStatus =
   | "publish_failed"
   | "epic_discarded"
   | "epic_cant_publish"
-  | "ready_to_archive"
-  | "published";
+  | "ready_to_archive";
 
 /** DraftKind is what a draft does on GitHub: a new card, an update of one, or an epic over them. */
 export type DraftKind = "new" | "update" | "epic";
@@ -1234,7 +1233,6 @@ export function asDiscussionStatus(value: string): DiscussionStatus {
     case "epic_discarded":
     case "epic_cant_publish":
     case "ready_to_archive":
-    case "published":
       return value;
     default:
       return "discussing";
@@ -1483,8 +1481,6 @@ export const api = {
     DiscussionService.DecideDraft(id, draftId, decision),
   groupIntoEpic: (id: string, draftIds: string[]): Promise<string> =>
     DiscussionService.GroupIntoEpic(id, draftIds),
-  publishEpic: (id: string, draftId: string): Promise<void> =>
-    DiscussionService.PublishEpic(id, draftId),
   retryPublish: (id: string, draftId: string): Promise<void> =>
     DiscussionService.RetryPublish(id, draftId),
   archiveDiscussion: (id: string): Promise<void> => DiscussionService.ArchiveDiscussion(id),

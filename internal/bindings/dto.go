@@ -1503,14 +1503,6 @@ type Draft struct {
 	PublishError string `json:"publishError"` // why the last publication failed; "" otherwise
 	// Hold is what keeps the draft out of the next publication; Reason "" when nothing does.
 	Hold DraftHold `json:"hold"`
-	// Waits is the title of the draft this one waits for before it is
-	// published; "" when it waits for none.
-	Waits string `json:"waits"`
-	// CanPublish says Publish epic is enabled; epics only.
-	CanPublish bool `json:"canPublish"`
-	// Hint is why an epic can't be published, or why a card of a discarded
-	// epic goes nowhere.
-	Hint string `json:"hint"`
 }
 
 // DiscussionRepository is a repository of the board a new card can be created
@@ -1530,8 +1522,9 @@ type DiscussionSummary struct {
 	Board   string `json:"board"` // the title of the board
 	Title   string `json:"title"`
 	Text    string `json:"text"` // what the user wrote when creating it; "" for none
-	// Status is discussing, awaiting_drafts, deciding, publishing,
-	// publish_failed or published, a string for the same reason as State.Theme.
+	// Status is discussing, awaiting_drafts, deciding, publishing, publish_failed,
+	// epic_discarded, epic_cant_publish or ready_to_archive, a string for the
+	// same reason as State.Theme.
 	Status string           `json:"status"`
 	Cards  []DiscussionCard `json:"cards"`  // the cards it started from; never nil
 	Drafts []Draft          `json:"drafts"` // in position order; never nil

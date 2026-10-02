@@ -241,10 +241,36 @@ describe("DraftCard", () => {
     expect(screen.queryByText("Publishing…")).not.toBeInTheDocument();
   });
 
-  it("says what the draft waits for", () => {
-    card({ waits: "Invoices", decision: "approved" });
+  it.each([
+    ["epic_discarded", {}, "The epic is discarded · this card won't publish", true],
+    ["cards", { left: 2 }, "Approved · waits for 2 more cards of the epic to be decided", false],
+    [
+      "epic_short",
+      { approved: 1, cards: 3 },
+      "Approved · the epic needs two approved cards · 1 of 3",
+      true,
+    ],
+    ["epic", {}, "Approved · waits for the epic", false],
+    ["draft", { title: "Invoices" }, "Approved · waits for Invoices", false],
+  ])("says what the draft is held by: %s", (reason, hold, text, stands) => {
+    card({
+      decision: "approved",
+      hold: { reason, title: "", left: 0, approved: 0, cards: 0, ...hold },
+    });
 
-    expect(screen.getByText("Waits for Invoices")).toBeInTheDocument();
+    const line = screen.getByText(text);
+    expect(line).toBeInTheDocument();
+    expect(line.classList.contains("font-medium")).toBe(stands);
+  });
+
+  it("says nothing about a hold while the draft is publishing", () => {
+    card({
+      decision: "approved",
+      publishing: true,
+      hold: { reason: "epic", title: "", left: 0, approved: 0, cards: 0 },
+    });
+
+    expect(screen.queryByText("Approved · waits for the epic")).not.toBeInTheDocument();
   });
 
   it("carries the warnings of a draft", () => {

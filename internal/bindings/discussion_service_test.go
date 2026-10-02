@@ -47,7 +47,7 @@ func TestEditingAndDecidingTheDraftsOfADiscussionReachesTheState(t *testing.T) {
 	if err := f.discussionSvc.SetDraftRepository(d.ID, "export-invoices", repoID); err != nil {
 		t.Fatalf("SetDraftRepository() = %v, want nil", err)
 	}
-	for _, draftID := range []string{"billing", "export-invoices", "email-invoices"} {
+	for _, draftID := range []string{"billing", "export-invoices"} {
 		if err := f.discussionSvc.DecideDraft(d.ID, draftID, "approved"); err != nil {
 			t.Fatalf("DecideDraft(%s) = %v, want nil", draftID, err)
 		}
@@ -68,8 +68,8 @@ func TestEditingAndDecidingTheDraftsOfADiscussionReachesTheState(t *testing.T) {
 		t.Errorf("decision = %q, want approved", card.Decision)
 	}
 	epic := f.draftOf(t, d.ID, "billing")
-	if !epic.CanPublish || epic.Hint != "" {
-		t.Errorf("epic = %+v, want one ready to publish", epic)
+	if epic.Hold.Reason != "cards" || epic.Hold.Left != 1 {
+		t.Errorf("epic hold = %+v, want one that waits for the card left to decide", epic.Hold)
 	}
 }
 
@@ -149,27 +149,6 @@ func TestGroupingDraftsIntoAnEpicPointsThemAtIt(t *testing.T) {
 	}
 }
 
-func TestPublishingAnEpicIsRefusedUntilItIsReady(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	f.register(t, t.TempDir())
-	f.registerBoard(t, true)
-	d := f.seedDiscussion(t,
-		epicDraft("billing", "Billing"),
-		inEpic(webDraft("export-invoices", "Export the invoices"), "billing"),
-	)
-
-	err := f.discussionSvc.PublishEpic(d.ID, "billing")
-
-	if want := "The epic isn't ready to publish."; err == nil || err.Error() != want {
-		t.Errorf("PublishEpic() = %v, want %q", err, want)
-	}
-	if epic := f.draftOf(t, d.ID, "billing"); epic.CanPublish || epic.Hint != "An epic needs at least two cards." {
-		t.Errorf("epic = %+v, want one waiting for a second card", epic)
-	}
-}
-
 func TestArchivingADiscussionIsRefusedWhileADraftWaitsToBePublished(t *testing.T) {
 	t.Parallel()
 
@@ -186,10 +165,10 @@ func TestArchivingADiscussionIsRefusedWhileADraftWaitsToBePublished(t *testing.T
 
 	err := f.discussionSvc.ArchiveDiscussion(d.ID)
 
-	if want := "Approved drafts are waiting to be published."; err == nil || err.Error() != want {
+	if want := "Approved drafts wait to be published."; err == nil || err.Error() != want {
 		t.Errorf("ArchiveDiscussion() = %v, want %q", err, want)
 	}
-	if got := f.discussionOf(t, d.ID); got.CanArchive || got.ArchiveHint != "Approved drafts are waiting to be published." {
+	if got := f.discussionOf(t, d.ID); got.CanArchive || got.ArchiveHint != "Approved drafts wait to be published." {
 		t.Errorf("discussion = %+v, want one that cannot be archived yet", got)
 	}
 	if f.logged(t, "binding failed") {

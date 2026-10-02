@@ -41,8 +41,6 @@ export function discussionStatusLabel(discussion: DiscussionSummary): string {
       return "Epic discarded";
     case "ready_to_archive":
       return "Ready to archive";
-    case "published":
-      return "Drafts published";
   }
 }
 
@@ -55,7 +53,6 @@ export function discussionStatusTone(discussion: DiscussionSummary): StatusTone 
   switch (asDiscussionStatus(discussion.status)) {
     case "publishing":
       return "working";
-    case "published":
     case "ready_to_archive":
       return "done";
     case "discussing":
@@ -264,11 +261,6 @@ export function dependencyLabel(dependency: DependencyRef): string {
   return dependency.title === ""
     ? dependency.reference
     : `${dependency.reference} · ${dependency.title}`;
-}
-
-/** waitsLabel says what holds the publication of a draft back. */
-export function waitsLabel(draft: Draft): string {
-  return `Waits for ${draft.waits}`;
 }
 
 /**

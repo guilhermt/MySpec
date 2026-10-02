@@ -943,14 +943,6 @@ export async function groupIntoEpic(id: string, draftIds: string[]): Promise<str
   return epicId;
 }
 
-/**
- * publishEpic does not swallow its failure either: the card of the epic shows
- * the refusal where the user is.
- */
-export function publishEpic(id: string, draftId: string): Promise<void> {
-  return api.publishEpic(id, draftId);
-}
-
 /** retryPublish publishes a draft again, after a failure. */
 export async function retryPublish(id: string, draftId: string): Promise<void> {
   await run(fail(`Couldn't publish a draft of ${theItem(id)} again`, GH), () =>

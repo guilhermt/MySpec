@@ -572,6 +572,18 @@ func (f *fixture) approve(id, draftID string) {
 	f.decide(id, draftID, discussion.DecisionApproved)
 }
 
+// approveQuietly approves drafts without the evaluation that publishes what
+// the approval lets go, so that a test starts the run itself.
+func (f *fixture) approveQuietly(id string, draftIDs ...string) {
+	f.t.Helper()
+
+	for _, draftID := range draftIDs {
+		if err := f.discussions.Decide(f.t.Context(), id, draftID, discussion.DecisionApproved); err != nil {
+			f.t.Fatalf("approve draft %s: %v", draftID, err)
+		}
+	}
+}
+
 // waitPublished waits for a draft to be written on GitHub to the last step,
 // with the run that wrote it over.
 func (f *fixture) waitPublished(id, draftID string) discussion.Draft {
