@@ -1651,6 +1651,21 @@ func TestDecidePRFindingRejectsAnUnknownDecision(t *testing.T) {
 	}
 }
 
+func TestApplyingFindingsWithNoneApprovedSaysSo(t *testing.T) {
+	t.Parallel()
+
+	f, id := reviewedTask(t)
+	for _, number := range []int{1, 2} {
+		if err := f.taskSvc.DecidePRFinding(t.Context(), id, 1, number, prreport.DecisionDiscarded); err != nil {
+			t.Fatalf("DecidePRFinding(%d) = %v, want nil", number, err)
+		}
+	}
+
+	if err := f.tasks.ApplyPRFindings(id); err == nil || err.Error() != "No finding is approved." {
+		t.Errorf("ApplyPRFindings() = %v, want the sentence about no finding approved", err)
+	}
+}
+
 func TestAFindingARewriteRemovedSaysItNoLongerExists(t *testing.T) {
 	t.Parallel()
 
