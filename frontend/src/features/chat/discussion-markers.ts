@@ -3,8 +3,8 @@ import { holdStands } from "@/features/discussion/discussion-status";
 import { cardEntries, isBlocked } from "@/features/discussion/drafts-card";
 import { contextCharacters } from "@/features/discussion/new-discussion";
 import { draftTitle, publishedOutcome } from "@/lib/drafts";
-import { shortName } from "@/lib/repositories";
-import { counted } from "@/lib/situations";
+import { shortName, shortRef } from "@/lib/repositories";
+import { counted, listed } from "@/lib/situations";
 import type {
   DiscussionCard,
   Draft,
@@ -151,16 +151,6 @@ function line(
   return { icon, text, complement, body, timeHidden: false };
 }
 
-// numbers are the cards of entry as the Context says them: "#455, #461".
-function numbersOf(cards: readonly DiscussionCard[]): string {
-  const all = cards.map((card) => `#${card.number}`);
-  const last = all.at(-1);
-  if (all.length < 2 || last === undefined) {
-    return all.join("");
-  }
-  return `${all.slice(0, -1).join(", ")} and ${last}`;
-}
-
 // MOST_LISTED is how many cards of entry the Context lists before it counts the rest.
 const MOST_LISTED = 3;
 
@@ -170,17 +160,16 @@ function contextComplement(cards: readonly DiscussionCard[], epics: number | nul
     return "the board and your text";
   }
   const epic = epics === null || epics === 0 ? null : epics === 1 ? "epic" : `${epics} epics`;
+  const numbers = cards.map((card) => `#${card.number}`);
   if (cards.length > MOST_LISTED) {
-    const listed = cards.slice(0, MOST_LISTED).map((card) => `#${card.number}`);
     const rest = cards.length - MOST_LISTED;
-    const more = `${listed.join(", ")} and ${rest} more card${rest === 1 ? "" : "s"}`;
+    const more = `${numbers.slice(0, MOST_LISTED).join(", ")} and ${rest} more card${rest === 1 ? "" : "s"}`;
     return epic === null ? more : `${more}, with their ${epic}`;
   }
   if (epic === null) {
-    return numbersOf(cards);
+    return listed(numbers);
   }
-  const listed = cards.map((card) => `#${card.number}`).join(", ");
-  return `${listed} and ${cards.length === 1 ? "its" : "their"} ${epic}`;
+  return `${numbers.join(", ")} and ${cards.length === 1 ? "its" : "their"} ${epic}`;
 }
 
 /**
@@ -238,7 +227,7 @@ function beforeStatus(before: DraftBefore): string {
   }
   const outcome = asDraftOutcome(before.outcome);
   if (outcome !== "") {
-    return `${outcome === "created" ? "Created" : "Updated"} ${before.reference}`;
+    return `${outcome === "created" ? "Created" : "Updated"} ${shortRef(before.reference)}`;
   }
   return before.decision === "" ? "not changed" : `not changed · ${before.decision}`;
 }
@@ -253,12 +242,6 @@ function beforePrefix(before: DraftBefore): string {
     case "new":
       return "";
   }
-}
-
-// shortRef is an issue as the screen writes it, "billing#479" for "acme/billing#479".
-function shortRef(reference: string): string {
-  const hash = reference.lastIndexOf("#");
-  return hash === -1 ? reference : `${shortName(reference.slice(0, hash))}${reference.slice(hash)}`;
 }
 
 function beforeRow(before: DraftBefore, index: number): DraftRowView {

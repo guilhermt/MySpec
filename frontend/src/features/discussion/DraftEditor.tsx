@@ -65,7 +65,6 @@ function epicChoices(
           {
             value: "existing-issue",
             label: "Existing issue…",
-            disabled: true,
             action: { label: "Open", onAction: openIssue, closes: true },
           },
         ],

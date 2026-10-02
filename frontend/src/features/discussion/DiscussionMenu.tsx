@@ -18,7 +18,7 @@ export interface DiscussionMenuProps {
   discussion: DiscussionSummary;
 }
 
-/** DiscussionMenu is the ⋯ of a discussion: its board, archiving it, and its deletion. */
+/** DiscussionMenu is the ⋯ of a discussion: its board, grouping drafts into an epic, archiving it, and its deletion. */
 export function DiscussionMenu({ discussion }: DiscussionMenuProps) {
   const openDiscussionDialog = useAppStore((state) => state.openDiscussionDialog);
   const go = useAppStore((state) => state.go);

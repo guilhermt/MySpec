@@ -44,7 +44,9 @@ function Subject() {
           sub="Clone failed"
           subTone="error"
           action={{ label: "Clone", onAction: () => {} }}
+          disabled
         />
+        <MenuActionItem label="Existing issue…" action={{ label: "Open", onAction: () => {} }} />
         <MenuRadioGroup value=""></MenuRadioGroup>
       </MenuContent>
     </Menu>
@@ -141,6 +143,14 @@ describe.each(THEMES)("Menu in the %s theme", (theme) => {
     expect(paintOf(item, { color: "" })).toEqual({ color: token("--ink-4") });
     expect(getComputedStyle(screen.getByText("Clone failed")).color).toBe(token("--state-error"));
     expect(getComputedStyle(screen.getByText("Clone")).color).toBe(token("--ink-3"));
+  });
+
+  it("writes an item that is its action in the ink of any item, the action in the third ink", async () => {
+    setTheme(theme);
+    await open();
+    const item = screen.getByRole("menuitem", { name: "Existing issue…. Enter opens it." });
+    expect(paintOf(item, { color: "" })).toEqual({ color: token("--ink-1") });
+    expect(getComputedStyle(screen.getByText("Open")).color).toBe(token("--ink-3"));
   });
 });
 

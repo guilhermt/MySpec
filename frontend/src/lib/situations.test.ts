@@ -11,6 +11,7 @@ import {
   DURATION_SLOW_MS,
   discussionSituation,
   FLASH_MS,
+  listed,
   nextWaiting,
   prSituation,
   reviewerSituation,
@@ -470,6 +471,17 @@ describe("compactWait and spokenWait", () => {
   ])("tells a wait of %s", (_wait, startedAt, compact, spoken) => {
     expect(compactWait(startedAt, now)).toBe(compact);
     expect(spokenWait(startedAt, now)).toBe(spoken);
+  });
+});
+
+describe("listed", () => {
+  it.each<[string[], string]>([
+    [[], ""],
+    [["#455"], "#455"],
+    [["#455", "#461"], "#455 and #461"],
+    [["a", "b", "c"], "a, b and c"],
+  ])("joins %j as %j", (items, want) => {
+    expect(listed(items)).toBe(want);
   });
 });
 

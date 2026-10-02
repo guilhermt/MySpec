@@ -2911,6 +2911,20 @@ func TestMarkDiscussionRecordsEachMarkerOnce(t *testing.T) {
 			},
 		},
 		{
+			name: "an emptied round comes back written",
+			mark: []session.MarkerEntry{
+				{Type: session.MarkerDraftsWritten, Round: 1, Count: 3},
+				{Type: session.MarkerDraftsRevised, Round: 1, Dropped: 3},
+				{Type: session.MarkerDraftsWritten, Round: 1, Count: 2},
+				{Type: session.MarkerDraftsWritten, Round: 1, Count: 2},
+			},
+			want: []session.MarkerEntry{
+				{Type: session.MarkerDraftsWritten, Round: 1, Count: 3},
+				{Type: session.MarkerDraftsRevised, Round: 1, Dropped: 3},
+				{Type: session.MarkerDraftsWritten, Round: 1, Count: 2},
+			},
+		},
+		{
 			name: "a publication by its round",
 			mark: []session.MarkerEntry{
 				{Type: session.MarkerDraftsPublished, Round: 1},

@@ -1,6 +1,6 @@
-import { counted, discussionSituation } from "@/lib/situations";
-import type { DiscussionSummary, Draft, DraftDependency, DraftRef } from "@/lib/wails";
-import { asDraftKind, asDraftOutcome, asHoldReason, asSituationKind } from "@/lib/wails";
+import { counted } from "@/lib/situations";
+import type { Draft, DraftDependency, DraftRef } from "@/lib/wails";
+import { asDraftKind, asDraftOutcome, asHoldReason } from "@/lib/wails";
 
 /** EpicGroup is an epic of a discussion with the cards that belong to it. */
 export interface EpicGroup {
@@ -60,39 +60,44 @@ export function readyToArchiveDetail(published: number, rounds = 1): string {
   return `${published === 0 ? "nothing" : published} published${where} · or ask the agent for more cards below`;
 }
 
-/** standingDetail is the middle of the bar of a discussion, by the situation it is in; null for the others. */
-export function standingDetail(discussion: DiscussionSummary): string | null {
-  const situation = discussionSituation(discussion);
-  const drafts = discussion.drafts ?? [];
-  switch (situation === null ? null : asSituationKind(situation.kind)) {
-    case "epic_cant_publish": {
-      const epic = drafts.find(
-        (draft) =>
-          asDraftKind(draft.kind) === "epic" && asHoldReason(draft.hold.reason) === "epic_short",
-      );
-      return epic === undefined ? null : epicWayOut(epic.hold.approved, epic.hold.cards);
+/** StandingKind is each situation whose bar names an epic: one that can't publish, or one discarded. */
+export type StandingKind = "epic_cant_publish" | "epic_discarded";
+
+// heldByDiscarded are the approved cards a discarded epic keeps from publishing.
+function heldByDiscarded(epic: Draft, drafts: readonly Draft[]): number {
+  return drafts.filter(
+    (draft) =>
+      draft.epic?.draft === epic.id &&
+      draft.decision === "approved" &&
+      asHoldReason(draft.hold.reason) === "epic_discarded",
+  ).length;
+}
+
+/**
+ * standingEpic is the epic the bar of the situation names, among the drafts given (those of the
+ * round): the first approved epic that can't publish, or the first discarded one that holds an
+ * approved card; undefined when none does.
+ */
+export function standingEpic(kind: StandingKind, drafts: readonly Draft[]): Draft | undefined {
+  return drafts.find((draft) => {
+    if (asDraftKind(draft.kind) !== "epic") {
+      return false;
     }
-    case "epic_discarded": {
-      for (const epic of drafts.filter(
-        (draft) => asDraftKind(draft.kind) === "epic" && draft.decision === "discarded",
-      )) {
-        const approved = drafts.filter(
-          (draft) =>
-            draft.epic?.draft === epic.id &&
-            draft.decision === "approved" &&
-            asHoldReason(draft.hold.reason) === "epic_discarded",
-        ).length;
-        if (approved > 0) {
-          return epicDiscardedDetail(approved);
-        }
-      }
-      return null;
-    }
-    case "ready_to_archive":
-      return readyToArchiveDetail(drafts.filter((draft) => draft.published).length);
-    default:
-      return null;
+    return kind === "epic_cant_publish"
+      ? draft.decision === "approved" && asHoldReason(draft.hold.reason) === "epic_short"
+      : draft.decision === "discarded" && heldByDiscarded(draft, drafts) > 0;
+  });
+}
+
+/** standingDetail is the middle of the bar of the situation, of the epic standingEpic names; null when none does. */
+export function standingDetail(kind: StandingKind, drafts: readonly Draft[]): string | null {
+  const epic = standingEpic(kind, drafts);
+  if (epic === undefined) {
+    return null;
   }
+  return kind === "epic_cant_publish"
+    ? epicWayOut(epic.hold.approved, epic.hold.cards)
+    : epicDiscardedDetail(heldByDiscarded(epic, drafts));
 }
 
 /** kindLabel names what a draft would do on GitHub. */

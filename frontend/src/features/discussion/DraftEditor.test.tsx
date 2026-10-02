@@ -183,7 +183,7 @@ describe("DraftEditor, Existing issue…", () => {
     const item = await screen.findByRole("menuitem", {
       name: "Existing issue…. Enter opens it.",
     });
-    expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(item).not.toHaveAttribute("aria-disabled");
     expect(screen.queryByRole("menuitemradio", { name: /Existing issue/ })).not.toBeInTheDocument();
 
     item.focus();

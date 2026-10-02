@@ -175,6 +175,18 @@ func TestAReadingMarksTheDrafts(t *testing.T) {
 	if n := len(f.sessions.markersOf(session.MarkerDraftsWritten)); n != 2 {
 		t.Errorf("the readings marked %d rounds written, want 2", n)
 	}
+
+	// The agent empties the round 2, and the drafts it writes again are the
+	// round 2 written once more.
+	f.replace(id, discussion.DraftsFile, "---\nstatus: none\n---\n")
+	f.flow.Check(id)
+	f.waitMarkers(session.MarkerDraftsRevised, 2)
+	f.replace(id, discussion.DraftsFile, looseCardsArtifact)
+	f.flow.Check(id)
+	got = f.waitMarkers(session.MarkerDraftsWritten, 3)
+	if diff := cmp.Diff(session.MarkerEntry{Type: session.MarkerDraftsWritten, Round: 2, Count: 2}, got[2]); diff != "" {
+		t.Errorf("the emptied round came back marked wrong (-want +got):\n%s", diff)
+	}
 }
 
 func TestAReadingThatTakesOutEveryDraftMarksTheRevision(t *testing.T) {

@@ -937,9 +937,10 @@ func (s *Service) MarkFindingsDecided(ctx context.Context, k Key, pass, approved
 }
 
 // MarkDiscussion records a marker of a discussion, once: a document by its
-// stamp, the first readable reading and the publication of a round by the
-// round, an unreadable drafts.md by its reason against the last marker of the
-// drafts. A closed or absent session records nothing.
+// stamp, the publication of a round by the round, the first readable reading
+// of a round against the last marker that wrote or revised the drafts, an
+// unreadable drafts.md by its reason against the last marker of the drafts. A
+// closed or absent session records nothing.
 func (s *Service) MarkDiscussion(ctx context.Context, k Key, marker *MarkerEntry) {
 	n := &notes{}
 	defer s.flush(n)
@@ -965,7 +966,20 @@ func (s *Service) MarkDiscussion(ctx context.Context, k Key, marker *MarkerEntry
 			break
 		}
 		m.First = first
-	case MarkerDraftsWritten, MarkerDraftsPublished:
+	case MarkerDraftsWritten:
+		// A round the agent emptied comes back written: only a reading the
+		// last marker of the drafts already wrote is the same one.
+		for _, e := range slices.Backward(r.entries) {
+			if e.Kind != KindMarker || e.Marker == nil ||
+				(e.Marker.Type != MarkerDraftsWritten && e.Marker.Type != MarkerDraftsRevised) {
+				continue
+			}
+			if e.Marker.Type == MarkerDraftsWritten && e.Marker.Round == m.Round {
+				return
+			}
+			break
+		}
+	case MarkerDraftsPublished:
 		for _, e := range r.entries {
 			if e.Kind == KindMarker && e.Marker != nil && e.Marker.Type == m.Type && e.Marker.Round == m.Round {
 				return

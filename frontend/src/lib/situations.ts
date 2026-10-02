@@ -49,6 +49,15 @@ export function counted(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
+/** listed joins parts by ", " with " and " before the last, without a comma before it: "a, b and c". */
+export function listed(items: readonly string[]): string {
+  const last = items.at(-1);
+  if (items.length < 2 || last === undefined) {
+    return items.join("");
+  }
+  return `${items.slice(0, -1).join(", ")} and ${last}`;
+}
+
 /**
  * situationLabel is what a situation asks of the user, in the few words the
  * lists and the section have room for. A situation with more than one form

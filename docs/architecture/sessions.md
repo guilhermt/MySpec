@@ -138,7 +138,7 @@ Os marcos da discussão, além de `discussion_started`, são cinco, gravados por
 - `drafts_unreadable`, com a razão (`discussion.Reason`, a regra que o arquivo quebra, sem o caminho) e a rodada;
 - `drafts_published`, o primeiro rascunho de uma rodada que chegou ao GitHub ou falhou ao ir, com a rodada.
 
-A deduplicação mora na sessão, que tem a conversa, e por isso um reinício não repete nada: o documento é gravado uma vez por carimbo (comparado ao do último marco de documento), `drafts_written` e `drafts_published` uma vez por rodada, `drafts_unreadable` uma vez por razão contra o último marco de rascunhos (`drafts_written`, `drafts_revised` ou `drafts_unreadable`), e `drafts_revised` sempre. Uma sessão fechada ou ausente não grava nada.
+A deduplicação mora na sessão, que tem a conversa, e por isso um reinício não repete nada: o documento é gravado uma vez por carimbo (comparado ao do último marco de documento), `drafts_published` uma vez por rodada, `drafts_written` só quando o último marco que escreveu ou revisou os rascunhos (`drafts_written` ou `drafts_revised`) não é um `drafts_written` da mesma rodada, para que uma rodada que o agente esvaziou volte escrita, `drafts_unreadable` uma vez por razão contra o último marco de rascunhos (`drafts_written`, `drafts_revised` ou `drafts_unreadable`), e `drafts_revised` sempre. Uma sessão fechada ou ausente não grava nada.
 
 ## Correções automáticas
 

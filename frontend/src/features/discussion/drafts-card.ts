@@ -8,8 +8,8 @@ import type {
 } from "@/components/system/draft-views";
 import { holdLabel, holdStands, kindLabel, refKey } from "@/features/discussion/discussion-status";
 import { draftTitle } from "@/lib/drafts";
-import { shortName } from "@/lib/repositories";
-import { counted } from "@/lib/situations";
+import { shortName, shortRef } from "@/lib/repositories";
+import { counted, listed } from "@/lib/situations";
 import type { DiscussionSummary, Draft, DraftDependency, DraftRef } from "@/lib/wails";
 import { asDraftKind, asDraftOutcome, asHoldReason } from "@/lib/wails";
 import { shortTime } from "@/lib/when";
@@ -108,12 +108,6 @@ export function nextToDecide(
     }
   }
   return null;
-}
-
-// shortRef is an issue as the screen writes it, "billing#479" for "acme/billing#479".
-function shortRef(reference: string): string {
-  const hash = reference.lastIndexOf("#");
-  return hash === -1 ? reference : `${shortName(reference.slice(0, hash))}${reference.slice(hash)}`;
 }
 
 // issueOf is the issue a started draft made or changed, null before it has a number.
@@ -385,12 +379,7 @@ function nameOf(id: string, self: Draft, drafts: readonly Draft[]): string {
 
 // names joins the names of a chain by ", " with " and " before the last.
 function names(ids: readonly string[], self: Draft, drafts: readonly Draft[]): string {
-  const all = ids.map((id) => nameOf(id, self, drafts));
-  const last = all.at(-1);
-  if (all.length < 2 || last === undefined) {
-    return all.join("");
-  }
-  return `${all.slice(0, -1).join(", ")} and ${last}`;
+  return listed(ids.map((id) => nameOf(id, self, drafts)));
 }
 
 // blockedText is why a draft can't publish, as the gesture line and the reason of Approve say it.

@@ -192,7 +192,7 @@ describe("Select", () => {
     expect(screen.getByRole("menu")).toBeInTheDocument();
   });
 
-  it("runs an action that closes the menu with Enter, without choosing it", async () => {
+  it("runs the action of an option that is not disabled and closes the menu with Enter, without choosing it", async () => {
     const onAction = vi.fn();
     const onValueChange = vi.fn();
     const { user } = renderWithStore(
@@ -206,7 +206,6 @@ describe("Select", () => {
               {
                 value: "existing-issue",
                 label: "Existing issue…",
-                disabled: true,
                 action: { label: "Open", onAction, closes: true },
               },
             ],
@@ -217,6 +216,7 @@ describe("Select", () => {
     );
     await user.click(screen.getByRole("button", { name: "Model: Opus" }));
     const item = await screen.findByRole("menuitem", { name: "Existing issue…. Enter opens it." });
+    expect(item).not.toHaveAttribute("aria-disabled");
     item.focus();
     await user.keyboard("{Enter}");
     expect(onAction).toHaveBeenCalledTimes(1);

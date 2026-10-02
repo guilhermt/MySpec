@@ -1,7 +1,11 @@
 import type { RequestButton, RequestModel } from "@/components/system/RequestBar";
 import type { ComposerContext, ComposerStarter, DraftsComposer } from "@/features/chat/composer";
 import type { DiscussionInput } from "@/features/chat/discussion-markers";
-import { readyToArchiveDetail, standingDetail } from "@/features/discussion/discussion-status";
+import {
+  readyToArchiveDetail,
+  standingDetail,
+  standingEpic,
+} from "@/features/discussion/discussion-status";
 import { cardEntries, isDecided, nextToDecide } from "@/features/discussion/drafts-card";
 import {
   type Bar,
@@ -18,8 +22,6 @@ import { compactWait, discussionSituation, lowerFirst, spokenWait } from "@/lib/
 import type { DiscussionSummary, Situation, SituationKind } from "@/lib/wails";
 import {
   asDiscussionStatus,
-  asDraftKind,
-  asHoldReason,
   asSessionStatus,
   asSituationGroup,
   asSituationKind,
@@ -99,27 +101,9 @@ function targetOf(
       const draft = nextToDecide(entries, null, 1);
       return draft === null ? null : { draft, retry: false };
     }
-    case "epic_cant_publish": {
-      const epic = drafts.find(
-        (draft) =>
-          asDraftKind(draft.kind) === "epic" &&
-          draft.decision === "approved" &&
-          asHoldReason(draft.hold.reason) === "epic_short",
-      );
-      return epic === undefined ? null : { draft: epic.id, retry: false };
-    }
+    case "epic_cant_publish":
     case "epic_discarded": {
-      const epic = drafts.find(
-        (draft) =>
-          asDraftKind(draft.kind) === "epic" &&
-          draft.decision === "discarded" &&
-          drafts.some(
-            (card) =>
-              card.epic?.draft === draft.id &&
-              card.decision === "approved" &&
-              asHoldReason(card.hold.reason) === "epic_discarded",
-          ),
-      );
+      const epic = standingEpic(kind, drafts);
       return epic === undefined ? null : { draft: epic.id, retry: false };
     }
     case "publish_failed": {
@@ -134,9 +118,9 @@ function targetOf(
 function barOf(discussion: DiscussionSummary, kind: DiscussionKind): DiscussionBar {
   const place = placeOf(discussion);
   const target = targetOf(discussion, kind);
+  const round = cardEntries(discussion).map((entry) => entry.draft);
   switch (kind) {
     case "drafts": {
-      const round = cardEntries(discussion).map((entry) => entry.draft);
       const decided = round.filter(isDecided).length;
       return {
         form: "decision",
@@ -154,7 +138,7 @@ function barOf(discussion: DiscussionSummary, kind: DiscussionKind): DiscussionB
         form: "tinted",
         label: "Epic can't publish",
         place,
-        progress: standingDetail(discussion) ?? "",
+        progress: standingDetail(kind, round) ?? "",
         status: statusOf("Epic can't publish", place),
         actions: [showButton("Go to the epic")],
         focus: "draft",
@@ -165,7 +149,7 @@ function barOf(discussion: DiscussionSummary, kind: DiscussionKind): DiscussionB
         form: "tinted",
         label: "Epic discarded",
         place,
-        progress: standingDetail(discussion) ?? "",
+        progress: standingDetail(kind, round) ?? "",
         status: statusOf("Epic discarded", place),
         actions: [showButton()],
         focus: "draft",

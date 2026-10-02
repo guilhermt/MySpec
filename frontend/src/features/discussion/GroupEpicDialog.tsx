@@ -87,7 +87,14 @@ export function GroupEpicDialog({ discussion, open, onOpenChange }: GroupEpicDia
   return (
     <Dialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        // While the call runs, the dialog stays: a refusal that comes back has its footer.
+        if (!next && grouping) {
+          return;
+        }
+        onOpenChange(next);
+      }}
+      closeDisabled={grouping}
       title="Group drafts into an epic"
       initialFocus={titleRef}
       onConfirm={() => void group()}

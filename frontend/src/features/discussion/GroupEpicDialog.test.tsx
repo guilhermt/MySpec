@@ -163,6 +163,32 @@ describe("GroupEpicDialog", () => {
     expect(useAppStore.getState().error).toBeNull();
   });
 
+  it("keeps Cancel, × and Esc inert while it groups, and groups once", async () => {
+    let finish: (id: string) => void = () => {};
+    vi.mocked(api.groupIntoEpic).mockReturnValueOnce(
+      new Promise<string>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const { user, onOpenChange } = draw();
+
+    await user.type(screen.getByRole("textbox", { name: "Title of the epic" }), "Pricing tiers");
+    await user.click(group(2));
+
+    const busy = await screen.findByRole("button", { name: "Grouping…" });
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Close" })).toHaveAttribute("aria-disabled", "true");
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(busy);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(api.groupIntoEpic).toHaveBeenCalledOnce();
+
+    finish("draft-epic");
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  });
+
   it("starts each opening with an empty title", () => {
     const { rerender, discussion } = draw();
     rerender(<GroupEpicDialog discussion={discussion} open={false} onOpenChange={vi.fn()} />);

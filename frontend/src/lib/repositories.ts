@@ -15,6 +15,12 @@ export function shortName(fullName: string): string {
   return slash === -1 ? fullName : fullName.slice(slash + 1);
 }
 
+/** shortRef is an issue as the screen writes it, "billing#479" for "acme/billing#479". */
+export function shortRef(reference: string): string {
+  const hash = reference.lastIndexOf("#");
+  return hash === -1 ? reference : `${shortName(reference.slice(0, hash))}${reference.slice(hash)}`;
+}
+
 /** findRepository is the registered repository of an id, null when none is. */
 export function findRepository(app: State | null, id: string): Repository | null {
   return repositoriesOf(app).find((repository) => repository.id === id) ?? null;

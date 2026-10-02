@@ -963,11 +963,11 @@ export async function groupIntoEpicInPlace(
   title: string,
   repositoryId: string,
 ): Promise<{ epicId: string } | { error: string }> {
-  try {
-    return { epicId: await api.groupIntoEpic(id, draftIds, title, repositoryId) };
-  } catch (error) {
-    return { error: messageOf(error) };
-  }
+  let epicId = "";
+  const error = await inPlace(async () => {
+    epicId = await api.groupIntoEpic(id, draftIds, title, repositoryId);
+  });
+  return error === null ? { epicId } : { error };
 }
 
 /** retryPublish publishes a draft again, after a failure. */
@@ -981,15 +981,11 @@ export async function retryPublish(id: string, draftId: string): Promise<void> {
 // marks the item as runRemoval does, and answers the message of the failure, or null.
 async function removalInPlace(id: string, operation: () => Promise<void>): Promise<string | null> {
   useAppStore.setState({ expectGone: id });
-  try {
-    await operation();
-    return null;
-  } catch (error) {
-    if (useAppStore.getState().expectGone === id) {
-      useAppStore.setState({ expectGone: null });
-    }
-    return messageOf(error);
+  const error = await inPlace(operation);
+  if (error !== null && useAppStore.getState().expectGone === id) {
+    useAppStore.setState({ expectGone: null });
   }
+  return error;
 }
 
 /** archiveDiscussionInPlace ends the conversation and sends the discussion to the history; it answers the refusal, or null. */

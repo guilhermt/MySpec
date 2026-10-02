@@ -14,15 +14,10 @@ import {
   refKey,
   refValue,
   standingDetail,
+  standingEpic,
 } from "@/features/discussion/discussion-status";
-import type { Draft, Situation } from "@/lib/wails";
-import { makeDiscussion, makeDraft, makeDraftRef, makeSituation } from "@/test/wails-mock";
-
-const DISCUSSION_PLACE = { kind: "discussion", stage: "", step: 0 };
-
-function discussionSituation(kind: string, group = "waiting"): Situation {
-  return makeSituation({ taskId: "discussion-1", kind, group, place: DISCUSSION_PLACE });
-}
+import type { Draft } from "@/lib/wails";
+import { makeDraft, makeDraftRef } from "@/test/wails-mock";
 
 function held(reason: string, hold: Partial<Draft["hold"]> = {}): Draft {
   return makeDraft({
@@ -198,6 +193,14 @@ describe("readyToArchiveDetail", () => {
 });
 
 describe("standingDetail", () => {
+  const heldCard = (id: string, epic: string) =>
+    makeDraft({
+      id,
+      decision: "approved",
+      epic: makeDraftRef({ draft: epic }),
+      hold: { reason: "epic_discarded", title: "", left: 0, approved: 0, cards: 0 },
+    });
+
   it("tells how far the epic that can't publish is", () => {
     const epic = makeDraft({
       id: "epic-1",
@@ -205,12 +208,8 @@ describe("standingDetail", () => {
       decision: "approved",
       hold: { reason: "epic_short", title: "", left: 0, approved: 1, cards: 3 },
     });
-    const discussion = makeDiscussion({
-      drafts: [makeDraft({ id: "card" }), epic],
-      situations: [discussionSituation("epic_cant_publish")],
-    });
 
-    expect(standingDetail(discussion)).toBe(
+    expect(standingDetail("epic_cant_publish", [makeDraft({ id: "card" }), epic])).toBe(
       "1 of 3 cards approved · approve one more, or discard the epic",
     );
   });
@@ -218,52 +217,33 @@ describe("standingDetail", () => {
   it("tells the approved cards of the discarded epic", () => {
     const drafts = [
       makeDraft({ id: "epic-1", kind: "epic", decision: "discarded" }),
-      makeDraft({
-        id: "card-1",
-        decision: "approved",
-        epic: makeDraftRef({ draft: "epic-1" }),
-        hold: { reason: "epic_discarded", title: "", left: 0, approved: 0, cards: 0 },
-      }),
-      makeDraft({
-        id: "card-2",
-        decision: "approved",
-        epic: makeDraftRef({ draft: "epic-1" }),
-        hold: { reason: "epic_discarded", title: "", left: 0, approved: 0, cards: 0 },
-      }),
+      heldCard("card-1", "epic-1"),
+      heldCard("card-2", "epic-1"),
     ];
-    const discussion = makeDiscussion({
-      drafts,
-      situations: [discussionSituation("epic_discarded")],
-    });
 
-    expect(standingDetail(discussion)).toBe(
+    expect(standingDetail("epic_discarded", drafts)).toBe(
       "2 approved cards of it won't publish · approve the epic again, or discard them",
     );
   });
 
-  it("tells what a discussion ready to archive published, without what it discarded", () => {
-    const discussion = makeDiscussion({
-      drafts: [
-        makeDraft({ published: true }),
-        makeDraft({ id: "two", published: true }),
-        makeDraft({ id: "three", decision: "discarded" }),
-      ],
-      situations: [discussionSituation("ready_to_archive", "closing")],
-    });
+  it("names the discarded epic that holds an approved card, as Show does", () => {
+    const quiet = makeDraft({ id: "epic-1", kind: "epic", decision: "discarded" });
+    const holding = makeDraft({ id: "epic-2", kind: "epic", decision: "discarded" });
+    const drafts = [quiet, holding, heldCard("card-1", "epic-2")];
 
-    expect(standingDetail(discussion)).toBe("2 published · or ask the agent for more cards below");
+    expect(standingEpic("epic_discarded", drafts)).toBe(holding);
+    expect(standingDetail("epic_discarded", drafts)).toBe(
+      "1 approved card of it won't publish · approve the epic again, or discard it",
+    );
   });
 
-  it("is null without a situation, for another one, and when the draft that explains it is gone", () => {
-    expect(standingDetail(makeDiscussion())).toBeNull();
+  it("is null when no draft given explains it", () => {
+    expect(standingDetail("epic_cant_publish", [])).toBeNull();
+    expect(standingDetail("epic_discarded", [])).toBeNull();
     expect(
-      standingDetail(makeDiscussion({ situations: [discussionSituation("drafts")] })),
-    ).toBeNull();
-    expect(
-      standingDetail(makeDiscussion({ situations: [discussionSituation("epic_cant_publish")] })),
-    ).toBeNull();
-    expect(
-      standingDetail(makeDiscussion({ situations: [discussionSituation("epic_discarded")] })),
+      standingDetail("epic_discarded", [
+        makeDraft({ id: "epic-1", kind: "epic", decision: "discarded" }),
+      ]),
     ).toBeNull();
   });
 });

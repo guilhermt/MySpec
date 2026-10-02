@@ -27,7 +27,7 @@ export interface SelectOption {
   unavailable?: boolean;
   /** disabled is an option that can't be chosen, its reason in sub. */
   disabled?: boolean;
-  /** action is what Enter or a click does on a disabled option instead of choosing it: Clone. */
+  /** action is what Enter or a click does instead of choosing the option: Clone on a disabled one, Existing issue… on one that isn't. */
   action?: ItemAction;
 }
 
@@ -183,14 +183,21 @@ export function ChosenText({
   return loading ? <Shimmer>{text}</Shimmer> : text;
 }
 
-/** SelectItem is a choice of the menu of a Select: a disabled one with an action offers it instead of the choice. */
+/** SelectItem is a choice of the menu of a Select: one with an action runs it instead of being chosen. */
 function SelectItem({ option }: { option: SelectOption }) {
   const sub = {
     ...(option.sub !== undefined ? { sub: option.sub } : {}),
     ...(option.subTone !== undefined ? { subTone: option.subTone } : {}),
   };
-  if (option.disabled && option.action !== undefined) {
-    return <MenuActionItem label={option.label} action={option.action} {...sub} />;
+  if (option.action !== undefined) {
+    return (
+      <MenuActionItem
+        label={option.label}
+        action={option.action}
+        {...(option.disabled ? { disabled: true } : {})}
+        {...sub}
+      />
+    );
   }
   return (
     <MenuRadioItem

@@ -1446,7 +1446,7 @@ describe("revisedLineOf", () => {
         row({
           key: "6·Billing page",
           title: "Billing page",
-          status: "Created acme/billing#479",
+          status: "Created billing#479",
           tone: "quiet",
         }),
         row({
@@ -1851,6 +1851,40 @@ describe("roundFolds", () => {
     expect([...folds.asRound]).toEqual([["w1", 1]]);
     expect([...folds.hidden]).toEqual(["r1"]);
     expect([...folds.before]).toEqual([]);
+  });
+
+  it("folds a round emptied and written again into its first Drafts written, hiding the second", () => {
+    const entries = [
+      entry("w1", { type: "drafts_written", round: 1, count: 2 }),
+      entry("r1", { type: "drafts_revised", round: 1, dropped: 2 }),
+      entry("w1b", { type: "drafts_written", round: 1, count: 1 }),
+      entry("p1", { type: "drafts_published", round: 1 }),
+      entry("w2", { type: "drafts_written", round: 2, count: 1 }),
+    ];
+    const unpublished = entries.filter((one) => one.id !== "p1");
+
+    const published = roundFolds(entries, two);
+    const discarded = roundFolds(unpublished, two);
+
+    expect([...published.asRound]).toEqual([["p1", 1]]);
+    expect([...published.hidden].sort()).toEqual(["r1", "w1", "w1b"]);
+    expect([...discarded.asRound]).toEqual([["w1", 1]]);
+    expect([...discarded.hidden].sort()).toEqual(["r1", "w1b"]);
+    expect([...discarded.before]).toEqual([]);
+  });
+
+  it("keeps both Drafts written of a current round emptied and written again, the card after the second", () => {
+    const entries = [
+      entry("w1", { type: "drafts_written", round: 1, count: 2 }),
+      entry("r1", { type: "drafts_revised", round: 1, dropped: 2 }),
+      entry("w1b", { type: "drafts_written", round: 1, count: 1 }),
+    ];
+
+    const folds = roundFolds(entries, [draftOf("d3", { round: 1 })]);
+
+    expect([...folds.asRound]).toEqual([]);
+    expect([...folds.hidden]).toEqual([]);
+    expect(folds.cardAfter).toBe("w1b");
   });
 
   it("folds a round of a discussion from before the task before the Drafts written of the next", () => {

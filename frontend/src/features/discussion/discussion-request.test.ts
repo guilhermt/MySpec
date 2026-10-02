@@ -463,19 +463,63 @@ describe("discussionRequestOf, paused and at rest", () => {
     });
   });
 
-  it.each<[string, string, string]>([
-    ["epic_cant_publish", "Epic can't publish", "Show"],
-    ["epic_discarded", "Epic discarded", "Show"],
-    ["publish_failed", "Publish failed", "Show"],
-    ["ready_to_archive", "Ready to archive", "Archive…"],
-  ])("draws the state %s while paused", (status, label, action) => {
+  const shortEpic = draftOf("d1", {
+    kind: "epic",
+    decision: "approved",
+    hold: { reason: "epic_short", title: "", left: 0, approved: 1, cards: 3 },
+  });
+  const discardedEpic = [
+    draftOf("d1", { kind: "epic", decision: "discarded" }),
+    draftOf("d2", {
+      decision: "approved",
+      ...inEpic("d1"),
+      hold: { reason: "epic_discarded", title: "", left: 0, approved: 0, cards: 0 },
+    }),
+  ];
+  const failed = [draftOf("d1", { decision: "approved", publishError: "Couldn't set the epic." })];
+  const published = [
+    draftOf("d1", { decision: "approved", published: true, outcome: "created" }),
+    draftOf("d2", { decision: "discarded" }),
+  ];
+
+  it.each<[string, Draft[], string, string, string]>([
+    [
+      "epic_cant_publish",
+      [shortEpic, draftOf("d2")],
+      "Epic can't publish",
+      "1 of 3 cards approved · approve one more, or discard the epic",
+      "Show",
+    ],
+    [
+      "epic_discarded",
+      discardedEpic,
+      "Epic discarded",
+      "1 approved card of it won't publish · approve the epic again, or discard it",
+      "Show",
+    ],
+    ["publish_failed", failed, "Publish failed", "Stopped at Title of d1", "Show"],
+    [
+      "ready_to_archive",
+      published,
+      "Ready to archive",
+      "1 published · or ask the agent for more cards below",
+      "Archive…",
+    ],
+  ])("draws the state %s while paused", (status, drafts, label, progress, action) => {
     const bar = discussionRequestOf(
-      discussion(five, { status, sessionStatus: "paused" }),
+      discussion(drafts, { status, sessionStatus: "paused" }),
       NOW,
       null,
     );
 
-    expect(bar).toMatchObject({ form: "quiet", glyph: "paused", label, situationId: null });
+    expect(bar).toMatchObject({
+      form: "quiet",
+      glyph: "paused",
+      label,
+      progress,
+      situationId: null,
+      target: action === "Show" ? { draft: "d1", retry: status === "publish_failed" } : null,
+    });
     expect(bar?.actions.map((one) => one.label)).toEqual([action]);
     expect(bar?.time).toBeUndefined();
   });

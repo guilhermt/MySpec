@@ -1,7 +1,7 @@
 import type { SelectOption } from "@/components/system/Select";
 import { findBoard } from "@/lib/boards";
 import { findRepository, shortName } from "@/lib/repositories";
-import { counted } from "@/lib/situations";
+import { counted, listed } from "@/lib/situations";
 import type { Board, BoardCard, Repository, State } from "@/lib/wails";
 import { age } from "@/lib/when";
 
@@ -80,15 +80,6 @@ function distinct<T extends { key: string }>(all: readonly T[], picked: Readonly
     seen.add(one.key);
     return true;
   });
-}
-
-// listed joins parts by ", " with " and " before the last, without a comma before it.
-function listed(items: readonly string[]): string {
-  const last = items.at(-1);
-  if (items.length < 2 || last === undefined) {
-    return items.join("");
-  }
-  return `${items.slice(0, -1).join(", ")} and ${last}`;
 }
 
 /**
