@@ -9,7 +9,13 @@ import { renderWithStore } from "@/test/render";
 import { makeState, makeTask } from "@/test/wails-mock";
 
 const DRAFT = { "task-1|prd": "ship it" };
-const REST = { findings: false, askForChange: false, reviseFindings: false, item: "task" };
+const REST = {
+  findings: false,
+  askForChange: false,
+  reviseFindings: false,
+  item: "task",
+  drafts: null,
+};
 const RUNNING = { sessionStatus: "working", turnRunning: true, processRunning: true };
 
 function composer(
@@ -248,6 +254,69 @@ describe("Composer", () => {
       "b · Per plan",
     ]);
     expect(replies[0]).toHaveClass("rounded-(--radius-pill)");
+  });
+
+  describe("starters", () => {
+    const starters = [
+      {
+        label: "Ask for changes",
+        tooltip: "Starts the message: the agent revises the drafts",
+        text: "Change the drafts: ",
+      },
+    ];
+    const discussion = { ...REST, item: "discussion", who: "agent" };
+    const box = () => screen.getByRole("textbox", { name: "Reply to the agent" });
+
+    it("puts the start of the message before what is written", async () => {
+      const { user } = renderWithStore(composer(makeTask(), { starters, context: discussion }), {
+        ui: { drafts: DRAFT },
+      });
+
+      const group = screen.getByRole("group", { name: "Starts of a message" });
+      await user.click(within(group).getByRole("button", { name: "Ask for changes" }));
+
+      expect(box()).toHaveValue("Change the drafts: ship it");
+    });
+
+    it("does not repeat a start the box already begins with", async () => {
+      const { user } = renderWithStore(composer(makeTask(), { starters, context: discussion }), {
+        ui: { drafts: { "task-1|prd": "Change the drafts: drop the third" } },
+      });
+
+      await user.click(screen.getByRole("button", { name: "Ask for changes" }));
+
+      expect(box()).toHaveValue("Change the drafts: drop the third");
+    });
+
+    it("takes the focus with the cursor at the end of the text", async () => {
+      const { user } = renderWithStore(composer(makeTask(), { starters, context: discussion }), {
+        ui: { drafts: DRAFT },
+      });
+
+      await user.click(screen.getByRole("button", { name: "Ask for changes" }));
+
+      const textarea = box() as HTMLTextAreaElement;
+      expect(textarea).toHaveFocus();
+      expect(textarea.selectionStart).toBe(textarea.value.length);
+      expect(textarea.selectionEnd).toBe(textarea.value.length);
+    });
+
+    it("comes before the quick replies in the same strip", () => {
+      const chips = [
+        { key: "a", text: "Per key" },
+        { key: "b", text: "Per plan" },
+      ];
+      renderWithStore(composer(makeTask(), { starters, chips, context: discussion }));
+
+      const groups = screen.getAllByRole("group").map((group) => group.getAttribute("aria-label"));
+      expect(groups.indexOf("Starts of a message")).toBeLessThan(groups.indexOf("Quick replies"));
+    });
+
+    it("lets the context name who speaks", () => {
+      renderWithStore(composer(makeTask(), { context: discussion }));
+
+      expect(box()).toHaveAttribute("placeholder", "Reply to the agent…");
+    });
   });
 
   it("sends a quick reply without touching the draft", async () => {

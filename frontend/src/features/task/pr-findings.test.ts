@@ -362,6 +362,7 @@ describe("prComposerContext", () => {
     askForChange: false,
     reviseFindings: false,
     item: "task",
+    drafts: null,
   };
 
   it.each<[string, PullRequest, SituationKind, string]>([

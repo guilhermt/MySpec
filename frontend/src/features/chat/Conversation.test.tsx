@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Conversation } from "@/features/chat/Conversation";
 import { IDLE_SESSION } from "@/features/chat/session";
@@ -807,6 +807,144 @@ describe("Conversation after", () => {
     );
     expect(places.every((place) => place >= 0)).toBe(true);
     expect([...places].sort((a, b) => a - b)).toEqual(places);
+  });
+
+  it("draws a node right before the entry it is keyed by", () => {
+    const first = marker("paused");
+    const second = makeEntry("user");
+    renderWithStore(
+      <Conversation
+        stage="prd"
+        taskId="task-1"
+        session={makeTask()}
+        before={new Map([[second.id, <p key="derived">The line before</p>]])}
+      />,
+      { state: withTask(), ui: { transcripts: ready([first, second]) } },
+    );
+
+    const text = screen.getByRole("feed").textContent ?? "";
+    expect(text.indexOf("Paused by you")).toBeLessThan(text.indexOf("The line before"));
+    expect(text.indexOf("The line before")).toBeLessThan(text.indexOf("Add a login screen"));
+  });
+
+  it("draws the node of an id it does not have before the nodes of after that are not there either", () => {
+    renderWithStore(
+      <Conversation
+        stage="prd"
+        taskId="task-1"
+        session={makeTask()}
+        after={new Map([["nowhere", <p key="after">The line after</p>]])}
+        before={new Map([["nowhere", <p key="before">The line before</p>]])}
+        endLine={<p>The end line</p>}
+        fixed={<p>The fixed card</p>}
+      />,
+      { state: withTask(), ui: { transcripts: ready([makeEntry("user")]) } },
+    );
+
+    const text = screen.getByRole("feed").textContent ?? "";
+    const places = ["The end line", "The line before", "The line after", "The fixed card"].map(
+      (part) => text.indexOf(part),
+    );
+    expect(places.every((place) => place >= 0)).toBe(true);
+    expect([...places].sort((a, b) => a - b)).toEqual(places);
+  });
+
+  it("never folds a stretch that holds a line drawn before an entry", () => {
+    const speeches = Array.from({ length: 12 }, (_, index) => {
+      const entry = makeEntry("assistant");
+      return entry.assistant === null
+        ? entry
+        : {
+            ...entry,
+            assistant: { ...entry.assistant, text: `Speech ${index}.`, messageId: `m${index}` },
+          };
+    });
+    const [first] = speeches;
+    renderWithStore(
+      <Conversation
+        stage="prd"
+        taskId="task-1"
+        session={makeTask()}
+        before={new Map([[first?.id ?? "", <p key="before">The line before</p>]])}
+      />,
+      { state: withTask(), ui: { transcripts: ready(speeches) } },
+    );
+
+    expect(screen.getByText("The line before")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /earlier/i })).not.toBeInTheDocument();
+  });
+
+  describe("the opening of a discussion", () => {
+    const prompt = makeEntry("user", {
+      user: {
+        text: "The context.",
+        pending: false,
+        prompt: true,
+        app: false,
+        sent: "",
+        appKind: "",
+        appPass: 0,
+        appRound: 0,
+        appRounds: 0,
+        appCount: 0,
+      },
+    });
+    const transcripts = {
+      "discussion-1|discussion": readyState([prompt]),
+    };
+    const input = (text: string) => ({
+      id: "discussion-1",
+      drafts: [],
+      text,
+      cards: [],
+      documentRevision: 0,
+    });
+
+    it("follows the start with the line Context and what the user wrote", () => {
+      renderWithStore(
+        <Conversation
+          stage="discussion"
+          taskId="discussion-1"
+          session={makeTask()}
+          discussion={input("Cap the overage.")}
+        />,
+        { ui: { transcripts } },
+      );
+
+      const feed = screen.getByRole("feed");
+      const context = within(feed).getByRole("button", { name: /^Context/ });
+      const message = within(feed).getByRole("article", { name: /^You/ });
+      expect(message).toHaveTextContent("Cap the overage.");
+      expect(
+        context.compareDocumentPosition(message) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("draws no message when the user wrote nothing", () => {
+      renderWithStore(
+        <Conversation
+          stage="discussion"
+          taskId="discussion-1"
+          session={makeTask()}
+          discussion={input("")}
+        />,
+        { ui: { transcripts } },
+      );
+
+      expect(
+        within(screen.getByRole("feed")).getByRole("button", { name: /^Context/ }),
+      ).toBeVisible();
+      expect(screen.queryByRole("article", { name: /^You/ })).not.toBeInTheDocument();
+    });
+
+    it("draws nothing of it outside a discussion", () => {
+      renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
+        state: withTask(),
+        ui: { transcripts: ready([prompt]) },
+      });
+
+      expect(screen.queryByRole("button", { name: /^Context/ })).not.toBeInTheDocument();
+    });
   });
 
   it("never folds a stretch that holds a derived line", () => {

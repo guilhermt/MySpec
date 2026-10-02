@@ -9,6 +9,7 @@ import {
   stretchFoldOf,
   waitingToolUseId,
 } from "@/features/chat/conversation";
+import { type DiscussionInput, roundFolds } from "@/features/chat/discussion-markers";
 import { Activity } from "@/features/chat/entries/Activity";
 import { BackToEnd } from "@/features/chat/entries/BackToEnd";
 import { ErrorBlock } from "@/features/chat/entries/ErrorBlock";
@@ -21,6 +22,7 @@ import { Speech } from "@/features/chat/entries/Speech";
 import { StretchFold } from "@/features/chat/entries/StretchFold";
 import { YourMessage } from "@/features/chat/entries/YourMessage";
 import {
+  discussionOpeningOf,
   type MarkerContext,
   markerOf,
   productMessageOf,
@@ -32,7 +34,7 @@ import type { SessionState } from "@/features/chat/session";
 import { useAutoScroll } from "@/features/chat/useAutoScroll";
 import { useFeed } from "@/features/chat/useFeed";
 import { decidedMarkerIds, reportMarkerIds } from "@/features/reviews/review-conversation";
-import { asSituationKind, asTaskMode, type Entry } from "@/lib/wails";
+import { asSituationKind, asTaskMode, type Entry, type UserEntry } from "@/lib/wails";
 import { useAppStore, useFlashing, useReview, useTask, useTranscript } from "@/store/app-store";
 
 const NO_ENTRIES: readonly Entry[] = [];
@@ -64,6 +66,22 @@ function useCardFlash(itemId: string): "question" | "permission" | null {
     .find((one) => flashing.has(one.id));
   const kind = situation === undefined ? null : asSituationKind(situation.kind);
   return kind === "question" || kind === "permission" ? kind : null;
+}
+
+// messageOf is what the user wrote at the start of a discussion, as an entry of the conversation.
+function messageOf(text: string): UserEntry {
+  return {
+    text,
+    pending: false,
+    prompt: false,
+    app: false,
+    sent: "",
+    appKind: "",
+    appPass: 0,
+    appRound: 0,
+    appRounds: 0,
+    appCount: 0,
+  };
 }
 
 interface RowViewProps {
@@ -113,15 +131,33 @@ function RowView({
       return row.entry.user === null ? null : (
         <YourMessage user={row.entry.user} createdAt={row.entry.createdAt} />
       );
-    case "start":
+    case "start": {
+      const opening = discussionOpeningOf(row.prompt, ctx);
+      const createdAt = row.prompt?.createdAt ?? "";
       return (
-        <MarkerLine
-          view={startLineOf(row.marker, row.prompt, ctx)}
-          createdAt={(row.marker ?? row.prompt)?.createdAt ?? ""}
-          task={ctx.task}
-          review={ctx.review}
-        />
+        <>
+          <MarkerLine
+            view={startLineOf(row.marker, row.prompt, ctx)}
+            createdAt={(row.marker ?? row.prompt)?.createdAt ?? ""}
+            task={ctx.task}
+            review={ctx.review}
+            discussion={ctx.discussion}
+          />
+          {opening.context !== null && (
+            <MarkerLine
+              view={opening.context}
+              createdAt={createdAt}
+              task={ctx.task}
+              review={ctx.review}
+              discussion={ctx.discussion}
+            />
+          )}
+          {opening.message !== "" && (
+            <YourMessage user={messageOf(opening.message)} createdAt={createdAt} />
+          )}
+        </>
       );
+    }
     case "product":
       return row.entry.user === null ? null : (
         <MarkerLine
@@ -129,6 +165,7 @@ function RowView({
           createdAt={row.entry.createdAt}
           task={ctx.task}
           review={ctx.review}
+          discussion={ctx.discussion}
         />
       );
     case "marker": {
@@ -139,6 +176,7 @@ function RowView({
           createdAt={row.entry.createdAt}
           task={ctx.task}
           review={ctx.review}
+          discussion={ctx.discussion}
           requested={requested}
           onRequested={onRequested}
         />
@@ -207,6 +245,14 @@ export interface ConversationProps {
    * at the end, after endLine.
    */
   after?: ReadonlyMap<string, ReactNode>;
+  /**
+   * before is what is drawn right before an entry, by its id: the round a discussion folded before
+   * its next Drafts written. An id not in the conversation draws its node at the end, before the
+   * nodes of after that aren't there either.
+   */
+  before?: ReadonlyMap<string, ReactNode>;
+  /** discussion is what the conversation of a discussion knows of it, for its markers; null elsewhere. */
+  discussion?: DiscussionInput | null;
   /** endLine is the derived line after the entries (Merged …, Closed …). */
   endLine?: ReactNode;
   /** fixed is the fixed card after the entries: changed files, the PR draft, the live checks. */
@@ -224,6 +270,8 @@ export function Conversation({
   session,
   readOnly = false,
   after,
+  before,
+  discussion = null,
   endLine,
   fixed,
   activity,
@@ -265,6 +313,11 @@ export function Conversation({
   const waiting = useMemo(() => waitingToolUseId(entries), [entries]);
   const latestReport = useMemo(() => reportMarkerIds(entries), [entries]);
   const latestDecided = useMemo(() => decidedMarkerIds(entries), [entries]);
+  const discussionCtx = useMemo(
+    () =>
+      discussion === null ? null : { ...discussion, folds: roundFolds(entries, discussion.drafts) },
+    [entries, discussion],
+  );
   const ctx = useMemo<MarkerContext>(
     () => ({
       stage,
@@ -273,9 +326,9 @@ export function Conversation({
       latestReport,
       latestDecided,
       oneShot: task !== null && asTaskMode(task.mode) === "one_shot",
-      discussion: null,
+      discussion: discussionCtx,
     }),
-    [stage, task, review, latestReport, latestDecided],
+    [stage, task, review, latestReport, latestDecided, discussionCtx],
   );
   // The stretches that fold are settled once, when the entries first arrive: a stretch that stops
   // being the last on screen stays open, so nothing folds under the reader.
@@ -336,6 +389,7 @@ export function Conversation({
               {model.stretches.map((stretch) => {
                 const views = stretch.rows.map((row) => (
                   <Fragment key={row.key}>
+                    {before?.get(row.key)}
                     <RowView
                       taskId={taskId}
                       stage={stage}
@@ -355,7 +409,7 @@ export function Conversation({
                 // A stretch that holds a derived line stays open: it is drawn inside the stretch.
                 const folds =
                   foldable?.has(stretch.key) === true &&
-                  !stretch.rows.some((row) => after?.has(row.key));
+                  !stretch.rows.some((row) => after?.has(row.key) || before?.has(row.key));
                 return folds ? (
                   <StretchFold
                     key={stretch.key}
@@ -370,6 +424,11 @@ export function Conversation({
                 );
               })}
               {endLine}
+              {[...(before ?? [])]
+                .filter(([key]) => !rowKeys.includes(key))
+                .map(([key, node]) => (
+                  <Fragment key={key}>{node}</Fragment>
+                ))}
               {[...(after ?? [])]
                 .filter(([key]) => !rowKeys.includes(key))
                 .map(([key, node]) => (

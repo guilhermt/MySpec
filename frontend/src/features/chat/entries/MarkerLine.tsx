@@ -155,6 +155,8 @@ export interface MarkerLineProps {
   task?: TaskSummary | null;
   /** review is the review whose documents an artifact body reads; null outside a review. */
   review?: ReviewSummary | null;
+  /** discussion is the discussion whose documents a body of it reads; null outside one. */
+  discussion?: { id: string; documentRevision: number } | null;
   /** requested opens the line and gives it the focus, once: the request bar asked for it. */
   requested?: boolean;
   /** onRequested says the request was settled. */

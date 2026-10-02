@@ -174,6 +174,7 @@ export function Finding({
       tabIndex={current ? 0 : -1}
       data-finding=""
       data-finding-id={model.id}
+      data-card-item={model.id}
       data-decided={String(model.decision !== "")}
       data-disabled={disabled ? "" : undefined}
       onKeyDown={onKeyDown}

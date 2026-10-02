@@ -39,6 +39,7 @@ describe("Finding", () => {
 
     const group = screen.getByRole("group", { name: view().name });
     expect(group).toHaveAttribute("data-finding-id", "2");
+    expect(group).toHaveAttribute("data-card-item", "2");
     expect(group).toHaveAttribute("data-disabled");
     expect(screen.getByText("The form never saves")).toBeInTheDocument();
     expect(screen.getByText("The submit handler drops the value.")).toBeInTheDocument();

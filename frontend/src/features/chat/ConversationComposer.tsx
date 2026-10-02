@@ -8,7 +8,13 @@ export interface ConversationComposerProps {
   session: SessionState;
 }
 
-const NO_CONTEXT = { findings: false, askForChange: false, reviseFindings: false, item: "task" };
+const NO_CONTEXT = {
+  findings: false,
+  askForChange: false,
+  reviseFindings: false,
+  item: "task",
+  drafts: null,
+};
 
 /**
  * ConversationComposer is the composer of a conversation without a request bar, a discussion's: it

@@ -1,6 +1,8 @@
-import { type KeyboardEvent, useEffect, useId, useState } from "react";
+import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { Chip } from "@/components/system/Chip";
+import { Icon } from "@/components/system/Icon";
+import { ICONS } from "@/components/system/icons";
 import { Spinner } from "@/components/system/Spinner";
 import { Tooltip } from "@/components/system/Tooltip";
 import { useNow } from "@/features/attention/useNow";
@@ -10,6 +12,7 @@ import {
   answersOf,
   answerWithText,
   type ComposerContext,
+  type ComposerStarter,
   composerLabelOf,
   otherHeaderOf,
   placeholderOf,
@@ -34,6 +37,7 @@ import { useAppStore, useDraft } from "@/store/app-store";
 
 const NO_CHOICES: QuestionChoices = {};
 const NO_CHIPS: QuickReply[] = [];
+const NO_STARTERS: readonly ComposerStarter[] = [];
 
 // EMPTY_REASON is why Send is disabled with nothing written, in its tooltip and its description.
 const EMPTY_REASON = "Write a message";
@@ -55,7 +59,13 @@ export interface ComposerProps {
   otherPrimary: boolean;
   /** chips are the quick replies of the question in text of the reply situation. */
   chips?: QuickReply[];
-  context: Pick<ComposerContext, "findings" | "askForChange" | "reviseFindings" | "item">;
+  /** starters are the chips that start the message: Ask for changes, Ask to fix the drafts. */
+  starters?: readonly ComposerStarter[];
+  /** context is what the placeholder needs; its who, when given, wins over the voice of the stage. */
+  context: Pick<
+    ComposerContext,
+    "findings" | "askForChange" | "reviseFindings" | "item" | "drafts"
+  > & { who?: string };
 }
 
 /** Working is the turn running: the spinner and the time since it started. */
@@ -83,6 +93,7 @@ export function Composer({
   permissionPending = false,
   otherPrimary,
   chips = NO_CHIPS,
+  starters = NO_STARTERS,
   context,
 }: ComposerProps) {
   const draft = useDraft(taskId, stage);
@@ -103,6 +114,9 @@ export function Composer({
   // backToCard counts the texts that left the card incomplete: after each one is drawn on the card,
   // the focus goes to its first question without a choice.
   const [backToCard, setBackToCard] = useState(0);
+  const field = useRef<HTMLTextAreaElement>(null);
+  // atEnd counts the starters put in the box: after each one is drawn, the cursor goes to the end.
+  const [atEnd, setAtEnd] = useState(0);
   const requestId = question?.requestId;
 
   // A failure belongs to the question it was told for: the card sending the answer, or the question
@@ -123,12 +137,20 @@ export function Composer({
     }
   }, [backToCard]);
 
-  const who = voiceInSentence(voiceOf(stage)) || "agent";
+  useEffect(() => {
+    if (atEnd === 0 || field.current === null) {
+      return;
+    }
+    const length = field.current.value.length;
+    field.current.focus();
+    field.current.setSelectionRange(length, length);
+  }, [atEnd]);
+
+  const who = context.who ?? (voiceInSentence(voiceOf(stage)) || "agent");
   const paused = asSessionStatus(session.sessionStatus) === "paused";
   const turnRunning = session.turnRunning;
   const empty = draft.trim() === "";
   const placeholder = placeholderOf({
-    who,
     paused,
     stopped: session.lastError !== "",
     turnFailed: session.turnFailed,
@@ -139,6 +161,7 @@ export function Composer({
     permission: permissionPending,
     chips,
     ...context,
+    who,
   });
 
   // deliver sends a text as a message, resuming a paused session first, and stops there when it
@@ -184,6 +207,14 @@ export function Composer({
       // Back to what the card held, unless the question settled while the answer was on its way.
       setQuestionChoices(q.requestId, choices);
     }
+  };
+
+  // start puts the start of a message at the beginning of the box, unless it is there already.
+  const start = (starter: ComposerStarter) => {
+    if (!draft.startsWith(starter.text)) {
+      setDraft(taskId, stage, starter.text + draft);
+    }
+    setAtEnd((count) => count + 1);
   };
 
   const send = () => {
@@ -262,30 +293,54 @@ export function Composer({
           "flex flex-col rounded-lg border border-line-3 bg-surface-input shadow-xs transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard has-[textarea:focus-visible]:field-focus!",
         )}
       >
-        {chips.length > 0 && (
-          <fieldset
-            aria-label="Quick replies"
-            className="flex min-w-0 flex-wrap items-center gap-(--space-1-5) px-(--space-3) pt-(--space-2)"
-          >
-            {chips.map((chip) => (
-              <Tooltip key={chip.key} content={`Sends “${chip.key}”`}>
-                <Chip
-                  kind="action"
-                  aria-label={`${chip.key} · ${chip.text}`}
-                  className="h-(--size-control-xs) gap-(--space-1-5) px-(--space-2)"
-                  disabled={sending}
-                  onClick={() => void deliver(chip.key, false)}
-                >
-                  <span className="font-mono text-(length:--text-micro) leading-(--leading-micro) text-ink-3">
-                    {chip.key}
-                  </span>
-                  {chip.text}
-                </Chip>
-              </Tooltip>
-            ))}
-          </fieldset>
+        {(starters.length > 0 || chips.length > 0) && (
+          <div className="flex min-w-0 flex-wrap items-center gap-(--space-1-5) px-(--space-3) pt-(--space-2)">
+            {starters.length > 0 && (
+              <fieldset
+                aria-label="Starts of a message"
+                className="flex min-w-0 flex-wrap items-center gap-(--space-1-5)"
+              >
+                {starters.map((starter) => (
+                  <Tooltip key={starter.label} content={starter.tooltip}>
+                    <Chip
+                      kind="action"
+                      className="h-(--size-control-xs) gap-(--space-1-5) px-(--space-2)"
+                      onClick={() => start(starter)}
+                    >
+                      <Icon icon={ICONS.revised} size="sm" tone="muted" />
+                      {starter.label}
+                    </Chip>
+                  </Tooltip>
+                ))}
+              </fieldset>
+            )}
+            {chips.length > 0 && (
+              <fieldset
+                aria-label="Quick replies"
+                className="flex min-w-0 flex-wrap items-center gap-(--space-1-5)"
+              >
+                {chips.map((chip) => (
+                  <Tooltip key={chip.key} content={`Sends “${chip.key}”`}>
+                    <Chip
+                      kind="action"
+                      aria-label={`${chip.key} · ${chip.text}`}
+                      className="h-(--size-control-xs) gap-(--space-1-5) px-(--space-2)"
+                      disabled={sending}
+                      onClick={() => void deliver(chip.key, false)}
+                    >
+                      <span className="font-mono text-(length:--text-micro) leading-(--leading-micro) text-ink-3">
+                        {chip.key}
+                      </span>
+                      {chip.text}
+                    </Chip>
+                  </Tooltip>
+                ))}
+              </fieldset>
+            )}
+          </div>
         )}
         <textarea
+          ref={field}
           id="composer-input"
           aria-label={composerLabelOf(who)}
           value={draft}

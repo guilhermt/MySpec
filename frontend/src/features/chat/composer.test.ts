@@ -55,6 +55,7 @@ const REST: ComposerContext = {
   askForChange: false,
   reviseFindings: false,
   item: "task",
+  drafts: null,
 };
 
 const CHIPS = [
@@ -160,6 +161,31 @@ describe("placeholderOf", () => {
       { who: "reviewer", reviseFindings: true, askForChange: true },
       "Ask the reviewer to add, change or drop a finding…",
     ],
+    [
+      "drafts.md unreadable",
+      { who: "agent", drafts: "unreadable", item: "discussion" },
+      "Ask the agent to fix drafts.md…",
+    ],
+    [
+      "drafts to change",
+      { who: "agent", drafts: "changes", item: "discussion" },
+      "Ask for changes: add, change or drop a draft…",
+    ],
+    [
+      "drafts all on GitHub",
+      { who: "agent", drafts: "archive", item: "discussion" },
+      "Ask for more cards, or reply to the agent…",
+    ],
+    [
+      "quick replies before the drafts",
+      { who: "agent", chips: CHIPS, drafts: "changes", item: "discussion" },
+      "Answer a or b, or reply to the agent…",
+    ],
+    [
+      "drafts before the findings",
+      { who: "agent", drafts: "changes", reviseFindings: true },
+      "Ask for changes: add, change or drop a draft…",
+    ],
     ["a step in review by the user", { askForChange: true }, "Ask the implementer for a change…"],
     ["the rest", {}, "Reply to the implementer…"],
     ["the rest, in the PRD", { who: "PRD agent" }, "Reply to the PRD agent…"],
@@ -170,6 +196,14 @@ describe("placeholderOf", () => {
   it("names the agent whose session restarts", () => {
     expect(placeholderOf({ ...REST, who: "reviewer", stopped: true })).toBe(
       "Sending restarts the reviewer's session…",
+    );
+  });
+});
+
+describe("placeholderOf of a stopped discussion", () => {
+  it("restarts the session without naming who speaks", () => {
+    expect(placeholderOf({ ...REST, who: "agent", item: "discussion", stopped: true })).toBe(
+      "Sending restarts the session…",
     );
   });
 });
