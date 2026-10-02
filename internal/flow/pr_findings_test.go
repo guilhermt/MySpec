@@ -926,6 +926,31 @@ func TestARewrittenReportTheParserRefusesLeavesWhatWasRecordedAndSaysWhy(t *test
 	}
 }
 
+func TestAnUnreadableRewriteOfAPassWithEveryFindingDiscardedKeepsItsChangesWatched(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	structured(t, f, decidedPass(1, discarded, discarded))
+	f.reviews.setSnapshot(reviewed(1, 2))
+	writeReport(t, f, 1, "---\nstatus: maybe\n---\n")
+
+	f.service.Check("task-1")
+
+	// What was recorded stays, so the evaluation goes on: the changes made
+	// with every finding discarded are the ones the user reviews.
+	waitFor(t, "the changes to be watched", func() bool {
+		active, watched := f.reviews.activeOf("task-1")
+		return watched && active
+	})
+	state := f.prState(t, "task-1")
+	if state.Unreadable == "" {
+		t.Error("unreadable reason is empty, want why the rewrite can't be read")
+	}
+	if state.Status != flow.PRInReview {
+		t.Errorf("status = %q, want the changes in review", state.Status)
+	}
+}
+
 func TestAReportRewrittenCleanClosesTheReview(t *testing.T) {
 	t.Parallel()
 
