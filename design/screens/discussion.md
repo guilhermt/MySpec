@@ -267,7 +267,7 @@ A barra do pedido de `screens/task.md` §7, acima do compositor. Ela diz o que f
 
 `Epic discarded`: `2 approved cards of it won't publish · approve the epic again, or discard them`; com um, `1 approved card of it won't publish · approve the epic again, or discard it`. Com mais de um épico nesses estados, a barra fala do primeiro pela posição.
 
-A barra é `role="region"` com nome, e o texto de estado é `role="status"`. Uma barra que nasce com a tela aberta pisca e é anunciada.
+A barra é `role="region"` com nome, e o texto de estado é `role="status"`: o rótulo e o meio juntos, porque o meio é a saída e é anunciado com o rótulo. Uma barra que nasce com a tela aberta pisca e é anunciada.
 
 ## 9. O compositor
 

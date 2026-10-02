@@ -70,23 +70,26 @@ describe("DiscussionBar", () => {
       [makeDraft({ published: true })],
       "1 published · or ask the agent for more cards below",
     ],
-  ])("tells %s in its middle, beside the status", (status, group, label, drafts, detail) => {
-    bar({
-      status,
-      drafts,
-      situations: [
-        makeSituation({
-          taskId: "discussion-1",
-          kind: status,
-          group,
-          place: { kind: "discussion", stage: "", step: 0 },
-        }),
-      ],
-    });
+  ])(
+    "tells %s in its middle, announced with the status",
+    (status, group, label, drafts, detail) => {
+      bar({
+        status,
+        drafts,
+        situations: [
+          makeSituation({
+            taskId: "discussion-1",
+            kind: status,
+            group,
+            place: { kind: "discussion", stage: "", step: 0 },
+          }),
+        ],
+      });
 
-    expect(screen.getByRole("status")).toHaveTextContent(label);
-    expect(screen.getByText(detail)).toHaveAttribute("title", detail);
-  });
+      expect(screen.getByRole("status")).toHaveTextContent(`${label} ${detail}`);
+      expect(screen.getByText(detail)).toHaveAttribute("title", detail);
+    },
+  );
 
   it("keeps saying Publish failed while the independent drafts publish", () => {
     bar({

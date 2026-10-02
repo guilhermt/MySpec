@@ -18,19 +18,25 @@ export function DiscussionBar({ discussion }: DiscussionBarProps) {
 
   return (
     <div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
+      {/* The middle is the way out, so it is announced with the label it explains. */}
       <span
         role="status"
         aria-live="polite"
-        className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
+        className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"
       >
-        <ToneDot tone={tone} />
-        {discussionBarLabel(discussion)}
-      </span>
-      {detail !== null && (
-        <span className="min-w-0 truncate text-xs text-muted-foreground" title={detail}>
-          {detail}
+        <span className="flex shrink-0 items-center gap-1.5">
+          <ToneDot tone={tone} />
+          {discussionBarLabel(discussion)}
         </span>
-      )}
+        {detail !== null && (
+          <>
+            {" "}
+            <span className="min-w-0 truncate" title={detail}>
+              {detail}
+            </span>
+          </>
+        )}
+      </span>
       {discussion.unreadableDrafts !== "" && (
         <span
           className="min-w-0 truncate text-xs text-[var(--status-attention)]"
