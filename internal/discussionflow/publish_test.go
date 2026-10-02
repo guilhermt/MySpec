@@ -375,7 +375,7 @@ func TestAFailureHoldsWhatDependsOnItAndLetsTheRestGo(t *testing.T) {
 	id := f.start(cardKey)
 	f.record(id, chainArtifact)
 	f.gh.failCreate("Export invoices as CSV", errGitHub)
-	f.approveQuietly(id, "invoices-epic", "invoice-schema", "export-invoices", "invoice-report", "audit-log")
+	f.approveQuietly(id, "invoices-epic", "invoice-schema", "export-invoices", "invoice-report")
 
 	f.flow.Check(id)
 
@@ -383,6 +383,8 @@ func TestAFailureHoldsWhatDependsOnItAndLetsTheRestGo(t *testing.T) {
 	if failed.PublishError != "Couldn't write to GitHub: gh: the server said no" {
 		t.Errorf("the card says %q about the failure", failed.PublishError)
 	}
+	// A card of its own approved while the failure stands goes all the same.
+	f.approve(id, "audit-log")
 	f.waitPublished(id, "audit-log")
 	if !f.draftState(id, "invoices-epic").Draft.Published.Done() {
 		t.Errorf("the epic written before the failure was not kept")
