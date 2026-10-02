@@ -314,10 +314,16 @@ func TestAStructuredPassIsShownByItsReportAndWhatTheUserDecidedAboutIt(t *testin
 			true, false, reviewed(0, 0), true, flow.PRDone,
 		},
 		{
-			"the session is paused, sent with changes reviewed",
+			"the session is paused while the agent applies the findings, with changes reviewed",
 			[]task.PRPass{sentPass(decidedPass(1, approved))},
 			nil, reviewing,
-			true, false, reviewed(3, 3), true, flow.PRReadyToApprove,
+			true, false, reviewed(3, 3), true, flow.PRReviewing,
+		},
+		{
+			"the session is paused while the agent applies the findings, nothing changed yet",
+			[]task.PRPass{sentPass(decidedPass(1, approved))},
+			nil, reviewing,
+			true, false, reviewed(0, 0), true, flow.PRReviewing,
 		},
 		{
 			"the session is paused, the report not in yet",

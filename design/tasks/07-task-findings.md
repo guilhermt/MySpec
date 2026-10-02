@@ -141,11 +141,11 @@ Uma passada é **estruturada** quando tem uma linha em `pr_passes`. A linha é c
 | Gravada, tudo decidido, algum aprovado, não enviada | Em repouso | Com ou sem mudanças | `awaiting_decision` | `findings` · `apply` |
 | Gravada, tudo decidido, nenhum aprovado, não enviada | Em repouso | Sem mudanças | `done`, derivado: a sessão fica aberta e o cartão fica | `merge` · `merge`, com `Nothing approved in pass 1` |
 | Gravada, tudo decidido, nenhum aprovado, não enviada | Em repouso | Com mudanças | `in_review`, `ready_to_approve` | `changes_review` |
-| Enviada | Trabalhando | — | `reviewing` | nenhuma |
+| Enviada | Trabalhando ou pausada | — | `reviewing` | nenhuma |
 | Enviada | Em repouso | Sem mudanças, ou sem leitura | `in_review` | `changes_review` · `review`, com `No file changed` |
 | Enviada | Em repouso | Com mudanças | `in_review`, `ready_to_approve` (como hoje) | `changes_review` |
 
-O `committing`, o `waiting_checks` da passada seguinte, o `trouble`, o `merged` e o `pr_closed` ficam como hoje; com tudo descartado, o `done` derivado leva a eles como o `done` gravado (§4.2, O que `flow` faz, item 5). A sessão pausada tira a situação (a regra da task), e a barra quieta fica com a forma que o estado pede.
+O `committing`, o `waiting_checks` da passada seguinte, o `trouble`, o `merged` e o `pr_closed` ficam como hoje; com tudo descartado, o `done` derivado leva a eles como o `done` gravado (§4.2, O que `flow` faz, item 5). A sessão pausada tira a situação (a regra da task). Numa passada gravada e não enviada, a barra quieta fica com a forma que o estado pede; pausada depois do envio, no meio da aplicação dos aprovados, a passada fica `reviewing`, como a passada em texto pausada, porque o trabalho do agente está pela metade e não vai ao `changes_review` antes de ele retomar e terminar.
 
 **As mudanças na worktree antes do envio.** O usuário pode pedir ao revisor, pelo compositor, que mude um arquivo antes de decidir (`fix #2 now`). Essas mudanças vão para o review junto com as do envio: com algo aprovado, elas esperam **Apply approved** e entram no `changes_review` que o segue; com tudo descartado, elas mesmas são o `changes_review` (a linha da tabela), e o commit segue como qualquer outro. Enquanto a decisão não acaba, o meio da barra `decide` e `apply` diz `· the worktree has changes`, com o tooltip `They go to review with the changes of the approved findings.` `ApprovePR` (`pr.go:1269–1322`) recusa (`ErrStepNotReady`) uma passada corrente não enviada que ainda tem algo aprovado ou por decidir, porque ela ainda não está em `in_review`.
 

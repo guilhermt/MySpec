@@ -258,12 +258,14 @@ func awaitingStatus(run task.PRRun) PRStatus {
 // that runs, the report the agent still owes, the report that closed it, or how
 // far the user got with the changes it asked for. A structured pass is shown by
 // structuredStatus, with its session at rest, or paused with nothing queued
-// once its report is recorded: a pause keeps the findings and the changes in
-// the state they ask for, while a report is only read from a session at rest.
+// once its report is recorded and before its findings are sent: a pause keeps
+// the findings in the state they ask for, while a report is only read from a
+// session at rest, and a pause while the agent applies the approved findings
+// stops it halfway, so its changes are not ready for review.
 func reviewingStatus(
 	run task.PRRun, art task.PRArtifacts, facts prFacts, snap review.Snapshot, read bool,
 ) PRStatus {
-	if facts.pass != nil && (facts.idle || (facts.paused && facts.pass.Recorded)) {
+	if facts.pass != nil && (facts.idle || (facts.paused && facts.pass.Recorded && !facts.pass.Sent())) {
 		return structuredStatus(run, *facts.pass, snap, read)
 	}
 	if !facts.idle {
