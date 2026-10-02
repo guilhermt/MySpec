@@ -41,23 +41,23 @@ func withDrafts(in attention.DiscussionInput, drafts ...discussionflow.DraftStat
 }
 
 // short is an epic that can't publish: approved of cards.
-func short(approved, cards int) discussionflow.DraftState {
+func short(id string, approved, cards int) discussionflow.DraftState {
 	return discussionflow.DraftState{
-		Draft: discussion.Draft{ID: "epic", Kind: discussion.KindEpic},
+		Draft: discussion.Draft{ID: id, Kind: discussion.KindEpic},
 		Hold:  discussionflow.Hold{Reason: discussionflow.HoldEpicShort, Approved: approved, Cards: cards},
 	}
 }
 
 // discardedEpic is a discarded epic with that many approved cards.
-func discardedEpic(approvedCards int) []discussionflow.DraftState {
+func discardedEpic(id string, approvedCards int) []discussionflow.DraftState {
 	drafts := make([]discussionflow.DraftState, 0, 1+approvedCards)
 	drafts = append(drafts, discussionflow.DraftState{
-		Draft: discussion.Draft{ID: "epic", Kind: discussion.KindEpic, Decision: discussion.DecisionDiscarded},
+		Draft: discussion.Draft{ID: id, Kind: discussion.KindEpic, Decision: discussion.DecisionDiscarded},
 	})
 	for range approvedCards {
 		drafts = append(drafts, discussionflow.DraftState{
 			Draft: discussion.Draft{
-				Kind: discussion.KindNew, Epic: "epic", Decision: discussion.DecisionApproved,
+				Kind: discussion.KindNew, Epic: id, Decision: discussion.DecisionApproved,
 			},
 		})
 	}
@@ -154,33 +154,45 @@ func TestDeriveTheSituationOfADiscussion(t *testing.T) {
 		},
 		{
 			"an epic with one approved card of three can't publish",
-			withDrafts(draftsRead(discussionInput(discussionflow.StatusEpicCantPublish, waiting)), short(1, 3)),
+			withDrafts(draftsRead(discussionInput(discussionflow.StatusEpicCantPublish, waiting)), short("epic", 1, 3)),
 			discussionSituation(attention.KindEpicCantPublish, "The epic can't publish: approve one more of its cards, or discard it."),
 		},
 		{
 			"an epic with no approved card of three can't publish",
-			withDrafts(draftsRead(discussionInput(discussionflow.StatusEpicCantPublish, waiting)), short(0, 3)),
+			withDrafts(draftsRead(discussionInput(discussionflow.StatusEpicCantPublish, waiting)), short("epic", 0, 3)),
 			discussionSituation(attention.KindEpicCantPublish, "The epic can't publish: approve two more of its cards, or discard it."),
 		},
 		{
 			"an epic with one card can't publish",
-			withDrafts(draftsRead(discussionInput(discussionflow.StatusEpicCantPublish, waiting)), short(1, 1)),
+			withDrafts(draftsRead(discussionInput(discussionflow.StatusEpicCantPublish, waiting)), short("epic", 1, 1)),
 			discussionSituation(attention.KindEpicCantPublish, "The epic can't publish: it has one card. Move another into it, or discard it."),
 		},
 		{
 			"an epic without cards can't publish",
-			withDrafts(draftsRead(discussionInput(discussionflow.StatusEpicCantPublish, waiting)), short(0, 0)),
+			withDrafts(draftsRead(discussionInput(discussionflow.StatusEpicCantPublish, waiting)), short("epic", 0, 0)),
 			discussionSituation(attention.KindEpicCantPublish, "The epic can't publish: it has no cards. Move two into it, or discard it."),
 		},
 		{
 			"a discarded epic has an approved card",
-			withDrafts(draftsRead(discussionInput(discussionflow.StatusEpicDiscarded, waiting)), discardedEpic(1)...),
+			withDrafts(draftsRead(discussionInput(discussionflow.StatusEpicDiscarded, waiting)), discardedEpic("epic", 1)...),
 			discussionSituation(attention.KindEpicDiscarded, "The epic is discarded, and its approved card won't publish."),
 		},
 		{
 			"a discarded epic has two approved cards",
-			withDrafts(draftsRead(discussionInput(discussionflow.StatusEpicDiscarded, waiting)), discardedEpic(2)...),
+			withDrafts(draftsRead(discussionInput(discussionflow.StatusEpicDiscarded, waiting)), discardedEpic("epic", 2)...),
 			discussionSituation(attention.KindEpicDiscarded, "The epic is discarded, and 2 of its approved cards won't publish."),
+		},
+		{
+			"of two epics that can't publish, the first by position speaks",
+			withDrafts(draftsRead(discussionInput(discussionflow.StatusEpicCantPublish, waiting)),
+				short("epic-1", 1, 3), short("epic-2", 0, 0)),
+			discussionSituation(attention.KindEpicCantPublish, "The epic can't publish: approve one more of its cards, or discard it."),
+		},
+		{
+			"of two discarded epics with approved cards, the first by position speaks",
+			withDrafts(draftsRead(discussionInput(discussionflow.StatusEpicDiscarded, waiting)),
+				append(discardedEpic("epic-1", 1), discardedEpic("epic-2", 2)...)...),
+			discussionSituation(attention.KindEpicDiscarded, "The epic is discarded, and its approved card won't publish."),
 		},
 		{
 			"every draft was published or discarded",
