@@ -67,7 +67,7 @@ describe("DiscussionHeader", () => {
   it("says why the discussion can't be archived yet", async () => {
     const { user } = header({
       canArchive: false,
-      archiveHint: "A draft is still being published.",
+      archiveHint: "Approved drafts wait to be published.",
     });
 
     expect(screen.getByRole("button", { name: "Archive discussion" })).toBeDisabled();
@@ -75,7 +75,7 @@ describe("DiscussionHeader", () => {
       screen.getByRole("button", { name: "Archive discussion" }).parentElement as HTMLElement,
     );
 
-    expect(await screen.findByText("A draft is still being published.")).toBeInTheDocument();
+    expect(await screen.findByText("Approved drafts wait to be published.")).toBeInTheDocument();
   });
 
   it("takes the colour of what waits for the user over the status", () => {

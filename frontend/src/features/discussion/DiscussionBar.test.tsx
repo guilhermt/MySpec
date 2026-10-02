@@ -88,6 +88,23 @@ describe("DiscussionBar", () => {
     expect(screen.getByText(detail)).toHaveAttribute("title", detail);
   });
 
+  it("keeps saying Publish failed while the independent drafts publish", () => {
+    bar({
+      status: "publishing",
+      situations: [
+        makeSituation({
+          taskId: "discussion-1",
+          kind: "publish_failed",
+          group: "error",
+          place: { kind: "discussion", stage: "", step: 0 },
+        }),
+      ],
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Publish failed");
+    expect(screen.getByText("Publishing…")).toBeInTheDocument();
+  });
+
   it("says it is publishing while it publishes", () => {
     bar({ status: "publishing" });
 

@@ -1,6 +1,6 @@
 import {
+  discussionBarLabel,
   discussionDotTone,
-  discussionStatusLabel,
   standingDetail,
 } from "@/features/discussion/discussion-status";
 import { ToneDot } from "@/features/task/StatusDot";
@@ -24,7 +24,7 @@ export function DiscussionBar({ discussion }: DiscussionBarProps) {
         className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
       >
         <ToneDot tone={tone} />
-        {discussionStatusLabel(discussion)}
+        {discussionBarLabel(discussion)}
       </span>
       {detail !== null && (
         <span className="min-w-0 truncate text-xs text-muted-foreground" title={detail}>

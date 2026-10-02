@@ -45,6 +45,18 @@ export function discussionStatusLabel(discussion: DiscussionSummary): string {
 }
 
 /**
+ * discussionBarLabel is the label of the bar: the state, except that a failure that stands says
+ * so through a run of the independent drafts, where the state reads Publishing.
+ */
+export function discussionBarLabel(discussion: DiscussionSummary): string {
+  const situation = discussionSituation(discussion);
+  if (situation !== null && asSituationKind(situation.kind) === "publish_failed") {
+    return "Publish failed";
+  }
+  return discussionStatusLabel(discussion);
+}
+
+/**
  * discussionStatusTone maps the state of a discussion to the colour that
  * carries it. It never calls for the user: that colour comes from the
  * situations alone.
