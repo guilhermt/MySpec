@@ -436,6 +436,40 @@ func TestOneRetryClearsEveryFailureOfTheDiscussion(t *testing.T) {
 	f.waitPublished(id, "audit-log")
 }
 
+func TestOneRetryWritesDownWhatMemoryHoldsOfEveryDraft(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, looseCardsArtifact)
+	// GitHub creates both cards, and the store refuses the write of each
+	// issue and of the failure with it: only memory knows they are started.
+	f.store.failWrites(4, errStore, onTheIssue)
+	f.approveQuietly(id, "invoice-report", "audit-log")
+
+	f.flow.Check(id)
+
+	f.waitFailed(id, "invoice-report")
+	f.waitFailed(id, "audit-log")
+	for _, d := range f.discussions.Drafts(id) {
+		if d.Published.Started() || d.PublishError != "" {
+			t.Fatalf("the store holds the publication of %s: %+v, %q", d.ID, d.Published, d.PublishError)
+		}
+	}
+
+	if err := f.flow.Retry(t.Context(), id, "invoice-report"); err != nil {
+		t.Fatalf("retry the card: %v", err)
+	}
+
+	f.waitPublished(id, "invoice-report")
+	f.waitPublished(id, "audit-log")
+	for _, title := range []string{"Invoice report", "Audit log"} {
+		if got := count(f.gh.made(), "createIssue:R_acme/api:"+title); got != 1 {
+			t.Errorf("the issue %s was created %d times, want once", title, got)
+		}
+	}
+}
+
 func TestAClosedConversationStillPublishes(t *testing.T) {
 	t.Parallel()
 
