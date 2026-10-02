@@ -5,7 +5,7 @@ import { groupable } from "@/features/discussion/drafts-card";
 import { draftTitle, publishedOutcome } from "@/lib/drafts";
 import { modelLabel } from "@/lib/models";
 import { counted, lowerFirst, situationPillState } from "@/lib/situations";
-import type { Board, DiscussionSummary, Draft, Repository, SituationGroup } from "@/lib/wails";
+import type { Board, DiscussionSummary, Draft, SituationGroup } from "@/lib/wails";
 import { asSessionStatus, asSituationGroup } from "@/lib/wails";
 import { clockTime, shortTime, startedTime } from "@/lib/when";
 
@@ -195,9 +195,6 @@ export interface DetailsCard {
 export interface DetailsRepository {
   id: string;
   fullName: string;
-  /** missing is a clone that is gone; otherwise there was none. */
-  missing: boolean;
-  cloning: boolean;
 }
 
 /** DetailsRound is a round of the drafts: "Round 1 · 5 drafts · 4 created, 1 updated" and the time of its last publication. */
@@ -275,15 +272,11 @@ function roundsOf(drafts: readonly Draft[], now: number): DetailsRound[] {
   }));
 }
 
-/**
- * discussionDetails is the Details panel of a discussion. repositories are the registered ones,
- * which know whether a clone is under way; without them none is.
- */
+/** discussionDetails is the Details panel of a discussion. */
 export function discussionDetails(
   discussion: DiscussionSummary,
   board: Board | null,
   now: number,
-  repositories: readonly Repository[] = [],
 ): DiscussionDetailsModel {
   const reading = new Set((board?.cards ?? []).map((card) => card.key));
   const all = discussion.repositories ?? [];
@@ -311,12 +304,7 @@ export function discussionDetails(
         .join(", "),
       notCloned: all
         .filter((repository) => !repository.cloned || repository.missing)
-        .map((repository) => ({
-          id: repository.id,
-          fullName: repository.fullName,
-          missing: repository.missing,
-          cloning: repositories.find((one) => one.id === repository.id)?.cloning ?? false,
-        })),
+        .map((repository) => ({ id: repository.id, fullName: repository.fullName })),
       model:
         discussion.sessionModel === ""
           ? ""

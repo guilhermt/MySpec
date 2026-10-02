@@ -11,7 +11,8 @@ const ITEMS: DecisionCardItem[] = [
 
 function draw(
   items: readonly DecisionCardItem[] = ITEMS,
-  onDecide: (id: string, key: "approve" | "discard") => "advance" | "stay" = () => "advance",
+  onDecide: (id: string, key: "approve" | "discard") => "advance" | "stay" | "refused" = () =>
+    "advance",
   onLeave?: (by: -1 | 1) => void,
 ) {
   render(
@@ -237,6 +238,23 @@ describe("DecisionCard", () => {
       vi.advanceTimersByTime(1);
       fireEvent.keyDown(item, { key: "a" });
       expect(onDecide).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not lock after a refused press, so the next one decides", () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const onDecide = vi
+        .fn<(id: string, key: "approve" | "discard") => "advance" | "stay" | "refused">()
+        .mockReturnValueOnce("refused")
+        .mockReturnValue("advance");
+      drawWith({ lockMs: 900, onDecide });
+      const item = screen.getByRole("group", { name: "Item 2" });
+      act(() => item.focus());
+
+      fireEvent.keyDown(item, { key: "a" });
+      fireEvent.keyDown(item, { key: "d" });
+
+      expect(onDecide).toHaveBeenCalledTimes(2);
+      expect(onDecide).toHaveBeenLastCalledWith("2", "discard");
     });
 
     it("sends the clicks of renderItem through the same lock and the same advance", () => {

@@ -14,11 +14,11 @@ export interface DecisionCardProps {
   /** label names the group: "Findings of pass 1". */
   label: string;
   items: readonly DecisionCardItem[];
-  /** onDecide is A or D on the item in focus; it says whether the press decided ("advance") or undid ("stay"). */
-  onDecide: (id: string, key: "approve" | "discard") => "advance" | "stay";
+  /** onDecide is A or D on the item in focus; it says whether the press decided ("advance"), undid ("stay") or was refused ("refused", which neither moves the focus nor takes the lock). */
+  onDecide: (id: string, key: "approve" | "discard") => "advance" | "stay" | "refused";
   /** onLeave hands the arrows over to what is around the card at its ends. */
   onLeave?: (by: -1 | 1) => void;
-  /** lockMs is how long A, D and the decide of renderItem stay inert after a decision; 0, the default, for none. */
+  /** lockMs is how long A, D and the decide of renderItem stay inert after a decision (not after a refused one); 0, the default, for none. */
   lockMs?: number;
   /** preferred is the item current until the user moves to one: a draft the request names. Absent or null: the first undecided. */
   preferred?: string | null;
@@ -83,7 +83,7 @@ export function DecisionCard({
     const item = items[index];
     if (item === undefined || item.disabled || Date.now() < lockedUntil.current) return;
     const result = onDecide(item.id, key);
-    if (lockMs > 0) lockedUntil.current = Date.now() + lockMs;
+    if (lockMs > 0 && result !== "refused") lockedUntil.current = Date.now() + lockMs;
     if (result === "advance") {
       const others = [...items.slice(index + 1), ...items.slice(0, index)];
       const next = others.find((other) => !other.decided && !other.disabled);

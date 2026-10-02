@@ -159,7 +159,7 @@ O agente conduz a conversa para entender a demanda, olhando o código quando pre
 
 Os marcos da discussão são linhas de uma linha que abrem o conteúdo no lugar:
 - **`Discussion started`**, com o modelo, o esforço e o board. Logo depois vêm `Context`, que abre o contexto inicial com o tamanho e o complemento `#455, #461 and their epic · 5,690 characters` (`the board and your text` sem cards), e o que o usuário escreveu, como mensagem dele.
-- **`Written discussion.md`** e **`Updated discussion.md`** abrem o documento, com o tamanho e **Open in Documents**. Só o mais recente abre, porque o arquivo é um só e é o de agora.
+- **`Written discussion.md`** e **`Updated discussion.md`** abrem o documento, com o tamanho e, na discussão ativa, que tem o painel, **Open in Documents**. Só o mais recente abre, porque o arquivo é um só e é o de agora.
 - **`Drafts written`** (`round 1 · 5 drafts`), **`Drafts revised`** (`round 1 · 3 changed, 1 added, 1 dropped`), que abre a lista dos rascunhos como eram antes da revisão, e **`drafts.md can't be read`**, com a razão.
 - **`Published`** (`2 so far`, `4 created, 1 updated`) e **`Publication stopped`**, em vermelho, com o intervalo da hora da publicação e a lista dos rascunhos da rodada, cada um com o estado e o link.
 
@@ -199,7 +199,7 @@ Uma discussão pode render um único card, misturar novos e atualizações, ou t
 
 ### Épico
 
-Um **rascunho de épico** agrupa dois ou mais rascunhos de card e tem título, corpo e o repositório da issue pai, escolhido entre os do board. O agente pode propor o épico; o usuário pode criar um por **Group drafts into an epic…**, no `⋯`, e mover rascunhos para dentro e para fora dele pelo seletor **Epic** de **Edit**. O cartão mostra o épico como um grupo, com os rascunhos dentro: o épico publica pela cadeia, com os cards. **Group drafts into an epic…** agrupa só cards da rodada atual que não estão num épico e não começaram a publicar, e os cards agrupados voltam a não decididos.
+Um **rascunho de épico** agrupa dois ou mais rascunhos de card e tem título, corpo e o repositório da issue pai, escolhido entre os do board. O agente pode propor o épico; o usuário pode criar um por **Group drafts into an epic…**, no `⋯`, e mover rascunhos para dentro e para fora dele pelo seletor **Epic** de **Edit**. O cartão mostra o épico como um grupo, com os rascunhos dentro: o épico publica pela cadeia, com os cards. **Group drafts into an epic…** agrupa só cards da rodada atual que não estão num épico, não foram descartados e não começaram a publicar, e os cards agrupados voltam a não decididos.
 
 O diálogo `Group drafts into an epic` tem:
 - **Title of the epic**, obrigatório, com até 256 caracteres contados por ponto de código;

@@ -207,7 +207,7 @@ export interface MarkerLineProps {
   /** review is the review whose documents an artifact body reads; null outside a review. */
   review?: ReviewSummary | null;
   /** discussion is the discussion whose documents a body of it reads; null outside one. */
-  discussion?: { id: string; documentRevision: number } | null;
+  discussion?: { id: string; documentRevision: number; documents: boolean } | null;
   /** requested opens the line and gives it the focus, once: the request bar asked for it. */
   requested?: boolean;
   /** onRequested says the request was settled. */
@@ -396,14 +396,16 @@ export function MarkerLine({
               <span className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
                 {contextCharacters(text)}
               </span>
-              <Button
-                variant="ghost"
-                size="xs"
-                icon={ICONS.file}
-                onClick={() => openPanelAt("documents", body.name)}
-              >
-                Open in Documents
-              </Button>
+              {discussion?.documents === false ? null : (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  icon={ICONS.file}
+                  onClick={() => openPanelAt("documents", body.name)}
+                >
+                  Open in Documents
+                </Button>
+              )}
             </div>
           </div>
         );

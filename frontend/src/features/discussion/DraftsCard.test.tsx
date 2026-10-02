@@ -172,6 +172,19 @@ describe("DraftsCard", () => {
     expect(api.decideDraft).toHaveBeenLastCalledWith("discussion-1", "b", "discarded");
   });
 
+  it("does not lock after an A the title refuses, so a D right away discards", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const { user } = draw(round({ c: { title: "" } }));
+    item("c")?.focus();
+
+    await user.keyboard("a");
+    expect(api.decideDraft).not.toHaveBeenCalled();
+    now.mockReturnValue(1_100);
+    await user.keyboard("d");
+
+    expect(api.decideDraft).toHaveBeenCalledExactlyOnceWith("discussion-1", "c", "discarded");
+  });
+
   it("decides with the click of Approve through the same advance", async () => {
     const { user } = draw(round());
 

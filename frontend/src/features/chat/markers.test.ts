@@ -1179,6 +1179,7 @@ const input = (overrides: Partial<DiscussionInput> = {}): DiscussionInput => ({
   text: "",
   cards: [],
   documentRevision: 0,
+  documents: true,
   ...overrides,
 });
 
@@ -1529,6 +1530,12 @@ describe("publishedLineOf", () => {
     expect(publishedLineOf(1, [onGitHub("d1", 479)], NOW).complement).toBe("round 1 · 1 created");
     expect(publishedLineOf(1, [onGitHub("d1", 461, { outcome: "updated" })], NOW).complement).toBe(
       "round 1 · 1 updated",
+    );
+  });
+
+  it("says nothing was published when the round has no draft left but a discarded one", () => {
+    expect(publishedLineOf(1, [draftOf("d1", { decision: "discarded" })], NOW).complement).toBe(
+      "round 1 · nothing published",
     );
   });
 

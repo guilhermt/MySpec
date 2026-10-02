@@ -899,6 +899,7 @@ describe("Conversation after", () => {
       text,
       cards: [],
       documentRevision: 0,
+      documents: true,
     });
 
     it("follows the start with the line Context and what the user wrote", () => {
@@ -990,6 +991,7 @@ describe("Conversation after", () => {
             text: "Cap the overage.",
             cards: [],
             documentRevision: 0,
+            documents: true,
           }}
         />,
         { ui: { transcripts: { "discussion-1|discussion": readyState(entries) } } },

@@ -33,7 +33,7 @@ export function DiscussionDetails({ discussion }: DiscussionDetailsProps) {
   const board = useBoard(discussion.boardId);
   const repositories = useRepositories();
   const now = useNow(MINUTE, true);
-  const model = discussionDetails(discussion, board, now, repositories);
+  const model = discussionDetails(discussion, board, now);
   const facts = model.discussion;
 
   const openCard = (index: number) => {

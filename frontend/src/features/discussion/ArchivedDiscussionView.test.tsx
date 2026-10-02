@@ -178,4 +178,27 @@ describe("ArchivedDiscussionView", () => {
       within(feed).queryByRole("article", { name: /^Drafts written · round 1/ }),
     ).not.toBeInTheDocument();
   });
+
+  it("opens the document of a marker without a way to the Documents panel", async () => {
+    const entry = makeEntry("marker");
+    vi.mocked(api.getTranscript).mockResolvedValueOnce(
+      makeTranscript({
+        taskId: "discussion-1",
+        stage: "discussion",
+        entries: [
+          entry.marker === null
+            ? entry
+            : { ...entry, marker: { ...entry.marker, type: "discussion_document", first: true } },
+        ],
+      }),
+    );
+    const { user } = view();
+
+    await user.click(await screen.findByRole("button", { name: /^Written discussion\.md/ }));
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("markdown")).toHaveLength(2);
+    });
+    expect(screen.queryByRole("button", { name: "Open in Documents" })).not.toBeInTheDocument();
+  });
 });

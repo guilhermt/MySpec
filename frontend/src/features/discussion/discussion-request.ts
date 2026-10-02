@@ -18,7 +18,13 @@ import {
 } from "@/features/task/request";
 import { draftTitle } from "@/lib/drafts";
 import type { RequestFocus } from "@/lib/focus";
-import { compactWait, discussionSituation, lowerFirst, spokenWait } from "@/lib/situations";
+import {
+  compactWait,
+  discussionSituation,
+  lowerFirst,
+  situationFragment,
+  spokenWait,
+} from "@/lib/situations";
 import type { DiscussionSummary, Situation, SituationKind } from "@/lib/wails";
 import {
   asDiscussionStatus,
@@ -287,8 +293,10 @@ export function discussionAnnouncement(
   request: DiscussionRequestModel,
 ): string {
   const tone = request.glyph === "error" ? "error" : "waiting for you";
-  const where = request.place === undefined ? "" : ` in ${request.place}`;
-  return `${discussion.title}: ${tone}: ${lowerFirst(request.label)}${where}`;
+  const situation = discussionSituation(discussion);
+  const asks =
+    situation === null ? lowerFirst(request.label) : situationFragment(situation, discussion.round);
+  return `${discussion.title}: ${tone}: ${asks}`;
 }
 
 /** discussionInputOf is what the conversation of a discussion knows of it, for its markers. */
@@ -299,6 +307,7 @@ export function discussionInputOf(discussion: DiscussionSummary): DiscussionInpu
     text: discussion.text,
     cards: discussion.cards ?? [],
     documentRevision: discussion.documentRevision,
+    documents: true,
   };
 }
 

@@ -131,11 +131,11 @@ export function DraftsCard({ discussion, target }: DraftsCardProps) {
   }, [requested, clearDraftRequest]);
 
   const drafts = entries.map((entry) => entry.draft);
-  const onDecide = (id: string, key: "approve" | "discard"): "advance" | "stay" => {
+  const onDecide = (id: string, key: "approve" | "discard"): "advance" | "stay" | "refused" => {
     const draft = drafts.find((each) => each.id === id);
-    if (draft === undefined) return "stay";
+    if (draft === undefined) return "refused";
     const view = decisionOf(draft, discussion, editingId === id);
-    if ((key === "approve" ? view.approveReason : view.discardReason) !== null) return "stay";
+    if ((key === "approve" ? view.approveReason : view.discardReason) !== null) return "refused";
     const decision = key === "approve" ? "approved" : "discarded";
     void decideDraft(discussion.id, id, draft.decision === decision ? "" : decision);
     return advanceAfter(draft, key);

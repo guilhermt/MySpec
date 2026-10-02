@@ -23,6 +23,8 @@ export interface DiscussionInput {
   text: string;
   cards: readonly DiscussionCard[];
   documentRevision: number;
+  /** documents is whether the screen has the Documents panel, which a document of the discussion opens in. */
+  documents: boolean;
 }
 
 /** RoundFolds is where the rounds before the current one fold in the conversation (material §4.2, A rodada dobra). */
@@ -414,7 +416,7 @@ export function publishedLineOf(round: number, drafts: readonly Draft[], now: nu
   const open = mine.some((draft) => !draft.published && draft.decision !== "discarded");
   return view(
     "Published",
-    `round ${round} · ${open ? `${published} so far` : publishedOutcome(mine)}`,
+    `round ${round} · ${open ? `${published} so far` : publishedOutcome(mine) || "nothing published"}`,
   );
 }
 

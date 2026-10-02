@@ -15,7 +15,6 @@ import {
   makeDiscussion,
   makeDiscussionCard,
   makeDraft,
-  makeRepository,
   makeSituation,
 } from "@/test/wails-mock";
 
@@ -435,9 +434,7 @@ describe("discussionDetails", () => {
     });
 
   it("says the facts of the discussion", () => {
-    const model = discussionDetails(full(), board, NOW, [
-      makeRepository({ id: "r-gateway", cloning: true }),
-    ]);
+    const model = discussionDetails(full(), board, NOW);
 
     expect(model.discussion).toEqual({
       board: { title: "Platform Roadmap", detail: "acme · project 7", open: true },
@@ -457,18 +454,12 @@ describe("discussionDetails", () => {
       ],
       read: "acme/billing, acme/docs",
       notCloned: [
-        { id: "r-gateway", fullName: "acme/gateway", missing: false, cloning: true },
-        { id: "r-web", fullName: "acme/web", missing: true, cloning: false },
+        { id: "r-gateway", fullName: "acme/gateway" },
+        { id: "r-web", fullName: "acme/web" },
       ],
       model: "Opus 5.5 (1M) · high",
       started: "Today 14:02",
     });
-  });
-
-  it("says no cloning when the registered repositories aren't given", () => {
-    const model = discussionDetails(full(), board, NOW);
-
-    expect(model.discussion.notCloned.map((one) => one.cloning)).toEqual([false, false]);
   });
 
   it("keeps the title of a board that left the app, without opening it", () => {

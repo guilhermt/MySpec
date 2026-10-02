@@ -408,7 +408,7 @@ describe("MarkerLine", () => {
   });
 
   describe("in a discussion", () => {
-    const discussion = { id: "discussion-1", documentRevision: 3 };
+    const discussion = { id: "discussion-1", documentRevision: 3, documents: true };
     const inDiscussion = (marker: MarkerView) =>
       renderWithStore(<MarkerLine view={marker} createdAt={AT} discussion={discussion} />);
 

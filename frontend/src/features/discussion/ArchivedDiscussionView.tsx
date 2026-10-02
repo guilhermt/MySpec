@@ -113,6 +113,7 @@ export function ArchivedDiscussionView({ discussionId }: ArchivedDiscussionViewP
             text: discussion.text,
             cards: discussion.cards ?? [],
             documentRevision: 0,
+            documents: false,
           },
     [discussion],
   );

@@ -551,7 +551,7 @@ describe("discussionAnnouncement", () => {
     [
       "a question before the drafts",
       waiting(situation("question"), [], { round: 0 }),
-      "Usage-based pricing tiers: waiting for you: question in Discussing",
+      "Usage-based pricing tiers: waiting for you: question",
     ],
   ])("says %s", (_name, found, text) => {
     const request = discussionRequestOf(found, NOW, null);
