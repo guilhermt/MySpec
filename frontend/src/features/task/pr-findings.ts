@@ -2,6 +2,7 @@ import {
   approveRestButton,
   type Bar,
   statusOf,
+  type TaskRequestAction,
   type TaskRequestButton,
 } from "@/features/task/request";
 import { decidedCounts } from "@/lib/findings";
@@ -205,7 +206,8 @@ export function findingsBar(pr: PullRequest, form: FindingsForm): Bar {
     status: statusOf("Decide findings", place),
     actions: [
       NEXT_TO_DECIDE,
-      approveRestButton(left),
+      // Approve the rest has nothing to approve once every finding is decided.
+      ...(left > 0 ? [approveRestButton<TaskRequestAction>(left)] : []),
       applyFindingsButton(left > 0 ? `Decide ${left} more` : undefined),
     ],
     focus: "finding",

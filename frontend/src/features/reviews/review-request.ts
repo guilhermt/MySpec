@@ -182,7 +182,8 @@ function reportBar(review: ReviewSummary, form: Want["form"], place: string): Re
     status: statusOf("Decide findings", place),
     actions: [
       NEXT_TO_DECIDE,
-      approveRestButton(left),
+      // Approve the rest has nothing to approve once every finding is decided.
+      ...(left > 0 ? [approveRestButton<ReviewRequestAction>(left)] : []),
       apply ? applyButton(refusal) : publishButton(refusal),
     ],
     focus: "finding",

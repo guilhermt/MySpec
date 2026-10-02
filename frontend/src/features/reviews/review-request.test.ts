@@ -447,6 +447,12 @@ describe("reviewRequestOf, Approve the rest", () => {
       }),
     ],
     ["the changes to approve", waiting(situation("changes_review", "waiting", "approve"))],
+    [
+      "the findings to decide with every finding decided",
+      waiting(situation("review_report", "waiting", "decide"), {
+        passes: [decided(["approved", "discarded"])],
+      }),
+    ],
   ])("is not on the bar of %s", (_, found) => {
     expect(actionsOf(found)).not.toContain("approveRest");
   });

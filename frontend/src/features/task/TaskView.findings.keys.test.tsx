@@ -492,13 +492,26 @@ describe("TaskView, the bar of the findings", () => {
     expect(api.applyPRFindings).toHaveBeenCalledWith("task-1");
   });
 
-  it("does not act on Ctrl+Enter: the composer has its own", async () => {
-    const { user } = screenOf(
-      taskOf({
-        findings: FINDINGS.map((each) => makeReviewFinding({ ...each, decision: "approved" })),
-      }),
-    );
+  it.each([
+    [
+      "the findings to decide, with Approve the rest",
+      { ...taskOf(), situations: [DECIDE] },
+      "Approve the rest",
+    ],
+    [
+      "the findings ready to apply, with Apply approved",
+      {
+        ...taskOf({
+          findings: FINDINGS.map((each) => makeReviewFinding({ ...each, decision: "approved" })),
+        }),
+        situations: [makeSituation({ ...DECIDE, form: "apply" })],
+      },
+      "Apply approved",
+    ],
+  ])("does not act on Ctrl+Enter on %s: the composer has its own", async (_, task, button) => {
+    const { user } = screenOf(task);
     await screen.findByRole("group", { name: "Findings of pass 1" });
+    expect(await screen.findByRole("button", { name: button })).toBeEnabled();
 
     finding(1).focus();
     await user.keyboard("{Control>}{Enter}{/Control}");

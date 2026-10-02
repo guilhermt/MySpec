@@ -222,10 +222,11 @@ describe("findingsBar", () => {
     expect(bar.actions[1]?.tooltip).toBe("Approve the 1 finding not decided yet");
   });
 
-  it("keeps Apply approved enabled when every finding is decided", () => {
+  it("leaves Approve the rest out and Apply approved enabled when every finding is decided", () => {
     const bar = findingsBar(pr("awaiting_decision", [report(["approved", "discarded"])]), "decide");
 
-    expect(bar.actions[2]).not.toHaveProperty("disabledReason");
+    expect(bar.actions.map((button) => button.action)).toEqual(["nextToDecide", "applyFindings"]);
+    expect(bar.actions[1]).not.toHaveProperty("disabledReason");
   });
 
   it("puts the notes in the middle, with their tooltip", () => {
