@@ -174,13 +174,25 @@ func (s *DiscussionService) DecideDraft(id, draftID, decision string) error {
 	return nil
 }
 
-// GroupIntoEpic creates an epic over the given cards and points every one of
-// them at it. It answers with the id of the epic.
-func (s *DiscussionService) GroupIntoEpic(id string, draftIDs []string) (string, error) {
+// GroupIntoEpic puts loose card drafts of the current round under a new epic
+// with this title, in this repository of the board, and answers with its id.
+func (s *DiscussionService) GroupIntoEpic(id string, draftIDs []string, title, repositoryID string) (string, error) {
+	repo, ok := s.repositories.Get(repositoryID)
+	if !ok {
+		return "", s.fail("GroupIntoEpic", fmt.Errorf(
+			"repository %s of the epic: %w", repositoryID, repository.ErrNotFound,
+		))
+	}
+	if stored, found := s.discussions.Get(id); found && stored.BoardID != repo.BoardID {
+		return "", s.fail("GroupIntoEpic", &board.Refusal{
+			Reason: board.RefusalNotManaged, Repository: repo.FullName(),
+		})
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
-	epic, err := s.flow.GroupIntoEpic(ctx, id, draftIDs)
+	epic, err := s.flow.GroupIntoEpic(ctx, id, draftIDs, title, repo.Owner, repo.Name)
 	if err != nil {
 		return "", s.fail("GroupIntoEpic", err)
 	}

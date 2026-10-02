@@ -291,3 +291,30 @@ export function repositoryOf(
     null
   );
 }
+
+/**
+ * epicRepositoryOf is the repository an epic over these drafts starts in: the
+ * most common one among them, ties going to the first by owner/name, and "" when
+ * none of them has one.
+ */
+export function epicRepositoryOf(drafts: readonly Draft[]): string {
+  const counts = new Map<string, { id: string; count: number }>();
+  for (const draft of drafts) {
+    if (draft.repositoryId === "") {
+      continue;
+    }
+    const entry = counts.get(draft.repository) ?? { id: draft.repositoryId, count: 0 };
+    entry.count += 1;
+    counts.set(draft.repository, entry);
+  }
+  let best = "";
+  let bestCount = 0;
+  for (const fullName of [...counts.keys()].sort()) {
+    const { count } = counts.get(fullName) ?? { count: 0 };
+    if (count > bestCount) {
+      best = fullName;
+      bestCount = count;
+    }
+  }
+  return counts.get(best)?.id ?? "";
+}

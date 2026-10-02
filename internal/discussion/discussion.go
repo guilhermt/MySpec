@@ -214,6 +214,9 @@ type Draft struct {
 	Dependencies       []Dependency // card drafts only
 	Decision           Decision
 	Revision           int      // bumped every time the artifact changes the draft
+	Round              int      // the round of drafts it belongs to, from 1
+	RevisedReading     int      // the DraftsRevision of the reading that last changed it within its round; 0 never
+	ApprovalCleared    bool     // a reading changed it while approved; cleared by the next decision
 	Warnings           []string // what a publication or a rewrite said
 	PublishError       string   // why the last publication failed; "" otherwise
 	Published          Publication
@@ -255,6 +258,48 @@ func (d Draft) Reference() string {
 // Decided reports whether the user settled the draft, or the app already
 // published it.
 func (d Draft) Decided() bool { return d.Decision != DecisionNone || d.Published.Done() }
+
+// DisplayTitle is the title the interface and the warnings call a draft by:
+// its own, or a name for the kind of draft that has none.
+func DisplayTitle(d Draft) string {
+	switch {
+	case d.Title != "":
+		return d.Title
+	case d.Kind == KindEpic:
+		return "Untitled epic"
+	default:
+		return "Untitled draft"
+	}
+}
+
+// Recorded is what a reading of the drafts did to them.
+type Recorded struct {
+	Changed  bool // the drafts differ from the stored ones
+	Round    int  // the current round after the reading; 0 without drafts
+	First    bool // the first reading of the round, which has drafts
+	Drafts   int  // the drafts of the round after the reading
+	Replaced int  // the drafts of the round the reading changed
+	Added    int  // the drafts the reading brought into the round
+	Dropped  int  // the drafts of the round the reading took out
+	Before   []BeforeDraft
+}
+
+// BeforeDraft is a draft of the round as it was before a reading that revised
+// the round, or one the reading added to it.
+type BeforeDraft struct {
+	Title           string // the title it had; the new one of an added draft
+	Kind            Kind
+	Decision        Decision
+	Outcome         Outcome
+	Reference       string   // owner/name#number once on GitHub; "" otherwise
+	Changes         []string // the fields the reading changed, in the order of Fields
+	Dropped         bool     // the agent took it out
+	Added           bool     // the reading brought it in
+	ApprovalCleared bool     // it was approved and lost the approval
+}
+
+// Fields are the fields a revision tells apart, in the order they are named.
+var Fields = []string{"title", "body", "repository", "module", "epic", "dependencies", "cards", "kind", "card"}
 
 // Discussion is one discussion of a demand of a board.
 type Discussion struct {
@@ -303,6 +348,9 @@ const idPrefixLen = 8
 // TitleMaxLen is the longest title a discussion takes.
 const TitleMaxLen = 120
 
+// EpicTitleMaxLen is the longest title an epic takes.
+const EpicTitleMaxLen = 256
+
 // ArtifactsDir is where the artifacts of a discussion live: one folder per
 // board, as GitHub names it, and one per discussion.
 func ArtifactsDir(dataDir, boardOwner string, boardNumber int, id string) string {
@@ -331,4 +379,7 @@ var (
 	ErrDependencyLinked = errors.New("discussion: the dependency is already on GitHub")
 	ErrArchived         = errors.New("discussion: the discussion is archived")
 	ErrUntitled         = errors.New("discussion: a draft needs a title to be approved")
+	ErrEpicUntitled     = errors.New("discussion: an epic needs a title to group drafts")
+	ErrEpicTitleTooLong = errors.New("discussion: the title of the epic is too long")
+	ErrNotGroupable     = errors.New("discussion: the draft can't go into an epic")
 )

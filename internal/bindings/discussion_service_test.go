@@ -116,11 +116,66 @@ func TestADraftIsRefusedARepositoryTheBoardDoesNotManage(t *testing.T) {
 	}
 }
 
+func TestGroupingRefusalsGetTheirSentences(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	repoID := f.register(t, t.TempDir())
+	f.registerBoard(t, true)
+	d := f.seedDiscussion(t,
+		webDraft("export-invoices", "Export the invoices"),
+		webDraft("email-invoices", "Email the invoices"),
+		webDraft("sms-invoices", "Text the invoices"),
+	)
+	if err := f.discussionSvc.DecideDraft(d.ID, "sms-invoices", "discarded"); err != nil {
+		t.Fatalf("DecideDraft() = %v, want nil", err)
+	}
+
+	cards := []string{"export-invoices", "email-invoices"}
+	tests := []struct {
+		name  string
+		cards []string
+		title string
+		want  string
+	}{
+		{"untitled", cards, "  ", "Name the epic to group the drafts."},
+		{"title too long", cards, strings.Repeat("a", 257), "Use at most 256 characters in the title of the epic."},
+		{"a discarded card", []string{"export-invoices", "sms-invoices"}, "Invoices", "One of the drafts can't go into an epic anymore."},
+	}
+	for _, tt := range tests {
+		_, err := f.discussionSvc.GroupIntoEpic(d.ID, tt.cards, tt.title, repoID)
+		if err == nil || err.Error() != tt.want {
+			t.Errorf("GroupIntoEpic(%s) = %v, want %q", tt.name, err, tt.want)
+		}
+	}
+	if f.logged(t, "binding failed") {
+		t.Error("a mistake of the user was logged, want nothing logged")
+	}
+}
+
+func TestAnEpicIsRefusedARepositoryTheBoardDoesNotManage(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	repoID := f.register(t, t.TempDir())
+	f.registerBoard(t, false)
+	d := f.seedDiscussion(t,
+		webDraft("export-invoices", "Export the invoices"),
+		webDraft("email-invoices", "Email the invoices"),
+	)
+
+	_, err := f.discussionSvc.GroupIntoEpic(d.ID, []string{"export-invoices", "email-invoices"}, "Invoices", repoID)
+
+	if want := "dev/web isn't managed by this board."; err == nil || err.Error() != want {
+		t.Errorf("GroupIntoEpic() = %v, want %q", err, want)
+	}
+}
+
 func TestGroupingDraftsIntoAnEpicPointsThemAtIt(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	f.register(t, t.TempDir())
+	repoID := f.register(t, t.TempDir())
 	f.registerBoard(t, true)
 	d := f.seedDiscussion(t,
 		webDraft("export-invoices", "Export the invoices"),
@@ -128,14 +183,14 @@ func TestGroupingDraftsIntoAnEpicPointsThemAtIt(t *testing.T) {
 		webDraft("sms-invoices", "Text the invoices"),
 	)
 
-	epicID, err := f.discussionSvc.GroupIntoEpic(d.ID, []string{"export-invoices", "email-invoices"})
+	epicID, err := f.discussionSvc.GroupIntoEpic(d.ID, []string{"export-invoices", "email-invoices"}, "Invoices", repoID)
 	if err != nil {
 		t.Fatalf("GroupIntoEpic() = %v, want nil", err)
 	}
 
 	epic := f.draftOf(t, d.ID, epicID)
-	if epic.Kind != "epic" || epic.Source != "user" {
-		t.Errorf("epic = %+v, want an epic of the user", epic)
+	if epic.Kind != "epic" || epic.Source != "user" || epic.Title != "Invoices" || epic.Repository != "dev/web" {
+		t.Errorf("epic = %+v, want an epic of the user with the title and the repository given", epic)
 	}
 	for _, draftID := range []string{"export-invoices", "email-invoices"} {
 		card := f.draftOf(t, d.ID, draftID)
@@ -143,7 +198,7 @@ func TestGroupingDraftsIntoAnEpicPointsThemAtIt(t *testing.T) {
 			t.Errorf("draft %s = epic %+v, want the epic just created", draftID, card.Epic)
 		}
 	}
-	if _, err = f.discussionSvc.GroupIntoEpic(d.ID, []string{"sms-invoices"}); err == nil ||
+	if _, err = f.discussionSvc.GroupIntoEpic(d.ID, []string{"sms-invoices"}, "Invoices", repoID); err == nil ||
 		err.Error() != "Select at least two cards." {
 		t.Errorf("GroupIntoEpic(one card) = %v, want the sentence about two cards", err)
 	}
@@ -400,19 +455,12 @@ func TestApprovingADraftWithoutATitleGetsItsSentence(t *testing.T) {
 	f := newFixture(t)
 	f.register(t, t.TempDir())
 	f.registerBoard(t, true)
-	d := f.seedDiscussion(t,
-		webDraft("export-invoices", "Export the invoices"),
-		webDraft("email-invoices", "Email the invoices"),
-	)
-	epicID, err := f.discussionSvc.GroupIntoEpic(d.ID, []string{"export-invoices", "email-invoices"})
-	if err != nil {
-		t.Fatalf("GroupIntoEpic() = %v, want nil", err)
-	}
+	d := f.seedDiscussion(t, webDraft("export-invoices", ""))
 
-	err = f.discussionSvc.DecideDraft(d.ID, epicID, "approved")
+	err := f.discussionSvc.DecideDraft(d.ID, "export-invoices", "approved")
 
 	if err == nil || err.Error() != "Name the draft to approve it." {
-		t.Errorf("DecideDraft(untitled epic) = %v, want the sentence about the name", err)
+		t.Errorf("DecideDraft(untitled card) = %v, want the sentence about the name", err)
 	}
 	if f.logged(t, "binding failed") {
 		t.Error("a refusal the user can read was logged as a failure")

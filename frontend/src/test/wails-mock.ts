@@ -282,9 +282,9 @@ export const api = {
   decideDraft: vi.fn<(id: string, draftId: string, decision: DraftDecision) => Promise<void>>(() =>
     Promise.resolve(),
   ),
-  groupIntoEpic: vi.fn<(id: string, draftIds: string[]) => Promise<string>>(() =>
-    Promise.resolve("draft-epic"),
-  ),
+  groupIntoEpic: vi.fn<
+    (id: string, draftIds: string[], title: string, repositoryId: string) => Promise<string>
+  >(() => Promise.resolve("draft-epic")),
   retryPublish: vi.fn<(id: string, draftId: string) => Promise<void>>(() => Promise.resolve()),
   archiveDiscussion: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   deleteDiscussion: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),

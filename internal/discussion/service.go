@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -255,28 +254,28 @@ func (s *Service) writeContext(d Discussion) error {
 
 // RecordDrafts reconciles the drafts of the artifact with what is stored: what
 // the agent did not change keeps the edits and the decisions it had, what it
-// changed is replaced, and a published draft never moves. changed says whether
-// anything moved.
-func (s *Service) RecordDrafts(ctx context.Context, id string, a Artifact) (bool, error) {
+// changed is replaced, and a published draft never moves. Recorded says what
+// the reading did to the drafts.
+func (s *Service) RecordDrafts(ctx context.Context, id string, a Artifact) (Recorded, error) {
 	d, ok := s.Get(id)
 	if !ok {
-		return false, fmt.Errorf("record drafts of discussion %s: %w", id, ErrNotFound)
+		return Recorded{}, fmt.Errorf("record drafts of discussion %s: %w", id, ErrNotFound)
 	}
 
 	stored := s.Drafts(id)
-	drafts := reconcile(id, stored, a)
-	changed := !equalDrafts(stored, drafts)
-	if !changed && d.DraftsRead {
-		return false, nil
+	drafts, rec := reconcile(id, stored, a, d.DraftsRevision+1)
+	rec.Changed = !equalDrafts(stored, drafts)
+	if !rec.Changed && d.DraftsRead {
+		return Recorded{Round: rec.Round}, nil
 	}
 
 	d.UpdatedAt = s.now().UTC()
 	d.DraftsRead = true
-	if changed {
+	if rec.Changed {
 		d.DraftsRevision++
 	}
 	if err := s.store.WriteDrafts(ctx, id, drafts, &d); err != nil {
-		return false, err
+		return Recorded{}, err
 	}
 
 	s.mu.Lock()
@@ -284,22 +283,25 @@ func (s *Service) RecordDrafts(ctx context.Context, id string, a Artifact) (bool
 	s.mu.Unlock()
 	s.save(d)
 
-	if changed {
+	if rec.Changed {
 		s.log.Info("discussion drafts recorded", "discussion", id,
-			"drafts", len(drafts), "revision", d.DraftsRevision)
+			"drafts", len(drafts), "revision", d.DraftsRevision, "round", rec.Round)
 	}
 	s.changed()
-	return changed, nil
+	return rec, nil
 }
 
 // SetDraftText records the title and the body the user left on a draft, which
 // is what a publication sends.
 func (s *Service) SetDraftText(ctx context.Context, id, draftID, title, body string) error {
 	title, body = strings.TrimSpace(title), strings.TrimSpace(body)
-	if title == "" || body == "" {
+	if title == "" {
 		return fmt.Errorf("set text of draft %s of discussion %s: %w", draftID, id, ErrEmptyText)
 	}
 	return s.editDraft(ctx, id, draftID, func(d *Draft) error {
+		if body == "" && (d.Kind != KindEpic || d.Source != SourceUser) {
+			return fmt.Errorf("set text of draft %s of discussion %s: %w", draftID, id, ErrEmptyText)
+		}
 		d.Title, d.Body = title, body
 		return nil
 	})
@@ -462,14 +464,23 @@ func (s *Service) Decide(ctx context.Context, id, draftID string, decision Decis
 		}
 		d.Decision = decided
 		d.PublishError = ""
+		d.ApprovalCleared = false
 		return nil
 	})
 }
 
-// GroupIntoEpic creates an epic of the user over the given cards and points
-// every one of them at it. The epic is written by the user: it starts without
-// a title and without a body.
-func (s *Service) GroupIntoEpic(ctx context.Context, id string, draftIDs []string) (Draft, error) {
+// GroupIntoEpic creates an epic of the user over the given cards of the
+// current round and points every one of them at it. The epic is written by the
+// user: it has the title and the repository the user gave, and no body.
+func (s *Service) GroupIntoEpic(ctx context.Context, id string, draftIDs []string, title, owner, name string) (Draft, error) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return Draft{}, fmt.Errorf("group drafts of discussion %s: %w", id, ErrEpicUntitled)
+	}
+	if utf8.RuneCountInString(title) > EpicTitleMaxLen {
+		return Draft{}, fmt.Errorf("group drafts of discussion %s: %w", id, ErrEpicTitleTooLong)
+	}
+
 	d, err := s.editable(id)
 	if err != nil {
 		return Draft{}, err
@@ -481,7 +492,7 @@ func (s *Service) GroupIntoEpic(ctx context.Context, id string, draftIDs []strin
 		return Draft{}, err
 	}
 
-	owner, name := commonRepository(drafts, members)
+	round := maxRound(drafts)
 	epic := Draft{
 		DiscussionID: d.ID,
 		ID:           nextUserEpicID(drafts),
@@ -489,6 +500,8 @@ func (s *Service) GroupIntoEpic(ctx context.Context, id string, draftIDs []strin
 		Source:       SourceUser,
 		Owner:        owner,
 		Name:         name,
+		Title:        title,
+		Round:        round,
 		Revision:     1,
 	}
 	for i := range drafts {
@@ -513,19 +526,20 @@ func (s *Service) GroupIntoEpic(ctx context.Context, id string, draftIDs []strin
 	return epic, nil
 }
 
-// epicMembers is the set of cards an epic groups, refusing what cannot be one.
+// epicMembers is the set of cards an epic groups, refusing what cannot be one:
+// a card of another round, one that is already under an epic, discarded or
+// started.
 func epicMembers(id string, drafts []Draft, draftIDs []string) (map[string]bool, error) {
+	round := maxRound(drafts)
 	members := map[string]bool{}
 	for _, draftID := range draftIDs {
 		index := slices.IndexFunc(drafts, func(d Draft) bool { return d.ID == draftID })
 		if index < 0 || !drafts[index].IsCard() {
 			return nil, fmt.Errorf("group draft %s of discussion %s: %w", draftID, id, ErrDraftNotFound)
 		}
-		if drafts[index].Published.Started() {
-			return nil, fmt.Errorf("group draft %s of discussion %s: %w", draftID, id, ErrPublished)
-		}
-		if drafts[index].InEpicDraft() {
-			return nil, fmt.Errorf("group draft %s of discussion %s: %w", draftID, id, ErrInvalidRef)
+		draft := drafts[index]
+		if draft.Round != round || draft.InEpicDraft() || draft.Decision == DecisionDiscarded || draft.Published.Started() {
+			return nil, fmt.Errorf("group draft %s of discussion %s: %w", draftID, id, ErrNotGroupable)
 		}
 		members[draftID] = true
 	}
@@ -533,27 +547,6 @@ func epicMembers(id string, drafts []Draft, draftIDs []string) (map[string]bool,
 		return nil, fmt.Errorf("group %d drafts of discussion %s: %w", len(members), id, ErrTooFewCards)
 	}
 	return members, nil
-}
-
-// commonRepository is the repository most of the cards of an epic are in, ties
-// going to the first one by owner/name.
-func commonRepository(drafts []Draft, members map[string]bool) (owner, name string) {
-	counts := map[string]int{}
-	for _, draft := range drafts {
-		if members[draft.ID] {
-			counts[draft.FullName()]++
-		}
-	}
-
-	fullNames := slices.Sorted(maps.Keys(counts))
-	best := fullNames[0]
-	for _, fullName := range fullNames {
-		if counts[fullName] > counts[best] {
-			best = fullName
-		}
-	}
-	owner, name, _ = strings.Cut(best, "/")
-	return owner, name
 }
 
 // nextUserEpicID is the id of the next epic of the user, which never collides

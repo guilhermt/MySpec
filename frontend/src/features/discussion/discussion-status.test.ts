@@ -9,6 +9,7 @@ import {
   draftsSummary,
   epicDiscardedDetail,
   epicGroups,
+  epicRepositoryOf,
   epicWayOut,
   holdLabel,
   holdStands,
@@ -364,5 +365,32 @@ describe("standingDetail", () => {
     expect(
       standingDetail(makeDiscussion({ situations: [discussionSituation("epic_discarded")] })),
     ).toBeNull();
+  });
+});
+
+describe("epicRepositoryOf", () => {
+  const draft = (repository: string, repositoryId: string): Draft =>
+    makeDraft({ repository, repositoryId });
+
+  it("is the repository most of the drafts are in", () => {
+    expect(
+      epicRepositoryOf([
+        draft("acme/api", "r-api"),
+        draft("acme/web", "r-web"),
+        draft("acme/web", "r-web"),
+      ]),
+    ).toBe("r-web");
+  });
+
+  it("goes to the first by owner/name on a tie", () => {
+    expect(epicRepositoryOf([draft("acme/web", "r-web"), draft("acme/api", "r-api")])).toBe(
+      "r-api",
+    );
+  });
+
+  it("ignores drafts without a repository and is empty when none has one", () => {
+    expect(epicRepositoryOf([draft("", ""), draft("acme/web", "r-web")])).toBe("r-web");
+    expect(epicRepositoryOf([draft("", ""), draft("", "")])).toBe("");
+    expect(epicRepositoryOf([])).toBe("");
   });
 });

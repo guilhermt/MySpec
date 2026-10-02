@@ -2,8 +2,21 @@ package bindings
 
 import (
 	"errors"
+	"log/slog"
 	"testing"
+
+	"github.com/guilhermt/myspec/internal/discussionflow"
 )
+
+func TestARunningPublicationGetsItsSentence(t *testing.T) {
+	t.Parallel()
+
+	err := failure(slog.New(slog.DiscardHandler), "DecideDraft", discussionflow.ErrPublishing)
+
+	if want := "A publication is running."; err == nil || err.Error() != want {
+		t.Errorf("failure(ErrPublishing) = %v, want %q", err, want)
+	}
+}
 
 func TestUndoneFailureSaysTheTaskWasUndoneOnlyWhenItWas(t *testing.T) {
 	t.Parallel()

@@ -87,7 +87,7 @@ func (s *Service) readDrafts(ctx context.Context, stored discussion.Discussion) 
 		return
 	}
 
-	changed, err := s.discussions.RecordDrafts(ctx, stored.ID, artifact)
+	rec, err := s.discussions.RecordDrafts(ctx, stored.ID, artifact)
 	if err != nil {
 		s.log.Error("record discussion drafts failed", "discussion", stored.ID, "error", err)
 		return
@@ -95,7 +95,7 @@ func (s *Service) readDrafts(ctx context.Context, stored discussion.Discussion) 
 	// A rewrite that brought the artifact back to what was recorded changes no
 	// draft, but it does settle the warning that the app could not read it.
 	settled := s.setUnreadable(stored.ID, "")
-	if changed || settled {
+	if rec.Changed || settled {
 		s.notify(stored.ID)
 	}
 }

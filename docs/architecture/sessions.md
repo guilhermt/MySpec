@@ -125,7 +125,7 @@ A sessão de uma discussão roda na pasta de artefatos dela, onde o agente escre
 `prompts.Render` acrescenta ao prompt de discussão, nesta ordem:
 
 1. `## Board`, quando o board ainda está cadastrado: o título, os repositórios administrados, o campo de módulo com as opções, ou a frase que diz que os rascunhos não têm módulo, e o status com que um card novo entra no board.
-2. `## Drafts format`, sempre: o formato exato de `drafts.md`, o cabeçalho `---` com `status`, `drafts` ou `none`, um bloco `## Draft: <id>` por rascunho, com `Kind`, `Repository` ou `Card`, `Module`, `Epic` e `Depends on`, e as seções `### Title` e `### Body`, com a regra de que o id é estável entre reescritas e que qualquer desvio torna o arquivo ilegível.
+2. `## Drafts format`, sempre: o formato exato de `drafts.md`, o cabeçalho `---` com `status`, `drafts` ou `none`, um bloco `## Draft: <id>` por rascunho, com `Kind`, `Repository` ou `Card`, `Module`, `Epic` e `Depends on`, e as seções `### Title` e `### Body`, com a regra de que o id é estável entre reescritas, de modo que um rascunho que muda mantém o id e um id novo é um rascunho novo, e que qualquer desvio torna o arquivo ilegível.
 
 Como as seções do review, nenhuma depende de placeholder, então um prompt editado as recebe também.
 

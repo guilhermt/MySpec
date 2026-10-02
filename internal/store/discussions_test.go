@@ -325,6 +325,7 @@ func TestUpdateDraftWritesWhatTheUserLeftAndWhatWasPublished(t *testing.T) {
 	insertDiscussion(t, s, d)
 	first := newDraft(d.ID, "read-the-boards", 0, newDependency("write-the-cards"))
 	second := newDraft(d.ID, "write-the-cards", 1)
+	second.Round, second.RevisedReading, second.ApprovalCleared = 2, 3, true
 	seedDrafts(t, s, d.ID, first, second)
 
 	published := fixedTime.Add(time.Hour)
@@ -336,6 +337,7 @@ func TestUpdateDraftWritesWhatTheUserLeftAndWhatWasPublished(t *testing.T) {
 	first.Epic = "dev/web#42"
 	first.Decision = discussion.DecisionApproved
 	first.Revision = 3
+	first.Round, first.RevisedReading, first.ApprovalCleared = 2, 3, true
 	first.Warnings = []string{"the epic is not on the board"}
 	first.PublishError = "gh: not authenticated"
 	first.Dependencies = []discussion.Dependency{{

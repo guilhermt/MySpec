@@ -223,7 +223,7 @@ One
 ### Body
 One.
 `, ""},
-		{"without a kind", "---\nstatus: drafts\n---\n\n## Draft: one\n- Repository: acme/web\n\n### Title\nOne\n\n### Body\nOne.\n", ""},
+		{"without a kind", "---\nstatus: drafts\n---\n\n## Draft: one\n### Title\nOne\n\n### Body\nOne.\n", ""},
 		{"with a kind that is no kind", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: rewrite\n\n### Title\nOne\n\n### Body\nOne.\n", ""},
 		{"updating without a card", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: update\n\n### Title\nOne\n\n### Body\nOne.\n", ""},
 		{"updating with a repository", `---
@@ -374,8 +374,8 @@ One
 ### Body
 One.
 `, ""},
-		{"without the title heading", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: new\n- Repository: acme/web\n\n### Body\nOne.\n", ""},
-		{"without the body heading", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: new\n- Repository: acme/web\n\n### Title\nOne\n", ""},
+		{"without the title heading", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: new\n### Body\nOne.\n", ""},
+		{"without the body heading", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: new\n### Title\nOne\n", ""},
 		{"with an empty title", `---
 status: drafts
 ---
@@ -503,5 +503,34 @@ func TestReadArtifactTellsAFileThatIsNotThereFromOneItCannotRead(t *testing.T) {
 	}
 	if len(artifact.Drafts) != 3 {
 		t.Errorf("drafts = %d, want 3", len(artifact.Drafts))
+	}
+}
+
+func TestReasonSaysTheRuleAsTheUserReadsIt(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), discussion.DraftsFile)
+	if err := os.WriteFile(path, []byte("no front matter"), 0o600); err != nil {
+		t.Fatalf("write drafts: %v", err)
+	}
+	_, _, readErr := discussion.ReadArtifact(path)
+	_, parseErr := discussion.ParseArtifact(artifactOf("\n## Draft: invoice-overage\n- Kind: new\n- Repository: acme/web\n"))
+	validateErr := discussion.Validate(
+		parse(t, artifactOf(draftOf("one", "Kind: new", "Repository: other/repo"))), boardCatalog())
+
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"a file that can't be read", readErr, "It has no front matter."},
+		{"a draft that can't be parsed", parseErr, "Draft invoice-overage: it has no ### Title."},
+		{"a draft the board does not answer for", validateErr, "Draft one: the board doesn't manage other/repo."},
+		{"an error of another kind", errors.New("disk full"), "The drafts can't be read."},
+	}
+	for _, tt := range tests {
+		if got := discussion.Reason(tt.err); got != tt.want {
+			t.Errorf("Reason(%s) = %q, want %q", tt.name, got, tt.want)
+		}
 	}
 }

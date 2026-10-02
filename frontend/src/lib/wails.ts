@@ -1479,8 +1479,12 @@ export const api = {
     DiscussionService.RemoveDraftDependency(id, draftId, ref),
   decideDraft: (id: string, draftId: string, decision: DraftDecision): Promise<void> =>
     DiscussionService.DecideDraft(id, draftId, decision),
-  groupIntoEpic: (id: string, draftIds: string[]): Promise<string> =>
-    DiscussionService.GroupIntoEpic(id, draftIds),
+  groupIntoEpic: (
+    id: string,
+    draftIds: string[],
+    title: string,
+    repositoryId: string,
+  ): Promise<string> => DiscussionService.GroupIntoEpic(id, draftIds, title, repositoryId),
   retryPublish: (id: string, draftId: string): Promise<void> =>
     DiscussionService.RetryPublish(id, draftId),
   archiveDiscussion: (id: string): Promise<void> => DiscussionService.ArchiveDiscussion(id),

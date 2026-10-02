@@ -60,17 +60,17 @@ func (s *Service) RemoveDraftDependency(ctx context.Context, id, draftID, value 
 	return s.editDraft(id, draftID, func() error { return s.discussions.RemoveDraftDependency(ctx, id, draftID, value) })
 }
 
-// GroupIntoEpic creates an epic of the user over the given cards and points
-// every one of them at it.
-func (s *Service) GroupIntoEpic(ctx context.Context, id string, draftIDs []string) (discussion.Draft, error) {
+// GroupIntoEpic creates an epic of the user over the given cards, with this
+// title and in this repository, and points every one of them at it.
+func (s *Service) GroupIntoEpic(ctx context.Context, id string, draftIDs []string, title, owner, name string) (discussion.Draft, error) {
 	var epic discussion.Draft
 	err := s.edit(id, func() error {
 		for _, draftID := range draftIDs {
 			if s.startedInMemory(id, draftID) {
-				return fmt.Errorf("group draft %s of discussion %s: %w", draftID, id, discussion.ErrPublished)
+				return fmt.Errorf("group draft %s of discussion %s: %w", draftID, id, discussion.ErrNotGroupable)
 			}
 		}
-		created, groupErr := s.discussions.GroupIntoEpic(ctx, id, draftIDs)
+		created, groupErr := s.discussions.GroupIntoEpic(ctx, id, draftIDs, title, owner, name)
 		epic = created
 		return groupErr
 	})

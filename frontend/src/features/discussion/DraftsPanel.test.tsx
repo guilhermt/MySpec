@@ -80,7 +80,12 @@ describe("DraftsPanel", () => {
     await user.click(screen.getByRole("checkbox", { name: "Select draft Group the invoices" }));
     await user.click(group());
 
-    expect(api.groupIntoEpic).toHaveBeenCalledWith("discussion-1", ["draft-1", "draft-2"]);
+    expect(api.groupIntoEpic).toHaveBeenCalledWith(
+      "discussion-1",
+      ["draft-1", "draft-2"],
+      "Epic",
+      "repo-1",
+    );
     await waitFor(() => {
       expect(
         screen.getByRole("checkbox", { name: "Select draft Export the invoices" }),

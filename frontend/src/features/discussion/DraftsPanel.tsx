@@ -4,7 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DraftCard } from "@/features/discussion/DraftCard";
-import { draftsSummary, epicGroups, looseDrafts } from "@/features/discussion/discussion-status";
+import {
+  draftsSummary,
+  epicGroups,
+  epicRepositoryOf,
+  looseDrafts,
+} from "@/features/discussion/discussion-status";
 import { EpicGroup } from "@/features/discussion/EpicGroup";
 import { cn } from "@/lib/utils";
 import type { DiscussionSummary, Draft } from "@/lib/wails";
@@ -69,6 +74,8 @@ export function DraftsPanel({ discussion }: DraftsPanelProps) {
     await groupIntoEpic(
       discussion.id,
       picked.map((draft) => draft.id),
+      "Epic",
+      epicRepositoryOf(picked),
     );
     setSelected(new Set());
   };

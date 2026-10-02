@@ -1055,14 +1055,21 @@ describe("discussion actions reported in the app notice", () => {
   it("answer the id of the epic the drafts were grouped into", async () => {
     vi.mocked(api.groupIntoEpic).mockResolvedValueOnce("draft-epic");
 
-    expect(await groupIntoEpic("discussion-1", ["draft-1", "draft-2"])).toBe("draft-epic");
-    expect(api.groupIntoEpic).toHaveBeenCalledWith("discussion-1", ["draft-1", "draft-2"]);
+    expect(await groupIntoEpic("discussion-1", ["draft-1", "draft-2"], "Epic", "repo-1")).toBe(
+      "draft-epic",
+    );
+    expect(api.groupIntoEpic).toHaveBeenCalledWith(
+      "discussion-1",
+      ["draft-1", "draft-2"],
+      "Epic",
+      "repo-1",
+    );
   });
 
   it("answer an empty id when the drafts could not be grouped", async () => {
     vi.mocked(api.groupIntoEpic).mockRejectedValueOnce(new Error("a draft is published"));
 
-    expect(await groupIntoEpic("discussion-1", ["draft-1"])).toBe("");
+    expect(await groupIntoEpic("discussion-1", ["draft-1"], "Epic", "repo-1")).toBe("");
     expect(useAppStore.getState().error).toEqual({
       label: "Couldn't group the drafts of the item into an epic",
       detail: "a draft is published. Try again.",

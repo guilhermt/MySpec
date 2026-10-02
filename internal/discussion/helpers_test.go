@@ -246,23 +246,23 @@ func (f *fixture) create() discussion.Discussion {
 
 // record parses an artifact and records it, which is what the flow does after
 // a turn of the agent.
-func (f *fixture) record(id, content string) bool {
+func (f *fixture) record(id, content string) discussion.Recorded {
 	f.t.Helper()
 
 	artifact, err := discussion.ParseArtifact(content)
 	if err != nil {
 		f.t.Fatalf("parse artifact: %v", err)
 	}
-	changed, err := f.service.RecordDrafts(f.t.Context(), id, artifact)
+	recorded, err := f.service.RecordDrafts(f.t.Context(), id, artifact)
 	if err != nil {
 		f.t.Fatalf("record drafts: %v", err)
 	}
-	return changed
+	return recorded
 }
 
 // recordValidated validates an artifact against the board and records it,
 // which is the whole reading the flow does after a turn of the agent.
-func (f *fixture) recordValidated(id, content string) bool {
+func (f *fixture) recordValidated(id, content string) discussion.Recorded {
 	f.t.Helper()
 
 	artifact, err := discussion.ParseArtifact(content)
@@ -272,11 +272,11 @@ func (f *fixture) recordValidated(id, content string) bool {
 	if err = discussion.Validate(artifact, boardCatalog()); err != nil {
 		f.t.Fatalf("validate artifact: %v", err)
 	}
-	changed, err := f.service.RecordDrafts(f.t.Context(), id, artifact)
+	recorded, err := f.service.RecordDrafts(f.t.Context(), id, artifact)
 	if err != nil {
 		f.t.Fatalf("record drafts: %v", err)
 	}
-	return changed
+	return recorded
 }
 
 // draft is one draft of a discussion by id.
@@ -303,3 +303,52 @@ func (f *fixture) draftIDs(id string) []string {
 	}
 	return ids
 }
+
+// decide records what the user decided about a draft, failing the test when
+// it is refused.
+func (f *fixture) decide(id, draftID string, decision discussion.Decision) {
+	f.t.Helper()
+
+	if err := f.service.Decide(f.t.Context(), id, draftID, decision); err != nil {
+		f.t.Fatalf("decide %s: %v", draftID, err)
+	}
+}
+
+// publish puts drafts on GitHub, every step of their publication done.
+func (f *fixture) publish(id string, draftIDs ...string) {
+	f.t.Helper()
+
+	for i, draftID := range draftIDs {
+		err := f.service.RecordPublication(f.t.Context(), id, draftID, func(d *discussion.Draft) {
+			d.Decision = discussion.DecisionApproved
+			d.Published = discussion.Publication{
+				Outcome: discussion.OutcomeCreated, Number: 100 + i, At: base.Add(time.Hour),
+			}
+		})
+		if err != nil {
+			f.t.Fatalf("publish %s: %v", draftID, err)
+		}
+	}
+}
+
+// start leaves a draft with the issue created and the rest of its publication
+// still to do.
+func (f *fixture) start(id, draftID string) {
+	f.t.Helper()
+
+	err := f.service.RecordPublication(f.t.Context(), id, draftID, func(d *discussion.Draft) {
+		d.Decision = discussion.DecisionApproved
+		d.Published = discussion.Publication{Outcome: discussion.OutcomeCreated, Number: 100}
+	})
+	if err != nil {
+		f.t.Fatalf("start %s: %v", draftID, err)
+	}
+}
+
+// fourCards is an artifact of four loose cards.
+var fourCards = artifactOf(
+	draftOf("one", "Kind: new", "Repository: acme/web"),
+	draftOf("two", "Kind: new", "Repository: acme/web"),
+	draftOf("three", "Kind: new", "Repository: acme/web"),
+	draftOf("four", "Kind: new", "Repository: acme/web"),
+)

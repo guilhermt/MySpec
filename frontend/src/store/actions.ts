@@ -935,10 +935,15 @@ export async function decideDraft(
 }
 
 /** groupIntoEpic puts the drafts under a new epic and answers its id; "" when it failed. */
-export async function groupIntoEpic(id: string, draftIds: string[]): Promise<string> {
+export async function groupIntoEpic(
+  id: string,
+  draftIds: string[],
+  title: string,
+  repositoryId: string,
+): Promise<string> {
   let epicId = "";
   await run(fail(`Couldn't group the drafts of ${theItem(id)} into an epic`, TRY), async () => {
-    epicId = await api.groupIntoEpic(id, draftIds);
+    epicId = await api.groupIntoEpic(id, draftIds, title, repositoryId);
   });
   return epicId;
 }
