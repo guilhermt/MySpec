@@ -71,7 +71,10 @@ function pillOf(discussion: DiscussionSummary, now: number): PillView {
       word: "",
       shimmer: false,
       paused: false,
-      state: situationPillState(situation, situations.length),
+      state:
+        discussion.unreadableDrafts !== "" && situation.kind === "reply"
+          ? `waiting for you: waiting for the drafts${situations.length > 1 ? `, and ${situations.length - 1} more` : ""}`
+          : situationPillState(situation, situations.length),
     };
   }
   return { ...place, ...momentOf(discussion), paused: false };

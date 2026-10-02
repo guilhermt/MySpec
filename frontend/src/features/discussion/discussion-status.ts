@@ -1,95 +1,11 @@
-import type { StatusTone } from "@/features/task/status";
-import { counted, discussionSituation, situationTone, summaryLabel } from "@/lib/situations";
+import { counted, discussionSituation } from "@/lib/situations";
 import type { DiscussionSummary, Draft, DraftDependency, DraftRef } from "@/lib/wails";
-import {
-  asDiscussionStatus,
-  asDraftKind,
-  asDraftOutcome,
-  asHoldReason,
-  asSituationGroup,
-  asSituationKind,
-} from "@/lib/wails";
+import { asDraftKind, asDraftOutcome, asHoldReason, asSituationKind } from "@/lib/wails";
 
 /** EpicGroup is an epic of a discussion with the cards that belong to it. */
 export interface EpicGroup {
   epic: Draft;
   members: Draft[];
-}
-
-/** discussionStatusLabel is where a discussion stands, in the words of the product. */
-export function discussionStatusLabel(discussion: DiscussionSummary): string {
-  switch (asDiscussionStatus(discussion.status)) {
-    case "discussing":
-      return "Discussing";
-    case "awaiting_drafts":
-      return "Waiting for the drafts";
-    case "deciding":
-      return "Decide drafts";
-    case "publishing":
-      return "Publishing";
-    case "publish_failed":
-      return "Publish failed";
-    case "epic_cant_publish":
-      return "Epic can't publish";
-    case "epic_discarded":
-      return "Epic discarded";
-    case "ready_to_archive":
-      return "Ready to archive";
-  }
-}
-
-/**
- * discussionBarLabel is the label of the bar: the state, except that a failure that stands says
- * so through a run of the independent drafts, where the state reads Publishing.
- */
-export function discussionBarLabel(discussion: DiscussionSummary): string {
-  const situation = discussionSituation(discussion);
-  if (situation !== null && asSituationKind(situation.kind) === "publish_failed") {
-    return "Publish failed";
-  }
-  return discussionStatusLabel(discussion);
-}
-
-/**
- * discussionStatusTone maps the state of a discussion to the colour that
- * carries it. It never calls for the user: that colour comes from the
- * situations alone.
- */
-export function discussionStatusTone(discussion: DiscussionSummary): StatusTone {
-  switch (asDiscussionStatus(discussion.status)) {
-    case "publishing":
-      return "working";
-    case "ready_to_archive":
-      return "done";
-    case "discussing":
-    case "awaiting_drafts":
-    case "deciding":
-    case "publish_failed":
-    case "epic_cant_publish":
-    case "epic_discarded":
-      return "idle";
-  }
-}
-
-/**
- * discussionRowLabel is what a row of a discussion reads: what it waits on the
- * user for, and, when it waits for nothing, what it is doing.
- */
-export function discussionRowLabel(discussion: DiscussionSummary): string {
-  return summaryLabel(discussion.situations ?? []) ?? discussionStatusLabel(discussion);
-}
-
-/**
- * discussionDotTone is the colour of the dot of a discussion: what waits on the user takes the
- * colour of its situation, a closing one reads as done here, and without one the dot shows what
- * the discussion is doing.
- */
-export function discussionDotTone(discussion: DiscussionSummary): StatusTone {
-  const situation = discussionSituation(discussion);
-  if (situation === null) {
-    return discussionStatusTone(discussion);
-  }
-  return asSituationGroup(situation.group) === "closing" ? "done" : situationTone(situation);
 }
 
 /** holdLabel is what keeps an approved draft out of the next publication, null when nothing does. */

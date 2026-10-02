@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   dependencyLabel,
-  discussionDotTone,
-  discussionRowLabel,
-  discussionStatusLabel,
-  discussionStatusTone,
   epicDiscardedDetail,
   epicGroups,
   epicRepositoryOf,
@@ -34,62 +30,6 @@ function held(reason: string, hold: Partial<Draft["hold"]> = {}): Draft {
     hold: { reason, title: "", left: 0, approved: 0, cards: 0, ...hold },
   });
 }
-
-describe("discussionStatusLabel", () => {
-  it("says where the discussion stands", () => {
-    expect(discussionStatusLabel(makeDiscussion())).toBe("Discussing");
-    expect(discussionStatusLabel(makeDiscussion({ status: "awaiting_drafts" }))).toBe(
-      "Waiting for the drafts",
-    );
-    expect(discussionStatusLabel(makeDiscussion({ status: "deciding" }))).toBe("Decide drafts");
-    expect(discussionStatusLabel(makeDiscussion({ status: "publishing" }))).toBe("Publishing");
-    expect(discussionStatusLabel(makeDiscussion({ status: "publish_failed" }))).toBe(
-      "Publish failed",
-    );
-  });
-
-  it.each([
-    ["epic_cant_publish", "Epic can't publish"],
-    ["epic_discarded", "Epic discarded"],
-    ["ready_to_archive", "Ready to archive"],
-  ])("names %s", (status, label) => {
-    expect(discussionStatusLabel(makeDiscussion({ status }))).toBe(label);
-  });
-});
-
-describe("discussionStatusTone", () => {
-  it("works while it publishes and rests when it is done", () => {
-    expect(discussionStatusTone(makeDiscussion({ status: "publishing" }))).toBe("working");
-    expect(discussionStatusTone(makeDiscussion({ status: "ready_to_archive" }))).toBe("done");
-    expect(discussionStatusTone(makeDiscussion({ status: "deciding" }))).toBe("idle");
-  });
-
-  it.each([
-    ["ready_to_archive", "done"],
-    ["epic_cant_publish", "idle"],
-    ["epic_discarded", "idle"],
-  ])("tones %s as %s", (status, tone) => {
-    expect(discussionStatusTone(makeDiscussion({ status }))).toBe(tone);
-  });
-});
-
-describe("discussionRowLabel", () => {
-  it("reads what waits for the user over what the discussion is doing", () => {
-    const situations = [
-      makeSituation({
-        taskId: "discussion-1",
-        kind: "drafts",
-        form: "decide",
-        place: { kind: "discussion", stage: "", step: 0 },
-      }),
-    ];
-
-    expect(discussionRowLabel(makeDiscussion({ status: "deciding", situations }))).toBe(
-      "Decide drafts",
-    );
-    expect(discussionRowLabel(makeDiscussion({ status: "discussing" }))).toBe("Discussing");
-  });
-});
 
 describe("kindLabel and outcomeLabel", () => {
   it("names what a draft does and what became of it", () => {
@@ -169,29 +109,6 @@ describe("dependencyLabel", () => {
         detail: "",
       }),
     ).toBe("dev/web#9 · Export");
-  });
-});
-
-describe("discussionDotTone", () => {
-  it("reads a closing situation as done", () => {
-    const situations = [discussionSituation("ready_to_archive", "closing")];
-
-    expect(discussionDotTone(makeDiscussion({ status: "ready_to_archive", situations }))).toBe(
-      "done",
-    );
-  });
-
-  it("takes the colour of what waits for the user", () => {
-    const situations = [discussionSituation("epic_cant_publish")];
-
-    expect(discussionDotTone(makeDiscussion({ status: "epic_cant_publish", situations }))).toBe(
-      "attention",
-    );
-  });
-
-  it("shows what the discussion is doing without a situation", () => {
-    expect(discussionDotTone(makeDiscussion({ status: "publishing" }))).toBe("working");
-    expect(discussionDotTone(makeDiscussion({ status: "deciding" }))).toBe("idle");
   });
 });
 

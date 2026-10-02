@@ -120,9 +120,14 @@ function toggleOf(item: HTMLElement): HTMLElement | null {
   return [...toggles].find((toggle) => entryOf(toggle) === item) ?? null;
 }
 
-function go(item: HTMLElement | undefined, items: readonly HTMLElement[]): void {
+function go(item: HTMLElement | undefined, items: readonly HTMLElement[], by: -1 | 1 = 1): void {
   if (item === undefined) {
     return;
+  }
+  // A card that takes the arrows in by its ends is told which one: below it, the first item;
+  // above it, the last.
+  if (item.hasAttribute("data-card-ends")) {
+    item.dataset.enter = by < 0 ? "last" : "first";
   }
   const feed = item.closest<HTMLElement>("[role=feed]");
   if (feed !== null) {
@@ -193,7 +198,7 @@ export function stepFeed(entry: HTMLElement, by: -1 | 1): void {
   const items = itemsOf(feed);
   const index = items.indexOf(entry);
   if (index !== -1) {
-    go(items[index + by], items);
+    go(items[index + by], items, by);
   }
 }
 
@@ -246,9 +251,10 @@ export function useFeed(feedRef: RefObject<HTMLElement | null>): void {
 
     const onKeyDown = (event: KeyboardEvent) => {
       const origin = event.target instanceof HTMLElement ? event.target : null;
-      // A finding of a card of findings walks the conversation from the card around it.
+      // An item of a decision card, a finding or a draft, walks the conversation from the card
+      // around it.
       const item =
-        origin?.matches("[data-finding-id]") && WALK_KEYS.includes(event.key)
+        origin?.matches("[data-card-item]") && WALK_KEYS.includes(event.key)
           ? origin.closest<HTMLElement>(ITEM)
           : origin;
       if (item === null || !item.matches(ITEM) || event.altKey || event.ctrlKey || event.metaKey) {
@@ -261,7 +267,7 @@ export function useFeed(feedRef: RefObject<HTMLElement | null>): void {
       const next = target(event.key, items.indexOf(item), items.length);
       if (next !== null) {
         event.preventDefault();
-        go(items[next], items);
+        go(items[next], items, next < items.indexOf(item) ? -1 : 1);
       } else if (toggle(event.key, item, items)) {
         event.preventDefault();
       }

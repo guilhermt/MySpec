@@ -132,6 +132,38 @@ describe("DecisionCard", () => {
     expect(onLeave).toHaveBeenLastCalledWith(1);
   });
 
+  it("takes the focus the feed brings by an end when the card asks for it", () => {
+    render(
+      <DecisionCard
+        title="Drafts"
+        count={3}
+        label="Drafts of round 1"
+        items={ITEMS}
+        onDecide={() => "advance"}
+        ends
+        renderItem={(item, current) => (
+          // biome-ignore lint/a11y/useSemanticElements: a stand-in for the item a screen draws
+          <div
+            role="group"
+            aria-label={`Item ${item.id}`}
+            data-card-item={item.id}
+            tabIndex={current ? 0 : -1}
+          />
+        )}
+      />,
+    );
+    const card = screen.getByRole("group", { name: "Drafts of round 1" });
+
+    card.dataset.enter = "last";
+    act(() => card.focus());
+    expect(screen.getByRole("group", { name: "Item 3" })).toHaveFocus();
+
+    act(() => screen.getByRole("group", { name: "Item 3" }).blur());
+    card.dataset.enter = "first";
+    act(() => card.focus());
+    expect(screen.getByRole("group", { name: "Item 1" })).toHaveFocus();
+  });
+
   it("leaves the keys to a field and to a modifier", async () => {
     const onDecide = vi.fn(() => "advance" as const);
     render(

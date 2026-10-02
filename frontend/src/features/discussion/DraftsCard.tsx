@@ -35,7 +35,9 @@ export interface DraftsCardProps {
 }
 
 // Slot holds a draft, open or folded. The two are different elements, so one that held the focus as
-// it opened or folded would drop it: the slot gives it back to the one that takes its place.
+// it opened or folded would drop it: the slot gives it back to the one that takes its place. A
+// control of the draft that leaves holding the focus, like the decision once the draft publishes,
+// gives it back to the draft too.
 function Slot({ current, children }: { current: boolean; children: ReactNode }) {
   const root = useRef<HTMLDivElement>(null);
   const held = useRef(false);
@@ -43,13 +45,13 @@ function Slot({ current, children }: { current: boolean; children: ReactNode }) 
   // The render still sees the DOM of the draft that is about to be replaced.
   held.current = root.current?.contains(document.activeElement) ?? false;
   useLayoutEffect(() => {
-    if (was.current === current) return;
+    const turned = was.current !== current;
     was.current = current;
-    if (!held.current) return;
+    if (!held.current || (!turned && document.activeElement !== document.body)) return;
     const item = root.current?.querySelector<HTMLElement>("[data-card-item]");
     item?.focus();
-    item?.scrollIntoView?.({ block: "center" });
-  }, [current]);
+    if (turned) item?.scrollIntoView?.({ block: "center" });
+  });
   return <div ref={root}>{children}</div>;
 }
 
@@ -157,6 +159,7 @@ export function DraftsCard({ discussion, target }: DraftsCardProps) {
       sections={sections}
       lockMs={LOCK_MS}
       idle="none"
+      ends
       preferred={target?.draft ?? null}
       onLeave={leaveDecisionCard}
       onDecide={onDecide}

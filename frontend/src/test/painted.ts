@@ -363,7 +363,9 @@ export async function withoutTooltip(elements: readonly HTMLElement[]): Promise<
     if (!shown) {
       missing.push(nameOf(element));
     }
-    await userEvent.unhover(element);
+    // The pointer leaves for the corner: unhover rests it in the middle of the page, which may be the
+    // element itself again, or another one with a tooltip.
+    (await pointerInTheCorner()).remove();
     // The tooltip that closes must be gone before the next element, or it would count for that one.
     await vi.waitFor(
       () => {
@@ -413,10 +415,21 @@ async function pointerInTheCorner(): Promise<HTMLElement> {
     height: "1px",
     zIndex: "2147483647",
   });
+  corner.dataset.testid = CORNER;
   document.body.append(corner);
-  await userEvent.hover(corner);
+  // The pixel is found by its id: a popup that mounts again in the body moves it among the children,
+  // and a path by position would then point at another element.
+  try {
+    await userEvent.hover(page.getByTestId(CORNER));
+  } catch (failure) {
+    corner.remove();
+    throw failure;
+  }
   return corner;
 }
+
+/** CORNER is the test id of the pixel pointerInTheCorner rests the pointer on. */
+const CORNER = "pointer-corner";
 
 /**
  * inkRuns are the widths, in CSS pixels, of the runs a screenshot of an element paints across its

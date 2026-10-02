@@ -181,6 +181,18 @@ describe("discussionStepper", () => {
     expect(model.label).toBe("Progress · Round 1 · waiting for you: question, and 1 more");
   });
 
+  it("says waiting for the drafts when drafts.md can't be read", () => {
+    const model = discussionStepper(
+      discussion({
+        unreadableDrafts: "Draft invoice-overage: it has no ### Title.",
+        situations: [makeSituation({ kind: "reply", place: PLACE })],
+      }),
+      NOW,
+    );
+
+    expect(model.label).toBe("Progress · Discussing · waiting for you: waiting for the drafts");
+  });
+
   it("draws the neutral pill while paused, whatever the situation", () => {
     const model = discussionStepper(
       discussion({

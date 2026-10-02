@@ -24,6 +24,8 @@ export interface DecisionCardProps {
   preferred?: string | null;
   /** idle is the current item when nothing is left to decide and the user moved to none: the first ("first", the default) or none ("none"). */
   idle?: "first" | "none";
+  /** ends makes the feed's arrows come into the card by an end: from above the first item, from below the last. Absent, they come into the current one. */
+  ends?: boolean;
   /** sections wrap an item and the ones under it in a group: an epic and its cards, the cards indented under a guide of --line-2. */
   sections?: readonly { head: string; members: readonly string[]; label: string }[];
   /** renderItem draws one item: current is the one open and holding the tab stop; tabStop holds it without being open (idle "none"); decide is the click of Approve or Discard, through the same lock and the same advance as the keys. */
@@ -49,6 +51,7 @@ export function DecisionCard({
   lockMs = 0,
   preferred = null,
   idle = "first",
+  ends = false,
   sections = [],
   renderItem,
 }: DecisionCardProps) {
@@ -119,13 +122,18 @@ export function DecisionCard({
       data-feed-item=""
       data-feed-keys="own"
       data-feed-stop="inner"
+      {...(ends ? { "data-card-ends": "" } : {})}
       tabIndex={-1}
       onKeyDown={onKeyDown}
       onFocus={(event) => {
         // The card is never the stop itself: focus that lands on it, from the feed's arrows or a
         // click between the items, goes on to the current item.
         if (event.target === event.currentTarget) {
-          if (current !== null) focusItem(current);
+          const enter = event.currentTarget.dataset.enter;
+          delete event.currentTarget.dataset.enter;
+          const entry =
+            enter === "first" ? items[0]?.id : enter === "last" ? items.at(-1)?.id : current;
+          if (entry !== undefined && entry !== null) focusItem(entry);
           return;
         }
         const id = (event.target as HTMLElement).closest<HTMLElement>("[data-card-item]")?.dataset

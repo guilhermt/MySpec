@@ -5,6 +5,7 @@ import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/sys
 import { Field } from "@/components/system/Field";
 import { Input } from "@/components/system/Input";
 import { Select } from "@/components/system/Select";
+import { Tooltip } from "@/components/system/Tooltip";
 import { epicRepositoryOf } from "@/features/discussion/discussion-status";
 import {
   draftTitle,
@@ -125,7 +126,9 @@ export function GroupEpicDialog({ discussion, open, onOpenChange }: GroupEpicDia
               checked={picked.has(draft.id)}
               onCheckedChange={(checked) => toggle(draft.id, checked)}
             >
-              <span className="min-w-0 truncate">{draftTitle(draft)}</span>
+              <Tooltip content={draftTitle(draft)}>
+                <span className="min-w-0 truncate">{draftTitle(draft)}</span>
+              </Tooltip>
               <span className="shrink-0 text-ink-3">{draft.repository}</span>
             </Checkbox>
           ))}

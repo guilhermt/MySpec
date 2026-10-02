@@ -248,9 +248,10 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
             </span>
             <ul className="flex flex-col divide-y divide-line-1 rounded-sm border border-line-1">
               {cards.map((card) => (
+                // The line under a row is outside its height, so the × stays centred on a whole pixel.
                 <li
                   key={card.key}
-                  className="flex min-h-(--size-control) items-center gap-2 pr-1 pl-3 text-(length:--text-ui) leading-(--leading-ui)"
+                  className="box-content flex min-h-(--size-control) items-center gap-2 pr-1 pl-3 text-(length:--text-ui) leading-(--leading-ui)"
                 >
                   <span className="shrink-0 font-mono text-(length:--text-meta) text-ink-3">
                     {issueLabel(card)}

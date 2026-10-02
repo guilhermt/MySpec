@@ -213,7 +213,7 @@ describe("DiscussionRequest", () => {
       situations: [situation("session_error", "error")],
     });
 
-    await user.click(screen.getByRole("button", { name: "Retry discussion agent" }));
+    await user.click(screen.getByRole("button", { name: "Retry" }));
 
     expect(api.retry).toHaveBeenCalledWith("discussion-1", "discussion");
   });
@@ -226,7 +226,7 @@ describe("DiscussionRequest", () => {
       situations: [situation("session_error", "error")],
     });
 
-    await user.click(screen.getByRole("button", { name: "Retry discussion agent" }));
+    await user.click(screen.getByRole("button", { name: "Retry" }));
 
     expect(await screen.findByRole("button", { name: "Retrying…" })).toBeInTheDocument();
   });

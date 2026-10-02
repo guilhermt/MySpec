@@ -253,7 +253,13 @@ function sessionBar(
       actions: [],
     },
   );
-  return { ...model, target: null };
+  // Retry says what it does in a tooltip, and names no one: the conversation is the discussion's.
+  const actions = model.actions.map((button) =>
+    button.action === "retrySession"
+      ? { ...button, label: "Retry", tooltip: "Opens the session again where it stopped" }
+      : button,
+  );
+  return { ...model, actions, target: null };
 }
 
 /**

@@ -349,9 +349,10 @@ describe("discussionRequestOf, the situations of the conversation", () => {
         actions: [
           {
             action: "retrySession",
-            label: "Retry discussion agent",
+            label: "Retry",
             variant: "primary",
             loadingLabel: "Retrying…",
+            tooltip: "Opens the session again where it stopped",
             stage: "discussion",
           },
         ],

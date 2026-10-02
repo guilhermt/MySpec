@@ -65,7 +65,8 @@ function epicChoices(
 /**
  * DraftEditor is the edit of a draft in the open draft: the title and the body saved as they are
  * typed, the fields, and the dependencies of a card. During a publication it reads only. Esc closes
- * the edit when nothing inside it took the key to close something first.
+ * what is open inside it first, a choice, the listbox of the dependencies or the field of an
+ * existing issue, and then the edit.
  */
 export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
   const kind = asDraftKind(draft.kind);
@@ -75,6 +76,8 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
   const lock = locked ? { disabled: true, disabledReason: RUNNING } : {};
   const board = useBoard(discussion.boardId);
   const titleInput = useRef<HTMLInputElement>(null);
+  const epicField = useRef<HTMLDivElement>(null);
+  const addDependency = useRef<HTMLButtonElement>(null);
   const [issue, setIssue] = useState<string | null>(null);
   const [issueRefusal, setIssueRefusal] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
@@ -165,16 +168,27 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
     }
   };
 
+  // What closes inside the edit gives the focus back to what opened it: the next Esc has to reach
+  // the edit, and a focus left on the body would go to the composer.
+  const closeIssue = () => {
+    epicField.current?.querySelector<HTMLElement>("button")?.focus();
+    setIssue(null);
+    setIssueRefusal(null);
+  };
+  const closePicker = () => {
+    addDependency.current?.focus();
+    setPicking(false);
+  };
+
   const saveIssue = async () => {
     const ref = (issue ?? "").trim();
     if (ref === "") {
-      setIssue(null);
+      closeIssue();
       return;
     }
     const refusal = await setDraftEpicInPlace(discussion.id, draft.id, ref);
     if (refusal === null) {
-      setIssue(null);
-      setIssueRefusal(null);
+      closeIssue();
     } else {
       setIssueRefusal(refusal);
     }
@@ -191,7 +205,14 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
     }
     event.preventDefault();
     event.stopPropagation();
-    onDone();
+    // Esc closes the listbox of the dependencies, then the field of an existing issue, then the edit.
+    if (picking) {
+      closePicker();
+    } else if (issue !== null) {
+      closeIssue();
+    } else {
+      onDone();
+    }
   };
 
   return (
@@ -250,23 +271,25 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
           </Field>
         )}
         {!isEpic && (
-          <Field label="Epic">
-            <Select
-              label="Epic"
-              value={epicValue}
-              options={epics.options}
-              groups={epics.groups}
-              onValueChange={(value) => {
-                if (value === ISSUE) {
-                  setIssue("");
-                } else {
-                  setIssue(null);
-                  void setDraftEpic(discussion.id, draft.id, value);
-                }
-              }}
-              {...lock}
-            />
-          </Field>
+          <div ref={epicField} className="contents">
+            <Field label="Epic">
+              <Select
+                label="Epic"
+                value={epicValue}
+                options={epics.options}
+                groups={epics.groups}
+                onValueChange={(value) => {
+                  if (value === ISSUE) {
+                    setIssue("");
+                  } else {
+                    setIssue(null);
+                    void setDraftEpic(discussion.id, draft.id, value);
+                  }
+                }}
+                {...lock}
+              />
+            </Field>
+          </div>
         )}
       </div>
       {issue !== null && !isEpic && (
@@ -280,12 +303,7 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
               setIssueRefusal(null);
             }}
             onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
-                event.stopPropagation();
-                setIssue(null);
-                setIssueRefusal(null);
-              } else if (event.key === "Enter") {
+              if (event.key === "Enter") {
                 event.preventDefault();
                 void saveIssue();
               }
@@ -320,6 +338,7 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
               );
             })}
             <Button
+              ref={addDependency}
               variant="ghost"
               size="xs"
               icon={ICONS.plus}
@@ -337,7 +356,7 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
               drafts={draftOptions}
               cards={cardOptions}
               onToggle={toggle}
-              onClose={() => setPicking(false)}
+              onClose={closePicker}
             />
           )}
         </div>
