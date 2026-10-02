@@ -289,6 +289,35 @@ func TestDiscardingADraftThatFailedBeforeWritingClearsItsFailureAndFreesItsDepen
 	f.waitPublished(id, "export-invoices")
 }
 
+func TestDecidingADraftThatFailedBeforeWritingClearsTheFailureOnlyMemoryHolds(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, looseArtifact)
+	// GitHub refuses the issue, and the store refuses the write of the
+	// failure: only memory holds it.
+	f.gh.failCreate("Invoice report", errGitHub)
+	f.store.failWrites(1, errStore, func(d discussion.Draft) bool { return d.PublishError != "" })
+	f.approve(id, "invoice-report")
+	f.waitFailed(id, "invoice-report")
+	for _, d := range f.discussions.Drafts(id) {
+		if d.PublishError != "" {
+			t.Fatalf("the store holds the failure of %s: %q", d.ID, d.PublishError)
+		}
+	}
+
+	f.decide(id, "invoice-report", discussion.DecisionDiscarded)
+
+	state := f.state(id)
+	if got := f.draftIn(state, "invoice-report"); got.PublishError != "" {
+		t.Errorf("the discarded draft still says %q", got.PublishError)
+	}
+	if state.Status != discussionflow.StatusReadyToArchive {
+		t.Errorf("the discussion is %s, want %s", state.Status, discussionflow.StatusReadyToArchive)
+	}
+}
+
 func TestADraftMemoryHoldsAsStartedRefusesDecisionsAndEdits(t *testing.T) {
 	t.Parallel()
 
