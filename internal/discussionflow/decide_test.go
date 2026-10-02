@@ -151,34 +151,34 @@ Invoice report
 The report of the invoices.
 `
 
-func TestACardThatLeavesAnEpicTakesTheRequestToPublishItAlong(t *testing.T) {
+func TestACardThatLeavesAnEpicTakesBackTheApprovalOfTheEpicAndOfItself(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	id := f.start(cardKey)
 	f.record(id, wideEpicArtifact)
-	// The conversation is closed while the user decides, so that the request
-	// to publish the epic waits for the evaluation the test asks for.
+	// The conversation is closed while the user decides, so that nothing
+	// publishes before the evaluation the test asks for.
 	f.sessions.shut(id)
 	for _, draftID := range []string{"invoices-epic", "invoice-schema", "export-invoices", "invoice-report"} {
 		f.approve(id, draftID)
-	}
-	if err := f.flow.PublishEpic(t.Context(), id, "invoices-epic"); err != nil {
-		t.Fatalf("publish epic: %v", err)
 	}
 
 	if err := f.flow.SetDraftEpic(t.Context(), id, "invoice-report", ""); err != nil {
 		t.Fatalf("set the epic of a card: %v", err)
 	}
+	for _, draftID := range []string{"invoice-report", "invoices-epic"} {
+		if got := f.draftState(id, draftID).Draft.Decision; got != discussion.DecisionNone {
+			t.Errorf("decision of %s = %q, want it taken back", draftID, got)
+		}
+	}
 
+	f.approve(id, "invoice-report")
 	f.sessions.idle(id)
 	f.flow.Check(id)
 	f.waitPublished(id, "invoice-report")
-	if got := count(f.gh.made(), "createIssue:R_acme/web:Invoices"); got != 0 {
-		t.Errorf("the epic was published %d times, want the request forgotten with the card", got)
-	}
 	if f.draftState(id, "invoices-epic").Draft.Published.Started() {
-		t.Errorf("the epic went to GitHub after the card that was asked for left it")
+		t.Errorf("the epic went to GitHub without the decision of the user")
 	}
 }
 
@@ -312,6 +312,7 @@ func TestAnEpicWhoseCardDependsOnAnIssueThatExistsIsReady(t *testing.T) {
 	if err := f.flow.AddDraftDependency(t.Context(), id, "export-invoices", "acme/api#7"); err != nil {
 		t.Fatalf("add dependency: %v", err)
 	}
+	f.decide(id, "export-invoices", discussion.DecisionApproved)
 
 	if got := f.draftState(id, "invoices-epic"); !got.CanPublish {
 		t.Errorf("an epic whose card depends on an issue that exists says %q, want it ready", got.Hint)

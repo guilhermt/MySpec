@@ -173,11 +173,13 @@ Cada rascunho tem o seu cartão, editável: título e corpo como texto, reposit�
 
 Edições e decisões são guardadas enquanto o usuário as faz e sobrevivem ao fechamento do app. A conversa fica aberta durante a decisão: um rascunho que o usuário quer incluir, mudar ou retirar pode ser pedido ao agente, que reescreve o artefato. O produto mostra a versão nova mantendo o texto e a decisão de cada rascunho que o agente não mudou; um rascunho publicado é somente leitura e o agente não o altera. Um rascunho que sai do artefato leva consigo o épico e as dependências que apontavam para ele, com o aviso no cartão de quem apontava.
 
+Mudar o repositório, o épico ou uma dependência de um rascunho aprovado e ainda não publicado retira a aprovação dele, e a do épico que o card deixa e a do épico em que entra: os rascunhos voltam a não decididos e esperam uma decisão nova. Título, corpo e módulo mantêm a aprovação. Uma reescrita do agente que tira o épico ou uma dependência de um rascunho aprovado, ou que muda os cards de um épico aprovado, também retira a aprovação. Retirar a aprovação limpa a falha do rascunho, e uma decisão nova num rascunho que falhou sem começar também a limpa. Um rascunho sem título não é aprovado (`Name the draft to approve it.`).
+
 Uma discussão pode render um único card, misturar novos e atualizações, ou terminar só com o documento, sem rascunho nenhum.
 
 ### Épico
 
-Um **rascunho de épico** agrupa dois ou mais rascunhos de card e tem título, corpo e o repositório da issue pai, escolhido entre os do board. O agente pode propor o épico; o usuário pode criar um com **Group into an epic** sobre rascunhos selecionados no painel, e mover rascunhos para dentro e para fora dele pelo seletor **Epic** de cada cartão. O painel mostra o épico como um grupo, com os rascunhos dentro e as ações do próprio épico.
+Um **rascunho de épico** agrupa dois ou mais rascunhos de card e tem título, corpo e o repositório da issue pai, escolhido entre os do board. O agente pode propor o épico; o usuário pode criar um com **Group into an epic** sobre rascunhos selecionados no painel, e mover rascunhos para dentro e para fora dele pelo seletor **Epic** de cada cartão. O painel mostra o épico como um grupo, com os rascunhos dentro e as ações do próprio épico. **Group into an epic** agrupa só cards que não estão num épico da discussão, e os cards agrupados voltam a não decididos.
 
 Um rascunho de card também pode apontar para um **épico existente**, por `dono/nome#número`, em **Existing issue…** do seletor. Nesse caso o card é publicado sozinho e vira sub-issue daquele épico, o que permite acrescentar cards a um épico que já existe.
 

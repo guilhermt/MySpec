@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -259,6 +260,8 @@ func TestGroupingCardsIntoAnEpicPointsEveryOneOfThemAtIt(t *testing.T) {
 		draftOf("one", "Kind: new", "Repository: acme/api"),
 		draftOf("two", "Kind: new", "Repository: acme/web"),
 		draftOf("three", "Kind: new", "Repository: acme/web"),
+		draftOf("four", "Kind: new", "Repository: acme/web"),
+		draftOf("five", "Kind: new", "Repository: acme/web"),
 	))
 
 	epic, err := f.service.GroupIntoEpic(t.Context(), d.ID, []string{"one", "two", "three"})
@@ -281,7 +284,7 @@ func TestGroupingCardsIntoAnEpicPointsEveryOneOfThemAtIt(t *testing.T) {
 		}
 	}
 
-	second, err := f.service.GroupIntoEpic(t.Context(), d.ID, []string{"one", "two"})
+	second, err := f.service.GroupIntoEpic(t.Context(), d.ID, []string{"four", "five"})
 	if err != nil {
 		t.Fatalf("group into epic: %v", err)
 	}
@@ -664,5 +667,240 @@ func TestSyncLoadsTheDiscussionsAndTheDraftsOfEachOne(t *testing.T) {
 	}
 	if got := loaded.Drafts(d.ID); len(got) != 2 {
 		t.Errorf("drafts = %d, want 2", len(got))
+	}
+}
+
+// approve approves drafts of a discussion, failing the test when one is refused.
+func (f *fixture) approve(id string, draftIDs ...string) {
+	f.t.Helper()
+
+	for _, draftID := range draftIDs {
+		if err := f.service.Decide(f.t.Context(), id, draftID, discussion.DecisionApproved); err != nil {
+			f.t.Fatalf("approve %s: %v", draftID, err)
+		}
+	}
+}
+
+// chainArtifact has two epics, a card in one of them and three loose cards.
+var chainArtifact = artifactOf(
+	draftOf("epic", "Kind: epic", "Repository: acme/web"),
+	draftOf("other", "Kind: epic", "Repository: acme/web"),
+	draftOf("one", "Kind: new", "Repository: acme/web", "Epic: epic"),
+	draftOf("two", "Kind: new", "Repository: acme/web"),
+	draftOf("three", "Kind: new", "Repository: acme/web"),
+)
+
+func TestAChangeOfTheChainTakesBackTheApproval(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		change func(f *fixture, id string) error
+		// undecided are the drafts that go back to be decided; every other one stays approved.
+		undecided []string
+	}{
+		{
+			"another repository",
+			func(f *fixture, id string) error {
+				return f.service.SetDraftRepository(f.t.Context(), id, "two", "acme", "api")
+			},
+			[]string{"two"},
+		},
+		{
+			"the same repository",
+			func(f *fixture, id string) error {
+				return f.service.SetDraftRepository(f.t.Context(), id, "two", "acme", "web")
+			},
+			nil,
+		},
+		{
+			"another epic",
+			func(f *fixture, id string) error { return f.service.SetDraftEpic(f.t.Context(), id, "one", "other") },
+			[]string{"one", "epic", "other"},
+		},
+		{
+			"the same epic",
+			func(f *fixture, id string) error { return f.service.SetDraftEpic(f.t.Context(), id, "one", "epic") },
+			nil,
+		},
+		{
+			"a dependency added",
+			func(f *fixture, id string) error {
+				return f.service.AddDraftDependency(f.t.Context(), id, "two", "three")
+			},
+			[]string{"two"},
+		},
+		{
+			"a dependency removed",
+			func(f *fixture, id string) error {
+				if err := f.service.AddDraftDependency(f.t.Context(), id, "two", "three"); err != nil {
+					return err
+				}
+				f.approve(id, "two")
+				return f.service.RemoveDraftDependency(f.t.Context(), id, "two", "three")
+			},
+			[]string{"two"},
+		},
+		{
+			"another text",
+			func(f *fixture, id string) error {
+				return f.service.SetDraftText(f.t.Context(), id, "two", "Other", "Other body.")
+			},
+			nil,
+		},
+		{
+			"another module",
+			func(f *fixture, id string) error {
+				return f.service.SetDraftModule(f.t.Context(), id, "two", "Billing")
+			},
+			nil,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			d := f.create()
+			f.record(d.ID, chainArtifact)
+			ids := []string{"epic", "other", "one", "two", "three"}
+			f.approve(d.ID, ids...)
+
+			if err := c.change(f, d.ID); err != nil {
+				t.Fatalf("change: %v", err)
+			}
+
+			for _, id := range ids {
+				want := discussion.DecisionApproved
+				if slices.Contains(c.undecided, id) {
+					want = discussion.DecisionNone
+				}
+				if got := f.draft(d.ID, id).Decision; got != want {
+					t.Errorf("decision of %s = %q, want %q", id, got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestTakingBackAnApprovalClearsTheFailureOfTheDraft(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.record(d.ID, chainArtifact)
+	f.approve(d.ID, "two")
+	ctx := t.Context()
+	if err := f.service.SetPublishError(ctx, d.ID, "two", "GitHub said no."); err != nil {
+		t.Fatalf("set publish error: %v", err)
+	}
+
+	if err := f.service.SetDraftRepository(ctx, d.ID, "two", "acme", "api"); err != nil {
+		t.Fatalf("set repository: %v", err)
+	}
+
+	got := f.draft(d.ID, "two")
+	if got.Decision != discussion.DecisionNone || got.PublishError != "" {
+		t.Errorf("draft = decision %q, failure %q, want it undecided and without a failure", got.Decision, got.PublishError)
+	}
+}
+
+func TestAStartedEpicKeepsItsApprovalWhenACardMoves(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.record(d.ID, chainArtifact)
+	f.approve(d.ID, "epic", "one")
+	ctx := t.Context()
+	if err := f.service.RecordPublication(ctx, d.ID, "epic", func(draft *discussion.Draft) {
+		draft.Published.Outcome = discussion.OutcomeCreated
+	}); err != nil {
+		t.Fatalf("record publication: %v", err)
+	}
+
+	if err := f.service.SetDraftEpic(ctx, d.ID, "one", ""); err != nil {
+		t.Fatalf("set epic: %v", err)
+	}
+
+	if got := f.draft(d.ID, "epic").Decision; got != discussion.DecisionApproved {
+		t.Errorf("decision of the started epic = %q, want it kept", got)
+	}
+	if got := f.draft(d.ID, "one").Decision; got != discussion.DecisionNone {
+		t.Errorf("decision of the card = %q, want it taken back", got)
+	}
+}
+
+func TestApprovingADraftWithoutATitleIsRefused(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.record(d.ID, chainArtifact)
+	ctx := t.Context()
+	epic, err := f.service.GroupIntoEpic(ctx, d.ID, []string{"two", "three"})
+	if err != nil {
+		t.Fatalf("group into epic: %v", err)
+	}
+
+	if err = f.service.Decide(ctx, d.ID, epic.ID, discussion.DecisionApproved); !errors.Is(err, discussion.ErrUntitled) {
+		t.Errorf("approve = %v, want ErrUntitled", err)
+	}
+	if err = f.service.Decide(ctx, d.ID, epic.ID, discussion.DecisionDiscarded); err != nil {
+		t.Errorf("discard = %v, want it accepted", err)
+	}
+	if err = f.service.SetDraftText(ctx, d.ID, epic.ID, "Billing", "The billing."); err != nil {
+		t.Fatalf("set text: %v", err)
+	}
+	if err = f.service.Decide(ctx, d.ID, epic.ID, discussion.DecisionApproved); err != nil {
+		t.Errorf("approve with a title = %v, want it accepted", err)
+	}
+}
+
+func TestDecidingADraftAgainClearsItsFailure(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.record(d.ID, chainArtifact)
+	f.approve(d.ID, "two")
+	ctx := t.Context()
+	if err := f.service.SetPublishError(ctx, d.ID, "two", "GitHub said no."); err != nil {
+		t.Fatalf("set publish error: %v", err)
+	}
+
+	if err := f.service.Decide(ctx, d.ID, "two", discussion.DecisionDiscarded); err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+
+	if got := f.draft(d.ID, "two"); got.PublishError != "" {
+		t.Errorf("failure = %q, want it cleared by the new decision", got.PublishError)
+	}
+}
+
+func TestGroupingRefusesACardOfAnEpicDraftAndTakesBackTheApprovalOfTheCards(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.record(d.ID, chainArtifact)
+	f.approve(d.ID, "one", "two", "three")
+	ctx := t.Context()
+
+	if _, err := f.service.GroupIntoEpic(ctx, d.ID, []string{"one", "two"}); !errors.Is(err, discussion.ErrInvalidRef) {
+		t.Errorf("group a card of an epic = %v, want ErrInvalidRef", err)
+	}
+	if got := f.draft(d.ID, "two").Decision; got != discussion.DecisionApproved {
+		t.Errorf("decision after a refusal = %q, want it kept", got)
+	}
+
+	if _, err := f.service.GroupIntoEpic(ctx, d.ID, []string{"two", "three"}); err != nil {
+		t.Fatalf("group into epic: %v", err)
+	}
+	for _, id := range []string{"two", "three"} {
+		if got := f.draft(d.ID, id).Decision; got != discussion.DecisionNone {
+			t.Errorf("decision of %s = %q, want it taken back", id, got)
+		}
 	}
 }

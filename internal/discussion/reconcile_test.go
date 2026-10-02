@@ -1,6 +1,7 @@
 package discussion_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -348,4 +349,75 @@ func TestAnUpdateThatPointsAtAnotherCardIsAnotherDraft(t *testing.T) {
 	if got.Card.Number != 13 || got.Revision != 2 {
 		t.Errorf("draft = %+v, want the new card and a revision", got)
 	}
+}
+
+func TestARewriteThatMovesAKeptDraftTakesBackItsApproval(t *testing.T) {
+	t.Parallel()
+
+	epic := draftOf("epic", "Kind: epic", "Repository: acme/web")
+	one := draftOf("one", "Kind: new", "Repository: acme/web", "Epic: epic")
+	two := draftOf("two", "Kind: new", "Repository: acme/web", "Epic: epic")
+	three := draftOf("three", "Kind: new", "Repository: acme/web", "Epic: epic")
+	dependent := draftOf("dependent", "Kind: new", "Repository: acme/web", "Depends on: one")
+	original := artifactOf(epic, one, two, dependent)
+
+	cases := []struct {
+		name      string
+		rewrite   string
+		undecided []string
+		failed    string // a draft with a failure standing before the rewrite
+	}{
+		{"the epic of a card leaves", artifactOf(one, two, dependent), []string{"one", "two"}, ""},
+		{"the dependency of a draft leaves", artifactOf(epic, two, dependent), []string{"dependent", "epic"}, ""},
+		{"a card of the epic leaves the artifact", artifactOf(epic, one, dependent), []string{"epic"}, ""},
+		{"a new card enters the epic", artifactOf(epic, one, two, dependent, three), []string{"epic"}, ""},
+		{"nothing moves", original, nil, ""},
+		{"a draft with a failure loses its epic", artifactOf(one, two, dependent), []string{"one", "two"}, "one"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			d := f.create()
+			f.record(d.ID, original)
+			ids := []string{"epic", "one", "two", "dependent"}
+			f.approve(d.ID, ids...)
+			if c.failed != "" {
+				if err := f.service.SetPublishError(t.Context(), d.ID, c.failed, "GitHub said no."); err != nil {
+					t.Fatalf("set publish error: %v", err)
+				}
+			}
+
+			f.record(d.ID, c.rewrite)
+
+			for _, id := range ids {
+				got, ok := f.find(d.ID, id)
+				if !ok {
+					continue
+				}
+				want := discussion.DecisionApproved
+				if slices.Contains(c.undecided, id) {
+					want = discussion.DecisionNone
+				}
+				if got.Decision != want {
+					t.Errorf("decision of %s = %q, want %q", id, got.Decision, want)
+				}
+				if want == discussion.DecisionNone && got.PublishError != "" {
+					t.Errorf("failure of %s = %q, want it cleared", id, got.PublishError)
+				}
+			}
+		})
+	}
+}
+
+// find is one draft of a discussion by id, when it is still there.
+func (f *fixture) find(id, draftID string) (discussion.Draft, bool) {
+	for _, d := range f.service.Drafts(id) {
+		if d.ID == draftID {
+			return d, true
+		}
+	}
+	return discussion.Draft{}, false
 }

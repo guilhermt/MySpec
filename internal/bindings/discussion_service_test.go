@@ -125,6 +125,7 @@ func TestGroupingDraftsIntoAnEpicPointsThemAtIt(t *testing.T) {
 	d := f.seedDiscussion(t,
 		webDraft("export-invoices", "Export the invoices"),
 		webDraft("email-invoices", "Email the invoices"),
+		webDraft("sms-invoices", "Text the invoices"),
 	)
 
 	epicID, err := f.discussionSvc.GroupIntoEpic(d.ID, []string{"export-invoices", "email-invoices"})
@@ -142,7 +143,7 @@ func TestGroupingDraftsIntoAnEpicPointsThemAtIt(t *testing.T) {
 			t.Errorf("draft %s = epic %+v, want the epic just created", draftID, card.Epic)
 		}
 	}
-	if _, err = f.discussionSvc.GroupIntoEpic(d.ID, []string{"export-invoices"}); err == nil ||
+	if _, err = f.discussionSvc.GroupIntoEpic(d.ID, []string{"sms-invoices"}); err == nil ||
 		err.Error() != "Select at least two cards." {
 		t.Errorf("GroupIntoEpic(one card) = %v, want the sentence about two cards", err)
 	}
@@ -411,5 +412,30 @@ func TestATaskCreatedFromACardStartsWithTheDocumentOfItsDiscussion(t *testing.T)
 	}
 	if want := board.Context(card, discussionDocument, "Keep the form short."); created.InitialContext != want {
 		t.Errorf("initial context = %q, want %q", created.InitialContext, want)
+	}
+}
+
+func TestApprovingADraftWithoutATitleGetsItsSentence(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+	f.registerBoard(t, true)
+	d := f.seedDiscussion(t,
+		webDraft("export-invoices", "Export the invoices"),
+		webDraft("email-invoices", "Email the invoices"),
+	)
+	epicID, err := f.discussionSvc.GroupIntoEpic(d.ID, []string{"export-invoices", "email-invoices"})
+	if err != nil {
+		t.Fatalf("GroupIntoEpic() = %v, want nil", err)
+	}
+
+	err = f.discussionSvc.DecideDraft(d.ID, epicID, "approved")
+
+	if err == nil || err.Error() != "Name the draft to approve it." {
+		t.Errorf("DecideDraft(untitled epic) = %v, want the sentence about the name", err)
+	}
+	if f.logged(t, "binding failed") {
+		t.Error("a refusal the user can read was logged as a failure")
 	}
 }
