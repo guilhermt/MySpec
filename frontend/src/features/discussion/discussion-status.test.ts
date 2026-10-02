@@ -340,9 +340,13 @@ describe("standingDetail", () => {
     );
   });
 
-  it("tells what a discussion ready to archive published", () => {
+  it("tells what a discussion ready to archive published, without what it discarded", () => {
     const discussion = makeDiscussion({
-      drafts: [makeDraft({ published: true }), makeDraft({ id: "two", published: true })],
+      drafts: [
+        makeDraft({ published: true }),
+        makeDraft({ id: "two", published: true }),
+        makeDraft({ id: "three", decision: "discarded" }),
+      ],
       situations: [discussionSituation("ready_to_archive", "closing")],
     });
 
