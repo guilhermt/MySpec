@@ -990,6 +990,44 @@ func TestAPassWithEveryFindingDiscardedIsReadFromGitHubLikeAClosedReview(t *test
 	f.waitPRRun(t, "the merge to be recorded", func(run task.PRRun) bool { return run.PR.State == task.PRStateMerged })
 }
 
+func TestAReadingOfAPassWithEveryFindingDiscardedRecordsWhatWentWrongOnThePullRequest(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	structured(t, f, decidedPass(1, discarded, discarded))
+	f.gh.setPR("task-1", withChecks(failing(gh.MergeableClean, "lint")))
+
+	f.service.PollPRs()
+
+	f.waitPRRun(t, "the trouble to be recorded", func(run task.PRRun) bool { return run.Trouble.Any() })
+	run, _ := f.tasks.prRun("task-1")
+	if want := (gh.Trouble{FailedChecks: []string{"lint"}}); !run.Trouble.Equal(want) {
+		t.Errorf("trouble = %+v, want %+v", run.Trouble, want)
+	}
+	f.waitPR(t, "task-1", flow.PRTrouble)
+}
+
+func TestAReadingThatFailsOnAPassWithEveryFindingDiscardedStillOffersTheClosing(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	structured(t, f, decidedPass(1, discarded, discarded))
+	f.gh.failView(errors.New("gh pr view: connection refused"))
+
+	f.service.PollPRs()
+	waitFor(t, "the failed reading of the pull request", func() bool {
+		return f.prState(t, "task-1").CheckError != ""
+	})
+
+	state := f.prState(t, "task-1")
+	if state.Status != flow.PRDone || !state.CanClose {
+		t.Errorf("state = %+v, want a task awaiting the merge the user may close", state)
+	}
+	if state.CheckError != "gh pr view: connection refused" {
+		t.Errorf("check error = %q, want what gh said", state.CheckError)
+	}
+}
+
 func TestAPassWithEveryFindingDiscardedIsReadFromGitHubWhenTheAppStarts(t *testing.T) {
 	t.Parallel()
 
