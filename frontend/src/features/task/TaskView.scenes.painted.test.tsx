@@ -220,6 +220,9 @@ function drawScene(
   return { area, band: screen.getByRole("banner") };
 }
 
+/** SCENE_WIDTHS are the main areas every scene of the findings is proved at: a 1250px window, the mock's and a 2560px window. */
+const SCENE_WIDTHS = [HALF_MAIN, SCENE_MAIN, WIDE_MAIN];
+
 /**
  * prepare puts the scene where the mock holds it: the focus on finding 2 in the findings scene, and
  * its inline editor open in findings-edit. Every other scene is as it is drawn.
@@ -373,22 +376,25 @@ describe.each(THEMES)("TaskView, the nine scenes in the %s theme", (theme) => {
       },
     );
 
-    it("gives every cut text a tooltip", async () => {
+    it.each(SCENE_WIDTHS)("gives every cut text a tooltip at %ipx", async (width) => {
       setTheme(theme);
-      const { area } = scene(name);
+      const { area } = scene(name, { width });
       await prepare(name);
       await settle();
-      expect(await withoutTooltip(cutTexts(area).slice(0, 8))).toEqual([]);
+      expect(await withoutTooltip(cutTexts(area))).toEqual([]);
     });
 
-    it("draws one primary at most, the one of the table", async () => {
-      setTheme(theme);
-      scene(name);
-      await prepare(name);
-      await settle();
-      const primaries = visiblePrimaries().map(nameOf);
-      expect(primaries).toEqual(PRIMARY[name]);
-    });
+    it.each(SCENE_WIDTHS)(
+      "draws one primary at most, the one of the table, at %ipx",
+      async (width) => {
+        setTheme(theme);
+        scene(name, { width });
+        await prepare(name);
+        await settle();
+        const primaries = visiblePrimaries().map(nameOf);
+        expect(primaries).toEqual(PRIMARY[name]);
+      },
+    );
   });
 
   it("opens the editor of a finding five lines high", async () => {
