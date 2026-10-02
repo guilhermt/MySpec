@@ -480,9 +480,17 @@ func TestApprovingTheRestLeavesTheDecidedFindingsAsTheyAre(t *testing.T) {
 			t.Errorf("finding %d = %q, want %q", finding.Number, finding.Decision, want[finding.Number])
 		}
 	}
+	// With nothing left to decide, a store that fails every write proves none
+	// is attempted.
+	f.store.writeErr = errors.New("database is locked")
+	before := f.changed()
 	if err := f.service.ApproveRest(t.Context(), review.ID, 1); err != nil {
 		t.Errorf("approve rest with nothing to decide: %v", err)
 	}
+	if f.changed() != before {
+		t.Error("the service announced a change nobody made")
+	}
+	f.store.writeErr = nil
 	if err := f.service.ApproveRest(t.Context(), review.ID, 2); !errors.Is(err, prreview.ErrNotFound) {
 		t.Errorf("approve rest of an unknown pass: error = %v, want ErrNotFound", err)
 	}

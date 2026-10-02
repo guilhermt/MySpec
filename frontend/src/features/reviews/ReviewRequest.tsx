@@ -7,6 +7,7 @@ import { type ReviewRequestAction, reviewAnnouncement } from "@/features/reviews
 import { useReviewRequest } from "@/features/reviews/useReviewRequest";
 import { RequestButtons } from "@/features/task/request-buttons";
 import { useBornStatus } from "@/features/task/useBornStatus";
+import { useFocusAfterApproveRest } from "@/features/task/useFocusAfterApproveRest";
 import { focusFindingToDecide, focusRequest } from "@/lib/focus";
 import { REVIEW_STAGE, type ReviewSummary } from "@/lib/wails";
 import {
@@ -56,17 +57,7 @@ export function ReviewRequest({ review }: ReviewRequestProps) {
   const situationId = request?.situationId ?? null;
   const status = useBornStatus(situationId, request?.status ?? "");
 
-  // Once Approve the rest went through, the focus goes to the primary the bar has then: the button
-  // that was pressed leaves with the findings it approved.
-  const focusPrimaryNext = useRef(false);
-  const offersApproveRest = request?.actions.some((button) => button.action === "approveRest");
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the bar changing is what moves the focus
-  useEffect(() => {
-    if (focusPrimaryNext.current && !offersApproveRest) {
-      focusPrimaryNext.current = false;
-      focusRequest("primary");
-    }
-  }, [request?.label, offersApproveRest]);
+  const approveRest = useFocusAfterApproveRest(request);
 
   // A situation born with the screen open is said once, with its pass.
   const announced = useRef<string | null>(null);
@@ -120,7 +111,7 @@ export function ReviewRequest({ review }: ReviewRequestProps) {
     try {
       const pass = currentCardPass(review)?.pass;
       if (action === "approveRest" && pass !== undefined) {
-        focusPrimaryNext.current = await approveRestOfFindings(review.id, pass);
+        await approveRest(() => approveRestOfFindings(review.id, pass));
       } else {
         await run(action, review, stage ?? REVIEW_STAGE);
       }

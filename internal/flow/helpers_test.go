@@ -1,6 +1,7 @@
 package flow_test
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"maps"
@@ -123,6 +124,7 @@ type memTasks struct {
 	seededTaskModes map[string]task.Mode
 	calls           []string
 	err             error         // returned by every mutation
+	recordErr       error         // returned by RecordPRReport
 	block           chan struct{} // when set, Inspect waits on it
 	inspects        int
 }
@@ -585,8 +587,8 @@ func (m *memTasks) RecordPRReport(
 	defer m.mu.Unlock()
 
 	m.calls = append(m.calls, "recordPRReport:"+id+":"+strconv.Itoa(report.Pass))
-	if m.err != nil {
-		return task.PRPass{}, false, m.err
+	if err := cmp.Or(m.err, m.recordErr); err != nil {
+		return task.PRPass{}, false, err
 	}
 	index := slices.IndexFunc(m.passes[id], func(p task.PRPass) bool { return p.Pass == report.Pass })
 	if index < 0 {
@@ -960,6 +962,15 @@ func (m *memTasks) failWith(err error) {
 	defer m.mu.Unlock()
 
 	m.err = err
+}
+
+// failRecord makes recording the report of a pass return err, nil to let it
+// through again.
+func (m *memTasks) failRecord(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.recordErr = err
 }
 
 // setArtifacts replaces what the disk holds for a task.

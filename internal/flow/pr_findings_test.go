@@ -492,6 +492,24 @@ func TestTheUserDecidesEditsAndApprovesTheRestOfTheFindings(t *testing.T) {
 	}
 }
 
+func TestAFindingARewriteRemovedCannotBeDecidedNorEdited(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	structured(t, f, decidedPass(1, undecided))
+	ctx := t.Context()
+
+	wantErrIs(t, f.service.DecidePRFinding(ctx, "task-1", 1, 2, approved), flow.ErrFindingNotFound)
+	wantErrIs(t, f.service.SetPRFindingText(ctx, "task-1", 1, 2, "Fix it."), flow.ErrFindingNotFound)
+
+	// A task that is gone is not told as a finding that is gone.
+	err := f.service.DecidePRFinding(ctx, "task-gone", 1, 1, approved)
+	wantErrIs(t, err, task.ErrNotFound)
+	if errors.Is(err, flow.ErrFindingNotFound) {
+		t.Errorf("DecidePRFinding(task-gone) = %v, want no finding blamed", err)
+	}
+}
+
 func TestApprovingTheRestOfTheFindingsLeavesTheDecidedOnesAsTheyAre(t *testing.T) {
 	t.Parallel()
 
@@ -708,6 +726,44 @@ func TestTheReportOfAStructuredPassIsRecordedWhenTheAgentRests(t *testing.T) {
 	})
 }
 
+func TestAReportThatCannotBeRecordedIsRecordedByTheNextEvaluationOnItsCommit(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	structured(t, f, askedPass(1))
+	f.tasks.setPRRun("task-1", task.PRRun{Status: task.PRReviewing, PR: openPR()})
+	f.tasks.failRecord(errStart)
+	writeReport(t, f, 1, reportOf("changes", "First | internal/a.go:3 | The first."))
+
+	before := f.tasks.inspectCount()
+	f.service.Check("task-1")
+	f.waitEvaluated(t, "task-1", before)
+	if currentPassOf(t, f).Recorded {
+		t.Fatal("the report is recorded, want the record to have failed")
+	}
+	if run, _ := f.tasks.prRun("task-1"); run.ReportedPass != 1 || run.ReviewedCommit != startCommit {
+		t.Fatalf("run = %+v, want the pass reported on the commit the report covered", run)
+	}
+
+	// The branch moved before the report could be recorded.
+	f.worktrees.setStatus(git.Status{Head: commitSHA})
+	f.tasks.failRecord(nil)
+	f.service.Check("task-1")
+
+	waitFor(t, "the report to be recorded", func() bool { return currentPassOf(t, f).Recorded })
+	if run, _ := f.tasks.prRun("task-1"); run.ReportedPass != 1 || run.ReviewedCommit != startCommit {
+		t.Errorf("run = %+v, want the commit recorded first kept", run)
+	}
+	findings := 1
+	want := []keyedMarker{{
+		Key:    reviewKeyOf,
+		Marker: session.MarkerEntry{Type: session.MarkerPRReviewWritten, Pass: 1, Findings: &findings},
+	}}
+	if diff := cmp.Diff(want, f.sessions.marked(session.MarkerPRReviewWritten)); diff != "" {
+		t.Errorf("pr_review_written markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestTheReportOfAStructuredPassIsNotRecordedWhileTheAgentWorks(t *testing.T) {
 	t.Parallel()
 
@@ -902,6 +958,19 @@ func TestAPassWithEveryFindingDiscardedIsReadFromGitHubLikeAClosedReview(t *test
 	f.waitPRRun(t, "the merge to be recorded", func(run task.PRRun) bool { return run.PR.State == task.PRStateMerged })
 }
 
+func TestAPassWithEveryFindingDiscardedIsReadFromGitHubWhenTheAppStarts(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	structured(t, f, decidedPass(1, discarded, discarded))
+	f.gh.setPR("task-1", gh.PR{Number: 7, URL: samePR.URL, State: gh.StateMerged})
+
+	f.service.Sync(t.Context())
+
+	// The merge may have happened while the app was closed.
+	f.waitPRRun(t, "the merge to be recorded", func(run task.PRRun) bool { return run.PR.State == task.PRStateMerged })
+}
+
 func TestAPassWithFindingsStillOpenIsNotReadFromGitHubOnTheTimer(t *testing.T) {
 	t.Parallel()
 
@@ -971,7 +1040,15 @@ func TestTearingDownThePullRequestForgetsItsStructuredPasses(t *testing.T) {
 	f.tasks.setArtifacts("task-1", task.Artifacts{OneShot: true, Plan: oneShotPlan()})
 	f.tasks.setStepRun("task-1", task.StepRun{Number: 1, Status: task.StepDone, CommitSHA: commitSHA})
 	f.tasks.setStepReports("task-1", 1, stepReport(1, 1, true))
+	f.tasks.setPRRun("task-1", task.PRRun{Status: task.PRReviewing, ReportedPass: 1})
 	f.tasks.setPRPasses("task-1", decidedPass(1, discarded))
+	f.tasks.useDir("task-1", t.TempDir())
+	f.sessions.setSummary("task-1", session.Summary{
+		Stage: session.PRReviewStage, Status: session.StatusWaiting, Idle: true,
+	})
+	writeReport(t, f, 1, "---\nstatus: maybe\n---\n\nThe summary.\n")
+	f.service.Check("task-1")
+	waitFor(t, "the reason the report can't be read", func() bool { return f.prState(t, "task-1").Unreadable != "" })
 
 	if err := f.service.Back(t.Context(), "task-1", task.StageOneShot); err != nil {
 		t.Fatalf("Back() = %v, want nil", err)
@@ -979,6 +1056,12 @@ func TestTearingDownThePullRequestForgetsItsStructuredPasses(t *testing.T) {
 
 	if passes := f.tasks.PRPasses("task-1"); len(passes) != 0 {
 		t.Errorf("passes = %+v, want them cleared with the pull request", passes)
+	}
+	// A PR stage started again shows nothing of the report this one could not read.
+	f.tasks.setPRRun("task-1", task.PRRun{Status: task.PRReviewing})
+	f.tasks.setPRPasses("task-1", askedPass(1))
+	if got := f.prState(t, "task-1").Unreadable; got != "" {
+		t.Errorf("unreadable = %q, want it cleared with the pull request", got)
 	}
 }
 
@@ -1130,25 +1213,27 @@ func TestReviewingAgainAfterAnUnreadableReportReplacesThePassNotRecorded(t *test
 	}
 }
 
-func TestAPassWhoseReportIsRecordedIsNotAskedAgain(t *testing.T) {
+func TestReviewingAgainAfterAReportThatCouldNotBeRecordedAsksTheNextPass(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	inPR(f, "task-1", plan(), task.PRReviewing)
+	structured(t, f, askedPass(1))
 	f.tasks.setPRRun("task-1", task.PRRun{Status: task.PRReviewing, PR: openPR()})
-	f.tasks.setPRPasses("task-1", recordedPass(1, reportedFinding(1)))
-	f.worktrees.setStatus(git.Status{Head: startCommit})
-	f.gh.setPR("task-1", samePR)
 	f.service.Sync(t.Context())
+	f.tasks.failRecord(errStart)
+	writeReport(t, f, 1, reportOf("changes", "First | internal/a.go:3 | The first."))
+	f.service.Check("task-1")
+	f.waitPRRun(t, "the pass to be reported", func(run task.PRRun) bool { return run.ReportedPass == 1 })
+	f.gh.setPR("task-1", withChecks(noChecks()))
 
-	waitFor(t, "the ask to be refused", func() bool {
-		asked, _ := passRows(f)
-		return asked > 0
-	})
-	if got := f.sessions.recorded(); slices.Contains(got, "start:task-1:pr_review:restarted=false") {
-		t.Errorf("session calls = %q, want no review started over a recorded pass", got)
+	if err := f.service.ReviewAgain(t.Context(), "task-1"); err != nil {
+		t.Fatalf("ReviewAgain() = %v, want nil", err)
 	}
-	if passes := f.tasks.PRPasses("task-1"); len(passes) != 1 || !passes[0].Recorded {
-		t.Errorf("passes = %+v, want the recorded pass untouched", passes)
+
+	waitFor(t, "the second pass to be asked for", func() bool {
+		return currentPassOf(t, f).Pass == 2
+	})
+	if pass := currentPassOf(t, f); pass.Recorded {
+		t.Errorf("pass = %+v, want the second pass asked for and not recorded", pass)
 	}
 }

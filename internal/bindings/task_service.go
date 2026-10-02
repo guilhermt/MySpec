@@ -911,6 +911,7 @@ var userMessages = []struct {
 	{flow.ErrNotDeciding, "These findings can't change now: they went to the agent, or a new pass started."},
 	{flow.ErrNotDecided, "Decide every finding first."},
 	{flow.ErrNothingApproved, "No finding is approved."},
+	{flow.ErrFindingNotFound, "This finding no longer exists."},
 	{errPathOutside, "This file is not in the worktree of the task."},
 	{errNotAnchored, "This finding isn't about a line of the pull request."},
 	{errFindingNotFound, "This finding no longer exists."},

@@ -43,9 +43,9 @@ function fail(label: string, remedy: Remedy | null): Failure {
   return { label, remedy };
 }
 
-// No action touches `app`: the new state always arrives through state:changed. attempt answers
-// whether the operation went through, for the actions whose caller goes on only then.
-async function attempt(failure: Failure, operation: () => Promise<void>): Promise<boolean> {
+// No action touches `app`: the new state always arrives through state:changed. run answers whether
+// the operation went through, for the actions whose caller goes on only then; the others ignore it.
+async function run(failure: Failure, operation: () => Promise<void>): Promise<boolean> {
   try {
     await operation();
     return true;
@@ -56,11 +56,6 @@ async function attempt(failure: Failure, operation: () => Promise<void>): Promis
     });
     return false;
   }
-}
-
-// run is attempt for the actions nothing waits on the outcome of.
-async function run(failure: Failure, operation: () => Promise<void>): Promise<void> {
-  await attempt(failure, operation);
 }
 
 // inPlace runs an action whose failure has a place of its own on screen: it answers the message of
@@ -147,8 +142,8 @@ export function changeRepositoryPath(id: string): Promise<boolean> {
 }
 
 /** changeClonePath is changeRepositoryPath for a bar, which has no place for the failure: the app notice says it. */
-export function changeClonePath(id: string): Promise<void> {
-  return run(fail("Couldn't change the path of the clone", TRY), async () => {
+export async function changeClonePath(id: string): Promise<void> {
+  await run(fail("Couldn't change the path of the clone", TRY), async () => {
     await api.changeRepositoryPath(id);
   });
 }
@@ -163,8 +158,8 @@ export function cloneRepository(id: string): Promise<boolean> {
 }
 
 /** chooseCloneFolder asks for the folder new clones go to. */
-export function chooseCloneFolder(): Promise<void> {
-  return run(fail("Couldn't choose the clone folder", TRY), () => api.chooseCloneFolder());
+export async function chooseCloneFolder(): Promise<void> {
+  await run(fail("Couldn't choose the clone folder", TRY), () => api.chooseCloneFolder());
 }
 
 /**
@@ -226,8 +221,8 @@ export async function previewRemoveBoard(id: string): Promise<BoardRemoval | nul
 }
 
 /** refreshBoard starts a reading of a board; the result arrives with the state. */
-export function refreshBoard(id: string): Promise<void> {
-  return run(fail(withItem("Couldn't refresh the board", boardTitle(id)), GH), () =>
+export async function refreshBoard(id: string): Promise<void> {
+  await run(fail(withItem("Couldn't refresh the board", boardTitle(id)), GH), () =>
     api.refreshBoard(id),
   );
 }
@@ -242,15 +237,15 @@ export async function cardContext(boardId: string, key: string): Promise<string>
 }
 
 /** removeRepository removes a repository that has no task. */
-export function removeRepository(id: string): Promise<void> {
-  return run(fail(withItem("Couldn't remove the repository", repositoryName(id)), TRY), () =>
+export async function removeRepository(id: string): Promise<void> {
+  await run(fail(withItem("Couldn't remove the repository", repositoryName(id)), TRY), () =>
     api.removeRepository(id),
   );
 }
 
 /** setRepositoryFilter chooses the repository the task list and the history show. */
-export function setRepositoryFilter(id: string): Promise<void> {
-  return run(
+export async function setRepositoryFilter(id: string): Promise<void> {
+  await run(
     fail(
       id === ""
         ? "Couldn't show every repository"
@@ -261,31 +256,31 @@ export function setRepositoryFilter(id: string): Promise<void> {
   );
 }
 
-export function setTheme(preference: ThemePreference): Promise<void> {
-  return run(fail("Couldn't change the theme", TRY), () => api.setTheme(preference));
+export async function setTheme(preference: ThemePreference): Promise<void> {
+  await run(fail("Couldn't change the theme", TRY), () => api.setTheme(preference));
 }
 
 /** setModelDefault changes what the app gives a stage of the tasks created next. */
-export function setModelDefault(stage: ModelStage, choice: ModelChoice): Promise<void> {
-  return run(fail("Couldn't change the default model", TRY), () =>
+export async function setModelDefault(stage: ModelStage, choice: ModelChoice): Promise<void> {
+  await run(fail("Couldn't change the default model", TRY), () =>
     api.setModelDefault(stage, choice.model, choice.effort),
   );
 }
 
 /** setReviewModeDefault changes who reviews the steps of the tasks created next. */
-export function setReviewModeDefault(mode: ReviewMode): Promise<void> {
-  return run(fail("Couldn't change the default review mode", TRY), () =>
+export async function setReviewModeDefault(mode: ReviewMode): Promise<void> {
+  await run(fail("Couldn't change the default review mode", TRY), () =>
     api.setReviewModeDefault(mode),
   );
 }
 
 /** setStageModel changes what a stage of a task runs with, before it starts. */
-export function setStageModel(
+export async function setStageModel(
   taskId: string,
   stage: ModelStage,
   choice: ModelChoice,
 ): Promise<void> {
-  return run(fail(`Couldn't change the model of ${theItem(taskId)}`, TRY), () =>
+  await run(fail(`Couldn't change the model of ${theItem(taskId)}`, TRY), () =>
     api.setStageModel(taskId, stage, choice.model, choice.effort),
   );
 }
@@ -303,22 +298,30 @@ export function setStageModelInPlace(
 }
 
 /** setStepModel gives one step a choice of its own, apart from the implementation. */
-export function setStepModel(taskId: string, step: number, choice: ModelChoice): Promise<void> {
-  return run(fail(`Couldn't change the model of step ${step} of ${theItem(taskId)}`, TRY), () =>
+export async function setStepModel(
+  taskId: string,
+  step: number,
+  choice: ModelChoice,
+): Promise<void> {
+  await run(fail(`Couldn't change the model of step ${step} of ${theItem(taskId)}`, TRY), () =>
     api.setStepModel(taskId, step, choice.model, choice.effort),
   );
 }
 
 /** setSessionModel changes what a session runs with from its next message on. */
-export function setSessionModel(taskId: string, stage: string, choice: ModelChoice): Promise<void> {
-  return run(fail(`Couldn't change the model of ${theItem(taskId)}`, TRY), () =>
+export async function setSessionModel(
+  taskId: string,
+  stage: string,
+  choice: ModelChoice,
+): Promise<void> {
+  await run(fail(`Couldn't change the model of ${theItem(taskId)}`, TRY), () =>
     api.setSessionModel(taskId, stage, choice.model, choice.effort),
   );
 }
 
 /** setReviewMode changes who reviews the steps of a task that are still to start. */
-export function setReviewMode(taskId: string, mode: ReviewMode): Promise<void> {
-  return run(fail(`Couldn't change the review mode of ${theItem(taskId)}`, TRY), () =>
+export async function setReviewMode(taskId: string, mode: ReviewMode): Promise<void> {
+  await run(fail(`Couldn't change the review mode of ${theItem(taskId)}`, TRY), () =>
     api.setReviewMode(taskId, mode),
   );
 }
@@ -332,16 +335,20 @@ export function setReviewModeInPlace(taskId: string, mode: ReviewMode): Promise<
 }
 
 /** setStepReviewMode gives one step a review mode of its own, apart from the task. */
-export function setStepReviewMode(taskId: string, step: number, mode: ReviewMode): Promise<void> {
-  return run(
+export async function setStepReviewMode(
+  taskId: string,
+  step: number,
+  mode: ReviewMode,
+): Promise<void> {
+  await run(
     fail(`Couldn't change the review mode of step ${step} of ${theItem(taskId)}`, TRY),
     () => api.setStepReviewMode(taskId, step, mode),
   );
 }
 
 /** followTaskReviewMode drops the review mode of a step, which follows the task again. */
-export function followTaskReviewMode(taskId: string, step: number): Promise<void> {
-  return run(fail(`Couldn't change the review mode of ${theItem(taskId)}`, TRY), () =>
+export async function followTaskReviewMode(taskId: string, step: number): Promise<void> {
+  await run(fail(`Couldn't change the review mode of ${theItem(taskId)}`, TRY), () =>
     api.clearStepReviewMode(taskId, step),
   );
 }
@@ -374,9 +381,13 @@ export function createTask(req: CreateTaskRequest): Promise<string> {
 // runRemoval runs the removal of an item the user asked for, marking the item
 // first: when it leaves, its page is not announced, since the user knows. A
 // removal that fails leaves the item in place, so the mark goes with it.
-function runRemoval(id: string, failure: Failure, operation: () => Promise<void>): Promise<void> {
+async function runRemoval(
+  id: string,
+  failure: Failure,
+  operation: () => Promise<void>,
+): Promise<void> {
   useAppStore.setState({ expectGone: id });
-  return run(failure, () =>
+  await run(failure, () =>
     operation().catch((error: unknown) => {
       if (useAppStore.getState().expectGone === id) {
         useAppStore.setState({ expectGone: null });
@@ -397,9 +408,9 @@ export function deleteTask(taskId: string): Promise<void> {
 }
 
 /** loadTranscript fetches a conversation and buffers what arrives meanwhile. */
-export function loadTranscript(taskId: string, stage: string): Promise<void> {
+export async function loadTranscript(taskId: string, stage: string): Promise<void> {
   useAppStore.getState().beginTranscript(taskId, stage);
-  return run(fail(`Couldn't load the conversation of ${theItem(taskId)}`, TRY), async () => {
+  await run(fail(`Couldn't load the conversation of ${theItem(taskId)}`, TRY), async () => {
     const transcript = await api.getTranscript(taskId, stage);
     useAppStore.getState().setTranscript(transcript);
   });
@@ -444,26 +455,26 @@ export async function sendMessageInPlace(
   return (await inPlace(() => api.sendMessage(taskId, stage, text))) ?? "";
 }
 
-export function removePending(taskId: string, stage: string, entryId: string): Promise<void> {
-  return run(fail(`Couldn't remove the queued message of ${theItem(taskId)}`, TRY), () =>
+export async function removePending(taskId: string, stage: string, entryId: string): Promise<void> {
+  await run(fail(`Couldn't remove the queued message of ${theItem(taskId)}`, TRY), () =>
     api.removePending(taskId, stage, entryId),
   );
 }
 
-export function interrupt(taskId: string, stage: string): Promise<void> {
-  return run(fail(`Couldn't stop the agent of ${theItem(taskId)}`, TRY), () =>
+export async function interrupt(taskId: string, stage: string): Promise<void> {
+  await run(fail(`Couldn't stop the agent of ${theItem(taskId)}`, TRY), () =>
     api.interrupt(taskId, stage),
   );
 }
 
-export function pause(taskId: string, stage: string): Promise<void> {
-  return run(fail(withItem("Couldn't pause", itemName(taskId)), TRY), () =>
+export async function pause(taskId: string, stage: string): Promise<void> {
+  await run(fail(withItem("Couldn't pause", itemName(taskId)), TRY), () =>
     api.pause(taskId, stage),
   );
 }
 
-export function resume(taskId: string, stage: string): Promise<void> {
-  return run(fail(withItem("Couldn't resume", itemName(taskId)), TRY), () =>
+export async function resume(taskId: string, stage: string): Promise<void> {
+  await run(fail(withItem("Couldn't resume", itemName(taskId)), TRY), () =>
     api.resume(taskId, stage),
   );
 }
@@ -476,8 +487,8 @@ export async function resumeInPlace(taskId: string, stage: string): Promise<stri
   return (await inPlace(() => api.resume(taskId, stage))) ?? "";
 }
 
-export function retry(taskId: string, stage: string): Promise<void> {
-  return run(fail(withItem("Couldn't retry", itemName(taskId)), TRY), () =>
+export async function retry(taskId: string, stage: string): Promise<void> {
+  await run(fail(withItem("Couldn't retry", itemName(taskId)), TRY), () =>
     api.retry(taskId, stage),
   );
 }
@@ -520,29 +531,29 @@ export async function answerQuestionInPlace(
 }
 
 /** backToStage reopens a stage that is already done. */
-export function backToStage(taskId: string, stage: TaskStage): Promise<void> {
-  return run(fail(`Couldn't go back to the ${stageName(stage)} of ${theItem(taskId)}`, TRY), () =>
+export async function backToStage(taskId: string, stage: TaskStage): Promise<void> {
+  await run(fail(`Couldn't go back to the ${stageName(stage)} of ${theItem(taskId)}`, TRY), () =>
     api.backToStage(taskId, stage),
   );
 }
 
 /** discardStage throws a stage away and starts it over. */
-export function discardStage(taskId: string, stage: TaskStage): Promise<void> {
-  return run(fail(`Couldn't discard the ${stageName(stage)} of ${theItem(taskId)}`, TRY), () =>
+export async function discardStage(taskId: string, stage: TaskStage): Promise<void> {
+  await run(fail(`Couldn't discard the ${stageName(stage)} of ${theItem(taskId)}`, TRY), () =>
     api.discardStage(taskId, stage),
   );
 }
 
 /** continueStage moves a task revisiting a stage on to the next one. */
-export function continueStage(taskId: string): Promise<void> {
-  return run(fail(withItem("Couldn't continue", itemName(taskId)), TRY), () =>
+export async function continueStage(taskId: string): Promise<void> {
+  await run(fail(withItem("Couldn't continue", itemName(taskId)), TRY), () =>
     api.continueStage(taskId),
   );
 }
 
 /** retryStep starts a blocked step over, from the fetch. */
-export function retryStep(taskId: string): Promise<void> {
-  return run(fail(`Couldn't retry the step of ${theItem(taskId)}`, cloneRemedy(taskId, TRY)), () =>
+export async function retryStep(taskId: string): Promise<void> {
+  await run(fail(`Couldn't retry the step of ${theItem(taskId)}`, cloneRemedy(taskId, TRY)), () =>
     api.retryStep(taskId),
   );
 }
@@ -556,52 +567,51 @@ export function cleanAndStartStep(taskId: string): Promise<string | null> {
 }
 
 /** discardStep deletes the conversation of the step and runs it again from scratch. */
-export function discardStep(taskId: string, cleanWorktree: boolean): Promise<void> {
-  return run(
-    fail(`Couldn't discard the step of ${theItem(taskId)}`, cloneRemedy(taskId, TRY)),
-    () => api.discardStep(taskId, cleanWorktree),
+export async function discardStep(taskId: string, cleanWorktree: boolean): Promise<void> {
+  await run(fail(`Couldn't discard the step of ${theItem(taskId)}`, cloneRemedy(taskId, TRY)), () =>
+    api.discardStep(taskId, cleanWorktree),
   );
 }
 
 /** approveStep sends the reviewed step to be committed by the agent that wrote it. */
-export function approveStep(taskId: string): Promise<void> {
-  return run(fail(`Couldn't approve the step of ${theItem(taskId)}`, TRY), () =>
+export async function approveStep(taskId: string): Promise<void> {
+  await run(fail(`Couldn't approve the step of ${theItem(taskId)}`, TRY), () =>
     api.approveStep(taskId),
   );
 }
 
 /** reviewStepMyself takes the review of the current step back from the agent. */
-export function reviewStepMyself(taskId: string): Promise<void> {
-  return run(fail(`Couldn't take over the review of the step of ${theItem(taskId)}`, TRY), () =>
+export async function reviewStepMyself(taskId: string): Promise<void> {
+  await run(fail(`Couldn't take over the review of the step of ${theItem(taskId)}`, TRY), () =>
     api.reviewStepMyself(taskId),
   );
 }
 
 /** openPR sends the draft the user approved to the agent, which opens the PR. */
-export function openPR(taskId: string, title: string, body: string): Promise<void> {
-  return run(fail(`Couldn't open the pull request of ${theItem(taskId)}`, GH), async () => {
+export async function openPR(taskId: string, title: string, body: string): Promise<void> {
+  await run(fail(`Couldn't open the pull request of ${theItem(taskId)}`, GH), async () => {
     await api.openPR(taskId, title, body);
     useAppStore.getState().clearPrDraft(taskId);
   });
 }
 
 /** approvePR sends the reviewed pull request to be committed and pushed. */
-export function approvePR(taskId: string): Promise<void> {
-  return run(fail(`Couldn't approve the changes of ${theItem(taskId)}`, TRY), () =>
+export async function approvePR(taskId: string): Promise<void> {
+  await run(fail(`Couldn't approve the changes of ${theItem(taskId)}`, TRY), () =>
     api.approvePR(taskId),
   );
 }
 
 /** reviewAgain runs another review pass over an open pull request. */
-export function reviewAgain(taskId: string): Promise<void> {
-  return run(fail(`Couldn't review the pull request of ${theItem(taskId)} again`, TRY), () =>
+export async function reviewAgain(taskId: string): Promise<void> {
+  await run(fail(`Couldn't review the pull request of ${theItem(taskId)} again`, TRY), () =>
     api.reviewAgain(taskId),
   );
 }
 
 /** discardDraft throws away the draft of the pull request and writes it again. */
-export function discardDraft(taskId: string): Promise<void> {
-  return run(
+export async function discardDraft(taskId: string): Promise<void> {
+  await run(
     fail(`Couldn't discard the draft of the pull request of ${theItem(taskId)}`, TRY),
     async () => {
       await api.discardDraft(taskId);
@@ -611,15 +621,15 @@ export function discardDraft(taskId: string): Promise<void> {
 }
 
 /** retryPR starts the blocked PR stage of a task over. */
-export function retryPR(taskId: string): Promise<void> {
-  return run(fail(`Couldn't retry the pull request of ${theItem(taskId)}`, GH), () =>
+export async function retryPR(taskId: string): Promise<void> {
+  await run(fail(`Couldn't retry the pull request of ${theItem(taskId)}`, GH), () =>
     api.retryPR(taskId),
   );
 }
 
 /** refreshPR asks GitHub again what became of the pull request. */
-export function refreshPR(taskId: string): Promise<void> {
-  return run(fail(`Couldn't check the pull request of ${theItem(taskId)}`, GH), () =>
+export async function refreshPR(taskId: string): Promise<void> {
+  await run(fail(`Couldn't check the pull request of ${theItem(taskId)}`, GH), () =>
     api.refreshPR(taskId),
   );
 }
@@ -634,26 +644,26 @@ export function closeTask(taskId: string): Promise<void> {
 }
 
 /** openInEditor opens the worktree of the task in the editor of the user. */
-export function openInEditor(taskId: string): Promise<void> {
-  return run(fail(`Couldn't open ${theItem(taskId)} in the editor`, null), () =>
+export async function openInEditor(taskId: string): Promise<void> {
+  await run(fail(`Couldn't open ${theItem(taskId)} in the editor`, null), () =>
     api.openInEditor(taskId),
   );
 }
 
 /** openFileInEditor opens one changed file of the worktree in the editor of the user. */
-export function openFileInEditor(taskId: string, path: string): Promise<void> {
-  return run(fail(`Couldn't open ${path} in the editor`, null), () =>
+export async function openFileInEditor(taskId: string, path: string): Promise<void> {
+  await run(fail(`Couldn't open ${path} in the editor`, null), () =>
     api.openFileInEditor(taskId, path),
   );
 }
 
-export function openExternal(url: string): Promise<void> {
-  return run(fail("Couldn't open the link", null), () => api.openExternal(url));
+export async function openExternal(url: string): Promise<void> {
+  await run(fail("Couldn't open the link", null), () => api.openExternal(url));
 }
 
 /** refreshPullRequests reads the open pull requests again; the result arrives with the state. */
-export function refreshPullRequests(): Promise<void> {
-  return run(fail("Couldn't refresh the pull requests", GH), () => api.refreshPullRequests());
+export async function refreshPullRequests(): Promise<void> {
+  await run(fail("Couldn't refresh the pull requests", GH), () => api.refreshPullRequests());
 }
 
 /**
@@ -693,8 +703,8 @@ export function publishReview(
 }
 
 /** refreshReviewPR reads the pull request of a review now, out of the minute. */
-export function refreshReviewPR(id: string): Promise<void> {
-  return run(fail(`Couldn't check the pull request of ${theItem(id)}`, GH), () =>
+export async function refreshReviewPR(id: string): Promise<void> {
+  await run(fail(`Couldn't check the pull request of ${theItem(id)}`, GH), () =>
     api.refreshReviewPR(id),
   );
 }
@@ -769,65 +779,68 @@ export function saveReviewSummaryInPlace(
 }
 
 /** saveReviewSummary records the summary of a pass as the user left it. */
-export function saveReviewSummary(id: string, pass: number, text: string): Promise<void> {
-  return run(fail(`Couldn't save the summary of ${theItem(id)}`, TRY), () =>
+export async function saveReviewSummary(id: string, pass: number, text: string): Promise<void> {
+  await run(fail(`Couldn't save the summary of ${theItem(id)}`, TRY), () =>
     api.setReviewSummary(id, pass, text),
   );
 }
 
 /** applyReview asks the agent to fix the findings the user approved. */
-export function applyReview(id: string): Promise<void> {
-  return run(fail(`Couldn't apply the approved findings of ${theItem(id)}`, TRY), () =>
+export async function applyReview(id: string): Promise<void> {
+  await run(fail(`Couldn't apply the approved findings of ${theItem(id)}`, TRY), () =>
     api.applyReview(id),
   );
 }
 
 /** approveReview sends the changes the agent made to be committed and pushed. */
-export function approveReview(id: string): Promise<void> {
-  return run(fail(`Couldn't approve the changes of ${theItem(id)}`, TRY), () =>
+export async function approveReview(id: string): Promise<void> {
+  await run(fail(`Couldn't approve the changes of ${theItem(id)}`, TRY), () =>
     api.approveReview(id),
   );
 }
 
 /** openReviewInEditor opens the worktree of a review in the editor of the user. */
-export function openReviewInEditor(id: string): Promise<void> {
-  return run(fail(`Couldn't open ${theItem(id)} in the editor`, null), () =>
+export async function openReviewInEditor(id: string): Promise<void> {
+  await run(fail(`Couldn't open ${theItem(id)} in the editor`, null), () =>
     api.openReviewInEditor(id),
   );
 }
 
 /** openFindingInEditor opens the line a finding points at, in the editor of the user. */
-export function openFindingInEditor(id: string, pass: number, number: number): Promise<void> {
-  return run(fail(`Couldn't open finding ${number} of ${theItem(id)} in the editor`, null), () =>
+export async function openFindingInEditor(id: string, pass: number, number: number): Promise<void> {
+  await run(fail(`Couldn't open finding ${number} of ${theItem(id)} in the editor`, null), () =>
     api.openFindingInEditor(id, pass, number),
   );
 }
 
 /** openPRFindingInEditor opens the line a finding of the review of the pull request of a task points at, in the editor of the user. */
-export function openPRFindingInEditor(taskId: string, pass: number, number: number): Promise<void> {
-  return run(
-    fail(`Couldn't open finding ${number} of ${theItem(taskId)} in the editor`, null),
-    () => api.openPRFindingInEditor(taskId, pass, number),
+export async function openPRFindingInEditor(
+  taskId: string,
+  pass: number,
+  number: number,
+): Promise<void> {
+  await run(fail(`Couldn't open finding ${number} of ${theItem(taskId)} in the editor`, null), () =>
+    api.openPRFindingInEditor(taskId, pass, number),
   );
 }
 
 /** approveRestOfPRFindings approves every finding of the pass of the pull request of a task that has no decision; it answers whether it did. */
 export function approveRestOfPRFindings(taskId: string, pass: number): Promise<boolean> {
-  return attempt(fail(`Couldn't approve the rest of the findings of ${theItem(taskId)}`, TRY), () =>
+  return run(fail(`Couldn't approve the rest of the findings of ${theItem(taskId)}`, TRY), () =>
     api.approveRestOfPRFindings(taskId, pass),
   );
 }
 
 /** applyPRFindings sends the agent the findings of the pull request of a task the user approved. */
-export function applyPRFindings(taskId: string): Promise<void> {
-  return run(fail(`Couldn't apply the approved findings of ${theItem(taskId)}`, TRY), () =>
+export async function applyPRFindings(taskId: string): Promise<void> {
+  await run(fail(`Couldn't apply the approved findings of ${theItem(taskId)}`, TRY), () =>
     api.applyPRFindings(taskId),
   );
 }
 
 /** approveRestOfFindings approves every finding of the pass of a review that has no decision; it answers whether it did. */
 export function approveRestOfFindings(id: string, pass: number): Promise<boolean> {
-  return attempt(fail(`Couldn't approve the rest of the findings of ${theItem(id)}`, TRY), () =>
+  return run(fail(`Couldn't approve the rest of the findings of ${theItem(id)}`, TRY), () =>
     api.approveRestOfFindings(id, pass),
   );
 }
@@ -855,38 +868,38 @@ export function discussionContext(req: DiscussionContextRequest): Promise<string
 }
 
 /** saveDraftText records the title and the body of a draft as the user left them. */
-export function saveDraftText(
+export async function saveDraftText(
   id: string,
   draftId: string,
   title: string,
   body: string,
 ): Promise<void> {
-  return run(fail(`Couldn't save a draft of ${theItem(id)}`, TRY), () =>
+  await run(fail(`Couldn't save a draft of ${theItem(id)}`, TRY), () =>
     api.setDraftText(id, draftId, title, body),
   );
 }
 
 /** setDraftRepository chooses the repository a draft is published to. */
-export function setDraftRepository(
+export async function setDraftRepository(
   id: string,
   draftId: string,
   repositoryId: string,
 ): Promise<void> {
-  return run(fail(`Couldn't change the repository of a draft of ${theItem(id)}`, TRY), () =>
+  await run(fail(`Couldn't change the repository of a draft of ${theItem(id)}`, TRY), () =>
     api.setDraftRepository(id, draftId, repositoryId),
   );
 }
 
 /** setDraftModule chooses the module of the card a draft writes. */
-export function setDraftModule(id: string, draftId: string, module: string): Promise<void> {
-  return run(fail(`Couldn't change the module of a draft of ${theItem(id)}`, TRY), () =>
+export async function setDraftModule(id: string, draftId: string, module: string): Promise<void> {
+  await run(fail(`Couldn't change the module of a draft of ${theItem(id)}`, TRY), () =>
     api.setDraftModule(id, draftId, module),
   );
 }
 
 /** setDraftEpic puts a draft under an epic, another draft or an issue of GitHub; "" takes it out. */
-export function setDraftEpic(id: string, draftId: string, ref: string): Promise<void> {
-  return run(fail(`Couldn't change the epic of a draft of ${theItem(id)}`, TRY), () =>
+export async function setDraftEpic(id: string, draftId: string, ref: string): Promise<void> {
+  await run(fail(`Couldn't change the epic of a draft of ${theItem(id)}`, TRY), () =>
     api.setDraftEpic(id, draftId, ref),
   );
 }
@@ -900,15 +913,23 @@ export function addDraftDependency(id: string, draftId: string, ref: string): Pr
 }
 
 /** removeDraftDependency takes one dependency off a draft. */
-export function removeDraftDependency(id: string, draftId: string, ref: string): Promise<void> {
-  return run(fail(`Couldn't remove the dependency ${ref} of a draft of ${theItem(id)}`, TRY), () =>
+export async function removeDraftDependency(
+  id: string,
+  draftId: string,
+  ref: string,
+): Promise<void> {
+  await run(fail(`Couldn't remove the dependency ${ref} of a draft of ${theItem(id)}`, TRY), () =>
     api.removeDraftDependency(id, draftId, ref),
   );
 }
 
 /** decideDraft records what the user decided about one draft. */
-export function decideDraft(id: string, draftId: string, decision: DraftDecision): Promise<void> {
-  return run(fail(`Couldn't decide a draft of ${theItem(id)}`, TRY), () =>
+export async function decideDraft(
+  id: string,
+  draftId: string,
+  decision: DraftDecision,
+): Promise<void> {
+  await run(fail(`Couldn't decide a draft of ${theItem(id)}`, TRY), () =>
     api.decideDraft(id, draftId, decision),
   );
 }
@@ -931,8 +952,8 @@ export function publishEpic(id: string, draftId: string): Promise<void> {
 }
 
 /** retryPublish publishes a draft again, after a failure. */
-export function retryPublish(id: string, draftId: string): Promise<void> {
-  return run(fail(`Couldn't publish a draft of ${theItem(id)} again`, GH), () =>
+export async function retryPublish(id: string, draftId: string): Promise<void> {
+  await run(fail(`Couldn't publish a draft of ${theItem(id)} again`, GH), () =>
     api.retryPublish(id, draftId),
   );
 }

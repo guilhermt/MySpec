@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { OtherConversationBar, RequestBar } from "@/components/system/RequestBar";
 import { CleanAndStartDialog } from "@/features/task/CleanAndStartDialog";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
@@ -8,6 +8,7 @@ import type { TaskRequestAction, TaskRequestButton } from "@/features/task/reque
 import { RequestButtons } from "@/features/task/request-buttons";
 import { currentStepOf } from "@/features/task/step-status";
 import { useBornStatus } from "@/features/task/useBornStatus";
+import { useFocusAfterApproveRest } from "@/features/task/useFocusAfterApproveRest";
 import { useTaskRequest } from "@/features/task/useTaskRequest";
 import { focusFindingToDecide, focusRequest } from "@/lib/focus";
 import type { TaskSummary } from "@/lib/wails";
@@ -99,17 +100,7 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
   const status = useBornStatus(situationId, request?.status ?? other?.status ?? "");
   const step = currentStepOf(task);
 
-  // Once Approve the rest went through, the focus goes to the primary the bar has then: the button
-  // that was pressed leaves with the findings it approved.
-  const focusPrimaryNext = useRef(false);
-  const offersApproveRest = request?.actions.some((button) => button.action === "approveRest");
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the bar changing is what moves the focus
-  useEffect(() => {
-    if (focusPrimaryNext.current && !offersApproveRest) {
-      focusPrimaryNext.current = false;
-      focusRequest("primary");
-    }
-  }, [request?.label, offersApproveRest]);
+  const approveRest = useFocusAfterApproveRest(request);
 
   if (request === null) {
     if (other === null || step === null) {
@@ -154,8 +145,9 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
     }
     setRunning(button.action);
     try {
-      if (button.action === "approveRest" && task.pr !== null) {
-        focusPrimaryNext.current = await approveRestOfPRFindings(task.id, task.pr.currentPass);
+      const pass = task.pr?.currentPass;
+      if (button.action === "approveRest" && pass !== undefined) {
+        await approveRest(() => approveRestOfPRFindings(task.id, pass));
       } else {
         await run(button, task, edited);
       }

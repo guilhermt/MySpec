@@ -17,6 +17,7 @@ var (
 	ErrNotDeciding     = errors.New("flow: the findings are not being decided")
 	ErrNotDecided      = errors.New("flow: a finding is still to decide")
 	ErrNothingApproved = errors.New("flow: no finding is approved")
+	ErrFindingNotFound = errors.New("flow: the finding no longer exists")
 )
 
 // currentPass is the structured pass the review is on: the one of the highest
@@ -99,22 +100,7 @@ func (s *Service) evaluateReport(
 		if !found {
 			return run, pass, false
 		}
-		recorded, _, err := s.tasks.RecordPRReport(ctx, t.ID, report)
-		if err != nil {
-			s.log.Error("record pr review report failed", "task", t.ID, "pass", pass.Pass, "error", err)
-			return run, pass, false
-		}
-		updated, err := s.tasks.SetPRReviewed(ctx, t.ID, s.headOf(ctx, wt), pass.Pass)
-		if err != nil {
-			s.log.Error("record reviewed pull request failed", "task", t.ID, "error", err)
-			return run, pass, false
-		}
-		s.setPassAsked(t.ID, "")
-		s.setUnreadable(t.ID, "")
-		s.sessions.MarkPRReview(ctx, key, pass.Pass, report.Clean, len(report.Findings))
-		s.log.Info("pr review report recorded",
-			"task", t.ID, "pass", pass.Pass, "clean", report.Clean, "findings", len(report.Findings))
-		return updated, recorded, true
+		return s.recordReportOf(ctx, t, wt, run, key, report)
 
 	case idle && !pass.Clean && !pass.Sent():
 		report, found, err := prreport.ReadReport(t.ReviewPath(pass.Pass), pass.Pass)
@@ -145,6 +131,39 @@ func (s *Service) evaluateReport(
 	default:
 		return run, pass, true
 	}
+}
+
+// recordReportOf records the first readable report of the current structured
+// pass. The pass is first recorded as reported, with the commit the branch is
+// on as the one the report covered, and only then is the report recorded: the
+// next pass is numbered from the pass reported, so a report recorded on a pass
+// not reported would have the review ask for that same pass again, which the
+// tasks refuse. A report that can't be recorded leaves the pass reported and
+// waiting for its report, which the evaluation that follows records, keeping
+// the commit recorded first; a pass asked before that becomes the current
+// one and leaves it behind.
+func (s *Service) recordReportOf(
+	ctx context.Context, t task.Task, wt worktree.Worktree, run task.PRRun, key session.Key, report prreport.Report,
+) (task.PRRun, task.PRPass, bool) {
+	if run.ReportedPass < report.Pass {
+		updated, err := s.tasks.SetPRReviewed(ctx, t.ID, s.headOf(ctx, wt), report.Pass)
+		if err != nil {
+			s.log.Error("record reviewed pull request failed", "task", t.ID, "error", err)
+			return run, task.PRPass{}, false
+		}
+		run = updated
+	}
+	recorded, _, err := s.tasks.RecordPRReport(ctx, t.ID, report)
+	if err != nil {
+		s.log.Error("record pr review report failed", "task", t.ID, "pass", report.Pass, "error", err)
+		return run, task.PRPass{}, false
+	}
+	s.setPassAsked(t.ID, "")
+	s.setUnreadable(t.ID, "")
+	s.sessions.MarkPRReview(ctx, key, report.Pass, report.Clean, len(report.Findings))
+	s.log.Info("pr review report recorded",
+		"task", t.ID, "pass", report.Pass, "clean", report.Clean, "findings", len(report.Findings))
+	return run, recorded, true
 }
 
 // reportUnreadable keeps why the report of the current structured pass could
@@ -185,19 +204,31 @@ func (s *Service) setUnreadable(id, reason string) bool {
 	return changed
 }
 
-// deciding says whether the user may act on a pass, refusing when it is not the current
-// one, was not recorded, is clean or already went to the agent, or when the
-// pull request is not under review or is over. The caller holds the lock of the
-// task.
+// deciding says whether the user may act on pass number, refusing when it is
+// not the current one or the current one can't be decided. The caller holds
+// the lock of the task.
 func (s *Service) deciding(id string, number int) error {
+	pass, _ := currentPass(s.tasks.PRPasses(id))
+	if err := s.decidable(id, pass); err != nil {
+		return err
+	}
+	if pass.Pass != number {
+		return fmt.Errorf("findings of pass %d of task %s: %w", number, id, ErrNotDeciding)
+	}
+	return nil
+}
+
+// decidable says whether the user may act on the current pass, refusing when
+// there is none, it was not recorded, is clean or already went to the agent,
+// or when the pull request is not under review or is over. The caller holds
+// the lock of the task.
+func (s *Service) decidable(id string, pass task.PRPass) error {
 	_, run, err := s.prOf(id)
 	if err != nil {
 		return err
 	}
-	pass, ok := currentPass(s.tasks.PRPasses(id))
-	if !ok || pass.Pass != number || !pass.Recorded || pass.Clean || pass.Sent() ||
-		run.Status != task.PRReviewing || prOver(run) {
-		return fmt.Errorf("findings of pass %d of task %s: %w", number, id, ErrNotDeciding)
+	if !pass.Recorded || pass.Clean || pass.Sent() || run.Status != task.PRReviewing || prOver(run) {
+		return fmt.Errorf("findings of pass %d of task %s: %w", pass.Pass, id, ErrNotDeciding)
 	}
 	return nil
 }
@@ -212,7 +243,7 @@ func (s *Service) DecidePRFinding(ctx context.Context, id string, pass, number i
 	if err := s.deciding(id, pass); err != nil {
 		return err
 	}
-	return s.tasks.DecidePRFinding(ctx, id, pass, number, d)
+	return findingGone(s.tasks.DecidePRFinding(ctx, id, pass, number, d))
 }
 
 // SetPRFindingText records the text of one finding as the user left it, which
@@ -225,7 +256,17 @@ func (s *Service) SetPRFindingText(ctx context.Context, id string, pass, number 
 	if err := s.deciding(id, pass); err != nil {
 		return err
 	}
-	return s.tasks.SetPRFindingText(ctx, id, pass, number, text)
+	return findingGone(s.tasks.SetPRFindingText(ctx, id, pass, number, text))
+}
+
+// findingGone tells a finding a rewrite of the report removed: the task and its
+// pass were found under the lock, so what the tasks no longer find is the
+// finding.
+func findingGone(err error) error {
+	if errors.Is(err, task.ErrNotFound) {
+		return fmt.Errorf("%w: %w", ErrFindingNotFound, err)
+	}
+	return err
 }
 
 // ApproveRestOfPRFindings approves every finding of the current pass that has
@@ -249,11 +290,8 @@ func (s *Service) ApplyPRFindings(ctx context.Context, id string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	current, ok := currentPass(s.tasks.PRPasses(id))
-	if !ok {
-		return fmt.Errorf("apply the findings of task %s: %w", id, ErrNotDeciding)
-	}
-	if err := s.deciding(id, current.Pass); err != nil {
+	current, _ := currentPass(s.tasks.PRPasses(id))
+	if err := s.decidable(id, current); err != nil {
 		return fmt.Errorf("apply the findings of task %s: %w", id, err)
 	}
 	if !current.Decided() {

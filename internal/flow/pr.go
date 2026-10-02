@@ -143,9 +143,7 @@ func (s *Service) prState(t task.Task, run task.PRRun, art task.PRArtifacts) Pul
 	}
 	passes := s.tasks.PRPasses(t.ID)
 	pr.Passes = passes
-	if len(passes) > 0 {
-		current := passes[len(passes)-1]
-		pr.Pass = &current
+	if pr.Pass = currentPassPtr(passes); pr.Pass != nil {
 		pr.Unreadable = s.unreadable(t.ID)
 	}
 	snap, read := s.review.Snapshot(t.ID)
@@ -426,8 +424,9 @@ func (s *Service) checkPR(ctx context.Context, id string) {
 		return
 	}
 	run, hasRun := s.tasks.PRRun(id)
-	// A task whose review closed clean is waiting for the merge: the reading
-	// tells what became of the pull request, not what the app does next.
+	// A task whose review is over, closed clean or with every finding of its
+	// pass discarded, is waiting for the merge: the reading tells what became
+	// of the pull request, not what the app does next.
 	awaiting := hasRun && awaitingMerge(run, currentPassPtr(s.tasks.PRPasses(id)))
 
 	pr, err := s.viewPR(ctx, wt)
@@ -494,8 +493,8 @@ func (s *Service) viewPR(ctx context.Context, wt worktree.Worktree) (gh.PR, erro
 }
 
 // recordPR stores the pull request a reading found and hands the task to its
-// review. With detailsOnly, the task is already past the review and waiting for
-// the merge: only what GitHub says about the pull request changes. A task whose
+// review. With detailsOnly, the review of the task is over and the task waits
+// for the merge: only what GitHub says about the pull request changes. A task whose
 // review is under way keeps its status: the pull request was found, and marked
 // in the conversation, when the review began.
 func (s *Service) recordPR(id string, pr gh.PR, detailsOnly bool) {
@@ -873,7 +872,8 @@ func (s *Service) recordReport(
 }
 
 // finishReview ends the review of the pull request of a task whose last pass
-// found nothing to change. The task then waits for the merge, and for the
+// found nothing to change, or had every finding discarded once the pull
+// request was merged or closed. The task then waits for the merge, and for the
 // closing the user asks for after it.
 func (s *Service) finishReview(ctx context.Context, t task.Task, run task.PRRun, key session.Key) {
 	if _, err := s.tasks.SetPRRun(ctx, t.ID, task.PRDone, nil); err != nil {

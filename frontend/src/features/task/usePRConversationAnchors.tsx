@@ -2,7 +2,7 @@ import { type ReactNode, useMemo } from "react";
 import { FindingsCard } from "@/components/FindingsCard";
 import { Markdown } from "@/features/chat/Markdown";
 import { leaveDecisionCard } from "@/features/chat/useFeed";
-import { reportMarkerIds } from "@/features/reviews/review-conversation";
+import { EDIT_NOTES, reportMarkerIds } from "@/features/reviews/review-conversation";
 import { cardOf, disabledNote } from "@/features/task/pr-findings";
 import { findingViewsOf } from "@/lib/findings";
 import type { Entry, PullRequest, TaskSummary } from "@/lib/wails";
@@ -17,9 +17,6 @@ const NO_ENTRIES: readonly Entry[] = [];
 
 // END is the key the conversation gives what has no entry to follow: the end of the conversation.
 const END = "end";
-
-// EDIT_NOTE says where the text of a finding goes as the user leaves it: to the agent of the pull request.
-const EDIT_NOTE = "Saved as you type. It goes to the agent as you leave it.";
 
 // passRevision is the report a pass of the pull request stands at now, null when the task no longer has it.
 function passRevision(taskId: string, pass: number): number | null {
@@ -57,7 +54,7 @@ export function usePRConversationAnchors(
           report.findings ?? [],
           card.disabled ? (finding) => disabledNote(report, finding, now) : null,
         )}
-        editNote={EDIT_NOTE}
+        editNote={EDIT_NOTES.apply}
         disabled={card.disabled}
         decide={(number, decision) =>
           decidePRFindingInPlace(task.id, report.pass, number, decision)

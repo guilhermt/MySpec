@@ -215,11 +215,12 @@ function models(live: ModelStage[], editable: ModelStage[]): ReturnType<typeof m
 }
 
 // conversations are the conversations the reference task has had up to a moment, the oldest first,
-// each one started an hour after the one before it: the planning, the steps up to the current one,
-// with a reviewer on the steps reviewed by the agent, and those of the pull request.
-function conversations(stages: string[]): TaskConversation[] {
+// each one started an hour after the one before it and the last one an hour before the moment, or
+// earlier by `before` minutes: the planning, the steps up to the current one, with a reviewer on the
+// steps reviewed by the agent, and those of the pull request.
+function conversations(stages: string[], before = 0): TaskConversation[] {
   return stages.map((stage, index) =>
-    makeTaskConversation({ stage, startedAt: at((stages.length - index) * 60) }),
+    makeTaskConversation({ stage, startedAt: at((stages.length - index) * 60 + before) }),
   );
 }
 
@@ -737,6 +738,8 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
         longName,
       );
     case "close":
+      // Merged 2 hours ago, the chip of the mock, after the review: the conversation of the review
+      // of the pull request started an hour before, and its clean second pass was written last.
       return inPR(
         {
           status: "merged",
@@ -748,11 +751,21 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
           contextPercent: 36,
           currentPass: 2,
           reports: [
-            structuredReport(1, { findings: findingsOf(4, DECIDED), sentAt: at(-25) }),
-            structuredReport(2, { clean: true, recordedAt: at(-60) }),
+            structuredReport(1, {
+              findings: findingsOf(4, DECIDED),
+              recordedAt: at(172),
+              sentAt: at(164),
+            }),
+            structuredReport(2, { clean: true, recordedAt: at(125) }),
           ],
         },
-        { situations: [situation("merge", "closing", prPlace, 120, { form: "close" })] },
+        {
+          situations: [situation("merge", "closing", prPlace, 120, { form: "close" })],
+          conversations: conversations(
+            [...PLANNING, ...stepConversations(TITLES.length, true), "pr", "pr_review"],
+            120,
+          ),
+        },
         longName,
       );
   }
@@ -844,18 +857,18 @@ function conversationsOf(name: SceneName): Record<string, Entry[]> {
     case "close":
       return {
         pr_review: reviewTalk(
-          written(1, 4, 12),
-          decidedOf(1, -25),
-          applied(-25),
-          makeEntry("action", { createdAt: at(-30) }),
-          milestone("changes_approved", -49, { files: 3 }),
-          milestone("committed", -51, {
+          written(1, 4, 172),
+          decidedOf(1, 164),
+          applied(164),
+          makeEntry("action", { createdAt: at(162) }),
+          milestone("changes_approved", 146, { files: 3 }),
+          milestone("committed", 144, {
             sha: "4b7e0aa",
             subject: "Fix the burst off-by-one and round Retry-After up",
             pushed: true,
             number: 1284,
           }),
-          written(2, 0, -60),
+          written(2, 0, 125),
         ),
       };
   }

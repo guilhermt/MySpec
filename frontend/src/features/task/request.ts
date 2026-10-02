@@ -7,6 +7,7 @@ import {
   findingsBar,
   findingsFormOf,
   noFileChanged,
+  REWRITE_UNREADABLE,
 } from "@/features/task/pr-findings";
 import { canCloseTask, closeHint, draftAtHand } from "@/features/task/pr-status";
 import {
@@ -354,7 +355,7 @@ function mergeBar(pr: PullRequest, want: Want, repository: Repository | null): B
       ...base,
       progress: joined([
         `Nothing approved in pass ${pr.currentPass}`,
-        ...(unreadable ? ["the rewritten report can't be read"] : []),
+        ...(unreadable ? [REWRITE_UNREADABLE] : []),
       ]),
       ...(unreadable ? { progressTooltip: pr.unreadableReport } : {}),
       status,

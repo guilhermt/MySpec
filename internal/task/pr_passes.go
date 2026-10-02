@@ -150,9 +150,8 @@ func (s *Service) DecidePRFinding(ctx context.Context, id string, pass, number i
 	if _, err := prreport.ParseDecision(string(d)); err != nil {
 		return fmt.Errorf("decide finding %d of pass %d of task %s: %w", number, pass, id, err)
 	}
-	return s.updatePRFinding(ctx, id, pass, number, func(f *prreport.Finding) error {
+	return s.updatePRFinding(ctx, id, pass, number, func(f *prreport.Finding) {
 		f.Decision = d
-		return nil
 	})
 }
 
@@ -162,9 +161,8 @@ func (s *Service) SetPRFindingText(ctx context.Context, id string, pass, number 
 	if text == "" {
 		return fmt.Errorf("set text of finding %d of pass %d of task %s: %w", number, pass, id, prreport.ErrEmptyText)
 	}
-	return s.updatePRFinding(ctx, id, pass, number, func(f *prreport.Finding) error {
+	return s.updatePRFinding(ctx, id, pass, number, func(f *prreport.Finding) {
 		f.Text = text
-		return nil
 	})
 }
 
@@ -223,7 +221,7 @@ func (s *Service) setPRPassSent(ctx context.Context, id string, pass int, at tim
 // updatePRFinding rewrites one finding of a pass with mutate, in the store and
 // then in the cache.
 func (s *Service) updatePRFinding(
-	ctx context.Context, id string, pass, number int, mutate func(*prreport.Finding) error,
+	ctx context.Context, id string, pass, number int, mutate func(*prreport.Finding),
 ) error {
 	stored, ok := s.prPass(id, pass)
 	if !ok {
@@ -234,9 +232,7 @@ func (s *Service) updatePRFinding(
 		return fmt.Errorf("update finding %d of pass %d of task %s: %w", number, pass, id, ErrNotFound)
 	}
 	finding := stored.Findings[index]
-	if err := mutate(&finding); err != nil {
-		return err
-	}
+	mutate(&finding)
 	if err := s.repo.UpdatePRFinding(ctx, id, pass, finding); err != nil {
 		return err
 	}

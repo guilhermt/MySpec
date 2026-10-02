@@ -378,12 +378,8 @@ describe("TaskView, the bar of the findings", () => {
     expect(api.approveRestOfPRFindings).toHaveBeenCalledWith("task-1", 1);
   });
 
-  it("takes the focus to Apply approved once the rest is approved", async () => {
-    const { user } = screenOf();
-    await screen.findByRole("group", { name: "Findings of pass 1" });
-
-    await user.click(screen.getByRole("button", { name: "Approve the rest" }));
-    await waitFor(() => expect(api.approveRestOfPRFindings).toHaveBeenCalled());
+  // applyApproved is the state:changed of the rest approved: every finding approved, the bar applying.
+  const applyApproved = () =>
     useAppStore.getState().applyState(
       makeState({
         tasks: [
@@ -399,9 +395,60 @@ describe("TaskView, the bar of the findings", () => {
       }),
     );
 
+  it("takes the focus to Apply approved once the rest is approved", async () => {
+    const { user } = screenOf();
+    await screen.findByRole("group", { name: "Findings of pass 1" });
+
+    await user.click(screen.getByRole("button", { name: "Approve the rest" }));
+    await waitFor(() => expect(api.approveRestOfPRFindings).toHaveBeenCalled());
+    applyApproved();
+
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Apply approved" })).toHaveFocus(),
     );
+  });
+
+  it("takes the focus to Apply approved when the new state arrived before the approval answered", async () => {
+    vi.mocked(api.approveRestOfPRFindings).mockImplementationOnce(async () => {
+      applyApproved();
+    });
+    const { user } = screenOf();
+    await screen.findByRole("group", { name: "Findings of pass 1" });
+
+    await user.click(screen.getByRole("button", { name: "Approve the rest" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Apply approved" })).toHaveFocus(),
+    );
+  });
+
+  it("leaves the focus alone for good when the bar still offers Approve the rest once approved", async () => {
+    // A rewrite brings a new finding to decide as the rest is approved: the bar keeps the button.
+    vi.mocked(api.approveRestOfPRFindings).mockImplementationOnce(async () => {
+      useAppStore.getState().applyState(
+        makeState({
+          tasks: [
+            taskOf({
+              findings: [
+                ...FINDINGS.map((each) => makeReviewFinding({ ...each, decision: "approved" })),
+                makeReviewFinding({ number: 4, title: "Fourth" }),
+              ],
+            }),
+          ],
+        }),
+      );
+    });
+    const { user } = screenOf();
+    await screen.findByRole("group", { name: "Findings of pass 1" });
+
+    await user.click(screen.getByRole("button", { name: "Approve the rest" }));
+    await waitFor(() => expect(screen.getByText(/3 of 4 decided/)).toBeInTheDocument());
+    await vi.mocked(api.approveRestOfPRFindings).mock.results[0]?.value;
+    applyApproved();
+
+    await screen.findByRole("button", { name: "Apply approved" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.getByRole("button", { name: "Apply approved" })).not.toHaveFocus();
   });
 
   it("leaves the focus alone when approving the rest failed", async () => {
@@ -410,8 +457,11 @@ describe("TaskView, the bar of the findings", () => {
     await screen.findByRole("group", { name: "Findings of pass 1" });
 
     await user.click(screen.getByRole("button", { name: "Approve the rest" }));
-    await waitFor(() => expect(api.approveRestOfPRFindings).toHaveBeenCalled());
+    await waitFor(() => expect(useAppStore.getState().error).not.toBeNull());
+    applyApproved();
 
+    await screen.findByRole("button", { name: "Apply approved" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(screen.getByRole("button", { name: "Apply approved" })).not.toHaveFocus();
   });
 

@@ -137,7 +137,8 @@ export function passPlace(pr: PullRequest): string {
 
 const WORKTREE_CHANGED = "the worktree has changes";
 const WORKTREE_CHANGED_TOOLTIP = "They go to review with the changes of the approved findings.";
-const REWRITE_UNREADABLE = "the rewritten report can't be read";
+/** REWRITE_UNREADABLE is the note of the bar when the rewritten report of the pass can't be read. */
+export const REWRITE_UNREADABLE = "the rewritten report can't be read";
 
 /** findingsNotes are what the middle of the bar adds while the findings are decided: the changed worktree, the rewrite that can't be read. */
 export function findingsNotes(pr: PullRequest): { notes: string[]; tooltip: string } {

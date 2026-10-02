@@ -8,6 +8,7 @@ import {
 } from "@/features/task/details";
 import type { TaskSummary } from "@/lib/wails";
 import {
+  makePRReport,
   makePullRequest,
   makeRepository,
   makeStep,
@@ -289,6 +290,31 @@ describe("detailsOf, Pull request", () => {
       },
     });
   });
+
+  it("leaves out the passes without a file: asked, running or unreadable", () => {
+    const task = makeTask({
+      stage: "pr",
+      conversations: [conversation("pr"), conversation("pr_review")],
+      pr: makePullRequest({
+        status: "reviewing",
+        prNumber: 1284,
+        sessionStage: "pr_review",
+        reports: [
+          makeTextPRReport(1, false),
+          makePRReport({ pass: 2, file: "", recorded: false, findings: [] }),
+        ],
+      }),
+    });
+
+    expect(detailsOf(task, null, "pr_review").pullRequest?.reports).toEqual([
+      {
+        key: "pr-1",
+        label: "Review 1 · changes",
+        file: "pr/review-1.md",
+        title: "PR review · Review 1 · changes",
+      },
+    ]);
+  });
 });
 
 describe("detailsOf, Pull request past its review", () => {
@@ -435,5 +461,21 @@ describe("reportOf", () => {
 
   it("finds nothing for a file Details doesn't list", () => {
     expect(reportOf(detailsOf(STRUCTURED, null, null), "step-reviews/9-1.md")).toBeNull();
+  });
+
+  it("finds nothing for an empty file, not even a pass of the pull request without one", () => {
+    const pr = detailsOf(
+      makeTask({
+        stage: "pr",
+        pr: makePullRequest({
+          prNumber: 1284,
+          reports: [makeTextPRReport(1, false), makePRReport({ pass: 2, file: "" })],
+        }),
+      }),
+      null,
+      null,
+    );
+    expect(reportOf(pr, "")).toBeNull();
+    expect(reportOf(pr, "pr/")).toBeNull();
   });
 });
