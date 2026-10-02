@@ -287,7 +287,7 @@ A barra fixa no pé tem `Unsaved changes`, **Cancel** e **Save** `Ctrl S`, a pri
 
 **A barra fixa no alto** tem:
 
-- a busca `Search by name, title or #number`, com `/`; ela casa com o nome da task, com o título e o número do review e com o título da discussão;
+- a busca `Search by name, title or #number`, com `/`; ela casa com o nome da task, com o título do review, com o título da discussão e, com `#N`, com o número da PR de uma task ou de um review e com o número do card de uma task;
 - à direita, `44 archived · Sep 12 – today`.
 
 O foco começa na busca.
@@ -306,8 +306,8 @@ O foco começa na busca.
 
 - **Na lista estreita** (abaixo de 860 px de lista), onde e o resultado descem para uma segunda linha sob o nome, inteiros. Entre 860 e 1040 px, a linha continua com as colunas. A regra da linha do card do board, que esconde a meta, não vale aqui.
 - **O nome acessível** diz tudo: `Task Idempotency keys for payment intents, api#398, PR #1279 · 6 steps · dev not updated, archived today at 15:02`.
-- **O teclado:** `↑` e `↓` percorrem as linhas, e `Enter` abre.
-- **A linha recém-arquivada:** quando se chega pela página do item que saiu (**Open in History**), ela fica destacada como a linha aberta (véu, anel e glifo em identidade), com a hora em `--ink-3` e o foco.
+- **O teclado:** a lista é o `tree` do system, como a do board: `↑` e `↓` percorrem os cabeçalhos dos dias e as linhas, `←` numa linha vai ao cabeçalho do dia, e `Enter` abre.
+- **A linha recém-arquivada:** quando se chega pela página do item que saiu (**Open in History**), ela fica destacada como a linha aberta (véu, anel e glifo em identidade), com a hora em `--ink-3` e o foco. A chegada limpa a busca, e a linha aparece mesmo quando o filtro da lateral a esconderia.
 
 **Os vazios:**
 
@@ -346,13 +346,13 @@ O corpo fica na medida `--measure`, centrado. Nada roda.
 
 **O review.**
 
-1. **Os fatos:** a PR com o autor e quem fez o merge, o card, `2 passes, both published`.
+1. **Os fatos:** a PR com o autor e quem fez o merge, o card, `Started` com o começo do review, `2 passes, both published`.
 2. **Uma seção por passada:** `Pass 1 · Request changes · published Sep 23 at 13:41`. Os apontamentos publicados ficam num bloco afundado, cada um com o texto, `arquivo:linha` em mono e `Inline comment` ou `In the review body`. Depois vem o relatório, como marco que abre no lugar.
 3. **No pé:** `The conversation of a review isn't kept in History.`
 
 **A discussão.**
 
-1. **Os fatos:** o board e os cards de entrada, `Archived Sep 24 at 11:47 · 1 round`, `Published: 4 of 5 drafts: 3 created, 1 updated`.
+1. **Os fatos:** o board e os cards de entrada, `Started` com o começo da discussão, `Archived Sep 24 at 11:47 · 1 round`, `Published: 4 of 5 drafts: 3 created, 1 updated`.
 2. **What it published, primeiro.** Uma lista contornada, com o épico e os cards dele recuados em `--epic-indent`. Cada linha tem a etiqueta do tipo (`Epic`, `New card`, `Update`), o título e, à direita, `Created api#452 ↗`, `Updated gateway#440 ↗` ou `Not published · discarded`.
 3. **Document and conversation:** `discussion.md · the understanding` e `Conversation · 31 messages, read only`, como marcos que abrem no lugar.
 
@@ -468,15 +468,17 @@ O cabeçalho tem `←` para o lugar anterior e o nome do item. A árvore já nã
 | Review encerrado | `web#2291 was merged, and its review ended` | o de `screens/review.md` §15 | Uma linha por passada | **Next that needs you**, **Open in History**, **Back to Reviews** |
 | Discussão arquivada | `Webhook delivery guarantees was archived` | o de `screens/discussion.md` §11 | Uma linha por rodada | **Next that needs you**, **Open in History**, **Open Platform Roadmap** |
 
+**O review apagado** com algo que o git não removeu mostra o mesmo bloco da task apagada, só com a worktree, o aviso e o comando.
+
 **Quando nada mais espera o usuário,** **Next that needs you** fica tracejado, com `Nothing else needs you now.` ao lado, e **Open in History** passa a ser a primária, com o foco. O board removido com a visão aberta segue `screens/board.md` §3.8.
 
 ## 10. Os diálogos da task
 
-Os três diálogos são o diálogo mínimo de confirmação (`alertdialog`, `--size-dialog`, a `8vh` do topo), com o foco em **Cancel** e o perigoso como a confirmação final. Eles abrem do `⋯` e da barra do pedido (`screens/task.md` §7 e §10).
+Os três diálogos são o diálogo mínimo de confirmação (`alertdialog`, `--size-dialog`, a `8vh` do topo), com o foco em **Cancel** e o perigoso como a confirmação final. Eles abrem do `⋯` e da barra do pedido (`screens/task.md` §7 e §10), ficam abertos até a ação terminar, com a falha no rodapé, e não confirmam por `Ctrl ↵`.
 
 **Delete task.**
 
-- Título `Delete "Rate limit per API key"?`.
+- Título `Delete “Rate limit per API key”?`.
 - Corpo: `This removes the documents, the steps and every record of the task. It can't be undone.`
 - **A prévia do que será destruído**, lida do git ao abrir. É um bloco afundado com uma linha por coisa, o ícone e o detalhe:
   - `The reviewer's answer in progress is interrupted`, com o spinner, quando uma sessão roda;
@@ -531,7 +533,7 @@ O clique traz a janela e abre o lugar como `Ctrl+J`. Com uma edição de prompt 
 
 **O título** é o item: o nome da task, `dono/nome#N · <título da PR>` no review, o título da discussão. O título do review muda: hoje é só `dono/nome#N`. **O corpo** é o que a situação pede, sempre com o lugar.
 
-A pergunta, a permissão, a resposta e o erro de uma sessão usam um texto por tipo, com o lugar no texto: `PRD`, `tech spec`, `plan`, `One-Shot planning`, `step N`, `the pull request`, `the review`, `the discussion`. A tabela tem uma linha por lugar onde o clique cai em outro ponto. Os exemplos usam `Rate limit per API key`, `acme/web#2291 · Migrate settings page…` e `Usage-based pricing tiers`.
+A pergunta, a permissão, a resposta e o erro de uma sessão usam um texto por tipo, com o lugar no texto, como ele entra depois de `in `: `the PRD`, `the tech spec`, `the plan`, `One-Shot planning`, `step N`, `the pull request` (a sessão da PR), `the review` (a sessão do review da PR, e o review de uma PR), `the discussion`. A razão de uma falha vem da mensagem que a barra mostra. Uma mensagem com um dos prefixos `Couldn't publish to GitHub: `, `Couldn't write to GitHub: `, `Couldn't read from GitHub: ` ou `worktree: ` perde o prefixo e entra crua, inteira, sem mudar a primeira letra. Uma sem prefixo que termina em `.`, `!` ou `?` é uma frase do produto: entra a primeira frase, com a primeira letra em minúscula, salvo quando a palavra começa com `GitHub`, é `gh` ou é `MySpec`. O resto é um erro cru, que entra inteiro. Num erro cru, os caminhos vão pelo `~`, e a frase termina em `.`. A tabela tem uma linha por lugar onde o clique cai em outro ponto. Os exemplos usam `Rate limit per API key`, `acme/web#2291 · Migrate settings page…` e `Usage-based pricing tiers`.
 
 A última coluna compara com o texto de hoje:
 
@@ -545,11 +547,11 @@ São 61 textos. Esta seção é a fonte única dos textos das notificações; as
 
 | Situação | Corpo | O clique abre | Em relação a hoje |
 |---|---|---|---|
-| Question | `The agent has a question in the tech spec.` | O tech spec, o foco na primeira opção do cartão | igual |
+| Question | `The agent has a question in the tech spec.` | O tech spec, o foco na primeira opção do cartão | muda |
 | Question · PR | `The agent has a question in the pull request.` | A PR, o foco na primeira opção do cartão | igual |
 | Permission | `Permission requested in step 3.` | O step 3, a aba Implementer, o foco em **Allow** | igual |
-| Permission · PR review | `Permission requested in the review.` | O PR review, o foco em **Allow** | igual |
-| Waiting for reply | `The agent is waiting for your reply in the PRD.` | O PRD, o foco no compositor | igual |
+| Permission · PR review | `Permission requested in the review.` | O PR review, o foco em **Allow** | muda |
+| Waiting for reply | `The agent is waiting for your reply in the PRD.` | O PRD, o foco no compositor | muda |
 | Session error | `The session stopped with an error in step 3.` | O step 3, o foco em **Retry** | igual |
 | Session error · PR | `The session stopped with an error in the pull request.` | A PR, o foco em **Retry** | igual |
 | Reviewer asks | `The reviewer of step 3 has a question.` | O step 3, a aba Reviewer, a primeira opção | igual |
@@ -565,11 +567,11 @@ São 61 textos. Esta seção é a fonte única dos textos das notificações; as
 | No commit after approval | `Step 4: the last approval didn't produce a commit.` | O step 4, o foco em **Open in VS Code** | igual |
 | Agent review gave up | `Step 3: the agent review didn't come clean after 3 rounds. It's yours now.` | O step 3, a aba Implementer, o último relatório | muda |
 | Step empty | `Step 6 finished without changes.` | O step 6, o foco em **Discard step 6…** | igual |
-| PR blocked | `The pull request is blocked: the branch has no commits ahead of dev.` | A PR, o foco em **Try again** | igual |
+| PR blocked | `The pull request is blocked: the GitHub CLI isn't authenticated.` | A PR, o foco em **Try again** | igual |
 | Draft | `The pull request draft is ready for your OK.` | A PR, o rascunho na conversa, o foco em **Approve draft** | igual |
 | Findings | `The review of the pull request found 4 changes for you to decide.` | O PR review, o primeiro apontamento a decidir | muda |
 | Findings · ready to apply | `The approved findings of the pull request review are ready to apply.` (a decisão terminou enquanto o revisor trabalhava) | O PR review, o foco em **Apply approved** | novo |
-| Changes to review | `The changes from the review of the pull request are ready for your review.` | O PR review, o foco em **Open in VS Code** | igual |
+| Changes to review | `The changes from the review of the pull request are ready for your review.` | O PR review, o foco em **Open in VS Code** | muda |
 | No commit after approval · PR | `The last approval of the pull request didn't produce a commit.` | O PR review, o foco em **Open in VS Code** | igual |
 | Check failed after review | `A check failed after the review: e2e (chromium).` | O PR review, o check pelo nome, o foco em **Review again** | igual |
 | Checks failed after review | `Checks failed after the review: e2e (chromium), lint.` | O PR review, os checks pelo nome, o foco em **Review again** | igual |
@@ -577,7 +579,7 @@ São 61 textos. Esta seção é a fonte única dos textos das notificações; as
 | Ready to merge | `PR #1284 is ready to merge.` | A PR, o foco em **Open PR** | muda |
 | Ready to merge · nothing approved | `PR #1284 is ready to merge: every finding of the review was discarded.` | A PR, o foco em **Open PR** | novo |
 | Ready to close | `PR #1284 was merged. The task is ready to close.` | A PR, o foco em **Close task** | muda |
-| PR closed | `PR #1284 was closed without a merge.` | A PR, o foco em **Delete task…** | igual |
+| PR closed | `PR #1284 was closed without a merge.` | A PR, o foco em **Delete task…** | muda |
 
 **Review de PR**
 
@@ -590,12 +592,12 @@ São 61 textos. Esta seção é a fonte única dos textos das notificações; as
 | Findings | `The review has 5 findings for you to decide.` | O review, o primeiro apontamento a decidir | muda |
 | Ready to publish | `The review is ready to publish.` | O review, o foco em **Publish review…** | igual |
 | Publish failed | `The review couldn't be published: GitHub's rate limit was reached.` | O review, o foco em **Retry** | muda |
-| Pass blocked | `The next pass of the review couldn't start: the clone is missing.` | O review, a saída na barra | muda |
+| Pass blocked | `The next pass of the review couldn't start: gh is not authenticated.` | O review, a saída na barra | muda |
 | New commits | `2 commits arrived since your review.` | O review, o foco em **Review again** | muda |
 | Check failed after publishing | `A check failed after the review: e2e (chromium).` | O review, o check pelo nome, o foco em **Review again** | igual |
 | Conflict after publishing | `The pull request has a conflict with dev.` | O review, o foco em **Review again** | igual |
 | Apply · ready to apply | `The approved findings are ready to apply.` | O review, o foco em **Apply approved** | igual |
-| Apply · changes to review | `The changes from the review are ready for your review.` | O review, o foco em **Open in VS Code** | igual |
+| Apply · changes to review | `The changes from the review are ready for your review.` | O review, o foco em **Open in VS Code** | muda |
 | Apply · ready to merge | `The pull request is ready to merge.` | O review, o foco em **Open PR** | igual |
 
 **Discussão**
@@ -641,7 +643,7 @@ São 61 textos. Esta seção é a fonte única dos textos das notificações; as
 | `Enter` | O passo da URL do board | Lê o board |
 | `Ctrl S` | A edição de um prompt | Salva |
 | `/` | History | Foca a busca |
-| `↑` `↓`, `Enter` | A lista do History | Percorrem as linhas e abrem o arquivado |
+| `↑` `↓`, `Enter` | A lista do History | Percorrem os cabeçalhos dos dias e as linhas, e abrem o arquivado |
 | `Ctrl J` | A página do item que saiu | **Next that needs you** |
 | `Enter` | O início que falhou | **Try again** |
 

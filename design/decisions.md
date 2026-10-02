@@ -2,6 +2,98 @@
 
 Uma entrada por decisão, da mais recente para a mais antiga. Cada uma diz a data, o que foi decidido, o que foi descartado e a razão em uma ou duas frases. Uma decisão revista ganha uma entrada nova que aponta a antiga; a antiga não é apagada.
 
+## 2026-10-02 · Consistência: o passe do crítico antes da task, e a task 12 de M a G
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #1). O coordenador roda o passe do `design-critic` sobre o app inteiro depois do merge da task 11 e antes de o card da task 12 ir para `Ready`; o relatório (`research/critique-task-12-pass.md`) é o PRD, e as lacunas que ele achar são fechadas em `design/` antes. O plano tem um step por área de tela com itens no relatório, e a task é M a G, de 5 a 14 steps; passar de 14 vai ao usuário. Descartado: o passe como primeiro step da task, que deixaria lacunas de design para depois do PRD e um step de tamanho desconhecido no plano. Razão: `implementation.md:178` e a fase 5 já punham o passe antes, e o tamanho de uma task é estimativa do plano.
+
+## 2026-10-02 · Consistência: o que sai do design antigo é o que existe hoje
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #2). A lista do que a task 12 remove deixa de citar `.dark`, Inter e JetBrains Mono, que saíram na task 1 (o tema é `data-theme`, a Fira é a única fonte). Razão: a lista é do código de hoje.
+
+## 2026-10-02 · Consistência: as verificações que fecham a porta
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #3). As importações (nenhuma feature de `components/ui/`, nenhum `lucide-react` fora do system) são regras do Biome; as regras de texto (cor literal, classe de cor do shadcn, `--status-*`, tamanho de texto, movimento) são um teste, `styles/design-rules.test.ts`, que `lint:web` roda sempre; arquivos e dependências sem uso são do `knip`. Descartado: só um teste de varredura, que `test:web --changed` não roda quando só uma feature muda. Razão: uma verificação que não roda em todo `task check` não fecha a porta.
+
+## 2026-10-02 · Consistência: o tamanho de texto e o movimento também são verificados
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #4). Nenhum `text-xs`, `text-sm`, `text-base`, `text-lg`… fora de `components/ui/`, e nenhum `animate-spin`, `animate-pulse`, `duration-<n>` ou curva do Tailwind: o texto é o registro dos tokens, o giro é o `Spinner`, o brilho é o `Shimmer`. Razão: são as regras de `design-system.md` e de `principles.md` 8, e o legado delas é do mesmo tamanho do das cores.
+
+## 2026-10-02 · Bloco de código: um Copy só, `Copy the code`
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #5). Todo bloco de código, curto ou cortado, tem no cabeçalho o **Copy** do system (`CopyButton`), com o nome `Copy the code`, `Copied` e `Can't copy · select the text`; a cópia própria do `CutCode` e a do Streamdown saem. Descartado: manter as duas cópias. Razão: um controle por significado, com os mesmos estados em todo lugar.
+
+## 2026-10-02 · Árvore: as três marcas da espera ficam
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #6). A linha da árvore que espera pelo usuário mantém o glifo, o nome em 600 e o chip de tempo âmbar, como `components.md` aprovou; o item 2 da pauta de polimento da rodada 08 fecha sem mudança. Descartado: o chip neutro na árvore. Razão: as três marcas têm formas diferentes e um matiz só, o chip é o tempo de espera que se vê de longe (2026-09-23), e a cor nunca é o único portador.
+
+## 2026-10-02 · Botão: a tecla sempre em caixa
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #7). A tecla da ação num botão fica sempre em caixa, sem corpo: contorno `--line-2` no secundário e no fantasma, `--brand-key-ring` no primário, `--line-1` com `--ink-4` no desabilitado. Descartado: a tecla solta fora do primário, como o código pinta hoje. Razão: "a mesma forma em todas as ações de um grupo" (`components.md`) e o mock decidido da conversa (`lab/16-conversation-wide/src/core.css:16–17`).
+
+## 2026-10-02 · Barra de rolagem: a mesma em toda área que rola
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #8). Uma regra global `::-webkit-scrollbar` dá à área que rola nativamente (o corpo de um diálogo, um `listbox`, o compositor) a anatomia da barra do `scroll-area`, sem trilho. Descartado: levar toda área ao `scroll-area`. Razão: o item 7 da pauta de polimento; o GTK não pinta mais a dele em lugar nenhum, com menos código.
+
+## 2026-10-02 · Shadcn: um primitivo sem uso sai
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #9). Um arquivo de `components/ui/` que nenhum componente importa sai (`resizable`, `scroll-area`, `separator`); um `shadcn add` o traz de volta quando um wrapper pedir. Razão: o gerado não é editado, mas o que não é usado não precisa ficar.
+
+## 2026-10-02 · System: um componente sem uso sai do código
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #10). Um componente de `components/system/` sem uso depois da task 11 sai do código com os testes; `components.md` continua descrevendo o componente, e `docs/architecture/design-system.md` deixa de listá-lo. Razão: o código descreve o que o produto usa, e o design system descreve o que ele pode usar.
+
+## 2026-10-02 · Virtualização: as metas e as builds
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #11). A meta de cada medida vale para o máximo das execuções quentes com o React de produção e para a mediana com o de desenvolvimento; a conversa também é medida com todos os trechos abertos, com `↓` (16 ms) e `Home` (100 ms) no `feed`. Razão: "abaixo de 16 ms" não dizia de que build, e o caso que a virtualização serve, a conversa aberta, não tinha medida.
+
+## 2026-10-02 · Virtualização: o registro das medidas
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #12). As medidas finais da conversa e do board ficam em `docs/development/target-machine.md` e no corpo da pull request da task 12. Razão: a documentação descreve o produto como ele é, e ele passa a ser virtualizado.
+
+## 2026-10-02 · Reviews: a lista sem janela
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #13). A lista de Reviews não é virtualizada e passa a andar pelo teclado por índice, como o board. Razão: 8 PRs abertas no uso real (`research/review.md:13`).
+
+## 2026-10-02 · Conversa: a cauda fora da janela
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #14). A linha do fim, o cartão fixo, as mensagens na fila e a atividade ficam fora da janela da conversa, sempre montados. Razão: são o fim da conversa, onde o usuário está quase sempre, e a âncora do fim depende deles.
+
+## 2026-10-02 · Virtualização: linhas no fluxo, sem transform
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #15). As linhas montadas de uma lista virtualizada ficam no fluxo da coluna, entre espaçadores em pixel inteiro, nunca posicionadas por `transform` com a soma das alturas. Descartado: o posicionamento absoluto com `translateY` das bibliotecas. Razão: a soma das alturas cai em meio pixel, e o WebKitGTK borra o que fica em meio pixel (`principles.md` 10).
+
+## 2026-10-02 · Faixa de aviso: alerta só quando chega
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #16). Uma faixa de falha que já está na tela quando o lugar abre não é `role="alert"`; só a que chega com a tela aberta é. Razão: é a regra de `components.md` (Faixa de aviso), que o código não seguia, e montar a tela anunciava a faixa de novo.
+
+## 2026-10-02 · Home: o que bloqueia, por repositório
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #17). Na linha de um board na Home, depois da falha da leitura, as linhas do que bloqueia vêm uma por repositório, em ordem alfabética, com o caso de cada um, e não agrupadas por caso. Razão: é o que `tasks/05-board.md:121` dizia, e `screens/board.md` §2 passa a dizer.
+
+## 2026-10-02 · Conversa e board virtualizados
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #18). A conversa e o board passam a ser listas virtualizadas, e `structure.md` §7, `screens/task.md` §12 e `screens/board.md` §6 dizem como, em vez de "entra só se a medição pedir". Razão: as medidas das tasks 4 e 5 perderam as metas (`implementation.md`, task 12).
+
+## 2026-10-02 · Diálogos destrutivos: abertos até a ação terminar
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 11 (`tasks/11-history-dialogs.md` §4.3 #12). **Delete task**, **Discard step**, **Back to…**, **Discard and restart…**, o apagar de um arquivado e **Delete review**, ativo ou arquivado, ficam abertos com o verbo no gerúndio até a chamada voltar, e uma falha fica no rodapé, com a confirmação como o repetir; o aviso do app não as recebe. Descartado: fechar antes e mandar a falha ao aviso, como hoje. Razão: é a regra de `components.md` (Diálogo; Aviso do app), que a task 10 já aplicou aos de Settings.
+
+## 2026-10-02 · History: a busca casa com o número da PR e do card de uma task
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 11 (`tasks/11-history-dialogs.md` §4.3 #3). Com `#N`, a busca do History acha também a task pela PR que ela abriu e pelo card de onde veio, além do review pelo número. Descartado: só o review, como hoje. Razão: o placeholder e o vazio aprovados (`Search by name, title or #number`) já prometem o número para todos.
+
+## 2026-10-02 · History: a linha recém-arquivada aparece mesmo fora do filtro
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 11 (`tasks/11-history-dialogs.md` §4.3 #4). Chegar por **Open in History** limpa a busca do History; se o filtro da lateral esconderia a linha, ela aparece assim mesmo, no dia dela, fora da contagem. Descartado: limpar o filtro da lateral, que mudaria a árvore sem o usuário pedir. Razão: a linha a que se chega nunca falta.
+
+## 2026-10-02 · Diálogos destrutivos: sem `Ctrl+Enter`
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 11 (`tasks/11-history-dialogs.md` §4.3 #10). Um diálogo cuja confirmação é perigosa não confirma por `Ctrl+Enter`: abre em **Cancel**, e só `Enter` ou o clique na confirmação a disparam. Vale a exceção em `components.md` (Diálogo, Teclado) e em `structure.md` (§5, `Ctrl+Enter`), que dizem que `Ctrl+Enter` confirma o diálogo. Descartado: o atalho em todo diálogo. Razão: o gesto destrutivo nunca fica a um atalho; o **Delete review** da task 6 já é assim, e `screens/rest.md` §13 liga `Ctrl ↵` ao primário, que um destrutivo não tem.
+
+## 2026-10-02 · O que o git não removeu de um review apagado vai à página dele
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 11 (`tasks/11-history-dialogs.md` §4.3 #14). A worktree de um review que o git não removeu aparece na página do review apagado, com o aviso do `--force` e o comando, como na task apagada. Descartado: a faixa `Some files stayed on disk`, que sai e dizia `The task is gone` também de um review. Razão: o que sobrou tem saída no lugar do item (`structure.md` §1).
+
 ## 2026-09-29 · Settings, boas-vindas, início e migração: o que a entrada da task 10 decidiu
 
 Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 10 (`tasks/10-settings.md` §4.3). **A janela abre antes dos dados** (P35): o início e a falha aprovados em `screens/rest.md` §5 só aparecem assim, porque hoje o app carrega tudo antes da janela e sai sem ela numa falha; **Try again** recomeça o início no mesmo processo, uma falha antes de haver janela (os diretórios, o log) continua no terminal, e a migração recusada vira o fim do primeiro passo. Cada binding chega ao domínio por um acesso que devolve `MySpec is starting` antes do `ready`. Os passos são `Opening your data` e `Checking the clones of N repositories`; um passo passa a lento em 3 s; o início não tem prazo total (sai o de 10 s), e o teste dos clones vem antes das flows, que precisam saber que clone falta. O caso de uma falha vem de uma sonda do diretório de dados antes do banco, porque o SQLite não diz o `errno`, e os textos levam os caminhos resolvidos. A área principal do início só aparece depois de 400 ms, para uma abertura normal não piscar. Antes do estado, o tema é o que `index.html` pintou, e a interface guarda também a preferência. **As boas-vindas moram no shell**, no lugar da Home, só sem board, sem repositório e sem item ativo (uma discussão ativa de um board removido deixa o shell normal, que não esconde trabalho vivo): valem a Home, Settings e, com algo arquivado, History; `Ctrl+,`, `Esc` e `Alt+←` `Alt+→` agem, os outros atalhos não; a checagem da máquina roda ao aparecer, quando a leitura do catálogo termina e quando a janela volta ao foco, com o login lido do `gh` local, sem rede. **O seletor de modelo** espera o catálogo sem abrir e diz `Effort · <modelo>` em todo lugar; a marca `factory` e os padrões de fábrica (P34b) ficam só em Defaults, onde a fábrica é a referência. **O retrato dos status** é gravado por uma migration no cadastro e na edição de um board (P32), e os boards de antes ganham o da última leitura, porque o produto só guardava os ids dos finais. **As confirmações de remover** um board e um repositório ficam abertas até o fim, com a falha nelas. **O board inexistente** passa a dizer o que fazer (`Check the number and that this account can see the project.`), em todo lugar; `gh auth refresh -s read:project` fica com a falta de escopo, que é outro motivo. **Os vazios** de Boards e de Repositories têm a ação que os resolve, pela regra do system. **Save** das instruções de review é secundário, porque Settings não tem primária. `o aviso de clone abre Repositories` sai de `structure.md` §1 e `screens/rest.md` §2.1: nenhum aviso o faz, e o item da árvore muda o caminho direto. A task 10 começa depois do merge das tasks 4 e 5 e corre em paralelo com as tasks 6 a 9, o que revê em parte, só para ela, o princípio "uma task por vez, na ordem" (`implementation.md` §1), como a entrada de 2026-09-28 fez para a 5. Descartados: registrar os services vazios e preenchê-los depois, que prenderia receptores nulos em `options()` e pediria sincronização; abrir a janela depois do banco, que deixaria sem tela a falha mais provável (os dados sem permissão); reabrir o processo no **Try again**, que esbarraria na instância única; `gh auth status`, que consulta a API e diria "sem login" numa máquina sem rede; a marca `factory` na task e na criação, onde a escolha segue **Defaults**. Razão: nenhuma muda um fluxo inteiro, apaga dado ou desdiz o aprovado; cada uma fecha um caso que `screens/rest.md` deixava sem regra, ou que o código atual não permitia.

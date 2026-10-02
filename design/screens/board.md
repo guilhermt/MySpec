@@ -59,6 +59,8 @@ O item de **Continue** é o primeiro item ativo que ainda existe entre o lugar n
 - `◇ acme/billing isn't cloned. Its cards can't start a task yet.`, com **Clone**;
 - `◇ The clone at ~/code/infra is missing.`, com **Change path…**.
 
+A falha da leitura vem primeiro; depois, uma linha por repositório do board, em ordem alfabética, com o caso dele (sem clone ou clone inexistente), e não agrupadas por caso.
+
 Os repositórios sem board ficam numa última linha, **No board**, com os avisos deles.
 
 **Atalhos.** Uma linha com as teclas e o que fazem: `Ctrl J` Next that needs you, `Ctrl N` New task, `Alt ←` Back, `Ctrl ,` Settings.
@@ -368,7 +370,7 @@ Com a task criada, o diálogo fecha e a task abre, esperando a primeira pergunta
 | **Aguardando o usuário** | A task de um card que espera: o glifo âmbar e o rótulo em peso 500 na linha, o chip do tempo no painel e em **Continue** |
 | **Agente trabalhando** | O spinner e a posição na coluna da task. Um clone em curso é o app trabalhando: o spinner no botão e na linha |
 | **Pausado e ocioso** | A task pausada ou ociosa de um card aparece na linha com o glifo e a palavra da árvore (`Paused · PRD`) |
-| **Muitos itens** | 120 cards e 46 visíveis com as finais recolhidas no board real. A lista rola, a barra de filtros fica fixa, e as seções recolhem. A leitura traz até 2.000 issues: a lista não é virtualizada, e a task 5 mede, na máquina alvo, 2.000 cards com todas as seções abertas; a virtualização vai para a task 12 só se a medição pedir (`tasks/05-board.md` §6) |
+| **Muitos itens** | 120 cards e 46 visíveis com as finais recolhidas no board real. A lista rola, a barra de filtros fica fixa, e as seções recolhem. A leitura traz até 2.000 issues, e a lista é virtualizada (`structure.md` §7): monta as linhas à vista, a linha com a parada de Tab e a do card aberto no painel; o teclado anda por toda linha, e cada `treeitem` diz `aria-level`, `aria-setsize` e `aria-posinset` entre os seus irmãos |
 | **Item que sumiu** | O card que sai da leitura fica aberto com a faixa. O board que sai do estado dá a página do lugar que saiu |
 
 ## 7. Atalhos
