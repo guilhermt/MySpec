@@ -16,6 +16,7 @@ import {
   makeState,
   makeStep,
   makeTask,
+  makeTextPRReport,
 } from "@/test/wails-mock";
 
 const WORKTREE = "/w/api/add-login";
@@ -70,12 +71,23 @@ interface Row {
     | "PendingMessage"
     | "FindingsCard"
     | "FindingsBar"
+    | "FindingsReply"
+    | "ReportLink"
     | "ReviewMenu";
   button: string;
   state: string;
   task: TaskSummary;
-  where: "menu" | "bar" | "header" | "card" | "composer" | "entry" | "tooltip";
-  /** name is the accessible name in the new place; in a tooltip, its text. */
+  where:
+    | "menu"
+    | "bar"
+    | "header"
+    | "card"
+    | "composer"
+    | "placeholder"
+    | "details"
+    | "entry"
+    | "tooltip";
+  /** name is the accessible name in the new place; in a tooltip, its text; in the composer, its placeholder. */
   name: RegExp;
   /** trigger is the text in the bar that holds the tooltip. */
   trigger?: RegExp;
@@ -88,6 +100,8 @@ interface Row {
   group?: RegExp[];
   /** role is the role of the control in the card, a button when not given. */
   role?: "radio" | "link";
+  /** editing opens the editor of the finding the row names first, which is where Done is. */
+  editing?: boolean;
   /** transcripts are the conversations the screen reads, with the pending card of a row. */
   transcripts?: Record<string, TranscriptState>;
 }
@@ -170,7 +184,43 @@ const ALL_DECIDED = reviewed(["approved", "approved", "discarded", "approved"]);
 const ALL_DISCARDED = reviewed(["discarded", "discarded", "discarded", "discarded"], {
   status: "done",
 });
+// REWRITING is the pull request whose report the agent rewrites: no situation, the card stays.
+const REWRITING = reviewed(["approved", "", "", ""], {
+  status: "reviewing",
+  sessionStatus: "working",
+});
+// IN_TEXT is the pull request whose pass was asked before the format of the findings.
+const IN_TEXT: Partial<PullRequest> = {
+  ...OPENED,
+  status: "awaiting_decision",
+  sessionStage: "pr_review",
+  currentPass: 1,
+  reports: [makeTextPRReport(1, false)],
+};
 const FIRST_FINDING = [/^Findings of pass 1$/, /^Finding 1 of 4/];
+
+// CARD_STATES are the states the card of findings is decided in, besides the findings to decide.
+const CARD_STATES: [string, TaskSummary][] = [
+  ["every finding decided", inPR(ALL_DECIDED, "findings", "apply")],
+  ["every finding discarded", inPR(ALL_DISCARDED, "merge", "merge")],
+  ["the report rewritten", inPR(REWRITING)],
+];
+
+// cardRows are the controls of the first finding of the card in a state.
+function cardRows(state: string, task: TaskSummary): Row[] {
+  const row = { origin: "FindingsCard", state, task, where: "card", group: FIRST_FINDING } as const;
+  return [
+    { ...row, button: "Approve", name: /^Approve/ },
+    { ...row, button: "Discard", name: /^Discard/ },
+    { ...row, button: "Edit", name: /^Edit/ },
+    { ...row, button: "Done", name: /^Done$/, editing: true },
+    { ...row, button: "bucket.go:31", role: "link", name: /bucket\.go:31/ },
+    { ...row, button: "Open in VS Code", name: /^Open line 31 of bucket\.go in VS Code$/ },
+  ];
+}
+
+// ASK_FOR_FINDINGS is what the composer says while a structured pass is decided.
+const ASK_FOR_FINDINGS = /^Ask the PR agent to add, change or drop a finding…$/;
 
 // REPORTED is the conversation of the review with the milestone of the report, the one that opens it.
 const REPORTED: Record<string, TranscriptState> = {
@@ -923,6 +973,65 @@ const ROWS: Row[] = [
     name: /^Open line 31 of bucket\.go in VS Code$/,
   },
   {
+    origin: "FindingsCard",
+    button: "Done",
+    state: "findings to decide",
+    task: inPR(TO_DECIDE, "findings", "decide"),
+    where: "card",
+    group: FIRST_FINDING,
+    name: /^Done$/,
+    editing: true,
+  },
+  ...CARD_STATES.flatMap(([state, task]) => cardRows(state, task)),
+  {
+    origin: "FindingsReply",
+    button: "Ask for a finding",
+    state: "findings to decide",
+    task: inPR(TO_DECIDE, "findings", "decide"),
+    where: "placeholder",
+    name: ASK_FOR_FINDINGS,
+  },
+  {
+    origin: "FindingsReply",
+    button: "Ask for a finding",
+    state: "every finding decided",
+    task: inPR(ALL_DECIDED, "findings", "apply"),
+    where: "placeholder",
+    name: ASK_FOR_FINDINGS,
+  },
+  {
+    origin: "FindingsReply",
+    button: "Ask for a finding",
+    state: "every finding discarded",
+    task: inPR(ALL_DISCARDED, "merge", "merge"),
+    where: "placeholder",
+    name: ASK_FOR_FINDINGS,
+  },
+  {
+    origin: "FindingsReply",
+    button: "Reply with the findings",
+    state: "a pass in text",
+    task: inPR(IN_TEXT, "findings"),
+    where: "placeholder",
+    name: /^Tell the PR agent which findings to apply…$/,
+  },
+  {
+    origin: "ReportLink",
+    button: "Review 1",
+    state: "findings to decide",
+    task: inPR(TO_DECIDE, "findings", "decide"),
+    where: "details",
+    name: /^Review 1 · changes$/,
+  },
+  {
+    origin: "ReportLink",
+    button: "Review 1",
+    state: "a pass in text",
+    task: inPR(IN_TEXT, "findings"),
+    where: "details",
+    name: /^Review 1 · changes$/,
+  },
+  {
     origin: "FindingsBar",
     button: "Next to decide",
     state: "findings to decide",
@@ -1032,6 +1141,7 @@ describe("where the actions of the bars that left went", () => {
       entry,
       role,
       group,
+      editing,
       transcripts,
     }) => {
       const { user } = renderWithStore(<TaskView taskId={task.id} />, {
@@ -1066,7 +1176,10 @@ describe("where the actions of the bars that left went", () => {
         if (holder === null) {
           throw new Error("the row names no group");
         }
-        found = within(holder).getByRole(role ?? "button", { name });
+        if (editing) {
+          await user.click(within(holder).getByRole("button", { name: /^Edit/ }));
+        }
+        found = await within(holder).findByRole(role ?? "button", { name });
       } else if (where === "card") {
         const card =
           cardName === undefined
@@ -1077,6 +1190,19 @@ describe("where the actions of the bars that left went", () => {
               })
             : await screen.findByRole("article", { name: cardName });
         found = within(card).getByRole(role ?? "button", { name });
+      } else if (where === "placeholder") {
+        const composer = await screen.findByRole("textbox", { name: /^Reply to/ });
+        expect(composer.getAttribute("placeholder")).toMatch(name);
+        return;
+      } else if (where === "details") {
+        await user.click(
+          within(screen.getByRole("banner")).getByRole("button", { name: "Details" }),
+        );
+        const details = await screen.findByRole("complementary", { name: "Details" });
+        found = within(within(details).getByRole("region", { name: "Pull request" })).getByRole(
+          "button",
+          { name },
+        );
       } else if (where === "header") {
         found = within(screen.getByRole("banner")).getByRole("button", { name });
       } else if (where === "composer") {
@@ -1189,6 +1315,7 @@ const SITUATIONS: [string, TaskSummary][] = [
   ],
   ["findings decide", inPR(TO_DECIDE, "findings", "decide")],
   ["findings apply", inPR(ALL_DECIDED, "findings", "apply")],
+  ["the report rewritten", inPR(REWRITING)],
   ["merge, every finding discarded", inPR(ALL_DISCARDED, "merge", "merge")],
   [
     "changes_review, no file changed",
