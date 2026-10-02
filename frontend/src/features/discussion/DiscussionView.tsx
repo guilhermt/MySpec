@@ -9,6 +9,7 @@ import { DiscussionHeader } from "@/features/discussion/DiscussionHeader";
 import { DocumentsPanel } from "@/features/discussion/DocumentsPanel";
 import { DraftsPanel } from "@/features/discussion/DraftsPanel";
 import { discussionInputOf } from "@/features/discussion/discussion-request";
+import { useDiscussionAnchors } from "@/features/discussion/useDiscussionAnchors";
 import { useFocusRescue } from "@/features/task/request-focus";
 import { discussionSituation } from "@/lib/situations";
 import { asSituationKind, DISCUSSION_STAGE, type DiscussionSummary, sessionKey } from "@/lib/wails";
@@ -24,6 +25,8 @@ function DiscussionConversation({ discussion }: { discussion: DiscussionSummary 
     asSituationKind(situation.kind) === "reply" &&
     discussion.unreadableDrafts === "";
   const input = useMemo(() => discussionInputOf(discussion), [discussion]);
+  // The card of drafts enters the anchors with the card itself.
+  const { after, before } = useDiscussionAnchors(discussion, null);
   return (
     <Conversation
       key="conversation:discussion"
@@ -31,6 +34,8 @@ function DiscussionConversation({ discussion }: { discussion: DiscussionSummary 
       stage={DISCUSSION_STAGE}
       session={discussion}
       discussion={input}
+      after={after}
+      before={before}
       replyWaiting={replyWaiting}
     />
   );

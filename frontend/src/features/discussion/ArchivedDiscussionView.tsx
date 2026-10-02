@@ -1,10 +1,11 @@
 import { ExternalLink, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { pluralize } from "@/features/boards/board-dialog";
 import { Conversation } from "@/features/chat/Conversation";
+import type { DiscussionInput } from "@/features/chat/discussion-markers";
 import { Markdown } from "@/features/chat/Markdown";
 import { IDLE_SESSION, type SessionState } from "@/features/chat/session";
 import { DeleteDiscussionDialog } from "@/features/discussion/DeleteDiscussionDialog";
@@ -101,7 +102,22 @@ export function ArchivedDiscussionView({ discussionId }: ArchivedDiscussionViewP
     void loadTranscript(discussionId, DISCUSSION_STAGE);
   }, [discussionId]);
 
-  if (discussion === null) {
+  // The rounds fold in the archived conversation too, and its document is the archived file.
+  const input = useMemo<DiscussionInput | null>(
+    () =>
+      discussion === null
+        ? null
+        : {
+            id: discussion.id,
+            drafts: discussion.drafts ?? [],
+            text: discussion.text,
+            cards: discussion.cards ?? [],
+            documentRevision: 0,
+          },
+    [discussion],
+  );
+
+  if (discussion === null || input === null) {
     return <section className="min-h-0 flex-1 bg-background" />;
   }
 
@@ -170,6 +186,7 @@ export function ArchivedDiscussionView({ discussionId }: ArchivedDiscussionViewP
               taskId={discussion.id}
               stage={DISCUSSION_STAGE}
               session={ARCHIVED_SESSION}
+              discussion={input}
             />
           </section>
         </div>

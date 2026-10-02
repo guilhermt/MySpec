@@ -157,11 +157,19 @@ A conversa roda na pasta de artefatos da discussão e recebe cada clone dos repo
 
 O agente conduz a conversa para entender a demanda, olhando o código quando precisa, e pergunta só as lacunas reais. Enquanto não escreveu os rascunhos, um turno que termina sem pergunta estruturada espera pelo usuário, como a etapa de PRD. Quando o entendimento está fechado, ele escreve o documento e os rascunhos.
 
+Os marcos da discussão são linhas de uma linha que abrem o conteúdo no lugar:
+- **`Discussion started`**, com o modelo, o esforço e o board. Logo depois vêm `Context`, que abre o contexto inicial com o tamanho e o complemento `#455, #461 and their epic · 5,690 characters` (`the board and your text` sem cards), e o que o usuário escreveu, como mensagem dele.
+- **`Written discussion.md`** e **`Updated discussion.md`** abrem o documento, com o tamanho e **Open in Documents**. Só o último marco lê o arquivo de hoje.
+- **`Drafts written`** (`round 1 · 5 drafts`), **`Drafts revised`** (`round 1 · 3 changed, 1 added, 1 dropped`), que abre a lista dos rascunhos como eram antes da revisão, e **`drafts.md can't be read`**, com a razão.
+- **`Published`** (`2 so far`, `4 created, 1 updated`) e **`Publication stopped`**, em vermelho, com o intervalo da hora da publicação e a lista dos rascunhos da rodada, cada um com o estado e o link.
+
+**A rodada dobra.** Uma rodada anterior à atual vira uma linha só, `Round 1 · 5 drafts, revised once · 4 created, 1 updated`, que abre a lista com os links; os marcos de escrita e de revisão dela somem. A linha toma o lugar da publicação da rodada, ou do `Drafts written` quando nada foi publicado. Uma rodada sem marco, de uma discussão anterior a elas, dobra antes do `Drafts written` da rodada seguinte.
+
 ### O documento
 
 O documento é um artefato da discussão, escrito pelo agente, com o entendimento: contexto, problema, restrições, o que entra e o que fica de fora. Ele não propõe a solução técnica.
 
-O painel de documentos, à direita, tem **Context**, com o contexto inicial, e **Document**, com o documento, renderizados como Markdown. O painel abre no documento assim que ele existe e mostra sempre a versão atual: o agente pode reescrevê-lo a qualquer momento, a pedido do usuário na conversa.
+O painel de documentos, à direita, tem **Context**, com o contexto inicial, e **Document**, com o documento, renderizados como Markdown. O painel abre no documento assim que ele existe e mostra sempre a versão atual: o agente pode reescrevê-lo a qualquer momento, a pedido do usuário na conversa. Na conversa, os marcos `Context` e `Written discussion.md` abrem os mesmos documentos no lugar.
 
 ### Rascunhos de cards
 
@@ -753,7 +761,7 @@ Um review arquivado aparece na lista com o rótulo `Review`, `#<número>` e o t�
 
 ### Histórico de uma discussão
 
-Uma discussão arquivada aparece na lista com o rótulo `Discussion`, o título, o board, a contagem de cards publicados e as datas. A busca casa com o título, e o filtro por repositório mostra as discussões cujos cards de entrada ou publicados pertencem ao repositório. Aberta, ela mostra o documento renderizado, ou `No document was written.`, os rascunhos com o que cada um virou, `Created`, `Updated` ou `Not published`, com a referência e o link, os épicos com os cards dentro, e a conversa inteira, somente leitura. O cabeçalho tem a etiqueta `Archived` e o apagar; `History`, no breadcrumb, volta à lista.
+Uma discussão arquivada aparece na lista com o rótulo `Discussion`, o título, o board, a contagem de cards publicados e as datas. A busca casa com o título, e o filtro por repositório mostra as discussões cujos cards de entrada ou publicados pertencem ao repositório. Aberta, ela mostra o documento renderizado, ou `No document was written.`, os rascunhos com o que cada um virou, `Created`, `Updated` ou `Not published`, com a referência e o link, os épicos com os cards dentro, e a conversa inteira, somente leitura, com os mesmos marcos e as rodadas dobradas; o documento do marco é o arquivo arquivado. O cabeçalho tem a etiqueta `Archived` e o apagar; `History`, no breadcrumb, volta à lista.
 
 ## Apagar uma task
 

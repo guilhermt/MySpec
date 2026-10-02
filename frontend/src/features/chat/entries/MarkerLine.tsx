@@ -5,9 +5,15 @@ import { Finding } from "@/components/system/Finding";
 import { Icon } from "@/components/system/Icon";
 import { ICONS, type IconMeaning } from "@/components/system/icons";
 import { Shimmer } from "@/components/system/Shimmer";
+import { Spinner } from "@/components/system/Spinner";
+import { StateGlyph } from "@/components/system/StateGlyph";
+import { Tooltip } from "@/components/system/Tooltip";
+import type { DraftRowView } from "@/features/chat/discussion-markers";
 import { Chevron } from "@/features/chat/entries/Chevron";
 import { Markdown } from "@/features/chat/Markdown";
 import type { MarkerIcon, MarkerView } from "@/features/chat/markers";
+import { contextCharacters } from "@/features/discussion/new-discussion";
+import { useDiscussionArtifact } from "@/features/discussion/useDiscussionArtifact";
 import { useReviewArtifact } from "@/features/reviews/useReviewArtifact";
 import { useArtifact } from "@/features/task/useArtifact";
 import { splitFrontMatter } from "@/lib/front-matter";
@@ -46,6 +52,9 @@ const FOOTS: Record<"artifacts" | "details" | "reports", { panel: PanelId; label
 // bleeding --space-2 past it.
 const LINE =
   "-mx-(--space-2) flex min-h-(--size-control-sm) min-w-0 items-center gap-(--space-2) rounded-sm px-(--space-2) text-left text-(length:--text-meta) leading-(--leading-meta) text-ink-3";
+
+// ERROR_RAIL is the rail of an error on the edge of a line.
+const ERROR_RAIL = "shadow-[inset_var(--error-rail)_0_0_var(--state-error)]";
 
 // SUNKEN is the block a marker opens into, in the width of the column.
 const SUNKEN =
@@ -123,6 +132,67 @@ function FindingsBody({
   );
 }
 
+function DraftGlyph({ glyph }: { glyph: DraftRowView["glyph"] }) {
+  switch (glyph) {
+    case "check":
+      return <Icon icon={ICONS.done} size="sm" tone="muted" />;
+    case "hold":
+      return <Icon icon={ICONS.waiting} size="sm" tone="muted" />;
+    case "pencil":
+      return <Icon icon={ICONS.revised} size="sm" tone="muted" />;
+    case "error":
+      return <StateGlyph state="error" size="sm" />;
+    case "blocked":
+      return <StateGlyph state="blocked" size="sm" />;
+    case "spinner":
+      return <Spinner />;
+    case null:
+      return <span aria-hidden="true" className="size-(--icon-sm) shrink-0" />;
+  }
+}
+
+function DraftsBody({ rows }: { rows: readonly DraftRowView[] }) {
+  return (
+    <ul data-slot="marker-body" className={cn(SUNKEN, "flex flex-col gap-(--space-2)")}>
+      {rows.map((row) => (
+        <li
+          key={`${row.prefix}${row.title}${row.status}`}
+          className="flex min-w-0 items-center gap-(--space-2) text-(length:--text-body) leading-(--leading-body) text-ink-1"
+        >
+          <DraftGlyph glyph={row.glyph} />
+          {row.prefix !== "" && <span className="shrink-0 text-ink-3">{row.prefix}</span>}
+          <Tooltip content={row.title}>
+            <span className="min-w-0 truncate">{row.title}</span>
+          </Tooltip>
+          <span
+            className={cn(
+              "ml-auto max-w-1/2 shrink-0 truncate text-(length:--text-meta) leading-(--leading-meta)",
+              row.tone === "error"
+                ? "text-state-error"
+                : row.tone === "quiet"
+                  ? "text-ink-3"
+                  : "text-ink-2",
+            )}
+          >
+            {row.status}
+          </span>
+          {row.link !== null && (
+            <Button
+              variant="ghost"
+              size="xs"
+              icon={ICONS.external}
+              className="shrink-0"
+              onClick={() => void openExternal(row.link?.url ?? "")}
+            >
+              {row.link.label}
+            </Button>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function CommitsBody({ body }: { body: Extract<MarkerView["body"], { kind: "commits" }> }) {
   return (
     <ul
@@ -173,6 +243,7 @@ export function MarkerLine({
   createdAt,
   task = null,
   review = null,
+  discussion = null,
   requested = false,
   onRequested,
 }: MarkerLineProps) {
@@ -201,8 +272,17 @@ export function MarkerLine({
     open && body.kind === "artifact" && review !== null ? body.name : null,
     passRevision + attempt,
   );
+  const discussionDocument = body.kind === "discussionDocument" ? body : null;
+  const discussionArtifact = useDiscussionArtifact(
+    discussion?.id ?? "",
+    open && discussionDocument !== null && discussionDocument.text === null && discussion !== null
+      ? discussionDocument.name
+      : null,
+    discussion?.documentRevision ?? 0,
+    attempt,
+  );
   const artifact = review === null ? taskArtifact : reviewArtifact;
-  const time = clockTime(createdAt, Date.now());
+  const time = view.timeText ?? clockTime(createdAt, Date.now());
   const said = view.complement === "" ? view.text : `${view.text} · ${view.complement}`;
   const name = time === "" ? said : `${said}, ${time}`;
 
@@ -218,15 +298,23 @@ export function MarkerLine({
     onRequested?.();
   }, [requested, opens, onRequested]);
 
-  const reading = body.kind === "artifact" && artifact.status === "loading";
+  // An error draws the rail of an error on the edge of its line.
+  const railOf = view.tone === "error" ? ERROR_RAIL : "";
+  const reading =
+    (body.kind === "artifact" && artifact.status === "loading") ||
+    (discussionDocument?.text === null && discussionArtifact.status === "loading");
   const cells = (
     <>
       {opens ? <Chevron open={open} /> : <span aria-hidden="true" className="w-(--icon-xs)" />}
-      <Icon
-        icon={ICONS[MARKER_ICONS[view.icon]]}
-        size="sm"
-        className={view.icon === "retry" ? "text-ink-3" : "text-ink-4"}
-      />
+      {view.tone === "error" ? (
+        <StateGlyph state="error" size="sm" />
+      ) : (
+        <Icon
+          icon={ICONS[MARKER_ICONS[view.icon]]}
+          size="sm"
+          className={view.icon === "retry" ? "text-ink-3" : "text-ink-4"}
+        />
+      )}
       <span
         className={cn(
           "shrink-0 whitespace-nowrap text-ink-2",
@@ -266,7 +354,7 @@ export function MarkerLine({
   if (!opens) {
     return (
       <article ref={articleRef} aria-label={name} className="flex flex-col">
-        <div className={LINE}>{cells}</div>
+        <div className={cn(LINE, railOf)}>{cells}</div>
       </article>
     );
   }
@@ -292,6 +380,54 @@ export function MarkerLine({
     case "commits":
       content = <CommitsBody body={body} />;
       break;
+    case "drafts":
+      content = <DraftsBody rows={body.rows} />;
+      break;
+    case "discussionDocument": {
+      const text =
+        body.text ?? (discussionArtifact.status === "ready" ? discussionArtifact.content : null);
+      content =
+        body.text === null && discussionArtifact.status === "error" ? (
+          <p className="mt-(--space-1) flex items-center gap-(--space-2) rounded-md bg-state-error-veil px-(--space-4) py-(--space-1) text-(length:--text-meta) leading-(--leading-meta) text-state-error">
+            {`Couldn't read ${body.name}`}
+            <span aria-hidden="true">·</span>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => {
+                toggleRef.current?.focus();
+                setAttempt(attempt + 1);
+              }}
+            >
+              Try again
+            </Button>
+          </p>
+        ) : text === null ? (
+          <div data-slot="marker-body" className={SUNKEN}>
+            <Shimmer>Reading…</Shimmer>
+          </div>
+        ) : (
+          <div data-slot="marker-body" className={SUNKEN}>
+            <div className="select-text">
+              <Markdown cutCode>{text}</Markdown>
+            </div>
+            <div className="mt-(--space-2) flex items-center gap-(--space-3)">
+              <span className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
+                {contextCharacters(text)}
+              </span>
+              <Button
+                variant="ghost"
+                size="xs"
+                icon={ICONS.file}
+                onClick={() => openPanelAt("documents", body.name)}
+              >
+                Open in Documents
+              </Button>
+            </div>
+          </div>
+        );
+      break;
+    }
     case "artifact": {
       const foot = FOOTS[body.openIn];
       content =
@@ -346,6 +482,7 @@ export function MarkerLine({
         onClick={() => setOpen(!open)}
         className={cn(
           LINE,
+          railOf,
           "outline-none transition-colors duration-(--duration-fast) ease-standard hover:bg-veil-hover active:bg-veil-press focus-visible:focus-ring",
         )}
       >

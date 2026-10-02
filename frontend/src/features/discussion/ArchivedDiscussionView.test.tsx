@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { ArchivedDiscussionView } from "@/features/discussion/ArchivedDiscussionView";
-import { type ArchivedDiscussion, api } from "@/lib/wails";
+import { type ArchivedDiscussion, api, type Entry, type MarkerEntry } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import {
@@ -143,5 +143,39 @@ describe("ArchivedDiscussionView", () => {
     expect(within(feed).getByRole("article", { name: /^Discussion agent, / })).toHaveTextContent(
       "On it.",
     );
+  });
+
+  it("folds the round that was published into one line", async () => {
+    const marker = (fields: Partial<MarkerEntry>): Entry => {
+      const entry = makeEntry("marker");
+      return entry.marker === null ? entry : { ...entry, marker: { ...entry.marker, ...fields } };
+    };
+    vi.mocked(api.getTranscript).mockResolvedValueOnce(
+      makeTranscript({
+        taskId: "discussion-1",
+        stage: "discussion",
+        entries: [
+          marker({ type: "drafts_written", round: 1, count: 1 }),
+          marker({ type: "drafts_published", round: 1 }),
+          marker({ type: "drafts_written", round: 2, count: 1 }),
+        ],
+      }),
+    );
+    view({
+      drafts: [
+        makeDraft({ id: "d1", round: 1, outcome: "created", published: true, number: 31 }),
+        makeDraft({ id: "d2", position: 2, round: 2 }),
+      ],
+    });
+
+    const feed = await screen.findByRole("feed", {
+      name: "Conversation with the discussion agent",
+    });
+    expect(
+      within(feed).getByRole("button", { name: /^Round 1 · 1 draft · 1 created/ }),
+    ).toBeVisible();
+    expect(
+      within(feed).queryByRole("article", { name: /^Drafts written · round 1/ }),
+    ).not.toBeInTheDocument();
   });
 });
