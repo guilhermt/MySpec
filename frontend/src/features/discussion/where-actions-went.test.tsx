@@ -1048,7 +1048,11 @@ const ROWS: Row[] = [
     control: "Epic, Existing issue…",
     state: "a card",
     draw: view(DECIDING),
-    steps: then(edit, click("button", "Epic: No epic"), click("menuitemradio", "Existing issue…")),
+    steps: then(
+      edit,
+      click("button", "Epic: No epic"),
+      click("menuitem", "Existing issue…. Enter opens it."),
+    ),
     where: "card",
     holder: BETA,
     role: "textbox",

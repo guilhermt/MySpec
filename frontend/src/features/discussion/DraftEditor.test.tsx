@@ -155,7 +155,7 @@ describe("DraftEditor, the texts", () => {
 describe("DraftEditor, Existing issue…", () => {
   async function openField(user: ReturnType<typeof draw>["user"]) {
     await user.click(screen.getByRole("button", { name: "Epic: No epic" }));
-    await user.click(await screen.findByRole("menuitemradio", { name: "Existing issue…" }));
+    await user.click(await screen.findByRole("menuitem", { name: /^Existing issue…/ }));
     return screen.findByRole("textbox", { name: "Existing issue" });
   }
 
@@ -163,6 +163,7 @@ describe("DraftEditor, Existing issue…", () => {
     const { user } = draw(makeDraft());
     const field = await openField(user);
     expect(field).toHaveFocus();
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
 
     await user.type(field, "dev/web#3{Enter}");
 
@@ -174,6 +175,22 @@ describe("DraftEditor, Existing issue…", () => {
     await waitFor(() =>
       expect(screen.queryByRole("textbox", { name: "Existing issue" })).not.toBeInTheDocument(),
     );
+  });
+
+  it("is the action of the Epic, apart from its choices, and opens the field with Enter", async () => {
+    const { user } = draw(makeDraft());
+    await user.click(screen.getByRole("button", { name: "Epic: No epic" }));
+    const item = await screen.findByRole("menuitem", {
+      name: "Existing issue…. Enter opens it.",
+    });
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByRole("menuitemradio", { name: /Existing issue/ })).not.toBeInTheDocument();
+
+    item.focus();
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByRole("textbox", { name: "Existing issue" })).toHaveFocus();
+    expect(api.setDraftEpic).not.toHaveBeenCalled();
   });
 
   it("shows the refusal under the field and keeps it open", async () => {

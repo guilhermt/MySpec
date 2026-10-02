@@ -40,6 +40,7 @@ import type {
   Board,
   BoardCard,
   DiscussionSummary,
+  Draft,
   Entry,
   Leftover,
   MarkerType,
@@ -1483,6 +1484,18 @@ export function useOnScreenSituationId(): string | null {
 /** useFlashing is the situations whose brief highlight is showing, by id. */
 export function useFlashing(): ReadonlySet<string> {
   return useAppStore((state) => state.flashing);
+}
+
+/**
+ * storedDraft is a draft as the Go side has it now, null when the discussion
+ * no longer has it. It is read outside a render, by whoever needs what stands
+ * at the moment of a call rather than what the last render saw.
+ */
+export function storedDraft(discussionId: string, draftId: string): Draft | null {
+  const discussion = useAppStore
+    .getState()
+    .app?.discussions?.find((each) => each.id === discussionId);
+  return discussion?.drafts?.find((each) => each.id === draftId) ?? null;
 }
 
 export function usePrDraft(taskId: string): PrDraft | null {

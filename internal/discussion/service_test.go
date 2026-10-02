@@ -363,14 +363,13 @@ func TestGroupingRefusesACardThatCanNotGoIntoAnEpic(t *testing.T) {
 		setUp func(f *fixture, id string)
 	}{
 		{"of another round", func(f *fixture, id string) {
-			f.record(id, twoDrafts)
-			f.publish(id, "one", "two")
-			f.record(id, artifactOf(
-				draftOf("one", "Kind: new", "Repository: acme/web"),
-				draftOf("two", "Kind: new", "Repository: acme/web"),
-				draftOf("three", "Kind: new", "Repository: acme/web"),
-				draftOf("four", "Kind: new", "Repository: acme/web"),
-			))
+			// The round 1 closes with everything discarded, and taking back the
+			// decision on one leaves it a loose card of the round 1, undecided.
+			f.record(id, plain("one", "two"))
+			f.decide(id, "one", discussion.DecisionDiscarded)
+			f.decide(id, "two", discussion.DecisionDiscarded)
+			f.record(id, plain("one", "two", "three", "four"))
+			f.decide(id, "one", discussion.DecisionNone)
 		}},
 		{"of another epic draft", func(f *fixture, id string) {
 			f.record(id, artifactOf(

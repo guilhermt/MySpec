@@ -177,6 +177,26 @@ func TestAReadingMarksTheDrafts(t *testing.T) {
 	}
 }
 
+func TestAReadingThatTakesOutEveryDraftMarksTheRevision(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, draftsArtifact)
+	f.waitMarkers(session.MarkerDraftsWritten, 1)
+
+	f.replace(id, discussion.DraftsFile, "---\nstatus: none\n---\n")
+	f.flow.Check(id)
+
+	revised := f.waitMarkers(session.MarkerDraftsRevised, 1)
+	if revised[0].Round != 1 || revised[0].Dropped != 3 || revised[0].Changed != 0 || revised[0].Added != 0 {
+		t.Errorf("the revision marked %+v, want the 3 drafts of the round 1 dropped", revised[0])
+	}
+	if len(revised[0].Before) != 3 || slices.ContainsFunc(revised[0].Before, func(b session.DraftBefore) bool { return !b.Dropped }) {
+		t.Errorf("the revision lists %+v, want the 3 drafts of the round, each dropped", revised[0].Before)
+	}
+}
+
 func TestUnreadableDraftsAreMarkedWithTheirReason(t *testing.T) {
 	t.Parallel()
 
@@ -193,7 +213,7 @@ func TestUnreadableDraftsAreMarkedWithTheirReason(t *testing.T) {
 		t.Errorf("the marker says %q, the state %q, want the same reason", marked[0].Reason, state.UnreadableDrafts)
 	}
 	if !strings.HasSuffix(marked[0].Reason, ".") || strings.Contains(marked[0].Reason, "discussion:") ||
-		strings.Contains(marked[0].Reason, DraftsPathOf(f, id)) {
+		strings.Contains(marked[0].Reason, draftsPathOf(f, id)) {
 		t.Errorf("the reason %q is not a sentence of the rule", marked[0].Reason)
 	}
 
@@ -206,8 +226,8 @@ func TestUnreadableDraftsAreMarkedWithTheirReason(t *testing.T) {
 	}
 }
 
-// DraftsPathOf is the path of the drafts file of a discussion.
-func DraftsPathOf(f *fixture, id string) string {
+// draftsPathOf is the path of the drafts file of a discussion.
+func draftsPathOf(f *fixture, id string) string {
 	stored, _ := f.discussions.Get(id)
 	return filepath.Join(stored.ArtifactsDir, discussion.DraftsFile)
 }

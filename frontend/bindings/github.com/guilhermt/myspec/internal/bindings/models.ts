@@ -814,7 +814,7 @@ export interface DiscussionSummary {
 
     /**
      * DraftsRead says a readable drafts artifact was recorded, and
-     * DraftsRevision changes every time the artifact is read again and differs.
+     * DraftsRevision changes with every reading that opens or revises a round.
      */
     "draftsRead": boolean;
     "draftsRevision": number;
@@ -1344,9 +1344,6 @@ export interface MarkerEntry {
     "count": number;
 
     /**
-     * The markers of a discussion: Model and Effort also belong to
-     * discussion_started, Count to drafts_written and Reason to
-     * drafts_unreadable.
      * discussion_started
      */
     "board": string;

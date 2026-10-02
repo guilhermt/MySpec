@@ -275,7 +275,7 @@ func DisplayTitle(d Draft) string {
 // Recorded is what a reading of the drafts did to them.
 type Recorded struct {
 	Changed  bool // the drafts differ from the stored ones
-	Round    int  // the current round after the reading; 0 without drafts
+	Round    int  // the round of the reading; 0 when it leaves no draft and revised none
 	First    bool // the first reading of the round, which has drafts
 	Drafts   int  // the drafts of the round after the reading
 	Replaced int  // the drafts of the round the reading changed
@@ -312,7 +312,7 @@ type Discussion struct {
 	ArtifactsDir   string
 	Cards          []InputCard
 	DraftsRead     bool // a readable drafts artifact was recorded
-	DraftsRevision int  // bumped every time the artifact is read again and differs
+	DraftsRevision int  // bumped by every reading that opens or revises a round
 	ArchivedAt     time.Time
 	CreatedAt      time.Time
 	UpdatedAt      time.Time

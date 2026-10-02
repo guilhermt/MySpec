@@ -13,6 +13,7 @@ import {
   initialNav,
   readLastItem,
   stepTabKey,
+  storedDraft,
   useAppStore,
   useArchivedDiscussion,
   useArchivedReview,
@@ -65,6 +66,7 @@ import {
   makeBoard,
   makeBoardCard,
   makeDiscussion,
+  makeDraft,
   makeEntry,
   makeMigration,
   makeModelCatalog,
@@ -1944,6 +1946,21 @@ describe("discussions", () => {
       useAppStore.getState().openDiscussion(DISCUSSION.id);
     });
     expect(result.current).toBe("s-drafts");
+  });
+});
+
+describe("storedDraft", () => {
+  it("reads a draft as the snapshot has it now, and null once the discussion no longer has it", () => {
+    const draft = makeDraft({ id: "draft-1", revision: 3 });
+    useAppStore
+      .getState()
+      .applyState(
+        withTasks({ discussions: [makeDiscussion({ id: "discussion-1", drafts: [draft] })] }),
+      );
+
+    expect(storedDraft("discussion-1", "draft-1")).toEqual(draft);
+    expect(storedDraft("discussion-1", "draft-gone")).toBeNull();
+    expect(storedDraft("discussion-gone", "draft-1")).toBeNull();
   });
 });
 

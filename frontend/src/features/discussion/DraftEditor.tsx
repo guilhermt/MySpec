@@ -8,8 +8,9 @@ import { ICONS } from "@/components/system/icons";
 import { Select, type SelectOption } from "@/components/system/Select";
 import { Textarea } from "@/components/system/Textarea";
 import { dependencyLabel, refValue } from "@/features/discussion/discussion-status";
-import { dependencyViews, draftTitle } from "@/features/discussion/drafts-card";
-import { type DraftField, storedDraft, useDraftText } from "@/features/discussion/useDraftText";
+import { dependencyViews } from "@/features/discussion/drafts-card";
+import { type DraftField, useDraftText } from "@/features/discussion/useDraftText";
+import { draftTitle } from "@/lib/drafts";
 import { messageOf } from "@/lib/errors";
 import { asDraftKind, type DiscussionSummary, type Draft } from "@/lib/wails";
 import {
@@ -21,7 +22,7 @@ import {
   setDraftModule,
   setDraftRepository,
 } from "@/store/actions";
-import { useBoard } from "@/store/app-store";
+import { storedDraft, useBoard } from "@/store/app-store";
 
 export interface DraftEditorProps {
   discussion: DiscussionSummary;
@@ -33,14 +34,12 @@ export interface DraftEditorProps {
 const RUNNING = "A publication is running";
 const META = "text-(length:--text-meta) leading-(--leading-meta)";
 
-// ISSUE is the value of the choice that opens the field of an existing issue as the epic.
-const ISSUE = "\u0000issue";
-
-// epicOptions are the epics a card can sit under: the ones of the round, the one it has now if it is
-// elsewhere, and the field of an existing issue apart.
+// epicChoices are the epics a card can sit under: the ones of the round and the one it has now if it
+// is elsewhere, and apart, the action that opens the field of an existing issue.
 function epicChoices(
   discussion: DiscussionSummary,
   draft: Draft,
+  openIssue: () => void,
 ): { options: SelectOption[]; groups: { label: string; options: SelectOption[] }[] } {
   const options: SelectOption[] = [{ value: "", label: "No epic" }];
   for (const each of discussion.drafts ?? []) {
@@ -58,7 +57,20 @@ function epicChoices(
   }
   return {
     options,
-    groups: [{ label: "On GitHub", options: [{ value: ISSUE, label: "Existing issue…" }] }],
+    groups: [
+      {
+        label: "On GitHub",
+        // Not a choice: its value is only the key of the item, and Enter or a click opens the field.
+        options: [
+          {
+            value: "existing-issue",
+            label: "Existing issue…",
+            disabled: true,
+            action: { label: "Open", onAction: openIssue, closes: true },
+          },
+        ],
+      },
+    ],
   };
 }
 
@@ -134,7 +146,7 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
     { value: "", label: "No module" },
     ...(discussion.moduleOptions ?? []).map((name) => ({ value: name, label: name })),
   ];
-  const epics = epicChoices(discussion, draft);
+  const epics = epicChoices(discussion, draft, () => setIssue(""));
   const epicValue = draft.epic === null ? "" : refValue(draft.epic);
 
   const dependencies = (draft.dependencies ?? []).filter((each) => each.dropped === "");
@@ -279,12 +291,8 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
                 options={epics.options}
                 groups={epics.groups}
                 onValueChange={(value) => {
-                  if (value === ISSUE) {
-                    setIssue("");
-                  } else {
-                    setIssue(null);
-                    void setDraftEpic(discussion.id, draft.id, value);
-                  }
+                  setIssue(null);
+                  void setDraftEpic(discussion.id, draft.id, value);
                 }}
                 {...lock}
               />

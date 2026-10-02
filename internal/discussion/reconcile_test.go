@@ -212,11 +212,11 @@ func TestAReferenceToADraftThatLeftIsDroppedWithAWarning(t *testing.T) {
 
 	f := newFixture(t)
 	d := f.create()
-	f.record(d.ID, artifactOf(
+	f.record(d.ID, withTitle(withTitle(artifactOf(
 		draftOf("epic", "Kind: epic", "Repository: acme/web"),
 		draftOf("one", "Kind: new", "Repository: acme/web", "Epic: epic", "Depends on: two"),
 		draftOf("two", "Kind: new", "Repository: acme/web"),
-	))
+	), "epic", "Pricing tiers"), "two", "Invoice schema"))
 
 	f.record(d.ID, artifactOf(draftOf("one", "Kind: new", "Repository: acme/web", "Epic: epic", "Depends on: two")))
 
@@ -225,8 +225,8 @@ func TestAReferenceToADraftThatLeftIsDroppedWithAWarning(t *testing.T) {
 		t.Errorf("draft = %+v, want the references dropped", got)
 	}
 	want := []string{
-		"The epic epic is no longer among the drafts.",
-		"The dependency on two is no longer among the drafts.",
+		"The epic Pricing tiers is no longer among the drafts.",
+		"The dependency on Invoice schema is no longer among the drafts.",
 	}
 	if diff := cmp.Diff(want, got.Warnings); diff != "" {
 		t.Errorf("warnings (-want +got):\n%s", diff)
@@ -558,6 +558,7 @@ func TestARevisionSaysWhatChangedInEachDraft(t *testing.T) {
 	cases := []struct {
 		name         string
 		first        string
+		settle       func(f *fixture, id string) // what happens between the two readings
 		approve      []string
 		then         string
 		want         discussion.Recorded
@@ -674,6 +675,34 @@ func TestARevisionSaysWhatChangedInEachDraft(t *testing.T) {
 			approvalLost: []string{"epic"},
 		},
 		{
+			name:  "every draft of the round taken out",
+			first: plain("one", "two"),
+			then:  "---\nstatus: none\n---\n",
+			want: discussion.Recorded{
+				Changed: true, Round: 1, Dropped: 2,
+				Before: []discussion.BeforeDraft{
+					{Title: "one", Kind: discussion.KindNew, Dropped: true},
+					{Title: "two", Kind: discussion.KindNew, Dropped: true},
+				},
+			},
+		},
+		{
+			name:  "every draft of the round 2 taken out",
+			first: plain("one", "two"),
+			settle: func(f *fixture, id string) {
+				f.publish(id, "one", "two")
+				f.record(id, plain("one", "two", "three", "four"))
+			},
+			then: plain("one", "two"),
+			want: discussion.Recorded{
+				Changed: true, Round: 2, Dropped: 2,
+				Before: []discussion.BeforeDraft{
+					{Title: "three", Kind: discussion.KindNew, Dropped: true},
+					{Title: "four", Kind: discussion.KindNew, Dropped: true},
+				},
+			},
+		},
+		{
 			name:  "a reading that changes nothing",
 			first: plain("one", "two"),
 			then:  plain("one", "two"),
@@ -687,6 +716,9 @@ func TestARevisionSaysWhatChangedInEachDraft(t *testing.T) {
 			f := newFixture(t)
 			d := f.create()
 			f.record(d.ID, c.first)
+			if c.settle != nil {
+				c.settle(f, d.ID)
+			}
 			f.approve(d.ID, c.approve...)
 
 			got := f.record(d.ID, c.then)
@@ -704,6 +736,148 @@ func TestARevisionSaysWhatChangedInEachDraft(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestARewriteThatAdoptsTheEditsOfTheUserKeepsTheDecision(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.record(d.ID, plain("one", "two"))
+	if err := f.service.SetDraftText(t.Context(), d.ID, "one", "one", "B"); err != nil {
+		t.Fatalf("set text: %v", err)
+	}
+	f.approve(d.ID, "one")
+	before := f.draft(d.ID, "one")
+
+	got := f.record(d.ID, withBody(plain("one", "two"), "one", "B"))
+
+	if diff := cmp.Diff(discussion.Recorded{Changed: true, Round: 1, Drafts: 2}, got); diff != "" {
+		t.Errorf("Recorded (-want +got):\n%s", diff)
+	}
+	want := before
+	want.BodyOriginal = "B"
+	if diff := cmp.Diff(want, f.draft(d.ID, "one")); diff != "" {
+		t.Errorf("draft (-want +got):\n%s", diff)
+	}
+
+	// The artifact now says B: the agent writing A again is a change.
+	again := f.record(d.ID, plain("one", "two"))
+	wantAgain := discussion.Recorded{
+		Changed: true, Round: 1, Drafts: 2, Replaced: 1,
+		Before: []discussion.BeforeDraft{
+			{
+				Title: "one", Kind: discussion.KindNew, Decision: discussion.DecisionApproved,
+				Changes: []string{"body"}, ApprovalCleared: true,
+			},
+			{Title: "two", Kind: discussion.KindNew},
+		},
+	}
+	if diff := cmp.Diff(wantAgain, again); diff != "" {
+		t.Errorf("Recorded of the rewrite back (-want +got):\n%s", diff)
+	}
+	one := f.draft(d.ID, "one")
+	if one.Body != "The body of one." || one.Decision != discussion.DecisionNone || !one.ApprovalCleared {
+		t.Errorf("draft = %+v, want the body of the artifact and the approval cleared", one)
+	}
+}
+
+func TestAReplacedDraftThatEndsAsStoredKeepsItsDecision(t *testing.T) {
+	t.Parallel()
+
+	for _, decision := range []discussion.Decision{discussion.DecisionApproved, discussion.DecisionDiscarded} {
+		t.Run(string(decision), func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			d := f.create()
+			f.record(d.ID, artifactOf(
+				draftOf("one", "Kind: new", "Repository: acme/web", "Depends on: two"),
+				draftOf("two", "Kind: new", "Repository: acme/web"),
+				draftOf("three", "Kind: new", "Repository: acme/web"),
+			))
+			if err := f.service.RemoveDraftDependency(t.Context(), d.ID, "one", "two"); err != nil {
+				t.Fatalf("remove dependency: %v", err)
+			}
+			f.decide(d.ID, "one", decision)
+
+			// The agent points one at three and takes three out: one is
+			// replaced, and normalize brings it back to what the user had left.
+			got := f.record(d.ID, artifactOf(
+				draftOf("one", "Kind: new", "Repository: acme/web", "Depends on: three"),
+				draftOf("two", "Kind: new", "Repository: acme/web"),
+			))
+
+			one := f.draft(d.ID, "one")
+			if one.Decision != decision || one.ApprovalCleared || one.RevisedReading != 0 || one.Revision != 1 {
+				t.Errorf("draft = %+v, want the decision kept and no revision", one)
+			}
+			want := discussion.Recorded{
+				Changed: true, Round: 1, Drafts: 2, Dropped: 1,
+				Before: []discussion.BeforeDraft{
+					{Title: "one", Kind: discussion.KindNew, Decision: decision},
+					{Title: "two", Kind: discussion.KindNew},
+					{Title: "three", Kind: discussion.KindNew, Dropped: true},
+				},
+			}
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Errorf("Recorded (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestADraftOfAClosedRoundRewrittenAsTheUserLeftItStaysInItsRound(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.record(d.ID, plain("one", "two"))
+	if err := f.service.SetDraftText(t.Context(), d.ID, "one", "one", "B"); err != nil {
+		t.Fatalf("set text: %v", err)
+	}
+	f.decide(d.ID, "one", discussion.DecisionDiscarded)
+	f.decide(d.ID, "two", discussion.DecisionDiscarded)
+
+	got := f.record(d.ID, withBody(plain("one", "three"), "one", "B"))
+
+	if diff := cmp.Diff(discussion.Recorded{Changed: true, Round: 2, First: true, Drafts: 1}, got); diff != "" {
+		t.Errorf("Recorded (-want +got):\n%s", diff)
+	}
+	one := f.draft(d.ID, "one")
+	if one.Round != 1 || one.Decision != discussion.DecisionDiscarded || one.Body != "B" || one.BodyOriginal != "B" {
+		t.Errorf("draft = %+v, want it discarded in the round 1, with B as the body and the original", one)
+	}
+}
+
+func TestAReadingThatRevisesNothingKeepsTheMarksOfTheLastRevision(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.record(d.ID, plain("one", "two"))
+	if err := f.service.SetDraftText(t.Context(), d.ID, "one", "one", "B"); err != nil {
+		t.Fatalf("set text: %v", err)
+	}
+	revised := withBody(plain("one", "two"), "two", "Another body.")
+	f.record(d.ID, revised)
+
+	// The agent writes one as the user left it, which revises nothing.
+	got := f.record(d.ID, withBody(revised, "one", "B"))
+
+	if diff := cmp.Diff(discussion.Recorded{Changed: true, Round: 1, Drafts: 2}, got); diff != "" {
+		t.Errorf("Recorded (-want +got):\n%s", diff)
+	}
+	stored, _ := f.service.Get(d.ID)
+	if stored.DraftsRevision != 2 {
+		t.Errorf("revision = %d, want 2, the one of the last revision", stored.DraftsRevision)
+	}
+	if two := f.draft(d.ID, "two"); two.RevisedReading != stored.DraftsRevision {
+		t.Errorf("two revised in reading %d, want it still revised by the last revision %d", two.RevisedReading, stored.DraftsRevision)
+	}
+	if one := f.draft(d.ID, "one"); one.BodyOriginal != "B" || one.RevisedReading != 0 {
+		t.Errorf("one = %+v, want B as the original and no revision", one)
 	}
 }
 

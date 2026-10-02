@@ -1,11 +1,12 @@
 import type { MenuRowItem } from "@/components/MenuRow";
 import type { PillView, StepperGlyph } from "@/components/system/Pill";
 import type { StepperStepView } from "@/components/system/Stepper";
-import { draftTitle, groupable } from "@/features/discussion/drafts-card";
+import { groupable } from "@/features/discussion/drafts-card";
+import { draftTitle, publishedOutcome } from "@/lib/drafts";
 import { modelLabel } from "@/lib/models";
 import { counted, lowerFirst, situationPillState } from "@/lib/situations";
 import type { Board, DiscussionSummary, Draft, Repository, SituationGroup } from "@/lib/wails";
-import { asDraftOutcome, asSessionStatus, asSituationGroup } from "@/lib/wails";
+import { asSessionStatus, asSituationGroup } from "@/lib/wails";
 import { clockTime, shortTime, startedTime } from "@/lib/when";
 
 /** DiscussionStepperModel is the pill of a discussion in a stepper of one stage, its name and its tooltip. */
@@ -124,12 +125,11 @@ function archiveRefusal(discussion: DiscussionSummary): string {
 
 /**
  * discussionMenu is the ⋯ of a discussion: legend Discussion; the board, grouping, archiving; then
- * Delete discussion…, red. withGroup says the item that groups the drafts is there.
+ * Delete discussion…, red.
  */
 export function discussionMenu(
   discussion: DiscussionSummary,
   boardTitle: string | null,
-  withGroup: boolean,
 ): DiscussionMenuGroup[] {
   const running = discussion.publishing ? "a publication is running" : null;
   const items: DiscussionMenuItem[] = [];
@@ -141,17 +141,15 @@ export function discussionMenu(
       icon: "board",
     });
   }
-  if (withGroup) {
-    const refusal =
-      groupable(discussion).length < 2 ? "needs two loose drafts not published" : running;
-    items.push({
-      id: "discussion.group",
-      label: "Group drafts into an epic…",
-      action: "group",
-      icon: "epic",
-      ...(refusal === null ? {} : { disabledReason: refusal }),
-    });
-  }
+  const refusal =
+    groupable(discussion).length < 2 ? "needs two loose drafts not published" : running;
+  items.push({
+    id: "discussion.group",
+    label: "Group drafts into an epic…",
+    action: "group",
+    icon: "epic",
+    ...(refusal === null ? {} : { disabledReason: refusal }),
+  });
   items.push({
     id: "discussion.archive",
     label: "Archive…",
@@ -241,12 +239,7 @@ export interface DiscussionDetailsModel {
 export function roundSummary(drafts: readonly Draft[], round: number): string {
   const current = Math.max(0, ...drafts.map((draft) => draft.round));
   const mine = drafts.filter((draft) => draft.round === round);
-  const published = mine.filter((draft) => draft.published);
-  const created = published.filter((draft) => asDraftOutcome(draft.outcome) === "created").length;
-  const updated = published.filter((draft) => asDraftOutcome(draft.outcome) === "updated").length;
-  const outcome = [created > 0 ? `${created} created` : "", updated > 0 ? `${updated} updated` : ""]
-    .filter((part) => part !== "")
-    .join(", ");
+  const outcome = publishedOutcome(mine);
   const decided = mine.filter((draft) => draft.decision !== "" || draft.published).length;
   return [
     counted(mine.length, "draft"),
@@ -355,16 +348,8 @@ export function archiveSummary(drafts: readonly Draft[]): string {
   let line = "Published: nothing";
   if (published.length > 0) {
     const rounds = new Set(published.map((draft) => draft.round)).size;
-    const created = published.filter((draft) => asDraftOutcome(draft.outcome) === "created").length;
-    const updated = published.filter((draft) => asDraftOutcome(draft.outcome) === "updated").length;
-    const outcome = [
-      created > 0 ? `${created} created` : "",
-      updated > 0 ? `${updated} updated` : "",
-    ]
-      .filter((part) => part !== "")
-      .join(", ");
     const where = rounds === 1 ? `round ${published[0]?.round ?? 0}` : counted(rounds, "round");
-    line = `Published: ${counted(published.length, "issue")} in ${where}: ${outcome}`;
+    line = `Published: ${counted(published.length, "issue")} in ${where}: ${publishedOutcome(published)}`;
   }
   const left = drafts.filter((draft) => !draft.published && draft.decision !== "discarded");
   return left.length === 0

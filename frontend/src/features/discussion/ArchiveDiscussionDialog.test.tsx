@@ -67,4 +67,29 @@ describe("ArchiveDiscussionDialog", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("A publication is running.");
     expect(onOpenChange).not.toHaveBeenCalled();
   });
+
+  it("keeps Cancel, × and Esc inert while it archives, and archives once", async () => {
+    let finish: () => void = () => {};
+    vi.mocked(api.archiveDiscussion).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const { user, onOpenChange } = dialog();
+
+    await user.click(screen.getByRole("button", { name: /^Archive/ }));
+
+    const busy = await screen.findByRole("button", { name: "Archiving…" });
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Close" })).toHaveAttribute("aria-disabled", "true");
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(busy);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(api.archiveDiscussion).toHaveBeenCalledOnce();
+
+    finish();
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  });
 });

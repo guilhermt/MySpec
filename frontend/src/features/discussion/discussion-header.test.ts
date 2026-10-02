@@ -228,11 +228,7 @@ describe("discussionMenu", () => {
   const loose = [draftOf("d1"), draftOf("d2")];
 
   it("has the legend Discussion, then Delete discussion… after the separator", () => {
-    const groups = discussionMenu(
-      discussion({ round: 1, drafts: loose }),
-      "Platform Roadmap",
-      true,
-    );
+    const groups = discussionMenu(discussion({ round: 1, drafts: loose }), "Platform Roadmap");
 
     expect(labels(groups)).toEqual([
       ["Discussion", ["Open Platform Roadmap", "Group drafts into an epic…", "Archive…"]],
@@ -247,19 +243,13 @@ describe("discussionMenu", () => {
   });
 
   it("leaves the board out without one", () => {
-    const groups = discussionMenu(discussion(), null, true);
+    const groups = discussionMenu(discussion(), null);
 
     expect(groups[0]?.items.map((item) => item.action)).toEqual(["group", "archive"]);
   });
 
-  it("leaves the item that groups out without withGroup", () => {
-    const groups = discussionMenu(discussion({ round: 1, drafts: loose }), "Roadmap", false);
-
-    expect(groups[0]?.items.map((item) => item.action)).toEqual(["openBoard", "archive"]);
-  });
-
   it("enables everything at rest with two loose drafts and a discussion that archives", () => {
-    const items = discussionMenu(discussion({ round: 1, drafts: loose }), "Roadmap", true).flatMap(
+    const items = discussionMenu(discussion({ round: 1, drafts: loose }), "Roadmap").flatMap(
       (group) => group.items,
     );
 
@@ -291,8 +281,7 @@ describe("discussionMenu", () => {
       ],
     ],
   ])("dashes Group with the need of two loose drafts: %s", (_name, drafts) => {
-    const items = discussionMenu(discussion({ round: 1, drafts: drafts() }), "Roadmap", true)[0]
-      ?.items;
+    const items = discussionMenu(discussion({ round: 1, drafts: drafts() }), "Roadmap")[0]?.items;
 
     expect(items?.find((item) => item.action === "group")?.disabledReason).toBe(
       "needs two loose drafts not published",
@@ -309,7 +298,6 @@ describe("discussionMenu", () => {
         archiveHint: "A publication is running.",
       }),
       "Roadmap",
-      true,
     ).flatMap((group) => group.items);
 
     expect(items.map((item) => [item.action, item.disabledReason])).toEqual([
@@ -332,17 +320,14 @@ describe("discussionMenu", () => {
     ["Approved drafts wait to be published.", "approved drafts wait to be published"],
     ["PR checks are running.", "PR checks are running"],
   ])("gives Archive the hint %s as its reason", (hint, reason) => {
-    const items = discussionMenu(
-      discussion({ canArchive: false, archiveHint: hint }),
-      "Roadmap",
-      false,
-    )[0]?.items;
+    const items = discussionMenu(discussion({ canArchive: false, archiveHint: hint }), "Roadmap")[0]
+      ?.items;
 
     expect(items?.find((item) => item.action === "archive")?.disabledReason).toBe(reason);
   });
 
   it("always has a reason for an Archive that can't, even without the hint", () => {
-    const items = discussionMenu(discussion({ canArchive: false }), "Roadmap", false)[0]?.items;
+    const items = discussionMenu(discussion({ canArchive: false }), "Roadmap")[0]?.items;
 
     expect(items?.find((item) => item.action === "archive")?.disabledReason).toBe(
       "it can't be archived now",

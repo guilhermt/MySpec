@@ -1,13 +1,8 @@
 import type { RequestButton, RequestModel } from "@/components/system/RequestBar";
-import type { ComposerContext } from "@/features/chat/composer";
+import type { ComposerContext, ComposerStarter, DraftsComposer } from "@/features/chat/composer";
 import type { DiscussionInput } from "@/features/chat/discussion-markers";
 import { readyToArchiveDetail, standingDetail } from "@/features/discussion/discussion-status";
-import {
-  cardEntries,
-  draftTitle,
-  isDecided,
-  nextToDecide,
-} from "@/features/discussion/drafts-card";
+import { cardEntries, isDecided, nextToDecide } from "@/features/discussion/drafts-card";
 import {
   type Bar,
   clean,
@@ -17,6 +12,7 @@ import {
   statusOf,
   TONES,
 } from "@/features/task/request";
+import { draftTitle } from "@/lib/drafts";
 import type { RequestFocus } from "@/lib/focus";
 import { compactWait, discussionSituation, lowerFirst, spokenWait } from "@/lib/situations";
 import type { DiscussionSummary, Situation, SituationKind } from "@/lib/wails";
@@ -322,23 +318,11 @@ export function discussionInputOf(discussion: DiscussionSummary): DiscussionInpu
   };
 }
 
-/** DraftsComposer is what the composer offers about the drafts: to fix an unreadable file, to ask for changes, or the way to more cards. */
-export type DraftsComposer = "unreadable" | "changes" | "archive" | null;
-
-/** ComposerStarter is a starter of the composer: a pill that begins the message. */
-export interface ComposerStarter {
-  label: string;
-  /** tooltip says what happens: "Starts the message: the agent revises the drafts…". */
-  tooltip: string;
-  /** text is what the click puts at the start of the box. */
-  text: string;
-}
-
 /** DiscussionComposer is what the composer of a discussion needs of it, beside what a conversation tells. */
 export type DiscussionComposer = Pick<
   ComposerContext,
-  "findings" | "askForChange" | "reviseFindings" | "item" | "who"
-> & { drafts: DraftsComposer };
+  "findings" | "askForChange" | "reviseFindings" | "item" | "who" | "drafts"
+>;
 
 /** discussionComposerContext is what the composer of a discussion says (material §4.2, O compositor). */
 export function discussionComposerContext(discussion: DiscussionSummary): DiscussionComposer {

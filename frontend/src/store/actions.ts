@@ -1,5 +1,4 @@
-import { draftTitle } from "@/features/discussion/drafts-card";
-import { storedDraft } from "@/features/discussion/useDraftText";
+import { draftTitle } from "@/lib/drafts";
 import { messageOf, noticeDetail, type Remedy } from "@/lib/errors";
 import { locationTitle } from "@/lib/locations";
 import type { ModelChoice } from "@/lib/models";
@@ -29,7 +28,7 @@ import type {
   ThemePreference,
 } from "@/lib/wails";
 import { api } from "@/lib/wails";
-import { useAppStore } from "@/store/app-store";
+import { storedDraft, useAppStore } from "@/store/app-store";
 
 /** Failure is how the app notice names an action that failed: the action with its item, and what to do. */
 interface Failure {

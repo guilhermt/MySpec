@@ -7,12 +7,8 @@ import { Input } from "@/components/system/Input";
 import { Select } from "@/components/system/Select";
 import { Tooltip } from "@/components/system/Tooltip";
 import { epicRepositoryOf } from "@/features/discussion/discussion-status";
-import {
-  draftTitle,
-  EPIC_TITLE_MAX,
-  groupable,
-  groupReason,
-} from "@/features/discussion/drafts-card";
+import { EPIC_TITLE_MAX, groupable, groupReason } from "@/features/discussion/drafts-card";
+import { draftTitle } from "@/lib/drafts";
 import type { DiscussionSummary } from "@/lib/wails";
 import { groupIntoEpicInPlace } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";

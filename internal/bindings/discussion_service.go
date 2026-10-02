@@ -94,18 +94,9 @@ func (s *DiscussionService) SetDraftText(id, draftID, title, body string) error 
 // SetDraftRepository records the registered repository a new card or an epic
 // is created in.
 func (s *DiscussionService) SetDraftRepository(id, draftID, repositoryID string) error {
-	repo, ok := s.repositories.Get(repositoryID)
-	if !ok {
-		return s.fail("SetDraftRepository", fmt.Errorf(
-			"repository %s of draft %s: %w", repositoryID, draftID, repository.ErrNotFound,
-		))
-	}
-	// A card of a discussion is created in a repository of the board it is
-	// about, the same rule the cards it started from answer to.
-	if stored, found := s.discussions.Get(id); found && stored.BoardID != repo.BoardID {
-		return s.fail("SetDraftRepository", &board.Refusal{
-			Reason: board.RefusalNotManaged, Repository: repo.FullName(),
-		})
+	repo, err := s.boardRepository(id, repositoryID, "draft "+draftID)
+	if err != nil {
+		return s.fail("SetDraftRepository", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
@@ -182,16 +173,9 @@ func (s *DiscussionService) DecideDraft(id, draftID, decision string) error {
 // GroupIntoEpic puts loose card drafts of the current round under a new epic
 // with this title, in this repository of the board, and answers with its id.
 func (s *DiscussionService) GroupIntoEpic(id string, draftIDs []string, title, repositoryID string) (string, error) {
-	repo, ok := s.repositories.Get(repositoryID)
-	if !ok {
-		return "", s.fail("GroupIntoEpic", fmt.Errorf(
-			"repository %s of the epic: %w", repositoryID, repository.ErrNotFound,
-		))
-	}
-	if stored, found := s.discussions.Get(id); found && stored.BoardID != repo.BoardID {
-		return "", s.fail("GroupIntoEpic", &board.Refusal{
-			Reason: board.RefusalNotManaged, Repository: repo.FullName(),
-		})
+	repo, err := s.boardRepository(id, repositoryID, "the epic")
+	if err != nil {
+		return "", s.fail("GroupIntoEpic", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
@@ -248,6 +232,20 @@ func (s *DiscussionService) ReadDiscussionArtifact(id, name string) (string, err
 		return "", s.fail("ReadDiscussionArtifact", err)
 	}
 	return content, nil
+}
+
+// boardRepository is the registered repository a draft of a discussion, named
+// by of, is created in. A card of a discussion is created in a repository of
+// the board it is about, the same rule the cards it started from answer to.
+func (s *DiscussionService) boardRepository(id, repositoryID, of string) (repository.Repository, error) {
+	repo, ok := s.repositories.Get(repositoryID)
+	if !ok {
+		return repository.Repository{}, fmt.Errorf("repository %s of %s: %w", repositoryID, of, repository.ErrNotFound)
+	}
+	if stored, found := s.discussions.Get(id); found && stored.BoardID != repo.BoardID {
+		return repository.Repository{}, &board.Refusal{Reason: board.RefusalNotManaged, Repository: repo.FullName()}
+	}
+	return repo, nil
 }
 
 func (s *DiscussionService) fail(method string, err error) error { return failure(s.log, method, err) }

@@ -1,7 +1,8 @@
 import type { MarkerBody, MarkerView } from "@/features/chat/markers";
 import { holdStands } from "@/features/discussion/discussion-status";
-import { cardEntries, draftTitle, isBlocked } from "@/features/discussion/drafts-card";
+import { cardEntries, isBlocked } from "@/features/discussion/drafts-card";
 import { contextCharacters } from "@/features/discussion/new-discussion";
+import { draftTitle, publishedOutcome } from "@/lib/drafts";
 import { shortName } from "@/lib/repositories";
 import { counted } from "@/lib/situations";
 import type {
@@ -46,6 +47,8 @@ export interface RoundFolds {
 
 /** DraftRowView is one draft in the list a marker opens. */
 export interface DraftRowView {
+  /** key tells the row apart in its list: the id of the draft, or for a row of a revision, which has no id, its place and title. */
+  key: string;
   glyph: "check" | "hold" | "error" | "blocked" | "spinner" | "pencil" | null;
   /** prefix is "Epic · ", "Update gateway#461 · " or "". */
   prefix: string;
@@ -258,9 +261,10 @@ function shortRef(reference: string): string {
   return hash === -1 ? reference : `${shortName(reference.slice(0, hash))}${reference.slice(hash)}`;
 }
 
-function beforeRow(before: DraftBefore): DraftRowView {
+function beforeRow(before: DraftBefore, index: number): DraftRowView {
   const changed = (before.changes ?? []).length > 0 || before.added;
   return {
+    key: `${index}·${before.title}`,
     glyph: changed ? "pencil" : null,
     prefix: beforePrefix(before),
     title: before.title,
@@ -329,7 +333,13 @@ function rowPrefix(draft: Draft): string {
 
 // rowOf is a draft in the list of a round, by what became of it.
 function rowOf(draft: Draft): DraftRowView {
-  const base = { glyph: null, prefix: rowPrefix(draft), title: draftTitle(draft), link: null };
+  const base = {
+    key: draft.id,
+    glyph: null,
+    prefix: rowPrefix(draft),
+    title: draftTitle(draft),
+    link: null,
+  };
   if (draft.published) {
     const label = `${shortName(draft.repository)}#${draft.number}`;
     const did = asDraftOutcome(draft.outcome) === "updated" ? "Updated" : "Created";
@@ -373,22 +383,6 @@ function rowOf(draft: Draft): DraftRowView {
 // rowsOf are the drafts of a round in the order of the card.
 function rowsOf(round: number, drafts: readonly Draft[]): DraftRowView[] {
   return cardEntries({ drafts: [...drafts], round }).map((entry) => rowOf(entry.draft));
-}
-
-// outcomeOf is what a round published: "4 created, 1 updated"; "" without a publication.
-function outcomeOf(mine: readonly Draft[]): string {
-  const created = mine.filter(
-    (draft) => draft.published && asDraftOutcome(draft.outcome) === "created",
-  );
-  const updated = mine.filter(
-    (draft) => draft.published && asDraftOutcome(draft.outcome) === "updated",
-  );
-  return [
-    created.length > 0 ? `${created.length} created` : "",
-    updated.length > 0 ? `${updated.length} updated` : "",
-  ]
-    .filter((part) => part !== "")
-    .join(", ");
 }
 
 // span is the time of a publication, from the first draft to the last: "14:29 – 15:12"; "" without one.
@@ -435,7 +429,10 @@ export function publishedLineOf(round: number, drafts: readonly Draft[], now: nu
     );
   }
   const open = mine.some((draft) => !draft.published && draft.decision !== "discarded");
-  return view("Published", `round ${round} · ${open ? `${published} so far` : outcomeOf(mine)}`);
+  return view(
+    "Published",
+    `round ${round} · ${open ? `${published} so far` : publishedOutcome(mine)}`,
+  );
 }
 
 // revised says how many times a round was revised: "revised once", "revised twice", "revised 3 times".
@@ -459,7 +456,7 @@ export function roundLineOf(
   return line(
     "pullRequest",
     `Round ${round}`,
-    `${count} · ${outcomeOf(mine) || "nothing published"}`,
+    `${count} · ${publishedOutcome(mine) || "nothing published"}`,
     {
       kind: "drafts",
       rows: rowsOf(round, drafts),

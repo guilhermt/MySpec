@@ -14,13 +14,13 @@ import {
   dependencyViews,
   diffCount,
   draftStateOf,
-  draftTitle,
   fieldsLine,
   gestureLineOf,
   onGitHub,
   warningsOf,
 } from "@/features/discussion/drafts-card";
 import { STALE_CARD_MS } from "@/lib/boards";
+import { draftTitle } from "@/lib/drafts";
 import { messageOf } from "@/lib/errors";
 import { focusDraft } from "@/lib/focus";
 import { shortName } from "@/lib/repositories";

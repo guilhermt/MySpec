@@ -21,6 +21,8 @@ export interface DialogProps {
   alert?: boolean;
   onConfirm?: () => void;
   initialFocus?: RefObject<HTMLElement | null>;
+  /** closeDisabled draws the × disabled, while the dialog waits for a call. */
+  closeDisabled?: boolean;
   children: ReactNode;
 }
 
@@ -45,6 +47,8 @@ const TITLE =
  * - wide: size="wide";
  * - in steps: subtitle with the step, a DialogFooter with back from the second step and refusal;
  * - destructive: alert, with the confirmation as a danger Button.
+ * While the dialog waits for a call, closeDisabled and a disabled DialogCancel draw the ways out
+ * dashed, and its onOpenChange ignores the close.
  * Without initialFocus, an alert opens on its DialogCancel and the others on the first field of the
  * body, or on the dialog itself when the body has none; never on the close button.
  */
@@ -57,6 +61,7 @@ export function Dialog({
   alert,
   onConfirm,
   initialFocus,
+  closeDisabled = false,
   children,
 }: DialogProps) {
   const popup = useRef<HTMLDivElement>(null);
@@ -84,6 +89,7 @@ export function Dialog({
       title={title}
       {...(subtitle !== undefined ? { subtitle } : {})}
       alert={alert === true}
+      closeDisabled={closeDisabled}
     />
   );
 
@@ -112,10 +118,12 @@ function DialogHeading({
   title,
   subtitle,
   alert,
+  closeDisabled,
 }: {
   title: string;
   subtitle?: string;
   alert: boolean;
+  closeDisabled: boolean;
 }) {
   const Title = alert ? AlertDialogTitle : UIDialogTitle;
   const Close = alert ? BaseAlertDialog.Close : UIDialogClose;
@@ -129,7 +137,17 @@ function DialogHeading({
           </p>
         )}
       </div>
-      <Close render={<IconButton label="Close" shortcut="Esc" icon={ICONS.close} size="sm" />} />
+      <Close
+        render={
+          <IconButton
+            label="Close"
+            shortcut="Esc"
+            icon={ICONS.close}
+            size="sm"
+            disabled={closeDisabled}
+          />
+        }
+      />
     </div>
   );
 }

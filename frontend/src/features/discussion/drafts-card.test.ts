@@ -9,7 +9,6 @@ import {
   dependencyViews,
   diffCount,
   draftStateOf,
-  draftTitle,
   epicGroupLabel,
   fieldsLine,
   foldedLine2,
@@ -56,16 +55,6 @@ const inEpic = (id: string): Partial<Draft> => ({ epic: makeDraftRef({ draft: id
 describe("LOCK_MS", () => {
   it("is 900 ms", () => {
     expect(LOCK_MS).toBe(900);
-  });
-});
-
-describe("draftTitle", () => {
-  it.each([
-    ["the title", draft("d1", { title: "  Overage  " }), "Overage"],
-    ["an untitled card", draft("d1", { title: "" }), "Untitled draft"],
-    ["an untitled epic", draft("d1", { title: " ", kind: "epic" }), "Untitled epic"],
-  ])("is %s", (_name, one, expected) => {
-    expect(draftTitle(one)).toBe(expected);
   });
 });
 
@@ -1122,14 +1111,24 @@ describe("groupable", () => {
     expect(groupable(discussion).map((one) => one.id)).toEqual(["d4", "d3"]);
   });
 
-  it("offers an approved card, and a card of an epic of another round", () => {
+  it("offers an approved card and a card of an epic on GitHub", () => {
+    const toIssue = draft("d1", {
+      position: 1,
+      epic: makeDraftRef({ draft: "", key: "acme/billing#7", reference: "billing#7" }),
+    });
+    const approved = draft("d2", { position: 2, decision: "approved" });
+
+    expect(groupable(discussionOf([toIssue, approved])).map((one) => one.id)).toEqual(["d1", "d2"]);
+  });
+
+  it("leaves out a card of an epic of another round, which is published with that epic", () => {
     const old = draft("d1", { kind: "epic", round: 1 });
     const toOld = draft("d2", { round: 2, position: 1, ...inEpic("d1") });
     const approved = draft("d3", { round: 2, position: 2, decision: "approved" });
 
     expect(
       groupable(discussionOf([old, toOld, approved], { round: 2 })).map((one) => one.id),
-    ).toEqual(["d2", "d3"]);
+    ).toEqual(["d3"]);
   });
 
   it("is empty without a draft to group", () => {

@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
@@ -190,5 +190,37 @@ describe("Select", () => {
     expect(onAction).toHaveBeenCalledTimes(1);
     expect(onValueChange).not.toHaveBeenCalled();
     expect(screen.getByRole("menu")).toBeInTheDocument();
+  });
+
+  it("runs an action that closes the menu with Enter, without choosing it", async () => {
+    const onAction = vi.fn();
+    const onValueChange = vi.fn();
+    const { user } = renderWithStore(
+      <Subject
+        value="opus"
+        onValueChange={onValueChange}
+        groups={[
+          {
+            label: "On GitHub",
+            options: [
+              {
+                value: "existing-issue",
+                label: "Existing issue…",
+                disabled: true,
+                action: { label: "Open", onAction, closes: true },
+              },
+            ],
+          },
+        ]}
+        options={[{ value: "opus", label: "Opus" }]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Model: Opus" }));
+    const item = await screen.findByRole("menuitem", { name: "Existing issue…. Enter opens it." });
+    item.focus();
+    await user.keyboard("{Enter}");
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onValueChange).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
   });
 });

@@ -2,10 +2,10 @@ import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { ChecksList } from "@/components/system/ChecksList";
 import { Finding } from "@/components/system/Finding";
+import { DraftGlyph } from "@/components/system/FoldedDraft";
 import { Icon } from "@/components/system/Icon";
 import { ICONS, type IconMeaning } from "@/components/system/icons";
 import { Shimmer } from "@/components/system/Shimmer";
-import { Spinner } from "@/components/system/Spinner";
 import { StateGlyph } from "@/components/system/StateGlyph";
 import { Tooltip } from "@/components/system/Tooltip";
 import type { DraftRowView } from "@/features/chat/discussion-markers";
@@ -132,34 +132,15 @@ function FindingsBody({
   );
 }
 
-function DraftGlyph({ glyph }: { glyph: DraftRowView["glyph"] }) {
-  switch (glyph) {
-    case "check":
-      return <Icon icon={ICONS.done} size="sm" tone="muted" />;
-    case "hold":
-      return <Icon icon={ICONS.waiting} size="sm" tone="muted" />;
-    case "pencil":
-      return <Icon icon={ICONS.revised} size="sm" tone="muted" />;
-    case "error":
-      return <StateGlyph state="error" size="sm" />;
-    case "blocked":
-      return <StateGlyph state="blocked" size="sm" />;
-    case "spinner":
-      return <Spinner />;
-    case null:
-      return <span aria-hidden="true" className="size-(--icon-sm) shrink-0" />;
-  }
-}
-
 function DraftsBody({ rows }: { rows: readonly DraftRowView[] }) {
   return (
     <ul data-slot="marker-body" className={cn(SUNKEN, "flex flex-col gap-(--space-2)")}>
       {rows.map((row) => (
         <li
-          key={`${row.prefix}${row.title}${row.status}`}
+          key={row.key}
           className="flex min-w-0 items-center gap-(--space-2) text-(length:--text-body) leading-(--leading-body) text-ink-1"
         >
-          <DraftGlyph glyph={row.glyph} />
+          <DraftGlyph glyph={row.glyph} spacer />
           {row.prefix !== "" && <span className="shrink-0 text-ink-3">{row.prefix}</span>}
           <Tooltip content={row.title}>
             <span className="min-w-0 truncate">{row.title}</span>

@@ -803,6 +803,7 @@ type MarkerEntry struct {
 	// The markers of a discussion: Model and Effort also belong to
 	// discussion_started, Count to drafts_written and Reason to
 	// drafts_unreadable.
+
 	Board   string        `json:"board"`   // discussion_started
 	Epics   []string      `json:"epics"`   // discussion_started; never nil
 	Round   int           `json:"round"`   // drafts_*
@@ -1566,7 +1567,7 @@ type DiscussionSummary struct {
 	// Publishing says a run that writes on GitHub is under way.
 	Publishing bool `json:"publishing"`
 	// DraftsRead says a readable drafts artifact was recorded, and
-	// DraftsRevision changes every time the artifact is read again and differs.
+	// DraftsRevision changes with every reading that opens or revises a round.
 	DraftsRead     bool `json:"draftsRead"`
 	DraftsRevision int  `json:"draftsRevision"`
 	// UnreadableDrafts is why the drafts artifact could not be read; ""

@@ -12,8 +12,18 @@ import { Tooltip } from "./Tooltip";
 export const REVISED_TIP =
   "The agent revised this draft. The earlier version is in the marker Drafts revised.";
 
-/** DraftGlyph is the sign before the state of a draft: ⧗, ✓, ◆, ◇ or the spinner. */
-export function DraftGlyph({ glyph }: { glyph: DraftStateView["glyph"] }): ReactElement | null {
+/**
+ * DraftGlyph is the sign before the state of a draft: ⧗, ✓, ◆, ◇, the spinner, or the pencil of a
+ * draft a revision changed. spacer keeps the place of the sign when there is none, for a list whose
+ * texts line up.
+ */
+export function DraftGlyph({
+  glyph,
+  spacer = false,
+}: {
+  glyph: DraftStateView["glyph"] | "pencil";
+  spacer?: boolean;
+}): ReactElement | null {
   switch (glyph) {
     case "hold":
       return <Icon icon={ICONS.waiting} size="sm" tone="muted" />;
@@ -25,8 +35,10 @@ export function DraftGlyph({ glyph }: { glyph: DraftStateView["glyph"] }): React
       return <StateGlyph state="blocked" size="sm" />;
     case "spinner":
       return <Spinner />;
+    case "pencil":
+      return <Icon icon={ICONS.revised} size="sm" tone="muted" />;
     case null:
-      return null;
+      return spacer ? <span aria-hidden="true" className="size-(--icon-sm) shrink-0" /> : null;
   }
 }
 

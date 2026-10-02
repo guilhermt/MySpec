@@ -196,6 +196,8 @@ export function MenuRadioItem({
 export interface ItemAction {
   label: string;
   onAction: () => void;
+  /** closes leaves the menu with the action, for one that opens something next to it: Existing issue…. Absent, the menu stays to show the action's progress. */
+  closes?: boolean;
 }
 
 /** actionItemLabel is the accessible name of a disabled item with an action: "acme/billing, not cloned. Enter clones it." */
@@ -219,12 +221,13 @@ export interface MenuActionItemProps {
 /**
  * MenuActionItem is a choice that can't be made and offers an action in its place: the label in the
  * fourth ink, the reason, and the action as ghost text on the right. It stays on the path of the
- * arrows, is not chosen, and keeps the menu open, so the action shows its own progress.
+ * arrows, is not chosen, and keeps the menu open, so the action shows its own progress, unless the
+ * action closes it.
  */
 export function MenuActionItem({ label, sub, subTone, action }: MenuActionItemProps) {
   return (
     <BaseMenu.Item
-      closeOnClick={false}
+      closeOnClick={action.closes === true}
       aria-disabled="true"
       aria-label={actionItemLabel(label, sub, action)}
       onClick={() => action.onAction()}

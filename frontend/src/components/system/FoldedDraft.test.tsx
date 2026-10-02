@@ -2,7 +2,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
-import { FoldedDraft, type FoldedDraftProps } from "./FoldedDraft";
+import { DraftGlyph, FoldedDraft, type FoldedDraftProps } from "./FoldedDraft";
 
 const NAME =
   "Draft 3 of 5: New card. Overage on the monthly invoice. acme/billing, Billing. Approved, waits for the epic.";
@@ -126,5 +126,22 @@ describe("FoldedDraft", () => {
     draw({ line2: "" });
 
     expect(screen.queryByText(/acme\/billing/)).not.toBeInTheDocument();
+  });
+});
+
+describe("DraftGlyph", () => {
+  it("draws the pencil of a revised draft", () => {
+    const { container } = renderWithStore(<DraftGlyph glyph="pencil" />);
+    expect(container.querySelector("svg")).not.toBeNull();
+  });
+
+  it("draws nothing without a sign, and keeps its place with spacer", () => {
+    const bare = renderWithStore(<DraftGlyph glyph={null} />);
+    expect(bare.container).toBeEmptyDOMElement();
+    bare.unmount();
+
+    const { container } = renderWithStore(<DraftGlyph glyph={null} spacer />);
+    expect(container.firstElementChild).toHaveAttribute("aria-hidden", "true");
+    expect(container.firstElementChild).toHaveClass("size-(--icon-sm)");
   });
 });

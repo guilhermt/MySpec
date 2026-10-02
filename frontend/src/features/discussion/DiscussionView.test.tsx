@@ -3,8 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import { bootstrap } from "@/app/bootstrap";
 import { useGlobalShortcuts } from "@/app/useGlobalShortcuts";
 import { DiscussionView } from "@/features/discussion/DiscussionView";
-import { api, type DiscussionSummary } from "@/lib/wails";
+import { api, DISCUSSION_STAGE, type DiscussionSummary, sessionKey } from "@/lib/wails";
 import { useAppStore, useLocation } from "@/store/app-store";
+import { fromTranscript } from "@/store/transcript";
+import {
+  type DiscussionFlags,
+  type DiscussionSceneName,
+  discussionScene,
+} from "@/test/discussion-scenes";
 import { renderWithStore } from "@/test/render";
 import {
   emitSituationOpen,
@@ -277,6 +283,71 @@ describe("DiscussionView, arriving at the other situations", () => {
     act(() => useAppStore.getState().openSituation("discussion-1", PLACE));
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Archive…" })).toHaveFocus());
+  });
+
+  it.each([
+    ["question", () => document.querySelector("[data-pending-card=question] [role=radio]")],
+    [
+      "permission",
+      () => document.querySelector("[data-pending-card=permission] [data-default-focus]"),
+    ],
+  ] as const)("takes the focus to the pending card of a %s", async (kind, target) => {
+    const transcript = makeTranscript({
+      taskId: "discussion-1",
+      stage: DISCUSSION_STAGE,
+      entries: [makeEntry(kind)],
+    });
+    renderWithStore(<Shell />, {
+      state: at(kind, { status: "discussing" }),
+      ui: {
+        transcripts: { [sessionKey("discussion-1", DISCUSSION_STAGE)]: fromTranscript(transcript) },
+      },
+    });
+
+    act(() => useAppStore.getState().openSituation("discussion-1", PLACE));
+
+    await waitFor(() => {
+      expect(target()).not.toBeNull();
+      expect(target()).toHaveFocus();
+    });
+  });
+});
+
+describe("DiscussionView, arriving at the situations of the scenes", () => {
+  // epicOf is the card item of the epic of the round with the decision.
+  const epicOf = (discussion: DiscussionSummary, decision: string) => {
+    const epic = (discussion.drafts ?? []).find(
+      (draft) => draft.kind === "epic" && draft.decision === decision,
+    );
+    return document.querySelector<HTMLElement>(`[data-card-item="${epic?.id ?? ""}"]`);
+  };
+
+  it.each([
+    ["epic_cant_publish", "epic", {}, (discussion) => epicOf(discussion, "approved")],
+    ["epic_discarded", "epic-off", {}, (discussion) => epicOf(discussion, "discarded")],
+    ["session_error", "talk", { error: true }, () => screen.getByRole("button", { name: "Retry" })],
+    ["reply", "talk", {}, () => screen.getByRole("textbox", { name: "Reply to the agent" })],
+  ] satisfies [
+    string,
+    DiscussionSceneName,
+    DiscussionFlags,
+    (discussion: DiscussionSummary) => HTMLElement | null,
+  ][])("takes the focus to the target of %s", async (kind, name, flags, target) => {
+    const scene = discussionScene(name, flags);
+    const discussion = scene.state.discussions?.[0];
+    const situation = discussion?.situations?.[0];
+    if (discussion === undefined || situation === undefined) {
+      throw new Error(`the scene ${name} has no situation`);
+    }
+    expect(situation.kind).toBe(kind);
+    renderWithStore(<Shell />, { state: scene.state, ui: { transcripts: scene.transcripts } });
+
+    act(() => useAppStore.getState().openSituation(discussion.id, situation.place));
+
+    await waitFor(() => {
+      expect(target(discussion)).not.toBeNull();
+      expect(target(discussion)).toHaveFocus();
+    });
   });
 });
 

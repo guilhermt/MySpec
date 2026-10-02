@@ -22,19 +22,3 @@ export function useDiscussionRequest(discussion: DiscussionSummary): DiscussionR
   const pending = entries === undefined ? null : pendingRequestOf(entries);
   return discussionRequestOf(discussion, now, pending);
 }
-
-/**
- * currentDiscussionRequest is the request bar as it stands now, read when a key asks for it instead
- * of followed by the screen.
- */
-export function currentDiscussionRequest(
-  discussion: DiscussionSummary,
-): DiscussionRequestModel | null {
-  const entries =
-    useAppStore.getState().transcripts[sessionKey(discussion.id, DISCUSSION_STAGE)]?.entries;
-  return discussionRequestOf(
-    discussion,
-    Date.now(),
-    entries === undefined ? null : pendingRequestOf(entries),
-  );
-}

@@ -23,7 +23,7 @@ export function DiscussionMenu({ discussion }: DiscussionMenuProps) {
   const openDiscussionDialog = useAppStore((state) => state.openDiscussionDialog);
   const go = useAppStore((state) => state.go);
   const board = useBoard(discussion.boardId);
-  const groups = discussionMenu(discussion, board?.title ?? null, true);
+  const groups = discussionMenu(discussion, board?.title ?? null);
 
   const run = (action: DiscussionMenuAction) => {
     switch (action) {

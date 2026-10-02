@@ -12,13 +12,13 @@ import {
   cardEntries,
   decisionOf,
   draftStateOf,
-  draftTitle,
   epicGroupLabel,
   foldedLine2,
   isDecided,
   isStarted,
   LOCK_MS,
 } from "@/features/discussion/drafts-card";
+import { draftTitle } from "@/lib/drafts";
 import { focusDraft } from "@/lib/focus";
 import { modalOpen } from "@/lib/layers";
 import { asDraftKind, type DiscussionSummary } from "@/lib/wails";
@@ -37,14 +37,24 @@ export interface DraftsCardProps {
 // Slot holds a draft, open or folded. The two are different elements, so one that held the focus as
 // it opened or folded would drop it: the slot gives it back to the one that takes its place. A
 // control of the draft that leaves holding the focus, like the decision once the draft publishes,
-// gives it back to the draft too.
-function Slot({ current, children }: { current: boolean; children: ReactNode }) {
+// gives it back to the draft too. onFolded runs while the draft is folded: the edit of a draft that
+// stops being the current one closes, and the focus stays where the user moved it.
+function Slot({
+  current,
+  onFolded,
+  children,
+}: {
+  current: boolean;
+  onFolded?: (() => void) | undefined;
+  children: ReactNode;
+}) {
   const root = useRef<HTMLDivElement>(null);
   const held = useRef(false);
   const was = useRef(current);
   // The render still sees the DOM of the draft that is about to be replaced.
   held.current = root.current?.contains(document.activeElement) ?? false;
   useLayoutEffect(() => {
+    if (!current) onFolded?.();
     const turned = was.current !== current;
     was.current = current;
     if (!held.current || (!turned && document.activeElement !== document.body)) return;
@@ -82,7 +92,7 @@ export function DraftsCard({ discussion, target }: DraftsCardProps) {
   const clearDraftRequest = useAppStore((state) => state.clearDraftRequest);
   const round = discussion.round;
 
-  // An edit closes when its draft leaves or the agent revises it.
+  // An edit closes when its draft leaves, the agent revises it or another draft becomes the current one.
   const editingEntry =
     editing === null
       ? undefined
@@ -169,7 +179,10 @@ export function DraftsCard({ discussion, target }: DraftsCardProps) {
         const { draft } = entry;
         const name = accessibleName(entry, entries.length, draft, discussion, now);
         return (
-          <Slot current={current}>
+          <Slot
+            current={current}
+            onFolded={editingId === draft.id ? () => setEditing(null) : undefined}
+          >
             {current ? (
               <CardDraft
                 discussion={discussion}

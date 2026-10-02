@@ -88,4 +88,29 @@ describe("DeleteDiscussionDialog", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("A publication is running.");
     expect(onOpenChange).not.toHaveBeenCalled();
   });
+
+  it("keeps Cancel, × and Esc inert while it deletes, and deletes once", async () => {
+    let finish: () => void = () => {};
+    vi.mocked(api.deleteDiscussion).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const { user, onOpenChange } = dialog();
+
+    await user.click(screen.getByRole("button", { name: "Delete discussion" }));
+
+    const busy = await screen.findByRole("button", { name: "Deleting…" });
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Close" })).toHaveAttribute("aria-disabled", "true");
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(busy);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(api.deleteDiscussion).toHaveBeenCalledOnce();
+
+    finish();
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  });
 });

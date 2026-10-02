@@ -470,6 +470,7 @@ describe("MarkerLine", () => {
             kind: "drafts",
             rows: [
               {
+                key: "epic",
                 glyph: "check",
                 prefix: "Epic · ",
                 title: "Billing",
@@ -478,6 +479,7 @@ describe("MarkerLine", () => {
                 link: { label: "billing#479", url: "https://github.com/acme/billing/issues/479" },
               },
               {
+                key: "export",
                 glyph: "error",
                 prefix: "",
                 title: "Export",

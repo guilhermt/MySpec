@@ -310,7 +310,7 @@ describe("NewDiscussionDialog", () => {
     });
   });
 
-  it("starts with Starting… and keeps Esc inert", async () => {
+  it("starts with Starting…, with the fields read-only and Esc, × and Cancel inert", async () => {
     let finish: (id: string) => void = () => {};
     vi.mocked(api.startDiscussion).mockReturnValueOnce(
       new Promise<string>((resolve) => {
@@ -327,9 +327,16 @@ describe("NewDiscussionDialog", () => {
     );
     expect(screen.getByText("Starting the conversation…")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Close" })).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByLabelText("Title")).toHaveAttribute("readonly");
+    const model = screen.getByRole("button", { name: /^Discussion model:/ });
+    expect(model).toHaveAttribute("aria-disabled", "true");
+    await user.click(model);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 
     await user.keyboard("{Escape}");
+    expect(useAppStore.getState().newDiscussion).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "Close" }));
     expect(useAppStore.getState().newDiscussion).not.toBeNull();
 
     finish("discussion-1");

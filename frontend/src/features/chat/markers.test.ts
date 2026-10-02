@@ -1204,6 +1204,7 @@ const discussionCtx = (
   });
 
 const row = (fields: Partial<DraftRowView>): DraftRowView => ({
+  key: "",
   glyph: null,
   prefix: "",
   title: "",
@@ -1426,27 +1427,58 @@ describe("revisedLineOf", () => {
     expect(line.body).toEqual({
       kind: "drafts",
       rows: [
-        row({ glyph: "pencil", title: "Overage", status: "title, body" }),
+        row({ key: "0·Overage", glyph: "pencil", title: "Overage", status: "title, body" }),
         row({
+          key: "1·Tier limits",
           glyph: "pencil",
           title: "Tier limits",
           status: "epic · your approval was cleared",
         }),
-        row({ title: "Export", status: "dropped by the agent", tone: "quiet" }),
-        row({ title: "Invoice list", status: "not changed · approved", tone: "quiet" }),
-        row({ title: "Alerts", status: "not changed · discarded", tone: "quiet" }),
-        row({ title: "Undecided", status: "not changed", tone: "quiet" }),
-        row({ title: "Billing page", status: "Created acme/billing#479", tone: "quiet" }),
+        row({ key: "2·Export", title: "Export", status: "dropped by the agent", tone: "quiet" }),
         row({
+          key: "3·Invoice list",
+          title: "Invoice list",
+          status: "not changed · approved",
+          tone: "quiet",
+        }),
+        row({ key: "4·Alerts", title: "Alerts", status: "not changed · discarded", tone: "quiet" }),
+        row({ key: "5·Undecided", title: "Undecided", status: "not changed", tone: "quiet" }),
+        row({
+          key: "6·Billing page",
+          title: "Billing page",
+          status: "Created acme/billing#479",
+          tone: "quiet",
+        }),
+        row({
+          key: "7·Rate limits",
           glyph: "pencil",
           prefix: "Update gateway#461 · ",
           title: "Rate limits",
           status: "cards",
         }),
-        row({ glyph: "pencil", prefix: "Epic · ", title: "Pricing", status: "cards" }),
-        row({ glyph: "pencil", title: "Brand new", status: "added" }),
+        row({
+          key: "8·Pricing",
+          glyph: "pencil",
+          prefix: "Epic · ",
+          title: "Pricing",
+          status: "cards",
+        }),
+        row({ key: "9·Brand new", glyph: "pencil", title: "Brand new", status: "added" }),
       ],
     });
+  });
+
+  it("tells apart the rows that read the same, by their place", () => {
+    const line = revisedLineOf(
+      marker({
+        type: "drafts_revised",
+        round: 1,
+        before: [earlier({ title: "", kind: "epic" }), earlier({ title: "", kind: "epic" })],
+      }),
+    );
+
+    const rows = line.body.kind === "drafts" ? line.body.rows : [];
+    expect(rows.map((one) => one.key)).toEqual(["0·", "1·"]);
   });
 
   it("has no body without a draft before", () => {
@@ -1634,21 +1666,30 @@ describe("publishedLineOf", () => {
       kind: "drafts",
       rows: [
         row({
+          key: "d1",
           glyph: "hold",
           prefix: "Epic · ",
           title: "Pricing",
           status: "The epic needs two approved cards",
         }),
         row({
+          key: "d2",
           glyph: "check",
           title: "Created one",
           status: "Created billing#479",
           link: { label: "billing#479", url: "https://github.com/acme/billing/issues/479" },
         }),
-        row({ glyph: "spinner", title: "Running", status: "Publishing…" }),
-        row({ title: "Next one", status: "Next", tone: "quiet" }),
-        row({ glyph: "hold", title: "Waits", status: "Waits for the epic", tone: "quiet" }),
+        row({ key: "d3", glyph: "spinner", title: "Running", status: "Publishing…" }),
+        row({ key: "d4", title: "Next one", status: "Next", tone: "quiet" }),
         row({
+          key: "d5",
+          glyph: "hold",
+          title: "Waits",
+          status: "Waits for the epic",
+          tone: "quiet",
+        }),
+        row({
+          key: "d7",
           glyph: "hold",
           prefix: "Epic · ",
           title: "Waits for cards",
@@ -1656,27 +1697,37 @@ describe("publishedLineOf", () => {
           tone: "quiet",
         }),
         row({
+          key: "d6",
           glyph: "hold",
           title: "Waits for a draft",
           status: "Waits for Tier limits",
           tone: "quiet",
         }),
         row({
+          key: "d8",
           glyph: "hold",
           title: "Epic is out",
           status: "The epic is discarded · not published",
           tone: "normal",
         }),
-        row({ title: "Loose", status: "Not decided", tone: "quiet" }),
-        row({ title: "Dropped", status: "Discarded · not published", tone: "quiet" }),
+        row({ key: "d9", title: "Loose", status: "Not decided", tone: "quiet" }),
+        row({ key: "d10", title: "Dropped", status: "Discarded · not published", tone: "quiet" }),
         row({
+          key: "d11",
           glyph: "blocked",
           title: "Left the board",
           status: "Can't publish · the repository left the board",
           tone: "quiet",
         }),
-        row({ glyph: "error", title: "Failed", status: "Rate limited.", tone: "error" }),
         row({
+          key: "d12",
+          glyph: "error",
+          title: "Failed",
+          status: "Rate limited.",
+          tone: "error",
+        }),
+        row({
+          key: "d13",
           glyph: "check",
           prefix: "Update gateway#461 · ",
           title: "Update",
@@ -1685,6 +1736,22 @@ describe("publishedLineOf", () => {
         }),
       ],
     });
+  });
+});
+
+describe("publishedLineOf, the rows", () => {
+  it("keys each row by its draft, also two untitled epics", () => {
+    const drafts = [
+      draftOf("d1", { kind: "epic", title: "", position: 1 }),
+      draftOf("d2", { kind: "epic", title: "", position: 2 }),
+    ];
+
+    const { body } = publishedLineOf(1, drafts, NOW);
+
+    expect(body.kind === "drafts" ? body.rows.map((one) => [one.key, one.title]) : []).toEqual([
+      ["d1", "Untitled epic"],
+      ["d2", "Untitled epic"],
+    ]);
   });
 });
 
@@ -1731,12 +1798,18 @@ describe("roundLineOf", () => {
       kind: "drafts",
       rows: [
         row({
+          key: "d1",
           glyph: "check",
           title: "Title of d1",
           status: "Created billing#479",
           link: { label: "billing#479", url: "https://github.com/acme/billing/issues/479" },
         }),
-        row({ title: "Title of d2", status: "Discarded · not published", tone: "quiet" }),
+        row({
+          key: "d2",
+          title: "Title of d2",
+          status: "Discarded · not published",
+          tone: "quiet",
+        }),
       ],
     });
   });

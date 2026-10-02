@@ -247,6 +247,24 @@ describe("DraftsCard", () => {
     expect(screen.queryByRole("textbox", { name: "Title" })).not.toBeInTheDocument();
   });
 
+  it("closes the edit when another draft becomes the current one, with the focus where it went", async () => {
+    const { user } = draw(round());
+    item("a")?.focus();
+    await user.keyboard("e");
+    await screen.findByRole("textbox", { name: "Title" });
+
+    await user.click(item("c") as HTMLElement);
+
+    expect(screen.queryByRole("textbox", { name: "Title" })).not.toBeInTheDocument();
+    expect(item("c")).toHaveFocus();
+
+    await user.keyboard("{ArrowUp}{ArrowUp}");
+
+    expect(open("a")).toBe(true);
+    expect(screen.queryByRole("textbox", { name: "Title" })).not.toBeInTheDocument();
+    expect(item("a")).toHaveFocus();
+  });
+
   it("keeps the edit open for a revision that doesn't change the draft", async () => {
     const drafts = round();
     const { user, again } = draw(drafts);

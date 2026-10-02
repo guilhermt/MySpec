@@ -2,7 +2,15 @@ import { render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { paintOf, resolve, setTheme, THEMES, TRANSPARENT, token } from "@/test/painted";
+import {
+  dashedDisabled,
+  paintOf,
+  resolve,
+  setTheme,
+  THEMES,
+  TRANSPARENT,
+  token,
+} from "@/test/painted";
 import { Button } from "./Button";
 import { Dialog, DialogBody, DialogCancel, DialogFooter, type DialogProps } from "./Dialog";
 
@@ -83,6 +91,13 @@ describe.each(THEMES)("Dialog in the %s theme", (theme) => {
     const cancel = screen.getByRole("button", { name: "Cancel" });
     const want = { background: TRANSPARENT, border: TRANSPARENT, color: token("--ink-2") };
     expect(paintOf(cancel, want)).toEqual(want);
+  });
+
+  it("draws the close button dashed with closeDisabled", () => {
+    setTheme(theme);
+    render(<Subject closeDisabled />);
+    const want = dashedDisabled();
+    expect(paintOf(screen.getByRole("button", { name: "Close" }), want)).toEqual(want);
   });
 
   it("lays the scrim behind it, without blur", () => {

@@ -14,16 +14,19 @@ const (
 )
 
 // reconcile is the drafts of the artifact against what is stored: a draft the
-// agent did not change keeps what the user edited and decided, a draft that
-// changed is replaced, a published draft never moves, and what the user made
-// stays. The list comes out in the order of the artifact, with what it no
-// longer has at the end.
+// agent did not change keeps what the user edited and decided, one it rewrote
+// as the user had edited it keeps the decision, a draft that changed is
+// replaced, a published draft never moves, and what the user made stays. The
+// list comes out in the order of the artifact, with what it no longer has at
+// the end.
 //
 // A reading belongs to the current round, or opens the next one when every
 // draft of the current round is on GitHub or discarded: a closed round never
 // changes nor loses a draft, except an id the agent reuses with another
-// content, which is a draft of the new round. reading is the DraftsRevision the
-// discussion has if the reading changes anything.
+// content, which is a draft of the new round. The content is what the user
+// sees: a draft the agent rewrote as the user had left it stays in its round.
+// reading is the DraftsRevision the discussion has if the reading revises its
+// round.
 func reconcile(discussionID string, stored []Draft, a Artifact, reading int) ([]Draft, Recorded) {
 	current := maxRound(stored)
 	round := max(current, 1)
@@ -32,12 +35,13 @@ func reconcile(discussionID string, stored []Draft, a Artifact, reading int) ([]
 	}
 
 	drafts := make([]Draft, 0, len(stored)+len(a.Drafts))
-	taken := map[string]bool{}
+	taken, replaced := map[string]bool{}, map[string]bool{}
 	for _, parsed := range a.Drafts {
 		taken[parsed.ID] = true
 		draft, kept := inherit(discussionID, stored, parsed)
 		if !kept {
 			draft.Round = round
+			replaced[draft.ID] = true
 		}
 		drafts = append(drafts, draft)
 	}
@@ -56,13 +60,23 @@ func reconcile(discussionID string, stored []Draft, a Artifact, reading int) ([]
 	changes := map[string][]string{}
 	for i := range drafts {
 		after := &drafts[i]
-		j := slices.IndexFunc(stored, func(d Draft) bool { return d.ID == after.ID && d.Round == after.Round })
+		j := slices.IndexFunc(stored, func(d Draft) bool { return d.ID == after.ID })
 		if j < 0 {
 			continue
 		}
 		before := stored[j]
 		ch := changesOf(before, *after, stored, drafts)
-		if len(ch) == 0 {
+		if len(ch) == 0 && replaced[after.ID] {
+			// The user sees the draft as it was: it stays in its round, with
+			// what was decided about it.
+			after.Round = before.Round
+			carryOver(after, before)
+			continue
+		}
+		// Only a draft that stays in the round of the reading is revised: one
+		// of a closed round never is, and an id reused with another content is
+		// a draft of the new round.
+		if len(ch) == 0 || before.Round != round || after.Round != round {
 			continue
 		}
 		changes[after.ID] = ch
@@ -70,13 +84,13 @@ func reconcile(discussionID string, stored []Draft, a Artifact, reading int) ([]
 		after.ApprovalCleared = (before.Decision == DecisionApproved && after.Decision != DecisionApproved) ||
 			(before.ApprovalCleared && after.Decision == DecisionNone)
 	}
-	return drafts, recordedOf(stored, drafts, changes)
+	return drafts, recordedOf(stored, drafts, changes, round)
 }
 
-// recordedOf says what a reading did to the current round: how many drafts it
-// has, and, unless the reading is the first of the round, the round as it was.
-func recordedOf(stored, drafts []Draft, changes map[string][]string) Recorded {
-	round := maxRound(drafts)
+// recordedOf says what a reading did to its round: how many drafts it has,
+// and, unless the reading is the first of the round, the round as it was. A
+// reading that leaves no draft and revised nothing has no round.
+func recordedOf(stored, drafts []Draft, changes map[string][]string, round int) Recorded {
 	rec := Recorded{Round: round}
 	for _, draft := range drafts {
 		if draft.Round == round {
@@ -131,6 +145,9 @@ func recordedOf(stored, drafts []Draft, changes map[string][]string) Recorded {
 	}
 	if rec.Replaced+rec.Added+rec.Dropped == 0 {
 		rec.Before = nil
+	}
+	if len(drafts) == 0 && rec.Before == nil {
+		rec.Round = 0
 	}
 	return rec
 }
@@ -201,6 +218,28 @@ func inherit(discussionID string, stored []Draft, parsed ParsedDraft) (draft Dra
 	draft = fresh(discussionID, parsed)
 	draft.Revision = previous.Revision + 1
 	return draft, false
+}
+
+// carryOver gives a replaced draft that reads as it was stored what the user
+// and the app left on the stored one: the agent rewrote it as the user had
+// edited it, so nothing changed for the user and the decision stands. What
+// the artifact says now stays as its originals, and the warnings are the ones
+// of this reading.
+func carryOver(draft *Draft, stored Draft) {
+	draft.Decision = stored.Decision
+	draft.Revision = stored.Revision
+	draft.RevisedReading = stored.RevisedReading
+	draft.ApprovalCleared = stored.ApprovalCleared
+	draft.PublishError = stored.PublishError
+	draft.Published = stored.Published
+	for i := range draft.Dependencies {
+		dependency := &draft.Dependencies[i]
+		j := slices.IndexFunc(stored.Dependencies, func(d Dependency) bool { return d.Key() == dependency.Key() })
+		if j >= 0 {
+			dependency.Linked, dependency.Dropped, dependency.Detail =
+				stored.Dependencies[j].Linked, stored.Dependencies[j].Dropped, stored.Dependencies[j].Detail
+		}
+	}
 }
 
 // adoptCard gives a kept draft the title and the url of its card, which a

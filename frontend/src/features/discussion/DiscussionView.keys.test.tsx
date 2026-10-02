@@ -590,7 +590,7 @@ describe("DiscussionView, the order of Esc", () => {
     await user.click(
       screen.getByRole("button", { name: "Epic: Pricing tiers with metered overage" }),
     );
-    await user.click(await screen.findByRole("menuitemradio", { name: "Existing issue…" }));
+    await user.click(await screen.findByRole("menuitem", { name: /^Existing issue…/ }));
     expect(await screen.findByRole("textbox", { name: "Existing issue" })).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Add a dependency" }));
     expect(screen.getByRole("combobox", { name: "Search drafts and cards" })).toHaveFocus();

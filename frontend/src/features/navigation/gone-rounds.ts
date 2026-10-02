@@ -1,5 +1,5 @@
+import { publishedOutcome } from "@/lib/drafts";
 import type { ArchivedDiscussion } from "@/lib/wails";
-import { asDraftOutcome } from "@/lib/wails";
 import { clockTime, shortTime } from "@/lib/when";
 
 /** DELETED_DISCUSSION_TEXT is the text of the page of a discussion that was deleted. */
@@ -24,14 +24,7 @@ export function goneRoundLines(
   const rounds = [...new Set(drafts.map((draft) => draft.round))].sort((a, b) => a - b);
   return rounds.map((round) => {
     const published = drafts.filter((draft) => draft.round === round && draft.published);
-    const created = published.filter((draft) => asDraftOutcome(draft.outcome) === "created").length;
-    const updated = published.filter((draft) => asDraftOutcome(draft.outcome) === "updated").length;
-    const outcome = [
-      created > 0 ? `${created} created` : "",
-      updated > 0 ? `${updated} updated` : "",
-    ]
-      .filter((part) => part !== "")
-      .join(", ");
+    const outcome = publishedOutcome(published);
     const last = published
       .map((draft) => draft.publishedAt)
       .filter((at) => !Number.isNaN(Date.parse(at)))

@@ -185,6 +185,7 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
       }}
       title="New discussion"
       size="wide"
+      closeDisabled={starting}
       onConfirm={start}
       {...(askBoard ? { initialFocus: boardTrigger } : {})}
     >
@@ -338,7 +339,7 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
 
         <div className="flex items-center gap-3">
           <span className={SECTION_LABEL}>Model</span>
-          <ModelPicker label="Discussion" value={choice} onChange={setChoice} />
+          <ModelPicker label="Discussion" value={choice} disabled={starting} onChange={setChoice} />
           {byDefault && (
             <span className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
               From Defaults

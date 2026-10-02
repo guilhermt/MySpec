@@ -43,11 +43,16 @@ export function ArchiveDiscussionDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
+        // While the call runs, the dialog stays: a refusal that comes back has its footer.
+        if (!next && archiving) {
+          return;
+        }
         if (!next) {
           setRefusal(null);
         }
         onOpenChange(next);
       }}
+      closeDisabled={archiving}
       title={`Archive “${discussion.title}”?`}
       alert
       onConfirm={() => void archive()}
@@ -63,7 +68,7 @@ export function ArchiveDiscussionDialog({
         </p>
       </DialogBody>
       <DialogFooter {...(refusal === null ? {} : { refusal })}>
-        <DialogCancel />
+        <DialogCancel disabled={archiving} />
         <Button
           variant="primary"
           shortcut="Ctrl ↵"

@@ -29,6 +29,9 @@ export function DeleteDiscussionDialog({
   const published = discussion.drafts.filter((draft) => draft.published).length;
 
   const remove = async () => {
+    if (deleting) {
+      return;
+    }
     setDeleting(true);
     setRefusal(null);
     const message = await deleteDiscussionInPlace(discussion.id);
@@ -44,11 +47,16 @@ export function DeleteDiscussionDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
+        // While the call runs, the dialog stays: a refusal that comes back has its footer.
+        if (!next && deleting) {
+          return;
+        }
         if (!next) {
           setRefusal(null);
         }
         onOpenChange(next);
       }}
+      closeDisabled={deleting}
       title={`Delete “${discussion.title}”?`}
       alert
     >
@@ -64,7 +72,7 @@ export function DeleteDiscussionDialog({
         </p>
       </DialogBody>
       <DialogFooter {...(refusal === null ? {} : { refusal })}>
-        <DialogCancel />
+        <DialogCancel disabled={deleting} />
         <Button
           variant="danger"
           loading={deleting}

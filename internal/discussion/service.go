@@ -271,7 +271,10 @@ func (s *Service) RecordDrafts(ctx context.Context, id string, a Artifact) (Reco
 
 	d.UpdatedAt = s.now().UTC()
 	d.DraftsRead = true
-	if rec.Changed {
+	// A reading that only takes what the artifact now says onto drafts the
+	// user sees unchanged writes them without a revision, so the drafts the
+	// last revision changed keep saying so.
+	if rec.Changed && (rec.First || rec.Before != nil) {
 		d.DraftsRevision++
 	}
 	if err := s.store.WriteDrafts(ctx, id, drafts, &d); err != nil {

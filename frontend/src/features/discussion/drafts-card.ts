@@ -7,6 +7,7 @@ import type {
   GestureLineView,
 } from "@/components/system/draft-views";
 import { holdLabel, holdStands, kindLabel, refKey } from "@/features/discussion/discussion-status";
+import { draftTitle } from "@/lib/drafts";
 import { shortName } from "@/lib/repositories";
 import { counted } from "@/lib/situations";
 import type { DiscussionSummary, Draft, DraftDependency, DraftRef } from "@/lib/wails";
@@ -18,18 +19,6 @@ export const LOCK_MS = 900;
 
 /** EPIC_TITLE_MAX is how long the title of an epic can be. */
 export const EPIC_TITLE_MAX = 256;
-
-const UNTITLED_EPIC = "Untitled epic";
-const UNTITLED_DRAFT = "Untitled draft";
-
-/** draftTitle is the title of a draft as the screen writes it: never the id. */
-export function draftTitle(draft: Draft): string {
-  const title = draft.title.trim();
-  if (title !== "") {
-    return title;
-  }
-  return asDraftKind(draft.kind) === "epic" ? UNTITLED_EPIC : UNTITLED_DRAFT;
-}
 
 /** isDecided: approved, discarded or on GitHub. */
 export function isDecided(draft: Draft): boolean {
@@ -590,12 +579,20 @@ export function diffCount(lines: readonly DiffLine[]): string {
     .join(" ");
 }
 
-/** groupable are the drafts the dialog Group drafts into an epic offers: cards of the current round, loose, not started, not discarded, in the order of the card. */
+/**
+ * groupable are the drafts the dialog Group drafts into an epic offers: cards of the current round,
+ * loose, not started, not discarded, in the order of the card. A card whose epic is a draft of an
+ * earlier round stands loose on the card but is not loose: it is published with that epic.
+ */
 export function groupable(discussion: DiscussionSummary): Draft[] {
   return cardEntries(discussion)
     .filter(
       ({ draft, epic }) =>
-        epic === null && !isEpic(draft) && !isStarted(draft) && draft.decision !== "discarded",
+        epic === null &&
+        !isEpic(draft) &&
+        (draft.epic === null || draft.epic.draft === "") &&
+        !isStarted(draft) &&
+        draft.decision !== "discarded",
     )
     .map((entry) => entry.draft);
 }
