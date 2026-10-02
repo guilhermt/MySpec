@@ -391,6 +391,20 @@ describe.each(THEMES)("TaskView, the nine scenes in the %s theme", (theme) => {
     });
   });
 
+  it("opens the editor of a finding five lines high", async () => {
+    setTheme(theme);
+    scene("findings-edit");
+    await prepare("findings-edit");
+    await settle();
+
+    const field = screen.getByRole("textbox", { name: "Text of finding 2" });
+    const style = getComputedStyle(field);
+    const lines =
+      (field.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)) /
+      parseFloat(style.lineHeight);
+    expect(lines).toBeGreaterThanOrEqual(5);
+  });
+
   it("draws the bar of the close scene inside the main area", () => {
     setTheme(theme);
     const { area } = scene("close");

@@ -204,9 +204,11 @@ export function Finding({
         )}
         {editing ? (
           <div className="flex flex-col gap-(--space-1)">
+            {/* field-sizing-content ignores rows: the field holds five lines of the text at least. */}
             <Textarea
               ref={field}
               rows={5}
+              className="min-h-[calc(var(--leading-body)*5+var(--space-2)*2+var(--border)*2)]"
               aria-label={`Text of finding ${model.number}`}
               aria-invalid={emptyDraft || undefined}
               value={draft}
