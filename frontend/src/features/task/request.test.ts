@@ -3,7 +3,6 @@ import {
   approveDraftButton,
   blockRequestOf,
   conversationName,
-  findingsRequestOf,
   type OtherConversationModel,
   otherConversationOf,
   type PendingRequest,
@@ -22,9 +21,11 @@ import type { Entry, PullRequest, Situation, Step, StepReviewer, TaskSummary } f
 import type { PrDraft, StepTab } from "@/store/app-store";
 import {
   makeEntry,
+  makePRReport,
   makePullRequest,
   makeRepository,
   makeReview,
+  makeReviewFinding,
   makeSituation,
   makeStep,
   makeStepReviewer,
@@ -69,6 +70,38 @@ function inPR(pr: Partial<PullRequest>, found: Situation): Scene {
     });
   return { waiting: task("waiting", [found]), paused: task("paused", []) };
 }
+
+// recorded is a structured pass recorded with a finding for each decision.
+function recorded(decisions: string[], pass = 1) {
+  return makePRReport({
+    pass,
+    findings: decisions.map((decision, index) =>
+      makeReviewFinding({ number: index + 1, decision }),
+    ),
+  });
+}
+
+const NEXT_TO_DECIDE = {
+  action: "nextToDecide",
+  label: "Next to decide",
+  variant: "secondary",
+  shortcut: "Alt ↓",
+  tooltip: "The next finding to decide · Alt+↓",
+  loadingLabel: "",
+} as const;
+const APPROVE_REST = (left: number) => ({
+  action: "approveRest" as const,
+  label: "Approve the rest",
+  variant: "secondary" as const,
+  tooltip: `Approve the ${left} finding${left === 1 ? "" : "s"} not decided yet`,
+  loadingLabel: "Approving…",
+});
+const APPLY_FINDINGS = {
+  action: "applyFindings",
+  label: "Apply approved",
+  variant: "primary",
+  loadingLabel: "Sending…",
+} as const;
 
 const WAIT = { short: "9m", long: "9 minutes", tone: "wait" } as const;
 const ERROR = { short: "9m", long: "9 minutes", tone: "error" } as const;
@@ -294,9 +327,10 @@ describe("taskRequestOf and pausedRequestOf", () => {
         form: "tinted",
         glyph: "wait",
         label: "Review changes",
+        place: "PR review",
         time: WAIT,
         progress: "3 of 5 files staged · 60%",
-        status: "Review changes",
+        status: "Review changes · PR review",
         actions: [OPEN_IN_EDITOR, approve("approvePR", "Stage 2 more files")],
         situationId: "s-changes_review",
         focus: "primary",
@@ -312,11 +346,156 @@ describe("taskRequestOf and pausedRequestOf", () => {
         form: "tinted",
         glyph: "wait",
         label: "Approve changes",
+        place: "PR review",
         time: WAIT,
         progress: "5 of 5 files staged · 100% · the last approval didn't produce a commit",
-        status: "Approve changes",
+        status: "Approve changes · PR review",
         actions: [OPEN_IN_EDITOR, approve("approvePR")],
         situationId: "s-changes_review",
+        focus: "primary",
+      },
+    ],
+    [
+      "changes_review, with no file changed by the findings",
+      inPR(
+        {
+          status: "in_review",
+          currentPass: 1,
+          reports: [makePRReport({ sentAt: "2026-09-27T17:36:00Z" })],
+          review: makeReview({ staged: 0, total: 0, percent: 0 }),
+        },
+        situation("changes_review", "waiting", "review"),
+      ),
+      {
+        form: "tinted",
+        glyph: "wait",
+        label: "Review changes",
+        place: "PR review",
+        time: WAIT,
+        progress: "No file changed",
+        status: "Review changes · PR review",
+        actions: [
+          OPEN_IN_EDITOR,
+          { ...approve("approvePR"), disabledReason: "No change to approve" },
+        ],
+        situationId: "s-changes_review",
+        focus: "primary",
+      },
+    ],
+    [
+      "findings, in text",
+      inPR({ status: "awaiting_decision" }, situation("findings", "waiting", "")),
+      {
+        form: "tinted",
+        glyph: "wait",
+        label: "Decide findings",
+        place: "PR review · pass 1",
+        time: WAIT,
+        status: "Decide findings · PR review · pass 1",
+        actions: [],
+        situationId: "s-findings",
+        focus: "composer",
+      },
+    ],
+    [
+      "findings, to decide",
+      inPR(
+        { status: "awaiting_decision", currentPass: 1, reports: [recorded(["approved", ""])] },
+        situation("findings", "waiting", "decide"),
+      ),
+      {
+        form: "decision",
+        glyph: "wait",
+        label: "Decide findings",
+        place: "PR review · pass 1",
+        time: WAIT,
+        progress: "1 of 2 decided",
+        status: "Decide findings · PR review · pass 1",
+        actions: [
+          NEXT_TO_DECIDE,
+          APPROVE_REST(1),
+          { ...APPLY_FINDINGS, disabledReason: "Decide 1 more" },
+        ],
+        situationId: "s-findings",
+        focus: "finding",
+      },
+    ],
+    [
+      "findings, ready to apply",
+      inPR(
+        {
+          status: "awaiting_decision",
+          currentPass: 1,
+          reports: [recorded(["approved", "discarded"])],
+        },
+        situation("findings", "waiting", "apply"),
+      ),
+      {
+        form: "decision",
+        glyph: "wait",
+        label: "Ready to apply",
+        place: "PR review · pass 1",
+        time: WAIT,
+        progress: "1 approved finding goes to the agent",
+        status: "Ready to apply · PR review · pass 1",
+        actions: [APPLY_FINDINGS],
+        situationId: "s-findings",
+        focus: "primary",
+      },
+    ],
+    [
+      "findings, with the worktree changed and the rewrite unreadable",
+      inPR(
+        {
+          status: "awaiting_decision",
+          currentPass: 2,
+          reports: [recorded(["approved", ""], 2)],
+          review: makeReview({ staged: 0, total: 2, percent: 0 }),
+          unreadableReport: "no heading for the finding 3",
+        },
+        situation("findings", "waiting", "decide"),
+      ),
+      {
+        form: "decision",
+        glyph: "wait",
+        label: "Decide findings",
+        place: "PR review · pass 2",
+        time: WAIT,
+        progress: "1 of 2 decided · the worktree has changes · the rewritten report can't be read",
+        progressTooltip:
+          "They go to review with the changes of the approved findings. no heading for the finding 3",
+        status: "Decide findings · PR review · pass 2",
+        actions: [
+          NEXT_TO_DECIDE,
+          APPROVE_REST(1),
+          { ...APPLY_FINDINGS, disabledReason: "Decide 1 more" },
+        ],
+        situationId: "s-findings",
+        focus: "finding",
+      },
+    ],
+    [
+      "merge, with every finding of the pass discarded",
+      inPR(
+        {
+          status: "done",
+          currentPass: 1,
+          reports: [recorded(["discarded", "discarded"])],
+          unreadableReport: "no heading for the finding 3",
+        },
+        situation("merge", "waiting", "merge"),
+      ),
+      {
+        form: "tinted",
+        glyph: "wait",
+        label: "Ready to merge",
+        place: "#1284",
+        time: WAIT,
+        progress: "Nothing approved in pass 1 · the rewritten report can't be read",
+        progressTooltip: "no heading for the finding 3",
+        status: "Ready to merge · #1284",
+        actions: [OPEN_PR],
+        situationId: "s-merge",
         focus: "primary",
       },
     ],
@@ -639,6 +818,26 @@ describe("taskRequestOf and pausedRequestOf", () => {
       place: "PR",
       actions: [{ action: "approveDraft", label: "Approve draft" }],
       focus: "primary",
+    });
+  });
+
+  it("says on the reply of the PR review why the report can't be read", () => {
+    const task = makeTask({
+      stage: "pr",
+      pr: makePullRequest({
+        sessionStage: "pr_review",
+        currentPass: 1,
+        reports: [makePRReport({ recorded: false, findings: [] })],
+        unreadableReport: "no heading for the finding 3",
+      }),
+      situations: [situation("reply", "waiting", "")],
+    });
+
+    expect(taskRequestOf(task, "implementer", NOW)).toMatchObject({
+      label: "Waiting for reply",
+      place: "PR review",
+      progress: "no heading for the finding 3",
+      progressTooltip: "no heading for the finding 3",
     });
   });
 
@@ -1275,23 +1474,6 @@ describe("planRequestOf", () => {
         focus: "composer",
       },
     );
-  });
-});
-
-describe("findingsRequestOf", () => {
-  it("draws the findings to decide in the PR review, answered through the composer", () => {
-    const task = prTask({ status: "awaiting_decision", sessionStage: "pr_review" });
-
-    expect(findingsRequestOf(situation("findings", "waiting", ""), task)).toEqual({
-      form: "tinted",
-      glyph: "wait",
-      label: "Decide findings",
-      place: "PR review",
-      status: "Decide findings · PR review",
-      actions: [],
-      situationId: "s-findings",
-      focus: "composer",
-    });
   });
 });
 

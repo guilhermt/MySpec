@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { RequestBar } from "@/components/system/RequestBar";
-import { focusFindingToDecide } from "@/features/reviews/decide-keys";
 import { PublishDialog } from "@/features/reviews/PublishDialog";
 import { ReviewAgainDialog } from "@/features/reviews/ReviewAgainDialog";
+import { currentCardPass } from "@/features/reviews/review-conversation";
 import { type ReviewRequestAction, reviewAnnouncement } from "@/features/reviews/review-request";
 import { useReviewRequest } from "@/features/reviews/useReviewRequest";
 import { RequestButtons } from "@/features/task/request-buttons";
 import { useBornStatus } from "@/features/task/useBornStatus";
-import { focusRequest } from "@/lib/focus";
+import { useFocusAfterApproveRest } from "@/features/task/useFocusAfterApproveRest";
+import { focusFindingToDecide, focusRequest } from "@/lib/focus";
 import { REVIEW_STAGE, type ReviewSummary } from "@/lib/wails";
 import {
   applyReview,
+  approveRestOfFindings,
   approveReview,
   openExternal,
   openReviewInEditor,
@@ -55,6 +57,8 @@ export function ReviewRequest({ review }: ReviewRequestProps) {
   const situationId = request?.situationId ?? null;
   const status = useBornStatus(situationId, request?.status ?? "");
 
+  const approveRest = useFocusAfterApproveRest(request);
+
   // A situation born with the screen open is said once, with its pass.
   const announced = useRef<string | null>(null);
   useEffect(() => {
@@ -94,7 +98,7 @@ export function ReviewRequest({ review }: ReviewRequestProps) {
         focusRequest(request.focus);
         return;
       case "nextToDecide":
-        focusFindingToDecide(review, 1);
+        focusFindingToDecide(currentCardPass(review)?.findings ?? null, 1);
         return;
       case "publish":
         openReviewDialog(review.id, "publish");
@@ -105,7 +109,12 @@ export function ReviewRequest({ review }: ReviewRequestProps) {
     }
     setRunning(action);
     try {
-      await run(action, review, stage ?? REVIEW_STAGE);
+      const pass = currentCardPass(review)?.pass;
+      if (action === "approveRest" && pass !== undefined) {
+        await approveRest(() => approveRestOfFindings(review.id, pass));
+      } else {
+        await run(action, review, stage ?? REVIEW_STAGE);
+      }
     } finally {
       setRunning(null);
     }

@@ -8,6 +8,7 @@ import (
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
@@ -312,6 +313,22 @@ func TestDeriveTheReviewerOfTheCurrentStep(t *testing.T) {
 	}
 }
 
+// structuredPass is the current structured pass of a pull request under review:
+// recorded, with one finding for each decision.
+func structuredPass(decisions ...prreport.Decision) *task.PRPass {
+	pass := &task.PRPass{Pass: 1, Recorded: true}
+	for i, d := range decisions {
+		pass.Findings = append(pass.Findings, prreport.Finding{Number: i + 1, Decision: d})
+	}
+	return pass
+}
+
+const (
+	approved  = prreport.DecisionApproved
+	discarded = prreport.DecisionDiscarded
+	undecided = prreport.DecisionNone
+)
+
 func TestDeriveThePullRequestOfThePRStage(t *testing.T) {
 	t.Parallel()
 
@@ -365,6 +382,85 @@ func TestDeriveThePullRequestOfThePRStage(t *testing.T) {
 			}),
 			situation(attention.KindFindings, attention.FormNone, 0,
 				"The review of the pull request found changes for you to decide."),
+		},
+		{
+			"four findings to decide",
+			prInput(flow.PullRequest{
+				Status: flow.PRAwaitingDecision, SessionStage: session.PRReviewStage, Session: waiting,
+				Pass: structuredPass(approved, undecided, undecided, undecided),
+			}),
+			situation(attention.KindFindings, attention.FormDecide, 0,
+				"The review of the pull request found 4 changes for you to decide."),
+		},
+		{
+			"one finding to decide",
+			prInput(flow.PullRequest{
+				Status: flow.PRAwaitingDecision, SessionStage: session.PRReviewStage, Session: waiting,
+				Pass: structuredPass(undecided),
+			}),
+			situation(attention.KindFindings, attention.FormDecide, 0,
+				"The review of the pull request found 1 change for you to decide."),
+		},
+		{
+			"the approved findings to apply",
+			prInput(flow.PullRequest{
+				Status: flow.PRAwaitingDecision, SessionStage: session.PRReviewStage, Session: waiting,
+				Pass: structuredPass(approved, discarded, approved),
+			}),
+			situation(attention.KindFindings, attention.FormApply, 0,
+				"The approved findings of the pull request review are ready to apply."),
+		},
+		{
+			"findings to decide with the conversation paused",
+			prInput(flow.PullRequest{
+				Status: flow.PRAwaitingDecision, SessionStage: session.PRReviewStage,
+				Session: summary(session.StatusPaused, false),
+				Pass:    structuredPass(approved, undecided),
+			}),
+			nil,
+		},
+		{
+			"every finding discarded with the conversation paused",
+			prInput(flow.PullRequest{
+				Status: flow.PRDone, SessionStage: session.PRReviewStage,
+				Session: summary(session.StatusPaused, false),
+				Pass:    structuredPass(discarded, discarded),
+			}),
+			nil,
+		},
+		{
+			"the agent rewrites the report",
+			prInput(flow.PullRequest{
+				Status: flow.PRReviewing, SessionStage: session.PRReviewStage,
+				Session: summary(session.StatusWorking, false),
+				Pass:    structuredPass(approved, undecided),
+			}),
+			nil,
+		},
+		{
+			"ready to merge with every finding discarded",
+			prInput(flow.PullRequest{
+				Status: flow.PRDone, PR: task.PRDetails{Number: 1284}, SessionStage: session.PRReviewStage,
+				Session: waiting, Pass: structuredPass(discarded, discarded),
+			}),
+			situation(attention.KindMerge, attention.FormMerge, 0,
+				"PR #1284 is ready to merge: every finding of the review was discarded."),
+		},
+		{
+			"ready to close with every finding discarded",
+			prInput(flow.PullRequest{
+				Status: flow.PRDone, PR: task.PRDetails{Number: 1284}, CheckError: "gh pr view: timeout", CanClose: true,
+				Pass: structuredPass(discarded, discarded),
+			}),
+			situation(attention.KindMerge, attention.FormClose, 0, "The pull request is ready to close."),
+		},
+		{
+			"ready to merge after a clean pass",
+			prInput(flow.PullRequest{
+				Status: flow.PRDone, PR: task.PRDetails{Number: 1284},
+				Pass: &task.PRPass{Pass: 2, Recorded: true, Clean: true},
+			}),
+			situation(attention.KindMerge, attention.FormMerge, 0, "The pull request is ready to merge."),
 		},
 		{
 			"changes with nothing staged",

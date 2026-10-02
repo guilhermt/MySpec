@@ -10,6 +10,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 )
 
@@ -146,14 +147,14 @@ func TestTheFirstReportOfAPassIsRecordedAsTheUserFindsIt(t *testing.T) {
 
 	f := newFixture(t)
 	report := changesReport(1, "Two things.",
-		prreview.ParsedFinding{Number: 1, Path: "main.go", Line: 12, Text: "No test."},
-		prreview.ParsedFinding{Number: 2, Text: "The commits mix two changes."})
+		prreport.ParsedFinding{Number: 1, Path: "main.go", Line: 12, Text: "No test."},
+		prreport.ParsedFinding{Number: 2, Text: "The commits mix two changes."})
 	review := f.recorded(t, 42, report, "commit-1")
 
 	pass := f.pass(t, review.ID, 1)
 	want := []prreview.Finding{
-		{Number: 1, Path: "main.go", Line: 12, Original: "No test.", Text: "No test."},
-		{Number: 2, Original: "The commits mix two changes.", Text: "The commits mix two changes."},
+		{Finding: prreport.Finding{Number: 1, Path: "main.go", Line: 12, Original: "No test.", Text: "No test."}},
+		{Finding: prreport.Finding{Number: 2, Original: "The commits mix two changes.", Text: "The commits mix two changes."}},
 	}
 	if diff := cmp.Diff(want, pass.Findings); diff != "" {
 		t.Errorf("findings (-want +got):\n%s", diff)
@@ -176,7 +177,7 @@ func TestAReportThatSaysTheSameThingChangesNothing(t *testing.T) {
 
 	f := newFixture(t)
 	report := changesReport(1, "One thing.",
-		prreview.ParsedFinding{Number: 1, Path: "main.go", Line: 12, Text: "No test."})
+		prreport.ParsedFinding{Number: 1, Path: "main.go", Line: 12, Text: "No test."})
 	review := f.recorded(t, 42, report, "commit-1")
 	before := f.changed()
 
@@ -200,8 +201,8 @@ func TestARewrittenReportKeepsTheDecisionsOfTheFindingsThatStand(t *testing.T) {
 
 	f := newFixture(t)
 	first := changesReport(1, "Two things.",
-		prreview.ParsedFinding{Number: 1, Path: "main.go", Line: 12, Text: "No test."},
-		prreview.ParsedFinding{Number: 2, Text: "The commits mix two changes."})
+		prreport.ParsedFinding{Number: 1, Path: "main.go", Line: 12, Text: "No test."},
+		prreport.ParsedFinding{Number: 2, Text: "The commits mix two changes."})
 	review := f.recorded(t, 42, first, "commit-1")
 
 	if err := f.service.Decide(t.Context(), review.ID, 1, 1, prreview.DecisionApproved); err != nil {
@@ -212,8 +213,8 @@ func TestARewrittenReportKeepsTheDecisionsOfTheFindingsThatStand(t *testing.T) {
 	}
 
 	second := changesReport(1, "Two things.",
-		prreview.ParsedFinding{Number: 1, Path: "main.go", Line: 12, Text: "No test."},
-		prreview.ParsedFinding{Number: 2, Path: "main.go", Line: 40, Text: "This name says nothing."})
+		prreport.ParsedFinding{Number: 1, Path: "main.go", Line: 12, Text: "No test."},
+		prreport.ParsedFinding{Number: 2, Path: "main.go", Line: 40, Text: "This name says nothing."})
 	pass, change, err := f.service.RecordReport(t.Context(), review.ID, second, "commit-2")
 	if err != nil {
 		t.Fatalf("record report: %v", err)
@@ -223,11 +224,11 @@ func TestARewrittenReportKeepsTheDecisionsOfTheFindingsThatStand(t *testing.T) {
 	}
 
 	want := []prreview.Finding{
-		{
+		{Finding: prreport.Finding{
 			Number: 1, Path: "main.go", Line: 12, Original: "No test.",
 			Text: "Cover it with a test.", Decision: prreview.DecisionApproved,
-		},
-		{Number: 2, Path: "main.go", Line: 40, Original: "This name says nothing.", Text: "This name says nothing."},
+		}},
+		{Finding: prreport.Finding{Number: 2, Path: "main.go", Line: 40, Original: "This name says nothing.", Text: "This name says nothing."}},
 	}
 	if diff := cmp.Diff(want, pass.Findings); diff != "" {
 		t.Errorf("findings (-want +got):\n%s", diff)
@@ -245,12 +246,12 @@ func TestASummaryTheUserEditedSurvivesARewriteThatKeepsTheSummaryOfTheReport(t *
 
 	f := newFixture(t)
 	review := f.recorded(t, 42, changesReport(1, "One thing.",
-		prreview.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
+		prreport.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
 
 	if err := f.service.SetSummary(t.Context(), review.ID, 1, "One small thing."); err != nil {
 		t.Fatalf("set summary: %v", err)
 	}
-	rewritten := changesReport(1, "One thing.", prreview.ParsedFinding{Number: 1, Text: "Another thing."})
+	rewritten := changesReport(1, "One thing.", prreport.ParsedFinding{Number: 1, Text: "Another thing."})
 	if _, _, err := f.service.RecordReport(t.Context(), review.ID, rewritten, "commit-1"); err != nil {
 		t.Fatalf("record report: %v", err)
 	}
@@ -288,7 +289,7 @@ func TestAReportThatCouldNotBeStoredLeavesThePassToBeRecordedAgain(t *testing.T)
 
 	f := newFixture(t)
 	review := f.asked(t, 42)
-	report := changesReport(1, "One thing.", prreview.ParsedFinding{Number: 1, Text: "A thing."})
+	report := changesReport(1, "One thing.", prreport.ParsedFinding{Number: 1, Text: "A thing."})
 
 	f.store.writeErr = errors.New("database is locked")
 	if _, _, err := f.service.RecordReport(t.Context(), review.ID, report, "commit-1"); err == nil {
@@ -345,7 +346,7 @@ func TestAPassWhoseFixesWentUpIsMarkedAppliedInTheCacheAndInTheStore(t *testing.
 
 	f := newFixture(t)
 	review := f.recorded(t, 42, changesReport(1, "One thing.",
-		prreview.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
+		prreport.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
 
 	f.store.updateErr = errors.New("database is locked")
 	if err := f.service.MarkApplied(t.Context(), review.ID, 1); err == nil {
@@ -412,7 +413,7 @@ func TestAPublishedPassIsNoLongerDecidedOn(t *testing.T) {
 
 	f := newFixture(t)
 	review := f.recorded(t, 42, changesReport(1, "One thing.",
-		prreview.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
+		prreport.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
 
 	if err := f.service.Decide(t.Context(), review.ID, 1, 1, prreview.DecisionApproved); err != nil {
 		t.Fatalf("decide: %v", err)
@@ -436,10 +437,10 @@ func TestAFindingWithoutWordsIsRefused(t *testing.T) {
 
 	f := newFixture(t)
 	review := f.recorded(t, 42, changesReport(1, "One thing.",
-		prreview.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
+		prreport.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
 
 	err := f.service.SetFindingText(t.Context(), review.ID, 1, 1, "  \n ")
-	if !errors.Is(err, prreview.ErrEmptyText) {
+	if !errors.Is(err, prreport.ErrEmptyText) {
 		t.Errorf("error = %v, want ErrEmptyText", err)
 	}
 }
@@ -449,11 +450,49 @@ func TestADecisionTheProductDoesNotHaveIsRefused(t *testing.T) {
 
 	f := newFixture(t)
 	review := f.recorded(t, 42, changesReport(1, "One thing.",
-		prreview.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
+		prreport.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
 
 	err := f.service.Decide(t.Context(), review.ID, 1, 1, prreview.Decision("maybe"))
-	if !errors.Is(err, prreview.ErrUnknownDecision) {
+	if !errors.Is(err, prreport.ErrUnknownDecision) {
 		t.Errorf("error = %v, want ErrUnknownDecision", err)
+	}
+}
+
+func TestApprovingTheRestLeavesTheDecidedFindingsAsTheyAre(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	review := f.recorded(t, 42, changesReport(1, "Three things.",
+		prreport.ParsedFinding{Number: 1, Text: "One."},
+		prreport.ParsedFinding{Number: 2, Text: "Two."},
+		prreport.ParsedFinding{Number: 3, Text: "Three."}), "commit-1")
+	if err := f.service.Decide(t.Context(), review.ID, 1, 2, prreview.DecisionDiscarded); err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+
+	if err := f.service.ApproveRest(t.Context(), review.ID, 1); err != nil {
+		t.Fatalf("approve rest: %v", err)
+	}
+
+	want := map[int]prreview.Decision{1: prreview.DecisionApproved, 2: prreview.DecisionDiscarded, 3: prreview.DecisionApproved}
+	for _, finding := range f.pass(t, review.ID, 1).Findings {
+		if finding.Decision != want[finding.Number] {
+			t.Errorf("finding %d = %q, want %q", finding.Number, finding.Decision, want[finding.Number])
+		}
+	}
+	// With nothing left to decide, a store that fails every write proves none
+	// is attempted.
+	f.store.writeErr = errors.New("database is locked")
+	before := f.changed()
+	if err := f.service.ApproveRest(t.Context(), review.ID, 1); err != nil {
+		t.Errorf("approve rest with nothing to decide: %v", err)
+	}
+	if f.changed() != before {
+		t.Error("the service announced a change nobody made")
+	}
+	f.store.writeErr = nil
+	if err := f.service.ApproveRest(t.Context(), review.ID, 2); !errors.Is(err, prreview.ErrNotFound) {
+		t.Errorf("approve rest of an unknown pass: error = %v, want ErrNotFound", err)
 	}
 }
 
@@ -462,8 +501,8 @@ func TestAPublishedPassCarriesWhereEachFindingWentAndTheHeadItWasSentAgainst(t *
 
 	f := newFixture(t)
 	review := f.recorded(t, 42, changesReport(1, "Two things.",
-		prreview.ParsedFinding{Number: 1, Path: "main.go", Line: 12, Text: "No test."},
-		prreview.ParsedFinding{Number: 2, Text: "The commits mix two changes."}), "commit-1")
+		prreport.ParsedFinding{Number: 1, Path: "main.go", Line: 12, Text: "No test."},
+		prreport.ParsedFinding{Number: 2, Text: "The commits mix two changes."}), "commit-1")
 	for _, number := range []int{1, 2} {
 		if err := f.service.Decide(t.Context(), review.ID, 1, number, prreview.DecisionApproved); err != nil {
 			t.Fatalf("decide: %v", err)
@@ -644,7 +683,7 @@ func TestSyncLoadsTheReviewsWithThePassesOfEachOne(t *testing.T) {
 
 	f := newFixture(t)
 	review := f.recorded(t, 42, changesReport(1, "One thing.",
-		prreview.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
+		prreport.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
 	archived := f.create(t, 43)
 	if _, err := f.service.Archive(t.Context(), archived.ID, prreview.End{State: prreview.PRMerged}); err != nil {
 		t.Fatalf("archive review: %v", err)
@@ -675,7 +714,7 @@ func TestAPassACallerHoldsNeverChangesUnderIt(t *testing.T) {
 
 	f := newFixture(t)
 	review := f.recorded(t, 42, changesReport(1, "One thing.",
-		prreview.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
+		prreport.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
 
 	held := f.service.Passes(review.ID)
 	held[0].Findings[0].Decision = prreview.DecisionDiscarded
@@ -702,7 +741,7 @@ func TestAPassBeforeTheLastRecordedOneIsNoLongerDecidedOn(t *testing.T) {
 
 	f := newFixture(t)
 	review := f.recorded(t, 42, changesReport(1, "One thing.",
-		prreview.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
+		prreport.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
 
 	if _, err := f.service.AskPass(t.Context(), review.ID, 2, ""); err != nil {
 		t.Fatalf("ask pass: %v", err)
@@ -722,7 +761,7 @@ func TestARewrittenReportKeepsTheDecisionAndTheTextWhenOnlyTheTitleChanged(t *te
 
 	f := newFixture(t)
 	first := changesReport(1, "One thing.",
-		prreview.ParsedFinding{Number: 1, Title: "Old", Path: "main.go", Line: 12, Text: "No test."})
+		prreport.ParsedFinding{Number: 1, Title: "Old", Path: "main.go", Line: 12, Text: "No test."})
 	review := f.recorded(t, 42, first, "commit-1")
 	if err := f.service.Decide(t.Context(), review.ID, 1, 1, prreview.DecisionApproved); err != nil {
 		t.Fatalf("decide: %v", err)
@@ -732,8 +771,8 @@ func TestARewrittenReportKeepsTheDecisionAndTheTextWhenOnlyTheTitleChanged(t *te
 	}
 
 	second := changesReport(1, "One thing.",
-		prreview.ParsedFinding{Number: 1, Title: "New", Path: "main.go", Line: 12, Text: "No test."},
-		prreview.ParsedFinding{Number: 2, Title: "Extra", Text: "Another."})
+		prreport.ParsedFinding{Number: 1, Title: "New", Path: "main.go", Line: 12, Text: "No test."},
+		prreport.ParsedFinding{Number: 2, Title: "Extra", Text: "Another."})
 	pass, _, err := f.service.RecordReport(t.Context(), review.ID, second, "commit-2")
 	if err != nil {
 		t.Fatalf("record report: %v", err)
@@ -750,8 +789,8 @@ func TestAReportThatDiffersOnlyInTheTitlesIsNoRevision(t *testing.T) {
 
 	f := newFixture(t)
 	first := changesReport(1, "Two things.",
-		prreview.ParsedFinding{Number: 1, Path: "main.go", Line: 12, Text: "No test."},
-		prreview.ParsedFinding{Number: 2, Text: "Mixed commits."})
+		prreport.ParsedFinding{Number: 1, Path: "main.go", Line: 12, Text: "No test."},
+		prreport.ParsedFinding{Number: 2, Text: "Mixed commits."})
 	review := f.recorded(t, 42, first, "commit-1")
 	if err := f.service.Decide(t.Context(), review.ID, 1, 2, prreview.DecisionDiscarded); err != nil {
 		t.Fatalf("decide: %v", err)
@@ -759,8 +798,8 @@ func TestAReportThatDiffersOnlyInTheTitlesIsNoRevision(t *testing.T) {
 	before := f.changed()
 
 	titled := changesReport(1, "Two things.",
-		prreview.ParsedFinding{Number: 1, Title: "No test", Path: "main.go", Line: 12, Text: "No test."},
-		prreview.ParsedFinding{Number: 2, Title: "Mixed commits", Text: "Mixed commits."})
+		prreport.ParsedFinding{Number: 1, Title: "No test", Path: "main.go", Line: 12, Text: "No test."},
+		prreport.ParsedFinding{Number: 2, Title: "Mixed commits", Text: "Mixed commits."})
 	pass, change, err := f.service.RecordReport(t.Context(), review.ID, titled, "commit-2")
 	if err != nil {
 		t.Fatalf("record report: %v", err)
@@ -791,7 +830,7 @@ func TestAFindingStoredWithoutATitleReadsWithoutOne(t *testing.T) {
 
 	f := newFixture(t)
 	review := f.recorded(t, 42, changesReport(1, "One thing.",
-		prreview.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
+		prreport.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
 
 	if got := f.pass(t, review.ID, 1).Findings[0].Title; got != "" {
 		t.Errorf("title = %q, want it empty", got)
@@ -802,7 +841,7 @@ func TestTheFirstReportOfAPassIsRecordedAtTheTimeItWasRead(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	report := changesReport(1, "One thing.", prreview.ParsedFinding{Number: 1, Text: "A thing."})
+	report := changesReport(1, "One thing.", prreport.ParsedFinding{Number: 1, Text: "A thing."})
 	review := f.recorded(t, 42, report, "commit-1")
 
 	recordedAt := f.pass(t, review.ID, 1).RecordedAt
@@ -810,7 +849,7 @@ func TestTheFirstReportOfAPassIsRecordedAtTheTimeItWasRead(t *testing.T) {
 		t.Fatal("RecordedAt is zero, want the time of the first report")
 	}
 
-	rewritten := changesReport(1, "One thing.", prreview.ParsedFinding{Number: 1, Text: "Another thing."})
+	rewritten := changesReport(1, "One thing.", prreport.ParsedFinding{Number: 1, Text: "Another thing."})
 	if _, _, err := f.service.RecordReport(t.Context(), review.ID, rewritten, "commit-1"); err != nil {
 		t.Fatalf("record report: %v", err)
 	}
@@ -824,7 +863,7 @@ func TestTheChecksTheSendAndThePublicationOfAPassAreKept(t *testing.T) {
 
 	f := newFixture(t)
 	review := f.recorded(t, 42, changesReport(1, "One thing.",
-		prreview.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
+		prreport.ParsedFinding{Number: 1, Text: "A thing."}), "commit-1")
 
 	readAt := base.Add(time.Hour)
 	checks := gh.PRChecks{

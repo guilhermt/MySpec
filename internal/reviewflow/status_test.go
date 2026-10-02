@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/review"
@@ -11,8 +12,8 @@ import (
 )
 
 // finding is a finding of a report, anchored to a line of the diff.
-func finding(number int, path string, line int) prreview.ParsedFinding {
-	return prreview.ParsedFinding{
+func finding(number int, path string, line int) prreport.ParsedFinding {
+	return prreport.ParsedFinding{
 		Number: number, Path: path, Line: line, Text: "this reading is never cached",
 	}
 }

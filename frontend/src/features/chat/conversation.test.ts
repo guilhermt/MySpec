@@ -593,6 +593,7 @@ describe("stretchFoldOf", () => {
     task: makeTask({ steps: [makeStep({ number: 6, file: "06-throttle-metrics.md" })] }),
     review: null,
     latestReport: new Map(),
+    latestDecided: new Map(),
     oneShot: false,
   };
   const stretch = (fields: Partial<Stretch>): Stretch => ({

@@ -91,6 +91,8 @@ describe("situationLabel", () => {
     ["step_empty", "", 0, "Step 3 has no changes"],
     ["draft", "", 0, "Draft to approve"],
     ["findings", "", 0, "Decide findings"],
+    ["findings", "decide", 0, "Decide findings"],
+    ["findings", "apply", 0, "Ready to apply"],
     ["changes_review", "review", 0, "Review changes"],
     ["changes_review", "staged", 40, "Changes · 40% staged"],
     ["changes_review", "approve", 100, "Approve changes"],
@@ -304,6 +306,14 @@ describe("situationFragment", () => {
     [makeSituation({ kind: "pr_blocked", place: PR_PLACE }), "PR blocked"],
     [makeSituation({ kind: "plan_invalid", place: stagePlace("plan") }), "plan still invalid"],
     [makeSituation({ kind: "findings", place: PR_PLACE }), "decide findings in PR review"],
+    [
+      makeSituation({ kind: "findings", form: "decide", place: PR_PLACE }),
+      "decide findings in PR review",
+    ],
+    [
+      makeSituation({ kind: "findings", form: "apply", place: PR_PLACE }),
+      "ready to apply in PR review",
+    ],
   ])("tells %o as %s", (situation, expected) => {
     expect(situationFragment(situation)).toBe(expected);
   });

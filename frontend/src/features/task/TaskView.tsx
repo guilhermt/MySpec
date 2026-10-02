@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { type KeyboardEvent, useEffect, useRef } from "react";
 import { ArrivalFocus } from "@/components/ArrivalFocus";
 import { PanelLayout } from "@/components/system/AuxPanel";
 import { Conversation } from "@/features/chat/Conversation";
@@ -13,6 +13,7 @@ import { earlierPlace } from "@/features/task/details";
 import { EarlierConversationFoot } from "@/features/task/EarlierConversationFoot";
 import { PRPane } from "@/features/task/PRPane";
 import { hasReviewConversation, prPlaceOf } from "@/features/task/place";
+import { cardFindings } from "@/features/task/pr-findings";
 import { screenSituationKindOf, screenStageOf } from "@/features/task/request";
 import { useFocusRescue } from "@/features/task/request-focus";
 import { StepPane } from "@/features/task/StepPane";
@@ -21,6 +22,8 @@ import { TaskComposer } from "@/features/task/TaskComposer";
 import { TaskHeader } from "@/features/task/TaskHeader";
 import { TaskRequest } from "@/features/task/TaskRequest";
 import { useTaskRequest } from "@/features/task/useTaskRequest";
+import { focusFindingToDecide } from "@/lib/focus";
+import { modalOpen } from "@/lib/layers";
 import { prOf } from "@/lib/pull-requests";
 import { asTaskStage, type Step, sessionKey, type TaskSummary } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
@@ -144,8 +147,31 @@ export function TaskView({ taskId }: TaskViewProps) {
     );
   }
 
+  // Alt+↓ and Alt+↑ go to the next and the previous finding to decide from anywhere on the screen,
+  // the composer included. The other keys of the findings belong to the card.
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.defaultPrevented || modalOpen()) {
+      return;
+    }
+    if (
+      event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.shiftKey &&
+      (event.key === "ArrowDown" || event.key === "ArrowUp")
+    ) {
+      event.preventDefault();
+      focusFindingToDecide(cardFindings(task), event.key === "ArrowDown" ? 1 : -1);
+    }
+  };
+
   return (
-    <section ref={rescue} className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+    <section
+      ref={rescue}
+      aria-label={task.name}
+      onKeyDown={onKeyDown}
+      className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
+    >
       <TaskHeader task={task} />
       <TaskArrival task={task} tab={stepTab} ready={!hasConversation || conversationSettled} />
       <PanelLayout

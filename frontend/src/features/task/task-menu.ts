@@ -1,4 +1,5 @@
 import type { MenuRowItem } from "@/components/MenuRow";
+import { reviewAgainTooltip } from "@/features/task/pr-findings";
 import { canDiscardDraft, reviewAgainRefusal } from "@/features/task/pr-status";
 import { type StageAction, stageNoun } from "@/features/task/stage-actions";
 import { canReviewMyself, currentStepOf, hasStepSession } from "@/features/task/step-status";
@@ -145,6 +146,7 @@ function pullRequestGroup(pr: PullRequest, now: number): TaskMenuGroup {
   const closing = asPRStatus(pr.status) === "closing";
   const checked = age(pr.checkedAt, now);
   const refusal = reviewAgainRefusal(pr);
+  const decisions = refusal === null ? reviewAgainTooltip(pr) : null;
   const items: TaskMenuItem[] = [
     { id: "pr.open", label: "Open PR", action: { kind: "openPR" }, icon: "external" },
     {
@@ -162,6 +164,7 @@ function pullRequestGroup(pr: PullRequest, now: number): TaskMenuGroup {
       label: "Review again",
       action: { kind: "reviewAgain" },
       ...(refusal === null ? {} : { disabledReason: refusal }),
+      ...(decisions === null ? {} : { tooltip: decisions }),
     },
   ];
   if (pr.worktreePath !== "" && !closing) {

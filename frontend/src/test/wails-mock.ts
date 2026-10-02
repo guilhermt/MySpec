@@ -31,6 +31,7 @@ import type {
   ModelStage,
   PermissionDecision,
   PRCheck,
+  PRReport,
   Prompt,
   PromptStage,
   PullRequest,
@@ -195,6 +196,19 @@ export const api = {
     Promise.resolve(),
   ),
   approvePR: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  decidePRFinding: vi.fn<
+    (taskId: string, pass: number, number: number, decision: FindingDecision) => Promise<void>
+  >(() => Promise.resolve()),
+  setPRFindingText: vi.fn<
+    (taskId: string, pass: number, number: number, text: string) => Promise<void>
+  >(() => Promise.resolve()),
+  approveRestOfPRFindings: vi.fn<(taskId: string, pass: number) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  applyPRFindings: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  openPRFindingInEditor: vi.fn<(taskId: string, pass: number, number: number) => Promise<void>>(
+    () => Promise.resolve(),
+  ),
   reviewAgain: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
   discardDraft: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
   retryPR: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
@@ -227,6 +241,9 @@ export const api = {
   refreshReviewPR: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   applyReview: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   approveReview: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  approveRestOfFindings: vi.fn<(id: string, pass: number) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
   deleteReview: vi.fn<(id: string) => Promise<DeleteResult>>(() =>
     Promise.resolve({ leftover: null }),
   ),
@@ -719,6 +736,37 @@ export function makePRCheck(overrides: Partial<PRCheck> = {}): PRCheck {
   };
 }
 
+/** makePRReport is a pass of the review of the pull request of a task: a structured one, recorded with one finding, by default. */
+export function makePRReport(overrides: Partial<PRReport> = {}): PRReport {
+  return {
+    pass: 1,
+    file: "review-1.md",
+    clean: false,
+    structured: true,
+    recorded: true,
+    findings: [makeReviewFinding()],
+    revision: 1,
+    edited: false,
+    recordedAt: "2026-09-27T17:28:00Z",
+    sentAt: "",
+    ...overrides,
+  };
+}
+
+/** makeTextPRReport is a pass of the review of the pull request of a task in text, with no findings. */
+export function makeTextPRReport(pass: number, clean: boolean): PRReport {
+  return makePRReport({
+    pass,
+    file: `review-${pass}.md`,
+    clean,
+    structured: false,
+    recorded: false,
+    findings: [],
+    revision: 0,
+    recordedAt: "",
+  });
+}
+
 export function makePullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
   return {
     status: "preparing",
@@ -728,6 +776,8 @@ export function makePullRequest(overrides: Partial<PullRequest> = {}): PullReque
     baseBranch: "origin/dev",
     draft: null,
     reports: [],
+    currentPass: 0,
+    unreadableReport: "",
     review: null,
     commitFailed: false,
     prNumber: 0,

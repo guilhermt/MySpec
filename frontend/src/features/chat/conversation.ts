@@ -411,6 +411,7 @@ function stretchOf(rows: Row[], voice: string): Stretch {
             task: null,
             review: null,
             latestReport: NO_REPORTS,
+            latestDecided: NO_REPORTS,
             oneShot: false,
           }).complement,
     startedAt: first === undefined ? "" : (entriesOf(first)[0]?.createdAt ?? ""),

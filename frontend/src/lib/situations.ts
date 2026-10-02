@@ -94,7 +94,7 @@ export function situationLabel(situation: Situation): string {
     case "draft":
       return "Draft to approve";
     case "findings":
-      return "Decide findings";
+      return form === "apply" ? "Ready to apply" : "Decide findings";
     case "changes_review":
       if (form === "staged") {
         return `Changes · ${p}% staged`;
@@ -254,7 +254,9 @@ const PLACE_IN_LABEL: readonly SituationKind[] = [
 export function situationFragment(situation: Situation): string {
   const kind = asSituationKind(situation.kind);
   if (kind === "findings") {
-    return "decide findings in PR review";
+    return asSituationForm(situation.form) === "apply"
+      ? "ready to apply in PR review"
+      : "decide findings in PR review";
   }
   const asks = lowerFirst(situationLabel(situation));
   // These labels already name their place: "step 5 blocked", "PR blocked".

@@ -20,6 +20,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/repository"
@@ -563,6 +564,102 @@ func (s *TaskService) ApprovePR(taskID string) error {
 	return nil
 }
 
+// DecidePRFinding records what the user decided about a finding of the
+// current pass of the review of the pull request: "approved", "discarded",
+// or "" to take the decision back.
+func (s *TaskService) DecidePRFinding(taskID string, pass, number int, decision string) error {
+	d, err := prreport.ParseDecision(decision)
+	if err != nil {
+		return s.fail("DecidePRFinding", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.DecidePRFinding(ctx, taskID, pass, number, d); err != nil {
+		return s.fail("DecidePRFinding", err)
+	}
+	return nil
+}
+
+// SetPRFindingText replaces the text of a finding of the current pass of the
+// review of the pull request.
+func (s *TaskService) SetPRFindingText(taskID string, pass, number int, text string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.SetPRFindingText(ctx, taskID, pass, number, text); err != nil {
+		return s.fail("SetPRFindingText", err)
+	}
+	return nil
+}
+
+// ApproveRestOfPRFindings approves every finding of the pass that has no
+// decision.
+func (s *TaskService) ApproveRestOfPRFindings(taskID string, pass int) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.ApproveRestOfPRFindings(ctx, taskID, pass); err != nil {
+		return s.fail("ApproveRestOfPRFindings", err)
+	}
+	return nil
+}
+
+// ApplyPRFindings sends the approved findings of the current pass to the agent.
+func (s *TaskService) ApplyPRFindings(taskID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.ApplyPRFindings(ctx, taskID); err != nil {
+		return s.fail("ApplyPRFindings", err)
+	}
+	return nil
+}
+
+// OpenPRFindingInEditor opens VS Code on the worktree of the task at the line
+// of a finding of the review of its pull request.
+func (s *TaskService) OpenPRFindingInEditor(taskID string, pass, number int) error {
+	finding, err := s.prFindingOf(taskID, pass, number)
+	if err != nil {
+		return s.fail("OpenPRFindingInEditor", err)
+	}
+	wt, ok := s.flow.Worktree(taskID)
+	if !ok {
+		return s.fail("OpenPRFindingInEditor", fmt.Errorf("worktree of task %s: %w", taskID, flow.ErrNoWorktree))
+	}
+	target := filepath.Join(wt.Path, finding.Path) + ":" + strconv.Itoa(finding.Line)
+	if err := s.editor(wt.Path, "-g", target); err != nil {
+		return s.fail("OpenPRFindingInEditor", err)
+	}
+	return nil
+}
+
+// prFindingOf is one anchored finding of one pass of the review of the pull
+// request of a task, refused when the pass or the finding is gone, or when the
+// finding is anchored to nothing.
+func (s *TaskService) prFindingOf(taskID string, pass, number int) (prreport.Finding, error) {
+	for _, one := range s.tasks.PRPasses(taskID) {
+		if one.Pass != pass {
+			continue
+		}
+		for _, finding := range one.Findings {
+			if finding.Number != number {
+				continue
+			}
+			if !finding.Anchored() {
+				return prreport.Finding{}, fmt.Errorf(
+					"open finding %d of pass %d of task %s: %w", number, pass, taskID, errNotAnchored,
+				)
+			}
+			return finding, nil
+		}
+	}
+	return prreport.Finding{}, fmt.Errorf(
+		"open finding %d of pass %d of task %s: %w", number, pass, taskID, errFindingNotFound,
+	)
+}
+
 // ReviewAgain ends the review session of a task and starts a new pass over its
 // pull request.
 func (s *TaskService) ReviewAgain(taskID string) error {
@@ -811,16 +908,20 @@ var userMessages = []struct {
 	{flow.ErrReviewModeLocked, "Every step of this task has already started."},
 	{flow.ErrAgentReviewing, "The agent is reviewing this step. Review it yourself to approve it."},
 	{flow.ErrNoAgentReview, "The agent isn't reviewing this step."},
+	{flow.ErrNotDeciding, "These findings can't change now: they went to the agent, or a new pass started."},
+	{flow.ErrNotDecided, "Decide every finding first."},
+	{flow.ErrNothingApproved, "No finding is approved."},
+	{flow.ErrFindingNotFound, "This finding no longer exists."},
 	{errPathOutside, "This file is not in the worktree of the task."},
 	{errNotAnchored, "This finding isn't about a line of the pull request."},
 	{errFindingNotFound, "This finding no longer exists."},
 	{prreview.ErrNotFound, "This review no longer exists."},
 	{prreview.ErrActiveExists, "This pull request already has a review in MySpec."},
 	{prreview.ErrNotDeciding, "This pass is not the one being decided."},
-	{prreview.ErrEmptyText, "Write the text of the finding."},
+	{prreport.ErrEmptyText, "Write the finding, or discard it."},
 	{prreview.ErrUnknownMode, "Unknown review mode."},
 	{prreview.ErrUnknownVerdict, "Unknown verdict."},
-	{prreview.ErrUnknownDecision, "Unknown decision."},
+	{prreport.ErrUnknownDecision, "Unknown decision."},
 	{prreview.ErrUnknownArtifact, "Unknown artifact."},
 	{reviewflow.ErrPullRequestGone, reviewflow.GoneMessage},
 	{reviewflow.ErrNotOpen, reviewflow.NotOpenMessage},

@@ -16,6 +16,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/repository"
@@ -1298,7 +1299,7 @@ func (f *fixture) writeReport(t *testing.T, id string, pass int, content string)
 }
 
 // record is the report of a pass as the app already had it recorded.
-func (f *fixture) record(t *testing.T, id string, report prreview.Report, commit string) {
+func (f *fixture) record(t *testing.T, id string, report prreport.Report, commit string) {
 	t.Helper()
 
 	if _, _, err := f.reviews.RecordReport(t.Context(), id, report, commit); err != nil {
@@ -1384,13 +1385,13 @@ func (m *memSessions) sent() []string {
 }
 
 // changesReport is a report with findings, as the agent writes it.
-func changesReport(pass int, summary string, findings ...prreview.ParsedFinding) prreview.Report {
-	return prreview.Report{Pass: pass, Summary: summary, Findings: findings}
+func changesReport(pass int, summary string, findings ...prreport.ParsedFinding) prreport.Report {
+	return prreport.Report{Pass: pass, Summary: summary, Findings: findings}
 }
 
 // cleanReport is a report that found nothing to change.
-func cleanReport(pass int, summary string) prreview.Report {
-	return prreview.Report{Pass: pass, Clean: true, Summary: summary}
+func cleanReport(pass int, summary string) prreport.Report {
+	return prreport.Report{Pass: pass, Clean: true, Summary: summary}
 }
 
 // reportFile is a report of a pass as the agent writes it to disk.

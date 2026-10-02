@@ -4,6 +4,7 @@ import { isPausedReview, reviewChecks, reviewPass } from "@/features/reviews/rev
 import { lastRecordedPass } from "@/features/reviews/review-status";
 import {
   approveButton,
+  approveRestButton,
   type Bar,
   clean,
   drawn,
@@ -42,6 +43,7 @@ export type ReviewRequestAction =
   | "show"
   | "retrySession"
   | "nextToDecide"
+  | "approveRest"
   | "publish"
   | "apply"
   | "openInEditor"
@@ -178,7 +180,12 @@ function reportBar(review: ReviewSummary, form: Want["form"], place: string): Re
     place,
     progress: joined([`${decided} of ${total} decided`, staleNote(review)]),
     status: statusOf("Decide findings", place),
-    actions: [NEXT_TO_DECIDE, apply ? applyButton(refusal) : publishButton(refusal)],
+    actions: [
+      NEXT_TO_DECIDE,
+      // Approve the rest has nothing to approve once every finding is decided.
+      ...(left > 0 ? [approveRestButton<ReviewRequestAction>(left)] : []),
+      apply ? applyButton(refusal) : publishButton(refusal),
+    ],
     focus: "finding",
   };
 }

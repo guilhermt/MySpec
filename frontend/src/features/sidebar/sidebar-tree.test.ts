@@ -25,6 +25,7 @@ import {
   makeDiscussionCard,
   makeDraft,
   makePRCheck,
+  makePRReport,
   makePullRequest,
   makeRepository,
   makeReviewFinding,
@@ -61,8 +62,26 @@ function taskWith(overrides: Partial<TaskSummary> = {}): TaskSummary {
       status: "awaiting_decision",
       prNumber: 1279,
       reports: [
-        { pass: 1, file: "", clean: false },
-        { pass: 2, file: "", clean: false },
+        makePRReport({
+          pass: 1,
+          file: "",
+          clean: false,
+          structured: false,
+          recorded: false,
+          findings: [],
+          revision: 0,
+          recordedAt: "",
+        }),
+        makePRReport({
+          pass: 2,
+          file: "",
+          clean: false,
+          structured: false,
+          recorded: false,
+          findings: [],
+          revision: 0,
+          recordedAt: "",
+        }),
       ],
     }),
     ...overrides,
@@ -224,6 +243,34 @@ describe("the line 2 of a task with a situation", () => {
       {},
       "Decide findings · PR review · pass 2",
       "Decide findings · PR review",
+    ],
+    [
+      "findings to decide, counted",
+      { kind: "findings", form: "decide", place: PR_PLACE },
+      {
+        pr: makePullRequest({
+          currentPass: 3,
+          reports: [
+            makePRReport({
+              pass: 3,
+              findings: [
+                makeReviewFinding({ number: 1, decision: "approved" }),
+                makeReviewFinding({ number: 2 }),
+                makeReviewFinding({ number: 3 }),
+              ],
+            }),
+          ],
+        }),
+      },
+      "Decide findings · PR review · pass 3 · 1 of 3",
+      "Decide findings · 1/3",
+    ],
+    [
+      "findings ready to apply",
+      { kind: "findings", form: "apply", place: PR_PLACE },
+      { pr: makePullRequest({ currentPass: 3 }) },
+      "Ready to apply · PR review · pass 3",
+      "Ready to apply · PR review",
     ],
     [
       "changes to review",

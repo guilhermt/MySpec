@@ -210,7 +210,7 @@ Fica acima do compositor, na coluna da conversa, com a mesma borda esquerda e di
 | `findings` · decide | `Decide findings · PR review · pass 1 12m` · `1 of 4 decided` (e `· the worktree has changes` quando há) | **Next to decide** `Alt ↓`, **Approve the rest** (secundários), **Apply approved** (primária tracejada com `Decide 3 more`) | `A` e `D` no apontamento em foco, `Alt+↓` e `Alt+↑` | de decisão |
 | `findings` · apply (tudo decidido, algum aprovado) | `Ready to apply · PR review · pass 1` · `3 approved findings go to the agent` | **Apply approved** (primária) | — | de decisão |
 | `findings` de uma passada em texto (pedida antes do formato de apontamentos) | `Decide findings · PR review · pass 1` | nenhuma: a resposta vai pelo compositor | `Enter` no compositor | tingida |
-| `changes_review` | `Review changes` · `3 of 5 files staged`, depois `Approve changes`; sem nenhuma mudança depois de **Apply approved**, `No file changed`. A resposta vai pelo compositor com `Ask the reviewer for a change…` | **Open in VS Code**, **Approve** (tracejado com `No change to approve` sem mudança) | — | tingida |
+| `changes_review` | `Review changes` · `3 of 5 files staged`, depois `Approve changes`; sem nenhuma mudança depois de **Apply approved**, `No file changed`. A resposta vai pelo compositor com `Ask the PR agent for a change…` | **Open in VS Code**, **Approve** (tracejado com `No change to approve` sem mudança) | — | tingida |
 | `pr_trouble` | `Checks failed`, `Conflict with base` ou `Checks failed · conflict`, com os checks pelo nome; com a leitura falha, `Couldn't confirm the merge` | **Review again**; com a leitura falha e o encerramento oferecido, **Close task** secundário | — | erro |
 | `pr_closed` | `PR closed unmerged` | **Delete task…** (repetida do `⋯`) | — | erro |
 | `merge` (forma `merge`, a PR esperando o merge) | `Ready to merge · #1284`; depois de uma passada com todos os apontamentos descartados, `· Nothing approved in pass 1`, com a conversa do review aberta e o cartão | **Open PR** | — | tingida |
@@ -233,8 +233,8 @@ O lugar das barras dos apontamentos (`findings`: `decide`, `apply` e a passada e
 - `Answer with 1–3, or reply to the reviewer…`;
 - `Queue a message for the implementer…` com o agente trabalhando;
 - `Sending restarts the reviewer's session…` com a sessão parada num erro, e `Reply to the reviewer to go on…` depois de um turno que falhou com o processo vivo;
-- `Ask the reviewer to add, change or drop a finding…` com apontamentos;
-- `Ask the reviewer for a change…` com as mudanças da PR em review (`changes_review`), como `Ask the implementer for a change…` num step;
+- `Ask the PR agent to add, change or drop a finding…` com apontamentos;
+- `Ask the PR agent for a change…` com as mudanças da PR em review (`changes_review`), como `Ask the implementer for a change…` num step;
 - `Sending resumes the task…` com a task pausada: enviar retoma a sessão;
 - `Answer with 1–3 above, or queue a message for the implementer…` com uma permissão aberta;
 - `Write your answer to “Limits” and press Enter…` depois de **Other…**;
@@ -259,11 +259,11 @@ Os apontamentos de uma passada do review da PR da task são decididos na convers
 - **A barra** diz `Decide findings · PR review · pass 1` e o progresso (`1 of 4 decided`), com **Next to decide** `Alt ↓`, **Approve the rest** (aprova de uma vez os que ainda não têm decisão; sem tecla) e **Apply approved** tracejado com `Decide 3 more`. Com tudo decidido e algum aprovado, `Ready to apply · PR review · pass 1` com **Apply approved**, que envia os aprovados ao revisor, com o texto como o usuário o deixou, e lista os descartados para ele não os apontar de novo; o marco `You decided · 3 approved, 1 discarded` e a mensagem do produto `MySpec → Reviewer · apply 3 approved findings` entram na conversa, e o ciclo segue pelo `changes_review`, o commit e a passada seguinte.
 - **Tudo descartado** leva a PR a `Ready to merge` sozinho, como no modo Apply (`review.md` §14): a barra diz `Ready to merge · #1284 · Nothing approved in pass 1`, a conversa continua aberta, com o cartão e o compositor, e desfazer um descarte volta à decisão até o merge. Um check que falha ou um conflito depois da passada dão `pr_trouble` como hoje, com o cartão ainda na conversa e a decisão ainda permitida. No merge ou no fechamento da PR, o produto fecha a conversa do review, e daí tudo segue como hoje, **Close task** incluído. Assim o review da PR da task termina num relatório limpo ou numa passada toda descartada.
 - **Mudanças na worktree antes do envio** (pedidas ao revisor pelo compositor) vão ao review junto com as dos aprovados; com tudo descartado, elas mesmas são o `Review changes`. Enquanto a decisão não acaba, a barra diz `· the worktree has changes`.
-- **Enquanto o revisor trabalha** (uma reescrita pedida) não há barra; o cartão fica, e o compositor diz `Queue a message for the reviewer…`.
-- **Pedir ao agente** que acrescente, mude ou retire um apontamento vai pelo compositor (`Ask the reviewer to add, change or drop a finding…`). O agente reescreve o relatório no lugar; o produto grava o marco `Review 1 revised · changes · 4 findings`, e o cartão passa para logo depois dele, com a decisão e o texto dos apontamentos que não mudaram. O marco anterior do relatório fica sem conteúdo.
+- **Enquanto o revisor trabalha** (uma reescrita pedida) não há barra; o cartão fica, e o compositor diz `Queue a message for the PR agent…`.
+- **Pedir ao agente** que acrescente, mude ou retire um apontamento vai pelo compositor (`Ask the PR agent to add, change or drop a finding…`). O agente reescreve o relatório no lugar; o produto grava o marco `Review 1 revised · changes · 4 findings`, e o cartão passa para logo depois dele, com a decisão e o texto dos apontamentos que não mudaram. O marco anterior do relatório fica sem conteúdo.
 - **Depois do envio** não há cartão: o marco `You decided` abre os apontamentos como eram, desabilitados, com `Sent to the agent · 17:36` ou `Not sent`. Depois do merge, o cartão de uma passada toda descartada fica no lugar, desabilitado, com `Not sent`.
 - **Um relatório que o produto não consegue ler** deixa a barra `Waiting for reply · PR review` com a razão (`The report can't be read: finding 2 does not open with its location.`), e o pedido de correção vai pelo compositor.
-- **Uma passada pedida antes do formato de apontamentos** continua decidida em texto até acabar: o marco sem a contagem, a barra sem ação e a resposta pelo compositor (`Tell the reviewer which findings to apply…`). A passada seguinte já tem o cartão.
+- **Uma passada pedida antes do formato de apontamentos** continua decidida em texto até acabar: o marco sem a contagem, a barra sem ação e a resposta pelo compositor (`Tell the PR agent which findings to apply…`). A passada seguinte já tem o cartão.
 
 Isto é uma mudança de feature: hoje esses apontamentos são decididos em texto (`features.md`, Review de pull request). O custo está na seção 15.
 
@@ -349,7 +349,7 @@ A task de referência é `Rate limit per API key`, Structured, modo `Agent`, com
 | `manual` · arquivos e stage | `[Implementation 4/7 · Manual ●]` | — | O step 4 e o cartão `Changed files · 7` | `Review step 4` · `5 of 7 files staged · 71%` · **Open in VS Code**, **Approve** tracejado | `Ask the implementer for a change…` |
 | `blocked` · worktree suja | `[Implementation 5/7 ◆]` | — | `Step 5 is next` e o bloco com o `git status` | `Step 5 blocked · worktree not clean` · **Clean and start…**, **Try again** | Nenhum |
 | `checks` · a PR espera os checks | `✓✓✓✓✓ [PR review ◌ checks 3/5]` | — | O vazio e os checks pelo nome | — | Nenhum; sem medidor |
-| `findings` · apontamentos a decidir | `[PR review pass 1 ●]` | — | O relatório e o cartão de decisão | `Decide findings` · `1 of 4 decided` · **Next to decide**, **Apply approved** | `Ask the reviewer to add, change or drop a finding…` |
+| `findings` · apontamentos a decidir | `[PR review pass 1 ●]` | — | O relatório e o cartão de decisão | `Decide findings` · `1 of 4 decided` · **Next to decide**, **Apply approved** | `Ask the PR agent to add, change or drop a finding…` |
 | `close` · pronta para encerrar | `[Closing ○]` | — | O ciclo do PR review, a conversa fechada, até `Merged #1284 into dev · by lnakamura` | `Ready to close` · **Close task** | Nenhum: a conversa do review fechou com o review limpo |
 
 ## 12. Os estados de toda tela (`brief.md` §7)

@@ -2,7 +2,8 @@ import type { FindingView } from "@/components/system/Finding";
 import { publishedGoes } from "@/features/reviews/publish";
 import { findingViews } from "@/features/reviews/review-conversation";
 import { verdictLabel } from "@/features/reviews/review-status";
-import { decidedCounts } from "@/lib/findings";
+import { disabledNote } from "@/features/task/pr-findings";
+import { decidedCounts, findingViewsOf } from "@/lib/findings";
 import { modelLabel } from "@/lib/models";
 import { baseName, type ChecksReading, checksSummary, prBaseName } from "@/lib/pull-requests";
 import { counted, lowerFirst } from "@/lib/situations";
@@ -84,6 +85,8 @@ export interface MarkerContext {
   review: ReviewSummary | null;
   /** latestReport is the id of the latest report marker of each pass of a review; empty elsewhere. */
   latestReport: ReadonlyMap<number, string>;
+  /** latestDecided is the id of the latest findings_decided marker of each pass: the one that holds the findings. */
+  latestDecided: ReadonlyMap<number, string>;
   oneShot: boolean;
 }
 
@@ -353,12 +356,10 @@ function stepReviewLine(marker: MarkerEntry, ctx: MarkerContext): MarkerView {
 function prReviewLine(marker: MarkerEntry, ctx: MarkerContext, entryId: string): MarkerView {
   const revised = marker.type === "pr_review_revised";
   const text = `Review ${marker.pass} ${revised ? "revised" : "written"}`;
+  const changes =
+    marker.findings >= 0 ? `changes · ${counted(marker.findings, "finding")}` : "changes";
   if (ctx.review !== null) {
-    const verdict = marker.clean
-      ? "clean"
-      : marker.findings >= 0
-        ? `changes · ${counted(marker.findings, "finding")}`
-        : "changes";
+    const verdict = marker.clean ? "clean" : changes;
     // Only the latest marker of a pass opens its report: the file is the one that stands.
     const body: MarkerBody =
       ctx.latestReport.get(marker.pass) === entryId
@@ -368,11 +369,15 @@ function prReviewLine(marker: MarkerEntry, ctx: MarkerContext, entryId: string):
   }
   const report = (ctx.task?.pr?.reports ?? []).find((one) => one.pass === marker.pass);
   const verdict =
-    marker.clean || report?.clean === true ? "clean" : report === undefined ? "" : "changes";
+    marker.clean || report?.clean === true
+      ? "clean"
+      : report === undefined && marker.findings < 0
+        ? ""
+        : changes;
   const body: MarkerBody =
-    report === undefined
-      ? NONE
-      : { kind: "artifact", name: `pr/${report.file}`, openIn: "details" };
+    report !== undefined && report.file !== "" && ctx.latestReport.get(marker.pass) === entryId
+      ? { kind: "artifact", name: `pr/${report.file}`, openIn: "details" }
+      : NONE;
   return line("file", text, verdict, body);
 }
 
@@ -413,24 +418,19 @@ function checksBody(pass: number, review: ReviewSummary | null, base: string): M
 
 /** decidedLineOf is the line You decided of a pass: what the user approved and discarded, and the findings with where each went. */
 export function decidedLineOf(
-  review: ReviewSummary | null,
-  pass: ReviewPass | undefined,
+  pass: number,
+  views: readonly FindingView[],
   counts: { approved: number; discarded: number },
-  now: number,
 ): MarkerView {
   const said = parts(
     counts.approved > 0 ? `${counts.approved} approved` : "",
     counts.discarded > 0 ? `${counts.discarded} discarded` : "",
   );
-  const findings =
-    review === null || pass === undefined ? [] : findingViews(review, pass, now, true);
   return line(
     "check",
     "You decided",
     said === "" ? "nothing decided" : said,
-    findings.length === 0 || pass === undefined
-      ? NONE
-      : { kind: "findings", pass: pass.pass, findings },
+    views.length === 0 ? NONE : { kind: "findings", pass, findings: [...views] },
   );
 }
 
@@ -440,7 +440,32 @@ export function derivedDecidedLineOf(
   pass: ReviewPass,
   now: number,
 ): MarkerView {
-  return decidedLineOf(review, pass, decidedCounts(pass.findings ?? []), now);
+  return decidedLineOf(
+    pass.pass,
+    findingViews(review, pass, now, true),
+    decidedCounts(pass.findings ?? []),
+  );
+}
+
+// decidedViews are the findings the line You decided of a pass holds, once the line is the latest of
+// its pass: in a review, as the pass sent or published them; in a task, as the pass sent them.
+function decidedViews(
+  marker: MarkerEntry,
+  ctx: MarkerContext,
+  entryId: string,
+  now: number,
+): FindingView[] {
+  if (ctx.latestDecided.get(marker.pass) !== entryId) {
+    return [];
+  }
+  if (ctx.review !== null) {
+    const pass = (ctx.review.passes ?? []).find((one) => one.pass === marker.pass);
+    return pass === undefined ? [] : findingViews(ctx.review, pass, now, true);
+  }
+  const report = (ctx.task?.pr?.reports ?? []).find((one) => one.pass === marker.pass);
+  return report === undefined
+    ? []
+    : findingViewsOf(report.findings ?? [], (finding) => disabledNote(report, finding, now));
 }
 
 // authorsOf are the authors of some commits, each once, in order: "rsouza and tchen", "a, b and c".
@@ -541,12 +566,7 @@ export function markerOf(
     case "pr_review_revised":
       return prReviewLine(marker, ctx, entryId);
     case "findings_decided":
-      return decidedLineOf(
-        ctx.review,
-        (ctx.review?.passes ?? []).find((one) => one.pass === marker.pass),
-        marker,
-        now,
-      );
+      return decidedLineOf(marker.pass, decidedViews(marker, ctx, entryId, now), marker);
     case "review_published":
       return reviewPublishedLine(marker);
     case "new_commits":

@@ -905,9 +905,30 @@ func (s *Service) MarkPRReviewRevised(ctx context.Context, k Key, pass int, clea
 }
 
 // MarkFindingsDecided records how many findings of a pass were approved and
-// how many discarded.
+// how many discarded, unless the last findings_decided marker of the pass says
+// the same: an Apply approved tried again after a failed send records its
+// decision once.
 func (s *Service) MarkFindingsDecided(ctx context.Context, k Key, pass, approved, discarded int) {
-	s.mark(ctx, k, &MarkerEntry{Type: MarkerFindingsDecided, Pass: pass, Approved: approved, Discarded: discarded})
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(k)
+	if err != nil {
+		return
+	}
+	for _, e := range slices.Backward(r.entries) {
+		if e.Kind != KindMarker || e.Marker == nil || e.Marker.Type != MarkerFindingsDecided || e.Marker.Pass != pass {
+			continue
+		}
+		if e.Marker.Approved == approved && e.Marker.Discarded == discarded {
+			return
+		}
+		break
+	}
+	marker := &MarkerEntry{Type: MarkerFindingsDecided, Pass: pass, Approved: approved, Discarded: discarded}
+	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
 }
 
 // MarkReviewPublished records that a pass was published on GitHub as a review.

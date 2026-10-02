@@ -1,8 +1,10 @@
 import type { ComposerProps } from "@/features/chat/Composer";
 import { useConversationCards } from "@/features/chat/useConversationCards";
+import { prComposerContext } from "@/features/task/pr-findings";
 import { screenSituationKindOf } from "@/features/task/request";
 import { useTaskRequest } from "@/features/task/useTaskRequest";
 import type { TaskSummary } from "@/lib/wails";
+import { asTaskStage } from "@/lib/wails";
 import type { StepTab } from "@/store/app-store";
 
 /** TaskComposerContext is what the composer of the task screen learns from the task and the bar. */
@@ -28,9 +30,13 @@ export function useTaskComposer(
     otherPrimary: barPrimary || cards.question !== null || cards.permission,
     chips: kind === "reply" ? cards.chips : [],
     context: {
-      findings: kind === "findings",
-      askForChange: kind === "step_review" || kind === "step_empty",
-      reviseFindings: false,
+      ...(asTaskStage(task.stage) === "pr"
+        ? prComposerContext(task, kind)
+        : {
+            findings: false,
+            reviseFindings: false,
+            askForChange: kind === "step_review" || kind === "step_empty",
+          }),
       item: "task",
     },
   };

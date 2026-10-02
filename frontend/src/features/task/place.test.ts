@@ -13,7 +13,9 @@ import {
 import type { PullRequest, Step, TaskSummary } from "@/lib/wails";
 import {
   makePRCheck,
+  makePRReport,
   makePullRequest,
+  makeReviewFinding,
   makeStep,
   makeTask,
   makeTaskConversation,
@@ -273,6 +275,28 @@ describe("prPlaceOf", () => {
       pr({ status: "closed", prState: "merged", mergedBy: "lnakamura" }),
       true,
       { kind: "closedReview", endLine: merged },
+    ],
+    [
+      "the review done with every finding discarded",
+      pr({
+        status: "done",
+        prState: "open",
+        currentPass: 1,
+        reports: [makePRReport({ findings: [makeReviewFinding({ decision: "discarded" })] })],
+      }),
+      true,
+      { kind: "conversation" },
+    ],
+    [
+      "the review in trouble with every finding discarded",
+      pr({
+        status: "trouble",
+        prState: "open",
+        currentPass: 1,
+        reports: [makePRReport({ findings: [makeReviewFinding({ decision: "discarded" })] })],
+      }),
+      true,
+      { kind: "conversation" },
     ],
     ["the draft", pr({ status: "draft_ready", prNumber: 0 }), false, { kind: "conversation" }],
     ["a pass of the review", pr({ status: "reviewing" }), true, { kind: "conversation" }],

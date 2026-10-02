@@ -14,6 +14,7 @@ import (
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
@@ -41,6 +42,7 @@ func underReview(t *testing.T, f *fixture) task.Task {
 	t.Helper()
 
 	tk := f.tasks.add("task-1", task.StagePR, prArtifacts(task.PRArtifacts{}))
+	f.tasks.useDir("task-1", t.TempDir())
 	f.worktrees.seed(tk)
 	f.worktrees.setStatus(git.Status{Head: startCommit})
 	f.tasks.setPRRun("task-1", task.PRRun{Status: task.PRReviewing, PR: openPR()})
@@ -65,9 +67,21 @@ func (f *fixture) waitPRRun(t *testing.T, subject string, cond func(task.PRRun) 
 }
 
 // reportsWritten puts the reports of a review on disk and lets the agent rest,
-// which is what an evaluation reads them on.
-func reportsWritten(f *fixture, written []task.ReviewReport) {
+// which is what an evaluation reads them on. A pass the app asked for is
+// structured, so its report is written in the format of the findings, with one
+// finding when it has changes; the reports of the earlier passes are also the
+// ones in text the artifacts list.
+func reportsWritten(t *testing.T, f *fixture, written []task.ReviewReport) {
+	t.Helper()
+
 	f.tasks.setArtifacts("task-1", prArtifacts(task.PRArtifacts{Reports: written}))
+	for _, report := range written {
+		if report.Clean {
+			writeReport(t, f, report.Pass, reportOf("clean"))
+		} else {
+			writeReport(t, f, report.Pass, reportOf("changes", "A finding | internal/a.go:3 | What is wrong."))
+		}
+	}
 	f.sessions.goIdle("task-1")
 	f.service.Check("task-1")
 }
@@ -82,7 +96,7 @@ func TestTheFirstPassOfAReviewIsStartedWithItsReport(t *testing.T) {
 	if !ok {
 		t.Fatal("the review session was not started")
 	}
-	if want := "/data/task-1/pr/review-1.md"; info.ReviewPath != want {
+	if want := f.reviewPath(1); info.ReviewPath != want {
 		t.Errorf("review path = %q, want %q", info.ReviewPath, want)
 	}
 	if info.PRNumber != "7" || info.PRURL != samePR.URL {
@@ -98,7 +112,9 @@ func TestTheReviewOfAOneShotPullRequestReadsTheDocument(t *testing.T) {
 
 	f := newFixture(t)
 	f.tasks.setTaskMode("task-1", task.ModeOneShot)
-	document := underReview(t, f).OneShotPath()
+	underReview(t, f)
+	tk, _ := f.tasks.Get("task-1")
+	document := tk.OneShotPath()
 
 	if info, _ := f.sessions.info(reviewKeyOf); info.OneShotPath != document {
 		t.Errorf("document of the review session = %q, want %q", info.OneShotPath, document)
@@ -106,8 +122,9 @@ func TestTheReviewOfAOneShotPullRequestReadsTheDocument(t *testing.T) {
 
 	// The passes after the first one are asked for by the app, and point to the
 	// same document.
-	reportsWritten(f, reports(1, false))
+	reportsWritten(t, f, reports(1, false))
 	f.waitPRRun(t, "the report of the first pass", func(run task.PRRun) bool { return run.ReportedPass == 1 })
+	applied(t, f, 1)
 	f.reviews.setSnapshot(staged(3, 3))
 	f.sessions.goIdle("task-1")
 	if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
@@ -118,7 +135,7 @@ func TestTheReviewOfAOneShotPullRequestReadsTheDocument(t *testing.T) {
 	f.sessions.goIdle("task-1")
 	f.service.Check("task-1")
 
-	want := oneShotReviewPrompt("/data/task-1/pr/review-2.md", document)
+	want := oneShotReviewPrompt(f.reviewPath(2), document)
 	waitFor(t, "the prompt of the second pass", func() bool { return f.sessions.sentCount(want) > 0 })
 }
 
@@ -127,7 +144,7 @@ func TestAReportWithFindingsWaitsForTheDecision(t *testing.T) {
 
 	f := newFixture(t)
 	underReview(t, f)
-	reportsWritten(f, reports(1, false))
+	reportsWritten(t, f, reports(1, false))
 
 	f.waitPRRun(t, "the report of the first pass to be recorded", func(run task.PRRun) bool {
 		return run.ReportedPass == 1
@@ -159,8 +176,9 @@ func TestApprovingAReviewAsksForACommitThatIsPushed(t *testing.T) {
 
 	f := newFixture(t)
 	underReview(t, f)
-	reportsWritten(f, reports(1, false))
+	reportsWritten(t, f, reports(1, false))
 	f.waitPRRun(t, "the report of the first pass", func(run task.PRRun) bool { return run.ReportedPass == 1 })
+	applied(t, f, 1)
 	f.reviews.setSnapshot(staged(3, 3))
 	f.sessions.goIdle("task-1")
 
@@ -196,8 +214,9 @@ func TestACommitOfAReviewStartsTheNextPass(t *testing.T) {
 
 	f := newFixture(t)
 	underReview(t, f)
-	reportsWritten(f, reports(1, false))
+	reportsWritten(t, f, reports(1, false))
 	f.waitPRRun(t, "the report of the first pass", func(run task.PRRun) bool { return run.ReportedPass == 1 })
+	applied(t, f, 1)
 	f.reviews.setSnapshot(staged(3, 3))
 	f.sessions.goIdle("task-1")
 	if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
@@ -212,7 +231,7 @@ func TestACommitOfAReviewStartsTheNextPass(t *testing.T) {
 	f.service.Check("task-1")
 
 	waitFor(t, "the prompt of the second pass", func() bool {
-		return f.sessions.sentCount(reviewPrompt("/data/task-1/pr/review-2.md")) > 0
+		return f.sessions.sentCount(reviewPrompt(f.reviewPath(2))) > 0
 	})
 	run, _ := f.tasks.prRun("task-1")
 	if run.Status != task.PRReviewing {
@@ -235,7 +254,7 @@ func TestACommitOfAReviewStartsTheNextPass(t *testing.T) {
 	// The same commit never asks for a second pass.
 	f.service.Check("task-1")
 	f.waitEvaluations(t, 1)
-	if asked := f.sessions.sentCount(reviewPrompt("/data/task-1/pr/review-2.md")); asked != 1 {
+	if asked := f.sessions.sentCount(reviewPrompt(f.reviewPath(2))); asked != 1 {
 		t.Errorf("the second pass was asked for %d times, want once", asked)
 	}
 
@@ -252,8 +271,9 @@ func TestACommitTurnOfAReviewThatCommitsNothingGivesTheTaskBack(t *testing.T) {
 
 	f := newFixture(t)
 	underReview(t, f)
-	reportsWritten(f, reports(1, false))
+	reportsWritten(t, f, reports(1, false))
 	f.waitPRRun(t, "the report of the first pass", func(run task.PRRun) bool { return run.ReportedPass == 1 })
+	applied(t, f, 1)
 	f.reviews.setSnapshot(staged(3, 3))
 	f.sessions.goIdle("task-1")
 	if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
@@ -278,7 +298,7 @@ func TestACleanReportClosesThePullRequest(t *testing.T) {
 
 	f := newFixture(t)
 	underReview(t, f)
-	reportsWritten(f, reports(1, true))
+	reportsWritten(t, f, reports(1, true))
 
 	f.waitPRRun(t, "the pull request to be closed", func(run task.PRRun) bool { return run.Status == task.PRDone })
 	f.waitPR(t, "task-1", flow.PRDone)
@@ -296,17 +316,20 @@ func TestACleanReportClosesThePullRequest(t *testing.T) {
 	}
 }
 
-func TestFindingsTheUserDismissesCloseThePullRequestToo(t *testing.T) {
+func TestAPassThatFindsNothingAfterAPassWithFindingsClosesThePullRequest(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	underReview(t, f)
-	reportsWritten(f, reports(1, false))
+	reportsWritten(t, f, reports(1, false))
 	f.waitPRRun(t, "the report of the first pass", func(run task.PRRun) bool { return run.ReportedPass == 1 })
 
-	// The user dismissed every finding: the agent changed nothing and wrote a
-	// pass that closes clean.
-	reportsWritten(f, reports(2, true))
+	// The pass after the changes of the first one is asked for and closes clean.
+	applied(t, f, 1)
+	if _, err := f.tasks.AskPRPass(t.Context(), "task-1", 2); err != nil {
+		t.Fatalf("AskPRPass() = %v, want nil", err)
+	}
+	reportsWritten(t, f, reports(2, true))
 
 	f.waitPRRun(t, "the pull request to be closed", func(run task.PRRun) bool {
 		return run.Status == task.PRDone && run.ReportedPass == 2
@@ -420,7 +443,7 @@ func TestReviewingAgainStartsAPassOverTheSamePullRequest(t *testing.T) {
 
 	f := newFixture(t)
 	underReview(t, f)
-	reportsWritten(f, reports(1, true))
+	reportsWritten(t, f, reports(1, true))
 	f.waitPRRun(t, "the pull request to be closed", func(run task.PRRun) bool {
 		return run.Status == task.PRDone && run.ReportedPass == 1
 	})
@@ -431,7 +454,7 @@ func TestReviewingAgainStartsAPassOverTheSamePullRequest(t *testing.T) {
 
 	waitFor(t, "the session of the second pass", func() bool {
 		info, ok := f.sessions.info(reviewKeyOf)
-		return ok && info.ReviewPath == "/data/task-1/pr/review-2.md"
+		return ok && info.ReviewPath == f.reviewPath(2)
 	})
 	// The reports already written stay where they are.
 	if state := f.prState(t, "task-1"); len(state.Reports) != 1 {
@@ -455,7 +478,7 @@ func TestReviewingAgainStartsAPassOverTheSamePullRequest(t *testing.T) {
 	}
 
 	// The clean report of that pass is what closes it.
-	reportsWritten(f, reports(2, true))
+	reportsWritten(t, f, reports(2, true))
 	f.waitPRRun(t, "the pull request to be closed again", func(run task.PRRun) bool {
 		return run.Status == task.PRDone && run.ReportedPass == 2
 	})
@@ -575,4 +598,24 @@ func TestTheActionsOfATaskThatIsNotInThePRStage(t *testing.T) {
 	implementing(f, "task-1", plan())
 
 	wantErrIs(t, f.service.ApprovePR(t.Context(), "task-1"), flow.ErrNotInPR)
+}
+
+// reviewPath is where the agent writes the report of a pass of the task.
+func (f *fixture) reviewPath(pass int) string {
+	tk, _ := f.tasks.Get("task-1")
+	return tk.ReviewPath(pass)
+}
+
+// applied approves the first finding of a pass and sends it to the agent,
+// which is what the changes of the pass the user approves come from.
+func applied(t *testing.T, f *fixture, pass int) {
+	t.Helper()
+
+	ctx := t.Context()
+	if err := f.tasks.DecidePRFinding(ctx, "task-1", pass, 1, prreport.DecisionApproved); err != nil {
+		t.Fatalf("DecidePRFinding() = %v, want nil", err)
+	}
+	if err := f.tasks.MarkPRPassSent(ctx, "task-1", pass); err != nil {
+		t.Fatalf("MarkPRPassSent() = %v, want nil", err)
+	}
 }

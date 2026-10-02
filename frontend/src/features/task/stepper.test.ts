@@ -8,6 +8,7 @@ import {
   makeStep,
   makeStepReviewer,
   makeTask,
+  makeTextPRReport,
 } from "@/test/wails-mock";
 
 const NOW = new Date(2026, 8, 27, 15, 0).getTime();
@@ -60,11 +61,7 @@ const checks = (passed: number, total: number) =>
     makePRCheck({ name: `check-${index}`, state: index < passed ? "passed" : "running" }),
   );
 const reports = (count: number) =>
-  Array.from({ length: count }, (_, index) => ({
-    pass: index + 1,
-    file: `${index + 1}.md`,
-    clean: false,
-  }));
+  Array.from({ length: count }, (_, index) => makeTextPRReport(index + 1, false));
 
 const place = (kind: string, stage = "", step = 0): Place => ({ kind, stage, step });
 const situation = (kind: string, group: string, where: Place, form = ""): Situation =>
@@ -258,6 +255,18 @@ describe("stepperOf, the pill", () => {
         sessionStage: "pr_review",
         sessionStatus: "working",
         reports: reports(1),
+      }),
+      pill("PR review", "PR agent working", { ...working, position: "pass 2" }),
+    ],
+    [
+      "PR review reviewing a structured pass, working",
+      inPR({
+        status: "reviewing",
+        prNumber: 1284,
+        sessionStage: "pr_review",
+        sessionStatus: "working",
+        currentPass: 2,
+        reports: reports(2),
       }),
       pill("PR review", "PR agent working", { ...working, position: "pass 2" }),
     ],

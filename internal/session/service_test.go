@@ -1295,6 +1295,34 @@ func TestMarkPRReview(t *testing.T) {
 	}
 }
 
+func TestTheDecisionOfAPassIsRecordedOnceWhileItsCountsHoldAndAgainWhenTheyChange(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	f.service.MarkFindingsDecided(t.Context(), prd("t1"), 1, 3, 1)
+	f.service.MarkFindingsDecided(t.Context(), prd("t1"), 1, 3, 1)
+	f.service.MarkFindingsDecided(t.Context(), prd("t1"), 2, 3, 1)
+	f.service.MarkFindingsDecided(t.Context(), prd("t1"), 2, 2, 2)
+
+	var got []*session.MarkerEntry
+	for _, entry := range f.entriesOf(t, prd("t1"), session.KindMarker) {
+		if entry.Marker.Type == session.MarkerFindingsDecided {
+			got = append(got, entry.Marker)
+		}
+	}
+	want := []*session.MarkerEntry{
+		{Type: session.MarkerFindingsDecided, Pass: 1, Approved: 3, Discarded: 1},
+		{Type: session.MarkerFindingsDecided, Pass: 2, Approved: 3, Discarded: 1},
+		{Type: session.MarkerFindingsDecided, Pass: 2, Approved: 2, Discarded: 2},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestTheMarkersOfAReviewAreRecordedWithTheirFields(t *testing.T) {
 	t.Parallel()
 

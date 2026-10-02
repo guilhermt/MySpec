@@ -1,3 +1,5 @@
+import type { FindingView } from "@/components/system/Finding";
+
 /** FindingLike is what the rules of the findings read of a finding: its number, its decision, its location. */
 export interface FindingLike {
   number: number;
@@ -82,4 +84,41 @@ export function findingName(finding: FindingLike, total: number): string {
   const said = finding.title === "" ? [where] : [finding.title, where];
   const state = STATES[finding.decision] ?? STATES[""];
   return `Finding ${finding.number} of ${total}: ${said.join(". ")}. ${state}.`;
+}
+
+/** FindingRow is a finding as the views read it: the rules' fields, its line on GitHub and its text. */
+export interface FindingRow extends FindingLike {
+  lineUrl: string;
+  text: string;
+}
+
+/** findingViewsOf are findings as the system draws them; with disabledNote, each one disabled, with where it went. */
+export function findingViewsOf<T extends FindingRow>(
+  findings: readonly T[],
+  disabledNote: ((finding: T) => string) | null,
+): FindingView[] {
+  return findings.map((finding) => {
+    const { title, locationAsTitle } = headingOf(finding);
+    return {
+      id: String(finding.number),
+      number: finding.number,
+      name: findingName(finding, findings.length),
+      title,
+      locationAsTitle,
+      location:
+        finding.path === ""
+          ? { kind: "general", text: locationText(finding) }
+          : {
+              kind: "anchored",
+              text: locationText(finding),
+              url: finding.lineUrl,
+              line: finding.line,
+              fileName: fileName(finding.path),
+            },
+      text: finding.text,
+      decision:
+        finding.decision === "approved" || finding.decision === "discarded" ? finding.decision : "",
+      disabled: disabledNote === null ? null : disabledNote(finding),
+    };
+  });
 }

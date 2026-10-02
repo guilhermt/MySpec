@@ -130,6 +130,115 @@ describe("ReviewView, the keys of the findings", () => {
   });
 });
 
+describe("ReviewView, Approve the rest", () => {
+  const approvedAll = FINDINGS.map((each) => makeReviewFinding({ ...each, decision: "approved" }));
+
+  it("approves what has no decision, without a key", async () => {
+    const { user } = screenOf();
+    await screen.findByRole("group", { name: "Findings of pass 1" });
+
+    const button = screen.getByRole("button", { name: "Approve the rest" });
+    expect(button).not.toHaveTextContent(/Ctrl|Alt/);
+    await user.click(button);
+
+    expect(api.approveRestOfFindings).toHaveBeenCalledWith("review-1", 1);
+  });
+
+  // publishable is the state:changed of the rest approved: every finding approved, ready to publish.
+  const publishable = () =>
+    useAppStore.getState().applyState(
+      makeState({
+        reviews: [
+          makeReviewSummary({
+            status: "ready_to_publish",
+            canPublish: true,
+            sessionStatus: "waiting",
+            turnRunning: false,
+            processRunning: false,
+            passes: [makeReviewPass({ findings: approvedAll })],
+            situations: [PUBLISH],
+          }),
+        ],
+      }),
+    );
+
+  it("takes the focus to the primary the bar has once the rest is approved", async () => {
+    const { user } = screenOf();
+    await screen.findByRole("group", { name: "Findings of pass 1" });
+
+    await user.click(screen.getByRole("button", { name: "Approve the rest" }));
+    await waitFor(() => expect(api.approveRestOfFindings).toHaveBeenCalled());
+    publishable();
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Publish review…" })).toHaveFocus(),
+    );
+  });
+
+  it("takes the focus to the primary when the new state arrived before the approval answered", async () => {
+    vi.mocked(api.approveRestOfFindings).mockImplementationOnce(async () => {
+      publishable();
+    });
+    const { user } = screenOf();
+    await screen.findByRole("group", { name: "Findings of pass 1" });
+
+    await user.click(screen.getByRole("button", { name: "Approve the rest" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Publish review…" })).toHaveFocus(),
+    );
+  });
+
+  it("leaves the focus alone for good when the bar still offers Approve the rest once approved", async () => {
+    // A new finding to decide arrives as the rest is approved: the bar keeps the button.
+    vi.mocked(api.approveRestOfFindings).mockImplementationOnce(async () => {
+      useAppStore.getState().applyState(
+        makeState({
+          reviews: [
+            makeReviewSummary({
+              status: "awaiting_decision",
+              sessionStatus: "waiting",
+              turnRunning: false,
+              processRunning: false,
+              passes: [
+                makeReviewPass({
+                  findings: [...approvedAll, makeReviewFinding({ number: 4, title: "Fourth" })],
+                }),
+              ],
+              situations: [DECIDE],
+            }),
+          ],
+        }),
+      );
+    });
+    const { user } = screenOf();
+    await screen.findByRole("group", { name: "Findings of pass 1" });
+
+    await user.click(screen.getByRole("button", { name: "Approve the rest" }));
+    await waitFor(() => expect(screen.getByText(/3 of 4 decided/)).toBeInTheDocument());
+    await vi.mocked(api.approveRestOfFindings).mock.results[0]?.value;
+    publishable();
+
+    await screen.findByRole("button", { name: "Publish review…" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.getByRole("button", { name: "Publish review…" })).not.toHaveFocus();
+  });
+
+  it("leaves the focus where it was when approving the rest failed", async () => {
+    vi.mocked(api.approveRestOfFindings).mockRejectedValueOnce(new Error("no"));
+    const { user } = screenOf();
+    await screen.findByRole("group", { name: "Findings of pass 1" });
+
+    await user.click(screen.getByRole("button", { name: "Approve the rest" }));
+    await waitFor(() => expect(useAppStore.getState().error).not.toBeNull());
+    publishable();
+
+    await screen.findByRole("button", { name: "Publish review…" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.getByRole("button", { name: "Publish review…" })).not.toHaveFocus();
+  });
+});
+
 describe("ReviewView, Ctrl+Enter", () => {
   const ready = {
     status: "ready_to_publish",

@@ -1,4 +1,10 @@
-package prreview
+// Package prreport owns the report of one pass of the review of a pull
+// request: the format the agent writes it in, how the app reads it, the
+// findings with what the user decided about them, how those decisions cross a
+// rewrite of the report, and the message that sends the approved findings to
+// the agent. Both the review center (internal/prreview) and the pull request
+// of a task (internal/task, internal/flow) use it.
+package prreport
 
 import (
 	"errors"
@@ -25,9 +31,6 @@ const findingsHeading = "## Findings"
 // generalLocation is the location of a finding that points at no line.
 const generalLocation = "general"
 
-// reportFileName is the name a report of a pass may have: review-<pass>.md.
-var reportFileName = regexp.MustCompile(`^review-\d+\.md$`)
-
 // findingHeading opens one finding, with its number and, after it, the
 // title of what is wrong: "### 1 · Title", "### 1. Title", "### 1 - Title",
 // "### 1: Title", "### 1 **Title**". The title may be missing.
@@ -38,7 +41,7 @@ var locationLine = regexp.MustCompile(`^Location:\s*(.+)$`)
 
 // ErrUnreadable is a report the app cannot act on: the agent wrote it in a
 // shape the product does not define.
-var ErrUnreadable = errors.New("prreview: the report can't be read")
+var ErrUnreadable = errors.New("prreport: the report can't be read")
 
 // ParsedFinding is one finding as the report has it, before the user decides
 // anything about it.

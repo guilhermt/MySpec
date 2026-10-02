@@ -225,15 +225,18 @@ function pullRequestGroup(
       .filter((conversation) => conversation.stage === stage)
       .map((conversation) => conversationRow(conversation, label, screen)),
   );
-  const reports = (pr.reports ?? []).map((report) => {
-    const label = stepReportLabel(report.pass, report.clean);
-    return {
-      key: `pr-${report.pass}`,
-      label,
-      file: `pr/${report.file}`,
-      title: `PR review · ${label}`,
-    };
-  });
+  // A pass without a file (asked, running or unreadable) has no report to open yet.
+  const reports = (pr.reports ?? [])
+    .filter((report) => report.file !== "")
+    .map((report) => {
+      const label = stepReportLabel(report.pass, report.clean);
+      return {
+        key: `pr-${report.pass}`,
+        label,
+        file: `pr/${report.file}`,
+        title: `PR review · ${label}`,
+      };
+    });
   return {
     conversations,
     reports,
@@ -281,7 +284,7 @@ export function reportOf(model: DetailsModel, file: string): DetailsReport | nul
     ...rows.flatMap((row) => (row.kind === "not_started" ? [] : row.reports)),
     ...(model.pullRequest?.reports ?? []),
   ];
-  return reports.find((report) => report.file === file) ?? null;
+  return file === "" ? null : (reports.find((report) => report.file === file) ?? null);
 }
 
 /** earlierPlace is the <Lugar> of an earlier conversation: PRD, Step 2 · Implementer, Draft and opening… */

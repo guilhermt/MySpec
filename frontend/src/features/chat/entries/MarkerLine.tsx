@@ -15,7 +15,7 @@ import { checkDuration, checkRows } from "@/lib/pull-requests";
 import { cn } from "@/lib/utils";
 import type { PlanProblem, ReviewSummary, TaskSummary } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
-import { openExternal, openFindingInEditor } from "@/store/actions";
+import { openExternal, openFindingInEditor, openPRFindingInEditor } from "@/store/actions";
 import { type PanelId, useAppStore } from "@/store/app-store";
 
 /** MARKER_ICONS is the meaning of ICONS each icon of a line draws: the product's message is its mark. */
@@ -90,9 +90,11 @@ function ChecksBody({ body }: { body: Extract<MarkerView["body"], { kind: "check
 function FindingsBody({
   body,
   review,
+  task,
 }: {
   body: Extract<MarkerView["body"], { kind: "findings" }>;
   review: ReviewSummary | null;
+  task: TaskSummary | null;
 }) {
   return (
     <ul data-slot="marker-body" className={cn(SUNKEN, "flex flex-col gap-(--space-2)")}>
@@ -109,6 +111,8 @@ function FindingsBody({
             onOpenEditor={() => {
               if (review !== null) {
                 void openFindingInEditor(review.id, body.pass, finding.number);
+              } else if (task !== null) {
+                void openPRFindingInEditor(task.id, body.pass, finding.number);
               }
             }}
             renderText={(text) => <Markdown cutCode>{text}</Markdown>}
@@ -281,7 +285,7 @@ export function MarkerLine({
       content = <ChecksBody body={body} />;
       break;
     case "findings":
-      content = <FindingsBody body={body} review={review ?? null} />;
+      content = <FindingsBody body={body} review={review ?? null} task={task} />;
       break;
     case "commits":
       content = <CommitsBody body={body} />;

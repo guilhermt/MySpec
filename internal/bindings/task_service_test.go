@@ -16,6 +16,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git/gittest"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
@@ -1604,5 +1605,103 @@ func TestCreateTaskRefusesASecondActiveTaskForTheCard(t *testing.T) {
 	_, err = f.tasks.CreateTask(cardTask("second", 12))
 	if want := "Card #12 already has an active task: first."; err == nil || err.Error() != want {
 		t.Errorf("CreateTask(second) = %v, want %q", err, want)
+	}
+}
+
+// reviewedTask is a task under the review of its pull request, with a
+// structured first pass whose report lists a finding about the pull request as
+// a whole and one about a line.
+func reviewedTask(t *testing.T) (*fixture, string) {
+	t.Helper()
+
+	f, _, id := createdTask(t)
+	ctx := t.Context()
+	if _, err := f.taskSvc.SetStage(ctx, id, task.StagePR, false); err != nil {
+		t.Fatalf("SetStage() = %v, want nil", err)
+	}
+	if _, err := f.taskSvc.SetPRRun(ctx, id, task.PRReviewing, nil); err != nil {
+		t.Fatalf("SetPRRun() = %v, want nil", err)
+	}
+	if _, err := f.taskSvc.AskPRPass(ctx, id, 1); err != nil {
+		t.Fatalf("AskPRPass() = %v, want nil", err)
+	}
+	report := prreport.Report{
+		Pass:    1,
+		Summary: "Two things to look at.",
+		Findings: []prreport.ParsedFinding{
+			{Number: 1, Text: "The pull request has no tests."},
+			{Number: 2, Path: "main.go", Line: 12, Text: "Handle the error."},
+		},
+	}
+	if _, _, err := f.taskSvc.RecordPRReport(ctx, id, report); err != nil {
+		t.Fatalf("RecordPRReport() = %v, want nil", err)
+	}
+	return f, id
+}
+
+func TestDecidePRFindingRejectsAnUnknownDecision(t *testing.T) {
+	t.Parallel()
+
+	f, id := reviewedTask(t)
+
+	err := f.tasks.DecidePRFinding(id, 1, 1, "maybe")
+
+	if err == nil || err.Error() != "Unknown decision." {
+		t.Errorf("DecidePRFinding(maybe) = %v, want the sentence about an unknown decision", err)
+	}
+}
+
+func TestApplyingFindingsWithNoneApprovedSaysSo(t *testing.T) {
+	t.Parallel()
+
+	f, id := reviewedTask(t)
+	for _, number := range []int{1, 2} {
+		if err := f.taskSvc.DecidePRFinding(t.Context(), id, 1, number, prreport.DecisionDiscarded); err != nil {
+			t.Fatalf("DecidePRFinding(%d) = %v, want nil", number, err)
+		}
+	}
+
+	if err := f.tasks.ApplyPRFindings(id); err == nil || err.Error() != "No finding is approved." {
+		t.Errorf("ApplyPRFindings() = %v, want the sentence about no finding approved", err)
+	}
+}
+
+func TestAFindingARewriteRemovedSaysItNoLongerExists(t *testing.T) {
+	t.Parallel()
+
+	f, id := reviewedTask(t)
+	rewrite := prreport.Report{
+		Pass: 1, Summary: "One thing to look at.",
+		Findings: []prreport.ParsedFinding{{Number: 1, Text: "The pull request has no tests."}},
+	}
+	if _, _, err := f.taskSvc.RecordPRReport(t.Context(), id, rewrite); err != nil {
+		t.Fatalf("RecordPRReport(rewrite) = %v, want nil", err)
+	}
+
+	if err := f.tasks.DecidePRFinding(id, 1, 2, "approved"); err == nil ||
+		err.Error() != "This finding no longer exists." {
+		t.Errorf("DecidePRFinding(removed) = %v, want the sentence about a finding that is gone", err)
+	}
+	if err := f.tasks.SetPRFindingText(id, 1, 2, "Handle it."); err == nil ||
+		err.Error() != "This finding no longer exists." {
+		t.Errorf("SetPRFindingText(removed) = %v, want the sentence about a finding that is gone", err)
+	}
+}
+
+func TestOpeningAFindingOfAPullRequestThatIsGoneOrGeneralIsRefused(t *testing.T) {
+	t.Parallel()
+
+	f, id := reviewedTask(t)
+
+	if err := f.tasks.OpenPRFindingInEditor(id, 1, 1); err == nil ||
+		err.Error() != "This finding isn't about a line of the pull request." {
+		t.Errorf("OpenPRFindingInEditor(general) = %v, want the sentence about a finding of no file", err)
+	}
+	if err := f.tasks.OpenPRFindingInEditor(id, 1, 9); err == nil ||
+		err.Error() != "This finding no longer exists." {
+		t.Errorf("OpenPRFindingInEditor(unknown finding) = %v, want the sentence about a finding that is gone", err)
+	}
+	if opened := f.editor.opened(); len(opened) != 0 {
+		t.Errorf("the editor was asked to open %v, want nothing", opened)
 	}
 }

@@ -15,6 +15,9 @@ const ENTRY = "[data-feed-entry]";
 const CONTROL =
   'a[href], button, input, select, textarea, summary, iframe, [tabindex], [contenteditable="true"], [contenteditable=""]';
 
+/** WALK_KEYS are the keys that walk the entries of the feed beyond the arrows. */
+const WALK_KEYS: readonly string[] = ["Home", "End", "PageUp", "PageDown"];
+
 /** PAGE is how many entries Page Up and Page Down move. */
 const PAGE = 10;
 
@@ -194,6 +197,14 @@ export function stepFeed(entry: HTMLElement, by: -1 | 1): void {
   }
 }
 
+/** leaveDecisionCard goes on along the conversation from the card of findings, by one entry up or down. */
+export function leaveDecisionCard(by: -1 | 1): void {
+  const card = document.querySelector<HTMLElement>("[data-decision-card]");
+  if (card !== null) {
+    stepFeed(card, by);
+  }
+}
+
 /**
  * useFeed makes the feed one stop of Tab over its entries, the elements with data-feed-item in the
  * order of the page: arriving, the pending card or the last entry; Tab goes through the controls
@@ -234,7 +245,12 @@ export function useFeed(feedRef: RefObject<HTMLElement | null>): void {
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
-      const item = event.target instanceof HTMLElement ? event.target : null;
+      const origin = event.target instanceof HTMLElement ? event.target : null;
+      // A finding of a card of findings walks the conversation from the card around it.
+      const item =
+        origin?.matches("[data-finding-id]") && WALK_KEYS.includes(event.key)
+          ? origin.closest<HTMLElement>(ITEM)
+          : origin;
       if (item === null || !item.matches(ITEM) || event.altKey || event.ctrlKey || event.metaKey) {
         return;
       }

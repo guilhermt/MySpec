@@ -1,5 +1,5 @@
 import type { FindingView } from "@/components/system/Finding";
-import { fileName, findingName, headingOf, locationText } from "@/lib/findings";
+import { findingViewsOf } from "@/lib/findings";
 import { type ChecksReading, unfinishedChecks } from "@/lib/pull-requests";
 import { shortName } from "@/lib/repositories";
 import type { Entry, ReviewFinding, ReviewPass, ReviewSummary } from "@/lib/wails";
@@ -8,6 +8,12 @@ import { clockTime } from "@/lib/when";
 
 // LEFT_BEHIND are the statuses that say a Review again left the last pass behind: the next one was asked for.
 const LEFT_BEHIND = ["waiting_checks", "pass_blocked"];
+
+/** EDIT_NOTES say where the text of a finding goes as the user leaves it, by the mode of the review. */
+export const EDIT_NOTES = {
+  publish: "Saved as you type. It goes to GitHub as you leave it.",
+  apply: "Saved as you type. It goes to the agent as you leave it.",
+};
 
 /**
  * currentCardPass is the pass whose findings the card below the conversation holds: the last one, when
@@ -96,6 +102,17 @@ export function reportMarkerIds(entries: readonly Entry[]): Map<number, string> 
   return ids;
 }
 
+/** decidedMarkerIds is, for each pass, the id of its latest findings_decided marker: the one that holds the findings. */
+export function decidedMarkerIds(entries: readonly Entry[]): Map<number, string> {
+  const ids = new Map<number, string>();
+  for (const entry of entries) {
+    if (entry.marker !== null && entry.marker.type === "findings_decided") {
+      ids.set(entry.marker.pass, entry.id);
+    }
+  }
+  return ids;
+}
+
 /** decidedMarkerPasses are the passes whose decisions the conversation recorded with a findings_decided marker. */
 export function decidedMarkerPasses(entries: readonly Entry[]): Set<number> {
   const passes = new Set<number>();
@@ -163,31 +180,10 @@ export function findingViews(
   now: number,
   disabled = false,
 ): FindingView[] {
-  const findings = pass.findings ?? [];
-  return findings.map((finding) => {
-    const { title, locationAsTitle } = headingOf(finding);
-    return {
-      id: String(finding.number),
-      number: finding.number,
-      name: findingName(finding, findings.length),
-      title,
-      locationAsTitle,
-      location:
-        finding.path === ""
-          ? { kind: "general", text: locationText(finding) }
-          : {
-              kind: "anchored",
-              text: locationText(finding),
-              url: finding.lineUrl,
-              line: finding.line,
-              fileName: fileName(finding.path),
-            },
-      text: finding.text,
-      decision:
-        finding.decision === "approved" || finding.decision === "discarded" ? finding.decision : "",
-      disabled: disabled ? disabledFindingNote(review, pass, finding, now) : null,
-    };
-  });
+  return findingViewsOf(
+    pass.findings ?? [],
+    disabled ? (finding) => disabledFindingNote(review, pass, finding, now) : null,
+  );
 }
 
 /**

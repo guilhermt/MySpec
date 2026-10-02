@@ -1,6 +1,7 @@
 package attention
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -138,9 +139,19 @@ func draftBody() string {
 }
 
 // findingsBody is the notification of a pull request review that found
-// changes.
-func findingsBody() string {
-	return "The review of the pull request found changes for you to decide."
+// changes for the user: how many to decide, or the approved ones ready to
+// apply. A pass in text has no count (-1).
+func findingsBody(form Form, count int) string {
+	switch {
+	case form == FormApply:
+		return "The approved findings of the pull request review are ready to apply."
+	case count < 0:
+		return "The review of the pull request found changes for you to decide."
+	case count == 1:
+		return "The review of the pull request found 1 change for you to decide."
+	default:
+		return fmt.Sprintf("The review of the pull request found %d changes for you to decide.", count)
+	}
 }
 
 // changesReviewBody is the notification of the changes a pull request review
@@ -153,14 +164,19 @@ func changesReviewBody(form Form, commitFailed bool) string {
 	return "The changes from the review of the pull request are ready for review."
 }
 
-// mergeBody is the notification of a pull request whose review closed clean:
-// ready to merge while it is open, ready to close once merged or when the merge
-// could not be confirmed.
-func mergeBody(form Form) string {
-	if form == FormClose {
+// mergeBody is the notification of a pull request whose review is over: ready
+// to merge while it is open, ready to close once merged or when the merge could
+// not be confirmed. A review that ended with every finding discarded, which
+// names the pull request by its number, says so.
+func mergeBody(form Form, discarded int) string {
+	switch {
+	case form == FormClose:
 		return "The pull request is ready to close."
+	case discarded > 0:
+		return fmt.Sprintf("PR #%d is ready to merge: every finding of the review was discarded.", discarded)
+	default:
+		return "The pull request is ready to merge."
 	}
-	return "The pull request is ready to merge."
 }
 
 // reviewReplyBody is the notification of a pass of a review of a pull request

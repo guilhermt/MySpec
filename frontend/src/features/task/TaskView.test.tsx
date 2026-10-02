@@ -2,14 +2,17 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AGENT_CONVERSATION } from "@/features/task/AgentTabs";
 import { TaskView } from "@/features/task/TaskView";
-import { api, type Step, type TaskSummary } from "@/lib/wails";
+import { announcement } from "@/lib/situations";
+import { api, type PRReport, type PullRequest, type Step, type TaskSummary } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import type { TranscriptState } from "@/store/transcript";
 import { renderWithStore } from "@/test/render";
 import {
   makeEntry,
+  makePRReport,
   makePullRequest,
   makeReview,
+  makeReviewFinding,
   makeSituation,
   makeState,
   makeStep,
@@ -17,6 +20,7 @@ import {
   makeTask,
   makeTaskCard,
   makeTaskConversation,
+  makeTextPRReport,
 } from "@/test/wails-mock";
 
 function view(overrides: Partial<TaskSummary> = {}) {
@@ -797,5 +801,112 @@ describe("TaskView, the focus on arriving at a situation", () => {
     );
 
     await waitFor(() => expect(screen.getByRole("heading", { level: 1 })).toHaveFocus());
+  });
+});
+
+describe("TaskView, the focus on arriving at the findings of the pull request", () => {
+  const PR_PLACE = { kind: "pr", stage: "", step: 0 };
+  const FINDINGS = [
+    makeReviewFinding({ number: 1, title: "First", decision: "approved" }),
+    makeReviewFinding({ number: 2, title: "Second" }),
+    makeReviewFinding({ number: 3, title: "Third" }),
+  ];
+
+  function inReview(
+    situation: Parameters<typeof makeSituation>[0],
+    pr: Partial<PullRequest>,
+    report: Partial<PRReport> = {},
+  ): TaskSummary {
+    return makeTask({
+      name: "Rate limit per API key",
+      stage: "pr",
+      conversations: [
+        makeTaskConversation({ stage: "pr" }),
+        makeTaskConversation({ stage: "pr_review" }),
+      ],
+      situations: [makeSituation({ taskId: "task-1", place: PR_PLACE, ...situation })],
+      pr: makePullRequest({
+        status: "awaiting_decision",
+        prNumber: 1284,
+        prState: "open",
+        sessionStage: "pr_review",
+        sessionStatus: "waiting",
+        currentPass: 1,
+        reports: [makePRReport({ findings: FINDINGS, ...report })],
+        ...pr,
+      }),
+    });
+  }
+
+  function arrive(task: TaskSummary) {
+    return renderWithStore(<TaskView taskId={task.id} />, {
+      state: makeState({ tasks: [task] }),
+      ui: { location: { kind: "task", id: task.id }, pendingFocus: "request" },
+    });
+  }
+
+  it("goes to the first finding to decide when the findings are to decide", async () => {
+    arrive(inReview({ kind: "findings", form: "decide" }, {}));
+
+    await waitFor(() =>
+      expect(screen.getByRole("group", { name: /^Finding 2 of 3/ })).toHaveFocus(),
+    );
+    expect(useAppStore.getState().pendingFocus).toBeNull();
+  });
+
+  it("goes to Apply approved when the situation is born ready to apply", async () => {
+    arrive(
+      inReview(
+        { kind: "findings", form: "apply" },
+        {},
+        { findings: FINDINGS.map((each) => ({ ...each, decision: "approved" })) },
+      ),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Apply approved" })).toHaveFocus(),
+    );
+  });
+
+  it("goes to Open PR when the pass had every finding discarded", async () => {
+    arrive(
+      inReview(
+        { kind: "merge", group: "closing", form: "" },
+        { status: "done" },
+        { findings: FINDINGS.map((each) => ({ ...each, decision: "discarded" })) },
+      ),
+    );
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Open PR" })).toHaveFocus());
+  });
+
+  it("goes to the composer when the findings are in text", async () => {
+    arrive(
+      inReview(
+        { kind: "findings", form: "" },
+        {},
+        { ...makeTextPRReport(1, false), file: "review-1.md" },
+      ),
+    );
+
+    await waitFor(() => expect(document.getElementById("composer-input")).toHaveFocus());
+  });
+
+  it("blinks the bar of findings born with the screen open, and says it with the task's name", async () => {
+    const task = inReview({ kind: "findings", form: "decide" }, {});
+    renderWithStore(<TaskView taskId="task-1" />, {
+      state: makeState({ tasks: [task] }),
+      ui: {
+        location: { kind: "task", id: "task-1" },
+        flashing: new Set([task.situations?.[0]?.id ?? ""]),
+      },
+    });
+
+    const bar = await screen.findByRole("region", { name: "Request" });
+    expect(bar).toHaveClass("situation-flash");
+    expect(bar).toHaveAttribute("data-flash", "wait");
+    expect(announcement(task.name, task.situations?.[0] ?? makeSituation())).toBe(
+      "Rate limit per API key: decide findings in PR review",
+    );
   });
 });

@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/repository"
 )
 
@@ -375,7 +376,7 @@ const (
 // published, change nothing; one that differs only in the titles of its
 // findings changes only them; the first report of a pass and any other that
 // differs are a revision.
-func (s *Service) RecordReport(ctx context.Context, id string, report Report, commit string) (Pass, Change, error) {
+func (s *Service) RecordReport(ctx context.Context, id string, report prreport.Report, commit string) (Pass, Change, error) {
 	if _, ok := s.Get(id); !ok {
 		return Pass{}, ChangeNone, fmt.Errorf("record report of review %s: %w", id, ErrNotFound)
 	}
@@ -401,7 +402,7 @@ func (s *Service) RecordReport(ctx context.Context, id string, report Report, co
 
 // recordFirst writes the first readable report of a pass, and moves the review
 // to it.
-func (s *Service) recordFirst(ctx context.Context, pass Pass, report Report, commit string) (Pass, Change, error) {
+func (s *Service) recordFirst(ctx context.Context, pass Pass, report prreport.Report, commit string) (Pass, Change, error) {
 	pass.Recorded = true
 	pass.Clean = report.Clean
 	pass.Commit = commit
@@ -424,7 +425,7 @@ func (s *Service) recordFirst(ctx context.Context, pass Pass, report Report, com
 
 // retitle writes the titles of a report that says the same as the pass in
 // everything else. It is no revision.
-func (s *Service) retitle(ctx context.Context, pass Pass, report Report) (Pass, Change, error) {
+func (s *Service) retitle(ctx context.Context, pass Pass, report prreport.Report) (Pass, Change, error) {
 	titles := make(map[int]string, len(report.Findings))
 	pass.Findings = slices.Clone(pass.Findings)
 	for i, parsed := range report.Findings {
@@ -444,7 +445,7 @@ func (s *Service) retitle(ctx context.Context, pass Pass, report Report) (Pass, 
 // recordAgain reconciles a report the agent rewrote with what the user already
 // did with it: an edited summary and the decisions of the findings that are
 // still there survive.
-func (s *Service) recordAgain(ctx context.Context, pass Pass, report Report) (Pass, Change, error) {
+func (s *Service) recordAgain(ctx context.Context, pass Pass, report prreport.Report) (Pass, Change, error) {
 	if pass.SummaryOriginal != report.Summary {
 		pass.Summary = report.Summary
 		pass.SummaryOriginal = report.Summary
@@ -503,9 +504,37 @@ func (s *Service) Decide(ctx context.Context, id string, pass, number int, d Dec
 func (s *Service) SetFindingText(ctx context.Context, id string, pass, number int, text string) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
-		return fmt.Errorf("set text of finding %d of pass %d of review %s: %w", number, pass, id, ErrEmptyText)
+		return fmt.Errorf("set text of finding %d of pass %d of review %s: %w", number, pass, id, prreport.ErrEmptyText)
 	}
 	return s.updateFinding(ctx, id, pass, number, func(f *Finding) { f.Text = text })
+}
+
+// ApproveRest approves, in one write, every finding of the pass being decided
+// that has no decision yet, and leaves the decided ones as they are.
+func (s *Service) ApproveRest(ctx context.Context, id string, pass int) error {
+	stored, err := s.deciding(id, pass)
+	if err != nil {
+		return err
+	}
+
+	stored.Findings = slices.Clone(stored.Findings)
+	approved := 0
+	for i := range stored.Findings {
+		if stored.Findings[i].Decision == DecisionNone {
+			stored.Findings[i].Decision = DecisionApproved
+			approved++
+		}
+	}
+	if approved == 0 {
+		return nil
+	}
+
+	if err = s.writePass(ctx, stored, nil); err != nil {
+		return err
+	}
+	s.log.Info("review findings approved", "review", id, "pass", pass, "findings", approved)
+	s.changed()
+	return nil
 }
 
 // updateFinding rewrites one finding of the pass being decided.
@@ -826,18 +855,12 @@ func indexOf(reviews []Review, id string) int {
 // same reports whether a report says what the pass already recorded: the same
 // summary, and the same findings in the same places with the same titles and
 // words.
-func same(pass Pass, report Report) bool {
-	return sameFindings(pass, report, true)
+func same(pass Pass, report prreport.Report) bool {
+	return prreport.Same(pass.SummaryOriginal, ReportFindings(pass.Findings), report)
 }
 
 // sameExceptTitles is same without the titles of the findings.
-func sameExceptTitles(pass Pass, report Report) bool {
-	return sameFindings(pass, report, false)
-}
-
-// sameFindings compares a report with a pass, the titles of the findings
-// included when withTitles is set.
-func sameFindings(pass Pass, report Report, withTitles bool) bool {
+func sameExceptTitles(pass Pass, report prreport.Report) bool {
 	if pass.SummaryOriginal != report.Summary || len(pass.Findings) != len(report.Findings) {
 		return false
 	}
@@ -847,47 +870,28 @@ func sameFindings(pass Pass, report Report, withTitles bool) bool {
 			finding.Line != parsed.Line || finding.Original != parsed.Text {
 			return false
 		}
-		if withTitles && finding.Title != parsed.Title {
-			return false
-		}
 	}
 	return true
 }
 
 // fresh are the findings of a report nobody decided anything about yet.
-func fresh(parsed []ParsedFinding) []Finding {
-	findings := make([]Finding, 0, len(parsed))
-	for _, finding := range parsed {
-		findings = append(findings, Finding{
-			Number:   finding.Number,
-			Title:    finding.Title,
-			Path:     finding.Path,
-			Line:     finding.Line,
-			Original: finding.Text,
-			Text:     finding.Text,
-		})
-	}
-	return findings
+func fresh(parsed []prreport.ParsedFinding) []Finding {
+	return wrap(prreport.Fresh(parsed))
 }
 
 // inherit are the findings of a rewritten report, each carrying what the user
-// did with the finding that said the same thing in the same place.
-func inherit(stored []Finding, parsed []ParsedFinding) []Finding {
-	previous := map[Finding][]Finding{}
-	for _, finding := range stored {
-		key := Finding{Path: finding.Path, Line: finding.Line, Original: finding.Original}
-		previous[key] = append(previous[key], finding)
-	}
+// did with the finding that said the same thing in the same place. A pass read
+// again was never published, so no placement crosses.
+func inherit(stored []Finding, parsed []prreport.ParsedFinding) []Finding {
+	return wrap(prreport.Inherit(ReportFindings(stored), parsed))
+}
 
-	findings := fresh(parsed)
-	for i, finding := range findings {
-		key := Finding{Path: finding.Path, Line: finding.Line, Original: finding.Original}
-		matches := previous[key]
-		if len(matches) == 0 {
-			continue
-		}
-		findings[i].Text, findings[i].Decision = matches[0].Text, matches[0].Decision
-		previous[key] = matches[1:]
+// wrap puts findings of a report in the findings of a review, none of them
+// published.
+func wrap(reported []prreport.Finding) []Finding {
+	findings := make([]Finding, 0, len(reported))
+	for _, finding := range reported {
+		findings = append(findings, Finding{Finding: finding})
 	}
 	return findings
 }

@@ -1,3 +1,5 @@
+import { type FindingLike, nextToDecide, previousToDecide } from "@/lib/findings";
+
 /**
  * RequestFocus is where the focus goes on arriving at the request, and on Show: the pending card
  * (its first question without a choice, or its default answer), the first finding to decide of the
@@ -79,4 +81,34 @@ export function focusRequest(target: RequestFocus): boolean {
 /** focusTitle takes the focus to the title of the place on screen. */
 export function focusTitle(): void {
   document.querySelector<HTMLElement>("h1[tabindex='-1']")?.focus();
+}
+
+/**
+ * focusFindingToDecide takes the focus to the next finding to decide (by 1) or the previous one (by
+ * -1), from the finding in focus or from the start, scrolled to the centre. False when there is no
+ * card of findings on screen (findings null) or nothing is left to decide.
+ */
+export function focusFindingToDecide(findings: readonly FindingLike[] | null, by: 1 | -1): boolean {
+  if (findings === null) {
+    return false;
+  }
+  const focused = document.activeElement?.closest<HTMLElement>(
+    "[data-decision-card] [data-finding-id]",
+  );
+  const from =
+    focused === null || focused === undefined ? Number.NaN : Number(focused.dataset.findingId);
+  const origin = Number.isNaN(from) ? null : from;
+  const number = by === 1 ? nextToDecide(findings, origin) : previousToDecide(findings, origin);
+  if (number === null) {
+    return false;
+  }
+  const target = document.querySelector<HTMLElement>(
+    `[data-decision-card] [data-finding-id="${number}"]`,
+  );
+  if (target === null) {
+    return false;
+  }
+  target.focus();
+  target.scrollIntoView({ block: "center" });
+  return true;
 }

@@ -4,6 +4,14 @@ import { useAppStore, useTextDraft } from "@/store/app-store";
 /** SAVE_DELAY_MS is how long the typing rests before the text is recorded. */
 const SAVE_DELAY_MS = 800;
 
+/**
+ * textKey names one editable text of a review or of a task: a finding by its number, or the
+ * summary of a pass.
+ */
+export function textKey(ownerId: string, pass: number, number: number | "summary"): string {
+  return `${ownerId}|${pass}|${number}`;
+}
+
 /** EditedText is one text of the interface as the user is leaving it. */
 export interface EditedText {
   value: string;

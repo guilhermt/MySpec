@@ -1,7 +1,12 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { FindingsCard } from "@/features/reviews/FindingsCard";
+import { FindingsCard, type FindingsCardProps } from "@/components/FindingsCard";
+import { Markdown } from "@/features/chat/Markdown";
+import { leaveDecisionCard } from "@/features/chat/useFeed";
+import { EDIT_NOTES, findingViews } from "@/features/reviews/review-conversation";
+import { passRevision } from "@/features/reviews/useFindingText";
 import { api, type ReviewPass, type ReviewSummary } from "@/lib/wails";
+import { decideFindingInPlace, openFindingInEditor, saveFindingTextInPlace } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makeReviewFinding, makeReviewPass, makeReviewSummary, makeState } from "@/test/wails-mock";
@@ -19,10 +24,39 @@ const FINDINGS = [
   makeReviewFinding({ number: 3, title: "The copy is wrong", path: "", line: 0 }),
 ];
 
-function card(pass: Partial<ReviewPass> = {}, review: Partial<ReviewSummary> = {}) {
+// cardOf mounts the card as the review does: by the props the pass and the review give.
+function cardOf(
+  review: ReviewSummary,
+  pass: ReviewPass,
+  disabled = false,
+): React.ReactElement<FindingsCardProps> {
+  return (
+    <FindingsCard
+      owner={review.id}
+      pass={pass.pass}
+      revision={pass.revision}
+      currentRevision={() => passRevision(review.id, pass.pass)}
+      findings={pass.findings ?? []}
+      views={findingViews(review, pass, Date.now(), disabled)}
+      editNote={EDIT_NOTES[review.mode === "apply" ? "apply" : "publish"]}
+      disabled={disabled}
+      decide={(number, decision) => decideFindingInPlace(review.id, pass.pass, number, decision)}
+      saveText={(number, text) => saveFindingTextInPlace(review.id, pass.pass, number, text)}
+      openEditor={(number) => void openFindingInEditor(review.id, pass.pass, number)}
+      renderText={(text) => <Markdown cutCode>{text}</Markdown>}
+      onLeave={leaveDecisionCard}
+    />
+  );
+}
+
+function card(
+  pass: Partial<ReviewPass> = {},
+  review: Partial<ReviewSummary> = {},
+  disabled = false,
+) {
   const made = makeReviewPass({ findings: FINDINGS, ...pass });
   const summary = makeReviewSummary({ passes: [made], status: "awaiting_decision", ...review });
-  const view = renderWithStore(<FindingsCard review={summary} pass={made} />, {
+  const view = renderWithStore(cardOf(summary, made, disabled), {
     state: makeState({ reviews: [summary] }),
   });
   return { ...view, review: summary, pass: made };
@@ -133,6 +167,35 @@ describe("FindingsCard", () => {
     expect(api.openFindingInEditor).not.toHaveBeenCalled();
   });
 
+  describe("a card behind", () => {
+    it("decides and edits nothing, and says where each finding went", async () => {
+      const { user } = card(
+        {
+          sent: true,
+          sentAt: "2026-09-27T17:36:00Z",
+          findings: [
+            makeReviewFinding({ number: 1, decision: "approved" }),
+            makeReviewFinding({ number: 2, decision: "discarded" }),
+          ],
+        },
+        { mode: "apply" },
+        true,
+      );
+
+      expect(within(finding(1)).getByText(/^Sent to the agent/)).toBeInTheDocument();
+      expect(within(finding(2)).getByText("Not sent")).toBeInTheDocument();
+      expect(within(finding(1)).queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+      expect(within(finding(1)).queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+
+      finding(1).focus();
+      await user.keyboard("d");
+      await user.keyboard("e");
+
+      expect(api.decideFinding).not.toHaveBeenCalled();
+      expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    });
+  });
+
   describe("editing the text", () => {
     it("opens the raw text with E, saves what is typed as the field is left, and closes with Done", async () => {
       const { user } = card();
@@ -238,7 +301,7 @@ describe("FindingsCard", () => {
       const pass = makeReviewPass({ findings, revision: 2 });
       const review = makeReviewSummary({ passes: [pass], status: "awaiting_decision" });
       act(() => useAppStore.getState().applyState(makeState({ reviews: [review] })));
-      view.rerender(<FindingsCard review={review} pass={pass} />);
+      view.rerender(cardOf(review, pass));
     }
 
     it("keeps the editing open of a finding that did not change, and closes that of one that did", async () => {

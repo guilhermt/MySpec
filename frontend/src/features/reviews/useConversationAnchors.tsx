@@ -1,13 +1,19 @@
 import { type ReactNode, useMemo } from "react";
+import { FindingsCard } from "@/components/FindingsCard";
 import { MarkerLine } from "@/features/chat/entries/MarkerLine";
+import { Markdown } from "@/features/chat/Markdown";
 import { derivedDecidedLineOf } from "@/features/chat/markers";
-import { FindingsCard } from "@/features/reviews/FindingsCard";
+import { leaveDecisionCard } from "@/features/chat/useFeed";
 import {
   currentCardPass,
   derivedDecidedPasses,
+  EDIT_NOTES,
+  findingViews,
   reportMarkerIds,
 } from "@/features/reviews/review-conversation";
+import { passRevision } from "@/features/reviews/useFindingText";
 import { type Entry, REVIEW_STAGE, type ReviewSummary } from "@/lib/wails";
+import { decideFindingInPlace, openFindingInEditor, saveFindingTextInPlace } from "@/store/actions";
 import { useTranscript } from "@/store/app-store";
 
 const NO_ENTRIES: readonly Entry[] = [];
@@ -43,7 +49,24 @@ export function useConversationAnchors(review: ReviewSummary): ReadonlyMap<strin
     if (card !== null) {
       anchors.set(
         ids.get(card.pass) ?? END,
-        <FindingsCard key="findings" review={review} pass={card} />,
+        <FindingsCard
+          key="findings"
+          owner={review.id}
+          pass={card.pass}
+          revision={card.revision}
+          currentRevision={() => passRevision(review.id, card.pass)}
+          findings={card.findings ?? []}
+          views={findingViews(review, card, now)}
+          editNote={EDIT_NOTES[review.mode === "apply" ? "apply" : "publish"]}
+          disabled={false}
+          decide={(number, decision) =>
+            decideFindingInPlace(review.id, card.pass, number, decision)
+          }
+          saveText={(number, text) => saveFindingTextInPlace(review.id, card.pass, number, text)}
+          openEditor={(number) => void openFindingInEditor(review.id, card.pass, number)}
+          renderText={(text) => <Markdown cutCode>{text}</Markdown>}
+          onLeave={leaveDecisionCard}
+        />,
       );
     }
     return anchors;

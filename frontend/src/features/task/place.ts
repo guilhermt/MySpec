@@ -1,4 +1,5 @@
 import { type MarkerView, mergedLineOf } from "@/features/chat/markers";
+import { discardedPass } from "@/features/task/pr-findings";
 import { draftAtHand, prBlockHint } from "@/features/task/pr-status";
 import { blockHint, currentStepOf, stepPhaseLabel } from "@/features/task/step-status";
 import { counted } from "@/lib/situations";
@@ -136,7 +137,8 @@ function endedBeforeReview(pr: PullRequest): PlaceView {
  * prPlaceOf is what the PR stage shows. hasReviewConversation says the
  * conversation of the review exists, which the index of the conversations of
  * the task lists once the first pass started. The pull request says the rest:
- * the task is taken for the symmetry with stepPlaceOf.
+ * the task is taken for the symmetry with stepPlaceOf. The done and the trouble derived from a pass
+ * with every finding discarded keep the conversation with the composer: the review still waits.
  */
 export function prPlaceOf(
   _task: TaskSummary,
@@ -173,12 +175,15 @@ export function prPlaceOf(
       return { kind: "activity", text: "Closing the task…" };
     case "done":
     case "trouble":
+      if (discardedPass(pr)) {
+        return { kind: "conversation" };
+      }
+      return { kind: "closedReview", endLine: mergedLineOf(pr) };
     case "merged":
     case "pr_closed":
     case "closed":
-      // Done and trouble come after a pass, so the review has a conversation; a
-      // pull request can be merged or closed before the first one.
-      return hasReviewConversation || status === "done" || status === "trouble"
+      // A pull request can be merged or closed before the first pass.
+      return hasReviewConversation
         ? { kind: "closedReview", endLine: mergedLineOf(pr) }
         : endedBeforeReview(pr);
     default:

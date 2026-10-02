@@ -152,7 +152,11 @@ function implementationMoment(task: TaskSummary): Moment {
   }
 }
 
-/** reviewPassOf is the pass of the review of a pull request: its reports once it wrote its own, one more while it runs. */
+/**
+ * reviewPassOf is the pass of the review of a pull request: its reports once it wrote its own, one
+ * more while it runs. A structured pass has its row from the moment it is asked for, so the current
+ * pass is the one that runs.
+ */
 function reviewPassOf(pr: PullRequest): string {
   const reports = (pr.reports ?? []).length;
   const status = asPRStatus(pr.status);
@@ -160,7 +164,7 @@ function reviewPassOf(pr: PullRequest): string {
     return `pass ${reports}`;
   }
   if (status === "reviewing" || (status === "awaiting_reply" && pr.prNumber > 0)) {
-    return `pass ${reports + 1}`;
+    return `pass ${pr.currentPass > 0 ? pr.currentPass : reports + 1}`;
   }
   return "";
 }

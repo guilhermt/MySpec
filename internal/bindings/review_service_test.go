@@ -136,6 +136,37 @@ func TestDecidingOnTheFindingsOfAPassReachesTheState(t *testing.T) {
 	}
 }
 
+func TestApprovingTheRestOfTheFindingsLeavesTheDecidedOnesAsTheyAre(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	repoID := f.register(t, t.TempDir())
+	review := f.seedReview(t, repoID)
+	if err := f.reviewSvc.DecideFinding(review.ID, 1, 2, "discarded"); err != nil {
+		t.Fatalf("DecideFinding() = %v, want nil", err)
+	}
+
+	if err := f.reviewSvc.ApproveRestOfFindings(review.ID, 1); err != nil {
+		t.Fatalf("ApproveRestOfFindings() = %v, want nil", err)
+	}
+
+	got := f.reviewOf(t, review.ID)
+	if len(got.Passes) != 1 {
+		t.Fatalf("passes = %+v, want the first one", got.Passes)
+	}
+	decisions := make([]string, 0, len(got.Passes[0].Findings))
+	for _, finding := range got.Passes[0].Findings {
+		decisions = append(decisions, finding.Decision)
+	}
+	if diff := cmp.Diff([]string{"approved", "discarded"}, decisions); diff != "" {
+		t.Errorf("decisions (-want +got):\n%s", diff)
+	}
+	if err := f.reviewSvc.ApproveRestOfFindings("review-gone", 1); err == nil ||
+		err.Error() != "This review no longer exists." {
+		t.Errorf("ApproveRestOfFindings(gone) = %v, want the sentence about a review that is gone", err)
+	}
+}
+
 func TestDecidingOnAFindingIsRefusedWhileAnotherPassIsRunning(t *testing.T) {
 	t.Parallel()
 

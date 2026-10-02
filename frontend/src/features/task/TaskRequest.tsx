@@ -3,15 +3,19 @@ import { OtherConversationBar, RequestBar } from "@/components/system/RequestBar
 import { CleanAndStartDialog } from "@/features/task/CleanAndStartDialog";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { DiscardStepDialog } from "@/features/task/DiscardStepDialog";
+import { cardFindings } from "@/features/task/pr-findings";
 import type { TaskRequestAction, TaskRequestButton } from "@/features/task/request";
 import { RequestButtons } from "@/features/task/request-buttons";
 import { currentStepOf } from "@/features/task/step-status";
 import { useBornStatus } from "@/features/task/useBornStatus";
+import { useFocusAfterApproveRest } from "@/features/task/useFocusAfterApproveRest";
 import { useTaskRequest } from "@/features/task/useTaskRequest";
-import { focusRequest } from "@/lib/focus";
+import { focusFindingToDecide, focusRequest } from "@/lib/focus";
 import type { TaskSummary } from "@/lib/wails";
 import {
+  applyPRFindings,
   approvePR,
+  approveRestOfPRFindings,
   approveStep,
   changeClonePath,
   closeTask,
@@ -53,6 +57,8 @@ function run(button: TaskRequestButton, task: TaskSummary, edited: PrDraft | nul
       );
     case "discardDraft":
       return discardDraft(taskId);
+    case "applyFindings":
+      return applyPRFindings(taskId);
     case "approvePR":
       return approvePR(taskId);
     case "openPR":
@@ -94,6 +100,8 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
   const status = useBornStatus(situationId, request?.status ?? other?.status ?? "");
   const step = currentStepOf(task);
 
+  const approveRest = useFocusAfterApproveRest(request);
+
   if (request === null) {
     if (other === null || step === null) {
       return null;
@@ -131,10 +139,18 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
       case "showProblems":
         requestMarkerOpen(task.id, "plan_invalid");
         return;
+      case "nextToDecide":
+        focusFindingToDecide(cardFindings(task), 1);
+        return;
     }
     setRunning(button.action);
     try {
-      await run(button, task, edited);
+      const pass = task.pr?.currentPass;
+      if (button.action === "approveRest" && pass !== undefined) {
+        await approveRest(() => approveRestOfPRFindings(task.id, pass));
+      } else {
+        await run(button, task, edited);
+      }
     } finally {
       setRunning(null);
     }

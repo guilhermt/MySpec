@@ -60,7 +60,7 @@ func DeriveReview(in ReviewInput) []Found {
 		found.Body = changesReviewBody(FormApprove, state.CommitFailed)
 	case reviewflow.StatusReadyToMerge:
 		found.Kind, found.Form = KindMerge, FormMerge
-		found.Body = mergeBody(FormMerge)
+		found.Body = mergeBody(FormMerge, 0)
 	case reviewflow.StatusTrouble:
 		found.Kind, found.Form = KindPRTrouble, troubleForm(state.Review.Trouble)
 		found.Body = troubleBody(state.Review.Trouble, state.Review.BaseBranch)

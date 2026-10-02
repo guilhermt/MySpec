@@ -3,11 +3,10 @@ package reviewflow
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
@@ -45,7 +44,7 @@ func (s *Service) Apply(ctx context.Context, id string) error {
 	}
 	s.watch.Track(id, wt, true)
 	if err = s.sessions.SendFromApp(ctx, sessionKey(id), session.AppMessage{
-		Text: applyMessage(last.Number, approved), Kind: session.AppApply, Count: len(approved),
+		Text: prreport.ApplyMessage(last.Number, prreview.ReportFindings(last.Findings)), Kind: session.AppApply, Count: len(approved),
 	}); err != nil {
 		// The fix never reached the agent: the findings are the user's again.
 		s.watch.Forget(id)
@@ -58,28 +57,11 @@ func (s *Service) Apply(ctx context.Context, id string) error {
 	if err = s.reviews.MarkSent(ctx, id, last.Number); err != nil {
 		s.log.Error("record review pass sent failed", "review", id, "pass", last.Number, "error", err)
 	}
-	approvedCount, discarded := countDecisions(last)
+	approvedCount, discarded := prreport.Counts(prreview.ReportFindings(last.Findings))
 	s.sessions.MarkFindingsDecided(ctx, sessionKey(id), last.Number, approvedCount, discarded)
 	s.log.Info("review findings applying", "review", id, "pass", last.Number, "findings", len(approved))
 	s.notify(id)
 	return nil
-}
-
-// applyMessage is what the app says to the conversation of a review when the
-// user asks for the findings they approved to be fixed.
-func applyMessage(pass int, approved []prreview.Finding) string {
-	lines := make([]string, 0, len(approved))
-	for _, finding := range approved {
-		location := "(general)"
-		if finding.Anchored() {
-			location = fmt.Sprintf("`%s:%d`", finding.Path, finding.Line)
-		}
-		lines = append(lines, fmt.Sprintf("%d. %s — %s", finding.Number, location, strings.TrimSpace(finding.Text)))
-	}
-	return "The user decided on the findings of pass " + strconv.Itoa(pass) + ". Implement only the ones " +
-		"below, and only that: no drive-by changes, no refactoring nobody asked for. Do not commit, do not " +
-		"run `git add` and do not push: the user reviews the changes in the app. When you are done, say in a " +
-		"few lines what you changed.\n\n## Approved findings\n" + strings.Join(lines, "\n")
 }
 
 // Approve approves the changes the agent made and asks it to commit them and
@@ -228,21 +210,6 @@ func (s *Service) markCommit(ctx context.Context, id string, wt worktree.Worktre
 		commit = read
 	}
 	s.sessions.MarkCommitted(ctx, sessionKey(id), task.ShortSHA(commit.SHA), commit.Subject, true, number)
-}
-
-// countDecisions counts the findings of a pass the user approved and the ones
-// they discarded.
-func countDecisions(pass prreview.Pass) (approved, discarded int) {
-	for _, finding := range pass.Findings {
-		switch finding.Decision {
-		case prreview.DecisionApproved:
-			approved++
-		case prreview.DecisionDiscarded:
-			discarded++
-		case prreview.DecisionNone:
-		}
-	}
-	return approved, discarded
 }
 
 // setPhase records where a review is in the cycle of a pass.

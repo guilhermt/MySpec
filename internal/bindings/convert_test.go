@@ -1,6 +1,8 @@
 package bindings_test
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -18,6 +20,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
 	"github.com/guilhermt/myspec/internal/repository"
@@ -1281,7 +1284,7 @@ func TestFromTasksCarriesThePullRequestOfThePRStage(t *testing.T) {
 		Draft: &bindings.PRDraft{
 			Title: "Add the login screen", Body: "It adds the screen.", File: "draft.md",
 		},
-		Reports: []bindings.PRReport{{Pass: 1, File: "review-1.md"}},
+		Reports: []bindings.PRReport{{Pass: 1, File: "review-1.md", Findings: []bindings.ReviewFinding{}}},
 		Review: &bindings.Review{
 			Files: []bindings.ReviewFile{}, Staged: 2, Total: 2, Percent: 100,
 		},
@@ -2341,10 +2344,10 @@ func recordedPass(number int, decision prreview.Decision) prreview.Pass {
 	return prreview.Pass{
 		ReviewID: "review-1", Number: number, Recorded: true, Revision: 1,
 		SummaryOriginal: "Two things to look at.", Summary: "Two things to look at.",
-		Findings: []prreview.Finding{{
+		Findings: []prreview.Finding{{Finding: prreport.Finding{
 			Number: 1, Path: "main.go", Line: 12, Original: "Handle the error.",
 			Text: "Handle the error.", Decision: decision,
-		}},
+		}}},
 		CreatedAt: readAt,
 	}
 }
@@ -3312,8 +3315,8 @@ func TestFromReviewsCarriesTheTitleAndTheLineOnGitHubOfAFinding(t *testing.T) {
 
 	pass := recordedPass(1, prreview.DecisionNone)
 	pass.Findings = []prreview.Finding{
-		{Number: 1, Title: "The error is dropped", Path: "main.go", Line: 12, Original: "a", Text: "a"},
-		{Number: 2, Title: "No tests", Original: "b", Text: "b"},
+		{Finding: prreport.Finding{Number: 1, Title: "The error is dropped", Path: "main.go", Line: 12, Original: "a", Text: "a"}},
+		{Finding: prreport.Finding{Number: 2, Title: "No tests", Original: "b", Text: "b"}},
 	}
 	state := reviewState(reviewflow.StatusReadyToPublish, pass)
 
@@ -3401,5 +3404,77 @@ func TestFromReviewsCarriesTheChecksAndTheHoursOfAPass(t *testing.T) {
 	}
 	if got[2].Checks == nil || got[2].SentAt != "" || got[2].ChecksReadAt != "" {
 		t.Errorf("pass without them = %+v, want empty checks and no hours", got[2])
+	}
+}
+
+func TestFromTasksCarriesTheStructuredPassesOfThePullRequest(t *testing.T) {
+	t.Parallel()
+
+	recordedAt := time.Date(2026, 9, 27, 17, 28, 0, 0, time.UTC)
+	sentAt := recordedAt.Add(time.Hour)
+	anchored := prreport.Finding{
+		Number: 1, Title: "The error is dropped", Path: "main.go", Line: 12,
+		Original: "Handle it.", Text: "Handle it well.", Decision: prreport.DecisionApproved,
+	}
+	general := prreport.Finding{Number: 2, Title: "No tests", Original: "Add some.", Text: "Add some."}
+	pr := flow.PullRequest{
+		Status: flow.PRAwaitingDecision,
+		Reports: []task.ReviewReport{
+			{Pass: 1, File: "review-1.md", Clean: false},
+			{Pass: 3, File: "review-3.md", Clean: true},
+		},
+		Passes: []task.PRPass{
+			{Pass: 2, Recorded: false},
+			{
+				Pass: 3, Recorded: true, Clean: false, Revision: 2, RecordedAt: recordedAt, SentAt: sentAt,
+				Findings: []prreport.Finding{anchored, general},
+			},
+		},
+		Pass:       &task.PRPass{Pass: 3},
+		Unreadable: "The report is not valid.",
+		PR:         task.PRDetails{URL: "https://github.com/acme/api/pull/7"},
+	}
+
+	got := bindings.FromTasks(
+		[]task.Task{{ID: "task-1", RepositoryID: convertRepo.ID, Name: "login-screen", Stage: task.StagePR}},
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) []flow.StepState { return nil },
+		func(string) (flow.PullRequest, bool) { return pr, true },
+		noWorktree,
+		noConversations,
+		repoOf,
+		nil,
+		nil,
+	)
+	if len(got) != 1 || got[0].PR == nil {
+		t.Fatalf("FromTasks() = %+v, want one task with a pull request", got)
+	}
+	gotPR := got[0].PR
+
+	if gotPR.CurrentPass != 3 {
+		t.Errorf("currentPass = %d, want 3", gotPR.CurrentPass)
+	}
+	if gotPR.UnreadableReport != "The report is not valid." {
+		t.Errorf("unreadableReport = %q, want the reason", gotPR.UnreadableReport)
+	}
+
+	wantURL := fmt.Sprintf("https://github.com/acme/api/pull/7/files#diff-%xR12", sha256.Sum256([]byte("main.go")))
+	want := []bindings.PRReport{
+		{Pass: 1, File: "review-1.md", Findings: []bindings.ReviewFinding{}},
+		{Pass: 2, Structured: true, Findings: []bindings.ReviewFinding{}},
+		{
+			Pass: 3, File: "review-3.md", Structured: true, Recorded: true, Revision: 2, Edited: true,
+			RecordedAt: "2026-09-27T17:28:00Z", SentAt: "2026-09-27T18:28:00Z",
+			Findings: []bindings.ReviewFinding{
+				{
+					Number: 1, Title: "The error is dropped", Path: "main.go", Line: 12, LineURL: wantURL,
+					Text: "Handle it well.", Decision: "approved",
+				},
+				{Number: 2, Title: "No tests", Text: "Add some."},
+			},
+		},
+	}
+	if diff := cmp.Diff(want, gotPR.Reports); diff != "" {
+		t.Errorf("reports mismatch (-want +got):\n%s", diff)
 	}
 }

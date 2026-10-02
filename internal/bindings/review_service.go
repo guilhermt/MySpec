@@ -226,6 +226,17 @@ func (s *ReviewService) ApproveReview(id string) error {
 	return nil
 }
 
+// ApproveRestOfFindings approves every finding of a pass that has no decision.
+func (s *ReviewService) ApproveRestOfFindings(id string, pass int) error {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.ApproveRest(ctx, id, pass); err != nil {
+		return s.fail("ApproveRestOfFindings", err)
+	}
+	return nil
+}
+
 // DeleteReview removes a review for good, active or archived, and answers with
 // what git could not remove.
 func (s *ReviewService) DeleteReview(id string) (DeleteResult, error) {

@@ -224,16 +224,16 @@ const prCardNote = "This task was created from a card of the team's board. Read 
 // the pull request comes from no task of the product.
 const externalNote = "This pull request does not come from a task of this product: there is no PRD and no technical specification. Every reference in this prompt to the PRD or the technical specification means the single document `{{context_path}}`, which holds the title and the description of the pull request and, when the pull request is linked to a card of the team's board, the card and its epic. That document is the criteria: what the card and the description say the change is for is what the code must do. When the document has no card, review against the description, the instructions below and the conventions the repository documents. The worktree is on a detached HEAD at the head of the pull request; the base is `{{base_branch}}`."
 
-// findingsFormatNote is how the report of such a review has to read, so that
-// the app can list its findings.
+// findingsFormatNote is how the report of the review of a pull request has to
+// read, so that the app can list its findings.
 const findingsFormatNote = "The app reads the report, so its body must follow this format exactly, and it replaces what this prompt says above about the body of the report. After the header, write a summary of what you reviewed and what you found, as plain Markdown without any `## Findings` heading in it. When there are findings, follow the summary with a line `## Findings` and then one block per finding:\n\n```markdown\n### 1 · <a short title of what is wrong, one line, no Markdown>\nLocation: path/from/the/repository/root.go:123\n\n[what is wrong and what to do about it]\n```\n\nThe title follows the number on the same line, after \" · \": a few words that say what is wrong, with no Markdown. `Location` is either `path:line`, where the line is a line of the **new** version of a file and is part of the diff of the pull request, or the word `general` for a finding with no such line: a missing test, a migration that was not written, a problem in a file the pull request does not touch, a problem on a line the pull request removed. Number the findings from 1. A report with `status: clean` has no `## Findings` section."
 
-// publishNote is what such a review does with its findings when the user
-// publishes them on GitHub.
+// publishNote is what the review of a pull request in the review center does
+// with its findings when the user publishes them on GitHub.
 const publishNote = "The user decides on each finding in the app, may edit its text, and the app publishes the approved ones on GitHub as a review: each finding with a `path:line` location becomes a comment on that line, and the general ones go in the body after the summary. Write each finding as a comment a colleague reads on the pull request: self-contained, direct and respectful. This replaces what this prompt says above under \"What happens next\": after writing the report, say in one line what you found and stop. Never edit a file of the worktree, never commit and never push. When the user asks in the conversation for a finding to be added, changed or removed, rewrite the report of the current pass in place, keeping the numbers of the findings that did not change."
 
-// applyNote is what such a review does with its findings when the agent
-// applies them in the worktree.
+// applyNote is what the review of a pull request does with its findings when
+// the agent applies them in the worktree.
 const applyNote = "The user decides on each finding in the app, and the app then sends you the findings they approved. This replaces the item-by-item decision in the conversation this prompt describes above: after writing the report, say in one line what you found and stop, and implement only what the app sends you as approved. When the user asks in the conversation for a finding to be added, changed or removed before that, rewrite the report of the current pass in place, keeping the numbers of the findings that did not change."
 
 // checksNote is what the review of a pull request does with the checks of its
@@ -475,7 +475,7 @@ type Vars struct {
 	// specification; "" for the review of the pull request of a task.
 	ContextPath  string
 	External     bool   // PR review only: the pull request comes from no task of the product
-	Publish      bool   // external only: the findings are published on GitHub, not applied
+	Publish      bool   // PR review: the findings are published on GitHub, not applied; a task never publishes
 	Instructions string // PR review only: the fixed review instructions of the repository
 	// Checks is what the app read from GitHub about the head of the pull
 	// request before the pass: its checks and whether it merges clean. PR
@@ -630,20 +630,22 @@ func discussionSections(vars Vars) string {
 
 // reviewSections are the sections the app appends to the prompt of the review
 // of a pull request: what the review is about when the pull request comes from
-// no task, then, always, what to do about the checks and conflicts and what
-// the app read of them on GitHub, and the instructions the pass runs with.
+// no task, then, always, the format of the report and what happens to its
+// findings (applied, or published when the pull request comes from no task),
+// what to do about the checks and conflicts and what the app read of them on
+// GitHub, and the instructions the pass runs with.
 // Like the others, they depend on no placeholder, so an edited prompt receives
 // them too.
 func reviewSections(vars Vars) string {
 	var b strings.Builder
 	if vars.External {
 		b.WriteString(externalHeading + reviewNote(externalNote, vars))
-		b.WriteString(findingsFormatHeading + reviewNote(findingsFormatNote, vars))
-		if vars.Publish {
-			b.WriteString(publishHeading + reviewNote(publishNote, vars))
-		} else {
-			b.WriteString(applyHeading + reviewNote(applyNote, vars))
-		}
+	}
+	b.WriteString(findingsFormatHeading + reviewNote(findingsFormatNote, vars))
+	if vars.Publish {
+		b.WriteString(publishHeading + reviewNote(publishNote, vars))
+	} else {
+		b.WriteString(applyHeading + reviewNote(applyNote, vars))
 	}
 	b.WriteString(checksHeading + reviewNote(checksNote, vars))
 	b.WriteString(githubStatusHeading + reviewNote(PRChecksSection(vars.Checks, vars.MergeBase), vars))

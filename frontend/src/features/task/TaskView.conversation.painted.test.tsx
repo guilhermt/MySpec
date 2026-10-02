@@ -45,6 +45,9 @@ const ODD_WIDTHS = [1567, 2181];
 /** FRAMES are the sunken blocks that hold blocks of their own: the open group and the body of a line. */
 const FRAMES = '[data-slot="group-block"], [data-slot="marker-body"]';
 
+/** FINDING is the column of a finding of the card of the review, after its number: it holds the blocks of its text. */
+const FINDING = "[data-finding] > div";
+
 /**
  * BLOCKS are the blocks inside an entry: the text of a speech, a code block, cut or not, a table, a
  * diagram, the open group and the body of a line. Outside a frame, each one has the edges of the
@@ -78,10 +81,10 @@ const CLOCK = /\b\d{1,2}:\d{2}\b/;
 
 /**
  * UNTIMED are the entries whose name the material writes without a time (§4.2): the message in the
- * queue, not sent yet; the group that runs, named by what runs; and the pending card, named by its
- * keys.
+ * queue, not sent yet; the group that runs, named by what runs; the pending card, named by its
+ * keys; and the card of the findings, named by its pass.
  */
-const UNTIMED = /^You, queued|, running: |^(Question|Permission), answer with/;
+const UNTIMED = /^You, queued|, running: |^(Question|Permission), answer with|^Findings of pass /;
 
 // awayFromTheEntries puts the pointer on the header, where no entry is under it.
 async function awayFromTheEntries(): Promise<void> {
@@ -161,7 +164,7 @@ function nameOf(block: Element): string {
 // the column's, or those of what the frame around it holds.
 function blockEdges(feed: HTMLElement, column: Edges): [string, Edges, Edges][] {
   return [...feed.querySelectorAll(BLOCKS)].map((block) => {
-    const frame = block.parentElement?.closest(FRAMES) ?? null;
+    const frame = block.parentElement?.closest(`${FRAMES}, ${FINDING}`) ?? null;
     return [nameOf(block), edgesOf(block), frame === null ? column : innerEdgesOf(frame)];
   });
 }

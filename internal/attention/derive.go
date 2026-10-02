@@ -187,6 +187,15 @@ func reviewerSituation(t task.Task, step flow.StepState) (Found, bool) {
 	return Found{}, false
 }
 
+// discardedNumber is the number of the pull request when its review ended with
+// every finding of the current pass discarded, and 0 otherwise.
+func discardedNumber(pr flow.PullRequest) int {
+	if pr.Pass != nil && pr.Pass.AllDiscarded() {
+		return pr.PR.Number
+	}
+	return 0
+}
+
 // prSituation is the situation of the pull request of a task in the PR stage.
 func prSituation(t task.Task, pr flow.PullRequest) (Found, bool) {
 	place := Place{Kind: PlacePR}
@@ -214,7 +223,16 @@ func prSituation(t task.Task, pr flow.PullRequest) (Found, bool) {
 	case flow.PRDraftReady:
 		return newFound(t, place, KindDraft, draftBody()), true
 	case flow.PRAwaitingDecision:
-		return newFound(t, place, KindFindings, findingsBody()), true
+		found := newFound(t, place, KindFindings, findingsBody(FormNone, -1))
+		if pr.Pass != nil {
+			form := FormDecide
+			if pr.Pass.Decided() {
+				form = FormApply
+			}
+			found.Form = form
+			found.Body = findingsBody(form, len(pr.Pass.Findings))
+		}
+		return found, true
 	case flow.PRInReview:
 		form, percent := FormReview, 0
 		if pr.Review != nil && pr.Review.Staged > 0 {
@@ -238,11 +256,11 @@ func prSituation(t task.Task, pr flow.PullRequest) (Found, bool) {
 			// The merge could not be confirmed, and the closing is offered.
 			form = FormClose
 		}
-		found := newFound(t, place, KindMerge, mergeBody(form))
+		found := newFound(t, place, KindMerge, mergeBody(form, discardedNumber(pr)))
 		found.Form = form
 		return found, true
 	case flow.PRMerged:
-		found := newFound(t, place, KindMerge, mergeBody(FormClose))
+		found := newFound(t, place, KindMerge, mergeBody(FormClose, 0))
 		found.Form = FormClose
 		return found, true
 	default:

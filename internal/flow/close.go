@@ -24,16 +24,14 @@ func (s *Service) CloseTask(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	switch run.Status {
-	case task.PRDone:
-		if run.PR.State == task.PRStateClosed {
-			return fmt.Errorf("close task %s: %w", id, ErrNotClosable)
-		}
-		if run.PR.State != task.PRStateMerged && s.checkError(id) == "" {
-			return fmt.Errorf("close task %s: %w", id, ErrPRNotMerged)
-		}
-	default:
+	if !awaitingMerge(run, currentPassPtr(s.tasks.PRPasses(id))) {
 		return fmt.Errorf("close task %s: %w", id, ErrNotClosable)
+	}
+	if run.PR.State == task.PRStateClosed {
+		return fmt.Errorf("close task %s: %w", id, ErrNotClosable)
+	}
+	if run.PR.State != task.PRStateMerged && s.checkError(id) == "" {
+		return fmt.Errorf("close task %s: %w", id, ErrPRNotMerged)
 	}
 
 	// Closing removes the worktree and the branch and updates the base branch,

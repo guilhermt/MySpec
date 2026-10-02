@@ -799,8 +799,9 @@ func TestAPassOfTheReviewOfAPullRequestIsAskedWithTheInstructionsOfItsRepository
 	f := newFixture(t)
 	f.repositories.setInstructions(instructions)
 	underReview(t, f)
-	reportsWritten(f, reports(1, false))
+	reportsWritten(t, f, reports(1, false))
 	f.waitPRRun(t, "the report of the first pass", func(run task.PRRun) bool { return run.ReportedPass == 1 })
+	applied(t, f, 1)
 	f.reviews.setSnapshot(staged(3, 3))
 	f.sessions.goIdle("task-1")
 	if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
@@ -812,7 +813,7 @@ func TestAPassOfTheReviewOfAPullRequestIsAskedWithTheInstructionsOfItsRepository
 	f.sessions.goIdle("task-1")
 	f.service.Check("task-1")
 
-	want := instructedReviewPrompt("/data/task-1/pr/review-2.md", instructions)
+	want := instructedReviewPrompt(f.reviewPath(2), instructions)
 	waitFor(t, "the prompt of the second pass with the instructions", func() bool {
 		return f.sessions.sentCount(want) > 0
 	})

@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { textKey, useFindingText } from "@/features/reviews/useFindingText";
+import { textKey } from "@/components/useEditedText";
+import { useFindingText } from "@/features/reviews/useFindingText";
 import { useAppStore } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
 import { makeReviewPass, makeReviewSummary, makeState } from "@/test/wails-mock";

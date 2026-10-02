@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewflow"
@@ -37,9 +38,9 @@ func applyDecidedOn(t *testing.T, f *fixture, commit string) string {
 	id := f.startMode(t, prreview.ModeApply, "")
 	f.sessions.goIdle(id)
 	f.record(t, id, changesReport(1, "Three things to fix.",
-		prreview.ParsedFinding{Number: 1, Path: "internal/board/service.go", Line: 12, Text: "The reading is never cached."},
-		prreview.ParsedFinding{Number: 2, Text: "The cache has no test."},
-		prreview.ParsedFinding{Number: 3, Text: "The name of the cache is vague."},
+		prreport.ParsedFinding{Number: 1, Path: "internal/board/service.go", Line: 12, Text: "The reading is never cached."},
+		prreport.ParsedFinding{Number: 2, Text: "The cache has no test."},
+		prreport.ParsedFinding{Number: 3, Text: "The name of the cache is vague."},
 	), commit)
 	f.decide(t, id, 1, 1, prreview.DecisionApproved)
 	f.decide(t, id, 1, 2, prreview.DecisionDiscarded)
@@ -88,9 +89,12 @@ func TestApplyingAsksTheAgentToFixOnlyTheApprovedFindings(t *testing.T) {
 	want := "The user decided on the findings of pass 1. Implement only the ones below, and only that: " +
 		"no drive-by changes, no refactoring nobody asked for. Do not commit, do not run `git add` and do " +
 		"not push: the user reviews the changes in the app. When you are done, say in a few lines what you " +
-		"changed.\n\n## Approved findings\n" +
-		"1. `internal/board/service.go:12` — The reading is never cached.\n" +
-		"3. (general) — The name of the cache is vague."
+		"changed.\n\n## Approved findings\n\n" +
+		"### 1\nLocation: internal/board/service.go:12\n\nThe reading is never cached.\n\n" +
+		"### 3\nLocation: general\n\nThe name of the cache is vague.\n\n" +
+		"## Discarded findings\n\n" +
+		"The user decided not to act on these. Do not report them again in a later pass unless the code " +
+		"they point at changes.\n\n- 2 · general"
 	if got := lastMessage(t, f); got != want {
 		t.Errorf("message =\n%s\n\nwant:\n%s", got, want)
 	}
@@ -493,7 +497,7 @@ func secondPassOn(t *testing.T, f *fixture, commit string) string {
 	}, "the second pass to start once the checks passed")
 	f.sessions.goIdle(id)
 	f.record(t, id, changesReport(2, "One thing left.",
-		prreview.ParsedFinding{Number: 1, Text: "The cache is never emptied."},
+		prreport.ParsedFinding{Number: 1, Text: "The cache is never emptied."},
 	), commit)
 	f.decide(t, id, 2, 1, prreview.DecisionApproved)
 	return id
