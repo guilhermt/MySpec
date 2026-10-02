@@ -15,7 +15,7 @@ export const TITLE_MAX = 120;
 export const NOTHING_TO_DISCUSS = "Write what to discuss or select at least one card.";
 
 /** READS_CLONES says why a discussion wants the repositories of the board cloned. */
-export const READS_CLONES = "The conversation reads the code of the cloned repositories.";
+export const READS_CLONES = "The conversation reads the code of the cloned repositories only.";
 
 /**
  * suggestedTitle is the title the dialog opens with: the title of the one card
