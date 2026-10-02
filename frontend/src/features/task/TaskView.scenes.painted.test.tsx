@@ -224,10 +224,18 @@ function drawScene(
 const SCENE_WIDTHS = [HALF_MAIN, SCENE_MAIN, WIDE_MAIN];
 
 /**
- * prepare puts the scene where the mock holds it: the focus on finding 2 in the findings scene, and
- * its inline editor open in findings-edit. Every other scene is as it is drawn.
+ * prepare puts the scene where the material holds it: the focus on finding 2 in the findings
+ * scene, its inline editor open in findings-edit, and the line You decided open, with the findings
+ * where each went, in findings-sent. Every other scene is as it is drawn.
  */
 async function prepare(name: SceneName): Promise<void> {
+  if (name === "findings-sent") {
+    const decided = await screen.findByRole("article", { name: /^You decided/ });
+    const toggle = decided.querySelector<HTMLElement>('[data-feed-toggle][aria-expanded="false"]');
+    toggle?.click();
+    await within(decided).findByRole("group", { name: /^Finding 1 of / });
+    return;
+  }
   if (name !== "findings" && name !== "findings-edit") {
     return;
   }
@@ -372,6 +380,25 @@ describe.each(THEMES)("TaskView, the nine scenes in the %s theme", (theme) => {
             ]);
           }
           expect(offWholePixels([card, ...findings])).toEqual([]);
+        }
+
+        // The findings a line You decided holds are the disabled ones, where each went.
+        const bodies = [...area.querySelectorAll('[data-slot="marker-body"]')].filter(
+          (body) => body.querySelector("[data-finding]") !== null,
+        );
+        expect(bodies.length > 0).toBe(name === "findings-sent");
+        for (const body of bodies) {
+          const disabled = [...body.querySelectorAll("[data-finding]")];
+          expect(edgesOf(body)).toEqual(edges);
+          for (const finding of disabled) {
+            const inner = edgesOf(finding);
+            expect([nameOf(finding), inner.left > edges.left, inner.right < edges.right]).toEqual([
+              nameOf(finding),
+              true,
+              true,
+            ]);
+          }
+          expect(offWholePixels([body, ...disabled])).toEqual([]);
         }
       },
     );
