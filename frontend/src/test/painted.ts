@@ -381,6 +381,7 @@ export async function withoutTooltip(elements: readonly HTMLElement[]): Promise<
 export async function capture(name: string, element: HTMLElement): Promise<void> {
   const dir = inject("captureDir");
   if (dir === "") return;
+  const corner = await pointerInTheCorner();
   // The viewport grows to hold the whole element, which a wide main area passes, and then goes back.
   const { innerWidth, innerHeight } = window;
   const box = element.getBoundingClientRect();
@@ -392,7 +393,29 @@ export async function capture(name: string, element: HTMLElement): Promise<void>
     await page.screenshot({ path: `${dir}/${name}.png`, element });
   } finally {
     await page.viewport(innerWidth, innerHeight);
+    corner.remove();
   }
+}
+
+/**
+ * pointerInTheCorner rests the pointer on a transparent pixel in the top left corner of the
+ * viewport, over everything, so a capture never shows the hover a test before it left behind. The
+ * pixel stays until the capture is taken.
+ */
+async function pointerInTheCorner(): Promise<HTMLElement> {
+  const corner = document.createElement("div");
+  corner.setAttribute("aria-hidden", "true");
+  Object.assign(corner.style, {
+    position: "fixed",
+    top: "0",
+    left: "0",
+    width: "1px",
+    height: "1px",
+    zIndex: "2147483647",
+  });
+  document.body.append(corner);
+  await userEvent.hover(corner);
+  return corner;
 }
 
 /**
