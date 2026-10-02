@@ -273,6 +273,22 @@ export function situationFragment(situation: Situation): string {
   return place === null ? asks : `${asks} in ${place}`;
 }
 
+/**
+ * situationPillState is the state of a pill with a situation: the tone and what the most urgent
+ * one asks, with how many more; a closing one says itself.
+ */
+export function situationPillState(situation: Situation, count: number): string {
+  const more = count > 1 ? `, and ${count - 1} more` : "";
+  switch (asSituationGroup(situation.group)) {
+    case "error":
+      return `error: ${situationFragment(situation)}${more}`;
+    case "waiting":
+      return `waiting for you: ${situationFragment(situation)}${more}`;
+    case "closing":
+      return `${lowerFirst(situationLabel(situation))}${more}`;
+  }
+}
+
 /** announcement is what the live region says of a new situation: `<name>: <what it asks> in <where>`. */
 export function announcement(name: string, situation: Situation): string {
   return `${name}: ${situationFragment(situation)}`;

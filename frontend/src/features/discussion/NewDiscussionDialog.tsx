@@ -18,12 +18,12 @@ import { DiscussionContextPreview } from "@/features/discussion/DiscussionContex
 import {
   BOARD_FIELD_HELP,
   boardOptions,
-  canStart,
   NOTHING_TO_DISCUSS,
   READS_CLONES,
+  startReason,
   suggestedTitle,
   TITLE_MAX,
-  titleProblem,
+  titleError,
   unclonedRepositories,
 } from "@/features/discussion/new-discussion";
 import { ModelPicker } from "@/features/models/ModelPicker";
@@ -45,9 +45,6 @@ const NO_MODELS: readonly StageModel[] = [];
 
 /** COUNTER_FROM is the length after which the title says how much room is left. */
 const COUNTER_FROM = 100;
-
-/** TITLE_TOO_LONG says what to do with a title that does not fit, as a suggested one may not. */
-const TITLE_TOO_LONG = `Use at most ${TITLE_MAX} characters.`;
 
 /** NewDiscussionDialog starts a discussion of a board, over the cards picked on it. */
 export function NewDiscussionDialog() {
@@ -147,8 +144,8 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
 
-  const problem = titleProblem(title);
-  const ready = canStart(title, text, cards);
+  const problem = titleError(title);
+  const ready = startReason({ board: board.id, title, text, cards: cards.length }) === null;
   const uncloned = unclonedRepositories(board, repositories);
   const nothingToDiscuss = text.trim() === "" && cards.length === 0;
 
@@ -216,11 +213,11 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
           autoFocus={!askBoard}
           maxLength={TITLE_MAX}
           autoComplete="off"
-          aria-invalid={problem === "too_long"}
+          aria-invalid={problem !== null}
           onChange={(event) => setTitle(event.target.value)}
         />
-        {problem === "too_long" ? (
-          <p className="text-xs text-destructive">{TITLE_TOO_LONG}</p>
+        {problem !== null ? (
+          <p className="text-xs text-destructive">{problem}</p>
         ) : (
           title.length > COUNTER_FROM && (
             <p className="text-xs text-muted-foreground tabular-nums">{`${title.length}/${TITLE_MAX}`}</p>

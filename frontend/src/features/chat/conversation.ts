@@ -413,6 +413,7 @@ function stretchOf(rows: Row[], voice: string): Stretch {
             latestReport: NO_REPORTS,
             latestDecided: NO_REPORTS,
             oneShot: false,
+            discussion: null,
           }).complement,
     startedAt: first === undefined ? "" : (entriesOf(first)[0]?.createdAt ?? ""),
     endedAt: last === undefined ? "" : lastTime(last),

@@ -295,6 +295,15 @@ describe("readyToArchiveDetail", () => {
     );
     expect(readyToArchiveDetail(5)).toBe("5 published · or ask the agent for more cards below");
   });
+
+  it("says in how many rounds when there is more than one", () => {
+    expect(readyToArchiveDetail(7, 3)).toBe(
+      "7 published in 3 rounds · or ask the agent for more cards below",
+    );
+    expect(readyToArchiveDetail(0, 3)).toBe(
+      "nothing published · or ask the agent for more cards below",
+    );
+  });
 });
 
 describe("standingDetail", () => {

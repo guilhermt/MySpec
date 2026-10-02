@@ -1,15 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
   BOARD_FIELD_HELP,
+  boardLine,
   boardOptions,
-  canStart,
+  codePoints,
+  contextCharacters,
+  contextLine,
   defaultDiscussionBoard,
   lastUsedBoard,
+  startReason,
   suggestedTitle,
   TITLE_MAX,
-  titleProblem,
+  titleError,
+  titleHelp,
   unclonedRepositories,
+  whatHint,
 } from "@/features/discussion/new-discussion";
+import type { BoardCard } from "@/lib/wails";
 import {
   makeArchivedDiscussion,
   makeBoard,
@@ -36,35 +43,202 @@ describe("suggestedTitle", () => {
   });
 });
 
-describe("titleProblem", () => {
-  it("wants a title", () => {
-    expect(titleProblem("   ")).toBe("empty");
-  });
-
-  it("keeps the title short", () => {
-    expect(titleProblem("a".repeat(TITLE_MAX + 1))).toBe("too_long");
-  });
-
-  it("takes a title that fits", () => {
-    expect(titleProblem("Billing, end to end")).toBeNull();
+describe("codePoints", () => {
+  it("counts by code point, as the Go side does", () => {
+    expect(codePoints("abc")).toBe(3);
+    expect(codePoints("a😀b")).toBe(3);
   });
 });
 
-describe("canStart", () => {
-  it("wants a title", () => {
-    expect(canStart("", "Something to look at", [CARD])).toBe(false);
+describe("titleHelp", () => {
+  it("is silent before 100 characters", () => {
+    expect(titleHelp("a".repeat(99))).toBe("");
   });
 
-  it("takes cards without text", () => {
-    expect(canStart("Billing", "", [CARD])).toBe(true);
+  it("says how much of the 120 is used from 100 on", () => {
+    expect(titleHelp("a".repeat(100))).toBe("100 of 120");
+    expect(titleHelp("a".repeat(104))).toBe("104 of 120");
   });
 
-  it("takes text without cards", () => {
-    expect(canStart("Billing", "The invoices are late", [])).toBe(true);
+  it("counts an emoji as one character, and leaves the spaces at the edges out", () => {
+    expect(titleHelp(`  ${"😀".repeat(100)}  `)).toBe("100 of 120");
+  });
+});
+
+describe("titleError", () => {
+  it("takes a title up to 120 characters", () => {
+    expect(titleError("a".repeat(TITLE_MAX))).toBeNull();
+    expect(titleError("😀".repeat(TITLE_MAX))).toBeNull();
   });
 
-  it("wants something to discuss", () => {
-    expect(canStart("Billing", "  ", [])).toBe(false);
+  it("refuses a title above 120 characters, by code point", () => {
+    expect(titleError("a".repeat(TITLE_MAX + 1))).toBe("Use at most 120 characters.");
+    expect(titleError("😀".repeat(TITLE_MAX + 1))).toBe("Use at most 120 characters.");
+  });
+
+  it("has nothing to say of an empty title, which startReason names", () => {
+    expect(titleError("")).toBeNull();
+  });
+});
+
+describe("startReason", () => {
+  const ready = { board: "board-1", title: "Billing", text: "The invoices", cards: 0 };
+
+  it.each([
+    ["starts with text, a title and a board", ready, null],
+    ["starts with cards and no text", { ...ready, text: "  ", cards: 1 }, null],
+    [
+      "wants something to discuss before anything else",
+      { board: null, title: "", text: " ", cards: 0 },
+      "Write what to discuss or select at least one card.",
+    ],
+    ["wants a title", { ...ready, title: "  " }, "Name the discussion to start it."],
+    [
+      "wants a title that fits",
+      { ...ready, title: "a".repeat(121) },
+      "Use at most 120 characters.",
+    ],
+    ["wants a board", { ...ready, board: null }, "Choose a board."],
+    [
+      "names the title before the board",
+      { ...ready, board: null, title: "" },
+      "Name the discussion to start it.",
+    ],
+  ])("%s", (_name, input, expected) => {
+    expect(startReason(input)).toBe(expected);
+  });
+});
+
+describe("contextCharacters", () => {
+  it("counts code points with the English thousands separator", () => {
+    expect(contextCharacters("a".repeat(5690))).toBe("5,690 characters");
+    expect(contextCharacters("😀".repeat(3))).toBe("3 characters");
+  });
+
+  it("is singular for one", () => {
+    expect(contextCharacters("a")).toBe("1 character");
+  });
+});
+
+describe("contextLine", () => {
+  const epic = {
+    key: "dev/web#400",
+    repository: "dev/web",
+    number: 400,
+    title: "Usage-based billing",
+    url: "",
+    state: "open",
+  };
+  const other = { ...epic, key: "dev/web#500", number: 500, title: "Mobile" };
+  const sibling = (number: number) => ({
+    key: `dev/web#${number}`,
+    repository: "dev/web",
+    number,
+    title: `Card ${number}`,
+    url: "",
+    state: "open",
+    status: "Todo",
+    onBoard: true,
+  });
+  const dependency = (number: number) => ({
+    ...sibling(number),
+    pullRequests: [],
+    satisfied: false,
+  });
+  const card = (number: number, overrides: Partial<BoardCard> = {}) =>
+    makeBoardCard({ key: `dev/web#${number}`, number, ...overrides });
+  const chars = "a".repeat(5690);
+
+  it.each([
+    ["one card alone", [card(474)], "From the card: #474 · 5,690 characters"],
+    ["two cards alone", [card(455), card(461)], "From the cards: #455 and #461 · 5,690 characters"],
+    [
+      "three cards alone",
+      [card(455), card(461), card(470)],
+      "From the cards: #455, #461 and #470 · 5,690 characters",
+    ],
+    [
+      "an epic, its cards and a dependency",
+      [
+        card(455, {
+          epic,
+          siblings: [sibling(456), sibling(457)],
+          dependencies: [dependency(300)],
+        }),
+        card(461, { epic, siblings: [sibling(457), sibling(458), sibling(455)] }),
+      ],
+      "From the cards: #455, #461, the epic Usage-based billing, 3 cards of the epic and 1 dependency · 5,690 characters",
+    ],
+    [
+      "one sibling and two dependencies",
+      [
+        card(455, {
+          epic,
+          siblings: [sibling(456)],
+          dependencies: [dependency(300), dependency(301)],
+        }),
+      ],
+      "From the card: #455, the epic Usage-based billing, 1 card of the epic and 2 dependencies · 5,690 characters",
+    ],
+    [
+      "two epics",
+      [
+        card(455, { epic, siblings: [sibling(456), sibling(457)] }),
+        card(461, {
+          epic: other,
+          siblings: [sibling(462), sibling(463), sibling(464), sibling(465)],
+        }),
+      ],
+      "From the cards: #455, #461, 2 epics and 6 cards of the epics · 5,690 characters",
+    ],
+    [
+      "a dependency that is a card picked",
+      [card(455, { dependencies: [dependency(461)] }), card(461)],
+      "From the cards: #455 and #461 · 5,690 characters",
+    ],
+  ])("says %s", (_name, cards, expected) => {
+    expect(contextLine(cards, chars)).toBe(expected);
+  });
+
+  it("says the board and the text without cards", () => {
+    expect(contextLine([], "a".repeat(1240))).toBe(
+      "From the board and your text · 1,240 characters",
+    );
+  });
+
+  it("has no count while the context hasn't come", () => {
+    expect(contextLine([], null)).toBe("From the board and your text");
+    expect(contextLine([card(474)], null)).toBe("From the card: #474");
+  });
+});
+
+describe("boardLine", () => {
+  it("is the owner, the project and the short names of the repositories alphabetically", () => {
+    const board = makeBoard({
+      owner: "acme",
+      number: 7,
+      repositoryIds: ["r-web", "r-api", "r-billing", "r-gone"],
+    });
+    const repositories = [
+      makeRepository({ id: "r-web", fullName: "acme/web" }),
+      makeRepository({ id: "r-api", fullName: "acme/api" }),
+      makeRepository({ id: "r-billing", fullName: "acme/billing" }),
+    ];
+
+    expect(boardLine(board, repositories)).toBe("acme · project 7 · api, billing, web");
+  });
+
+  it("leaves the repositories out when the board has none", () => {
+    expect(boardLine(makeBoard({ owner: "acme", number: 7, repositoryIds: [] }), [])).toBe(
+      "acme · project 7",
+    );
+  });
+});
+
+describe("whatHint", () => {
+  it("is optional with cards, and asks for cards without", () => {
+    expect(whatHint(2)).toBe("optional with cards");
+    expect(whatHint(0)).toBe("or pick cards on the board");
   });
 });
 

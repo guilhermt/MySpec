@@ -1,4 +1,4 @@
-import { bodyDiff, type DiffLine } from "@/lib/body-diff";
+import { bodyDiff, type DiffLine } from "@/features/discussion/drafts-card";
 import { cn } from "@/lib/utils";
 
 export interface DraftDiffProps {

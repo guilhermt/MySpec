@@ -18,6 +18,7 @@ import {
   reviewSituation,
   situationFragment,
   situationLabel,
+  situationPillState,
   situationTone,
   spokenWait,
   stageSituation,
@@ -352,6 +353,27 @@ describe("situationFragment", () => {
     ],
   ])("tells %o as %s", (situation, expected) => {
     expect(situationFragment(situation)).toBe(expected);
+  });
+});
+
+describe("situationPillState", () => {
+  const question = makeSituation({ kind: "question", place: reviewerPlace(2) });
+  const failure = makeSituation({ kind: "session_error", group: "error", place: REVIEW_PLACE });
+  const archive = makeSituation({
+    kind: "ready_to_archive",
+    group: "closing",
+    place: { kind: "discussion", stage: "discussion", step: 0 },
+  });
+
+  it.each([
+    [question, 1, "waiting for you: question in Reviewer"],
+    [question, 3, "waiting for you: question in Reviewer, and 2 more"],
+    [failure, 1, "error: session error"],
+    [failure, 2, "error: session error, and 1 more"],
+    [archive, 1, "ready to archive"],
+    [archive, 2, "ready to archive, and 1 more"],
+  ])("tells %o of %i as %s", (situation, count, expected) => {
+    expect(situationPillState(situation, count)).toBe(expected);
   });
 });
 

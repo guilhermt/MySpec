@@ -144,9 +144,10 @@ export function epicDiscardedDetail(approvedCards: number): string {
     : `${approvedCards} approved cards of it won't publish · approve the epic again, or discard them`;
 }
 
-/** readyToArchiveDetail is what the bar says of a discussion ready to archive. */
-export function readyToArchiveDetail(published: number): string {
-  return `${published === 0 ? "nothing" : published} published · or ask the agent for more cards below`;
+/** readyToArchiveDetail is what the bar says of a discussion ready to archive: what was published, in how many rounds when more than one. */
+export function readyToArchiveDetail(published: number, rounds = 1): string {
+  const where = published > 0 && rounds > 1 ? ` in ${rounds} rounds` : "";
+  return `${published === 0 ? "nothing" : published} published${where} · or ask the agent for more cards below`;
 }
 
 /** standingDetail is the middle of the bar of a discussion, by the situation it is in; null for the others. */

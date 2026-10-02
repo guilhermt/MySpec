@@ -273,6 +273,7 @@ export function Conversation({
       latestReport,
       latestDecided,
       oneShot: task !== null && asTaskMode(task.mode) === "one_shot",
+      discussion: null,
     }),
     [stage, task, review, latestReport, latestDecided],
   );

@@ -603,6 +603,7 @@ describe("stretchFoldOf", () => {
     latestReport: new Map(),
     latestDecided: new Map(),
     oneShot: false,
+    discussion: null,
   };
   const stretch = (fields: Partial<Stretch>): Stretch => ({
     key: "entry-1",

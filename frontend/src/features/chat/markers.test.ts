@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
+  contextLineOf,
+  type DiscussionInput,
+  type DraftRowView,
+  documentLineOf,
+  publishedLineOf,
+  type RoundFolds,
+  revisedLineOf,
+  roundFolds,
+  roundLineOf,
+  unreadableLineOf,
+  writtenLineOf,
+} from "@/features/chat/discussion-markers";
+import {
   derivedDecidedLineOf,
+  discussionOpeningOf,
   type MarkerContext,
   type MarkerView,
   markerOf,
@@ -11,6 +25,9 @@ import {
   voiceOf,
 } from "@/features/chat/markers";
 import type {
+  DiscussionCard,
+  Draft,
+  DraftBefore,
   Entry,
   MarkerEntry,
   PRReport,
@@ -20,6 +37,9 @@ import type {
 } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
 import {
+  makeDiscussionCard,
+  makeDraft,
+  makeDraftRef,
   makeEntry,
   makeMarkerCommit,
   makePRCheck,
@@ -133,6 +153,7 @@ const ctx = (stage: string, rest: Partial<MarkerContext> = {}): MarkerContext =>
   latestReport: new Map(),
   latestDecided: new Map(),
   oneShot: false,
+  discussion: null,
   ...rest,
 });
 
@@ -318,13 +339,25 @@ describe("startLineOf", () => {
       view("start", "Review started"),
     ],
     [
-      "a discussion",
-      markerEntry({ type: "discussion_started" }),
+      "a discussion with its model, effort and board, whose prompt reads as the line Context",
+      markerEntry({
+        type: "discussion_started",
+        model: "claude-opus-5-5[1m]",
+        effort: "high",
+        board: "Platform Roadmap",
+      }),
       prompt({ text: "Should we cache the plans?" }),
       ctx("discussion", { task: null }),
       view("start", "Discussion started", {
-        body: { kind: "markdown", text: "Should we cache the plans?" },
+        complement: "Opus 5.5 (1M) · high · Platform Roadmap",
       }),
+    ],
+    [
+      "a discussion started before the marker kept its model",
+      markerEntry({ type: "discussion_started" }),
+      prompt({ text: "Should we cache the plans?" }),
+      ctx("discussion", { task: null }),
+      view("start", "Discussion started"),
     ],
     [
       "a marker whose prompt has not arrived",
@@ -1115,5 +1148,831 @@ describe("markerOf in the PR review of a task", () => {
 
     expect(read.text).toBe("MySpec → PR agent");
     expect(read.complement).toBe("apply 3 approved findings");
+  });
+});
+
+// The times are local, as the screen writes them.
+const NOW = new Date(2026, 8, 24, 16, 0).getTime();
+const at = (hour: number, minute: number) => new Date(2026, 8, 24, hour, minute).toISOString();
+
+const draftOf = (id: string, overrides: Partial<Draft> = {}): Draft =>
+  makeDraft({ id, title: `Title of ${id}`, position: Number(id.replace(/\D/g, "")), ...overrides });
+
+const onGitHub = (id: string, number: number, overrides: Partial<Draft> = {}): Draft =>
+  draftOf(id, {
+    repository: "acme/billing",
+    number,
+    url: `https://github.com/acme/billing/issues/${number}`,
+    decision: "approved",
+    published: true,
+    outcome: "created",
+    publishedAt: at(15, 10),
+    ...overrides,
+  });
+
+const cardsOf = (...numbers: number[]): DiscussionCard[] =>
+  numbers.map((number) => makeDiscussionCard({ key: `acme/billing#${number}`, number }));
+
+const input = (overrides: Partial<DiscussionInput> = {}): DiscussionInput => ({
+  id: "discussion-1",
+  drafts: [],
+  text: "",
+  cards: [],
+  documentRevision: 0,
+  ...overrides,
+});
+
+const NO_FOLDS: RoundFolds = {
+  current: 0,
+  asRound: new Map(),
+  hidden: new Set(),
+  before: new Map(),
+  cardAfter: "end",
+  revisions: new Map(),
+  latestDocument: "",
+  epics: null,
+};
+
+const discussionCtx = (
+  drafts: Draft[],
+  folds: Partial<RoundFolds> = {},
+  rest: Partial<DiscussionInput> = {},
+): MarkerContext =>
+  ctx("discussion", {
+    task: null,
+    discussion: { ...input({ drafts, ...rest }), folds: { ...NO_FOLDS, ...folds } },
+  });
+
+const row = (fields: Partial<DraftRowView>): DraftRowView => ({
+  glyph: null,
+  prefix: "",
+  title: "",
+  status: "",
+  tone: "normal",
+  link: null,
+  ...fields,
+});
+
+describe("contextLineOf", () => {
+  const prompted = user({ text: "a".repeat(5690), prompt: true });
+
+  it.each<[string, DiscussionCard[], number | null, string]>([
+    ["one card and its epic", cardsOf(455), 1, "#455 and its epic"],
+    ["two cards and their epic", cardsOf(455, 461), 1, "#455, #461 and their epic"],
+    ["two cards and their two epics", cardsOf(455, 461), 2, "#455, #461 and their 2 epics"],
+    ["three cards and their epic", cardsOf(455, 461, 470), 1, "#455, #461, #470 and their epic"],
+    [
+      "four cards: the first three and a count, with the epic",
+      cardsOf(455, 461, 470, 480),
+      1,
+      "#455, #461, #470 and 1 more card, with their epic",
+    ],
+    [
+      "five cards with two epics",
+      cardsOf(455, 461, 470, 480, 490),
+      2,
+      "#455, #461, #470 and 2 more cards, with their 2 epics",
+    ],
+    ["cards without an epic", cardsOf(455, 461), 0, "#455 and #461"],
+    ["one card without an epic", cardsOf(455), 0, "#455"],
+    ["three cards without an epic", cardsOf(455, 461, 470), 0, "#455, #461 and #470"],
+    [
+      "four cards without an epic",
+      cardsOf(455, 461, 470, 480),
+      0,
+      "#455, #461, #470 and 1 more card",
+    ],
+    [
+      "cards of a discussion from before the epics were recorded: no part of the epic",
+      cardsOf(455, 461),
+      null,
+      "#455 and #461",
+    ],
+    ["no cards", [], null, "the board and your text"],
+    ["no cards, whatever the epics", [], 1, "the board and your text"],
+  ])("says %s", (_name, cards, epics, complement) => {
+    expect(contextLineOf(prompted, input({ cards }), epics)).toEqual(
+      view("file", "Context", {
+        complement: `${complement} · 5,690 characters`,
+        body: { kind: "discussionDocument", name: "context.md", text: "a".repeat(5690) },
+      }),
+    );
+  });
+
+  it("counts the characters by code point", () => {
+    const line = contextLineOf(user({ text: "😀😀😀", prompt: true }), input(), null);
+
+    expect(line.complement).toBe("the board and your text · 3 characters");
+  });
+
+  it("says where the context comes from and opens nothing without the prompt", () => {
+    expect(contextLineOf(null, input({ cards: cardsOf(455) }), 1)).toEqual(
+      view("file", "Context", { complement: "#455 and its epic" }),
+    );
+  });
+});
+
+describe("discussionOpeningOf", () => {
+  it("gives the line Context and what the user wrote", () => {
+    const folds = { ...NO_FOLDS, epics: 1 };
+    const context: MarkerContext = ctx("discussion", {
+      task: null,
+      discussion: { ...input({ cards: cardsOf(455), text: "Cap the overage." }), folds },
+    });
+    const opening = discussionOpeningOf(prompt({ text: "The context." }), context);
+
+    expect(opening.message).toBe("Cap the overage.");
+    expect(opening.context).toEqual(
+      view("file", "Context", {
+        complement: "#455 and its epic · 12 characters",
+        body: { kind: "discussionDocument", name: "context.md", text: "The context." },
+      }),
+    );
+  });
+
+  it("has no message when the user wrote nothing", () => {
+    const opening = discussionOpeningOf(prompt({ text: "The context." }), discussionCtx([]));
+
+    expect(opening.message).toBe("");
+    expect(opening.context?.complement).toBe("the board and your text · 12 characters");
+  });
+
+  it("has the line without the prompt that hasn't arrived", () => {
+    expect(discussionOpeningOf(null, discussionCtx([])).context).toEqual(
+      view("file", "Context", { complement: "the board and your text" }),
+    );
+  });
+
+  it("has nothing outside a discussion", () => {
+    expect(discussionOpeningOf(prompt({ text: "x" }), ctx("prd"))).toEqual({
+      context: null,
+      message: "",
+    });
+  });
+});
+
+describe("documentLineOf", () => {
+  it.each([
+    [true, true, "Written discussion.md", true],
+    [false, true, "Updated discussion.md", true],
+    [true, false, "Written discussion.md", false],
+    [false, false, "Updated discussion.md", false],
+  ])("first %s, latest %s: %s, opens %s", (first, latest, text, opens) => {
+    expect(documentLineOf(marker({ type: "discussion_document", first }), latest)).toEqual(
+      view("file", text, {
+        complement: "the understanding",
+        body: opens
+          ? { kind: "discussionDocument", name: "discussion.md", text: null }
+          : { kind: "none" },
+      }),
+    );
+  });
+});
+
+describe("writtenLineOf", () => {
+  it.each([
+    [5, "round 1 · 5 drafts"],
+    [1, "round 1 · 1 draft"],
+  ])("says %i drafts", (count, complement) => {
+    expect(writtenLineOf(marker({ type: "drafts_written", round: 1, count }))).toEqual(
+      view("file", "Drafts written", { complement }),
+    );
+  });
+});
+
+describe("unreadableLineOf", () => {
+  it("says the reason", () => {
+    expect(
+      unreadableLineOf(
+        marker({
+          type: "drafts_unreadable",
+          reason: "Draft invoice-overage: it has no ### Title.",
+        }),
+      ),
+    ).toEqual(
+      view("problem", "drafts.md can't be read", {
+        complement: "Draft invoice-overage: it has no ### Title.",
+      }),
+    );
+  });
+});
+
+describe("revisedLineOf", () => {
+  const earlier = (fields: Partial<DraftBefore>): DraftBefore => ({
+    title: "A draft",
+    kind: "new",
+    decision: "",
+    outcome: "",
+    reference: "",
+    changes: [],
+    dropped: false,
+    added: false,
+    approvalCleared: false,
+    ...fields,
+  });
+
+  it.each([
+    [{ changed: 3, added: 1, dropped: 1 }, "round 1 · 3 changed, 1 added, 1 dropped"],
+    [{ changed: 3, added: 0, dropped: 0 }, "round 1 · 3 changed"],
+    [{ changed: 0, added: 2, dropped: 0 }, "round 1 · 2 added"],
+    [{ changed: 1, added: 0, dropped: 4 }, "round 1 · 1 changed, 4 dropped"],
+    [{ changed: 0, added: 0, dropped: 0 }, "round 1"],
+  ])("says the parts that aren't zero: %o", (counts, complement) => {
+    const line = revisedLineOf(marker({ type: "drafts_revised", round: 1, ...counts }));
+
+    expect(line.text).toBe("Drafts revised");
+    expect(line.complement).toBe(complement);
+    expect(line.body).toEqual({ kind: "none" });
+  });
+
+  it("opens the round as it was, a row for each, with what changed", () => {
+    const line = revisedLineOf(
+      marker({
+        type: "drafts_revised",
+        round: 1,
+        changed: 2,
+        added: 1,
+        dropped: 1,
+        before: [
+          earlier({ title: "Overage", changes: ["title", "body"], decision: "approved" }),
+          earlier({
+            title: "Tier limits",
+            changes: ["epic"],
+            decision: "approved",
+            approvalCleared: true,
+          }),
+          earlier({ title: "Export", dropped: true }),
+          earlier({ title: "Invoice list", decision: "approved" }),
+          earlier({ title: "Alerts", decision: "discarded" }),
+          earlier({ title: "Undecided" }),
+          earlier({
+            title: "Billing page",
+            decision: "approved",
+            outcome: "created",
+            reference: "acme/billing#479",
+          }),
+          earlier({ title: "Brand new", added: true }),
+          earlier({
+            title: "Rate limits",
+            kind: "update",
+            changes: ["cards"],
+            reference: "acme/gateway#461",
+          }),
+          earlier({ title: "Pricing", kind: "epic", changes: ["cards"] }),
+        ],
+      }),
+    );
+
+    expect(line.body).toEqual({
+      kind: "drafts",
+      rows: [
+        row({ glyph: "pencil", title: "Overage", status: "title, body" }),
+        row({
+          glyph: "pencil",
+          title: "Tier limits",
+          status: "epic · your approval was cleared",
+        }),
+        row({ title: "Export", status: "dropped by the agent", tone: "quiet" }),
+        row({ title: "Invoice list", status: "not changed · approved", tone: "quiet" }),
+        row({ title: "Alerts", status: "not changed · discarded", tone: "quiet" }),
+        row({ title: "Undecided", status: "not changed", tone: "quiet" }),
+        row({ title: "Billing page", status: "Created acme/billing#479", tone: "quiet" }),
+        row({
+          glyph: "pencil",
+          prefix: "Update gateway#461 · ",
+          title: "Rate limits",
+          status: "cards",
+        }),
+        row({ glyph: "pencil", prefix: "Epic · ", title: "Pricing", status: "cards" }),
+        row({ glyph: "pencil", title: "Brand new", status: "added" }),
+      ],
+    });
+  });
+
+  it("has no body without a draft before", () => {
+    expect(revisedLineOf(marker({ type: "drafts_revised", round: 1, before: [] })).body).toEqual({
+      kind: "none",
+    });
+  });
+});
+
+describe("publishedLineOf", () => {
+  it("says how many are out so far while a draft of the round isn't on GitHub or discarded", () => {
+    const drafts = [
+      onGitHub("d1", 479, { publishedAt: at(14, 29) }),
+      onGitHub("d2", 480, { publishedAt: at(15, 12) }),
+      draftOf("d3", { decision: "approved" }),
+      draftOf("d4", { decision: "discarded" }),
+    ];
+
+    const line = publishedLineOf(1, drafts, NOW);
+
+    expect(line).toMatchObject({
+      icon: "pullRequest",
+      text: "Published",
+      complement: "round 1 · 2 so far",
+      timeText: "14:29 – 15:12",
+    });
+    expect(line.tone).toBeUndefined();
+  });
+
+  it("says what the round published once every draft is settled", () => {
+    const drafts = [
+      onGitHub("d1", 479),
+      onGitHub("d2", 480),
+      onGitHub("d3", 481),
+      onGitHub("d4", 482),
+      onGitHub("d5", 461, { outcome: "updated", kind: "update" }),
+      draftOf("d6", { decision: "discarded" }),
+    ];
+
+    expect(publishedLineOf(1, drafts, NOW)).toMatchObject({
+      text: "Published",
+      complement: "round 1 · 4 created, 1 updated",
+      timeText: "15:10",
+    });
+  });
+
+  it("says only one kind when the round published one", () => {
+    expect(publishedLineOf(1, [onGitHub("d1", 479)], NOW).complement).toBe("round 1 · 1 created");
+    expect(publishedLineOf(1, [onGitHub("d1", 461, { outcome: "updated" })], NOW).complement).toBe(
+      "round 1 · 1 updated",
+    );
+  });
+
+  it("says where the publication stopped, with the error tone", () => {
+    const drafts = [
+      onGitHub("d1", 479),
+      onGitHub("d2", 480),
+      onGitHub("d3", 481),
+      draftOf("d4", {
+        title: "Overage on the monthly invoice",
+        decision: "approved",
+        publishError: "Rate limited.",
+      }),
+    ];
+
+    expect(publishedLineOf(1, drafts, NOW)).toMatchObject({
+      icon: "problem",
+      text: "Publication stopped",
+      complement: "round 1 · 3 published · Overage on the monthly invoice failed",
+      tone: "error",
+    });
+  });
+
+  it("leaves the count out when nothing was published, and counts the other failures", () => {
+    const drafts = [
+      draftOf("d1", { title: "Overage", decision: "approved", publishError: "No." }),
+      draftOf("d2", { title: "Export", decision: "approved", publishError: "No." }),
+    ];
+
+    expect(publishedLineOf(1, drafts, NOW)).toMatchObject({
+      complement: "round 1 · Overage and 1 more failed",
+      tone: "error",
+    });
+    expect(publishedLineOf(1, drafts, NOW).timeText).toBeUndefined();
+  });
+
+  it("looks at the drafts of its round alone", () => {
+    const drafts = [
+      onGitHub("d1", 479, { round: 1 }),
+      draftOf("d2", { round: 2, decision: "approved" }),
+    ];
+
+    expect(publishedLineOf(1, drafts, NOW).complement).toBe("round 1 · 1 created");
+  });
+
+  it("opens the list of the round in the order of the card, each draft by what became of it", () => {
+    const epic = draftOf("d1", {
+      kind: "epic",
+      title: "Pricing",
+      decision: "approved",
+      hold: { reason: "epic_short", title: "", left: 0, approved: 1, cards: 3 },
+    });
+    const drafts = [
+      draftOf("d9", { position: 9, title: "Loose" }),
+      draftOf("d2", {
+        position: 2,
+        title: "Created one",
+        decision: "approved",
+        published: true,
+        outcome: "created",
+        repository: "acme/billing",
+        number: 479,
+        url: "https://github.com/acme/billing/issues/479",
+        epic: makeDraftRef({ draft: "d1" }),
+      }),
+      epic,
+      draftOf("d3", {
+        position: 3,
+        decision: "approved",
+        publishing: true,
+        title: "Running",
+        epic: makeDraftRef({ draft: "d1" }),
+      }),
+      draftOf("d4", {
+        position: 4,
+        decision: "approved",
+        title: "Next one",
+        epic: makeDraftRef({ draft: "d1" }),
+      }),
+      draftOf("d5", {
+        position: 5,
+        title: "Waits",
+        decision: "approved",
+        hold: { reason: "epic", title: "", left: 0, approved: 0, cards: 0 },
+        epic: makeDraftRef({ draft: "d1" }),
+      }),
+      draftOf("d6", {
+        position: 6,
+        title: "Waits for a draft",
+        decision: "approved",
+        hold: { reason: "draft", title: "Tier limits", left: 0, approved: 0, cards: 0 },
+      }),
+      draftOf("d7", {
+        position: 7,
+        title: "Waits for cards",
+        kind: "epic",
+        decision: "approved",
+        hold: { reason: "cards", left: 2, title: "", approved: 0, cards: 0 },
+      }),
+      draftOf("d8", {
+        position: 8,
+        title: "Epic is out",
+        decision: "approved",
+        hold: { reason: "epic_discarded", title: "", left: 0, approved: 0, cards: 0 },
+      }),
+      draftOf("d10", { position: 10, title: "Dropped", decision: "discarded" }),
+      draftOf("d11", {
+        position: 11,
+        title: "Left the board",
+        repositoryId: "",
+      }),
+      draftOf("d12", {
+        position: 12,
+        title: "Failed",
+        decision: "approved",
+        publishError: "Rate limited.",
+      }),
+      draftOf("d13", {
+        position: 13,
+        title: "Update",
+        kind: "update",
+        decision: "approved",
+        published: true,
+        outcome: "updated",
+        repository: "acme/gateway",
+        number: 461,
+        url: "https://github.com/acme/gateway/issues/461",
+        card: makeDiscussionCard({ repository: "acme/gateway", number: 461 }),
+      }),
+    ];
+
+    const line = publishedLineOf(1, drafts, NOW);
+
+    expect(line.body).toEqual({
+      kind: "drafts",
+      rows: [
+        row({
+          glyph: "hold",
+          prefix: "Epic · ",
+          title: "Pricing",
+          status: "The epic needs two approved cards",
+        }),
+        row({
+          glyph: "check",
+          title: "Created one",
+          status: "Created billing#479",
+          link: { label: "billing#479", url: "https://github.com/acme/billing/issues/479" },
+        }),
+        row({ glyph: "spinner", title: "Running", status: "Publishing…" }),
+        row({ title: "Next one", status: "Next", tone: "quiet" }),
+        row({ glyph: "hold", title: "Waits", status: "Waits for the epic", tone: "quiet" }),
+        row({
+          glyph: "hold",
+          prefix: "Epic · ",
+          title: "Waits for cards",
+          status: "Waits for 2 more cards of the epic",
+          tone: "quiet",
+        }),
+        row({
+          glyph: "hold",
+          title: "Waits for a draft",
+          status: "Waits for Tier limits",
+          tone: "quiet",
+        }),
+        row({
+          glyph: "hold",
+          title: "Epic is out",
+          status: "The epic is discarded · not published",
+          tone: "normal",
+        }),
+        row({ title: "Loose", status: "Not decided", tone: "quiet" }),
+        row({ title: "Dropped", status: "Discarded · not published", tone: "quiet" }),
+        row({
+          glyph: "blocked",
+          title: "Left the board",
+          status: "Can't publish · the repository left the board",
+          tone: "quiet",
+        }),
+        row({ glyph: "error", title: "Failed", status: "Rate limited.", tone: "error" }),
+        row({
+          glyph: "check",
+          prefix: "Update gateway#461 · ",
+          title: "Update",
+          status: "Updated gateway#461",
+          link: { label: "gateway#461", url: "https://github.com/acme/gateway/issues/461" },
+        }),
+      ],
+    });
+  });
+});
+
+describe("roundLineOf", () => {
+  const round = [
+    onGitHub("d1", 479, { round: 1 }),
+    onGitHub("d2", 480, { round: 1 }),
+    onGitHub("d3", 481, { round: 1 }),
+    onGitHub("d4", 482, { round: 1 }),
+    onGitHub("d5", 461, { round: 1, outcome: "updated" }),
+    draftOf("d6", { round: 2 }),
+  ];
+
+  it.each([
+    [0, "5 drafts · 4 created, 1 updated"],
+    [1, "5 drafts, revised once · 4 created, 1 updated"],
+    [2, "5 drafts, revised twice · 4 created, 1 updated"],
+    [3, "5 drafts, revised 3 times · 4 created, 1 updated"],
+  ])("says %i revisions", (revisions, complement) => {
+    const line = roundLineOf(1, round, revisions);
+
+    expect(line.text).toBe("Round 1");
+    expect(line.complement).toBe(complement);
+  });
+
+  it("says nothing published when the whole round was discarded", () => {
+    const drafts = [
+      draftOf("d1", { decision: "discarded" }),
+      draftOf("d2", { decision: "discarded" }),
+    ];
+
+    expect(roundLineOf(1, drafts, 1).complement).toBe("2 drafts, revised once · nothing published");
+    expect(roundLineOf(1, drafts, 0).complement).toBe("2 drafts · nothing published");
+  });
+
+  it("opens the list of the round with the links, a discarded draft as Discarded", () => {
+    const drafts = [
+      onGitHub("d1", 479, { round: 1 }),
+      draftOf("d2", { round: 1, position: 2, decision: "discarded" }),
+      draftOf("d3", { round: 2 }),
+    ];
+
+    expect(roundLineOf(1, drafts, 0).body).toEqual({
+      kind: "drafts",
+      rows: [
+        row({
+          glyph: "check",
+          title: "Title of d1",
+          status: "Created billing#479",
+          link: { label: "billing#479", url: "https://github.com/acme/billing/issues/479" },
+        }),
+        row({ title: "Title of d2", status: "Discarded · not published", tone: "quiet" }),
+      ],
+    });
+  });
+});
+
+describe("roundFolds", () => {
+  const entry = (id: string, fields: Partial<MarkerEntry>): Entry =>
+    makeEntry("marker", { id, marker: marker(fields) });
+  const two = [draftOf("d1", { round: 1 }), draftOf("d2", { round: 2 })];
+
+  it("folds a published round into its publication and hides the rest of it", () => {
+    const entries = [
+      entry("start", { type: "discussion_started" }),
+      entry("w1", { type: "drafts_written", round: 1, count: 5 }),
+      entry("r1", { type: "drafts_revised", round: 1, changed: 1 }),
+      entry("p1", { type: "drafts_published", round: 1 }),
+      entry("w2", { type: "drafts_written", round: 2, count: 1 }),
+    ];
+
+    const folds = roundFolds(entries, two);
+
+    expect(folds.current).toBe(2);
+    expect([...folds.asRound]).toEqual([["p1", 1]]);
+    expect([...folds.hidden].sort()).toEqual(["r1", "w1"]);
+    expect([...folds.before]).toEqual([]);
+    expect(folds.cardAfter).toBe("w2");
+    expect([...folds.revisions]).toEqual([[1, 1]]);
+  });
+
+  it("folds a round whose drafts were all discarded into its Drafts written", () => {
+    const entries = [
+      entry("w1", { type: "drafts_written", round: 1, count: 2 }),
+      entry("r1", { type: "drafts_revised", round: 1 }),
+      entry("w2", { type: "drafts_written", round: 2, count: 1 }),
+    ];
+
+    const folds = roundFolds(entries, two);
+
+    expect([...folds.asRound]).toEqual([["w1", 1]]);
+    expect([...folds.hidden]).toEqual(["r1"]);
+    expect([...folds.before]).toEqual([]);
+  });
+
+  it("folds a round of a discussion from before the task before the Drafts written of the next", () => {
+    const entries = [
+      entry("start", { type: "discussion_started" }),
+      entry("w2", { type: "drafts_written", round: 2, count: 1 }),
+    ];
+
+    const folds = roundFolds(entries, two);
+
+    expect([...folds.before]).toEqual([["w2", 1]]);
+    expect([...folds.asRound]).toEqual([]);
+    expect([...folds.hidden]).toEqual([]);
+  });
+
+  it("folds that round before the card when the next round has no marker either", () => {
+    const folds = roundFolds([entry("start", { type: "discussion_started" })], two);
+
+    expect([...folds.before]).toEqual([["end", 1]]);
+  });
+
+  it("folds nothing in the first round, and keeps every marker of the current one", () => {
+    const entries = [
+      entry("w1", { type: "drafts_written", round: 1, count: 2 }),
+      entry("p1", { type: "drafts_published", round: 1 }),
+    ];
+
+    const folds = roundFolds(entries, [draftOf("d1", { round: 1 })]);
+
+    expect(folds.current).toBe(1);
+    expect([...folds.asRound]).toEqual([]);
+    expect([...folds.hidden]).toEqual([]);
+    expect([...folds.before]).toEqual([]);
+  });
+
+  it("has no round without drafts", () => {
+    const folds = roundFolds([], []);
+
+    expect(folds.current).toBe(0);
+    expect(folds.cardAfter).toBe("end");
+  });
+
+  it("puts the card after the latest of the Drafts written and Drafts revised of the current round", () => {
+    const entries = [
+      entry("w1", { type: "drafts_written", round: 1 }),
+      entry("r1", { type: "drafts_revised", round: 1 }),
+      entry("r2", { type: "drafts_revised", round: 1 }),
+      entry("document", { type: "discussion_document", first: true }),
+    ];
+
+    expect(roundFolds(entries, [draftOf("d1", { round: 1 })]).cardAfter).toBe("r2");
+  });
+
+  it("puts the card at the end without either marker", () => {
+    expect(
+      roundFolds(
+        [entry("document", { type: "discussion_document" })],
+        [draftOf("d1", { round: 1 })],
+      ).cardAfter,
+    ).toBe("end");
+  });
+
+  it("never folds the drafts that can't be read", () => {
+    const entries = [
+      entry("u1", { type: "drafts_unreadable", round: 1, reason: "No title." }),
+      entry("p1", { type: "drafts_published", round: 1 }),
+      entry("w2", { type: "drafts_written", round: 2 }),
+    ];
+
+    const folds = roundFolds(entries, two);
+
+    expect(folds.hidden.has("u1")).toBe(false);
+    expect(folds.asRound.has("u1")).toBe(false);
+  });
+
+  it("counts the revisions of each round", () => {
+    const entries = [
+      entry("r1", { type: "drafts_revised", round: 1 }),
+      entry("r2", { type: "drafts_revised", round: 1 }),
+      entry("r3", { type: "drafts_revised", round: 2 }),
+    ];
+
+    expect([...roundFolds(entries, two).revisions]).toEqual([
+      [1, 2],
+      [2, 1],
+    ]);
+  });
+
+  it("finds the latest document", () => {
+    const entries = [
+      entry("d1", { type: "discussion_document", first: true }),
+      entry("d2", { type: "discussion_document" }),
+    ];
+
+    expect(roundFolds(entries, []).latestDocument).toBe("d2");
+    expect(roundFolds([], []).latestDocument).toBe("");
+  });
+
+  it.each([
+    ["the epics the start recorded", { model: "claude-opus-5-5", epics: ["a", "b"] }, 2],
+    ["a start that recorded its model and no epics", { model: "claude-opus-5-5", epics: [] }, 0],
+    ["a start that recorded epics without a model", { epics: ["a"] }, 1],
+    ["a start from before the task: neither", {}, null],
+  ])("reads %s", (_name, fields, epics) => {
+    const folds = roundFolds([entry("start", { type: "discussion_started", ...fields })], []);
+
+    expect(folds.epics).toBe(epics);
+  });
+
+  it("has no epics without a start", () => {
+    expect(roundFolds([], []).epics).toBeNull();
+  });
+});
+
+describe("markerOf in a discussion", () => {
+  const dctx = (folds: Partial<RoundFolds> = {}, drafts: Draft[] = []) =>
+    discussionCtx(drafts, { current: 2, ...folds });
+
+  it.each([
+    "discussion_document",
+    "drafts_written",
+    "drafts_revised",
+    "drafts_unreadable",
+    "drafts_published",
+  ])("draws nothing for %s outside a discussion", (type) => {
+    expect(markerOf(marker({ type, round: 1 }), ctx("prd"), "e", NOW)).toBeNull();
+    expect(
+      markerOf(marker({ type, round: 1 }), ctx("discussion", { task: null }), "e", NOW),
+    ).toBeNull();
+  });
+
+  it("draws the lines of the markers of the drafts", () => {
+    const drafts = [onGitHub("d1", 479, { round: 2 })];
+    const context = dctx({ latestDocument: "doc" }, drafts);
+
+    expect(
+      markerOf(marker({ type: "drafts_written", round: 2, count: 1 }), context, "w", NOW)?.text,
+    ).toBe("Drafts written");
+    expect(
+      markerOf(marker({ type: "drafts_revised", round: 2, changed: 1 }), context, "r", NOW)?.text,
+    ).toBe("Drafts revised");
+    expect(
+      markerOf(marker({ type: "drafts_unreadable", reason: "No title." }), context, "u", NOW)?.text,
+    ).toBe("drafts.md can't be read");
+    expect(
+      markerOf(marker({ type: "drafts_published", round: 2 }), context, "p", NOW),
+    ).toMatchObject({
+      text: "Published",
+      complement: "round 2 · 1 created",
+    });
+  });
+
+  it("opens the document only on the latest marker", () => {
+    const context = dctx({ latestDocument: "doc2" });
+
+    expect(
+      markerOf(marker({ type: "discussion_document", first: true }), context, "doc1", NOW)?.body,
+    ).toEqual({ kind: "none" });
+    expect(markerOf(marker({ type: "discussion_document" }), context, "doc2", NOW)?.body).toEqual({
+      kind: "discussionDocument",
+      name: "discussion.md",
+      text: null,
+    });
+  });
+
+  it("draws nothing for what a folded round leaves", () => {
+    const context = dctx({ hidden: new Set(["w1", "r1"]) });
+
+    expect(markerOf(marker({ type: "drafts_written", round: 1 }), context, "w1", NOW)).toBeNull();
+    expect(markerOf(marker({ type: "drafts_revised", round: 1 }), context, "r1", NOW)).toBeNull();
+  });
+
+  it("draws the publication, or the Drafts written, of a folded round as Round N", () => {
+    const drafts = [onGitHub("d1", 479, { round: 1 }), draftOf("d2", { round: 2 })];
+    const context = dctx(
+      {
+        asRound: new Map([
+          ["p1", 1],
+          ["w1", 1],
+        ]),
+        revisions: new Map([[1, 2]]),
+      },
+      drafts,
+    );
+
+    expect(
+      markerOf(marker({ type: "drafts_published", round: 1 }), context, "p1", NOW),
+    ).toMatchObject({
+      text: "Round 1",
+      complement: "1 draft, revised twice · 1 created",
+    });
+    expect(
+      markerOf(marker({ type: "drafts_written", round: 1 }), context, "w1", NOW),
+    ).toMatchObject({
+      text: "Round 1",
+    });
   });
 });

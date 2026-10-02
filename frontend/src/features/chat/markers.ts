@@ -1,4 +1,16 @@
 import type { FindingView } from "@/components/system/Finding";
+import {
+  contextLineOf,
+  type DiscussionInput,
+  type DraftRowView,
+  documentLineOf,
+  publishedLineOf,
+  type RoundFolds,
+  revisedLineOf,
+  roundLineOf,
+  unreadableLineOf,
+  writtenLineOf,
+} from "@/features/chat/discussion-markers";
 import { publishedGoes } from "@/features/reviews/publish";
 import { findingViews } from "@/features/reviews/review-conversation";
 import { verdictLabel } from "@/features/reviews/review-status";
@@ -50,7 +62,8 @@ export type MarkerIcon =
  * MarkerBody is what a line opens in place: nothing; Markdown (a prompt, an initial context, a
  * message of the product); a document of the task or of the review, read on opening, with the panel
  * of its foot; the problems of a plan; the checks a pass started from; the findings a pass decided;
- * or the commits that reached a pull request.
+ * the commits that reached a pull request; or, in a discussion, a document of it (the context it
+ * was given, or the one the agent wrote, which is read on opening) and a list of its drafts.
  */
 export type MarkerBody =
   | { kind: "none" }
@@ -59,7 +72,9 @@ export type MarkerBody =
   | { kind: "problems"; problems: PlanProblem[] }
   | { kind: "checks"; reading: ChecksReading; summary: string }
   | { kind: "findings"; pass: number; findings: FindingView[] }
-  | { kind: "commits"; commits: { sha: string; subject: string }[]; more: number };
+  | { kind: "commits"; commits: { sha: string; subject: string }[]; more: number }
+  | { kind: "discussionDocument"; name: "context.md" | "discussion.md"; text: string | null }
+  | { kind: "drafts"; rows: DraftRowView[] };
 
 /** MarkerView is a line of the conversation: a marker, a start line, a message of the product. */
 export interface MarkerView {
@@ -73,6 +88,10 @@ export interface MarkerView {
   link?: { label: string; url: string };
   /** timeHidden says the line never shows its time, not even on hover: a retry. */
   timeHidden: boolean;
+  /** timeText replaces the time of the hover: the span of a publication, "14:29 – 15:12". */
+  timeText?: string;
+  /** tone "error" draws the diamond and the rail of an error. */
+  tone?: "error";
 }
 
 /** MarkerContext is what a line needs to know about its conversation. */
@@ -88,6 +107,8 @@ export interface MarkerContext {
   /** latestDecided is the id of the latest findings_decided marker of each pass: the one that holds the findings. */
   latestDecided: ReadonlyMap<number, string>;
   oneShot: boolean;
+  /** discussion is what the conversation of a discussion knows of it, with where its rounds fold; null elsewhere. */
+  discussion: (DiscussionInput & { folds: RoundFolds }) | null;
 }
 
 // The voices of the conversations with a single session key.
@@ -156,7 +177,7 @@ function firstPassComplement(oneShot: boolean): string {
 // StartOf is what opened a conversation: its marker, or for a prompt without
 // one, what the stage of the conversation says it was.
 type StartOf = Pick<MarkerEntry, "type" | "stage" | "step" | "restarted"> &
-  Partial<Pick<MarkerEntry, "model" | "effort" | "mode">>;
+  Partial<Pick<MarkerEntry, "model" | "effort" | "mode" | "board">>;
 
 function startOfStage(stage: string): StartOf {
   const step = stepNumberOf(stage) ?? 0;
@@ -255,8 +276,13 @@ function startView(start: StartOf, prompt: UserEntry | null, ctx: MarkerContext)
           start.mode === "publish" ? "Publish" : start.mode === "apply" ? "Apply" : "",
         ),
       );
+    // What the discussion was given reads as the line Context after this one.
     case "discussion_started":
-      return line("start", "Discussion started", "", markdownOf(prompt?.text ?? ""));
+      return line(
+        "start",
+        "Discussion started",
+        parts(modelLabel(start.model ?? ""), start.effort ?? "", start.board ?? ""),
+      );
     default:
       return stageStart(start, prompt, ctx);
   }
@@ -623,15 +649,64 @@ export function markerOf(
     case "review_started":
     case "discussion_started":
       return startView(marker, null, ctx);
-    // The conversation draws the markers of the discussion from the step that
-    // draws them on.
     case "discussion_document":
     case "drafts_written":
     case "drafts_revised":
     case "drafts_unreadable":
     case "drafts_published":
-      return null;
+      return discussionLineOf(marker, ctx, entryId, now);
   }
+}
+
+// discussionLineOf is a marker of the drafts of a discussion; none outside one, and none for what a folded round leaves.
+function discussionLineOf(
+  marker: MarkerEntry,
+  ctx: MarkerContext,
+  entryId: string,
+  now: number,
+): MarkerView | null {
+  const { discussion } = ctx;
+  if (discussion === null) {
+    return null;
+  }
+  const { folds } = discussion;
+  if (folds.hidden.has(entryId)) {
+    return null;
+  }
+  const round = folds.asRound.get(entryId);
+  if (round !== undefined) {
+    return roundLineOf(round, discussion.drafts, folds.revisions.get(round) ?? 0);
+  }
+  switch (asMarkerType(marker.type)) {
+    case "discussion_document":
+      return documentLineOf(marker, entryId === folds.latestDocument);
+    case "drafts_written":
+      return writtenLineOf(marker);
+    case "drafts_revised":
+      return revisedLineOf(marker);
+    case "drafts_unreadable":
+      return unreadableLineOf(marker);
+    default:
+      return publishedLineOf(marker.round, discussion.drafts, now);
+  }
+}
+
+/**
+ * discussionOpeningOf is what follows the start of a discussion: the line Context, from the prompt,
+ * and what the user wrote, "" without. A conversation that isn't a discussion has neither.
+ */
+export function discussionOpeningOf(
+  prompt: Entry | null,
+  ctx: MarkerContext,
+): { context: MarkerView | null; message: string } {
+  const { discussion } = ctx;
+  if (discussion === null) {
+    return { context: null, message: "" };
+  }
+  return {
+    context: contextLineOf(prompt?.user ?? null, discussion, discussion.folds.epics),
+    message: discussion.text,
+  };
 }
 
 /** mergedLineOf is the line derived at the end of a pull request: Merged … or Closed …; null while it is open. */

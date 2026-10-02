@@ -3,13 +3,7 @@ import type { PillView, StepperGlyph } from "@/components/system/Pill";
 import type { StepperStepView } from "@/components/system/Stepper";
 import { choiceLabel } from "@/lib/models";
 import { type ChecksReading, checkCounts, checksSummary } from "@/lib/pull-requests";
-import {
-  counted,
-  lowerFirst,
-  reviewName,
-  situationFragment,
-  situationLabel,
-} from "@/lib/situations";
+import { counted, reviewName, situationPillState } from "@/lib/situations";
 import type {
   ModelCatalog,
   PullCard,
@@ -17,7 +11,6 @@ import type {
   PullReviewStatus,
   ReviewPass,
   ReviewSummary,
-  Situation,
   SituationGroup,
 } from "@/lib/wails";
 import {
@@ -100,20 +93,6 @@ function busy(word: string, state: string): Moment {
   return { glyph: "work", word, shimmer: false, state };
 }
 
-// situationState is the state of the pill with a situation: the tone and what the most urgent one
-// asks, with how many more; ready to merge says itself.
-function situationState(situation: Situation, count: number): string {
-  const more = count > 1 ? `, and ${count - 1} more` : "";
-  switch (asSituationGroup(situation.group)) {
-    case "error":
-      return `error: ${situationFragment(situation)}${more}`;
-    case "waiting":
-      return `waiting for you: ${situationFragment(situation)}${more}`;
-    case "closing":
-      return `${lowerFirst(situationLabel(situation))}${more}`;
-  }
-}
-
 // momentOf is the pill of a review neither paused nor waiting on the user.
 function momentOf(review: ReviewSummary): Moment {
   switch (asPullReviewStatus(review.status)) {
@@ -180,7 +159,7 @@ function pillOf(review: ReviewSummary, name: string, now: number): PillView {
       word: "",
       shimmer: false,
       paused: false,
-      state: situationState(situation, situations.length),
+      state: situationPillState(situation, situations.length),
     };
   }
   return { ...place, ...momentOf(review), paused: false };
