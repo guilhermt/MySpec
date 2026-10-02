@@ -315,7 +315,7 @@ Fechada sem merge: `web#2291 was closed without a merge`, com `It was closed at 
 | **Aguardando o usuário** | A linha da árvore e a da lista com o glifo âmbar; a barra de decisão, de publicação ou de commits novos; o disco âmbar na pílula. A barra que nasce pisca e é anunciada |
 | **Agente trabalhando** | A passada: spinner na pílula e na árvore, o grupo vivo, **Stop**. Os checks são o GitHub trabalhando: círculo tracejado, sem barra |
 | **Pausado e ocioso** | Pausado: **Resume** no cabeçalho, a pílula neutra, `Sending resumes the review…` no compositor. Publicado: ocioso, sem barra |
-| **Muitos itens** | A lista rola com a barra de filtros fixa e as seções recolhem (8 a 9 PRs no uso real; até 100 por repositório). Uma passada com 15 apontamentos: o cartão rola na conversa, e `Alt+↓` e o avanço de `A`/`D` levam ao próximo por decidir |
+| **Muitos itens** | A lista rola com a barra de filtros fixa e as seções recolhem (8 a 9 PRs no uso real; até 100 por repositório). Ela não é virtualizada, ao contrário do board: monta todas as linhas, e o teclado anda por índice, como no board. Uma passada com 15 apontamentos: o cartão rola na conversa, e `Alt+↓` e o avanço de `A`/`D` levam ao próximo por decidir |
 | **Item que sumiu** | O review encerrado com a tela aberta: a página da seção 15. A PR que sai da leitura com o painel aberto: o painel fecha, e a linha já saiu |
 
 ## 17. Atalhos
