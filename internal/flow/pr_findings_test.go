@@ -305,6 +305,32 @@ func TestAStructuredPassIsShownByItsReportAndWhatTheUserDecidedAboutIt(t *testin
 			nil, reviewing,
 			true, false,
 			review.Snapshot{},
+			false, flow.PRAwaitingDecision,
+		},
+		{
+			"the session is paused, every finding discarded",
+			[]task.PRPass{decidedPass(1, discarded, discarded)},
+			nil, reviewing,
+			true, false, reviewed(0, 0), true, flow.PRDone,
+		},
+		{
+			"the session is paused, sent with changes reviewed",
+			[]task.PRPass{sentPass(decidedPass(1, approved))},
+			nil, reviewing,
+			true, false, reviewed(3, 3), true, flow.PRReadyToApprove,
+		},
+		{
+			"the session is paused, the report not in yet",
+			[]task.PRPass{askedPass(1)},
+			nil, reviewing,
+			true, false,
+			review.Snapshot{},
+			false, flow.PRReviewing,
+		},
+		{
+			"a pass in text, the session paused", nil, reports(1, false), reviewing,
+			true, false,
+			review.Snapshot{},
 			false, flow.PRReviewing,
 		},
 		{

@@ -151,6 +151,7 @@ func (s *Service) prState(t task.Task, run task.PRRun, art task.PRArtifacts) Pul
 	pr.CommitFailed = s.prNoCommit(t.ID)
 	facts := prFacts{
 		idle:       pr.Session.Idle && pr.SessionStage != "",
+		paused:     pausedAtRest(pr.Session) && pr.SessionStage != "",
 		openFailed: s.openFailed(t.ID),
 		passAsked:  s.passAsked(t.ID) != "",
 		pass:       pr.Pass,
@@ -194,6 +195,7 @@ func prSessionStage(status task.PRStatus) string {
 // and its artifacts.
 type prFacts struct {
 	idle       bool         // the session of the stage is open and at rest
+	paused     bool         // the session of the stage is open, paused, with nothing queued
 	openFailed bool         // the last opening of the pull request ended without one
 	passAsked  bool         // a review pass was asked for and its report is not in yet
 	pass       *task.PRPass // the current structured pass; nil for a pass in text or none
@@ -255,15 +257,17 @@ func awaitingStatus(run task.PRRun) PRStatus {
 // reviewingStatus is what a pull request under review is shown as: the pass
 // that runs, the report the agent still owes, the report that closed it, or how
 // far the user got with the changes it asked for. A structured pass is shown by
-// structuredStatus.
+// structuredStatus, with its session at rest, or paused with nothing queued
+// once its report is recorded: a pause keeps the findings and the changes in
+// the state they ask for, while a report is only read from a session at rest.
 func reviewingStatus(
 	run task.PRRun, art task.PRArtifacts, facts prFacts, snap review.Snapshot, read bool,
 ) PRStatus {
+	if facts.pass != nil && (facts.idle || (facts.paused && facts.pass.Recorded)) {
+		return structuredStatus(run, *facts.pass, snap, read)
+	}
 	if !facts.idle {
 		return PRReviewing
-	}
-	if facts.pass != nil {
-		return structuredStatus(run, *facts.pass, snap, read)
 	}
 	last, ok := lastReport(art)
 	if !ok || facts.passAsked {
@@ -716,7 +720,8 @@ func (s *Service) evaluateReview(ctx context.Context, t task.Task, run task.PRRu
 		return
 	}
 
-	if pass, structured := currentPass(s.tasks.PRPasses(t.ID)); structured {
+	pass, structured := currentPass(s.tasks.PRPasses(t.ID))
+	if structured {
 		updated, recorded, ok := s.evaluateReport(ctx, t, wt, run, key, sum.Idle, pass)
 		if !ok {
 			return
@@ -750,9 +755,11 @@ func (s *Service) evaluateReview(ctx context.Context, t task.Task, run task.PRRu
 	}
 
 	// A pass that asks for changes is reviewed like a step: the user reads what
-	// the agent did, file by file, in the worktree of the task.
+	// the agent did, file by file, in the worktree of the task. A paused
+	// structured pass keeps showing them, so they are still watched; the next
+	// pass waits for the session to be resumed.
 	idle := sum.Idle
-	s.review.Track(t.ID, wt, idle)
+	s.review.Track(t.ID, wt, idle || (structured && pausedAtRest(sum)))
 	if !idle {
 		return
 	}
@@ -1391,6 +1398,12 @@ func (s *Service) ApprovePR(ctx context.Context, id string) error {
 	}
 	s.log.Info("pr review approved", "task", id, "files", snap.Total)
 	return nil
+}
+
+// pausedAtRest says a session is paused with no message queued for it: what it
+// stopped at is what it shows until it is resumed.
+func pausedAtRest(sum session.Summary) bool {
+	return sum.Status == session.StatusPaused && sum.PendingCount == 0
 }
 
 // readySession is the session of the PR stage, resumed when it was paused, so

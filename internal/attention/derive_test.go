@@ -411,6 +411,24 @@ func TestDeriveThePullRequestOfThePRStage(t *testing.T) {
 				"The approved findings of the pull request review are ready to apply."),
 		},
 		{
+			"findings to decide with the conversation paused",
+			prInput(flow.PullRequest{
+				Status: flow.PRAwaitingDecision, SessionStage: session.PRReviewStage,
+				Session: summary(session.StatusPaused, false),
+				Pass:    structuredPass(approved, undecided),
+			}),
+			nil,
+		},
+		{
+			"every finding discarded with the conversation paused",
+			prInput(flow.PullRequest{
+				Status: flow.PRDone, SessionStage: session.PRReviewStage,
+				Session: summary(session.StatusPaused, false),
+				Pass:    structuredPass(discarded, discarded),
+			}),
+			nil,
+		},
+		{
 			"the agent rewrites the report",
 			prInput(flow.PullRequest{
 				Status: flow.PRReviewing, SessionStage: session.PRReviewStage,
