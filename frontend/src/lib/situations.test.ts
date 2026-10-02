@@ -103,6 +103,9 @@ describe("situationLabel", () => {
     ["review_report", "apply", 0, "Ready to apply"],
     ["new_commits", "", 0, "New commits"],
     ["drafts", "", 0, "Decide drafts"],
+    ["epic_cant_publish", "", 0, "Epic can't publish"],
+    ["epic_discarded", "", 0, "Epic discarded"],
+    ["ready_to_archive", "", 0, "Ready to archive"],
     ["publish_failed", "", 0, "Publish failed"],
     ["pass_blocked", "", 0, "Pass blocked"],
     ["pr_trouble", "checks", 0, "Checks failed"],
@@ -263,6 +266,30 @@ describe("nextWaiting", () => {
     expect(filtered).toEqual(all);
   });
 
+  it("takes a discussion ready to archive, a closing situation", () => {
+    const closing = makeState({
+      discussions: [
+        makeDiscussion({
+          id: "discussion-2",
+          title: "Invoices",
+          situations: [
+            makeSituation({
+              id: "ready",
+              kind: "ready_to_archive",
+              group: "closing",
+              place: DISCUSSION_PLACE,
+            }),
+          ],
+        }),
+      ],
+    });
+
+    expect(nextWaiting(closing, null)).toMatchObject({
+      itemId: "discussion-2",
+      situation: { id: "ready" },
+    });
+  });
+
   it("is null when nothing waits", () => {
     expect(nextWaiting(makeState({ tasks: [makeTask({ situations: null })] }), null)).toBeNull();
   });
@@ -287,6 +314,15 @@ describe("announcement", () => {
     [makeSituation({ kind: "draft", place: PR_PLACE }), "Login: draft to approve in PR"],
     [makeSituation({ kind: "new_commits", place: REVIEW_PLACE }), "Login: new commits"],
     [makeSituation({ kind: "drafts", place: DISCUSSION_PLACE }), "Login: decide drafts"],
+    [
+      makeSituation({ kind: "epic_cant_publish", place: DISCUSSION_PLACE }),
+      "Login: epic can't publish",
+    ],
+    [makeSituation({ kind: "epic_discarded", place: DISCUSSION_PLACE }), "Login: epic discarded"],
+    [
+      makeSituation({ kind: "ready_to_archive", group: "closing", place: DISCUSSION_PLACE }),
+      "Login: ready to archive",
+    ],
   ])("tells %o as %s", (situation, expected) => {
     expect(announcement("Login", situation)).toBe(expected);
   });

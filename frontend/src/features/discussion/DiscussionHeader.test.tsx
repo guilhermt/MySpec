@@ -95,4 +95,21 @@ describe("DiscussionHeader", () => {
       container.querySelector(".bg-\\[var\\(--status-attention-fill\\)\\]"),
     ).toBeInTheDocument();
   });
+
+  it("shows a discussion ready to archive with the done dot", () => {
+    const { container } = header({
+      status: "ready_to_archive",
+      situations: [
+        makeSituation({
+          taskId: "discussion-1",
+          kind: "ready_to_archive",
+          group: "closing",
+          place: { kind: "discussion", stage: "", step: 0 },
+        }),
+      ],
+    });
+
+    expect(screen.getByText("Ready to archive")).toBeInTheDocument();
+    expect(container.querySelector(".bg-\\[var\\(--status-success\\)\\]")).toBeInTheDocument();
+  });
 });

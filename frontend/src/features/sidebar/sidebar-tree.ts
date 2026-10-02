@@ -465,6 +465,18 @@ function situationText(owner: Owner, situation: Situation): RowText {
       const { a, b } = decided(drafts);
       return { long: `Decide drafts · ${a} of ${b}`, short: `Decide drafts · ${a}/${b}` };
     }
+    case "epic_cant_publish":
+      return same("Epic can't publish");
+    case "epic_discarded":
+      return same("Epic discarded");
+    case "ready_to_archive": {
+      const drafts = owner.kind === "discussion" ? (owner.discussion.drafts ?? []) : [];
+      const published = drafts.filter((draft) => draft.published).length;
+      return {
+        long: `Ready to archive · ${published === 0 ? "nothing" : published} published`,
+        short: "Ready to archive",
+      };
+    }
   }
 }
 

@@ -19,6 +19,7 @@ import {
   asErrorKind,
   asFindingDecision,
   asFindingPlacement,
+  asHoldReason,
   asInterruptedBy,
   asIssueState,
   asMarkerType,
@@ -352,6 +353,15 @@ describe("narrowing", () => {
     for (const dropped of ["", "discarded", "unavailable"]) {
       expect(asDependencyDrop(dropped)).toBe(dropped);
     }
+    for (const reason of ["", "epic_discarded", "cards", "epic_short", "epic", "draft"]) {
+      expect(asHoldReason(reason)).toBe(reason);
+    }
+    for (const status of ["epic_discarded", "epic_cant_publish", "ready_to_archive"]) {
+      expect(asDiscussionStatus(status)).toBe(status);
+    }
+    for (const kind of ["epic_cant_publish", "epic_discarded", "ready_to_archive"]) {
+      expect(asSituationKind(kind)).toBe(kind);
+    }
     for (const failure of ["not_found", "unsupported", "failed"]) {
       expect(asCatalogFailure(failure)).toBe(failure);
     }
@@ -407,6 +417,7 @@ describe("narrowing", () => {
     expect(asDraftDecision("deferred")).toBe("");
     expect(asDraftOutcome("closed")).toBe("");
     expect(asDependencyDrop("cycle")).toBe("");
+    expect(asHoldReason("waiting")).toBe("");
     // A message of the user, or of the app in a transcript that has no kind.
     expect(asAppKind("")).toBe("");
     expect(asAppKind("merge")).toBe("");

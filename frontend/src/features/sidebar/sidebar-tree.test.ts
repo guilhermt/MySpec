@@ -423,6 +423,33 @@ describe("the line 2 of a discussion with a situation", () => {
       "Decide drafts · 1/3",
     ],
     [
+      { kind: "epic_cant_publish", place: DISCUSSION_PLACE },
+      {},
+      "Epic can't publish",
+      "Epic can't publish",
+    ],
+    [{ kind: "epic_discarded", place: DISCUSSION_PLACE }, {}, "Epic discarded", "Epic discarded"],
+    [
+      { kind: "ready_to_archive", group: "closing", place: DISCUSSION_PLACE },
+      {
+        drafts: [
+          makeDraft({ id: "a", published: true }),
+          makeDraft({ id: "b", published: true }),
+          makeDraft({ id: "c", published: true }),
+          makeDraft({ id: "d", published: true }),
+          makeDraft({ id: "e", published: true }),
+        ],
+      },
+      "Ready to archive · 5 published",
+      "Ready to archive",
+    ],
+    [
+      { kind: "ready_to_archive", group: "closing", place: DISCUSSION_PLACE },
+      { drafts: [makeDraft({ id: "a", decision: "discarded" })] },
+      "Ready to archive · nothing published",
+      "Ready to archive",
+    ],
+    [
       { kind: "publish_failed", group: "error", place: DISCUSSION_PLACE },
       {},
       "Publish failed",
@@ -943,6 +970,31 @@ describe("the accessible name", () => {
     expect(discussionRow(discussionWith({ status: "published", cards: [] }), NOW).label).toBe(
       "discussion Invoices. ready to close, Ready to archive.",
     );
+  });
+});
+
+describe("a discussion ready to archive", () => {
+  const ready = () =>
+    discussionRow(
+      discussionWith({
+        status: "ready_to_archive",
+        situations: [
+          situation({ kind: "ready_to_archive", group: "closing", place: DISCUSSION_PLACE }),
+        ],
+      }),
+      NOW,
+    );
+
+  it("takes the close tone with the chip of its situation", () => {
+    expect(ready()).toMatchObject({
+      tone: "close",
+      clock: { kind: "chip", tone: "close" },
+      line2: { short: "Ready to archive" },
+    });
+  });
+
+  it("counts in a collapsed node as ready to close", () => {
+    expect(nodeSummary([ready()])?.label).toBe("1 ready to close");
   });
 });
 

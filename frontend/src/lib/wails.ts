@@ -402,6 +402,9 @@ export type SituationKind =
   | "new_commits"
   | "pr_trouble"
   | "drafts"
+  | "epic_cant_publish"
+  | "epic_discarded"
+  | "ready_to_archive"
   | "publish_failed"
   | "pass_blocked";
 
@@ -519,6 +522,9 @@ export type DiscussionStatus =
   | "deciding"
   | "publishing"
   | "publish_failed"
+  | "epic_discarded"
+  | "epic_cant_publish"
+  | "ready_to_archive"
   | "published";
 
 /** DraftKind is what a draft does on GitHub: a new card, an update of one, or an epic over them. */
@@ -535,6 +541,9 @@ export type DraftOutcome = "" | "created" | "updated";
 
 /** DependencyDrop is why a dependency of a draft went nowhere; "" while it holds. */
 export type DependencyDrop = "" | "discarded" | "unavailable";
+
+/** HoldReason is what keeps an approved draft out of the next publication; "" when nothing does. */
+export type HoldReason = "" | "epic_discarded" | "cards" | "epic_short" | "epic" | "draft";
 
 /** REVIEW_STAGE is the stage of the conversation of a review: a review has one. */
 export const REVIEW_STAGE = "review";
@@ -944,6 +953,9 @@ export function asSituationKind(value: string): SituationKind {
     case "new_commits":
     case "pr_trouble":
     case "drafts":
+    case "epic_cant_publish":
+    case "epic_discarded":
+    case "ready_to_archive":
     case "publish_failed":
     case "pass_blocked":
       return value;
@@ -1219,6 +1231,9 @@ export function asDiscussionStatus(value: string): DiscussionStatus {
     case "deciding":
     case "publishing":
     case "publish_failed":
+    case "epic_discarded":
+    case "epic_cant_publish":
+    case "ready_to_archive":
     case "published":
       return value;
     default:
@@ -1274,6 +1289,19 @@ export function asDependencyDrop(value: string): DependencyDrop {
     case "":
     case "discarded":
     case "unavailable":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asHoldReason(value: string): HoldReason {
+  switch (value) {
+    case "epic_discarded":
+    case "cards":
+    case "epic_short":
+    case "epic":
+    case "draft":
       return value;
     default:
       return "";

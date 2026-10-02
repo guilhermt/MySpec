@@ -8,14 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ArchiveDiscussionDialog } from "@/features/discussion/ArchiveDiscussionDialog";
 import { DeleteDiscussionDialog } from "@/features/discussion/DeleteDiscussionDialog";
-import {
-  discussionStatusLabel,
-  discussionStatusTone,
-} from "@/features/discussion/discussion-status";
+import { discussionDotTone, discussionStatusLabel } from "@/features/discussion/discussion-status";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { ContextGauge } from "@/features/task/ContextGauge";
 import { ToneDot } from "@/features/task/StatusDot";
-import { discussionSituation, situationTone } from "@/lib/situations";
 import { asSessionStatus, type DiscussionSummary } from "@/lib/wails";
 import { pause, resume } from "@/store/actions";
 import { useAppStore, usePanel } from "@/store/app-store";
@@ -34,10 +30,8 @@ export function DiscussionHeader({ discussion }: DiscussionHeaderProps) {
   const panel = usePanel();
   const openPanel = useAppStore((state) => state.openPanel);
 
-  const situation = discussionSituation(discussion);
-  // What waits on the user takes the colour of its situation; without one, the
-  // dot shows what the discussion is doing.
-  const tone = situation !== null ? situationTone(situation) : discussionStatusTone(discussion);
+  // The dot: see discussionDotTone.
+  const tone = discussionDotTone(discussion);
   const status = asSessionStatus(discussion.sessionStatus);
   const paused = status === "paused";
   const running = discussion.sessionStage !== "";
