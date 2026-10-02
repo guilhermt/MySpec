@@ -757,11 +757,12 @@ func (s *Service) evaluateReview(ctx context.Context, t task.Task, run task.PRRu
 	}
 
 	// A pass that asks for changes is reviewed like a step: the user reads what
-	// the agent did, file by file, in the worktree of the task. A paused
-	// structured pass keeps showing them, so they are still watched; the next
-	// pass waits for the session to be resumed.
+	// the agent did, file by file, in the worktree of the task. A structured
+	// pass paused before it was sent keeps showing them, so they are still
+	// watched; the next pass waits for the session to be resumed. A pass
+	// paused while the agent applies it is not reviewed, so it is not watched.
 	idle := sum.Idle
-	s.review.Track(t.ID, wt, idle || (structured && pausedAtRest(sum)))
+	s.review.Track(t.ID, wt, idle || (structured && !pass.Sent() && pausedAtRest(sum)))
 	if !idle {
 		return
 	}
