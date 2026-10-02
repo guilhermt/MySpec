@@ -133,9 +133,10 @@ func (e *fakeEditor) opened() []string {
 // session that cannot be recorded, which is a first session that does not
 // start, and a task that cannot be deleted.
 type faults struct {
-	mu            sync.Mutex
-	sessionInsert error
-	taskDelete    error
+	mu               sync.Mutex
+	sessionInsert    error
+	taskDelete       error
+	discussionDelete error
 }
 
 // failSessions makes every session recorded from now on fail with err.
@@ -144,6 +145,14 @@ func (f *faults) failSessions(err error) {
 	defer f.mu.Unlock()
 
 	f.sessionInsert = err
+}
+
+// failDiscussionDeletes makes every discussion deleted from now on fail with err.
+func (f *faults) failDiscussionDeletes(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.discussionDelete = err
 }
 
 // failTaskDeletes makes every task deleted from now on fail with err.
@@ -194,6 +203,23 @@ func (r faultyTasks) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	return r.TasksRepo.Delete(ctx, id)
+}
+
+// faultyDiscussions is the table of discussions, failing a deletion when the
+// faults say so.
+type faultyDiscussions struct {
+	*store.DiscussionsRepo
+	faults *faults
+}
+
+func (r faultyDiscussions) Delete(ctx context.Context, id string) error {
+	r.faults.mu.Lock()
+	err := r.faults.discussionDelete
+	r.faults.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	return r.DiscussionsRepo.Delete(ctx, id)
 }
 
 // fakeSituationStore stands in for the table of situations. It remembers
@@ -513,7 +539,7 @@ func newFixture(t *testing.T) *fixture {
 	})
 	t.Cleanup(f.reviewFlow.Close)
 
-	f.discussions = discussion.New(discussion.Deps{Store: st.Discussions, DataDir: f.dataDir, Log: log})
+	f.discussions = discussion.New(discussion.Deps{Store: faultyDiscussions{DiscussionsRepo: st.Discussions, faults: f.faults}, DataDir: f.dataDir, Log: log})
 	f.discussionFlow = discussionflow.New(discussionflow.Deps{
 		Discussions:  f.discussions,
 		Sessions:     f.sessions,

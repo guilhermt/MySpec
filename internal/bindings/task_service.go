@@ -177,15 +177,14 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 		if deleteErr != nil {
 			s.log.Error("binding failed", "method", "CreateTask", "err", deleteErr)
 		}
-		return "", undoneFailure(failed, deleteErr)
+		return "", undoneFailure(failed, deleteErr, "The task was undone.")
 	}
 	return t.ID, nil
 }
 
 // undoneFailure is the error of a creation whose first session did not start:
-// the failure the user reads, saying the task was undone when its deletion
-// worked. A deletion that failed is logged by the caller and not mentioned.
-func undoneFailure(failed, deleteErr error) error {
+// the failure the user reads, followed by undone when the deletion worked. A deletion that failed is logged by the caller and not mentioned.
+func undoneFailure(failed, deleteErr error, undone string) error {
 	if deleteErr != nil {
 		return failed
 	}
@@ -194,7 +193,7 @@ func undoneFailure(failed, deleteErr error) error {
 	if !strings.HasSuffix(message, ".") && !strings.HasSuffix(message, "!") && !strings.HasSuffix(message, "?") {
 		separator = ". "
 	}
-	return errors.New(message + separator + "The task was undone.")
+	return errors.New(message + separator + undone)
 }
 
 // managingRepository is the registered repository of a card, when the board of

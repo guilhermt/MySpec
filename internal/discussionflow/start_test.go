@@ -126,8 +126,9 @@ func TestADiscussionIsUndoneWhenItsConversationCannotStart(t *testing.T) {
 	f.sessions.startErr = errSession
 
 	_, err := f.flow.Start(t.Context(), discussionflow.StartParams{BoardID: boardID, Title: "Invoices", Text: "Export"})
-	if !errors.Is(err, errSession) {
-		t.Fatalf("start discussion: got %v, want %v", err, errSession)
+	var undone *discussionflow.UndoneError
+	if !errors.Is(err, errSession) || !errors.As(err, &undone) {
+		t.Fatalf("start discussion: got %v, want an UndoneError of %v", err, errSession)
 	}
 	if list := f.discussions.List(); len(list) != 0 {
 		t.Errorf("the discussion stayed: %d in the list", len(list))
@@ -137,6 +138,21 @@ func TestADiscussionIsUndoneWhenItsConversationCannotStart(t *testing.T) {
 		if readErr == nil && len(entries) > 0 {
 			t.Errorf("the artifacts of the discussion stayed: %d folders", len(entries))
 		}
+	}
+}
+
+func TestADiscussionThatCannotBeDeletedIsNotSaidToBeUndone(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.sessions.startErr = errSession
+	f.store.deleteErr = errors.New("disk full")
+
+	_, err := f.flow.Start(t.Context(), discussionflow.StartParams{BoardID: boardID, Title: "Invoices", Text: "Export"})
+
+	var undone *discussionflow.UndoneError
+	if !errors.Is(err, errSession) || errors.As(err, &undone) {
+		t.Fatalf("start discussion: got %v, want the error of the session alone", err)
 	}
 }
 

@@ -62,8 +62,9 @@ func (s *Service) Start(ctx context.Context, p StartParams) (string, error) {
 		// goes with the conversation it could not have.
 		if delErr := s.discussions.Delete(ctx, created.ID); delErr != nil {
 			s.log.Error("delete discussion failed", "discussion", created.ID, "error", delErr)
+			return "", err
 		}
-		return "", err
+		return "", &UndoneError{Err: err}
 	}
 
 	s.log.Info("discussion started", "discussion", created.ID, "board", b.ID, "cards", len(cards))

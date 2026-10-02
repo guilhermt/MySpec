@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -58,6 +59,10 @@ func (s *DiscussionService) StartDiscussion(req StartDiscussionRequest) (string,
 		Choice:  choice,
 	})
 	if err != nil {
+		var undone *discussionflow.UndoneError
+		if errors.As(err, &undone) {
+			return "", undoneFailure(s.fail("StartDiscussion", undone.Err), nil, "The discussion was undone.")
+		}
 		return "", s.fail("StartDiscussion", err)
 	}
 	return id, nil

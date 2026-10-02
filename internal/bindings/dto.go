@@ -1529,7 +1529,13 @@ type Draft struct {
 	Publishing   bool   `json:"publishing"`   // the draft is in the publication under way
 	PublishError string `json:"publishError"` // why the last publication failed; "" otherwise
 	// Hold is what keeps the draft out of the next publication; Reason "" when nothing does.
-	Hold DraftHold `json:"hold"`
+	Hold             DraftHold `json:"hold"`
+	Round            int       `json:"round"`
+	Revised          bool      `json:"revised"`          // the last revision of the round changed it
+	ApprovalCleared  bool      `json:"approvalCleared"`  // a revision took its approval
+	ApprovePublishes []string  `json:"approvePublishes"` // ids, in the order of the run; never nil
+	DiscardPublishes []string  `json:"discardPublishes"` // ids, in the order of the run; never nil
+	ApproveHold      DraftHold `json:"approveHold"`
 }
 
 // DiscussionRepository is a repository of the board a new card can be created
@@ -1555,6 +1561,10 @@ type DiscussionSummary struct {
 	Status string           `json:"status"`
 	Cards  []DiscussionCard `json:"cards"`  // the cards it started from; never nil
 	Drafts []Draft          `json:"drafts"` // in position order; never nil
+	// Round is the current round of the drafts, 0 without any.
+	Round int `json:"round"`
+	// Publishing says a run that writes on GitHub is under way.
+	Publishing bool `json:"publishing"`
 	// DraftsRead says a readable drafts artifact was recorded, and
 	// DraftsRevision changes every time the artifact is read again and differs.
 	DraftsRead     bool `json:"draftsRead"`
@@ -1617,6 +1627,7 @@ type ArchivedDiscussion struct {
 	BoardID string           `json:"boardId"`
 	Board   string           `json:"board"` // the title of the board
 	Title   string           `json:"title"`
+	Text    string           `json:"text"`   // what the user wrote when creating it; "" for none
 	Cards   []DiscussionCard `json:"cards"`  // never nil
 	Drafts  []Draft          `json:"drafts"` // in position order; never nil
 	// PublishedCount is how many drafts went to GitHub.

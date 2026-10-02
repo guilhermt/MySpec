@@ -53,6 +53,13 @@ type DraftState struct {
 	Hold Hold
 	// Publishing says the draft is in the publication under way.
 	Publishing bool
+	// ApprovePublishes and DiscardPublishes are the drafts approving or
+	// discarding the draft would publish now, in the order of the run; nil when
+	// the gesture publishes nothing or can't be made.
+	ApprovePublishes []string
+	DiscardPublishes []string
+	// ApproveHold is what would hold the draft once approved.
+	ApproveHold Hold
 }
 
 // State is everything the app knows about a discussion: what it recorded, the
@@ -64,8 +71,10 @@ type State struct {
 	// without a run, so that what waits for the user stands through one, and
 	// StatusNone while a run is under way or about to start with nothing else
 	// waiting.
-	Waiting     Status
-	Drafts      []DraftState
+	Waiting Status
+	Drafts  []DraftState
+	// Round is the highest round of the drafts, 0 without any.
+	Round       int
 	Session     session.Summary
 	SessionOpen bool
 	// UnreadableDrafts is why the drafts artifact could not be read; "" when
@@ -148,7 +157,8 @@ func (s State) DiscardedEpic() (approvedCards int, ok bool) {
 // can be archived.
 func settle(state *State, drafts []discussion.Draft, running map[string]bool) {
 	c := chainOf(drafts)
-	state.Drafts = draftStates(c, running)
+	state.Drafts = draftStates(c, drafts, running, state.Publishing)
+	state.Round = maxRound(drafts)
 	state.Status = standing(*state, c, true)
 	state.Waiting = standing(*state, c, false)
 	state.CanArchive, state.ArchiveHint = canArchive(*state, c)
@@ -216,13 +226,56 @@ func pending(d discussion.Draft) bool {
 }
 
 // draftStates is every draft with what keeps it out of the next run, with
-// running saying which of them the publication under way writes.
-func draftStates(c chain, running map[string]bool) []DraftState {
+// running saying which of them the publication under way writes. A draft still
+// to decide also says what each decision would publish, by working the chain
+// out again with that decision: the rule stays in chainOf.
+func draftStates(c chain, drafts []discussion.Draft, running map[string]bool, publishing bool) []DraftState {
+	now := ids(c.due())
 	states := make([]DraftState, 0, len(c.drafts))
 	for _, d := range c.drafts {
-		states = append(states, DraftState{Draft: d, Hold: c.hold(d.ID), Publishing: running[d.ID]})
+		ds := DraftState{Draft: d, Hold: c.hold(d.ID), Publishing: running[d.ID]}
+		if d.Decision == discussion.DecisionNone && !d.Published.Started() && d.PublishError == "" && !publishing {
+			approved := chainOf(withDecision(drafts, d.ID, discussion.DecisionApproved))
+			discarded := chainOf(withDecision(drafts, d.ID, discussion.DecisionDiscarded))
+			ds.ApprovePublishes = without(ids(approved.due()), now)
+			ds.DiscardPublishes = without(ids(discarded.due()), now)
+			ds.ApproveHold = approved.hold(d.ID)
+		}
+		states = append(states, ds)
 	}
 	return states
+}
+
+// withDecision is the drafts with one of them decided.
+func withDecision(drafts []discussion.Draft, id string, decision discussion.Decision) []discussion.Draft {
+	decided := slices.Clone(drafts)
+	for i := range decided {
+		if decided[i].ID == id {
+			decided[i].Decision = decision
+		}
+	}
+	return decided
+}
+
+// ids are the ids of the drafts, in order.
+func ids(drafts []discussion.Draft) []string {
+	list := make([]string, 0, len(drafts))
+	for _, d := range drafts {
+		list = append(list, d.ID)
+	}
+	return list
+}
+
+// without is the list minus the ids in now, in the order of the list; nil when
+// nothing is left.
+func without(list, now []string) []string {
+	var left []string
+	for _, id := range list {
+		if !slices.Contains(now, id) {
+			left = append(left, id)
+		}
+	}
+	return left
 }
 
 // canArchive says whether a discussion can leave the list for the history, and

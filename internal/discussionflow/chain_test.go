@@ -324,3 +324,120 @@ func TestTheChainSaysWhatGoesAndWhatHoldsEachDraft(t *testing.T) {
 		})
 	}
 }
+
+func TestWhatTheGestureWouldPublish(t *testing.T) {
+	t.Parallel()
+
+	type gesture struct {
+		approve, discard []string
+		hold             discussionflow.Hold
+	}
+	tests := []struct {
+		name       string
+		drafts     []discussion.Draft
+		publishing bool
+		want       map[string]gesture
+	}{
+		{
+			name:   "a loose card publishes alone",
+			drafts: list(card("l1", "")),
+			want:   map[string]gesture{"l1": {approve: ids("l1")}},
+		},
+		{
+			name: "the last card of an epic with the condition closed publishes the epic and the cards, and so does discarding it",
+			drafts: list(
+				epic("e", approved), card("c1", "e", approved), card("c2", "e", approved), card("c3", "e"),
+			),
+			want: map[string]gesture{"c3": {approve: ids("e", "c1", "c2", "c3"), discard: ids("e", "c1", "c2")}},
+		},
+		{
+			name:   "a card waits for the epic",
+			drafts: list(epic("e"), card("c1", "e")),
+			want: map[string]gesture{
+				"e":  {hold: discussionflow.Hold{Reason: discussionflow.HoldCards, Left: 1}},
+				"c1": {hold: discussionflow.Hold{Reason: discussionflow.HoldEpic}},
+			},
+		},
+		{
+			name:   "a card waits for a dependency",
+			drafts: list(card("l1", ""), card("l2", "", dependsOn("l1"))),
+			want: map[string]gesture{
+				"l1": {approve: ids("l1")},
+				"l2": {hold: discussionflow.Hold{Reason: discussionflow.HoldDraft, Title: "The l1"}},
+			},
+		},
+		{
+			name:   "an epic waits for its cards",
+			drafts: list(epic("e"), card("c1", "e"), card("c2", "e")),
+			want: map[string]gesture{
+				"e": {hold: discussionflow.Hold{Reason: discussionflow.HoldCards, Left: 2}},
+			},
+		},
+		{
+			name:   "an epic with fewer than two approved cards is short",
+			drafts: list(epic("e"), card("c1", "e", approved), card("c2", "e", discarded)),
+			want: map[string]gesture{
+				"e": {hold: discussionflow.Hold{Reason: discussionflow.HoldEpicShort, Approved: 1, Cards: 2}},
+			},
+		},
+		{
+			name:   "the card of a discarded epic is held",
+			drafts: list(epic("e", discarded), card("c1", "e")),
+			want: map[string]gesture{
+				"c1": {hold: discussionflow.Hold{Reason: discussionflow.HoldEpicDiscarded}},
+			},
+		},
+		{
+			name:       "nothing during a run",
+			drafts:     list(card("l1", ""), card("l2", "", approved)),
+			publishing: true,
+			want:       map[string]gesture{"l1": {}},
+		},
+		{
+			name:   "nothing for a draft decided, started or failed",
+			drafts: list(card("a", "", approved), card("b", "", discarded), card("c", "", started), card("d", "", failed)),
+			want:   map[string]gesture{"a": {}, "b": {}, "c": {}, "d": {}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			state := discussionflow.StateOf(tt.drafts, tt.publishing)
+
+			got := map[string]gesture{}
+			for _, d := range state.Drafts {
+				if _, asked := tt.want[d.Draft.ID]; asked {
+					got[d.Draft.ID] = gesture{approve: d.ApprovePublishes, discard: d.DiscardPublishes, hold: d.ApproveHold}
+				}
+			}
+			if diff := cmp.Diff(tt.want, got, cmp.AllowUnexported(gesture{})); diff != "" {
+				t.Errorf("gesture (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestStateCarriesTheRound(t *testing.T) {
+	t.Parallel()
+
+	round := func(n int) modifier { return func(d *discussion.Draft) { d.Round = n } }
+	tests := []struct {
+		name   string
+		drafts []discussion.Draft
+		want   int
+	}{
+		{name: "no drafts", want: 0},
+		{name: "the first round", drafts: list(card("a", "", round(1), done), card("b", "", round(1))), want: 1},
+		{name: "the next round", drafts: list(card("a", "", round(1), done), card("b", "", round(2))), want: 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := discussionflow.StateOf(tt.drafts, false).Round; got != tt.want {
+				t.Errorf("Round = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}

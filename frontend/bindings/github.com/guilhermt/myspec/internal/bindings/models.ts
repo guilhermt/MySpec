@@ -89,6 +89,11 @@ export interface ArchivedDiscussion {
     "title": string;
 
     /**
+     * what the user wrote when creating it; "" for none
+     */
+    "text": string;
+
+    /**
      * never nil
      */
     "cards": DiscussionCard[] | null;
@@ -798,6 +803,16 @@ export interface DiscussionSummary {
     "drafts": Draft[] | null;
 
     /**
+     * Round is the current round of the drafts, 0 without any.
+     */
+    "round": number;
+
+    /**
+     * Publishing says a run that writes on GitHub is under way.
+     */
+    "publishing": boolean;
+
+    /**
      * DraftsRead says a readable drafts artifact was recorded, and
      * DraftsRevision changes every time the artifact is read again and differs.
      */
@@ -998,6 +1013,28 @@ export interface Draft {
      * Hold is what keeps the draft out of the next publication; Reason "" when nothing does.
      */
     "hold": DraftHold;
+    "round": number;
+
+    /**
+     * the last revision of the round changed it
+     */
+    "revised": boolean;
+
+    /**
+     * a revision took its approval
+     */
+    "approvalCleared": boolean;
+
+    /**
+     * ids, in the order of the run; never nil
+     */
+    "approvePublishes": string[] | null;
+
+    /**
+     * ids, in the order of the run; never nil
+     */
+    "discardPublishes": string[] | null;
+    "approveHold": DraftHold;
 }
 
 /**

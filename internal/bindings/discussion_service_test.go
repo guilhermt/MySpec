@@ -1,6 +1,7 @@
 package bindings_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -309,6 +310,39 @@ func TestStartingADiscussionIsRefusedBeforeItSaysAnything(t *testing.T) {
 	}
 	if discussions := f.state.GetState().Discussions; len(discussions) != 0 {
 		t.Errorf("discussions = %+v, want none created", discussions)
+	}
+}
+
+func TestADiscussionWhoseSessionDoesNotStartSaysItWasUndoneOnlyWhenItWas(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		deleteErr error
+		want      string
+	}{
+		{name: "the deletion worked", want: "disk I/O error. The discussion was undone."},
+		{name: "the deletion failed", deleteErr: errors.New("database is locked"), want: "disk I/O error"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			f.register(t, t.TempDir())
+			f.registerBoard(t, true, webCard(12))
+			f.faults.failSessions(errors.New("disk I/O error"))
+			f.faults.failDiscussionDeletes(tt.deleteErr)
+
+			_, err := f.discussionSvc.StartDiscussion(bindings.StartDiscussionRequest{
+				BoardID: testBoardID, Title: "Invoices", Text: "Bill them.",
+				Model: "claude-opus-5-5[1m]", Effort: "high",
+			})
+
+			if err == nil || err.Error() != tt.want {
+				t.Errorf("StartDiscussion() = %v, want %q", err, tt.want)
+			}
+		})
 	}
 }
 

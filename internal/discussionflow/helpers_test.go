@@ -758,6 +758,7 @@ type memStore struct {
 	mu          sync.Mutex
 	discussions []discussion.Discussion
 	drafts      map[string][]discussion.Draft
+	deleteErr   error // returned by Delete alone
 
 	// writeErr is what the next writes of a draft the test picked answer
 	// with, and writeErrLeft how many of them still do.
@@ -838,6 +839,10 @@ func (m *memStore) UpdateArchived(_ context.Context, id string, archivedAt, upda
 func (m *memStore) Delete(_ context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if m.deleteErr != nil {
+		return m.deleteErr
+	}
 
 	if index := m.indexOf(id); index >= 0 {
 		m.discussions = slices.Delete(m.discussions, index, index+1)

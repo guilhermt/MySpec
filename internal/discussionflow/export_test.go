@@ -40,3 +40,11 @@ func ChainOf(drafts []discussion.Draft, publishing bool) ChainView {
 	}
 	return view
 }
+
+// StateOf is the state of a discussion whose drafts were read, with a run under
+// way when publishing says so.
+func StateOf(drafts []discussion.Draft, publishing bool) State {
+	state := State{Discussion: discussion.Discussion{DraftsRead: true}, Publishing: publishing}
+	settle(&state, drafts, nil)
+	return state
+}

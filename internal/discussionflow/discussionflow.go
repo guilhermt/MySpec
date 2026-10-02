@@ -80,6 +80,13 @@ var (
 	ErrNoReading     = errors.New("discussionflow: the board hasn't been read yet")
 )
 
+// UndoneError is a start whose session did not begin, with the discussion
+// deleted again: nothing of it is left.
+type UndoneError struct{ Err error }
+
+func (e *UndoneError) Error() string { return e.Err.Error() }
+func (e *UndoneError) Unwrap() error { return e.Err }
+
 // Service is the state machine of every discussion of the product.
 type Service struct {
 	discussions  *discussion.Service

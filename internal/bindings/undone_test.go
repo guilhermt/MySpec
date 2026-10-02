@@ -42,7 +42,7 @@ func TestUndoneFailureSaysTheTaskWasUndoneOnlyWhenItWas(t *testing.T) {
 			if tt.raw != "" {
 				failed = errors.New(tt.raw)
 			}
-			if got := undoneFailure(failed, tt.deleteErr).Error(); got != tt.want {
+			if got := undoneFailure(failed, tt.deleteErr, "The task was undone.").Error(); got != tt.want {
 				t.Errorf("undoneFailure() = %q, want %q", got, tt.want)
 			}
 		})
