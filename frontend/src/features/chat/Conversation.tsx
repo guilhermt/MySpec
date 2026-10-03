@@ -261,6 +261,8 @@ export interface ConversationProps {
   activity?: string;
   /** replyWaiting marks the last block of the last speech with the rail of a question in text (the reply situation). */
   replyWaiting?: boolean;
+  /** endRoom leaves room at the end as high as the way back to the end: a discussion, whose card of drafts ends its conversation. */
+  endRoom?: boolean;
 }
 
 /** Conversation is everything that was said and done, from the top down, as a feed. */
@@ -276,6 +278,7 @@ export function Conversation({
   fixed,
   activity,
   replyWaiting = false,
+  endRoom = false,
 }: ConversationProps) {
   const transcript = useTranscript(taskId, stage);
   const task = useTask(taskId);
@@ -374,7 +377,12 @@ export function Conversation({
 
   return (
     <div className="relative min-h-0 flex-1">
-      <ConversationColumn viewportRef={viewportRef} contentRef={contentRef} fadeTop={!atTop}>
+      <ConversationColumn
+        viewportRef={viewportRef}
+        contentRef={contentRef}
+        fadeTop={!atTop}
+        endRoom={endRoom}
+      >
         <div
           ref={feedRef}
           role="feed"

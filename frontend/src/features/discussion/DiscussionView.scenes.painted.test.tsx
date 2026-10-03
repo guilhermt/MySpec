@@ -23,6 +23,7 @@ import {
   overlaps,
   placeHeaderOneLine,
   placeHeaderPieces,
+  resolve,
   setTheme,
   settle,
   THEMES,
@@ -390,6 +391,52 @@ describe.each(THEMES)("DiscussionView, the scenes in the %s theme", (theme) => {
         expect(document.querySelector('[role="tooltip"]')).toBeNull();
       }
       await capture(`discussion-${one.label.replace(/[?=&]/g, "-")}-${width}-${theme}`, area);
+
+      // The edit of draft 3 opened in the conversation with its fields: Add a dependency is in view,
+      // and the listbox it opens stays inside the conversation, above the row when below has no room.
+      if (one.flags.edit === true) {
+        const viewOf = (element: Element) => {
+          let box = element.parentElement;
+          while (box !== null && !["auto", "scroll"].includes(getComputedStyle(box).overflowY)) {
+            box = box.parentElement;
+          }
+          return (box ?? document.documentElement).getBoundingClientRect();
+        };
+        const inside = (element: Element) => {
+          const view = viewOf(element);
+          const box = element.getBoundingClientRect();
+          return box.top >= view.top && box.bottom <= view.bottom;
+        };
+        const add = within(area).getByRole("button", { name: /^Add a dependency/ });
+        expect(inside(add)).toBe(true);
+        // The row is taken near the bottom of the conversation, where the listbox has no room below.
+        const scroller = add.closest<HTMLElement>('[data-slot="conversation"]')?.parentElement
+          ?.parentElement;
+        if (scroller !== null && scroller !== undefined) {
+          const view = viewOf(add);
+          scroller.scrollTop += add.getBoundingClientRect().bottom - (view.bottom - 48);
+        }
+        await user.click(add);
+        const listbox = await within(area).findByRole("listbox", { name: "Depend on" });
+        const picker = listbox.closest<HTMLElement>("[data-picker-place]");
+        expect(picker).not.toBeNull();
+        if (picker !== null) {
+          expect(inside(picker)).toBe(true);
+          const row = add.getBoundingClientRect();
+          const placed = picker.getBoundingClientRect();
+          expect(picker.dataset.pickerPlace).toBe("up");
+          expect(placed.bottom).toBeLessThanOrEqual(row.top);
+        }
+        await user.keyboard("{Escape}");
+      }
+
+      // The conversation of the discussion ends with room as high as the way back to the end.
+      if (one.gone === undefined) {
+        const end = area.querySelector<HTMLElement>('[data-slot="conversation"]');
+        expect(end === null ? "" : getComputedStyle(end).paddingBottom).toBe(
+          resolve("calc(var(--space-4) + var(--size-control-sm))", "padding-bottom"),
+        );
+      }
 
       // The footer of the grouping keeps Cancel and Group 2 drafts where they are as the reason
       // goes: the title written, the button stops waiting for it.

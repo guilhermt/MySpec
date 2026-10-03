@@ -1,4 +1,11 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "@/components/system/Button";
 import { Chip } from "@/components/system/Chip";
 import { type DependencyOption, DependencyPicker } from "@/components/system/DependencyPicker";
@@ -12,6 +19,8 @@ import { dependencyViews } from "@/features/discussion/drafts-card";
 import { type DraftField, useDraftText } from "@/features/discussion/useDraftText";
 import { draftTitle } from "@/lib/drafts";
 import { messageOf } from "@/lib/errors";
+import { revealItem, scrollerOf } from "@/lib/reveal";
+import { cn } from "@/lib/utils";
 import { asDraftKind, type DiscussionSummary, type Draft } from "@/lib/wails";
 import {
   addDraftDependency,
@@ -32,6 +41,46 @@ export interface DraftEditorProps {
 }
 
 const RUNNING = "A publication is running";
+
+// PICKER_GAP is the room, in pixels, between the listbox of the dependencies and the row that opens
+// it, and between the listbox and the edge of the conversation.
+const PICKER_GAP = 4;
+
+// PlacedPicker holds the listbox of the dependencies by the row that opens it, over what is around
+// it: below when it fits there, else on the side with more room, and never past the edge of the
+// conversation, where the bar and the composer begin; what doesn't fit scrolls inside the listbox.
+function PlacedPicker({ children }: { children: ReactNode }) {
+  const holder = useRef<HTMLDivElement>(null);
+  const [place, setPlace] = useState<{ up: boolean; height: number } | null>(null);
+  useLayoutEffect(() => {
+    const row = holder.current?.parentElement;
+    const picker = holder.current?.firstElementChild;
+    if (row === null || row === undefined || !(picker instanceof HTMLElement)) return;
+    const box = scrollerOf(row);
+    const view =
+      box === null ? { top: 0, bottom: window.innerHeight } : box.getBoundingClientRect();
+    const anchor = row.getBoundingClientRect();
+    const natural = picker.offsetHeight;
+    const below = view.bottom - anchor.bottom - 2 * PICKER_GAP;
+    const above = anchor.top - view.top - 2 * PICKER_GAP;
+    const up = natural > below && above > below;
+    setPlace({ up, height: Math.max(0, Math.min(natural, up ? above : below)) });
+  }, []);
+  return (
+    <div
+      ref={holder}
+      data-picker-place={place === null ? undefined : place.up ? "up" : "down"}
+      style={place === null ? undefined : { height: place.height }}
+      className={cn(
+        "absolute left-0 z-(--z-float) flex w-(--size-popover) max-w-full flex-col",
+        place === null && "invisible",
+        place?.up === true ? "bottom-full mb-(--space-1)" : "top-full mt-(--space-1)",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
 const META = "text-(length:--text-meta) leading-(--leading-meta)";
 
 // epicChoices are the epics a card can sit under: the ones of the round and the one it has now if it
@@ -93,8 +142,14 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
   const [issueRefusal, setIssueRefusal] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
 
+  // The edit comes into the conversation as it opens, its fields below the title too.
   useEffect(() => {
-    titleInput.current?.focus();
+    const input = titleInput.current;
+    input?.focus({ preventScroll: true });
+    const held = input?.closest<HTMLElement>("[data-card-item]");
+    if (held !== null && held !== undefined) {
+      revealItem(held);
+    }
   }, []);
 
   // The two texts travel to the Go side together, so the one that is not being edited goes as the
@@ -322,7 +377,7 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
       {!isEpic && (
         <div className="flex flex-col gap-(--space-2)">
           <span className={`${META} font-medium text-ink-2`}>Depends on</span>
-          <div className="flex flex-wrap items-center gap-(--space-2)">
+          <div className="relative flex flex-wrap items-center gap-(--space-2)">
             {dependencies.map((dependency, index) => {
               const name = views[index]?.title ?? dependency.reference;
               return (
@@ -355,17 +410,19 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
             >
               Add a dependency
             </Button>
+            {picking && !locked && (
+              <PlacedPicker>
+                <DependencyPicker
+                  chosen={chosen}
+                  recorded={recorded}
+                  drafts={draftOptions}
+                  cards={cardOptions}
+                  onToggle={toggle}
+                  onClose={closePicker}
+                />
+              </PlacedPicker>
+            )}
           </div>
-          {picking && !locked && (
-            <DependencyPicker
-              chosen={chosen}
-              recorded={recorded}
-              drafts={draftOptions}
-              cards={cardOptions}
-              onToggle={toggle}
-              onClose={closePicker}
-            />
-          )}
         </div>
       )}
       <div className="flex flex-wrap items-center gap-(--space-2)">

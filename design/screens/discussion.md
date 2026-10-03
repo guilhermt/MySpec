@@ -184,7 +184,7 @@ Aprovar é uma escrita no GitHub e não tem confirmação. Por isso:
 - **Title**;
 - **Body**, em Markdown cru, numa área de texto em mono;
 - **Repository**, **Module** e **Epic**, como seletores lado a lado. O valor corta com reticências e tooltip. Numa atualização, o repositório é o do card, fixo. **Epic** tem, depois de um separador, **Existing issue…**, que abre o campo `owner/name#N`;
-- **Depends on**, com as dependências como chips com `×` (uma já registrada no GitHub não sai), e **Add a dependency**. Esse botão abre um `listbox` com os rascunhos da rodada pelo título, e com os cards do board por número ou título, com busca; uma busca que é um `dono/nome#N` fora deles oferece `Depend on <dono/nome#N>`.
+- **Depends on**, com as dependências como chips com `×` (uma já registrada no GitHub não sai), e **Add a dependency**. Esse botão abre um `listbox` com os rascunhos da rodada pelo título, e com os cards do board por número ou título, com busca; uma busca que é um `dono/nome#N` fora deles oferece `Depend on <dono/nome#N>`. O `listbox` abre sobre a edição, embaixo da linha quando cabe, e em cima quando há mais espaço acima, sem passar da borda da conversa.
 
 O título não se repete acima dos campos. Embaixo, `Saved as you type. The agent's next revision of this draft replaces your edits.` e **Done**; num aprovado, antes dela, `Changing the repository, the epic or a dependency clears the approval.` `Esc` fecha. O título e o corpo nunca ficam vazios, salvo o corpo de um épico do usuário.
 

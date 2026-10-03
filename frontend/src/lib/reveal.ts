@@ -17,8 +17,8 @@ export function revealItem(element: HTMLElement): void {
   box.scrollTop = Math.round(tall ? top - margin : top - (box.clientHeight - item.height) / 2);
 }
 
-// scrollerOf is the nearest ancestor that scrolls vertically; null when none does.
-function scrollerOf(element: HTMLElement): HTMLElement | null {
+/** scrollerOf is the nearest ancestor that scrolls vertically; null when none does. */
+export function scrollerOf(element: HTMLElement): HTMLElement | null {
   for (let node = element.parentElement; node !== null; node = node.parentElement) {
     const { overflowY } = getComputedStyle(node);
     if (overflowY === "auto" || overflowY === "scroll") {

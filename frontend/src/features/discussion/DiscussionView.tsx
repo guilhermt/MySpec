@@ -49,6 +49,7 @@ function DiscussionConversation({ discussion }: { discussion: DiscussionSummary 
       after={after}
       before={before}
       replyWaiting={replyWaiting}
+      endRoom
     />
   );
 }

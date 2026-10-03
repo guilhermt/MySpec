@@ -17,6 +17,8 @@ export interface ConversationColumnProps {
   contentRef?: Ref<HTMLDivElement>;
   /** fadeTop fades the top edge, when something is above what shows. */
   fadeTop: boolean;
+  /** endRoom leaves room at the end as high as the way back to the end, which floats over it. */
+  endRoom?: boolean;
 }
 
 /**
@@ -29,6 +31,7 @@ export function ConversationColumn({
   viewportRef,
   contentRef,
   fadeTop,
+  endRoom = false,
 }: ConversationColumnProps) {
   return (
     <ScrollArea
@@ -44,7 +47,8 @@ export function ConversationColumn({
           tabIndex={-1}
           className={cn(
             COLUMN_CLASS,
-            "flex flex-col gap-(--space-3) pt-(--space-6) pb-(--space-4) outline-none",
+            "flex flex-col gap-(--space-3) pt-(--space-6) outline-none",
+            endRoom ? "pb-[calc(var(--space-4)+var(--size-control-sm))]" : "pb-(--space-4)",
           )}
         >
           {children}
