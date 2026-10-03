@@ -244,7 +244,9 @@ describe("BoardDialog, adding", () => {
     const field = await screen.findByRole("textbox", { name: "Add a repository" });
     const add = screen.getByRole("button", { name: "Add" });
     expect(add).toHaveAttribute("aria-disabled", "true");
+    expect(add).toHaveAccessibleDescription("Type a repository as owner/name.");
     await user.type(field, "dev/nope");
+    expect(add).not.toHaveAttribute("aria-describedby");
     await user.click(add);
 
     expect(api.checkBoardRepository).toHaveBeenCalledWith("", "dev/nope");

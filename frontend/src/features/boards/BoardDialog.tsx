@@ -45,6 +45,8 @@ export type BoardDialogProps = {
 
 const READING_TEXT = "Reading the board…";
 const EMPTY_URL_TEXT = "Paste the URL of a GitHub project.";
+/** EMPTY_TYPED_TEXT is why Add waits, read with it: the field has no repository yet. */
+const EMPTY_TYPED_TEXT = "Type a repository as owner/name.";
 const URL_HELP =
   "github.com/orgs/<org>/projects/<n> or github.com/users/<user>/projects/<n>. Views and filters in the URL are fine.";
 const NO_STATUS_TEXT =
@@ -101,6 +103,7 @@ function BoardForm({ boardId, onOpenChange }: BoardFormProps) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const retryRef = useRef<HTMLButtonElement>(null);
   const reasonId = useId();
+  const typedReasonId = useId();
 
   /** read asks for the board and, once it arrives, starts the choices from what it says. */
   const read = useCallback(async (request: () => Promise<BoardPreview>, from: string) => {
@@ -254,6 +257,7 @@ function BoardForm({ boardId, onOpenChange }: BoardFormProps) {
     : subtitle(mode, preview, step, steps);
   const last = step === "repositories";
   const urlEmpty = url.trim() === "";
+  const typedEmpty = typed.trim() === "";
 
   /** primary is what Ctrl Enter and the main button do in the step the dialog is in. */
   const primary = () => {
@@ -398,7 +402,7 @@ function BoardForm({ boardId, onOpenChange }: BoardFormProps) {
                 label="Add a repository"
                 {...(checkError !== null ? { error: checkError } : {})}
               >
-                <div className="flex gap-2">
+                <div className="relative flex gap-2">
                   <Input
                     mono
                     placeholder="owner/name"
@@ -409,13 +413,19 @@ function BoardForm({ boardId, onOpenChange }: BoardFormProps) {
                   />
                   <Button
                     size="sm"
-                    disabled={typed.trim() === "" || saving}
+                    disabled={typedEmpty || saving}
+                    {...(typedEmpty ? { reasonId: typedReasonId } : {})}
                     loading={checking}
                     loadingLabel="Checking…"
                     onClick={() => void check()}
                   >
                     Add
                   </Button>
+                  {typedEmpty && (
+                    <span id={typedReasonId} className="sr-only">
+                      {EMPTY_TYPED_TEXT}
+                    </span>
+                  )}
                 </div>
               </Field>
             </>
