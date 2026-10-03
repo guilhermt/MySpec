@@ -390,7 +390,10 @@ function span(mine: readonly Draft[], now: number): string {
 export function publishedLineOf(round: number, drafts: readonly Draft[], now: number): MarkerView {
   const mine = drafts.filter((draft) => draft.round === round);
   const published = mine.filter((draft) => draft.published).length;
-  const failed = mine.filter((draft) => draft.publishError !== "");
+  // The first that failed is the first in the order of the card, as the bar and Show say it.
+  const failed = cardEntries({ drafts: [...drafts], round })
+    .map((entry) => entry.draft)
+    .filter((draft) => draft.publishError !== "");
   const rows: MarkerBody = { kind: "drafts", rows: rowsOf(round, drafts) };
   const timeText = span(mine, now);
   const view = (text: string, complement: string, tone?: "error"): MarkerView => ({

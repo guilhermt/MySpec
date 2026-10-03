@@ -1572,6 +1572,24 @@ describe("publishedLineOf", () => {
     expect(publishedLineOf(1, drafts, NOW).timeText).toBeUndefined();
   });
 
+  it("names the first failure in the order of the card, a card of an epic before a loose one", () => {
+    const drafts = [
+      draftOf("d1", { position: 1, title: "Loose", decision: "approved", publishError: "No." }),
+      draftOf("d2", { position: 2, kind: "epic", title: "Pricing", decision: "approved" }),
+      draftOf("d3", {
+        position: 3,
+        title: "Card of the epic",
+        decision: "approved",
+        publishError: "No.",
+        epic: makeDraftRef({ draft: "d2" }),
+      }),
+    ];
+
+    expect(publishedLineOf(1, drafts, NOW).complement).toBe(
+      "round 1 · Card of the epic and 1 more failed",
+    );
+  });
+
   it("looks at the drafts of its round alone", () => {
     const drafts = [
       onGitHub("d1", 479, { round: 1 }),
