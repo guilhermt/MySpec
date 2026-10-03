@@ -11,6 +11,14 @@ describe("ReadingAge", () => {
     expect(screen.getByText("Read 2m ago")).toBeInTheDocument();
   });
 
+  it("gives the time of the last read in the tooltip", async () => {
+    const { user } = renderWithStore(
+      <ReadingAge readAt="2026-09-24T14:08:00Z" reading={false} now={NOW} />,
+    );
+    await user.hover(screen.getByText("Read 2m ago"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(/^Last read at \d\d:\d\d$/);
+  });
+
   it("says just now under a minute", () => {
     renderWithStore(<ReadingAge readAt="2026-09-24T14:09:40Z" reading={false} now={NOW} />);
     expect(screen.getByText("Read just now")).toBeInTheDocument();
@@ -46,7 +54,9 @@ describe("ReadingAge", () => {
         failure={{ failedAt: "2026-09-24T13:52:00Z" }}
       />,
     );
-    expect(screen.getByText("Read failed 18m ago")).toBeInTheDocument();
+    const failed = screen.getByText("Read failed 18m ago");
+    // The ◇ of a blocked state says it failed, beside the words and not only in their tint.
+    expect(failed.querySelector('[data-state="blocked"][aria-hidden="true"]')).toBeInTheDocument();
   });
 
   it("says the reading failed even when the list was never read", () => {
