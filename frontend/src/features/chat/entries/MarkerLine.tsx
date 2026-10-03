@@ -6,6 +6,7 @@ import { Finding } from "@/components/system/Finding";
 import { DraftGlyph } from "@/components/system/FoldedDraft";
 import { Icon } from "@/components/system/Icon";
 import { ICONS, type IconMeaning } from "@/components/system/icons";
+import { Link } from "@/components/system/Link";
 import { Shimmer } from "@/components/system/Shimmer";
 import { StateGlyph } from "@/components/system/StateGlyph";
 import { Tooltip } from "@/components/system/Tooltip";
@@ -133,6 +134,32 @@ function FindingsBody({
   );
 }
 
+// StatusText is the state of a row of a list of drafts, its issue on GitHub as the link inside it:
+// "Created web#470".
+function StatusText({ row }: { row: DraftRowView }) {
+  const { link } = row;
+  const at = link === null ? -1 : row.status.indexOf(link.label);
+  if (link === null || at === -1) {
+    return row.status;
+  }
+  return (
+    <>
+      {row.status.slice(0, at)}
+      <Link
+        href={link.url}
+        external
+        onClick={(event) => {
+          event.preventDefault();
+          void openExternal(link.url);
+        }}
+      >
+        {link.label}
+      </Link>
+      {row.status.slice(at + link.label.length)}
+    </>
+  );
+}
+
 function DraftsBody({ rows }: { rows: readonly DraftRowView[] }) {
   return (
     <ul data-slot="marker-body" className={cn(SUNKEN, "flex flex-col gap-(--space-2)")}>
@@ -156,18 +183,9 @@ function DraftsBody({ rows }: { rows: readonly DraftRowView[] }) {
                   ? "text-ink-3"
                   : "text-ink-2",
             )}
-          />
-          {row.link !== null && (
-            <Button
-              variant="ghost"
-              size="xs"
-              icon={ICONS.external}
-              className="shrink-0"
-              onClick={() => void openExternal(row.link?.url ?? "")}
-            >
-              {row.link.label}
-            </Button>
-          )}
+          >
+            <StatusText row={row} />
+          </CutText>
         </li>
       ))}
     </ul>

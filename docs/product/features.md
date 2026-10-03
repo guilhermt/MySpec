@@ -161,7 +161,7 @@ Os marcos da discussão são linhas de uma linha que abrem o conteúdo no lugar:
 - **`Discussion started`**, com o modelo, o esforço e o board. Logo depois vêm `Context`, que abre o contexto inicial com o tamanho e o complemento `#455, #461 and their epic · 5,690 characters` (`the board and your text` sem cards), e o que o usuário escreveu, como mensagem dele.
 - **`Written discussion.md`** e **`Updated discussion.md`** abrem o documento, com o tamanho e, na discussão ativa, que tem o painel, **Open in Documents**. Só o mais recente abre, porque o arquivo é um só e é o de agora.
 - **`Drafts written`** (`round 1 · 5 drafts`), **`Drafts revised`** (`round 1 · 3 changed, 1 added, 1 dropped`), que abre a lista dos rascunhos como eram antes da revisão, e **`drafts.md can't be read`**, com a razão.
-- **`Published`** (`2 so far`, `4 created, 1 updated`) e **`Publication stopped`**, em vermelho, com o intervalo da hora da publicação e a lista dos rascunhos da rodada, cada um com o estado e o link.
+- **`Published`** (`2 so far`, `4 created, 1 updated`) e **`Publication stopped`**, em vermelho, com o intervalo da hora da publicação e a lista dos rascunhos da rodada, cada um com o estado; o de um publicado é o próprio link (`Created billing#479`).
 
 **A rodada dobra.** Uma rodada anterior à atual vira uma linha só, `Round 1 · 5 drafts, revised once · 4 created, 1 updated`, que abre a lista com os links; os marcos de escrita e de revisão dela somem. A linha toma o lugar da publicação da rodada, ou do `Drafts written` quando nada foi publicado. Uma rodada sem marco, de uma discussão anterior a elas, dobra antes do `Drafts written` da rodada seguinte.
 

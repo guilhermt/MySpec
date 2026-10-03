@@ -242,10 +242,19 @@ describe("DiscussionView, a new round", () => {
 
     await user.click(round);
     expect(round).toHaveAttribute("aria-expanded", "true");
+    // Each state of the list is its own link: Created web#2302, the issue in the words.
     for (const link of ["billing#478", "billing#479", "billing#480", "web#2302", "gateway#461"]) {
-      expect(within(feed()).getByRole("button", { name: link })).toBeInTheDocument();
+      expect(
+        within(feed()).getByRole("link", { name: new RegExp(`^${link}`) }),
+      ).toBeInTheDocument();
     }
-    await user.click(within(feed()).getByRole("button", { name: "web#2302" }));
+    expect(
+      within(feed())
+        .getByRole("link", { name: /^web#2302/ })
+        .closest("li"),
+    ).toHaveTextContent(/Created web#2302/);
+    expect(within(feed()).queryByRole("button", { name: "web#2302" })).toBeNull();
+    await user.click(within(feed()).getByRole("link", { name: /^web#2302/ }));
     expect(api.openExternal).toHaveBeenCalledWith("https://github.com/acme/web/issues/2302");
   });
 
