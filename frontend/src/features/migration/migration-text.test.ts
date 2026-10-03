@@ -76,7 +76,8 @@ const FULL = makeMigration({
     {
       kind: "no_origin",
       repository: "/home/dev/work/legacy-portal",
-      detail: "The origin remote is not on GitHub: git@gitlab.com:acme/legacy-portal.git",
+      detail:
+        "The origin remote of /home/dev/work/legacy-portal is not on GitHub: git@gitlab.com:acme/legacy-portal.git.",
       tasks: [
         { name: "portal-sso", workspace: "/home/dev/work", path: "/home/dev/work/legacy-portal" },
       ],
@@ -118,7 +119,7 @@ describe("copyText", () => {
         "Repositories without an origin on GitHub",
         "Add a GitHub origin to the repository, or delete its tasks, in the previous version of MySpec.",
         "- ~/work/legacy-portal",
-        "  The origin remote is not on GitHub: git@gitlab.com:acme/legacy-portal.git",
+        "  The origin remote of ~/work/legacy-portal is not on GitHub: git@gitlab.com:acme/legacy-portal.git.",
         "  - portal-sso · ~/work · ~/work/legacy-portal",
         "",
         "Tasks with the same name in the same repository",

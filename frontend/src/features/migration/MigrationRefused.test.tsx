@@ -10,7 +10,8 @@ const MIGRATION = makeMigration({
     {
       kind: "no_origin",
       repository: "/home/dev/projects/notes",
-      detail: "The origin remote is not on GitHub: git@gitlab.com:dev/notes.git",
+      detail:
+        "The origin remote of /home/dev/projects/notes is not on GitHub: git@gitlab.com:dev/notes.git.",
       tasks: [
         {
           name: "fix-header",
@@ -59,7 +60,9 @@ describe("MigrationRefused", () => {
     ).toBeInTheDocument();
     expect(within(origin).getByText("~/projects/notes")).toHaveClass("font-mono");
     expect(
-      within(origin).getByText("The origin remote is not on GitHub: git@gitlab.com:dev/notes.git"),
+      within(origin).getByText(
+        "The origin remote of ~/projects/notes is not on GitHub: git@gitlab.com:dev/notes.git.",
+      ),
     ).toBeInTheDocument();
     expect(within(origin).getByText("fix-header")).toBeInTheDocument();
     expect(within(origin).getByText("· ~/projects · ~/projects/notes")).toBeInTheDocument();
