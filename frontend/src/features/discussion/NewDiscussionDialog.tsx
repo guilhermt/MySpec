@@ -189,7 +189,7 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
       onConfirm={start}
       {...(askBoard ? { initialFocus: boardTrigger } : {})}
     >
-      <DialogBody className="gap-4">
+      <DialogBody className="gap-(--space-4)">
         {askBoard && app !== null ? (
           // Asking the board, the focus starts on its field; otherwise on the Title.
           <div
@@ -209,7 +209,7 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
           </div>
         ) : (
           <SunkenLine icon={ICONS.board}>
-            <span className="flex min-w-0 gap-2">
+            <span className="flex min-w-0 gap-(--space-2)">
               <span className="shrink-0 font-medium text-ink-1">{board.title}</span>
               <Tooltip content={boardLine(board, repositories)}>
                 <span className="min-w-0 truncate text-ink-3">
@@ -244,7 +244,7 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
         </Field>
 
         {cards.length > 0 && (
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-(--space-1)">
             <span className={SECTION_LABEL}>
               Cards <span className="font-normal text-ink-3">{cards.length}</span>
             </span>
@@ -253,7 +253,7 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
                 // The line under a row is outside its height, so the × stays centred on a whole pixel.
                 <li
                   key={card.key}
-                  className="box-content flex min-h-(--size-control) items-center gap-2 pr-1 pl-3 text-(length:--text-ui) leading-(--leading-ui)"
+                  className="box-content flex min-h-(--size-control) items-center gap-(--space-2) pr-(--space-1) pl-(--space-3) text-(length:--text-ui) leading-(--leading-ui)"
                 >
                   <span className="shrink-0 font-mono text-(length:--text-meta) text-ink-3">
                     {issueLabel(card)}
@@ -277,7 +277,7 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
           </div>
         )}
 
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-(--space-2)">
           {context.refreshing ? (
             <SunkenLine
               action={
@@ -327,7 +327,7 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
               aria-label="The context of the discussion"
               // biome-ignore lint/a11y/noNoninteractiveTabindex: a box that scrolls is read with the keyboard
               tabIndex={0}
-              className="max-h-[calc(9*var(--leading-body))] overflow-y-auto rounded-sm border border-line-1 px-3 py-2 text-(length:--text-body) leading-(--leading-body) text-ink-2 select-text focus-visible:focus-ring"
+              className="max-h-[calc(9*var(--leading-body))] overflow-y-auto rounded-sm border border-line-1 px-(--space-3) py-(--space-2) text-(length:--text-body) leading-(--leading-body) text-ink-2 select-text focus-visible:focus-ring"
             >
               <Markdown>{context.text ?? ""}</Markdown>
             </section>
@@ -338,7 +338,7 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
           <UnclonedRepository key={repository.id} repository={repository} layout="strip" />
         ))}
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-(--space-3)">
           <span className={SECTION_LABEL}>Model</span>
           <ModelPicker label="Discussion" value={choice} disabled={starting} onChange={setChoice} />
           {byDefault && (

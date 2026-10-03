@@ -116,7 +116,11 @@ export function GroupEpicDialog({ discussion, open, onOpenChange }: GroupEpicDia
           />
         </Field>
         {/* biome-ignore lint/a11y/useSemanticElements: a fieldset draws a frame and a legend the list does not want */}
-        <div role="group" aria-labelledby={`${reasonId}-drafts`} className="flex flex-col gap-1">
+        <div
+          role="group"
+          aria-labelledby={`${reasonId}-drafts`}
+          className="flex flex-col gap-(--space-1)"
+        >
           <span
             id={`${reasonId}-drafts`}
             className="text-(length:--text-meta) leading-(--leading-meta) font-medium text-ink-2"
