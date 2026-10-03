@@ -109,6 +109,15 @@ function parts(area: HTMLElement): Element[] {
   ];
 }
 
+/** footerSum is the text on the left of a dialog's footer: the sum of what saving does. */
+function footerSum(layer: Element | null): string {
+  const text = layer?.querySelector("[data-dialog-footer] [id]")?.textContent ?? "";
+  if (text === "") {
+    throw new Error("the dialog has no sum in its footer");
+  }
+  return text;
+}
+
 describe.each(THEMES)("Settings, the scenes in the %s theme", (theme) => {
   it.each(CASES)(
     "draws the %s scene, moment '%s', at the main area of %ipx",
@@ -153,6 +162,16 @@ describe.each(THEMES)("Settings, the scenes in the %s theme", (theme) => {
       // Behind a dialog the page can't be reached by the pointer: the dialog is what is checked.
       const layer = document.querySelector("[role='dialog'], [role='alertdialog']");
       expect(await withoutTooltip(cutTexts(layer ?? document.body))).toEqual([]);
+
+      // The board dialog keeps whole what it is there to say: the lead-in of a clone to pick, and
+      // the sum of what saving does, on two lines.
+      if (name === "settings-boards" && (variation === "add-3" || variation === "edit-2")) {
+        const whole = variation === "add-3" ? "Clone found · 2 clones:" : footerSum(layer);
+        expect(
+          cutTexts(layer ?? document.body).map((element) => element.textContent),
+          "the board dialog cuts nothing it is there to say",
+        ).not.toContain(whole);
+      }
 
       // The layer on top has one primary at most.
       expect(visiblePrimaries().length).toBeLessThanOrEqual(1);

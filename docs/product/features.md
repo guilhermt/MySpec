@@ -41,7 +41,7 @@ Cada repositório diz como ficará ligado ao produto:
 
 - `Registered · <caminho>`, ou `Registered · Not cloned`: já cadastrado, usa o cadastro existente;
 - `Registered · the clone at <caminho> is missing`: cadastrado, com o clone que não está mais no caminho;
-- `Clone found · <caminho>`: não cadastrado, com um clone encontrado pela mesma varredura da pasta home de **Add repository**; será cadastrado nesse clone. Com mais de um clone encontrado, a linha diz `Clone found · 2 clones:` e um seletor ao lado da caixa escolhe qual;
+- `Clone found · <caminho>`: não cadastrado, com um clone encontrado pela mesma varredura da pasta home de **Add repository**; será cadastrado nesse clone. Com mais de um clone encontrado, a linha diz `Clone found · 2 clones:`, sempre inteiro, e um seletor ao lado escolhe qual, estreitando-se antes do texto quando falta espaço;
 - `Registered without a clone`: não cadastrado e sem clone encontrado; será cadastrado sem clone;
 - `<dono/nome> belongs to the board <título>.`: administrado por outro board; a caixa aparece desabilitada, com essa frase como razão.
 
@@ -58,7 +58,7 @@ Os repositórios do board vêm marcados, e os outros repositórios das issues ap
 - vai para o grupo sem board quando tem clone, tasks ou reviews de pull request: `Moves to No board: it has a clone and 3 archived tasks. Its tasks keep working.`, com as partes que existem entre `a clone`, tasks ativas, tasks arquivadas e reviews, e um fecho só: `Its tasks keep working.` quando tem tasks, `Its reviews keep working.` quando tem só reviews, `Nothing on disk changes.` quando tem só o clone;
 - sai do produto quando não tem nada disso: `Leaves MySpec: it has no clone, tasks or reviews.`
 
-O rodapé soma o que foi desmarcado ao lado de **Save**: `acme/docs moves to No board, and acme/billing leaves MySpec.` As tasks dos repositórios não mudam.
+O rodapé soma o que foi desmarcado ao lado de **Save**, em até duas linhas: `acme/docs moves to No board, and acme/billing leaves MySpec.` As tasks dos repositórios não mudam.
 
 **Remove…** abre um diálogo de confirmação, com o foco em **Cancel**, que diz o que acontece: `5 repositories move to No board and 1 leaves MySpec. Tasks keep their cards, and nothing changes on GitHub or on disk.` A frase não tem a parte que dá zero (`1 repository moves to No board.`, `2 repositories leave MySpec.`, `The board has no repositories.`), e uma linha afundada nomeia os repositórios de cada destino: `To No board: api, docs` e `Leaves MySpec: billing, with no clone, tasks or reviews`. Os repositórios do board com clone, com tasks ou com reviews de pull request, ativos ou arquivados, passam ao grupo sem board; os que não têm nada disso saem do produto. As tasks criadas de cards do board continuam guardando o card e funcionando, e passam ao grupo **No board** da barra lateral. Nada é alterado no GitHub nem no disco.
 

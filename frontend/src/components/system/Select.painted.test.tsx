@@ -13,10 +13,12 @@ function Subject({
   disabled,
   loading,
   sidebar,
+  xs,
 }: {
   disabled?: boolean;
   loading?: boolean;
   sidebar?: boolean;
+  xs?: boolean;
 }) {
   return (
     <Select
@@ -25,6 +27,7 @@ function Subject({
       options={OPTIONS}
       onValueChange={() => {}}
       {...(sidebar ? { variant: "sidebar" as const } : {})}
+      {...(xs ? { size: "xs" as const } : {})}
       {...(loading ? { loading } : {})}
       {...(disabled ? { disabled, disabledReason: "The session is running" } : {})}
     />
@@ -114,6 +117,17 @@ describe.each(THEMES)("Select in the %s theme", (theme) => {
       border: token("--sidebar-control"),
       color: token("--ink-2"),
       height: resolve("var(--size-control-sm)", "height"),
+      fontSize: resolve("var(--text-meta)", "font-size"),
+    };
+    expect(paintOf(screen.getByRole("button", { name: "Model: Opus" }), want)).toEqual(want);
+  });
+
+  it("fits a row at the xs size, with the choice in the meta size", () => {
+    setTheme(theme);
+    render(<Subject xs />);
+    const want = {
+      ...fieldAt("--line-3"),
+      height: resolve("var(--size-control-xs)", "height"),
       fontSize: resolve("var(--text-meta)", "font-size"),
     };
     expect(paintOf(screen.getByRole("button", { name: "Model: Opus" }), want)).toEqual(want);

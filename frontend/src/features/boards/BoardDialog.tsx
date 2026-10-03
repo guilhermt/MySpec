@@ -433,7 +433,9 @@ function BoardForm({ boardId, onOpenChange }: BoardFormProps) {
               ),
             }
           : {})}
-        {...(footerReason !== "" ? { reason: { id: reasonId, text: footerReason } } : {})}
+        {...(footerReason !== ""
+          ? { reason: { id: reasonId, text: footerReason, lines: 2 as const } }
+          : {})}
       >
         <DialogCancel ref={cancelRef} disabled={saving} />
         {waiting ? (
