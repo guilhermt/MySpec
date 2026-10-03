@@ -1,6 +1,7 @@
 package gh_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -373,6 +374,32 @@ func TestSignedInReportsAGhWithNoLogin(t *testing.T) {
 	err := r.SignedIn(t.Context())
 	if !errors.Is(err, gh.ErrNotAuthenticated) {
 		t.Fatalf("SignedIn() = %v, want ErrNotAuthenticated", err)
+	}
+}
+
+func TestALoginCheckThatDidNotEndIsNotAMissingLogin(t *testing.T) {
+	t.Parallel()
+
+	// A gh stopped before it answered, by a cancellation or a deadline, has no
+	// exit code of its own: it said nothing about the login.
+	for name, check := range map[string]func(r *gh.Runner, ctx context.Context) error{
+		"auth":      (*gh.Runner).Auth,
+		"signed in": (*gh.Runner).SignedIn,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			r, _ := runner(t, map[string]ghtest.Reply{"auth": {Stderr: "not logged in", Exit: 1}})
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+
+			err := check(r, ctx)
+			if errors.Is(err, gh.ErrNotAuthenticated) {
+				t.Errorf("%s() = %v, want a check that did not end told apart from a missing login", name, err)
+			}
+			if !errors.Is(err, context.Canceled) {
+				t.Errorf("%s() = %v, want context.Canceled underneath", name, err)
+			}
+		})
 	}
 }
 
