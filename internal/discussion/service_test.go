@@ -1037,3 +1037,32 @@ func TestDecidingClearsTheClearedApproval(t *testing.T) {
 		})
 	}
 }
+
+func TestGroupingInTheRound2TakesTheHighestRoundWhateverTheOrderOfTheDrafts(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.record(d.ID, fourCards)
+	f.publish(d.ID, "one", "three", "four")
+	f.decide(d.ID, "two", discussion.DecisionDiscarded)
+	// two, discarded in the closed round 1, leaves the artifact and stays after the drafts of round 2.
+	f.record(d.ID, artifactOf(
+		draftOf("one", "Kind: new", "Repository: acme/web"),
+		draftOf("three", "Kind: new", "Repository: acme/web"),
+		draftOf("four", "Kind: new", "Repository: acme/web"),
+		draftOf("five", "Kind: new", "Repository: acme/web"),
+		draftOf("six", "Kind: new", "Repository: acme/web"),
+	))
+	if ids := f.draftIDs(d.ID); ids[len(ids)-1] != "two" {
+		t.Fatalf("drafts = %v, want two at the end", ids)
+	}
+
+	epic, err := f.service.GroupIntoEpic(t.Context(), d.ID, []string{"five", "six"}, "Later", "acme", "web")
+	if err != nil {
+		t.Fatalf("group into epic: %v", err)
+	}
+	if got := f.draft(d.ID, epic.ID); got.Round != 2 {
+		t.Errorf("round of the epic = %d, want 2", got.Round)
+	}
+}

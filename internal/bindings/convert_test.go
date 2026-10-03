@@ -3116,6 +3116,10 @@ func TestFromArchivedDiscussionsCountsWhatWasPublishedAndTheRepositoriesItTouche
 	if got[0].Drafts[0].Round != 2 || got[0].Drafts[0].Revised {
 		t.Errorf("draft round = %d, revised = %v, want 2, false: the history does not say revised", got[0].Drafts[0].Round, got[0].Drafts[0].Revised)
 	}
+	// A draft no reading revised is not revised either, though the history reads it with no revision.
+	if got[0].Drafts[1].Revised {
+		t.Error("revised = true for a draft never revised, want false")
+	}
 	if got[0].Drafts[0].Current != nil {
 		t.Errorf("current = %+v, want nil in the history", got[0].Drafts[0].Current)
 	}

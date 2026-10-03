@@ -513,6 +513,16 @@ func TestAReadingPutsEachDraftInItsRound(t *testing.T) {
 			want: map[string]int{"one": 1, "two": 1, "three": 2},
 		},
 		{
+			name:  "a draft started and not done holds its round open",
+			first: plain("one", "two"),
+			settle: func(f *fixture, id string) {
+				f.start(id, "one")
+				f.decide(id, "two", discussion.DecisionDiscarded)
+			},
+			then: plain("one", "two", "three"),
+			want: map[string]int{"one": 1, "two": 1, "three": 1},
+		},
+		{
 			name:  "a reading that changes nothing after the round closed",
 			first: plain("one", "two"),
 			settle: func(f *fixture, id string) {
@@ -577,6 +587,74 @@ func TestARevisionSaysWhatChangedInEachDraft(t *testing.T) {
 				},
 			},
 			revised: []string{"one"},
+		},
+		{
+			name:  "a repository alone that changed",
+			first: plain("one", "two"),
+			then: artifactOf(
+				draftOf("one", "Kind: new", "Repository: acme/api"),
+				draftOf("two", "Kind: new", "Repository: acme/web"),
+			),
+			want: discussion.Recorded{
+				Changed: true, Round: 1, Drafts: 2, Replaced: 1,
+				Before: []discussion.BeforeDraft{
+					{Title: "one", Kind: discussion.KindNew, Changes: []string{"repository"}},
+					{Title: "two", Kind: discussion.KindNew},
+				},
+			},
+			revised: []string{"one"},
+		},
+		{
+			name: "a module alone that changed",
+			first: artifactOf(
+				draftOf("one", "Kind: new", "Repository: acme/web", "Module: Billing"),
+				draftOf("two", "Kind: new", "Repository: acme/web"),
+			),
+			then: artifactOf(
+				draftOf("one", "Kind: new", "Repository: acme/web", "Module: Gateway"),
+				draftOf("two", "Kind: new", "Repository: acme/web"),
+			),
+			want: discussion.Recorded{
+				Changed: true, Round: 1, Drafts: 2, Replaced: 1,
+				Before: []discussion.BeforeDraft{
+					{Title: "one", Kind: discussion.KindNew, Changes: []string{"module"}},
+					{Title: "two", Kind: discussion.KindNew},
+				},
+			},
+			revised: []string{"one"},
+		},
+		{
+			name:  "a kind alone that changed",
+			first: plain("one", "two"),
+			then: artifactOf(
+				draftOf("one", "Kind: epic", "Repository: acme/web"),
+				draftOf("two", "Kind: new", "Repository: acme/web"),
+			),
+			want: discussion.Recorded{
+				Changed: true, Round: 1, Drafts: 2, Replaced: 1,
+				Before: []discussion.BeforeDraft{
+					{Title: "one", Kind: discussion.KindNew, Changes: []string{"kind"}},
+					{Title: "two", Kind: discussion.KindNew},
+				},
+			},
+			revised: []string{"one"},
+		},
+		{
+			name:   "a revision beside a draft on GitHub, which keeps what it became",
+			first:  plain("one", "two"),
+			settle: func(f *fixture, id string) { f.publish(id, "one") },
+			then:   withBody(plain("one", "two"), "two", "Another body."),
+			want: discussion.Recorded{
+				Changed: true, Round: 1, Drafts: 2, Replaced: 1,
+				Before: []discussion.BeforeDraft{
+					{
+						Title: "one", Kind: discussion.KindNew, Decision: discussion.DecisionApproved,
+						Outcome: discussion.OutcomeCreated, Reference: "acme/web#100",
+					},
+					{Title: "two", Kind: discussion.KindNew, Changes: []string{"body"}},
+				},
+			},
+			revised: []string{"two"},
 		},
 		{
 			name:  "a draft added and a draft taken out",
@@ -901,5 +979,64 @@ func TestTheFirstReadingOfARoundIsFirst(t *testing.T) {
 	next := f.record(d.ID, plain("one", "two", "three"))
 	if !next.First || next.Round != 2 || next.Drafts != 1 {
 		t.Errorf("reading that opens the next round = %+v, want the first of round 2 with one draft", next)
+	}
+}
+
+func TestAnIDReusedWithAnotherContentIsADraftOfTheNewRoundNeverRevised(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.record(d.ID, plain("one", "two"))
+	f.publish(d.ID, "one")
+	f.decide(d.ID, "two", discussion.DecisionDiscarded)
+
+	got := f.record(d.ID, withBody(plain("one", "two"), "two", "Another body."))
+
+	if diff := cmp.Diff(discussion.Recorded{Changed: true, Round: 2, First: true, Drafts: 1}, got); diff != "" {
+		t.Errorf("Recorded (-want +got):\n%s", diff)
+	}
+	two := f.draft(d.ID, "two")
+	if two.Round != 2 || two.RevisedReading != 0 || two.ApprovalCleared {
+		t.Errorf("draft = %+v, want it in the round 2, never revised", two)
+	}
+}
+
+func TestADraftRevisedTwiceKeepsTheApprovalItLostWhenTheAgentAdoptsTheEdit(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.record(d.ID, plain("one", "two"))
+	f.approve(d.ID, "one")
+	revised := withBody(plain("one", "two"), "one", "Another body.")
+	f.record(d.ID, revised)
+	first := f.draft(d.ID, "one")
+	if !first.ApprovalCleared || first.RevisedReading == 0 {
+		t.Fatalf("draft = %+v, want the revision to clear the approval", first)
+	}
+	if err := f.service.SetDraftText(t.Context(), d.ID, "one", "Mine", "Another body."); err != nil {
+		t.Fatalf("set text: %v", err)
+	}
+
+	// The agent writes one as the user left it: nothing changed for the user since the revision.
+	f.record(d.ID, withTitle(revised, "one", "Mine"))
+
+	one := f.draft(d.ID, "one")
+	if !one.ApprovalCleared || one.RevisedReading != first.RevisedReading {
+		t.Errorf("draft = %+v, want the approval cleared and the mark of reading %d kept", one, first.RevisedReading)
+	}
+}
+
+func TestAnArtifactWithoutDraftsIsNoRoundAtAll(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+
+	got := f.record(d.ID, "---\nstatus: none\n---\n")
+
+	if got.First || got.Round != 0 || got.Drafts != 0 || got.Before != nil {
+		t.Errorf("Recorded = %+v, want no round, nothing first and nothing before", got)
 	}
 }

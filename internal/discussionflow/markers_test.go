@@ -279,3 +279,70 @@ func TestAFailedPublicationMarksItsRound(t *testing.T) {
 		t.Errorf("the failure marked the wrong thing (-want +got):\n%s", diff)
 	}
 }
+
+// refundsArtifact is looseCardsArtifact with a third card, which opens the round 2 once the first
+// two are decided.
+const refundsArtifact = looseCardsArtifact + `
+## Draft: refunds
+- Kind: new
+- Repository: acme/api
+
+### Title
+Refunds
+
+### Body
+The refunds of an invoice.
+`
+
+func TestTheMarkersOfTheRound2SayTheRound2(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, looseCardsArtifact)
+	f.decide(id, "invoice-report", discussion.DecisionDiscarded)
+	f.decide(id, "audit-log", discussion.DecisionDiscarded)
+	f.replace(id, discussion.DraftsFile, refundsArtifact)
+	f.flow.Check(id)
+	f.waitMarkers(session.MarkerDraftsWritten, 2)
+
+	f.approve(id, "refunds")
+	f.waitPublished(id, "refunds")
+	published := f.waitMarkers(session.MarkerDraftsPublished, 1)
+	if diff := cmp.Diff(session.MarkerEntry{Type: session.MarkerDraftsPublished, Round: 2}, published[0]); diff != "" {
+		t.Errorf("the publication of the round 2 marked the wrong thing (-want +got):\n%s", diff)
+	}
+
+	f.replace(id, discussion.DraftsFile, strings.Replace(refundsArtifact, "### Title\nRefunds", "### Titel\nRefunds", 1))
+	f.sessions.idle(id)
+	f.flow.Check(id)
+	unreadable := f.waitMarkers(session.MarkerDraftsUnreadable, 1)
+	if unreadable[0].Round != 2 {
+		t.Errorf("the unreadable file of the round 2 marked the round %d", unreadable[0].Round)
+	}
+}
+
+func TestARewriteThatAdoptsWhatTheUserEditedMarksNoRevision(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, looseCardsArtifact)
+	f.waitMarkers(session.MarkerDraftsWritten, 1)
+	if err := f.flow.SetDraftText(t.Context(), id, "audit-log", "Audit log", "What the users did, kept."); err != nil {
+		t.Fatalf("set text: %v", err)
+	}
+
+	// The agent writes the draft as the user left it: the drafts change, and the round is not revised.
+	f.replace(id, discussion.DraftsFile,
+		strings.Replace(looseCardsArtifact, "The log of what the users did.", "What the users did, kept.", 1))
+	f.flow.Check(id)
+	f.waitFor(id, func(state discussionflow.State) bool {
+		return f.draftIn(state, "audit-log").BodyOriginal == "What the users did, kept."
+	})
+	f.flow.Check(id)
+	time.Sleep(10 * pollStep)
+	if n := len(f.sessions.markersOf(session.MarkerDraftsRevised)); n != 0 {
+		t.Errorf("a rewrite that adopts the edit marked %d revisions, want none", n)
+	}
+}
