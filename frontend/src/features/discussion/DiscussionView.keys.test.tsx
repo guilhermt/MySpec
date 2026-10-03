@@ -314,6 +314,18 @@ describe("DiscussionView, the decision keys", () => {
     expect(api.decideDraft).toHaveBeenCalledExactlyOnceWith("discussion-1", "d5", "approved");
   });
 
+  it.each(["Control", "Meta"])("decides nothing with %s and A or D", async (modifier) => {
+    const { user } = show();
+    await screen.findByRole("group", { name: "Drafts of round 1" });
+
+    focus(draft(3));
+    await user.keyboard(`{${modifier}>}a{/${modifier}}`);
+    await user.keyboard(`{${modifier}>}d{/${modifier}}`);
+
+    expect(api.decideDraft).not.toHaveBeenCalled();
+    expect(draft(3)).toHaveFocus();
+  });
+
   it("undoes the active decision with its key and stays on the draft", async () => {
     const { user } = show();
     await screen.findByRole("group", { name: "Drafts of round 1" });
@@ -486,6 +498,28 @@ describe("DiscussionView, Alt+↓ and Alt+↑", () => {
 
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
     expect(document.activeElement?.closest("[data-card-item]")).toBeNull();
+    // Not even a key that reaches the screen behind the dialog moves the current draft.
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Reply to the agent", hidden: true }), {
+      key: "ArrowDown",
+      altKey: true,
+    });
+    // The draft open behind the dialog is still the current one.
+    const behind = (number: number) =>
+      screen.getByRole("group", { name: new RegExp(`^Draft ${number} of \\d+: `), hidden: true });
+    expect(behind(3)).toHaveAttribute("aria-expanded", "true");
+    expect(behind(4)).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("does nothing with Shift+Alt+↓", async () => {
+    const { user } = show();
+    await screen.findByRole("group", { name: "Drafts of round 1" });
+
+    focus(composer());
+    await user.keyboard("{Shift>}{Alt>}{ArrowDown}{/Alt}{/Shift}");
+
+    expect(composer()).toHaveFocus();
+    expect(draft(3)).toHaveAttribute("aria-expanded", "true");
+    expect(draft(4)).toHaveAttribute("aria-expanded", "false");
   });
 });
 
