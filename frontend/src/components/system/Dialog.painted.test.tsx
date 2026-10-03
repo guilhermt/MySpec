@@ -110,6 +110,33 @@ describe.each(THEMES)("Dialog in the %s theme", (theme) => {
     await expect.poll(() => screen.queryByRole("tooltip")?.textContent).toBe(reason);
   });
 
+  it("keeps the primary as wide, and Cancel where it is, dashed and enabled", () => {
+    setTheme(theme);
+    const footer = (disabled: boolean) => (
+      <Dialog open onOpenChange={() => {}} title="Group drafts into an epic">
+        <DialogBody>Two drafts.</DialogBody>
+        <DialogFooter>
+          <DialogCancel />
+          <Button variant="primary" shortcut="Ctrl ↵" disabled={disabled}>
+            Group 2 drafts
+          </Button>
+        </DialogFooter>
+      </Dialog>
+    );
+    const places = () => {
+      const cancel = screen.getByRole("button", { name: "Cancel" }).getBoundingClientRect();
+      const primary = screen
+        .getByRole("button", { name: /^Group 2 drafts/ })
+        .getBoundingClientRect();
+      return { cancel: cancel.x, primary: [primary.x, primary.width] };
+    };
+    const { rerender } = render(footer(false));
+    const enabled = places();
+
+    rerender(footer(true));
+    expect(places()).toEqual(enabled);
+  });
+
   it("draws Cancel as a ghost, without a body", () => {
     setTheme(theme);
     render(

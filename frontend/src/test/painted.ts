@@ -474,10 +474,9 @@ export async function inkRuns(element: HTMLElement): Promise<number[]> {
 }
 
 /**
- * footerPlaces is where Cancel and the primary of a dialog stand in its footer: the line of each,
- * the right edge of the primary, and Cancel right before it. A footer whose buttons never wrap nor
- * move gives the same places with its disabled reason and without it. The x of Cancel is left out:
- * a dashed primary draws its key without the padding of the solid one, and Cancel follows its width.
+ * footerPlaces is where Cancel and the primary of a dialog stand in its footer: the line and the
+ * box of each, from the footer's top and right edge. A footer whose buttons never wrap nor move gives
+ * the same places with its disabled reason and without it.
  */
 export function footerPlaces(dialog: HTMLElement, primary: RegExp) {
   const footer = dialog.querySelector("[data-dialog-footer]");
@@ -485,10 +484,14 @@ export function footerPlaces(dialog: HTMLElement, primary: RegExp) {
     throw new Error("the dialog has no footer");
   }
   const box = footer.getBoundingClientRect();
-  const cancel = within(dialog).getByRole("button", { name: "Cancel" }).getBoundingClientRect();
-  const main = within(dialog).getByRole("button", { name: primary }).getBoundingClientRect();
-  return {
-    cancel: { top: cancel.top - box.top, height: cancel.height, before: main.left - cancel.right },
-    primary: { top: main.top - box.top, height: main.height, right: box.right - main.right },
+  const placeOf = (name: string | RegExp) => {
+    const button = within(dialog).getByRole("button", { name }).getBoundingClientRect();
+    return {
+      top: button.top - box.top,
+      right: box.right - button.right,
+      width: button.width,
+      height: button.height,
+    };
   };
+  return { cancel: placeOf("Cancel"), primary: placeOf(primary) };
 }
