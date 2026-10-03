@@ -139,6 +139,15 @@ describe("globals.css", () => {
     expect(halves).toEqual([]);
   });
 
+  it("sizes the Placeholders column of the prompt editor in whole pixels, 288px", () => {
+    const value = tokens.get("--col-placeholders") ?? "";
+    const space = (name: string) => pixels(tokens.get(name) ?? "");
+    const sum = /^calc\(var\((--space-\d+)\) \* (\d+) \+ var\((--space-\d+)\)\)$/.exec(value);
+
+    expect(sum, value).not.toBeNull();
+    expect(space(sum?.[1] ?? "") * Number(sum?.[2]) + space(sum?.[3] ?? "")).toBe(288);
+  });
+
   it("rounds every layout width that depends on the window", () => {
     const unrounded = [...tokens].filter(
       ([name, value]) =>

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { editedLabel, linesText, PLACEHOLDERS, PROMPTS } from "@/features/settings/prompts";
+import {
+  editedLabel,
+  linesText,
+  PLACEHOLDERS,
+  PROMPTS,
+  withPlaceholderCode,
+} from "@/features/settings/prompts";
 
 describe("PROMPTS", () => {
   it("has the nine prompts in workflow order, with the One-Shot planning after the plan", () => {
@@ -57,5 +63,35 @@ describe("linesText", () => {
     [0, 3, "Your version has 0 lines; the default of this version has 3."],
   ])("says %i and %i", (lines, defaultLines, text) => {
     expect(linesText(lines, defaultLines)).toBe(text);
+  });
+});
+
+describe("withPlaceholderCode", () => {
+  it.each([
+    ["Write the PRD of {{task_name}}.", "Write the PRD of `{{task_name}}`."],
+    ["{{prd_path}} and {{tech_spec_path}}", "`{{prd_path}}` and `{{tech_spec_path}}`"],
+    [
+      "Already `{{task_name}}` here, and {{branch}}",
+      "Already `{{task_name}}` here, and `{{branch}}`",
+    ],
+    ["An unknown {{other}} stays", "An unknown {{other}} stays"],
+    ["No placeholder at all", "No placeholder at all"],
+  ])("turns %j into %j", (text, want) => {
+    expect(withPlaceholderCode(text)).toBe(want);
+  });
+
+  it("leaves a fenced block alone, whatever the fence", () => {
+    const text =
+      "Before {{branch}}\n```sh\ncd {{repository}}\n```\n~~~~\n{{pr_url}}\n~~~~\nAfter {{pr_number}}";
+
+    expect(withPlaceholderCode(text)).toBe(
+      "Before `{{branch}}`\n```sh\ncd {{repository}}\n```\n~~~~\n{{pr_url}}\n~~~~\nAfter `{{pr_number}}`",
+    );
+  });
+
+  it("keeps a longer fence open until a fence at least as long closes it", () => {
+    const text = "````\n```\n{{branch}}\n````\n{{branch}}";
+
+    expect(withPlaceholderCode(text)).toBe("````\n```\n{{branch}}\n````\n`{{branch}}`");
   });
 });

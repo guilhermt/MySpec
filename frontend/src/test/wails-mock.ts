@@ -122,7 +122,9 @@ export const api = {
     Promise.resolve(makePrompt({ stage })),
   ),
   savePrompt: vi.fn<(stage: PromptStage, text: string) => Promise<Prompt>>((stage, text) =>
-    Promise.resolve(makePrompt({ stage, text, modified: true })),
+    Promise.resolve(
+      makePrompt({ stage, text, modified: true, editedAt: new Date().toISOString() }),
+    ),
   ),
   restorePrompt: vi.fn<(stage: PromptStage) => Promise<Prompt>>((stage) =>
     Promise.resolve(makePrompt({ stage })),
@@ -1545,7 +1547,9 @@ export function resetWailsMock(): void {
   );
   api.getPrompt.mockImplementation((stage) => Promise.resolve(makePrompt({ stage })));
   api.savePrompt.mockImplementation((stage, text) =>
-    Promise.resolve(makePrompt({ stage, text, modified: true })),
+    Promise.resolve(
+      makePrompt({ stage, text, modified: true, editedAt: new Date().toISOString() }),
+    ),
   );
   api.restorePrompt.mockImplementation((stage) => Promise.resolve(makePrompt({ stage })));
   api.listPrompts.mockImplementation(() => Promise.resolve(makePromptListings()));

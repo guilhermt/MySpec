@@ -1391,6 +1391,20 @@ describe("settings", () => {
     expect(useAppStore.getState().promptEdit).toBeNull();
   });
 
+  it("keeps the prompt the user returned from until the list clears it", () => {
+    useAppStore.getState().openSettings("prd");
+
+    useAppStore.getState().setPromptReturn("prd");
+    useAppStore.getState().selectSettingsSection("prompts");
+
+    expect(useAppStore.getState().promptReturn).toBe("prd");
+    expect(location()).toEqual({ kind: "settings", section: "prompts" });
+
+    useAppStore.getState().setPromptReturn(null);
+
+    expect(useAppStore.getState().promptReturn).toBeNull();
+  });
+
   it("closes the editor after a save without asking", () => {
     useAppStore.getState().openSettings();
     useAppStore.getState().startPromptEdit("prd", "# PRD");

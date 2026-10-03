@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
-import { createElement } from "react";
+import { type ComponentType, createElement, type ReactNode } from "react";
 import { afterEach, vi } from "vitest";
 import * as wailsMock from "./wails-mock";
 
@@ -23,12 +23,14 @@ vi.mock("streamdown", () => ({
     shikiTheme,
     lineNumbers,
     controls,
+    components,
   }: {
     children: string;
     className?: string;
     shikiTheme?: readonly (string | { name?: string })[];
     lineNumbers?: boolean;
     controls?: { code?: { copy?: boolean } };
+    components?: { inlineCode?: ComponentType<{ children?: ReactNode }> };
   }) =>
     createElement(
       "div",
@@ -41,7 +43,16 @@ vi.mock("streamdown", () => ({
         "data-line-numbers": String(lineNumbers ?? true),
         "data-code-copy": String(controls?.code?.copy ?? true),
       },
-      children,
+      // The inline code of the text goes through the component the caller gave for it.
+      components?.inlineCode === undefined
+        ? children
+        : children
+            .split(/`([^`\n]+)`/)
+            .map((piece, at) =>
+              at % 2 === 1 && components.inlineCode !== undefined
+                ? createElement(components.inlineCode, { key: at }, piece)
+                : piece,
+            ),
     ),
 }));
 vi.mock("@streamdown/code", () => ({ code: {} }));

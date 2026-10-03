@@ -49,6 +49,7 @@ export interface StoreOptions {
       | "flashing"
       | "promptEdit"
       | "pendingLeave"
+      | "promptReturn"
     >
   >;
 }
@@ -100,6 +101,7 @@ export function resetAppStore(options: StoreOptions = {}): void {
     flashing: options.ui?.flashing ?? new Set<string>(),
     promptEdit: options.ui?.promptEdit ?? null,
     pendingLeave: options.ui?.pendingLeave ?? null,
+    promptReturn: options.ui?.promptReturn ?? null,
   });
 }
 

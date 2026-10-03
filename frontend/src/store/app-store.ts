@@ -305,6 +305,11 @@ export interface AppStore {
   promptEdit: PromptEdit | null;
   /** pendingLeave is the navigation that waits for the user to discard the unsaved edit of a prompt. */
   pendingLeave: (() => void) | null;
+  /**
+   * promptReturn is the prompt whose page the user just left for the list: the list puts the focus
+   * on its row and clears it.
+   */
+  promptReturn: PromptStage | null;
 
   applyStartup: (next: Startup) => void;
   chooseStartupTheme: (preference: ThemePreference) => void;
@@ -412,6 +417,7 @@ export interface AppStore {
   finishPromptEdit: () => void;
   confirmLeave: () => void;
   cancelLeave: () => void;
+  setPromptReturn: (stage: PromptStage | null) => void;
 }
 
 /** PrDraft is the title and the description of a pull request being edited. */
@@ -858,6 +864,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
     expectGone: null,
     promptEdit: null,
     pendingLeave: null,
+    promptReturn: null,
     sidebarCollapsed: new Set(readStored(SIDEBAR_COLLAPSED_KEY, [], isStringList)),
     ...initialTaskUi(),
 
@@ -1256,6 +1263,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
     },
 
     cancelLeave: () => set({ pendingLeave: null }),
+
+    setPromptReturn: (stage) => set({ promptReturn: stage }),
   };
 });
 

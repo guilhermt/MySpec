@@ -1,17 +1,9 @@
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/system/Button";
+import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
 import { promptMeta } from "@/features/settings/prompts";
 import { useAppStore, useSettingsUi } from "@/store/app-store";
 
-/** DiscardChangesDialog is the last stop before an unsaved edit of a prompt is lost. */
+/** DiscardChangesDialog is the last stop before an unsaved edit of a prompt is lost. It opens on Keep editing. */
 export function DiscardChangesDialog() {
   const { promptEdit, pendingLeave } = useSettingsUi();
   const confirmLeave = useAppStore((state) => state.confirmLeave);
@@ -19,28 +11,25 @@ export function DiscardChangesDialog() {
   const name = promptEdit === null ? "" : promptMeta(promptEdit.stage).name;
 
   return (
-    <AlertDialog
+    <Dialog
       open={pendingLeave !== null}
       onOpenChange={(open) => {
         if (!open) {
           cancelLeave();
         }
       }}
+      title="Discard your changes?"
+      alert
     >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Discard your changes?</AlertDialogTitle>
-          <AlertDialogDescription>
-            {`The edits to the ${name} prompt haven't been saved.`}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Keep editing</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={confirmLeave}>
-            Discard
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      <DialogBody>
+        <p>{`The edits to the ${name} prompt haven't been saved.`}</p>
+      </DialogBody>
+      <DialogFooter>
+        <DialogCancel>Keep editing</DialogCancel>
+        <Button variant="danger" onClick={confirmLeave}>
+          Discard
+        </Button>
+      </DialogFooter>
+    </Dialog>
   );
 }

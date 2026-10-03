@@ -127,3 +127,35 @@ export function editedLabel(editedAt: string, now: number): string {
 export function linesText(lines: number, defaultLines: number): string {
   return `Your version has ${lines} ${lines === 1 ? "line" : "lines"}; the default of this version has ${defaultLines}.`;
 }
+
+const CODE_FENCE = /^ {0,3}(`{3,}|~{3,})/;
+
+/**
+ * withPlaceholderCode wraps every known placeholder outside a code block in backticks, so Markdown
+ * hands it over as inline code. A placeholder already in backticks, or in a fenced block, stays as it is.
+ */
+export function withPlaceholderCode(text: string): string {
+  const names = Object.keys(PLACEHOLDERS);
+  const pattern = new RegExp(
+    `\`[^\`\n]*\`|${names.map((name) => name.replace(/[{}]/g, "\\$&")).join("|")}`,
+    "g",
+  );
+  let fence: string | null = null;
+  return text
+    .split("\n")
+    .map((line) => {
+      const mark = CODE_FENCE.exec(line)?.[1];
+      if (fence !== null) {
+        if (mark !== undefined && mark[0] === fence[0] && mark.length >= fence.length) {
+          fence = null;
+        }
+        return line;
+      }
+      if (mark !== undefined) {
+        fence = mark;
+        return line;
+      }
+      return line.replace(pattern, (match) => (match.startsWith("`") ? match : `\`${match}\``));
+    })
+    .join("\n");
+}

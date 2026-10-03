@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/system/Badge";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
@@ -27,6 +27,9 @@ type Listing =
  */
 export function PromptsPage() {
   const selectSettingsSection = useAppStore((state) => state.selectSettingsSection);
+  const promptReturn = useAppStore((state) => state.promptReturn);
+  const setPromptReturn = useAppStore((state) => state.setPromptReturn);
+  const rows = useRef<HTMLDivElement>(null);
   const [listing, setListing] = useState<Listing>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const now = Date.now();
@@ -47,12 +50,20 @@ export function PromptsPage() {
     };
   }, [attempt]);
 
+  // Back from a prompt, the focus goes to its row.
+  useEffect(() => {
+    if (promptReturn !== null) {
+      rows.current?.querySelector<HTMLElement>(`a[data-stage="${promptReturn}"]`)?.focus();
+      setPromptReturn(null);
+    }
+  }, [promptReturn, setPromptReturn]);
+
   return (
     <SettingsPage
       title="Prompts"
       sentence="The instructions each session starts with. A prompt you never edit follows the default of every new version of MySpec."
     >
-      <div className="flex flex-col gap-(--space-3)">
+      <div ref={rows} className="flex flex-col gap-(--space-3)">
         <SettingsList label="Prompts">
           {PROMPTS.map(({ stage, name, description }) => {
             const edited =
@@ -64,6 +75,7 @@ export function PromptsPage() {
                 {/* biome-ignore lint/a11y/useValidAnchor: a row of the list that opens a prompt, which has no URL of its own; the click is the navigation. */}
                 <a
                   href="#"
+                  data-stage={stage}
                   onClick={(event) => {
                     event.preventDefault();
                     selectSettingsSection(stage);

@@ -1,6 +1,6 @@
 import { code } from "@streamdown/code";
 import { createMermaidPlugin } from "@streamdown/mermaid";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Streamdown } from "streamdown";
 import { Button } from "@/components/system/Button";
 import { ICONS } from "@/components/system/icons";
@@ -36,6 +36,11 @@ export interface MarkdownProps {
   cutCode?: boolean;
   /** railLast draws the rail of a question in text beside the last block. */
   railLast?: boolean;
+  /**
+   * renderInlineCode draws a piece of inline code of its own; null leaves it as the code it is.
+   * The prompt page draws its placeholders with it.
+   */
+  renderInlineCode?: (code: string) => ReactNode | null;
   className?: string;
 }
 
@@ -43,11 +48,18 @@ interface BlockProps {
   children: string;
   streaming: boolean;
   className: string | undefined;
+  renderInlineCode: MarkdownProps["renderInlineCode"];
   controls?: typeof CONTROLS | typeof CUT_CONTROLS;
 }
 
 // Block is one Streamdown over a piece of the text.
-function Block({ children, streaming, className, controls = CONTROLS }: BlockProps) {
+function Block({
+  children,
+  streaming,
+  className,
+  renderInlineCode,
+  controls = CONTROLS,
+}: BlockProps) {
   const dark = useEffectiveMode() === "dark";
   const plugins = useMemo(
     () => ({
@@ -58,6 +70,19 @@ function Block({ children, streaming, className, controls = CONTROLS }: BlockPro
     }),
     [dark],
   );
+  const components = useMemo(() => {
+    if (renderInlineCode === undefined) {
+      return COMPONENTS;
+    }
+    const InlineCode = ({ children: code }: { children?: ReactNode }) => (
+      <>
+        {(typeof code === "string" ? renderInlineCode(code) : null) ?? (
+          <code data-streamdown="inline-code">{code}</code>
+        )}
+      </>
+    );
+    return { ...COMPONENTS, inlineCode: InlineCode };
+  }, [renderInlineCode]);
 
   return (
     <Streamdown
@@ -73,7 +98,7 @@ function Block({ children, streaming, className, controls = CONTROLS }: BlockPro
       lineNumbers={false}
       controls={controls}
       linkSafety={LINK_SAFETY}
-      components={COMPONENTS}
+      components={components}
     >
       {children}
     </Streamdown>
@@ -126,7 +151,12 @@ function CutCode({ part, streaming, className }: CutCodeProps) {
       data-code-cut
       className="relative flex flex-col overflow-hidden rounded-md bg-surface-0 shadow-[inset_0_0_0_var(--border)_var(--line-1)]"
     >
-      <Block streaming={streaming && !part.closed} className={className} controls={CUT_CONTROLS}>
+      <Block
+        streaming={streaming && !part.closed}
+        className={className}
+        renderInlineCode={undefined}
+        controls={CUT_CONTROLS}
+      >
         {codeMarkdown(part, open ? total : CUT_SHOWN)}
       </Block>
       {/* Copy stands at the end of the block's header, where Streamdown puts its own: the header
@@ -160,13 +190,18 @@ export function Markdown({
   streaming = false,
   cutCode = false,
   railLast = false,
+  renderInlineCode,
   className,
 }: MarkdownProps) {
   const parts = useMemo(() => (cutCode ? cutParts(children) : null), [cutCode, children]);
 
   if (parts === null || parts.every((part) => part.kind === "text")) {
     return (
-      <Block streaming={streaming} className={cn(railLast && RAIL, className)}>
+      <Block
+        streaming={streaming}
+        className={cn(railLast && RAIL, className)}
+        renderInlineCode={renderInlineCode}
+      >
         {children}
       </Block>
     );
@@ -177,8 +212,13 @@ export function Markdown({
         const last = index === parts.length - 1;
         const partClass = cn(last && railLast && RAIL, className);
         return part.kind === "text" ? (
-          // biome-ignore lint/suspicious/noArrayIndexKey: the order of the parts never changes
-          <Block key={index} streaming={streaming && last} className={partClass}>
+          <Block
+            // biome-ignore lint/suspicious/noArrayIndexKey: the order of the parts never changes
+            key={index}
+            streaming={streaming && last}
+            className={partClass}
+            renderInlineCode={renderInlineCode}
+          >
             {part.text}
           </Block>
         ) : (

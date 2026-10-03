@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { Tooltip } from "@/components/system/Tooltip";
 import { BoardsPage } from "@/features/boards/BoardsPage";
@@ -6,12 +6,38 @@ import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { RepositoriesPage } from "@/features/repositories/RepositoriesPage";
 import { Defaults } from "@/features/settings/Defaults";
 import { DiscardChangesDialog } from "@/features/settings/DiscardChangesDialog";
-import { PromptPane } from "@/features/settings/PromptPane";
+import { PromptEditor } from "@/features/settings/PromptEditor";
+import { PromptPage } from "@/features/settings/PromptPage";
 import { PromptsPage } from "@/features/settings/PromptsPage";
 import { SettingsNav } from "@/features/settings/SettingsNav";
 import { pageOf } from "@/features/settings/settings-nav";
+import { usePrompt } from "@/features/settings/usePrompt";
 import { locationTitle } from "@/lib/locations";
+import type { PromptStage } from "@/lib/wails";
 import { useAppStore, useBackTarget, useSettingsUi } from "@/store/app-store";
+
+/**
+ * PromptOfStage is the area of one prompt: its page, or its editor while it is edited. It reads the
+ * prompt once for both, and a page that comes back from the editor puts the focus on Edit.
+ */
+function PromptOfStage({ stage }: { stage: PromptStage }) {
+  const { promptEdit } = useSettingsUi();
+  const { state, setPrompt, retry } = usePrompt(stage);
+  const editing = promptEdit?.stage === stage;
+  const [wasEditing, setWasEditing] = useState(editing);
+  const [focus, setFocus] = useState<"title" | "edit">("title");
+  if (editing !== wasEditing) {
+    setWasEditing(editing);
+    setFocus(editing ? "title" : "edit");
+  }
+
+  if (editing && state.status === "ready") {
+    return <PromptEditor stage={stage} prompt={state.prompt} onSaved={setPrompt} />;
+  }
+  return (
+    <PromptPage stage={stage} state={state} onRetry={retry} onReset={setPrompt} focus={focus} />
+  );
+}
 
 /** SettingsView is the settings of the app: the defaults of a new task, the boards, the repositories and the prompts, one page at a time beside their navigation. */
 export function SettingsView() {
@@ -56,7 +82,7 @@ export function SettingsView() {
           ) : settingsSection === "prompts" ? (
             <PromptsPage />
           ) : (
-            <PromptPane key={settingsSection} stage={settingsSection} />
+            <PromptOfStage key={settingsSection} stage={settingsSection} />
           )}
         </div>
       </div>

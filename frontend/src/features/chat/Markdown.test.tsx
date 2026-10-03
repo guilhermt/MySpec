@@ -39,6 +39,28 @@ describe("Markdown", () => {
   });
 });
 
+describe("Markdown renderInlineCode", () => {
+  const draw = (code: string) =>
+    code.startsWith("{{") ? <span data-testid="drawn">{code}</span> : null;
+
+  it("draws the inline code it answers for and leaves the rest as code", () => {
+    renderWithStore(
+      <Markdown renderInlineCode={draw}>{"Fill `{{task_name}}` and run `ls`."}</Markdown>,
+    );
+
+    expect(screen.getByTestId("drawn")).toHaveTextContent("{{task_name}}");
+    expect(screen.getByText("ls").tagName).toBe("CODE");
+    expect(screen.getByText("ls")).toHaveAttribute("data-streamdown", "inline-code");
+  });
+
+  it("leaves every inline code as it is without the prop", () => {
+    renderWithStore(<Markdown>{"Fill `{{task_name}}`."}</Markdown>);
+
+    expect(screen.queryByTestId("drawn")).not.toBeInTheDocument();
+    expect(screen.getByTestId("markdown")).toHaveTextContent("Fill `{{task_name}}`.");
+  });
+});
+
 describe("ExternalLink", () => {
   it("opens the link in the browser instead of the webview", async () => {
     const { user } = renderWithStore(

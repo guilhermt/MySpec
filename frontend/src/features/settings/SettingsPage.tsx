@@ -6,23 +6,35 @@ export interface SettingsPageProps {
   sentence: string;
   /** action is the action of the page, at the right of its header: Add board. */
   action?: ReactNode;
+  /** badge is a label beside the title: Edited Sep 20. */
+  badge?: ReactNode;
   children: ReactNode;
   titleRef?: Ref<HTMLHeadingElement>;
 }
 
 /** SettingsPage is a page of Settings: the title and its sentence with the action of the page, then the sections. */
-export function SettingsPage({ title, sentence, action, children, titleRef }: SettingsPageProps) {
+export function SettingsPage({
+  title,
+  sentence,
+  action,
+  badge,
+  children,
+  titleRef,
+}: SettingsPageProps) {
   return (
     <div className="flex min-w-0 flex-col gap-(--space-8)">
       <header className="flex items-start justify-between gap-(--space-4)">
         <div className="flex min-w-0 flex-col gap-(--space-1)">
-          <h2
-            ref={titleRef}
-            tabIndex={-1}
-            className="text-(length:--text-title) leading-(--leading-title) font-semibold text-ink-1 outline-none"
-          >
-            {title}
-          </h2>
+          <div className="flex items-center gap-(--space-2)">
+            <h2
+              ref={titleRef}
+              tabIndex={-1}
+              className="text-(length:--text-title) leading-(--leading-title) font-semibold text-ink-1 outline-none"
+            >
+              {title}
+            </h2>
+            {badge}
+          </div>
           <p className="max-w-(--measure-read) text-(length:--text-body) leading-(--leading-body) text-ink-3">
             {sentence}
           </p>
