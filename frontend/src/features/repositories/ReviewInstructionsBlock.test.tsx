@@ -44,7 +44,7 @@ describe("ReviewInstructionsBlock", () => {
     const save = screen.getByRole("button", { name: "Save" });
 
     expect(save).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByText("Nothing changed yet.")).toBeInTheDocument();
+    expect(save).toHaveAccessibleDescription("Nothing changed yet.");
 
     await user.type(screen.getByRole("textbox", { name: FIELD }), "Look at the tests.");
 

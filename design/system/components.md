@@ -869,7 +869,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 
 | | |
 |---|---|
-| Anatomia | **← <prompt>** no alto, o título (`Editing the PRD prompt`) e a frase; a área de texto em mono ocupando a coluna; à direita, em `--col-placeholders` e fixa ao rolar, a coluna **Placeholders**, cada um como etiqueta com o que ele vira e, quando se aplica, o que acontece sem ele; a barra fixa no pé com `Unsaved changes`, **Cancel** e **Save** `Ctrl S`, a primária |
+| Anatomia | **← <prompt>** no alto, o título (`Editing the PRD prompt`) e a frase; a área de texto em mono ocupando a coluna; à direita, em `--col-placeholders` e fixa ao rolar, a coluna **Placeholders**, cada um como etiqueta com o que ele vira e, quando se aplica, o que acontece sem ele; a barra fixa no pé com, à esquerda, a razão de **Save** tracejado (`Nothing changed yet.`), `Unsaved changes` ou a falha ao salvar, e à direita **Cancel** e **Save** `Ctrl S`, a primária, que não mudam de lugar enquanto se digita |
 | Largura | Abaixo de 820 px de área principal, a coluna desce para baixo do editor |
 | Estados | Sem mudança (**Save** tracejado), com mudança, salvando, erro ao salvar. Sair com edição não salva pede `Discard your changes?` |
 
