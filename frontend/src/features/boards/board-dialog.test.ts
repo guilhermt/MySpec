@@ -219,12 +219,15 @@ describe("consequence", () => {
     expect(consequence({ ...moving, release: "" }, makeRepository())).toBe("");
   });
 
-  it("says what has to move with a repository that goes to No board", () => {
+  it("says what has to move with a repository that goes to No board, with one closing", () => {
     expect(consequence(moving, makeRepository())).toBe(
       "Moves to No board: it has a clone. Nothing on disk changes.",
     );
     expect(consequence(moving, makeRepository({ archivedTasks: 3 }))).toBe(
-      "Moves to No board: it has a clone and 3 archived tasks. Its tasks keep working. Nothing on disk changes.",
+      "Moves to No board: it has a clone and 3 archived tasks. Its tasks keep working.",
+    );
+    expect(consequence(moving, makeRepository({ archivedReviews: 1 }))).toBe(
+      "Moves to No board: it has a clone and 1 review. Its reviews keep working.",
     );
     expect(
       consequence(
@@ -238,7 +241,7 @@ describe("consequence", () => {
         }),
       ),
     ).toBe(
-      "Moves to No board: it has 1 active task, 2 archived tasks and 2 reviews. Its tasks keep working. Its reviews keep working.",
+      "Moves to No board: it has 1 active task, 2 archived tasks and 2 reviews. Its tasks keep working.",
     );
   });
 

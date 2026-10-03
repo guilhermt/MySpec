@@ -55,7 +55,7 @@ Os status finais vêm como o board os guarda. Quando o board mudou desde que foi
 
 Os repositórios do board vêm marcados, e os outros repositórios das issues aparecem desmarcados. Acrescentar um repositório segue as regras do cadastro. Um repositório do board que o usuário desmarca sai do board, e a linha dele, afundada, diz para onde vai, com `→` e o texto, que também é a descrição da caixa:
 
-- vai para o grupo sem board quando tem clone, tasks ou reviews de pull request: `Moves to No board: it has a clone and 3 archived tasks. Its tasks keep working.`, com as partes que existem entre `a clone`, tasks ativas, tasks arquivadas e reviews, e as frases `Its tasks keep working.`, `Its reviews keep working.` e `Nothing on disk changes.` conforme ele tenha tasks, reviews ou clone;
+- vai para o grupo sem board quando tem clone, tasks ou reviews de pull request: `Moves to No board: it has a clone and 3 archived tasks. Its tasks keep working.`, com as partes que existem entre `a clone`, tasks ativas, tasks arquivadas e reviews, e um fecho só: `Its tasks keep working.` quando tem tasks, `Its reviews keep working.` quando tem só reviews, `Nothing on disk changes.` quando tem só o clone;
 - sai do produto quando não tem nada disso: `Leaves MySpec: it has no clone, tasks or reviews.`
 
 O rodapé soma o que foi desmarcado ao lado de **Save**: `acme/docs moves to No board, and acme/billing leaves MySpec.` As tasks dos repositórios não mudam.

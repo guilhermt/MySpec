@@ -427,8 +427,7 @@ describe("BoardDialog, editing", () => {
     await user.click(screen.getByRole("checkbox", { name: "dev/web 4 cards" }));
     await user.click(screen.getByRole("checkbox", { name: "dev/docs 4 cards" }));
 
-    const web =
-      "Moves to No board: it has a clone and 3 archived tasks. Its tasks keep working. Nothing on disk changes.";
+    const web = "Moves to No board: it has a clone and 3 archived tasks. Its tasks keep working.";
     expect(screen.getByText(`→ ${web}`)).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "dev/web 4 cards" })).toHaveAccessibleDescription(
       `→ ${web}`,
