@@ -155,7 +155,7 @@ function Choices({ onValueChange = () => {} }: { onValueChange?: (value: string)
           <MenuRadioItem value="opus" icon={Bot}>
             Opus
           </MenuRadioItem>
-          <MenuRadioItem value="sonnet" sub="faster">
+          <MenuRadioItem value="sonnet" sub="faster" trailing="factory">
             Sonnet
           </MenuRadioItem>
           <MenuRadioItem value="fable" unavailable>
@@ -175,7 +175,7 @@ describe("MenuRadioItem", () => {
       "aria-checked",
       "true",
     );
-    expect(screen.getByRole("menuitemradio", { name: "Sonnet faster" })).toHaveAttribute(
+    expect(screen.getByRole("menuitemradio", { name: "Sonnet faster factory" })).toHaveAttribute(
       "aria-checked",
       "false",
     );
@@ -185,8 +185,16 @@ describe("MenuRadioItem", () => {
     const onValueChange = vi.fn();
     const { user } = renderWithStore(<Choices onValueChange={onValueChange} />);
     await user.click(screen.getByRole("button", { name: "Model" }));
-    await user.click(await screen.findByRole("menuitemradio", { name: "Sonnet faster" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "Sonnet faster factory" }));
     expect(onValueChange).toHaveBeenCalledWith("sonnet");
+  });
+
+  it("writes the trailing mark at the end of the item", async () => {
+    const { user } = renderWithStore(<Choices />);
+    await user.click(screen.getByRole("button", { name: "Model" }));
+    const item = await screen.findByRole("menuitemradio", { name: "Sonnet faster factory" });
+    expect(item.lastElementChild).toHaveTextContent("factory");
+    expect(screen.getByRole("menuitemradio", { name: "Opus" })).not.toHaveTextContent("factory");
   });
 
   it("keeps an unavailable choice with ◇, not to be chosen again", async () => {

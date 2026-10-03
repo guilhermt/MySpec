@@ -117,6 +117,22 @@ export function choiceUnavailable(catalog: ModelCatalog, choice: ModelChoice): b
   return efforts.length > 0 && !efforts.includes(choice.effort);
 }
 
+/**
+ * unavailableReason says why a choice is marked unavailable: the installed Claude Code no longer lists
+ * its model, or doesn't offer its effort for that model. "" for a choice the catalog has.
+ */
+export function unavailableReason(catalog: ModelCatalog, choice: ModelChoice): string {
+  if (!choiceUnavailable(catalog, choice)) {
+    return "";
+  }
+  const name = modelLabel(choice.model);
+  const subject =
+    catalogModel(catalog, choice.model) === undefined
+      ? `no longer lists ${name}`
+      : `doesn't offer ${choice.effort} for ${name}`;
+  return `The installed Claude Code ${subject}. A session still starts with it, and the CLI decides.`;
+}
+
 /** choiceLabel is a choice as the whole interface writes it: "Opus 5.5 (1M) · high", or the name alone for a model that takes no effort or a choice without one. */
 export function choiceLabel(catalog: ModelCatalog, choice: ModelChoice): string {
   const name = modelLabel(choice.model);

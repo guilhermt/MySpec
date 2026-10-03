@@ -67,7 +67,7 @@ describe("ModelChip", () => {
     const { user } = renderChip();
     await user.click(screen.getByRole("button", { name: /Step 5 model/ }));
     expect(await screen.findByRole("menu")).toHaveTextContent("Model");
-    expect(screen.getByText("Effort")).toBeInTheDocument();
+    expect(screen.getByText("Effort · Opus 5.5 (1M)")).toBeInTheDocument();
     expect(screen.getByRole("menuitemradio", { name: "Opus 5.5 (1M)" })).toHaveAttribute(
       "aria-checked",
       "true",
@@ -111,30 +111,44 @@ describe("ModelChip", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
-  it("keeps the saved choice, busy, while the catalog is read", async () => {
+  it("keeps the saved choice, busy, while the catalog is read, with a menu that stays shut and says so", async () => {
     const { user } = renderChip({}, makeModelCatalog({ models: [] }));
     const chip = screen.getByRole("button", { name: "Step 5 model: Opus 5.5 (1M) · high" });
     expect(chip).toHaveAttribute("aria-busy", "true");
-    await user.click(chip);
-    expect(await screen.findByRole("menuitemradio", { name: "Opus 5.5 (1M)" })).toHaveAttribute(
-      "aria-checked",
-      "true",
+    expect(chip).toHaveAccessibleDescription(
+      "Reading the models of Claude Code · the menu opens when it ends",
     );
+    await user.tab();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Reading the models of Claude Code · the menu opens when it ends",
+    );
+    await user.click(chip);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(screen.queryByText(/unavailable/)).not.toBeInTheDocument();
+  });
+
+  it("says the same while an own choice reads, and not its own note", async () => {
+    renderChip(
+      { own: true, followNote: "Its own model · Implementation uses Sonnet · high" },
+      makeModelCatalog({ models: [] }),
+    );
+    expect(screen.getByRole("button", { name: /Step 5 model/ })).toHaveAccessibleDescription(
+      "Reading the models of Claude Code · the menu opens when it ends",
+    );
   });
 
   it("marks a choice the installed Claude Code no longer offers, without changing it", async () => {
     const { user, onChange } = renderChip({ value: { model: "claude-opus-4", effort: "high" } });
     const chip = screen.getByRole("button", { name: "Step 5 model: Opus 4 · high · unavailable" });
     expect(chip).toHaveTextContent("Opus 4 · high · unavailable");
-    expect(chip).toHaveAccessibleDescription("Not in the models of the installed Claude Code");
+    const reason =
+      "The installed Claude Code no longer lists Opus 4. A session still starts with it, and the CLI decides.";
+    expect(chip).toHaveAccessibleDescription(reason);
     await user.tab();
-    expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "Not in the models of the installed Claude Code",
-    );
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(reason);
     await user.click(chip);
     const kept = await screen.findByRole("menuitemradio", {
-      name: "◇ Opus 4 · unavailable Not in the models of the installed Claude Code",
+      name: `◇ Opus 4 · unavailable ${reason}`,
     });
     expect(kept).toHaveAttribute("aria-checked", "true");
     expect(kept).toHaveAttribute("aria-disabled", "true");
@@ -150,6 +164,55 @@ describe("ModelChip", () => {
       "Claude Code was not found. Install it or point MYSPEC_CLAUDE_PATH at the executable.",
     );
     expect(screen.queryByRole("menuitemradio")).not.toBeInTheDocument();
+  });
+
+  it("says an effort the model doesn't offer, with the reason of the effort", () => {
+    renderChip({ value: { model: "claude-sonnet-5", effort: "ultra" } });
+    expect(
+      screen.getByRole("button", { name: "Step 5 model: Sonnet 5 · ultra · unavailable" }),
+    ).toHaveAccessibleDescription(
+      "The installed Claude Code doesn't offer ultra for Sonnet 5. A session still starts with it, and the CLI decides.",
+    );
+  });
+
+  it("takes the whole accessible name it is given", () => {
+    renderChip({ accessibleName: "PRD: Opus 5.5 (1M) · high, the factory default" });
+    expect(
+      screen.getByRole("button", { name: "PRD: Opus 5.5 (1M) · high, the factory default" }),
+    ).toBeInTheDocument();
+  });
+
+  it("marks no factory choice in the menu unless it is given one", async () => {
+    const { user } = renderChip();
+    await user.click(screen.getByRole("button", { name: /Step 5 model/ }));
+    await screen.findByRole("menu");
+    expect(screen.getByRole("menuitemradio", { name: "Opus 5.5 (1M)" })).not.toHaveTextContent(
+      "factory",
+    );
+    expect(screen.queryByText(/read when MySpec opened/)).not.toBeInTheDocument();
+  });
+
+  it("marks the factory model, and its effort only on that model, and says where the list comes from", async () => {
+    const { user } = renderChip({ factory: { model: "claude-sonnet-5", effort: "medium" } });
+    await user.click(screen.getByRole("button", { name: /Step 5 model/ }));
+    await screen.findByRole("menu");
+    expect(screen.getByRole("menuitemradio", { name: /^Sonnet 5/ })).toHaveTextContent("factory");
+    expect(screen.getByRole("menuitemradio", { name: /^Opus 5.5/ })).not.toHaveTextContent(
+      "factory",
+    );
+    // The chosen model is Opus, so no effort carries the mark.
+    expect(screen.getByRole("menuitemradio", { name: "medium" })).toBeInTheDocument();
+    expect(
+      screen.getByText("From the Claude Code installed here, read when MySpec opened."),
+    ).toBeInTheDocument();
+  });
+
+  it("marks the factory effort when the chosen model is the factory one", async () => {
+    const { user } = renderChip({ factory: { model: "claude-opus-5-5[1m]", effort: "medium" } });
+    await user.click(screen.getByRole("button", { name: /Step 5 model/ }));
+    await screen.findByRole("menu");
+    expect(screen.getByRole("menuitemradio", { name: /^medium/ })).toHaveTextContent("factory");
+    expect(screen.getByRole("menuitemradio", { name: /^high/ })).not.toHaveTextContent("factory");
   });
 
   it("closes its menu on Escape and gives the focus back to the chip", async () => {

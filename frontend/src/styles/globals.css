@@ -334,6 +334,46 @@
     container: main / inline-size;
   }
 
+  /* The body of Settings: the navigation and the page side by side, the pair centered at a whole pixel
+     with the page at --measure. The margin takes what the pair and its two sides leave over, rounded
+     down; below 820px of main area the pair is one column of --measure, centered the same way, and the
+     navigation, now a row, stops being sticky. */
+  .settings-body {
+    display: grid;
+    grid-template-columns: var(--snav-w) minmax(0, var(--measure));
+    column-gap: var(--space-12);
+    align-items: start;
+    max-width: calc(var(--snav-w) + var(--space-12) + var(--measure) + 2 * var(--space-6));
+    box-sizing: border-box;
+    padding: var(--space-8) var(--space-6) var(--space-16);
+    margin-left: max(
+      0px,
+      round(
+        down,
+        calc((100% - var(--snav-w) - var(--space-12) - var(--measure) - 2 * var(--space-6)) / 2),
+        1px
+      )
+    );
+  }
+  .settings-nav {
+    position: sticky;
+    top: var(--space-8);
+  }
+  @container main (max-width: 820px) {
+    .settings-body {
+      grid-template-columns: minmax(0, var(--measure));
+      row-gap: var(--space-6);
+      max-width: calc(var(--measure) + 2 * var(--space-6));
+      margin-left: max(
+        0px,
+        round(down, calc((100% - var(--measure) - 2 * var(--space-6)) / 2), 1px)
+      );
+    }
+    .settings-nav {
+      position: static;
+    }
+  }
+
   /* The area of a list, a board or Reviews, is the container its bar measures itself against. */
   .list-area {
     container: list / inline-size;

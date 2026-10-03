@@ -96,3 +96,34 @@ export const PLACEHOLDERS: Readonly<Record<string, PlaceholderMeta>> = {
     whenRemoved: "Without it, the instruction is added at the end when it applies.",
   },
 };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const EDITED_DAY = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+const EDITED_DAY_OF_YEAR = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
+
+/** editedLabel is "Edited today", "Edited yesterday", "Edited Sep 20", "Edited Sep 20, 2025". */
+export function editedLabel(editedAt: string, now: number): string {
+  const date = new Date(editedAt);
+  const today = new Date(now);
+  const dayStart = (day: Date) =>
+    new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+  switch (Math.round((dayStart(today) - dayStart(date)) / DAY_MS)) {
+    case 0:
+      return "Edited today";
+    case 1:
+      return "Edited yesterday";
+    default:
+      return date.getFullYear() === today.getFullYear()
+        ? `Edited ${EDITED_DAY.format(date)}`
+        : `Edited ${EDITED_DAY_OF_YEAR.format(date)}`;
+  }
+}
+
+/** linesText is "Your version has 92 lines; the default of this version has 87." */
+export function linesText(lines: number, defaultLines: number): string {
+  return `Your version has ${lines} ${lines === 1 ? "line" : "lines"}; the default of this version has ${defaultLines}.`;
+}

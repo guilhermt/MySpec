@@ -37,6 +37,7 @@ import {
   followTaskReviewMode,
   groupIntoEpicInPlace,
   interrupt,
+  listPrompts,
   loadTranscript,
   openExternal,
   openFileInEditor,
@@ -77,11 +78,12 @@ import {
   setDraftEpicInPlace,
   setDraftModule,
   setDraftRepository,
+  setModelDefaultInPlace,
   setRepositoryFilter,
   setReviewFilters,
   setReviewInstructions,
   setReviewMode,
-  setReviewModeDefault,
+  setReviewModeDefaultInPlace,
   setReviewModeInPlace,
   setStageModelInPlace,
   setStepReviewMode,
@@ -343,13 +345,11 @@ describe("actions", () => {
     await removeRepository("repo-1");
     await setRepositoryFilter("repo-2");
     await setTheme("dark");
-    await setReviewModeDefault("agent");
     await tryStartupAgain();
 
     expect(api.removeRepository).toHaveBeenCalledWith("repo-1");
     expect(api.setRepositoryFilter).toHaveBeenCalledWith("repo-2");
     expect(api.setTheme).toHaveBeenCalledWith("dark");
-    expect(api.setReviewModeDefault).toHaveBeenCalledWith("agent");
     expect(api.tryStartupAgain).toHaveBeenCalledTimes(1);
     expect(useAppStore.getState().error).toBeNull();
   });
@@ -759,6 +759,47 @@ describe("task actions", () => {
     expect(
       await setStageModelInPlace("task-1", "plan", { model: "claude-sonnet-5", effort: "high" }),
     ).toBe("the stage has started");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("saves a default model in place, answering null and leaving the app notice alone", async () => {
+    const choice = { model: "claude-opus-5-5[1m]", effort: "low" };
+
+    expect(await setModelDefaultInPlace("pr", choice)).toBeNull();
+
+    expect(api.setModelDefault).toHaveBeenCalledWith("pr", "claude-opus-5-5[1m]", "low");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("answers the failure of saving a default model in place instead of the app notice", async () => {
+    vi.mocked(api.setModelDefault).mockRejectedValueOnce(new Error("the disk is full"));
+
+    expect(
+      await setModelDefaultInPlace("pr", { model: "claude-opus-5-5[1m]", effort: "low" }),
+    ).toBe("the disk is full");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("saves the default review mode in place, answering null and leaving the app notice alone", async () => {
+    expect(await setReviewModeDefaultInPlace("agent")).toBeNull();
+
+    expect(api.setReviewModeDefault).toHaveBeenCalledWith("agent");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("answers the failure of saving the default review mode in place instead of the app notice", async () => {
+    vi.mocked(api.setReviewModeDefault).mockRejectedValueOnce(new Error("the disk is full"));
+
+    expect(await setReviewModeDefaultInPlace("manual")).toBe("the disk is full");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("lists the prompts and lets the failure through", async () => {
+    expect(await listPrompts()).toHaveLength(9);
+
+    vi.mocked(api.listPrompts).mockRejectedValueOnce(new Error("no prompts"));
+
+    await expect(listPrompts()).rejects.toThrow("no prompts");
     expect(useAppStore.getState().error).toBeNull();
   });
 

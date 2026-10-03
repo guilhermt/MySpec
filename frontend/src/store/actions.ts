@@ -16,6 +16,7 @@ import type {
   ModelStage,
   PermissionDecision,
   Prompt,
+  PromptListing,
   PromptStage,
   RepositoryCandidate,
   ReviewFilters,
@@ -266,18 +267,23 @@ export async function setTheme(preference: ThemePreference): Promise<void> {
   await run(fail("Couldn't change the theme", TRY), () => api.setTheme(preference));
 }
 
-/** setModelDefault changes what the app gives a stage of the tasks created next. */
-export async function setModelDefault(stage: ModelStage, choice: ModelChoice): Promise<void> {
-  await run(fail("Couldn't change the default model", TRY), () =>
-    api.setModelDefault(stage, choice.model, choice.effort),
-  );
+/**
+ * setModelDefaultInPlace changes what the app gives a stage of the tasks created next, from a row of
+ * Defaults that shows its own failure under it: it answers the message of the failure, or null.
+ */
+export function setModelDefaultInPlace(
+  stage: ModelStage,
+  choice: ModelChoice,
+): Promise<string | null> {
+  return inPlace(() => api.setModelDefault(stage, choice.model, choice.effort));
 }
 
-/** setReviewModeDefault changes who reviews the steps of the tasks created next. */
-export async function setReviewModeDefault(mode: ReviewMode): Promise<void> {
-  await run(fail("Couldn't change the default review mode", TRY), () =>
-    api.setReviewModeDefault(mode),
-  );
+/**
+ * setReviewModeDefaultInPlace changes who reviews the steps of the tasks created next, from the
+ * options of Defaults, which show their own failure under them: it answers the message, or null.
+ */
+export function setReviewModeDefaultInPlace(mode: ReviewMode): Promise<string | null> {
+  return inPlace(() => api.setReviewModeDefault(mode));
 }
 
 /** setStageModel changes what a stage of a task runs with, before it starts. */
@@ -365,6 +371,11 @@ export async function followTaskReviewMode(taskId: string, step: number): Promis
  */
 export function getPrompt(stage: PromptStage): Promise<Prompt> {
   return api.getPrompt(stage);
+}
+
+/** listPrompts reads which prompts are edited; the list shows its own failure. */
+export function listPrompts(): Promise<PromptListing[]> {
+  return api.listPrompts();
 }
 
 export function savePrompt(stage: PromptStage, text: string): Promise<Prompt> {

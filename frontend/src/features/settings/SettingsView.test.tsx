@@ -1,226 +1,144 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { useGlobalShortcuts } from "@/app/useGlobalShortcuts";
 import { SettingsView } from "@/features/settings/SettingsView";
-import { api, type Prompt } from "@/lib/wails";
-import { type SettingsSection, useAppStore } from "@/store/app-store";
+import type { Location, SettingsSection } from "@/lib/locations";
+import { api } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makePrompt, makeState } from "@/test/wails-mock";
 
-const TEXT = makePrompt().text;
-
-function view(section: SettingsSection = "defaults") {
-  return renderWithStore(<SettingsView />, {
-    state: makeState(),
-    ui: { location: { kind: "settings", section } },
-  });
+// Shortcuts is the app's keyboard, which closes Settings with Esc and Ctrl+,.
+function Shortcuts() {
+  useGlobalShortcuts();
+  return null;
 }
 
-/** promptView opens the PRD prompt and waits for its text to arrive. */
-async function promptView(overrides: Partial<Prompt> = {}) {
-  vi.mocked(api.getPrompt).mockResolvedValue(makePrompt(overrides));
-  const rendered = view("prd");
-  await screen.findByTestId("markdown");
-  return rendered;
+function view(section: SettingsSection = "defaults", back: Location[] = []) {
+  return renderWithStore(
+    <>
+      <Shortcuts />
+      <SettingsView />
+    </>,
+    {
+      state: makeState(),
+      ui: { location: { kind: "settings", section }, back },
+    },
+  );
 }
 
-/** edited opens the editor of the PRD prompt and puts another text in it. */
-async function edited() {
-  const rendered = await promptView();
-  const { user } = rendered;
-
-  await user.click(screen.getByRole("button", { name: "Edit" }));
-  const field = await screen.findByRole("textbox", { name: "PRD prompt" });
-  await user.clear(field);
-  await user.type(field, "Rewritten.");
-
-  return { ...rendered, field };
-}
+const body = () => document.querySelector(".settings-body")?.parentElement as HTMLElement;
 
 describe("SettingsView", () => {
-  it("names the place Settings and closes it from the header", async () => {
-    const { user } = view();
-
-    expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^Close/ }));
-
-    expect(useAppStore.getState().location).toEqual({ kind: "home" });
-  });
-
-  it("lists the defaults, the boards, the repositories and the eight prompts in its navigation, with the one on screen as the current page", () => {
+  it("names the place Settings, with its navigation and the page of the section", () => {
     view();
 
-    const nav = screen.getByRole("navigation", { name: "Settings" });
-    for (const name of [
-      "Defaults",
-      "Boards",
-      "Repositories",
-      "PRD",
-      "Tech spec",
-      "Plan",
-      "One-Shot planning",
-      "Step review",
-      "Commit",
-      "PR",
-      "PR review",
-    ]) {
-      expect(screen.getByRole("button", { name })).toBeInTheDocument();
-    }
-    expect(nav).toHaveTextContent("Prompts");
-    expect(screen.getByRole("button", { name: "Defaults" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
-    expect(screen.getByRole("button", { name: "PRD" })).not.toHaveAttribute("aria-current");
-    expect(screen.getByRole("heading", { name: "Defaults" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Defaults" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("heading", { level: 2, name: "Defaults" })).toBeInTheDocument();
   });
 
-  it("shows the registered boards in their own section", async () => {
-    const { user } = view();
+  it.each([
+    ["boards", "Boards"],
+    ["repositories", "Repositories"],
+    ["prompts", "Prompts"],
+  ] as const)("shows the page %s", async (section, title) => {
+    view(section);
 
-    await user.click(screen.getByRole("button", { name: "Boards" }));
-
-    expect(screen.getByRole("heading", { name: "Boards" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Boards" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("button", { name: "Add board" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: title })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: title })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("heading", { level: 2, name: "Defaults" })).not.toBeInTheDocument();
   });
 
-  it("shows the registered repositories in their own section", async () => {
+  it("shows a prompt on the page Prompts", async () => {
+    vi.mocked(api.getPrompt).mockResolvedValue(makePrompt());
+    view("prd");
+
+    expect(await screen.findByTestId("markdown")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Prompts" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("changes the page from the navigation without stacking a place", async () => {
     const { user } = view();
 
-    await user.click(screen.getByRole("button", { name: "Repositories" }));
+    await user.click(screen.getByRole("link", { name: "Repositories" }));
 
-    expect(screen.getByRole("heading", { name: "Repositories" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Repositories" })).toBeInTheDocument();
     expect(screen.getByText("dev/web")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Defaults" })).not.toBeInTheDocument();
+    expect(useAppStore.getState().back).toEqual([]);
   });
 
-  it("changes the review mode of new tasks at once", async () => {
+  it("closes from the header with Close, back to the place before", async () => {
+    const { user } = view("defaults", [{ kind: "history" }]);
+
+    await user.click(screen.getByRole("button", { name: /^Close/ }));
+
+    expect(useAppStore.getState().location).toEqual({ kind: "history" });
+  });
+
+  it("says where Close goes, in its tooltip", async () => {
+    const { user } = view("defaults", [{ kind: "history" }]);
+
+    await user.hover(screen.getByRole("button", { name: /^Close/ }));
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Close Settings and go back to History · Esc",
+    );
+  });
+
+  it("says only that it closes when there is nowhere to go back to", async () => {
     const { user } = view();
 
-    await user.click(screen.getByRole("button", { name: "New tasks review mode: Manual" }));
-    await user.click(await screen.findByRole("menuitemradio", { name: "Agent" }));
+    await user.hover(screen.getByRole("button", { name: /^Close/ }));
 
-    expect(api.setReviewModeDefault).toHaveBeenCalledWith("agent");
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Close Settings · Esc");
   });
 
-  it("changes a default at once", async () => {
+  it("closes with Esc and with Ctrl+,", async () => {
+    const { user } = view("defaults", [{ kind: "history" }]);
+
+    await user.keyboard("{Escape}");
+
+    expect(useAppStore.getState().location).toEqual({ kind: "history" });
+
+    act(() => useAppStore.getState().openSettings());
+    await user.keyboard("{Control>},{/Control}");
+
+    expect(useAppStore.getState().location).toEqual({ kind: "history" });
+  });
+
+  it("brings a page back to the top when the page changes", async () => {
     const { user } = view();
+    body().scrollTop = 240;
 
-    await user.click(screen.getByRole("button", { name: "PR model: Opus 5.5 (1M) · medium" }));
-    await user.click(await screen.findByRole("menuitemradio", { name: "low" }));
+    await user.click(screen.getByRole("link", { name: "Boards" }));
 
-    expect(api.setModelDefault).toHaveBeenCalledWith("pr", "claude-opus-5-5[1m]", "low");
+    await waitFor(() => expect(body().scrollTop).toBe(0));
   });
 
-  it("shows a prompt rendered, marked as modified and restorable only when it is", async () => {
-    const { unmount } = await promptView();
+  it("keeps the scroll while the section changes inside a page", async () => {
+    vi.mocked(api.getPrompt).mockResolvedValue(makePrompt());
+    view("prompts");
+    await screen.findByRole("heading", { level: 2, name: "Prompts" });
+    body().scrollTop = 120;
 
-    expect(api.getPrompt).toHaveBeenCalledWith("prd");
-    expect(screen.getByTestId("markdown")).toHaveTextContent("Write the PRD of {{task_name}}.");
-    expect(screen.getByText("Opens the PRD session of a task.")).toBeInTheDocument();
-    expect(screen.queryByText("Modified")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Restore default" })).not.toBeInTheDocument();
+    act(() => useAppStore.getState().selectSettingsSection("prd"));
+    await screen.findByTestId("markdown");
 
-    unmount();
-    await promptView({ modified: true });
-
-    expect(screen.getByText("Modified")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Restore default" })).toBeInTheDocument();
+    expect(body().scrollTop).toBe(120);
   });
 
-  it("edits a prompt with its placeholders at hand and saves it", async () => {
-    const { user } = await promptView();
-
+  it("asks before the navigation loses an edit of a prompt", async () => {
+    vi.mocked(api.getPrompt).mockResolvedValue(makePrompt());
+    const { user } = view("prd");
+    await screen.findByTestId("markdown");
     await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.type(await screen.findByRole("textbox", { name: "PRD prompt" }), " More.");
 
-    const field = await screen.findByRole("textbox", { name: "PRD prompt" });
-    expect(field).toHaveValue(TEXT);
-    const reference = screen.getByRole("complementary", { name: "Placeholders" });
-    expect(reference).toHaveTextContent("{{task_name}}");
-    expect(reference).toHaveTextContent("The name of the task");
-    expect(reference).toHaveTextContent("Without it, the initial context is added at the end.");
-
-    await user.clear(field);
-    await user.type(field, "Rewritten.");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    expect(api.savePrompt).toHaveBeenCalledWith("prd", "Rewritten.");
-    expect(await screen.findByTestId("markdown")).toHaveTextContent("Rewritten.");
-    expect(screen.getByText("Modified")).toBeInTheDocument();
-  });
-
-  it("saves with Ctrl+S", async () => {
-    const { user } = await edited();
-
-    await user.keyboard("{Control>}s{/Control}");
-
-    expect(api.savePrompt).toHaveBeenCalledWith("prd", "Rewritten.");
-    expect(await screen.findByTestId("markdown")).toHaveTextContent("Rewritten.");
-  });
-
-  it("keeps the text and says why when saving fails", async () => {
-    vi.mocked(api.savePrompt).mockRejectedValue(new Error("disk is full"));
-    const { user, field } = await edited();
-
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    expect(await screen.findByRole("status")).toHaveTextContent("disk is full");
-    expect(field).toHaveValue("Rewritten.");
-  });
-
-  it("asks before leaving an edit with changes", async () => {
-    const { user } = await edited();
-
-    await user.click(screen.getByRole("button", { name: "Commit" }));
+    await user.click(screen.getByRole("link", { name: "Boards" }));
 
     expect(await screen.findByText("Discard your changes?")).toBeInTheDocument();
-    expect(screen.getByText("The edits to the PRD prompt haven't been saved.")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Keep editing" }));
-
-    expect(screen.getByRole("textbox", { name: "PRD prompt" })).toHaveValue("Rewritten.");
-
-    await user.click(screen.getByRole("button", { name: "Commit" }));
-    await user.click(await screen.findByRole("button", { name: "Discard" }));
-
-    expect(await screen.findByRole("heading", { name: "Commit" })).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "PRD prompt" })).not.toBeInTheDocument();
-
-    // Cancel loses the same text, so it asks the same way.
-    await user.click(screen.getByRole("button", { name: "Edit" }));
-    await user.type(await screen.findByRole("textbox", { name: "Commit prompt" }), " Push it.");
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-
-    expect(await screen.findByText("Discard your changes?")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Discard" }));
-
-    expect(screen.queryByRole("textbox", { name: "Commit prompt" })).not.toBeInTheDocument();
-  });
-
-  it("leaves an edit without changes without asking", async () => {
-    const { user } = await promptView();
-
-    await user.click(screen.getByRole("button", { name: "Edit" }));
-    await screen.findByRole("textbox", { name: "PRD prompt" });
-    await user.click(screen.getByRole("button", { name: "Plan" }));
-
-    expect(await screen.findByRole("heading", { name: "Plan" })).toBeInTheDocument();
-    expect(screen.queryByText("Discard your changes?")).not.toBeInTheDocument();
-  });
-
-  it("restores the default after a confirmation", async () => {
-    const { user } = await promptView({ modified: true });
-
-    await user.click(screen.getByRole("button", { name: "Restore default" }));
-
-    expect(await screen.findByText("Restore the default PRD prompt?")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Restore" }));
-
-    expect(api.restorePrompt).toHaveBeenCalledWith("prd");
-    await waitFor(() => {
-      expect(screen.queryByText("Modified")).not.toBeInTheDocument();
-    });
+    expect(useAppStore.getState().location).toEqual({ kind: "settings", section: "prd" });
   });
 });

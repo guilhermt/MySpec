@@ -205,10 +205,10 @@ export interface AppStore {
   earlierConversation: EarlierConversation | null;
   /**
    * pendingFocus is where the focus goes once the new place is on screen: its title, the back or
-   * forward button, or what the situation of a task or a review asks (request), which the screen of
-   * the item settles.
+   * forward button, what the situation of a task or a review asks (request), which the screen of
+   * the item settles, or the open page of the navigation of Settings (nav).
    */
-  pendingFocus: "title" | "back" | "forward" | "request" | null;
+  pendingFocus: "title" | "back" | "forward" | "request" | "nav" | null;
   /** sidebarRail is the sidebar collapsed into its strip; kept across runs. */
   sidebarRail: boolean;
   /** toasts are the notices of items that left without being open, the oldest first, three at most. */
@@ -313,7 +313,7 @@ export interface AppStore {
   setError: (error: AppError | null) => void;
 
   /** go opens a place: the current one goes behind it and whatever was ahead is dropped. */
-  go: (location: Location, options?: { focus?: "title" | "back" | "forward" }) => void;
+  go: (location: Location, options?: { focus?: "title" | "back" | "forward" | "nav" }) => void;
   /** goBack opens the nearest place behind the current one that still exists; with none, nothing happens. */
   goBack: (options?: { focus?: "title" | "back" }) => void;
   /** goForward opens the nearest place ahead of the current one that still exists; with none, nothing happens. */
@@ -401,7 +401,7 @@ export interface AppStore {
   /** openSituation opens an item where one of its situations is. */
   openSituation: (itemId: string, place: Place) => void;
 
-  openSettings: (section?: SettingsSection) => void;
+  openSettings: (section?: SettingsSection, focus?: "nav" | null) => void;
   closeSettings: () => void;
   selectSettingsSection: (section: SettingsSection) => void;
   startPromptEdit: (stage: PromptStage, text: string) => void;
@@ -1225,7 +1225,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
       );
     },
 
-    openSettings: (section) => go({ kind: "settings", section: section ?? "defaults" }),
+    openSettings: (section, focus = "nav") =>
+      go({ kind: "settings", section: section ?? "defaults" }, focus === null ? {} : { focus }),
 
     // Settings close back to the place before them, skipping the ones that no
     // longer exist; with none, to Home.

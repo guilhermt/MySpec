@@ -53,7 +53,7 @@ export function SidebarFooter({ rail = false }: SidebarFooterProps) {
   const archived = total > 0 ? archivedText(tasks, reviews, discussions) : null;
   const current = (open: boolean) =>
     open ? { pressed: true, "aria-current": "page" as const } : { pressed: false };
-  const toggleSettings = () => (settingsOpen ? closeSettings() : openSettings());
+  const toggleSettings = () => (settingsOpen ? closeSettings() : openSettings(undefined, null));
 
   if (rail) {
     return (

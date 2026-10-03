@@ -219,6 +219,15 @@ describe("globals.css", () => {
     expect(GLOBALS).toContain(`@container main (min-width: ${AUX_PANEL_COLUMN_MIN}px) {`);
   });
 
+  it("centers the pair of Settings at a whole pixel, with the page at --measure", () => {
+    expect(GLOBALS).toMatch(
+      /\.settings-body \{[^}]*max-width: calc\(var\(--snav-w\) \+ var\(--space-12\) \+ var\(--measure\) \+ 2 \* var\(--space-6\)\);[^}]*margin-left: max\(\s*0px,\s*round\(\s*down,\s*calc\(\(100% - var\(--snav-w\) - var\(--space-12\) - var\(--measure\) - 2 \* var\(--space-6\)\) \/ 2\),\s*1px\s*\)\s*\);/,
+    );
+    expect(GLOBALS).toMatch(
+      /@container main \(max-width: 820px\) \{\s*\.settings-body \{[^}]*grid-template-columns: minmax\(0, var\(--measure\)\);/,
+    );
+  });
+
   it("rounds the width of the list panel and puts it beside the list from 800px of main area", () => {
     expect(GLOBALS).toMatch(
       /\.list-panel \{[^}]*width: round\(down, var\(--panel-card-width\), 1px\);/,

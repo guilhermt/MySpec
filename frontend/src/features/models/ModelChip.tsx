@@ -22,6 +22,7 @@ import {
   type ModelChoice,
   modelLabel,
   takesEffort,
+  unavailableReason,
 } from "@/lib/models";
 import { asCatalogFailure } from "@/lib/wails";
 import { useModelCatalog } from "@/store/app-store";
@@ -38,20 +39,28 @@ export interface ModelChipProps {
    * Sonnet · high"), or what the choice follows ("Follows Implementation"); "" for none.
    */
   followNote: string;
+  /** accessibleName is the whole name of the chip, in place of "<label> model: <choice>". */
+  accessibleName?: string;
+  /** factory is the choice the installed app ships with; only Defaults passes it, and the menu marks it. */
+  factory?: ModelChoice;
   saving?: boolean;
   /** size is sm, the chip of the dense rows: the Models popover and Details. */
   size?: "sm";
   ref?: Ref<HTMLButtonElement>;
 }
 
-/** UNAVAILABLE_REASON is why a choice is marked unavailable. */
-const UNAVAILABLE_REASON = "Not in the models of the installed Claude Code";
+/** READING_NOTE is the tooltip of the chip while the catalog is read. */
+const READING_NOTE = "Reading the models of Claude Code · the menu opens when it ends";
+
+/** FACTORY_FOOT is what the foot of the menu says in Defaults, where the factory choice is marked. */
+const FACTORY_FOOT = "From the Claude Code installed here, read when MySpec opened.";
 
 /**
  * ModelChip is the chip that picks a model and an effort in the rows of the task screen: the menu
  * has the models and the efforts of the chosen model; a choice the installed Claude Code no longer
- * offers is kept and marked; while the catalog is read the choice shimmers, and a catalog never read
- * says why in place of the items.
+ * offers is kept and marked; while the catalog is read the choice shimmers and the menu stays shut,
+ * and a catalog never read says why in place of the items. In Defaults the menu marks the factory
+ * choice.
  */
 export function ModelChip({
   value,
@@ -59,6 +68,8 @@ export function ModelChip({
   label,
   own,
   followNote,
+  accessibleName,
+  factory,
   saving = false,
   size,
   ref,
@@ -72,7 +83,10 @@ export function ModelChip({
   const text = choiceLabel(catalog, value);
   const current = catalogModel(catalog, value.model);
   const efforts = current?.efforts ?? [];
-  const note = unavailable ? UNAVAILABLE_REASON : followNote;
+  const reason = unavailable ? unavailableReason(catalog, value) : "";
+  const note = reading ? READING_NOTE : unavailable ? reason : followNote;
+  // The chip draws the note of its own choice and the unavailable reason itself.
+  const chipNote = unavailable || (own && !reading);
 
   const trigger = (
     <MenuTrigger
@@ -85,10 +99,14 @@ export function ModelChip({
           reading={reading}
           loading={saving}
           loadingLabel="Saving…"
-          aria-label={`${label} model: ${text}${unavailable ? " · unavailable" : ""}`}
+          aria-label={
+            accessibleName ?? `${label} model: ${text}${unavailable ? " · unavailable" : ""}`
+          }
           {...(note !== "" ? { "aria-describedby": noteId } : {})}
-          {...(own && !unavailable && followNote !== "" ? { defaultNote: followNote } : {})}
-          {...(unavailable ? { unavailableReason: UNAVAILABLE_REASON } : {})}
+          {...(own && !unavailable && !reading && followNote !== ""
+            ? { defaultNote: followNote }
+            : {})}
+          {...(unavailable ? { unavailableReason: reason } : {})}
           {...(own ? {} : { className: "text-ink-3" })}
         >
           {text}
@@ -99,14 +117,9 @@ export function ModelChip({
 
   return (
     <>
-      <Menu {...(saving ? { open: false } : {})}>
-        {/* The chip draws the note of its own choice and the unavailable reason; a choice that
-            follows another has its note here. */}
-        {!own && !unavailable && followNote !== "" ? (
-          <Tooltip content={followNote}>{trigger}</Tooltip>
-        ) : (
-          trigger
-        )}
+      <Menu {...(saving || reading ? { open: false } : {})}>
+        {/* A choice that follows another, and the chip that reads, have their note here. */}
+        {!chipNote && note !== "" ? <Tooltip content={note}>{trigger}</Tooltip> : trigger}
         <MenuContent align="end">
           {models.length === 0 && failure !== "" ? (
             <MenuMessage tone="error">{catalogFailureMessage(failure)}</MenuMessage>
@@ -121,14 +134,18 @@ export function ModelChip({
                   }}
                 >
                   {models.map((model) => (
-                    <MenuRadioItem key={model.name} value={model.name}>
+                    <MenuRadioItem
+                      key={model.name}
+                      value={model.name}
+                      {...(factory?.model === model.name ? { trailing: "factory" } : {})}
+                    >
                       {modelLabel(model.name)}
                     </MenuRadioItem>
                   ))}
                   {current === undefined && (
                     <MenuRadioItem
                       value={value.model}
-                      {...(reading ? {} : { unavailable: true, sub: UNAVAILABLE_REASON })}
+                      {...(reading ? {} : { unavailable: true, sub: reason })}
                     >
                       {modelLabel(value.model)}
                     </MenuRadioItem>
@@ -137,7 +154,7 @@ export function ModelChip({
               </MenuGroup>
               <MenuSeparator />
               <MenuGroup>
-                <MenuGroupLabel>Effort</MenuGroupLabel>
+                <MenuGroupLabel>{`Effort · ${modelLabel(value.model)}`}</MenuGroupLabel>
                 {takesEffort(catalog, value.model) ? (
                   <MenuRadioGroup
                     value={value.effort}
@@ -146,7 +163,13 @@ export function ModelChip({
                     }}
                   >
                     {efforts.map((effort) => (
-                      <MenuRadioItem key={effort} value={effort}>
+                      <MenuRadioItem
+                        key={effort}
+                        value={effort}
+                        {...(factory?.model === value.model && factory.effort === effort
+                          ? { trailing: "factory" }
+                          : {})}
+                      >
                         {effort}
                       </MenuRadioItem>
                     ))}
@@ -163,6 +186,12 @@ export function ModelChip({
                   <MenuText>{`${modelLabel(value.model)} has no effort levels.`}</MenuText>
                 )}
               </MenuGroup>
+              {factory !== undefined && (
+                <>
+                  <MenuSeparator />
+                  <MenuText micro>{FACTORY_FOOT}</MenuText>
+                </>
+              )}
             </>
           )}
         </MenuContent>

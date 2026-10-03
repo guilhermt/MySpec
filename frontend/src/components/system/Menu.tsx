@@ -136,6 +136,8 @@ export interface MenuRadioItemProps {
   unavailable?: boolean;
   /** disabled is a choice that can't be made, its reason in sub. */
   disabled?: boolean;
+  /** trailing is the small mark at the end of the item: "factory". */
+  trailing?: string;
 }
 
 /** MenuSub is the small text after the label of an item: its sub, or the reason a choice is off. */
@@ -164,6 +166,7 @@ export function MenuRadioItem({
   subTone,
   unavailable,
   disabled,
+  trailing,
 }: MenuRadioItemProps) {
   return (
     <BaseMenu.RadioItem
@@ -188,6 +191,12 @@ export function MenuRadioItem({
       </span>
       {sub !== undefined && " "}
       {sub !== undefined && <MenuSub tone={subTone}>{sub}</MenuSub>}
+      {trailing !== undefined && " "}
+      {trailing !== undefined && (
+        <span className="ml-auto pl-(--space-3) text-(length:--text-micro) leading-(--leading-micro) text-ink-3">
+          {trailing}
+        </span>
+      )}
     </BaseMenu.RadioItem>
   );
 }
@@ -345,6 +354,8 @@ export function MenuMessage({ children, tone = "neutral", onRetry }: MenuMessage
 
 export interface MenuTextProps {
   children: ReactNode;
+  /** micro writes the line small, as the foot of a menu does. */
+  micro?: boolean;
 }
 
 /**
@@ -352,9 +363,16 @@ export interface MenuTextProps {
  * that is not a place, like an epic. It has the height of an item and the third ink, and takes
  * neither the highlight nor the keyboard.
  */
-export function MenuText({ children }: MenuTextProps) {
+export function MenuText({ children, micro = false }: MenuTextProps) {
   return (
-    <div className="flex min-h-(--size-control) items-center px-2 text-(length:--text-ui) leading-(--leading-ui) text-ink-3">
+    <div
+      className={cn(
+        "flex min-h-(--size-control) items-center px-2 text-ink-3",
+        micro
+          ? "text-(length:--text-micro) leading-(--leading-micro)"
+          : "text-(length:--text-ui) leading-(--leading-ui)",
+      )}
+    >
       {children}
     </div>
   );
