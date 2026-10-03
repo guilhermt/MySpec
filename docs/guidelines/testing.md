@@ -49,6 +49,7 @@ Os pacotes que rodam binários testam contra o binário real ou contra um fake q
 - `internal/git/gittest`: constrói repositórios de verdade em diretórios temporários com o `git` real. O git não é dublado.
 - `internal/gh/ghtest`: um `gh` falso que responde o que o teste escreveu, porque falar com o GitHub não é opção. É o binário reexecutado, não um script, porque escrever um executável enquanto outros testes fazem fork falha com "text file busy".
 - `internal/platform/chime` e `internal/platform/dnd`: um player de áudio e um `omarchy-shell` falsos, o binário de teste reexecutado, declarados no `TestMain` do próprio pacote porque só ele os usa. O comportamento do fake (tocar, falhar, travar; responder `on`, `off`, falhar, travar) vem no argumento ou numa variável de ambiente.
+- `internal/store`: a sonda do diretório de dados com um limite de tamanho de arquivo zero, o binário de teste reexecutado pelo `TestMain` do pacote, que baixa o limite só para ele. A escrita da sonda falha com `EFBIG`, no lugar do disco cheio, que um teste não consegue fazer.
 
 `store.OpenMemory` abre um SQLite em memória com as migrations aplicadas, para os testes do `store` e de quem o usa.
 
