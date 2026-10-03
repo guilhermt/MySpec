@@ -84,6 +84,9 @@ export function ModelChip({
   const current = catalogModel(catalog, value.model);
   const efforts = current?.efforts ?? [];
   const reason = unavailable ? unavailableReason(catalog, value) : "";
+  // A choice that follows another is quiet, in the third ink. In Defaults, where the factory is the
+  // reference, the factory choice keeps the chip's second ink.
+  const quiet = !own && factory === undefined;
   const note = reading ? READING_NOTE : unavailable ? reason : followNote;
   // The chip draws the note of its own choice and the unavailable reason itself.
   const chipNote = unavailable || (own && !reading);
@@ -107,7 +110,7 @@ export function ModelChip({
             ? { defaultNote: followNote }
             : {})}
           {...(unavailable ? { unavailableReason: reason } : {})}
-          {...(own ? {} : { className: "text-ink-3" })}
+          {...(quiet ? { className: "text-ink-3" } : {})}
         >
           {text}
         </Chip>
@@ -122,7 +125,7 @@ export function ModelChip({
         {!chipNote && note !== "" ? <Tooltip content={note}>{trigger}</Tooltip> : trigger}
         <MenuContent align="end">
           {models.length === 0 && failure !== "" ? (
-            <MenuMessage tone="error">{catalogFailureMessage(failure)}</MenuMessage>
+            <MenuMessage tone="notice">{catalogFailureMessage(failure)}</MenuMessage>
           ) : (
             <>
               <MenuGroup>

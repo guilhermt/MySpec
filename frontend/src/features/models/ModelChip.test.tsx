@@ -160,9 +160,10 @@ describe("ModelChip", () => {
     const chip = screen.getByRole("button", { name: "Step 5 model: Opus 5.5 (1M) · high" });
     expect(chip).not.toHaveAttribute("aria-busy");
     await user.click(chip);
-    expect(await screen.findByRole("alert")).toHaveTextContent(
+    expect(await screen.findByRole("status")).toHaveTextContent(
       "Claude Code was not found. Install it or point MYSPEC_CLAUDE_PATH at the executable.",
     );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitemradio")).not.toBeInTheDocument();
   });
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
+import { Button } from "@/components/system/Button";
 import { ModelChip } from "@/features/models/ModelChip";
 import { chipName, chipNote } from "@/features/settings/defaults";
-import { SaveFailure } from "@/features/task/SaveFailure";
 import { choiceLabel, type ModelChoice, modelStageLabel, sameChoice } from "@/lib/models";
 import type { ModelStage } from "@/lib/wails";
 import { setModelDefaultInPlace } from "@/store/actions";
@@ -57,12 +57,15 @@ export function ModelDefaultRow({ stage, note, choice, factory }: ModelDefaultRo
         size="sm"
       />
       {failure !== null && (
-        <SaveFailure
-          onRetry={() => void save(failure.choice)}
-          className="col-span-full pb-(--space-1) text-(length:--text-meta) leading-(--leading-meta)"
+        <div
+          role="alert"
+          className="col-span-full flex flex-wrap items-center gap-x-(--space-2) pb-(--space-1) text-(length:--text-meta) leading-(--leading-meta) text-state-error"
         >
-          {`Couldn't save ${choiceLabel(catalog, failure.choice)}: ${failure.message}`}
-        </SaveFailure>
+          <span>{`Couldn't save ${choiceLabel(catalog, failure.choice)}: ${failure.message}`}</span>
+          <Button variant="ghost" size="xs" onClick={() => void save(failure.choice)}>
+            Try again
+          </Button>
+        </div>
       )}
     </li>
   );
