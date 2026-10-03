@@ -26,13 +26,20 @@ function failed(failure = makeStartupFailure()) {
 
 describe("StartScreen", () => {
   it("shows nothing in the main area before 400 ms, and the steps after", () => {
+    // A clock that moves only when the test moves it, so 399 ms is 399 ms.
+    vi.useRealTimers();
+    vi.useFakeTimers();
     renderWithStore(<StartScreen />, { startup: starting() });
+
+    act(() => {
+      vi.advanceTimersByTime(399);
+    });
 
     expect(screen.queryByRole("heading", { name: "Starting MySpec…" })).not.toBeInTheDocument();
     expect(screen.getByRole("status", { name: "Loading your work" })).toBeInTheDocument();
 
     act(() => {
-      vi.advanceTimersByTime(400);
+      vi.advanceTimersByTime(1);
     });
 
     expect(screen.getByRole("heading", { name: "Starting MySpec…" })).toBeInTheDocument();
