@@ -12,6 +12,8 @@ export interface CheckboxProps {
   disabled?: boolean;
   disabledReason?: string;
   loading?: boolean;
+  /** describedBy is the id of a line outside the row that describes it, like a consequence. */
+  describedBy?: string;
   className?: string;
 }
 
@@ -54,6 +56,7 @@ export function Checkbox({
   disabled,
   disabledReason,
   loading,
+  describedBy,
   className,
 }: CheckboxProps) {
   const reasonId = useId();
@@ -63,6 +66,9 @@ export function Checkbox({
   const row = (
     <BaseCheckbox.Root
       render={<div />}
+      // Inside a radio group, Base UI takes a checkbox for an item of the group's roving focus and
+      // drops its tab stop; the box keeps its own.
+      tabIndex={0}
       checked={checked}
       onCheckedChange={(next) => {
         if (!inert) onCheckedChange(next);
@@ -70,7 +76,13 @@ export function Checkbox({
       {...(inert ? { readOnly: true } : {})}
       {...(disabled ? { "aria-disabled": true } : {})}
       {...(loading ? { "aria-busy": true } : {})}
-      {...(withReason ? { "aria-describedby": reasonId } : {})}
+      {...(withReason || describedBy !== undefined
+        ? {
+            "aria-describedby": [describedBy, withReason ? reasonId : undefined]
+              .filter(Boolean)
+              .join(" "),
+          }
+        : {})}
       className={cn(
         "group/checkbox flex min-h-(--size-control-sm) items-center gap-2 rounded-sm px-2 text-(length:--text-meta) leading-(--leading-meta) text-ink-1 focus-visible:focus-ring cursor-default",
         disabled && "text-ink-4",

@@ -80,4 +80,39 @@ describe("Radio", () => {
       "true",
     );
   });
+
+  it("draws the group as the element given and names a radio without text by its label", async () => {
+    const onValueChange = vi.fn();
+    const { user } = renderWithStore(
+      <table>
+        <RadioGroup
+          label="Status of new cards"
+          value="a"
+          onValueChange={onValueChange}
+          render={<tbody />}
+        >
+          <tr>
+            <td>Todo</td>
+            <td>
+              <Radio value="a" label="New cards start in Todo" />
+            </td>
+          </tr>
+          <tr>
+            <td>Done</td>
+            <td>
+              <Radio value="b" label="New cards start in Done" />
+            </td>
+          </tr>
+        </RadioGroup>
+      </table>,
+    );
+    const group = screen.getByRole("radiogroup", { name: "Status of new cards" });
+    expect(group.tagName).toBe("TBODY");
+    expect(screen.getByRole("radio", { name: "New cards start in Todo" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await user.click(screen.getByRole("radio", { name: "New cards start in Done" }));
+    expect(onValueChange).toHaveBeenCalledWith("b");
+  });
 });

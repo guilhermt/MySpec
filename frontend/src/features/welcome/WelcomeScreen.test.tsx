@@ -27,7 +27,7 @@ describe("WelcomeScreen", () => {
     await user.click(screen.getByRole("button", { name: /^Add board/ }));
 
     expect(await screen.findByRole("dialog", { name: "Add board" })).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Board URL" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "URL of the GitHub project" })).toBeInTheDocument();
   });
 
   it("opens the dialog that registers a repository", async () => {

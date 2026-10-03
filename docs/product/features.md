@@ -23,30 +23,42 @@ Quando a última leitura falhou, uma linha afundada sob a linha do board diz a f
 
 ### Cadastrar um board
 
-**Add board** abre um diálogo em etapas. Na primeira, o usuário cola a URL do board: `https://github.com/orgs/<org>/projects/<n>` ou `https://github.com/users/<usuário>/projects/<n>`, com ou sem sufixos como `/views/<n>` e parâmetros de query. O produto lê o board e recusa, com a razão:
+**Add board** abre um diálogo largo em passos, com o passo no subtítulo: `Step 1 of 3 · The project`, depois `Data Platform · acme · Step 2 of 3 · Statuses` e `… Step 3 of 3 · Repositories`. Um board sem campo de status tem dois passos (`Release Train · acme · Step 2 of 2 · Repositories`). O rodapé tem **Back** a partir do segundo passo, **Cancel** e o botão primário com `Ctrl ↵`; **Back** guarda tudo o que foi escolhido nos passos seguintes, e o foco começa no primeiro campo de cada passo.
+
+**O projeto.** O campo `URL of the GitHub project` recebe `https://github.com/orgs/<org>/projects/<n>` ou `https://github.com/users/<usuário>/projects/<n>`, com ou sem sufixos como `/views/<n>` e parâmetros de query; a ajuda do campo diz isso. **Continue** fica tracejado com o campo vazio, com `Paste the URL of a GitHub project.` ao lado, e `Enter` no campo lê o board. Lendo, o campo fica desabilitado, o rodapé diz `Reading the board…` e **Continue** diz `Reading…`. O produto recusa, com a razão sob o campo e o foco de volta nele:
 
 - uma URL que não é de um GitHub Projects v2, com `This isn't the URL of a GitHub project.`; um Project clássico é recusado assim;
 - um board já cadastrado, com `<título> is already registered.`;
 - um board que não pode ser lido, com a falha da leitura (ver [Falhas](#falhas)).
 
-Lido o board, o diálogo mostra o título e o dono e segue para as escolhas:
+Voltar ao primeiro passo e escolher **Continue** com a mesma URL não lê de novo; uma URL diferente lê de novo e recomeça as escolhas.
 
-- **Status finais.** O produto identifica o campo de status do board, o campo de seleção única chamado `Status`, e lista as opções na ordem do board, cada uma com a marcação `Final`. Vêm pré-marcadas as opções cujo nome é, sem diferenciar maiúsculas nem acentos, `Done`, `Concluído`, `Closed`, `Completed`, `Fechado` ou `Finalizado`. Um board sem campo de status pula esta etapa.
-- **Status for new cards.** Uma opção do campo de status, ou `None`, é o status com que um card criado por uma discussão entra no board. Vem pré-selecionada a primeira opção cujo nome é, sem diferenciar maiúsculas nem acentos, `A Fazer`, `To do`, `Todo` ou `Ready`. Um board sem campo de status não tem a escolha.
-- **Repositórios administrados.** O produto sugere os repositórios que aparecem nas issues do board, com a contagem de cards de cada um, todos marcados. O usuário desmarca os que o board não administra e pode acrescentar outros digitando `dono/nome`. Um texto fora dessa forma é recusado com `Type the repository as owner/name.`, e um repositório que não existe ou que a conta não lê, com `<dono/nome> doesn't exist or this account can't read it.`
+**Statuses.** O produto identifica o campo de status do board, o campo de seleção única chamado `Status`, e o mostra numa tabela com uma linha por opção, na ordem do board, e duas colunas: `Ends the work` (uma caixa por opção) e `New cards` (um rádio por opção, e a última linha, `No status`, só com o rádio). Vêm pré-marcadas como finais as opções cujo nome é, sem diferenciar maiúsculas nem acentos, `Done`, `Concluído`, `Closed`, `Completed`, `Fechado` ou `Finalizado`. O status com que um card criado por uma discussão entra no board vem pré-selecionado na primeira opção cujo nome é, sem diferenciar maiúsculas nem acentos, `A Fazer`, `To do`, `Todo` ou `Ready`. Sob a tabela, uma ajuda diz o que foi marcado pelo nome: `Done and To do are marked for you, from their names.` (os finais na ordem do board e depois o de cards novos, sem repetir; nada, quando nada foi marcado). Um board sem campo de status pula este passo.
+
+**Repositories.** Sob a frase `Check the repositories this board manages. They come from the issues on the board.`, uma lista contornada sugere os repositórios que aparecem nas issues do board, todos marcados, cada um com o nome, a contagem de cards e, à direita, como ficará ligado ao produto (cortado, com o texto inteiro no tooltip). O usuário desmarca os que o board não administra e pode acrescentar outros digitando `dono/nome` no campo `Add a repository`, com **Add** ou `Enter`; o acrescentado entra marcado, em ordem alfabética. Um texto fora dessa forma é recusado com `Type the repository as owner/name.`, e um repositório que não existe ou que a conta não lê, com `<dono/nome> doesn't exist or this account can't read it.` Num board sem campo de status, uma linha afundada abre o passo: `This board has no Status field, so there are no statuses to mark: its cards end when their issues close.`
 
 Cada repositório diz como ficará ligado ao produto:
 
 - `Registered · <caminho>`, ou `Registered · Not cloned`: já cadastrado, usa o cadastro existente;
-- `Clone found · <caminho>`: não cadastrado, com um clone encontrado pela mesma varredura da pasta home de **Add repository**; será cadastrado nesse clone. Com mais de um clone encontrado, o usuário escolhe qual;
+- `Registered · the clone at <caminho> is missing`: cadastrado, com o clone que não está mais no caminho;
+- `Clone found · <caminho>`: não cadastrado, com um clone encontrado pela mesma varredura da pasta home de **Add repository**; será cadastrado nesse clone. Com mais de um clone encontrado, a linha diz `Clone found · 2 clones:` e um seletor ao lado da caixa escolhe qual;
 - `Registered without a clone`: não cadastrado e sem clone encontrado; será cadastrado sem clone;
-- `<dono/nome> belongs to the board <título>.`: administrado por outro board; aparece desabilitado.
+- `<dono/nome> belongs to the board <título>.`: administrado por outro board; a caixa aparece desabilitada, com essa frase como razão.
 
-**Add board** confirma: o board é cadastrado, os repositórios marcados são cadastrados ou ligados a ele, e a primeira leitura dos cards começa.
+O botão do último passo, **Add board**, confirma: o board é cadastrado, os repositórios marcados são cadastrados ou ligados a ele, e a primeira leitura dos cards começa. Confirmando, o botão diz `Adding…`, **Cancel** e **Back** ficam tracejados e o diálogo não fecha; uma falha fica no rodapé, com o diálogo aberto e o botão de volta.
 
 ### Editar e remover um board
 
-**Edit** relê a estrutura do board no GitHub e reabre as mesmas escolhas, confirmadas com **Save**. Os status finais vêm como o board os guarda: opções que deixaram de existir somem e opções novas aparecem desmarcadas. O status de cards novos vem como está e volta a `None` quando a opção deixou de existir. Os repositórios do board vêm marcados, e os outros repositórios das issues aparecem desmarcados. Acrescentar um repositório segue as regras do cadastro. Um repositório desmarcado sai do board: vai para o grupo sem board quando tem clone, tasks ou reviews de pull request, e sai do produto quando não tem nada disso. As tasks dele não mudam.
+**Edit…** abre o mesmo diálogo, que relê a estrutura do board no GitHub a cada abertura: o corpo diz `Reading the board…`, o rodapé tem só **Cancel**, e o subtítulo diz `Platform Roadmap · acme`. Se a leitura falha, a falha fica no corpo e o rodapé ganha **Try again**, que lê de novo, com o foco nele. Lido o board, os passos são `Step 1 of 2 · Statuses` e `Step 2 of 2 · Repositories` (um board sem campo de status abre direto nos repositórios, `Release Train · acme · Repositories`), confirmados com **Save**, que diz `Saving…` enquanto grava.
+
+Os status finais vêm como o board os guarda. Quando o board mudou desde que foi salvo, uma linha afundada no alto do passo diz o que mudou: `The board changed since it was saved. Archived is gone from its statuses, and QA is new, not marked.`, e, quando o status de cards novos deixou de existir, ` New cards now start with no status.` As opções que deixaram de existir somem, e as novas aparecem desmarcadas, com a etiqueta `new`. O status de cards novos vem como está e volta a `No status` quando a opção deixou de existir.
+
+Os repositórios do board vêm marcados, e os outros repositórios das issues aparecem desmarcados. Acrescentar um repositório segue as regras do cadastro. Um repositório do board que o usuário desmarca sai do board, e a linha dele, afundada, diz para onde vai, com `→` e o texto, que também é a descrição da caixa:
+
+- vai para o grupo sem board quando tem clone, tasks ou reviews de pull request: `Moves to No board: it has a clone and 3 archived tasks. Its tasks keep working.`, com as partes que existem entre `a clone`, tasks ativas, tasks arquivadas e reviews, e as frases `Its tasks keep working.`, `Its reviews keep working.` e `Nothing on disk changes.` conforme ele tenha tasks, reviews ou clone;
+- sai do produto quando não tem nada disso: `Leaves MySpec: it has no clone, tasks or reviews.`
+
+O rodapé soma o que foi desmarcado ao lado de **Save**: `acme/docs moves to No board, and acme/billing leaves MySpec.` As tasks dos repositórios não mudam.
 
 **Remove…** abre um diálogo de confirmação, com o foco em **Cancel**, que diz o que acontece: `5 repositories move to No board and 1 leaves MySpec. Tasks keep their cards, and nothing changes on GitHub or on disk.` A frase não tem a parte que dá zero (`1 repository moves to No board.`, `2 repositories leave MySpec.`, `The board has no repositories.`), e uma linha afundada nomeia os repositórios de cada destino: `To No board: api, docs` e `Leaves MySpec: billing, with no clone, tasks or reviews`. Os repositórios do board com clone, com tasks ou com reviews de pull request, ativos ou arquivados, passam ao grupo sem board; os que não têm nada disso saem do produto. As tasks criadas de cards do board continuam guardando o card e funcionando, e passam ao grupo **No board** da barra lateral. Nada é alterado no GitHub nem no disco.
 

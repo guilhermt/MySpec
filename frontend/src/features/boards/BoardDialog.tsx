@@ -1,18 +1,32 @@
-import { useEffect, useId, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { choicesOf, chosenCloneOf, withOption } from "@/features/boards/board-dialog";
-import { RepositoryLinkRow } from "@/features/boards/RepositoryLinkRow";
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Button } from "@/components/system/Button";
+import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
+import { Field } from "@/components/system/Field";
+import { Input } from "@/components/system/Input";
+import { ICONS } from "@/components/system/icons";
+import { Spinner } from "@/components/system/Spinner";
+import { SunkenLine } from "@/components/system/SunkenLine";
+import { BoardRepositoryRow } from "@/features/boards/BoardRepositoryRow";
+import {
+  changedNote,
+  choicesOf,
+  chosenCloneOf,
+  consequence,
+  footerSum,
+  premarkHelp,
+  stepsOf,
+  subtitle,
+  withOption,
+} from "@/features/boards/board-dialog";
+import { StatusTable } from "@/features/boards/StatusTable";
 import { messageOf } from "@/lib/errors";
 import type { BoardPreview, BoardRepositoryOption } from "@/lib/wails";
 import {
@@ -22,27 +36,35 @@ import {
   previewEditBoard,
   updateBoard,
 } from "@/store/actions";
+import { useBoard, useRepositories } from "@/store/app-store";
 
 export type BoardDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 } & ({ mode: "add" } | { mode: "edit"; boardId: string });
 
-/** READING_TEXT is what the dialog says while it reads the board from GitHub. */
 const READING_TEXT = "Reading the board…";
+const EMPTY_URL_TEXT = "Paste the URL of a GitHub project.";
+const URL_HELP =
+  "github.com/orgs/<org>/projects/<n> or github.com/users/<user>/projects/<n>. Views and filters in the URL are fine.";
+const NO_STATUS_TEXT =
+  "This board has no Status field, so there are no statuses to mark: its cards end when their issues close.";
 
-/** BoardDialog registers a board of GitHub Projects, or edits one: its final statuses and the repositories it manages. */
+/** FIRST_FIELD finds the first control of the body the focus can start on in a step: not the hidden input a checkbox carries. */
+const FIRST_FIELD =
+  '[data-dialog-body] :is(input:not([type=hidden]), [role=checkbox]):not(:disabled):not([aria-disabled="true"]):not([aria-hidden="true"])';
+
+/** BoardDialog registers a board of GitHub Projects, or edits one, in steps: the project, its statuses and its repositories. */
 export function BoardDialog(props: BoardDialogProps) {
+  // The form lives only while the dialog is open, so every opening reads the board again.
+  if (!props.open) {
+    return null;
+  }
   return (
-    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      {/* The form lives only while the dialog is open, so every opening reads the board again. */}
-      {props.open && (
-        <BoardForm
-          boardId={props.mode === "edit" ? props.boardId : null}
-          onOpenChange={props.onOpenChange}
-        />
-      )}
-    </Dialog>
+    <BoardForm
+      boardId={props.mode === "edit" ? props.boardId : null}
+      onOpenChange={props.onOpenChange}
+    />
   );
 }
 
@@ -52,156 +74,99 @@ interface BoardFormProps {
   onOpenChange: (open: boolean) => void;
 }
 
-/** BoardForm reads the board, from the URL the user pastes or from the board being edited, then asks what to save. */
+/** BoardForm holds what the user chose across the steps, so Back never loses it. */
 function BoardForm({ boardId, onOpenChange }: BoardFormProps) {
+  const mode = boardId === null ? "add" : "edit";
+  const repositories = useRepositories();
+  const registered = useBoard(boardId ?? "");
+  const [step, setStep] = useState<"project" | "statuses" | "repositories">(
+    mode === "add" ? "project" : "statuses",
+  );
   const [url, setUrl] = useState("");
+  const [readUrl, setReadUrl] = useState("");
   const [preview, setPreview] = useState<BoardPreview | null>(null);
-  const [reading, setReading] = useState(boardId !== null);
+  const [reading, setReading] = useState(mode === "edit");
   const [readError, setReadError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (boardId === null) {
-      return;
-    }
-    let cancelled = false;
-    previewEditBoard(boardId)
-      .then((read) => {
-        if (!cancelled) {
-          setPreview(read);
-        }
-      })
-      .catch((failure: unknown) => {
-        if (!cancelled) {
-          setReadError(messageOf(failure));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setReading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [boardId]);
-
-  const read = async () => {
-    setReading(true);
-    setReadError(null);
-    try {
-      setPreview(await previewBoard(url.trim()));
-    } catch (failure) {
-      setReadError(messageOf(failure));
-    } finally {
-      setReading(false);
-    }
-  };
-
-  const title = boardId === null ? "Add board" : "Edit board";
-
-  if (preview !== null) {
-    return (
-      <BoardChoices
-        title={title}
-        url={url.trim()}
-        boardId={boardId}
-        preview={preview}
-        onOpenChange={onOpenChange}
-      />
-    );
-  }
-
-  const readingLine = reading && (
-    <p role="status" className="text-sm text-muted-foreground">
-      {READING_TEXT}
-    </p>
-  );
-  const errorLine = readError !== null && (
-    <p role="alert" className="text-sm text-destructive">
-      {readError}
-    </p>
-  );
-
-  if (boardId !== null) {
-    return (
-      <DialogContent className="sm:max-w-[40rem]">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
-        {readingLine}
-        {errorLine}
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    );
-  }
-
-  return (
-    <DialogContent className="sm:max-w-[40rem]">
-      <DialogHeader>
-        <DialogTitle>{title}</DialogTitle>
-        <DialogDescription>Paste the URL of a GitHub project.</DialogDescription>
-      </DialogHeader>
-      <form
-        className="flex flex-col gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void read();
-        }}
-      >
-        <Input
-          aria-label="Board URL"
-          placeholder="https://github.com/orgs/owner/projects/1"
-          value={url}
-          disabled={reading}
-          onChange={(event) => setUrl(event.target.value)}
-        />
-        {readingLine}
-        {errorLine}
-      </form>
-      <DialogFooter>
-        <Button variant="outline" onClick={() => onOpenChange(false)}>
-          Cancel
-        </Button>
-        <Button onClick={() => void read()} disabled={url.trim() === "" || reading}>
-          Continue
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  );
-}
-
-interface BoardChoicesProps {
-  title: string;
-  /** url is the URL the board was read from; "" while editing. */
-  url: string;
-  boardId: string | null;
-  preview: BoardPreview;
-  onOpenChange: (open: boolean) => void;
-}
-
-/** BoardChoices are the steps after the board was read: its final statuses, then its repositories. */
-function BoardChoices({ title, url, boardId, preview, onOpenChange }: BoardChoicesProps) {
-  const [step, setStep] = useState<"statuses" | "repositories">(
-    preview.hasStatus ? "statuses" : "repositories",
-  );
-  const [finals, setFinals] = useState<ReadonlySet<string>>(
-    () =>
-      new Set((preview.statuses ?? []).filter((status) => status.final).map((status) => status.id)),
-  );
-  const [newCardStatus, setNewCardStatus] = useState(preview.newCardStatus);
-  const [options, setOptions] = useState<BoardRepositoryOption[]>(preview.repositories ?? []);
+  const [finals, setFinals] = useState<ReadonlySet<string>>(new Set());
+  const [newCardStatus, setNewCardStatus] = useState("");
+  const [options, setOptions] = useState<BoardRepositoryOption[]>([]);
+  const [initiallyChecked, setInitiallyChecked] = useState<ReadonlySet<string>>(new Set());
   const [chosenClones, setChosenClones] = useState<Record<string, string>>({});
   const [typed, setTyped] = useState("");
   const [checking, setChecking] = useState(false);
   const [checkError, setCheckError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const statusId = useId();
-  const newCardId = useId();
+  const readCount = useRef(0);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const retryRef = useRef<HTMLButtonElement>(null);
+  const reasonId = useId();
+
+  /** read asks for the board and, once it arrives, starts the choices from what it says. */
+  const read = useCallback(async (request: () => Promise<BoardPreview>, from: string) => {
+    const mine = ++readCount.current;
+    setReading(true);
+    setReadError(null);
+    try {
+      const board = await request();
+      if (readCount.current !== mine) {
+        return;
+      }
+      const own = board.repositories ?? [];
+      setPreview(board);
+      setReadUrl(from);
+      setFinals(
+        new Set((board.statuses ?? []).filter((status) => status.final).map((status) => status.id)),
+      );
+      setNewCardStatus(board.newCardStatus);
+      setOptions(own);
+      setInitiallyChecked(new Set(own.filter((option) => option.checked).map((o) => o.fullName)));
+      setChosenClones({});
+      setTyped("");
+      setCheckError(null);
+      setStep(board.hasStatus ? "statuses" : "repositories");
+    } catch (failure) {
+      if (readCount.current === mine) {
+        setReadError(messageOf(failure));
+      }
+    } finally {
+      if (readCount.current === mine) {
+        setReading(false);
+      }
+    }
+  }, []);
+
+  const readEdit = useCallback(() => {
+    if (boardId !== null) {
+      void read(() => previewEditBoard(boardId), "");
+    }
+  }, [boardId, read]);
+
+  useEffect(() => {
+    readEdit();
+    return () => {
+      // A reading that comes back after the dialog closed is ignored.
+      readCount.current++;
+    };
+  }, [readEdit]);
+
+  const steps = stepsOf(mode, preview?.hasStatus ?? null);
+  const at = steps.indexOf(step);
+  const waiting = mode === "edit" && preview === null;
+
+  // The focus starts on the first field of each step, and on Try again when the reading fails. A
+  // checkbox of the system takes its tab stop after the render, so the focus waits a frame.
+  const failedEdit = waiting && readError !== null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a step, or a board that arrives, is a new body to start on
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const target = failedEdit
+        ? retryRef.current
+        : document.querySelector<HTMLElement>(FIRST_FIELD);
+      target?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [step, waiting, failedEdit, reading]);
 
   const toggleFinal = (id: string, checked: boolean) => {
     setFinals((current) => {
@@ -215,12 +180,33 @@ function BoardChoices({ title, url, boardId, preview, onOpenChange }: BoardChoic
     });
   };
 
+  const continueFromProject = () => {
+    const wanted = url.trim();
+    if (wanted === "" || reading) {
+      return;
+    }
+    const next = steps[at + 1];
+    if (preview !== null && wanted === readUrl && next !== undefined) {
+      setStep(next);
+      return;
+    }
+    void read(() => previewBoard(wanted), wanted);
+  };
+
   const check = async () => {
+    if (typed.trim() === "" || checking || saving) {
+      return;
+    }
     setChecking(true);
     setCheckError(null);
     try {
       const option = await checkBoardRepository(boardId ?? "", typed.trim());
-      setOptions((current) => withOption(current, option));
+      const entered = { ...option, checked: option.link !== "other_board" };
+      setOptions((current) =>
+        withOption(current, entered).sort((a, b) =>
+          a.fullName.toLowerCase().localeCompare(b.fullName.toLowerCase()),
+        ),
+      );
       setTyped("");
     } catch (failure) {
       setCheckError(messageOf(failure));
@@ -230,6 +216,9 @@ function BoardChoices({ title, url, boardId, preview, onOpenChange }: BoardChoic
   };
 
   const save = async () => {
+    if (preview === null || saving) {
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     const req = {
@@ -241,7 +230,7 @@ function BoardChoices({ title, url, boardId, preview, onOpenChange }: BoardChoic
     };
     try {
       if (boardId === null) {
-        await addBoard(url, req);
+        await addBoard(readUrl, req);
       } else {
         await updateBoard(boardId, req);
       }
@@ -252,142 +241,267 @@ function BoardChoices({ title, url, boardId, preview, onOpenChange }: BoardChoic
     }
   };
 
-  const boardLine = `${preview.title} · ${preview.owner}`;
+  const sum = useMemo(
+    () => (mode === "edit" ? footerSum(options, initiallyChecked) : ""),
+    [mode, options, initiallyChecked],
+  );
 
-  if (step === "statuses") {
-    return (
-      <DialogContent className="sm:max-w-[40rem]">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{`${boardLine} · Mark the statuses that end the work on a card.`}</DialogDescription>
-        </DialogHeader>
-        <ul className="flex max-h-[24rem] flex-col divide-y overflow-y-auto rounded-lg border">
-          {(preview.statuses ?? []).map((status, index) => (
-            <li key={status.id}>
-              <label className="flex cursor-pointer items-center gap-3 px-4 py-2">
-                <span id={`${statusId}-${index}`} className="min-w-0 flex-1 truncate text-sm">
-                  {status.name}
-                </span>
-                <Checkbox
-                  // The label wraps the whole row; the checkbox is named by the status and what marking it means.
-                  aria-labelledby={`${statusId}-${index} ${statusId}-final`}
-                  checked={finals.has(status.id)}
-                  onCheckedChange={(checked) => toggleFinal(status.id, checked)}
-                />
-                <span
-                  id={index === 0 ? `${statusId}-final` : undefined}
-                  className="text-xs text-muted-foreground"
-                >
-                  Final
-                </span>
-              </label>
-            </li>
-          ))}
-        </ul>
-        <div className="flex flex-col gap-2">
-          <p id={newCardId} className="text-sm font-medium">
-            Status for new cards
-          </p>
-          <RadioGroup
-            aria-labelledby={newCardId}
-            value={newCardStatus}
-            onValueChange={(value) => setNewCardStatus(String(value))}
-            className="flex flex-wrap gap-x-6 gap-y-2"
-          >
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <RadioGroupItem value="" aria-labelledby={`${newCardId}-none`} />
-              <span id={`${newCardId}-none`}>None</span>
-            </label>
-            {(preview.statuses ?? []).map((status, index) => (
-              <label key={status.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                <RadioGroupItem value={status.id} aria-labelledby={`${newCardId}-${index}`} />
-                <span id={`${newCardId}-${index}`}>{status.name}</span>
-              </label>
-            ))}
-          </RadioGroup>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={() => setStep("repositories")}>Continue</Button>
-        </DialogFooter>
-      </DialogContent>
-    );
-  }
+  // An edit names its board while it is read, as the board is registered.
+  const heading = waiting
+    ? registered === null
+      ? ""
+      : `${registered.title} · ${registered.owner}`
+    : subtitle(mode, preview, step, steps);
+  const last = step === "repositories";
+  const urlEmpty = url.trim() === "";
+
+  /** primary is what Ctrl Enter and the main button do in the step the dialog is in. */
+  const primary = () => {
+    if (failedEdit) {
+      readEdit();
+    } else if (step === "project") {
+      continueFromProject();
+    } else if (last) {
+      void save();
+    } else {
+      const next = steps[at + 1];
+      if (next !== undefined) {
+        setStep(next);
+      }
+    }
+  };
+
+  const back = () => {
+    const previous = steps[at - 1];
+    if (previous !== undefined) {
+      setStep(previous);
+    }
+  };
+
+  const onUrlKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Enter" && !event.ctrlKey) {
+      event.preventDefault();
+      continueFromProject();
+    }
+  };
+
+  const onTypedKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Enter" && !event.ctrlKey) {
+      event.preventDefault();
+      void check();
+    }
+  };
+
+  // The footer's line: what holds the primary back, or what saving does.
+  const footerReason =
+    step === "project"
+      ? reading
+        ? READING_TEXT
+        : urlEmpty
+          ? EMPTY_URL_TEXT
+          : ""
+      : last
+        ? sum
+        : "";
 
   return (
-    <DialogContent className="sm:max-w-[40rem]">
-      <DialogHeader>
-        <DialogTitle>{title}</DialogTitle>
-        <DialogDescription>{`${boardLine} · Check the repositories this board manages.`}</DialogDescription>
-      </DialogHeader>
-      <div className="flex flex-col gap-3">
-        {options.length > 0 && (
-          <ul className="flex max-h-[20rem] flex-col divide-y overflow-y-auto rounded-lg border">
-            {options.map((option) => (
-              <RepositoryLinkRow
-                key={option.fullName}
-                option={option}
-                chosenClone={option.link === "clone" ? chosenCloneOf(option, chosenClones) : ""}
-                disabled={saving}
-                onCheckedChange={(checked) =>
-                  setOptions((current) =>
-                    current.map((each) =>
-                      each.fullName === option.fullName ? { ...each, checked } : each,
-                    ),
-                  )
-                }
-                onCloneChange={(path) =>
-                  setChosenClones((current) => ({ ...current, [option.fullName]: path }))
-                }
-              />
-            ))}
-          </ul>
-        )}
-        <form
-          className="flex flex-col gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void check();
-          }}
-        >
-          <div className="flex gap-2">
-            <Input
-              aria-label="Add a repository"
-              placeholder="owner/name"
-              value={typed}
-              disabled={checking || saving}
-              onChange={(event) => setTyped(event.target.value)}
-            />
-            <Button
-              type="submit"
-              variant="outline"
-              disabled={typed.trim() === "" || checking || saving}
-            >
-              Add
-            </Button>
-          </div>
-          {checkError !== null && (
-            <p role="alert" className="text-sm text-destructive">
-              {checkError}
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        // While the board is saved, the dialog stays: a refusal that comes back has its footer.
+        if (!next && saving) {
+          return;
+        }
+        onOpenChange(next);
+      }}
+      size="wide"
+      title={mode === "add" ? "Add board" : "Edit board"}
+      {...(heading !== "" ? { subtitle: heading } : {})}
+      closeDisabled={saving}
+      {...(waiting && !failedEdit ? {} : { onConfirm: primary })}
+      {...(waiting ? { initialFocus: cancelRef } : {})}
+    >
+      <DialogBody>
+        {waiting ? (
+          failedEdit ? (
+            <p role="alert" className="text-state-error">
+              {readError}
             </p>
-          )}
-        </form>
-      </div>
-      <DialogFooter className="sm:flex-wrap">
-        <Button variant="outline" onClick={() => onOpenChange(false)}>
-          Cancel
-        </Button>
-        <Button onClick={() => void save()} disabled={saving}>
-          {boardId === null ? "Add board" : "Save"}
-        </Button>
-        {saveError !== null && (
-          <p role="alert" className="basis-full text-sm text-destructive">
-            {saveError}
-          </p>
+          ) : (
+            <p role="status" className="flex items-center gap-2">
+              <Spinner tone="current" />
+              {READING_TEXT}
+            </p>
+          )
+        ) : step === "project" ? (
+          <Field
+            label="URL of the GitHub project"
+            help={URL_HELP}
+            {...(readError !== null ? { error: readError } : {})}
+          >
+            <Input
+              mono
+              value={url}
+              disabled={reading}
+              onChange={(event) => setUrl(event.target.value)}
+              onKeyDown={onUrlKeyDown}
+            />
+          </Field>
+        ) : step === "statuses" && preview !== null ? (
+          <StatusesStep
+            mode={mode}
+            preview={preview}
+            finals={finals}
+            newCardStatus={newCardStatus}
+            onFinal={toggleFinal}
+            onNewCard={setNewCardStatus}
+          />
+        ) : (
+          preview !== null && (
+            <>
+              <p>
+                Check the repositories this board manages. They come from the issues on the board.
+              </p>
+              {!preview.hasStatus && <SunkenLine icon="blocked">{NO_STATUS_TEXT}</SunkenLine>}
+              {options.length > 0 && (
+                <ul className="divide-y divide-line-1 rounded-md border border-line-1">
+                  {options.map((option) => {
+                    const own =
+                      repositories.find((repository) => repository.id === option.repositoryId) ??
+                      null;
+                    return (
+                      <BoardRepositoryRow
+                        key={option.fullName}
+                        option={option}
+                        repository={own}
+                        chosenClone={
+                          option.link === "clone" ? chosenCloneOf(option, chosenClones) : ""
+                        }
+                        disabled={saving}
+                        consequence={mode === "edit" ? consequence(option, own) : ""}
+                        onCheckedChange={(checked) =>
+                          setOptions((current) =>
+                            current.map((each) =>
+                              each.fullName === option.fullName ? { ...each, checked } : each,
+                            ),
+                          )
+                        }
+                        onCloneChange={(path) =>
+                          setChosenClones((current) => ({ ...current, [option.fullName]: path }))
+                        }
+                      />
+                    );
+                  })}
+                </ul>
+              )}
+              <Field
+                label="Add a repository"
+                {...(checkError !== null ? { error: checkError } : {})}
+              >
+                <div className="flex gap-2">
+                  <Input
+                    mono
+                    placeholder="owner/name"
+                    value={typed}
+                    disabled={checking || saving}
+                    onChange={(event) => setTyped(event.target.value)}
+                    onKeyDown={onTypedKeyDown}
+                  />
+                  <Button
+                    size="sm"
+                    disabled={typed.trim() === "" || saving}
+                    loading={checking}
+                    loadingLabel="Checking…"
+                    onClick={() => void check()}
+                  >
+                    Add
+                  </Button>
+                </div>
+              </Field>
+            </>
+          )
+        )}
+      </DialogBody>
+      <DialogFooter
+        {...(saveError !== null ? { refusal: saveError } : {})}
+        {...(at > 0 && !waiting
+          ? {
+              back: (
+                <Button variant="ghost" icon={ICONS.back} disabled={saving} onClick={back}>
+                  Back
+                </Button>
+              ),
+            }
+          : {})}
+        {...(footerReason !== "" ? { reason: { id: reasonId, text: footerReason } } : {})}
+      >
+        <DialogCancel ref={cancelRef} disabled={saving} />
+        {waiting ? (
+          failedEdit && (
+            <Button ref={retryRef} variant="primary" shortcut="Ctrl ↵" onClick={readEdit}>
+              Try again
+            </Button>
+          )
+        ) : (
+          <Button
+            variant="primary"
+            shortcut="Ctrl ↵"
+            disabled={step === "project" && urlEmpty && !reading}
+            {...(footerReason !== "" ? { reasonId } : {})}
+            {...(step === "project"
+              ? { loading: reading, loadingLabel: "Reading…" }
+              : last
+                ? { loading: saving, loadingLabel: mode === "add" ? "Adding…" : "Saving…" }
+                : {})}
+            onClick={primary}
+          >
+            {step === "project" || !last ? "Continue" : mode === "add" ? "Add board" : "Save"}
+          </Button>
         )}
       </DialogFooter>
-    </DialogContent>
+    </Dialog>
+  );
+}
+
+interface StatusesStepProps {
+  mode: "add" | "edit";
+  preview: BoardPreview;
+  finals: ReadonlySet<string>;
+  newCardStatus: string;
+  onFinal: (id: string, final: boolean) => void;
+  onNewCard: (id: string) => void;
+}
+
+/** StatusesStep asks which statuses end the work and which one new cards start in. */
+function StatusesStep({
+  mode,
+  preview,
+  finals,
+  newCardStatus,
+  onFinal,
+  onNewCard,
+}: StatusesStepProps) {
+  const note = mode === "edit" ? changedNote(preview) : "";
+  const help = mode === "add" ? premarkHelp(preview) : "";
+  const newIds = useMemo(() => new Set(preview.newStatusIds ?? []), [preview.newStatusIds]);
+  return (
+    <>
+      <p>
+        Mark the statuses that end the work on a card, and the status a card published by a
+        discussion starts in.
+      </p>
+      {note !== "" && <SunkenLine icon="blocked">{note}</SunkenLine>}
+      <StatusTable
+        statuses={preview.statuses ?? []}
+        finals={finals}
+        newCardStatus={newCardStatus}
+        newIds={newIds}
+        onFinal={onFinal}
+        onNewCard={onNewCard}
+      />
+      {help !== "" && (
+        <p className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">{help}</p>
+      )}
+    </>
   );
 }

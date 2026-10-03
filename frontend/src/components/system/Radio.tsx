@@ -1,6 +1,6 @@
 import { Radio as BaseRadio } from "@base-ui/react/radio";
 import { RadioGroup as BaseRadioGroup } from "@base-ui/react/radio-group";
-import { createContext, type ReactNode, useContext, useId } from "react";
+import { createContext, type ReactElement, type ReactNode, useContext, useId } from "react";
 import { cn } from "@/lib/utils";
 
 export interface RadioGroupProps {
@@ -8,6 +8,8 @@ export interface RadioGroupProps {
   value: string;
   onValueChange: (value: string) => void;
   children: ReactNode;
+  /** render is the element the group is drawn as, like a tbody whose rows hold the radios. */
+  render?: ReactElement;
   orientation?: "vertical" | "horizontal";
   invalid?: boolean;
   disabled?: boolean;
@@ -16,7 +18,9 @@ export interface RadioGroupProps {
 
 export interface RadioProps {
   value: string;
-  children: ReactNode;
+  /** label names a radio that has no text beside it, like one in a table cell. */
+  label?: string;
+  children?: ReactNode;
 }
 
 /** RingState tells each radio of the group how to draw its ring. */
@@ -28,6 +32,7 @@ export function RadioGroup({
   value,
   onValueChange,
   children,
+  render,
   orientation = "vertical",
   invalid = false,
   disabled = false,
@@ -38,6 +43,7 @@ export function RadioGroup({
 
   const group = (
     <BaseRadioGroup
+      {...(render !== undefined ? { render } : {})}
       aria-label={label}
       value={value}
       onValueChange={(next) => {
@@ -67,13 +73,14 @@ export function RadioGroup({
 }
 
 /** Radio is one row of a RadioGroup, with the ring drawn at its start. */
-export function Radio({ value, children }: RadioProps) {
+export function Radio({ value, label, children }: RadioProps) {
   const { invalid, disabled } = useContext(RingState);
   return (
     <BaseRadio.Root
       value={value}
       render={<div />}
       nativeButton={false}
+      {...(label !== undefined ? { "aria-label": label } : {})}
       className={cn(
         "group/radio flex min-h-(--size-control-sm) items-center gap-2 rounded-sm px-2 text-(length:--text-meta) leading-(--leading-meta) focus-visible:focus-ring",
         disabled ? "text-ink-4" : "text-ink-1",
