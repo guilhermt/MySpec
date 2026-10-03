@@ -1,5 +1,6 @@
 import { within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { DiscussionView } from "@/features/discussion/DiscussionView";
 import { GoneView } from "@/features/navigation/GoneView";
 import { api, type DiscussionSummary } from "@/lib/wails";
@@ -225,6 +226,21 @@ async function draw(sceneOf: DiscussionScene, width: number) {
   if (view === null) {
     throw new Error("the scene is not a discussion");
   }
+  if (location.kind === "gone") {
+    // The page takes the focus as a click on the dialog left it, the way the mock draws it: the keys
+    // of a test before would make the focus visible and open the tooltip of the page's primary.
+    const spot = document.createElement("button");
+    Object.assign(spot.style, {
+      position: "fixed",
+      top: "0",
+      left: "0",
+      width: "8px",
+      height: "8px",
+    });
+    document.body.append(spot);
+    await userEvent.click(spot);
+    spot.remove();
+  }
   const { container, user } = renderWithStore(
     <div style={{ ...mainArea(width), height: "800px", display: "flex" }}>{view}</div>,
     { state: sceneOf.state, ui: { location, transcripts: sceneOf.transcripts } },
@@ -319,6 +335,36 @@ describe.each(THEMES)("DiscussionView, the scenes in the %s theme", (theme) => {
         }
       }
 
+      // The head of the current draft, its kind and its title, stands in the visible area of the
+      // conversation: a draft taller than it comes into view by its top.
+      const current = area.querySelector<HTMLElement>(
+        '[data-decision-card] [data-current][aria-expanded="true"]',
+      );
+      if (current !== null) {
+        let scroller = current.parentElement;
+        while (
+          scroller !== null &&
+          !["auto", "scroll"].includes(getComputedStyle(scroller).overflowY)
+        ) {
+          scroller = scroller.parentElement;
+        }
+        // The kind and, out of the edit, the title.
+        const head = [
+          ...current.querySelectorAll(
+            ":scope > div > div:first-child, :scope > div > p:nth-child(2)",
+          ),
+        ];
+        if (scroller === null || head.length === 0) {
+          throw new Error("the current draft is not drawn in the conversation");
+        }
+        const view = scroller.getBoundingClientRect();
+        const outside = head.filter((part) => {
+          const box = part.getBoundingClientRect();
+          return box.top < view.top || box.bottom > view.bottom;
+        });
+        expect(outside.map((part) => part.textContent)).toEqual([]);
+      }
+
       // What the top layer cuts says its whole text in a tooltip: the title and the line 2 of a
       // folded draft, the value of a selector of Edit, the list of a marker. A modal dialog takes the
       // pointer from the screen under it, which the same scene without the dialog checks.
@@ -339,6 +385,10 @@ describe.each(THEMES)("DiscussionView, the scenes in the %s theme", (theme) => {
       const primary = primaryOf(one);
       expect(primaries).toEqual(primary === null ? [] : [primary]);
 
+      // The page that the discussion leaves shows no tooltip of its focus.
+      if (one.gone !== undefined) {
+        expect(document.querySelector('[role="tooltip"]')).toBeNull();
+      }
       await capture(`discussion-${one.label.replace(/[?=&]/g, "-")}-${width}-${theme}`, area);
 
       // The footer of the grouping keeps Cancel and Group 2 drafts where they are as the reason

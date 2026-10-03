@@ -207,7 +207,8 @@ export function Draft({
       data-current={current ? "" : undefined}
       data-request-target={requestTarget === "draft" ? "" : undefined}
       className={cn(
-        "relative grid grid-cols-[var(--key-size)_minmax(0,1fr)] gap-x-(--space-2) rounded-md bg-surface-2 p-(--space-3) outline-none focus-visible:focus-ring",
+        // The scroll margin keeps the head of a tall draft below the fade at the top of a conversation.
+        "relative grid scroll-mt-(--fade) grid-cols-[var(--key-size)_minmax(0,1fr)] gap-x-(--space-2) rounded-md bg-surface-2 p-(--space-3) outline-none focus-visible:focus-ring",
         RINGS[`${current ? "current" : "rest"}${failed ? "Error" : ""}`],
       )}
     >

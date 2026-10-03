@@ -9,6 +9,7 @@
 import { act, screen, within } from "@testing-library/react";
 import type { UserEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, vi } from "vitest";
+import { focusDraft, focusRequest } from "@/lib/focus";
 import type { Location } from "@/lib/locations";
 import type {
   ActionEntry,
@@ -1812,14 +1813,25 @@ const CURRENT: Partial<Record<ScreenScene, [number, number]>> = {
 // the Retry of the draft that failed with it, or the ⋯ that says why Archive waits.
 function opening(name: ScreenScene): ((user: UserEvent) => Promise<void>) | null {
   if (name === "partial-fail") {
+    // The arrival at the failure: the draft that failed comes into view, and the focus goes to its Retry.
     return async () => {
       const retry = await screen.findByRole("button", { name: "Retry" });
-      act(() => retry.focus());
+      act(() => {
+        focusRequest("draft");
+      });
+      await vi.waitFor(() => {
+        if (document.activeElement !== retry) throw new Error("the Retry does not hold the focus");
+      });
     };
   }
   if (name === "archive-blocked") {
+    // The arrival at the epic that can't publish, then the ⋯ that says why Archive waits.
     return async (user) => {
-      await user.click(await screen.findByRole("button", { name: "More actions" }));
+      await screen.findByRole("button", { name: "More actions" });
+      act(() => {
+        focusRequest("draft");
+      });
+      await user.click(screen.getByRole("button", { name: "More actions" }));
     };
   }
   const current = CURRENT[name];
@@ -1836,8 +1848,18 @@ function opening(name: ScreenScene): ((user: UserEvent) => Promise<void>) | null
         await user.click(folded);
       }
     }
+    // The draft comes into view as the app brings it: one the user opened as Show and Alt+↓ do,
+    // the others by the arrival at what the bar asks for.
     const draft = await draftNamed(number, total);
-    act(() => draft.focus());
+    act(() => {
+      if (name === "many" || name === "publish" || !focusRequest("draft")) {
+        focusDraft(draft.dataset.cardItem ?? "", false);
+      }
+    });
+    const focused = await draftNamed(number, total);
+    if (document.activeElement !== focused) {
+      throw new Error(`draft ${number} of ${total} does not hold the focus`);
+    }
   };
 }
 

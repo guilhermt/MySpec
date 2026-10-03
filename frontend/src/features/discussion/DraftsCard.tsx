@@ -21,6 +21,7 @@ import {
 import { draftTitle } from "@/lib/drafts";
 import { focusDraft } from "@/lib/focus";
 import { modalOpen } from "@/lib/layers";
+import { revealItem } from "@/lib/reveal";
 import { asDraftKind, type DiscussionSummary } from "@/lib/wails";
 import { decideDraft } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
@@ -59,8 +60,9 @@ function Slot({
     was.current = current;
     if (!held.current || (!turned && document.activeElement !== document.body)) return;
     const item = root.current?.querySelector<HTMLElement>("[data-card-item]");
-    item?.focus();
-    if (turned) item?.scrollIntoView?.({ block: "center" });
+    if (item === null || item === undefined) return;
+    item.focus();
+    if (turned) revealItem(item);
   });
   return <div ref={root}>{children}</div>;
 }

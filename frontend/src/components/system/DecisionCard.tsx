@@ -1,4 +1,5 @@
 import { type KeyboardEvent, type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { revealItem } from "@/lib/reveal";
 import { isTyping } from "./keys";
 
 export interface DecisionCardItem {
@@ -68,8 +69,9 @@ export function DecisionCard({
 
   const focusItem = (id: string) => {
     const element = root.current?.querySelector<HTMLElement>(`[data-card-item="${id}"]`);
-    element?.focus();
-    element?.scrollIntoView({ block: "center" });
+    if (element === null || element === undefined) return;
+    element.focus();
+    revealItem(element);
   };
 
   // An item that leaves holding the focus hands it back to the card: the one current now.

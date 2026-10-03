@@ -1,4 +1,5 @@
 import { type FindingLike, nextToDecide, previousToDecide } from "@/lib/findings";
+import { revealItem } from "@/lib/reveal";
 
 /**
  * RequestFocus is where the focus goes on arriving at the request, and on Show: the pending card
@@ -77,7 +78,8 @@ function targetOf(target: RequestFocus): HTMLElement | null {
 /**
  * focusRequest takes the focus to where the request asks it, scrolled into view: the first
  * question without a choice of the pending card, the default answer of the pending permission, the
- * first finding to decide or the draft the bar asks for, centred, the primary of the bar, the composer or the bar itself. False
+ * first finding to decide, centred, the draft the bar asks for, centred or by its top when it is
+ * taller than the conversation, the primary of the bar, the composer or the bar itself. False
  * when the target isn't on screen.
  */
 export function focusRequest(target: RequestFocus): boolean {
@@ -85,10 +87,14 @@ export function focusRequest(target: RequestFocus): boolean {
   if (element === null) {
     return false;
   }
-  element.focus();
-  element.scrollIntoView({
-    block: target === "finding" || target === "draft" ? "center" : "nearest",
-  });
+  if (target === "draft") {
+    // The draft comes into view, also when the target is its Retry: its head first.
+    element.focus({ preventScroll: true });
+    revealItem(element.closest<HTMLElement>("[data-card-item]") ?? element);
+  } else {
+    element.focus();
+    element.scrollIntoView({ block: target === "finding" ? "center" : "nearest" });
+  }
   return true;
 }
 
@@ -143,8 +149,8 @@ export function currentDraftId(): string | null {
 }
 
 /**
- * focusDraft takes the focus to a draft of the drafts card, scrolled to the centre: the draft opens
- * as it takes the focus. With retry, on the next frame it goes on to the Retry of the draft, which
+ * focusDraft takes the focus to a draft of the drafts card, scrolled to the centre, or by its top
+ * when it is taller than the conversation: the draft opens as it takes the focus. With retry, on the next frame it goes on to the Retry of the draft, which
  * only exists once the draft is open. False when the draft is not on screen.
  */
 export function focusDraft(id: string, retry: boolean): boolean {
@@ -154,11 +160,13 @@ export function focusDraft(id: string, retry: boolean): boolean {
     return false;
   }
   element.focus();
-  element.scrollIntoView({ block: "center" });
+  revealItem(element);
   if (retry) {
+    // The draft stays where it came into view: a Retry below a draft taller than the conversation
+    // takes the focus without scrolling its head away.
     requestAnimationFrame(() => {
       const button = document.querySelector<HTMLElement>(`${selector} [data-retry]`);
-      button?.focus();
+      button?.focus({ preventScroll: true });
     });
   }
   return true;
