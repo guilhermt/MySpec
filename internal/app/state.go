@@ -8,6 +8,7 @@ import (
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
@@ -51,6 +52,7 @@ func (a *App) snapshot() bindings.State {
 		// ModelDefaults and ReviewModeDefault are the app's own: every
 		// repository sees the same ones.
 		ModelDefaults: bindings.FromModelSet(a.models.Defaults()),
+		ModelFactory:  bindings.FromModelSet(models.Factory()),
 		// ModelCatalog is what the installed CLI offers; like the defaults, it
 		// is the app's own.
 		ModelCatalog:      bindings.FromCatalog(a.models.Catalog(), a.models.CatalogFailure()),

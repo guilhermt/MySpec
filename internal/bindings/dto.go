@@ -79,6 +79,9 @@ type State struct {
 	// ModelDefaults are the choices a new task starts each stage with, in workflow
 	// order; never nil.
 	ModelDefaults []StageModel `json:"modelDefaults"`
+	// ModelFactory is the default every stage ships with, in the order of
+	// ModelDefaults; never nil.
+	ModelFactory []StageModel `json:"modelFactory"`
 	// ModelCatalog is what the installed Claude Code offers, which every picker
 	// lists.
 	ModelCatalog ModelCatalog `json:"modelCatalog"`
@@ -932,6 +935,27 @@ type Prompt struct {
 	// Placeholders are the placeholders the default of the prompt uses, in the
 	// order the settings list them; never nil.
 	Placeholders []string `json:"placeholders"`
+	EditedAt     string   `json:"editedAt"`     // RFC 3339; "" without an edit
+	Lines        int      `json:"lines"`        // of the text, the final line break not counted
+	DefaultLines int      `json:"defaultLines"` // of the default of the app
+}
+
+// PromptListing is what the list of prompts shows of one, without its text.
+type PromptListing struct {
+	Stage    string `json:"stage"` // as Prompt.Stage
+	Modified bool   `json:"modified"`
+	EditedAt string `json:"editedAt"` // RFC 3339; "" without an edit
+}
+
+// Machine is what the app found out about the machine it runs on.
+type Machine struct {
+	// Claude is found, not_found or unknown, a string for the same reason as
+	// State.Theme: unknown is a catalog read that has not finished or failed
+	// for another reason.
+	Claude string `json:"claude"`
+	// GH is ready, not_installed, signed_out or unknown, a string for the same
+	// reason as State.Theme: unknown is a gh that answered something else.
+	GH string `json:"gh"`
 }
 
 // CreateTaskRequest is the task the user filled in the creation dialog.

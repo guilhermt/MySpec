@@ -1669,6 +1669,7 @@ func TestRefusedStateCarriesTheCasesAndNothingElse(t *testing.T) {
 		Boards:        []bindings.Board{},
 		Theme:         "system",
 		ModelDefaults: []bindings.StageModel{},
+		ModelFactory:  bindings.FromModelSet(models.Factory()),
 		ModelCatalog:  bindings.ModelCatalog{Models: []bindings.CatalogModel{}},
 		Tasks:         []bindings.TaskSummary{},
 		History:       []bindings.ArchivedTask{},

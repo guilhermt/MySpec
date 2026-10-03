@@ -349,3 +349,41 @@ func TestPRDiffReportsAFailureAsGhWroteIt(t *testing.T) {
 		t.Errorf("PRDiff() = %v, want the gh error carrying %q", err, said)
 	}
 }
+
+func TestSignedInAsksTheLocalGhForTheTokenAndNeverForTheStatus(t *testing.T) {
+	t.Parallel()
+	r, fake := runner(t, map[string]ghtest.Reply{
+		"auth token": {Stdout: "gho_secret\n"},
+	})
+
+	if err := r.SignedIn(t.Context()); err != nil {
+		t.Fatalf("SignedIn() = %v, want nil", err)
+	}
+	if calls := fake.Calls(t); len(calls) != 1 || calls[0].Args != "auth token" {
+		t.Errorf("calls = %+v, want gh auth token alone", calls)
+	}
+}
+
+func TestSignedInReportsAGhWithNoLogin(t *testing.T) {
+	t.Parallel()
+	r, _ := runner(t, map[string]ghtest.Reply{
+		"auth token": {Stderr: "no oauth token found for github.com", Exit: 1},
+	})
+
+	err := r.SignedIn(t.Context())
+	if !errors.Is(err, gh.ErrNotAuthenticated) {
+		t.Fatalf("SignedIn() = %v, want ErrNotAuthenticated", err)
+	}
+}
+
+func TestSignedInFailsWithoutGhOnThePath(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+
+	err := gh.New(gh.Deps{}).SignedIn(t.Context())
+	if !errors.Is(err, gh.ErrNotFound) {
+		t.Errorf("SignedIn() = %v, want ErrNotFound", err)
+	}
+	if errors.Is(err, gh.ErrNotAuthenticated) {
+		t.Errorf("SignedIn() = %v, want a missing gh told apart from a missing login", err)
+	}
+}

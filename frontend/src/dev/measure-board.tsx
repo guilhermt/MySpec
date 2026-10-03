@@ -242,6 +242,7 @@ function measuredState(): State {
     theme: "system",
     systemDark: false,
     modelDefaults: [],
+    modelFactory: [],
     modelCatalog: { models: [], failure: "" },
     reviewModeDefault: "manual",
     tasks: cards.filter((each) => each.activeTaskId !== "").map(task),

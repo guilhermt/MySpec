@@ -25,6 +25,7 @@ import type {
   Entry,
   EntryKind,
   FindingDecision,
+  Machine,
   MarkerCommit,
   Migration,
   ModelCatalog,
@@ -33,6 +34,7 @@ import type {
   PRCheck,
   PRReport,
   Prompt,
+  PromptListing,
   PromptStage,
   PullRequest,
   PullRequestRow,
@@ -120,6 +122,8 @@ export const api = {
   restorePrompt: vi.fn<(stage: PromptStage) => Promise<Prompt>>((stage) =>
     Promise.resolve(makePrompt({ stage })),
   ),
+  listPrompts: vi.fn<() => Promise<PromptListing[]>>(() => Promise.resolve(makePromptListings())),
+  checkMachine: vi.fn<() => Promise<Machine>>(() => Promise.resolve(makeMachine())),
 
   createTask: vi.fn<(req: CreateTaskRequest) => Promise<string>>(() => Promise.resolve("task-1")),
   deleteTask: vi.fn<(taskId: string) => Promise<DeleteResult>>(() =>
@@ -378,6 +382,7 @@ export function makeState(overrides: Partial<State> = {}): State {
     theme: "system",
     systemDark: false,
     modelDefaults: makeModelDefaults(),
+    modelFactory: makeModelDefaults(),
     modelCatalog: makeModelCatalog(),
     reviewModeDefault: "manual",
     tasks: [],
@@ -892,8 +897,31 @@ export function makePrompt(overrides: Partial<Prompt> = {}): Prompt {
     text: "# PRD Creator\n\nWrite the PRD of {{task_name}}.\n",
     modified: false,
     placeholders: ["{{task_name}}", "{{artifacts_dir}}", "{{prd_path}}", "{{initial_context}}"],
+    editedAt: "",
+    lines: 3,
+    defaultLines: 3,
     ...overrides,
   };
+}
+
+/** makePromptListings are the nine prompts of the list, in workflow order, none edited. */
+export function makePromptListings(): PromptListing[] {
+  return [
+    "prd",
+    "tech_spec",
+    "plan",
+    "one_shot",
+    "step_review",
+    "commit",
+    "pr",
+    "pr_review",
+    "discussion",
+  ].map((stage) => ({ stage, modified: false, editedAt: "" }));
+}
+
+/** makeMachine is a machine that has claude and a gh signed in. */
+export function makeMachine(overrides: Partial<Machine> = {}): Machine {
+  return { claude: "found", gh: "ready", ...overrides };
 }
 
 export function makeReview(overrides: Partial<Review> = {}): Review {
@@ -1470,4 +1498,6 @@ export function resetWailsMock(): void {
     Promise.resolve(makePrompt({ stage, text, modified: true })),
   );
   api.restorePrompt.mockImplementation((stage) => Promise.resolve(makePrompt({ stage })));
+  api.listPrompts.mockImplementation(() => Promise.resolve(makePromptListings()));
+  api.checkMachine.mockImplementation(() => Promise.resolve(makeMachine()));
 }

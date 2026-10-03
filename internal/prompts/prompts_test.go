@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 
@@ -1638,5 +1639,100 @@ func TestRenderAppendsTheDetachedPushInstructionWhenThePlaceholderIsGone(t *test
 		"\n\n## Pushing\n\n" + fmt.Sprintf(prompts.DetachedPushInstruction, "fix-the-cache")
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Render() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestLineCountsLinesWithoutTheFinalBreak(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		text string
+		want int
+	}{
+		{"empty", "", 0},
+		{"one line", "a", 1},
+		{"one line with its break", "a\n", 1},
+		{"several lines", "a\nb\nc", 3},
+		{"several lines with the final break", "a\nb\nc\n", 3},
+		{"a blank line in the middle", "a\n\nb\n", 3},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			dataDir := t.TempDir()
+			write(t, dataDir, prompts.StageCommit, test.text)
+			if test.text == "" {
+				// An empty file is an edit of an empty text.
+				if got := readPrompt(t, dataDir, prompts.StageCommit); !got.Modified {
+					t.Fatal("an empty edit is not Modified")
+				}
+			}
+			if got := readPrompt(t, dataDir, prompts.StageCommit).Lines; got != test.want {
+				t.Errorf("Lines of %q = %d, want %d", test.text, got, test.want)
+			}
+		})
+	}
+}
+
+func TestReadCountsTheLinesOfTheDefault(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StageCommit, "mine\n")
+
+	got := readPrompt(t, dataDir, prompts.StageCommit)
+	want := strings.Count(strings.TrimSuffix(defaultText(t, prompts.StageCommit), "\n"), "\n") + 1
+	if got.DefaultLines != want {
+		t.Errorf("DefaultLines = %d, want %d", got.DefaultLines, want)
+	}
+	if got.Lines != 1 {
+		t.Errorf("Lines = %d, want 1", got.Lines)
+	}
+}
+
+func TestReadTellsWhenTheEditWasSaved(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	if got := readPrompt(t, dataDir, prompts.StagePRD).EditedAt; !got.IsZero() {
+		t.Errorf("EditedAt without an edit = %v, want zero", got)
+	}
+
+	write(t, dataDir, prompts.StagePRD, "mine")
+	at := time.Date(2026, time.September, 30, 10, 15, 0, 0, time.UTC)
+	if err := os.Chtimes(promptPath(dataDir, prompts.StagePRD), at, at); err != nil {
+		t.Fatalf("set the time of the edit: %v", err)
+	}
+	if got := readPrompt(t, dataDir, prompts.StagePRD).EditedAt; !got.Equal(at) {
+		t.Errorf("EditedAt = %v, want %v", got, at)
+	}
+}
+
+func TestListSaysWhichPromptsAreEditedInWorkflowOrder(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, prompts.StagePlan, "mine")
+	at := time.Date(2026, time.October, 1, 8, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(promptPath(dataDir, prompts.StagePlan), at, at); err != nil {
+		t.Fatalf("set the time of the edit: %v", err)
+	}
+
+	got, err := prompts.List(dataDir)
+	if err != nil {
+		t.Fatalf("List() = %v, want nil", err)
+	}
+
+	want := make([]prompts.Listed, len(prompts.Editable))
+	for i, stage := range prompts.Editable {
+		want[i] = prompts.Listed{Stage: stage}
+		if stage == prompts.StagePlan {
+			want[i] = prompts.Listed{Stage: stage, Modified: true, EditedAt: at}
+		}
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("List() mismatch (-want +got):\n%s", diff)
 	}
 }

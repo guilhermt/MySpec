@@ -45,6 +45,7 @@ import type {
   Entry,
   ErrorEntry,
   Leftover,
+  Machine,
   MarkerCommit,
   MarkerEntry,
   Migration,
@@ -61,6 +62,7 @@ import type {
   PRReport,
   PRTrouble,
   Prompt,
+  PromptListing,
   PullCard,
   PullLabel,
   PullRequest,
@@ -152,6 +154,7 @@ export type {
   Entry,
   ErrorEntry,
   Leftover,
+  Machine,
   MarkerCommit,
   MarkerEntry,
   Migration,
@@ -168,6 +171,7 @@ export type {
   PRReport,
   PRTrouble,
   Prompt,
+  PromptListing,
   PullCard,
   PullLabel,
   PullRequest,
@@ -583,6 +587,33 @@ export function asReleaseKind(value: string): ReleaseKind {
       return value;
     default:
       return "";
+  }
+}
+
+/** ClaudeCheck is what the check of the machine found of the claude CLI. */
+export type ClaudeCheck = "found" | "not_found" | "unknown";
+
+export function asClaudeCheck(value: string): ClaudeCheck {
+  switch (value) {
+    case "found":
+    case "not_found":
+      return value;
+    default:
+      return "unknown";
+  }
+}
+
+/** GHCheck is what the check of the machine found of gh and its login. */
+export type GHCheck = "ready" | "not_installed" | "signed_out" | "unknown";
+
+export function asGHCheck(value: string): GHCheck {
+  switch (value) {
+    case "ready":
+    case "not_installed":
+    case "signed_out":
+      return value;
+    default:
+      return "unknown";
   }
 }
 
@@ -1371,6 +1402,8 @@ export const api = {
   savePrompt: (stage: PromptStage, text: string): Promise<Prompt> =>
     SettingsService.SavePrompt(stage, text),
   restorePrompt: (stage: PromptStage): Promise<Prompt> => SettingsService.RestorePrompt(stage),
+  listPrompts: async (): Promise<PromptListing[]> => (await SettingsService.ListPrompts()) ?? [],
+  checkMachine: (): Promise<Machine> => SettingsService.CheckMachine(),
 
   createTask: (req: CreateTaskRequest): Promise<string> => TaskService.CreateTask(req),
   deleteTask: (taskId: string): Promise<DeleteResult> => TaskService.DeleteTask(taskId),

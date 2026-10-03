@@ -1282,6 +1282,24 @@ export interface Leftover {
 }
 
 /**
+ * Machine is what the app found out about the machine it runs on.
+ */
+export interface Machine {
+    /**
+     * Claude is found, not_found or unknown, a string for the same reason as
+     * State.Theme: unknown is a catalog read that has not finished or failed
+     * for another reason.
+     */
+    "claude": string;
+
+    /**
+     * GH is ready, not_installed, signed_out or unknown, a string for the same
+     * reason as State.Theme: unknown is a gh that answered something else.
+     */
+    "gh": string;
+}
+
+/**
  * MarkerCommit is a commit of a new_commits marker; the SHA is the short one.
  */
 export interface MarkerCommit {
@@ -1708,6 +1726,37 @@ export interface Prompt {
      * order the settings list them; never nil.
      */
     "placeholders": string[] | null;
+
+    /**
+     * RFC 3339; "" without an edit
+     */
+    "editedAt": string;
+
+    /**
+     * of the text, the final line break not counted
+     */
+    "lines": number;
+
+    /**
+     * of the default of the app
+     */
+    "defaultLines": number;
+}
+
+/**
+ * PromptListing is what the list of prompts shows of one, without its text.
+ */
+export interface PromptListing {
+    /**
+     * as Prompt.Stage
+     */
+    "stage": string;
+    "modified": boolean;
+
+    /**
+     * RFC 3339; "" without an edit
+     */
+    "editedAt": string;
 }
 
 /**
@@ -2768,6 +2817,12 @@ export interface State {
      * order; never nil.
      */
     "modelDefaults": StageModel[] | null;
+
+    /**
+     * ModelFactory is the default every stage ships with, in the order of
+     * ModelDefaults; never nil.
+     */
+    "modelFactory": StageModel[] | null;
 
     /**
      * ModelCatalog is what the installed Claude Code offers, which every picker

@@ -112,6 +112,7 @@ func RefusedState(refused *upgrade.RefusedError) State {
 		Boards:        []Board{},
 		Theme:         string(theme.System),
 		ModelDefaults: []StageModel{},
+		ModelFactory:  FromModelSet(models.Factory()),
 		ModelCatalog:  ModelCatalog{Models: []CatalogModel{}},
 		Tasks:         []TaskSummary{},
 		History:       []ArchivedTask{},
@@ -172,7 +173,27 @@ func FromPrompt(p prompts.Prompt) Prompt {
 		Text:         p.Text,
 		Modified:     p.Modified,
 		Placeholders: placeholders,
+		EditedAt:     formatEditedAt(p.EditedAt),
+		Lines:        p.Lines,
+		DefaultLines: p.DefaultLines,
 	}
+}
+
+// FromListed converts the list of prompts, never nil.
+func FromListed(listed []prompts.Listed) []PromptListing {
+	converted := make([]PromptListing, len(listed))
+	for i, l := range listed {
+		converted[i] = PromptListing{Stage: string(l.Stage), Modified: l.Modified, EditedAt: formatEditedAt(l.EditedAt)}
+	}
+	return converted
+}
+
+// formatEditedAt is the time of an edit as RFC 3339, "" for the zero time.
+func formatEditedAt(at time.Time) string {
+	if at.IsZero() {
+		return ""
+	}
+	return at.Format(time.RFC3339)
 }
 
 // FromTasks converts the active tasks, pairing each with the artifacts of its

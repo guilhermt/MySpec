@@ -7,6 +7,7 @@ import {
   asBoardFailureReason,
   asCardAction,
   asCatalogFailure,
+  asClaudeCheck,
   asCloseOutcome,
   asCloseSkipReason,
   asDependencyDrop,
@@ -19,6 +20,7 @@ import {
   asErrorKind,
   asFindingDecision,
   asFindingPlacement,
+  asGHCheck,
   asHoldReason,
   asInterruptedBy,
   asIssueState,
@@ -84,6 +86,20 @@ describe("asReleaseKind", () => {
     expect(asReleaseKind("leave")).toBe("leave");
     expect(asReleaseKind("")).toBe("");
     expect(asReleaseKind("delete")).toBe("");
+  });
+});
+
+describe("asClaudeCheck and asGHCheck", () => {
+  it("keep the values Go sends and turn anything else into unknown", () => {
+    expect(asClaudeCheck("found")).toBe("found");
+    expect(asClaudeCheck("not_found")).toBe("not_found");
+    expect(asClaudeCheck("unknown")).toBe("unknown");
+    expect(asClaudeCheck("broken")).toBe("unknown");
+    expect(asGHCheck("ready")).toBe("ready");
+    expect(asGHCheck("not_installed")).toBe("not_installed");
+    expect(asGHCheck("signed_out")).toBe("signed_out");
+    expect(asGHCheck("unknown")).toBe("unknown");
+    expect(asGHCheck("broken")).toBe("unknown");
   });
 });
 

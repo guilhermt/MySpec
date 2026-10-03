@@ -326,7 +326,10 @@ func Run(cfg Config) int {
 	go a.pollPRs(pollCtx)
 
 	wails := application.New(
-		a.options(cfg, repositories, boards, themeSvc, modelsSvc, reviewModesSvc, tasks, sessions, flowSvc, dirs.Data, log),
+		a.options(
+			cfg, repositories, boards, themeSvc, modelsSvc, reviewModesSvc, ghRunner, tasks, sessions, flowSvc,
+			dirs.Data, log,
+		),
 	)
 	a.setWails(wails)
 	a.openWindow(cfg, themeSvc.Effective())
@@ -351,6 +354,7 @@ func (a *App) options(
 	themeSvc *theme.Service,
 	modelsSvc *models.Service,
 	reviewModesSvc *reviewmode.Service,
+	login bindings.GHLogin,
 	tasks *task.Service,
 	sessions *session.Service,
 	flowSvc *flow.Service,
@@ -365,7 +369,7 @@ func (a *App) options(
 			application.NewService(bindings.NewStateService(a.state)),
 			application.NewService(bindings.NewRepositoryService(repositories, a, log)),
 			application.NewService(
-				bindings.NewSettingsService(themeSvc, modelsSvc, reviewModesSvc, dataDir, log),
+				bindings.NewSettingsService(themeSvc, modelsSvc, reviewModesSvc, login, dataDir, log),
 			),
 			application.NewService(bindings.NewTaskService(
 				tasks, sessions, flowSvc, modelsSvc, reviewModesSvc, repositories, boards, editor.Open,
