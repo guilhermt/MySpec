@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { displayPath } from "@/lib/paths";
+import { displayPath, displayPaths } from "@/lib/paths";
 
 describe("displayPath", () => {
   it("replaces the home directory with a tilde", () => {
@@ -16,5 +16,22 @@ describe("displayPath", () => {
 
   it("does not match a directory that merely starts with home", () => {
     expect(displayPath("/homework/api")).toBe("/homework/api");
+  });
+});
+
+describe("displayPaths", () => {
+  it.each([
+    ["/home/dev/projects/api", "~/projects/api"],
+    ["/home/dev", "~"],
+    ["Can't open /home/dev/.myspec: permission denied", "Can't open ~/.myspec: permission denied"],
+    ["in /home/dev, then /home/ana.", "in ~, then ~."],
+    ["(/home/dev) '/home/dev/x' \"/home/dev\"", "(~) '~/x' \"~\""],
+    ["/home/dev/a and /home/dev/b", "~/a and ~/b"],
+    ["/home/ana.silva/api", "~/api"],
+    ["/srv/code/api", "/srv/code/api"],
+    ["/homework/api", "/homework/api"],
+    ["no path here", "no path here"],
+  ])("writes %j as %j", (text, want) => {
+    expect(displayPaths(text)).toBe(want);
   });
 });
