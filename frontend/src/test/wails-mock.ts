@@ -95,7 +95,7 @@ export const api = {
   addBoard: vi.fn<(url: string, req: SaveBoardRequest) => Promise<void>>(() => Promise.resolve()),
   updateBoard: vi.fn<(id: string, req: SaveBoardRequest) => Promise<void>>(() => Promise.resolve()),
   previewRemoveBoard: vi.fn<(id: string) => Promise<BoardRemoval>>(() =>
-    Promise.resolve({ toNoBoard: 0, removed: 0 }),
+    Promise.resolve(makeBoardRemoval()),
   ),
   removeBoard: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   refreshBoard: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
@@ -518,8 +518,13 @@ export function makeBoardRepositoryOption(
     path: "/home/dev/projects/web",
     clones: [],
     otherBoard: "",
+    release: "",
     ...overrides,
   };
+}
+
+export function makeBoardRemoval(overrides: Partial<BoardRemoval> = {}): BoardRemoval {
+  return { toNoBoard: 0, removed: 0, toNoBoardNames: [], removedNames: [], ...overrides };
 }
 
 export function makeBoardPreview(overrides: Partial<BoardPreview> = {}): BoardPreview {
@@ -536,6 +541,9 @@ export function makeBoardPreview(overrides: Partial<BoardPreview> = {}): BoardPr
     ],
     repositories: [makeBoardRepositoryOption()],
     newCardStatus: "",
+    goneStatuses: [],
+    newStatusIds: [],
+    newCardStatusGone: false,
     ...overrides,
   };
 }
@@ -1441,7 +1449,7 @@ export function resetWailsMock(): void {
   api.previewBoard.mockImplementation(() => Promise.resolve(makeBoardPreview()));
   api.previewEditBoard.mockImplementation(() => Promise.resolve(makeBoardPreview()));
   api.checkBoardRepository.mockImplementation(() => Promise.resolve(makeBoardRepositoryOption()));
-  api.previewRemoveBoard.mockImplementation(() => Promise.resolve({ toNoBoard: 0, removed: 0 }));
+  api.previewRemoveBoard.mockImplementation(() => Promise.resolve(makeBoardRemoval()));
   api.cardContext.mockImplementation(() => Promise.resolve("### Card: Add the login screen\n"));
   api.createTask.mockImplementation(() => Promise.resolve("task-1"));
   api.startReview.mockImplementation(() => Promise.resolve("review-1"));

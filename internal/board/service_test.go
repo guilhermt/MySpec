@@ -690,6 +690,8 @@ func TestPreviewPreMarksTheFinalStatusesAndSuggestsTheRepositories(t *testing.T)
 				Clones:       []string{},
 			},
 		},
+		GoneStatuses: []string{},
+		NewStatusIDs: []string{},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Preview() (-want +got):\n%s", diff)
@@ -740,6 +742,7 @@ func TestPreviewEditChecksTheRepositoriesOfTheBoardNextToTheSuggestions(t *testi
 				Link:         board.LinkRegistered,
 				RepositoryID: "repo-api",
 				Clones:       []string{},
+				Release:      board.ReleaseLeave,
 			},
 			{
 				Identity: repository.Identity{Owner: "acme", Name: "docs"},
@@ -756,8 +759,11 @@ func TestPreviewEditChecksTheRepositoriesOfTheBoardNextToTheSuggestions(t *testi
 				RepositoryID: "repo-web",
 				Path:         "/src/web",
 				Clones:       []string{},
+				Release:      board.ReleaseNoBoard,
 			},
 		},
+		GoneStatuses: []string{},
+		NewStatusIDs: []string{},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("PreviewEdit() (-want +got):\n%s", diff)
@@ -1004,6 +1010,7 @@ func TestAddRegistersTheBoardWithItsRepositoriesAndReadsIt(t *testing.T) {
 		Title:         "Platform",
 		URL:           "https://github.com/orgs/acme/projects/3",
 		FinalStatuses: []string{done.ID},
+		SavedStatuses: []board.Option{todo, doing, done},
 		CreatedAt:     base,
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
@@ -1087,10 +1094,6 @@ func TestRemoveReleasesEveryRepositoryOfTheBoard(t *testing.T) {
 		{ID: "repo-free", Owner: "acme", Name: "free"},
 	}
 
-	toNoBoard, removed, err := f.service.RemovalPreview(boardID)
-	if err != nil || toNoBoard != 1 || removed != 1 {
-		t.Errorf("RemovalPreview() = %d, %d, %v, want 1, 1, nil", toNoBoard, removed, err)
-	}
 	if err := f.service.Remove(t.Context(), boardID); err != nil {
 		t.Fatalf("Remove() = %v, want nil", err)
 	}
@@ -1169,4 +1172,158 @@ func TestCardOfPullRequestFindsNothingWithoutAStoredReading(t *testing.T) {
 	if id, got, ok := f.service.CardOfPullRequest("acme", "web", 7); ok {
 		t.Errorf("CardOfPullRequest() = %q, %+v, true, want false", id, got)
 	}
+}
+
+func TestPreviewEditSaysWhereEachRepositoryOfTheBoardGoesWhenUnchecked(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, board.Stored{})
+	f.github.answer(structureMatch, "", structure("Roadmap"))
+	f.github.answer(reposMatch, suggestQ, reposPage("", "acme/suggested"))
+	f.repos.items = []repository.Repository{
+		{ID: "repo-clone", Owner: "acme", Name: "clone", Path: "/src/clone", BoardID: boardID},
+		{ID: "repo-tasks", Owner: "acme", Name: "tasks", BoardID: boardID},
+		{ID: "repo-nothing", Owner: "acme", Name: "nothing", BoardID: boardID},
+	}
+	f.tasks["repo-tasks"] = 1
+
+	got, err := f.service.PreviewEdit(t.Context(), boardID)
+	if err != nil {
+		t.Fatalf("PreviewEdit() = %v, want nil", err)
+	}
+
+	want := map[string]board.ReleaseKind{
+		"acme/clone":     board.ReleaseNoBoard,
+		"acme/tasks":     board.ReleaseNoBoard,
+		"acme/nothing":   board.ReleaseLeave,
+		"acme/suggested": "",
+	}
+	for _, o := range got.Repositories {
+		name := o.Identity.FullName()
+		if o.Release != want[name] {
+			t.Errorf("%s: Release = %q, want %q", name, o.Release, want[name])
+		}
+		delete(want, name)
+	}
+	if len(want) != 0 {
+		t.Errorf("the preview lacks %v", want)
+	}
+}
+
+func TestRemovalPreviewNamesTheRepositoriesByWhereTheyGo(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, board.Stored{})
+	f.repos.items = []repository.Repository{
+		{ID: "repo-web", Owner: "acme", Name: "web", Path: "/src/web", BoardID: boardID},
+		{ID: "repo-docs", Owner: "acme", Name: "docs", BoardID: boardID},
+		{ID: "repo-api", Owner: "Acme", Name: "api", BoardID: boardID},
+		{ID: "repo-lib", Owner: "acme", Name: "Lib", Path: "/src/lib", BoardID: boardID},
+		{ID: "repo-free", Owner: "acme", Name: "free"},
+	}
+
+	got, err := f.service.RemovalPreview(boardID)
+	if err != nil {
+		t.Fatalf("RemovalPreview() = %v, want nil", err)
+	}
+
+	want := board.Removal{ToNoBoard: []string{"acme/Lib", "acme/web"}, Removed: []string{"Acme/api", "acme/docs"}}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("RemovalPreview() (-want +got):\n%s", diff)
+	}
+	if _, err := f.service.RemovalPreview("board-9"); !errors.Is(err, board.ErrNotFound) {
+		t.Errorf("RemovalPreview(unknown) = %v, want ErrNotFound", err)
+	}
+}
+
+func TestAddAndUpdateSaveTheStatusesOfTheBoard(t *testing.T) {
+	t.Parallel()
+
+	t.Run("add", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t, board.Stored{})
+		f.github.answer(structureMatch, "", structureWith("Platform", todo, done))
+
+		added, err := f.service.Add(t.Context(), otherURL, board.SaveParams{})
+		if err != nil {
+			t.Fatalf("Add() = %v, want nil", err)
+		}
+		if diff := cmp.Diff([]board.Option{todo, done}, added.SavedStatuses); diff != "" {
+			t.Errorf("Add() SavedStatuses (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("update", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t, board.Stored{})
+		f.github.answer(structureMatch, "", structureWith("Roadmap", todo, doing))
+
+		if err := f.service.Update(t.Context(), boardID, board.SaveParams{}); err != nil {
+			t.Fatalf("Update() = %v, want nil", err)
+		}
+		b, _ := f.service.Get(boardID)
+		if diff := cmp.Diff([]board.Option{todo, doing}, b.SavedStatuses); diff != "" {
+			t.Errorf("Update() SavedStatuses (-want +got):\n%s", diff)
+		}
+		if diff := cmp.Diff([]board.Option{todo, doing}, f.store.boards[0].SavedStatuses); diff != "" {
+			t.Errorf("the store holds SavedStatuses (-want +got):\n%s", diff)
+		}
+	})
+}
+
+func TestPreviewEditSaysWhatChangedInTheStatusesSinceTheSave(t *testing.T) {
+	t.Parallel()
+	gone := board.Option{ID: "opt-gone", Name: "Blocked"}
+	tests := []struct {
+		name         string
+		saved        []board.Option
+		newCard      string
+		now          []board.Option
+		wantGone     []string
+		wantNew      []string
+		wantCardGone bool
+	}{
+		{name: "nothing changed", saved: []board.Option{todo, done}, now: []board.Option{todo, done}},
+		{name: "one is gone", saved: []board.Option{todo, gone, done}, now: []board.Option{todo, done}, wantGone: []string{"Blocked"}},
+		{name: "one is new", saved: []board.Option{todo}, now: []board.Option{todo, doing}, wantNew: []string{doing.ID}},
+		{
+			name: "both", saved: []board.Option{todo, gone}, now: []board.Option{doing, todo},
+			wantGone: []string{"Blocked"}, wantNew: []string{doing.ID},
+		},
+		{name: "no saved statuses", saved: nil, now: []board.Option{todo, doing}},
+		{name: "the status of new cards is gone", saved: []board.Option{todo, gone}, newCard: gone.ID, now: []board.Option{todo}, wantGone: []string{"Blocked"}, wantCardGone: true},
+		{name: "the status of new cards is gone without saved statuses", saved: nil, newCard: gone.ID, now: []board.Option{todo}, wantCardGone: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t, board.Stored{})
+			f.store.boards[0].SavedStatuses = tt.saved
+			f.store.boards[0].NewCardStatus = tt.newCard
+			if err := f.service.Sync(t.Context()); err != nil {
+				t.Fatalf("Sync() = %v, want nil", err)
+			}
+			f.github.answer(structureMatch, "", structureWith("Roadmap", tt.now...))
+			f.github.answer(reposMatch, suggestQ, reposPage(""))
+
+			got, err := f.service.PreviewEdit(t.Context(), boardID)
+			if err != nil {
+				t.Fatalf("PreviewEdit() = %v, want nil", err)
+			}
+			if diff := cmp.Diff(nonNil(tt.wantGone), got.GoneStatuses); diff != "" {
+				t.Errorf("GoneStatuses (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(nonNil(tt.wantNew), got.NewStatusIDs); diff != "" {
+				t.Errorf("NewStatusIDs (-want +got):\n%s", diff)
+			}
+			if got.NewCardStatusGone != tt.wantCardGone {
+				t.Errorf("NewCardStatusGone = %v, want %v", got.NewCardStatusGone, tt.wantCardGone)
+			}
+		})
+	}
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

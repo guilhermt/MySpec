@@ -222,12 +222,14 @@ describe("BoardDialog", () => {
 
   it("shows why a board being edited can't be read", async () => {
     vi.mocked(api.previewEditBoard).mockRejectedValue(
-      new Error("The board doesn't exist or this account can't read it."),
+      new Error(
+        "The board doesn't exist or this account can't read it. Check the number and that this account can see the project.",
+      ),
     );
     dialog({ mode: "edit", boardId: "board-1" });
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "The board doesn't exist or this account can't read it.",
+      "The board doesn't exist or this account can't read it. Check the number and that this account can see the project.",
     );
   });
 });

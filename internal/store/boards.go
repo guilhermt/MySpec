@@ -15,7 +15,7 @@ import (
 type BoardsRepo struct{ db *sql.DB }
 
 // boardColumns is the column list every board query selects, in scan order.
-const boardColumns = `id, owner, owner_type, number, title, url, final_statuses, created_at, new_card_status`
+const boardColumns = `id, owner, owner_type, number, title, url, final_statuses, created_at, new_card_status, saved_statuses`
 
 // ListBoards returns the registered boards, by title ignoring case, then id.
 func (r *BoardsRepo) ListBoards(ctx context.Context) ([]board.Board, error) {
@@ -44,10 +44,14 @@ func (r *BoardsRepo) ListBoards(ctx context.Context) ([]board.Board, error) {
 // InsertBoard registers a board with an empty reading and applies the links,
 // in one transaction.
 func (r *BoardsRepo) InsertBoard(ctx context.Context, b board.Board, links []board.Link) error {
-	const stmt = `INSERT INTO boards (` + boardColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	const stmt = `INSERT INTO boards (` + boardColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	const reading = `INSERT INTO board_readings (board_id) VALUES (?)`
 
 	finals, err := encodeFinalStatuses(b.FinalStatuses)
+	if err != nil {
+		return err
+	}
+	saved, err := encodeSavedStatuses(b.SavedStatuses)
 	if err != nil {
 		return err
 	}
@@ -59,7 +63,7 @@ func (r *BoardsRepo) InsertBoard(ctx context.Context, b board.Board, links []boa
 	defer func() { _ = tx.Rollback() }()
 
 	_, err = tx.ExecContext(ctx, stmt, b.ID, b.Owner, string(b.OwnerType), b.Number, b.Title, b.URL,
-		finals, formatTime(b.CreatedAt), b.NewCardStatus)
+		finals, formatTime(b.CreatedAt), b.NewCardStatus, saved)
 	if err != nil {
 		return fmt.Errorf("insert board %s: %w", b.ID, err)
 	}
@@ -78,9 +82,13 @@ func (r *BoardsRepo) InsertBoard(ctx context.Context, b board.Board, links []boa
 // UpdateBoard stores the title, the final statuses and the status of new cards
 // of a board, applies the releases, then the links, in one transaction.
 func (r *BoardsRepo) UpdateBoard(ctx context.Context, b board.Board, links []board.Link, releases []board.Release) error {
-	const stmt = `UPDATE boards SET title = ?, final_statuses = ?, new_card_status = ? WHERE id = ?`
+	const stmt = `UPDATE boards SET title = ?, final_statuses = ?, new_card_status = ?, saved_statuses = ? WHERE id = ?`
 
 	finals, err := encodeFinalStatuses(b.FinalStatuses)
+	if err != nil {
+		return err
+	}
+	saved, err := encodeSavedStatuses(b.SavedStatuses)
 	if err != nil {
 		return err
 	}
@@ -91,7 +99,7 @@ func (r *BoardsRepo) UpdateBoard(ctx context.Context, b board.Board, links []boa
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err = tx.ExecContext(ctx, stmt, b.Title, finals, b.NewCardStatus, b.ID); err != nil {
+	if _, err = tx.ExecContext(ctx, stmt, b.Title, finals, b.NewCardStatus, saved, b.ID); err != nil {
 		return fmt.Errorf("update board %s: %w", b.ID, err)
 	}
 	if err = applyReleases(ctx, tx, releases); err != nil {
@@ -252,9 +260,10 @@ func scanBoard(row scanner) (board.Board, error) {
 		ownerType string
 		finals    string
 		createdAt string
+		saved     string
 	)
 	if err := row.Scan(&b.ID, &b.Owner, &ownerType, &b.Number, &b.Title, &b.URL, &finals, &createdAt,
-		&b.NewCardStatus); err != nil {
+		&b.NewCardStatus, &saved); err != nil {
 		return board.Board{}, fmt.Errorf("scan board: %w", err)
 	}
 
@@ -264,6 +273,11 @@ func scanBoard(row scanner) (board.Board, error) {
 	}
 	if b.FinalStatuses == nil {
 		b.FinalStatuses = []string{}
+	}
+	if saved != "" {
+		if err := json.Unmarshal([]byte(saved), &b.SavedStatuses); err != nil {
+			return board.Board{}, fmt.Errorf("decode saved statuses of board %s: %w", b.ID, err)
+		}
 	}
 	var err error
 	if b.CreatedAt, err = parseTime(createdAt, "board "+b.ID); err != nil {
@@ -309,6 +323,18 @@ func scanReading(row scanner) (string, board.Stored, error) {
 		}
 	}
 	return id, stored, nil
+}
+
+// encodeSavedStatuses is the JSON of the options saved with a board; nil is "".
+func encodeSavedStatuses(options []board.Option) (string, error) {
+	if options == nil {
+		return "", nil
+	}
+	encoded, err := json.Marshal(options)
+	if err != nil {
+		return "", fmt.Errorf("encode saved statuses: %w", err)
+	}
+	return string(encoded), nil
 }
 
 // encodeFinalStatuses is the JSON of the final statuses of a board; nil is an

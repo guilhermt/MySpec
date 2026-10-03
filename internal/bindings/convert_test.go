@@ -1972,7 +1972,7 @@ func TestFromBoardsNeverHandsTheFrontendNull(t *testing.T) {
 		Reading:       true,
 		Failure: &bindings.BoardFailure{
 			Reason:   "not_found",
-			Message:  "The board doesn't exist or this account can't read it.",
+			Message:  "The board doesn't exist or this account can't read it. Check the number and that this account can see the project.",
 			FailedAt: "2026-09-16T12:00:00Z",
 		},
 		Cards: []bindings.BoardCard{},
@@ -3650,5 +3650,16 @@ func TestFromTasksCarriesTheStructuredPassesOfThePullRequest(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, gotPR.Reports); diff != "" {
 		t.Errorf("reports mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromRemovalCountsAndNamesTheRepositories(t *testing.T) {
+	t.Parallel()
+
+	got := bindings.FromRemoval(board.Removal{ToNoBoard: []string{"acme/web"}})
+
+	want := bindings.BoardRemoval{ToNoBoard: 1, ToNoBoardNames: []string{"acme/web"}, RemovedNames: []string{}}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("FromRemoval() mismatch (-want +got):\n%s", diff)
 	}
 }

@@ -36,6 +36,7 @@ import {
   asPullRequestState,
   asPullReviewMode,
   asPullReviewStatus,
+  asReleaseKind,
   asRepositoryLinkKind,
   asRetryReason,
   asReviewFallback,
@@ -74,6 +75,15 @@ describe("asThemePreference", () => {
 
   it("falls back to system", () => {
     expect(asThemePreference("sepia")).toBe("system");
+  });
+});
+
+describe("asReleaseKind", () => {
+  it("keeps the values Go sends and turns anything else into none", () => {
+    expect(asReleaseKind("no_board")).toBe("no_board");
+    expect(asReleaseKind("leave")).toBe("leave");
+    expect(asReleaseKind("")).toBe("");
+    expect(asReleaseKind("delete")).toBe("");
   });
 });
 

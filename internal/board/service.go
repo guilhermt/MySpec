@@ -475,16 +475,27 @@ const (
 	LinkOtherBoard RepositoryLink = "other_board" // the repository belongs to another board
 )
 
+// ReleaseKind is where a repository unchecked from its board goes: out of any
+// board, or out of the app.
+type ReleaseKind string
+
+// The places an unchecked repository goes to.
+const (
+	ReleaseNoBoard ReleaseKind = "no_board" // it has a clone, tasks or reviews
+	ReleaseLeave   ReleaseKind = "leave"    // it has none of them
+)
+
 // RepositoryOption is a repository the user may tie to a board.
 type RepositoryOption struct {
 	Identity     repository.Identity
 	Cards        int // issues of the board in this repository; 0 for one typed in
 	Checked      bool
 	Link         RepositoryLink
-	RepositoryID string   // registered, other_board
-	Path         string   // registered: its path, "" without a clone; clone: the first clone by path
-	Clones       []string // clone: every clone found, by path; never nil
-	OtherBoard   string   // other_board: the title
+	RepositoryID string      // registered, other_board
+	Path         string      // registered: its path, "" without a clone; clone: the first clone by path
+	Clones       []string    // clone: every clone found, by path; never nil
+	OtherBoard   string      // other_board: the title
+	Release      ReleaseKind // the repository's own board, in an edit: where it goes when unchecked; "" otherwise
 }
 
 // StatusOption is an option of the Status field, marked final or not.
@@ -502,6 +513,10 @@ type Preview struct {
 	Statuses      []StatusOption     // board order
 	NewCardStatus string             // the option a new card gets; "" for none
 	Repositories  []RepositoryOption // by owner/name ignoring case
+
+	GoneStatuses      []string // edit: names of the saved options the board no longer has, in saved order; never nil
+	NewStatusIDs      []string // edit: ids of the options the saved ones lack, in board order; never nil
+	NewCardStatusGone bool     // edit: the status new cards got is no longer an option
 }
 
 // RepositoryChoice is a repository the user checked.
@@ -570,6 +585,19 @@ func (s *Service) PreviewEdit(ctx context.Context, id string) (Preview, error) {
 		p.Statuses[i].Final = slices.Contains(b.FinalStatuses, o.ID)
 	}
 	p.NewCardStatus = newCardStatus(b.NewCardStatus, st)
+	p.NewCardStatusGone = b.NewCardStatus != "" && newCardStatus(b.NewCardStatus, st) == ""
+	if b.SavedStatuses != nil {
+		for _, o := range b.SavedStatuses {
+			if !slices.ContainsFunc(st.Statuses, func(c Option) bool { return c.ID == o.ID }) {
+				p.GoneStatuses = append(p.GoneStatuses, o.Name)
+			}
+		}
+		for _, o := range st.Statuses {
+			if !slices.ContainsFunc(b.SavedStatuses, func(c Option) bool { return c.ID == o.ID }) {
+				p.NewStatusIDs = append(p.NewStatusIDs, o.ID)
+			}
+		}
+	}
 	cards := map[string]int{}
 	for _, sg := range suggestions {
 		cards[strings.ToLower(sg.Identity.FullName())] = sg.Cards
@@ -578,7 +606,9 @@ func (s *Service) PreviewEdit(ctx context.Context, id string) (Preview, error) {
 	for _, repo := range s.repositories.List() {
 		if repo.BoardID == id {
 			own = append(own, repo.Identity())
-			p.Repositories = append(p.Repositories, s.option(repo.Identity(), cards[strings.ToLower(repo.FullName())], true, id))
+			o := s.option(repo.Identity(), cards[strings.ToLower(repo.FullName())], true, id)
+			o.Release = kindOf(s.releaseOf(repo))
+			p.Repositories = append(p.Repositories, o)
 		}
 	}
 	for _, sg := range suggestions {
@@ -636,6 +666,7 @@ func (s *Service) Add(ctx context.Context, rawURL string, p SaveParams) (Board, 
 		URL:           st.URL,
 		FinalStatuses: finalStatuses(p.FinalStatuses, st),
 		NewCardStatus: newCardStatus(p.NewCardStatus, st),
+		SavedStatuses: st.Statuses,
 		CreatedAt:     s.now(),
 	}
 	if err := s.store.InsertBoard(ctx, b, links); err != nil {
@@ -682,6 +713,7 @@ func (s *Service) Update(ctx context.Context, id string, p SaveParams) error {
 	b.Title = st.Title
 	b.FinalStatuses = finalStatuses(p.FinalStatuses, st)
 	b.NewCardStatus = newCardStatus(p.NewCardStatus, st)
+	b.SavedStatuses = st.Statuses
 	if err := s.store.UpdateBoard(ctx, b, links, releases); err != nil {
 		return fmt.Errorf("update board %s: %w", b.Title, err)
 	}
@@ -693,6 +725,7 @@ func (s *Service) Update(ctx context.Context, id string, p SaveParams) error {
 	if i := s.index(id); i >= 0 {
 		s.boards[i].Title, s.boards[i].FinalStatuses = b.Title, b.FinalStatuses
 		s.boards[i].NewCardStatus = b.NewCardStatus
+		s.boards[i].SavedStatuses = b.SavedStatuses
 		slices.SortStableFunc(s.boards, compare)
 	}
 	s.mu.Unlock()
@@ -702,20 +735,33 @@ func (s *Service) Update(ctx context.Context, id string, p SaveParams) error {
 	return nil
 }
 
-// RemovalPreview is what removing the board of id does to its repositories:
-// how many move to No board and how many leave the app.
-func (s *Service) RemovalPreview(id string) (toNoBoard, removed int, err error) {
+// Removal is what removing a board does to its repositories: owner/name of the
+// ones that move to No board and of the ones that leave the app, alphabetical.
+type Removal struct {
+	ToNoBoard []string // never nil
+	Removed   []string // never nil
+}
+
+// RemovalPreview is what removing the board of id does to its repositories.
+func (s *Service) RemovalPreview(id string) (Removal, error) {
 	if _, ok := s.Get(id); !ok {
-		return 0, 0, fmt.Errorf("preview removal of board %s: %w", id, ErrNotFound)
+		return Removal{}, fmt.Errorf("preview removal of board %s: %w", id, ErrNotFound)
 	}
-	for _, r := range s.releases(id, nil) {
-		if r.Remove {
-			removed++
+	r := Removal{ToNoBoard: []string{}, Removed: []string{}}
+	for _, repo := range s.repositories.List() {
+		if repo.BoardID != id {
+			continue
+		}
+		if s.releaseOf(repo).Remove {
+			r.Removed = append(r.Removed, repo.FullName())
 		} else {
-			toNoBoard++
+			r.ToNoBoard = append(r.ToNoBoard, repo.FullName())
 		}
 	}
-	return toNoBoard, removed, nil
+	byName := func(a, b string) int { return strings.Compare(strings.ToLower(a), strings.ToLower(b)) }
+	slices.SortFunc(r.ToNoBoard, byName)
+	slices.SortFunc(r.Removed, byName)
+	return r, nil
 }
 
 // Remove removes the board of id and releases every repository of it.
@@ -885,10 +931,24 @@ func (s *Service) releases(id string, leave func(repository.Repository) bool) []
 		if repo.BoardID != id || (leave != nil && !leave(repo)) {
 			continue
 		}
-		active, archived := s.counts(repo.ID)
-		releases = append(releases, Release{RepositoryID: repo.ID, Remove: !repo.Cloned() && active+archived == 0})
+		releases = append(releases, s.releaseOf(repo))
 	}
 	return releases
+}
+
+// releaseOf is what taking repo off its board does: it leaves the app without a
+// clone, tasks or reviews, and goes to No board otherwise.
+func (s *Service) releaseOf(repo repository.Repository) Release {
+	active, archived := s.counts(repo.ID)
+	return Release{RepositoryID: repo.ID, Remove: !repo.Cloned() && active+archived == 0}
+}
+
+// kindOf is the ReleaseKind of r.
+func kindOf(r Release) ReleaseKind {
+	if r.Remove {
+		return ReleaseLeave
+	}
+	return ReleaseNoBoard
 }
 
 // registered is the registered repository of identity.
@@ -911,6 +971,9 @@ func newPreview(loc Locator, st structure) Preview {
 		HasStatus:    st.HasStatus,
 		Statuses:     make([]StatusOption, len(st.Statuses)),
 		Repositories: []RepositoryOption{},
+
+		GoneStatuses: []string{},
+		NewStatusIDs: []string{},
 	}
 	for i, o := range st.Statuses {
 		p.Statuses[i] = StatusOption{Option: o}

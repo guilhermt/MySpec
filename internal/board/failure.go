@@ -39,7 +39,7 @@ func (f *Failure) Message() string {
 	case ReasonMissingScope:
 		return "gh can't read projects. Run gh auth refresh -s read:project."
 	case ReasonNotFound:
-		return "The board doesn't exist or this account can't read it."
+		return "The board doesn't exist or this account can't read it. Check the number and that this account can see the project."
 	case ReasonRateLimited:
 		return "GitHub's rate limit was reached. It resets at " + f.ResetAt.Local().Format("15:04") + "."
 	default:

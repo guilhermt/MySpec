@@ -1103,6 +1103,10 @@ type BoardRepositoryOption struct {
 	Path         string   `json:"path"`
 	Clones       []string `json:"clones"` // never nil
 	OtherBoard   string   `json:"otherBoard"`
+	// Release is no_board, leave or "", a string for the same reason as
+	// State.Theme: where the repository goes when unchecked in an edit of its own
+	// board.
+	Release string `json:"release"`
 }
 
 // BoardPreview is what registering or editing a board shows before saving.
@@ -1118,6 +1122,11 @@ type BoardPreview struct {
 	// NewCardStatus is the option a card created by a discussion gets; "" for
 	// none.
 	NewCardStatus string `json:"newCardStatus"`
+	// The three below are set in an edit: what changed in the Status field since
+	// the last save.
+	GoneStatuses      []string `json:"goneStatuses"` // never nil
+	NewStatusIDs      []string `json:"newStatusIds"` // never nil
+	NewCardStatusGone bool     `json:"newCardStatusGone"`
 }
 
 // BoardRepositoryChoice is a repository the user checked in the board dialog.
@@ -1139,8 +1148,10 @@ type SaveBoardRequest struct {
 // BoardRemoval is what removing a board does to its repositories: how many go
 // to no board and how many are removed.
 type BoardRemoval struct {
-	ToNoBoard int `json:"toNoBoard"`
-	Removed   int `json:"removed"`
+	ToNoBoard      int      `json:"toNoBoard"`
+	Removed        int      `json:"removed"`
+	ToNoBoardNames []string `json:"toNoBoardNames"` // owner/name, alphabetical; never nil
+	RemovedNames   []string `json:"removedNames"`   // never nil
 }
 
 // ReviewCenter is the Reviews view: the open pull requests of every registered

@@ -49,7 +49,7 @@ func TestFailureMessageIsWhatTheUserReads(t *testing.T) {
 		{Failure{Reason: ReasonGHMissing}, "GitHub CLI was not found: gh isn't on the PATH."},
 		{Failure{Reason: ReasonUnauthenticated}, "gh is not authenticated. Run gh auth login."},
 		{Failure{Reason: ReasonMissingScope}, "gh can't read projects. Run gh auth refresh -s read:project."},
-		{Failure{Reason: ReasonNotFound}, "The board doesn't exist or this account can't read it."},
+		{Failure{Reason: ReasonNotFound}, "The board doesn't exist or this account can't read it. Check the number and that this account can see the project."},
 		{Failure{Reason: ReasonRateLimited, ResetAt: reset}, "GitHub's rate limit was reached. It resets at 14:30."},
 		{Failure{Reason: ReasonFailed, Detail: "HTTP 502"}, "Couldn't read from GitHub: HTTP 502"},
 	}

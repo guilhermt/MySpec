@@ -67,7 +67,7 @@ Uma falha de leitura aparece onde a leitura foi pedida: no diálogo do board, na
 - `GitHub CLI was not found: gh isn't on the PATH.`
 - `gh is not authenticated. Run gh auth login.`
 - `gh can't read projects. Run gh auth refresh -s read:project.`
-- `The board doesn't exist or this account can't read it.`
+- `The board doesn't exist or this account can't read it. Check the number and that this account can see the project.`
 - `GitHub's rate limit was reached. It resets at <hora>.`
 - `Couldn't read from GitHub: <o que o gh disse>`
 

@@ -573,6 +573,19 @@ export function asThemePreference(value: string): ThemePreference {
   }
 }
 
+/** ReleaseKind is where a repository unchecked from its board goes; "" outside an edit of its own board. */
+export type ReleaseKind = "" | "no_board" | "leave";
+
+export function asReleaseKind(value: string): ReleaseKind {
+  switch (value) {
+    case "no_board":
+    case "leave":
+      return value;
+    default:
+      return "";
+  }
+}
+
 export function asTaskMode(value: string): TaskMode {
   switch (value) {
     case "structured":

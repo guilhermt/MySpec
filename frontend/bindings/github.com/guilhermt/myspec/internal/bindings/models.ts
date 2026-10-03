@@ -437,6 +437,19 @@ export interface BoardPreview {
      * none.
      */
     "newCardStatus": string;
+
+    /**
+     * The three below are set in an edit: what changed in the Status field since
+     * the last save.
+     * never nil
+     */
+    "goneStatuses": string[] | null;
+
+    /**
+     * never nil
+     */
+    "newStatusIds": string[] | null;
+    "newCardStatusGone": boolean;
 }
 
 /**
@@ -446,6 +459,16 @@ export interface BoardPreview {
 export interface BoardRemoval {
     "toNoBoard": number;
     "removed": number;
+
+    /**
+     * owner/name, alphabetical; never nil
+     */
+    "toNoBoardNames": string[] | null;
+
+    /**
+     * never nil
+     */
+    "removedNames": string[] | null;
 }
 
 /**
@@ -481,6 +504,13 @@ export interface BoardRepositoryOption {
      */
     "clones": string[] | null;
     "otherBoard": string;
+
+    /**
+     * Release is no_board, leave or "", a string for the same reason as
+     * State.Theme: where the repository goes when unchecked in an edit of its own
+     * board.
+     */
+    "release": string;
 }
 
 /**

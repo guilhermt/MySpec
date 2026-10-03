@@ -97,6 +97,7 @@ import {
   makeBoard,
   makeBoardCard,
   makeBoardPreview,
+  makeBoardRemoval,
   makeBoardRepositoryOption,
   makeDiscussion,
   makeDraft,
@@ -490,9 +491,13 @@ describe("board actions reported in the app notice", () => {
   });
 
   it("answer what removing a board takes with it", async () => {
-    vi.mocked(api.previewRemoveBoard).mockResolvedValueOnce({ toNoBoard: 2, removed: 1 });
+    vi.mocked(api.previewRemoveBoard).mockResolvedValueOnce(
+      makeBoardRemoval({ toNoBoard: 2, removed: 1 }),
+    );
 
-    expect(await previewRemoveBoard("board-1")).toEqual({ toNoBoard: 2, removed: 1 });
+    expect(await previewRemoveBoard("board-1")).toEqual(
+      makeBoardRemoval({ toNoBoard: 2, removed: 1 }),
+    );
   });
 
   it("answer null when the removal could not be previewed", async () => {

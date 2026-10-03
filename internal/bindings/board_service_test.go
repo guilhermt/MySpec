@@ -162,7 +162,7 @@ func TestCardContextIsTheContextOfTheCardWithoutAdditionalText(t *testing.T) {
 	}
 }
 
-func TestPreviewRemoveBoardCountsTheRepositoriesThatGoToNoBoard(t *testing.T) {
+func TestPreviewRemoveBoardNamesTheRepositoriesThatGoToNoBoard(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -173,7 +173,7 @@ func TestPreviewRemoveBoardCountsTheRepositoriesThatGoToNoBoard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PreviewRemoveBoard() = %v, want nil", err)
 	}
-	if diff := cmp.Diff(bindings.BoardRemoval{ToNoBoard: 1}, got); diff != "" {
+	if diff := cmp.Diff(bindings.BoardRemoval{ToNoBoard: 1, ToNoBoardNames: []string{"dev/web"}, RemovedNames: []string{}}, got); diff != "" {
 		t.Errorf("PreviewRemoveBoard() mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -210,6 +210,8 @@ func TestFromBoardPreviewCarriesTheStatusesAndTheRepositories(t *testing.T) {
 		Title: "Roadmap", HasStatus: true,
 		Statuses:      []bindings.BoardStatus{{ID: "todo", Name: "Todo"}, {ID: "done", Name: "Done", Final: true}},
 		NewCardStatus: "todo",
+		GoneStatuses:  []string{},
+		NewStatusIDs:  []string{},
 		Repositories: []bindings.BoardRepositoryOption{
 			{
 				Owner: "acme", Name: "api", FullName: "acme/api", Cards: 2, Checked: true, Link: "clone",

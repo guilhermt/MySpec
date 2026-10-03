@@ -1264,6 +1264,21 @@ func FromBoardPreview(p board.Preview) BoardPreview {
 		Statuses:      statuses,
 		NewCardStatus: p.NewCardStatus,
 		Repositories:  repositories,
+
+		GoneStatuses:      append([]string{}, p.GoneStatuses...),
+		NewStatusIDs:      append([]string{}, p.NewStatusIDs...),
+		NewCardStatusGone: p.NewCardStatusGone,
+	}
+}
+
+// FromRemoval converts what removing a board does to its repositories. The
+// slices are always allocated so the frontend never sees null.
+func FromRemoval(r board.Removal) BoardRemoval {
+	return BoardRemoval{
+		ToNoBoard:      len(r.ToNoBoard),
+		Removed:        len(r.Removed),
+		ToNoBoardNames: append([]string{}, r.ToNoBoard...),
+		RemovedNames:   append([]string{}, r.Removed...),
 	}
 }
 
@@ -1283,6 +1298,7 @@ func FromBoardRepositoryOption(o board.RepositoryOption) BoardRepositoryOption {
 		Path:         o.Path,
 		Clones:       clones,
 		OtherBoard:   o.OtherBoard,
+		Release:      string(o.Release),
 	}
 }
 

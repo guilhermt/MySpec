@@ -95,11 +95,11 @@ func (s *BoardService) UpdateBoard(id string, req SaveBoardRequest) error {
 
 // PreviewRemoveBoard is what removing a board does to its repositories.
 func (s *BoardService) PreviewRemoveBoard(id string) (BoardRemoval, error) {
-	toNoBoard, removed, err := s.boards.RemovalPreview(id)
+	removal, err := s.boards.RemovalPreview(id)
 	if err != nil {
 		return BoardRemoval{}, s.fail("PreviewRemoveBoard", err)
 	}
-	return BoardRemoval{ToNoBoard: toNoBoard, Removed: removed}, nil
+	return FromRemoval(removal), nil
 }
 
 // RemoveBoard removes a board and releases every repository of it.

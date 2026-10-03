@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { RemoveBoardDialog } from "@/features/boards/RemoveBoardDialog";
 import { api } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeBoard, makeState } from "@/test/wails-mock";
+import { makeBoard, makeBoardRemoval, makeState } from "@/test/wails-mock";
 
 function dialog() {
   const onOpenChange = vi.fn();
@@ -16,7 +16,9 @@ function dialog() {
 
 describe("RemoveBoardDialog", () => {
   it("says what removing does to the repositories of the board", async () => {
-    vi.mocked(api.previewRemoveBoard).mockResolvedValue({ toNoBoard: 3, removed: 1 });
+    vi.mocked(api.previewRemoveBoard).mockResolvedValue(
+      makeBoardRemoval({ toNoBoard: 3, removed: 1 }),
+    );
     dialog();
 
     expect(screen.getByText("Remove Roadmap?")).toBeInTheDocument();
