@@ -15,7 +15,7 @@ export function CopyBlock({ label, copyLabel, text }: CopyBlockProps) {
         <span className="text-(length:--text-micro) leading-(--leading-micro) font-medium tracking-wide text-ink-3 uppercase">
           {label}
         </span>
-        <CopyButton variant="icon" label={copyLabel} text={text} />
+        <CopyButton variant="icon" label={copyLabel} text={text} note="before" />
       </div>
       <pre className="m-0 px-(--space-3) pb-(--space-3) font-mono text-(length:--text-code) leading-(--leading-code) break-words whitespace-pre-wrap text-ink-1">
         {text}
