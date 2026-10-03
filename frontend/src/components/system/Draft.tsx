@@ -169,8 +169,11 @@ export function Draft({
   const reason = decision.approveReason ?? decision.discardReason;
   // The gesture line already says why Approve waits when it carries the same words.
   const reasonInLine = reason !== null && line !== null && line.text === reason;
-  // The reason takes the place of the state, but a draft in the race or a failed one keeps its state.
-  const reasonShown = reason !== null && !reasonInLine && state.glyph !== "spinner" && !failed;
+  // The reason takes the place of the state, but a draft in the race or a failed one keeps its state:
+  // the one publishing, and an approved one waiting for its turn while the race holds Edit.
+  const inRace =
+    state.glyph === "spinner" || (decision.value === "approved" && decision.editReason !== null);
+  const reasonShown = reason !== null && !reasonInLine && !inRace && !failed;
   const approveDescription =
     decision.approveReason !== null && !reasonInLine
       ? reasonId

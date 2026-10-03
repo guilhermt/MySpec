@@ -327,6 +327,20 @@ describe("DiscussionView, publishing the drafts", () => {
     );
   });
 
+  it("says the state of an approved draft that waits for its turn in the race, not the reason", async () => {
+    const { user } = await show(deciding(approved()));
+    next(racing(raced(epicCreated(), { d4: (draft) => ({ ...draft, publishing: false }) })));
+
+    await user.click(draft(4));
+
+    const running = "A publication is running · the decision waits for it";
+    expect(draft(4)).toHaveTextContent("Approved · publishing next");
+    expect(within(draft(4)).getByText(running)).toHaveClass("sr-only");
+    expect(within(draft(4)).getByRole("button", { name: /^Approve/ })).toHaveAccessibleDescription(
+      running,
+    );
+  });
+
   it("dashes the decision of the drafts outside a running publication, with the reason", async () => {
     const loose = makeDraft({
       id: "d6",
