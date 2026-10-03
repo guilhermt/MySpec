@@ -139,8 +139,33 @@ func TestACallRacesWithBind(t *testing.T) {
 
 func TestWailsListsEveryPlaceholderInOrder(t *testing.T) {
 	t.Parallel()
+	services := bindings.NewWaitingServices()
 
-	if got := len(bindings.NewWaitingServices().Wails()); got != 8 {
-		t.Errorf("len(Wails()) = %d, want 8", got)
+	got := services.Wails()
+
+	want := []any{
+		services.State, services.Repository, services.Settings, services.Task,
+		services.Board, services.Review, services.Discussion, services.Attention,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("len(Wails()) = %d, want %d", len(got), len(want))
+	}
+	for i, service := range got {
+		if service.Instance() != want[i] {
+			t.Errorf("Wails()[%d] = %T %p, want %T %p", i, service.Instance(), service.Instance(), want[i], want[i])
+		}
+	}
+}
+
+func TestBindHandsTheAttentionServiceToItsPlaceholder(t *testing.T) {
+	t.Parallel()
+	situations, notifier := notifiedSituation(t)
+	services := bindings.NewWaitingServices()
+
+	services.Bind(bindings.Services{Attention: bindings.NewAttentionService(situations)})
+	services.Attention.ViewSituation("s1")
+
+	if diff := cmp.Diff([]string{"send:s1", "withdraw:s1"}, notifier.calls); diff != "" {
+		t.Errorf("notifier calls after the view mismatch (-want +got):\n%s", diff)
 	}
 }
