@@ -38,6 +38,7 @@ export function useTaskComposer(
             askForChange: kind === "step_review" || kind === "step_empty",
           }),
       item: "task",
+      drafts: null,
     },
   };
 }

@@ -1,14 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  decidedCount,
   dependencyLabel,
-  discussionDotTone,
-  discussionRowLabel,
-  discussionStatusLabel,
-  discussionStatusTone,
-  draftsSummary,
   epicDiscardedDetail,
   epicGroups,
+  epicRepositoryOf,
   epicWayOut,
   holdLabel,
   holdStands,
@@ -18,17 +13,11 @@ import {
   readyToArchiveDetail,
   refKey,
   refValue,
-  repositoryOf,
   standingDetail,
+  standingEpic,
 } from "@/features/discussion/discussion-status";
-import type { Draft, Situation } from "@/lib/wails";
-import { makeDiscussion, makeDraft, makeDraftRef, makeSituation } from "@/test/wails-mock";
-
-const DISCUSSION_PLACE = { kind: "discussion", stage: "", step: 0 };
-
-function discussionSituation(kind: string, group = "waiting"): Situation {
-  return makeSituation({ taskId: "discussion-1", kind, group, place: DISCUSSION_PLACE });
-}
+import type { Draft } from "@/lib/wails";
+import { makeDraft, makeDraftRef } from "@/test/wails-mock";
 
 function held(reason: string, hold: Partial<Draft["hold"]> = {}): Draft {
   return makeDraft({
@@ -36,75 +25,6 @@ function held(reason: string, hold: Partial<Draft["hold"]> = {}): Draft {
     hold: { reason, title: "", left: 0, approved: 0, cards: 0, ...hold },
   });
 }
-
-describe("discussionStatusLabel", () => {
-  it("says where the discussion stands", () => {
-    expect(discussionStatusLabel(makeDiscussion())).toBe("Discussing");
-    expect(discussionStatusLabel(makeDiscussion({ status: "awaiting_drafts" }))).toBe(
-      "Waiting for the drafts",
-    );
-    expect(discussionStatusLabel(makeDiscussion({ status: "deciding" }))).toBe("Decide drafts");
-    expect(discussionStatusLabel(makeDiscussion({ status: "publishing" }))).toBe("Publishing");
-    expect(discussionStatusLabel(makeDiscussion({ status: "publish_failed" }))).toBe(
-      "Publish failed",
-    );
-  });
-
-  it.each([
-    ["epic_cant_publish", "Epic can't publish"],
-    ["epic_discarded", "Epic discarded"],
-    ["ready_to_archive", "Ready to archive"],
-  ])("names %s", (status, label) => {
-    expect(discussionStatusLabel(makeDiscussion({ status }))).toBe(label);
-  });
-});
-
-describe("discussionStatusTone", () => {
-  it("works while it publishes and rests when it is done", () => {
-    expect(discussionStatusTone(makeDiscussion({ status: "publishing" }))).toBe("working");
-    expect(discussionStatusTone(makeDiscussion({ status: "ready_to_archive" }))).toBe("done");
-    expect(discussionStatusTone(makeDiscussion({ status: "deciding" }))).toBe("idle");
-  });
-
-  it.each([
-    ["ready_to_archive", "done"],
-    ["epic_cant_publish", "idle"],
-    ["epic_discarded", "idle"],
-  ])("tones %s as %s", (status, tone) => {
-    expect(discussionStatusTone(makeDiscussion({ status }))).toBe(tone);
-  });
-});
-
-describe("discussionRowLabel", () => {
-  it("reads what waits for the user over what the discussion is doing", () => {
-    const situations = [
-      makeSituation({
-        taskId: "discussion-1",
-        kind: "drafts",
-        form: "decide",
-        place: { kind: "discussion", stage: "", step: 0 },
-      }),
-    ];
-
-    expect(discussionRowLabel(makeDiscussion({ status: "deciding", situations }))).toBe(
-      "Decide drafts",
-    );
-    expect(discussionRowLabel(makeDiscussion({ status: "discussing" }))).toBe("Discussing");
-  });
-});
-
-describe("decidedCount and draftsSummary", () => {
-  it("counts the drafts the user decided and the ones already published", () => {
-    const drafts = [
-      makeDraft({ id: "a", decision: "approved" }),
-      makeDraft({ id: "b", decision: "" }),
-      makeDraft({ id: "c", decision: "", published: true }),
-    ];
-
-    expect(decidedCount(drafts)).toBe(2);
-    expect(draftsSummary(drafts)).toBe("2 of 3 decided");
-  });
-});
 
 describe("kindLabel and outcomeLabel", () => {
   it("names what a draft does and what became of it", () => {
@@ -187,39 +107,6 @@ describe("dependencyLabel", () => {
   });
 });
 
-describe("repositoryOf", () => {
-  it("finds the repository a draft is created in", () => {
-    const discussion = makeDiscussion();
-
-    expect(repositoryOf(makeDraft(), discussion)?.fullName).toBe("dev/web");
-    expect(repositoryOf(makeDraft({ repositoryId: "" }), discussion)).toBeNull();
-    expect(repositoryOf(makeDraft({ repositoryId: "repo-9" }), discussion)).toBeNull();
-  });
-});
-
-describe("discussionDotTone", () => {
-  it("reads a closing situation as done", () => {
-    const situations = [discussionSituation("ready_to_archive", "closing")];
-
-    expect(discussionDotTone(makeDiscussion({ status: "ready_to_archive", situations }))).toBe(
-      "done",
-    );
-  });
-
-  it("takes the colour of what waits for the user", () => {
-    const situations = [discussionSituation("epic_cant_publish")];
-
-    expect(discussionDotTone(makeDiscussion({ status: "epic_cant_publish", situations }))).toBe(
-      "attention",
-    );
-  });
-
-  it("shows what the discussion is doing without a situation", () => {
-    expect(discussionDotTone(makeDiscussion({ status: "publishing" }))).toBe("working");
-    expect(discussionDotTone(makeDiscussion({ status: "deciding" }))).toBe("idle");
-  });
-});
-
 describe("holdLabel", () => {
   it.each<[string, Draft, string | null]>([
     ["a discarded epic", held("epic_discarded"), "The epic is discarded · this card won't publish"],
@@ -294,9 +181,26 @@ describe("readyToArchiveDetail", () => {
     );
     expect(readyToArchiveDetail(5)).toBe("5 published · or ask the agent for more cards below");
   });
+
+  it("says in how many rounds when there is more than one", () => {
+    expect(readyToArchiveDetail(7, 3)).toBe(
+      "7 published in 3 rounds · or ask the agent for more cards below",
+    );
+    expect(readyToArchiveDetail(0, 3)).toBe(
+      "nothing published · or ask the agent for more cards below",
+    );
+  });
 });
 
 describe("standingDetail", () => {
+  const heldCard = (id: string, epic: string) =>
+    makeDraft({
+      id,
+      decision: "approved",
+      epic: makeDraftRef({ draft: epic }),
+      hold: { reason: "epic_discarded", title: "", left: 0, approved: 0, cards: 0 },
+    });
+
   it("tells how far the epic that can't publish is", () => {
     const epic = makeDraft({
       id: "epic-1",
@@ -304,12 +208,8 @@ describe("standingDetail", () => {
       decision: "approved",
       hold: { reason: "epic_short", title: "", left: 0, approved: 1, cards: 3 },
     });
-    const discussion = makeDiscussion({
-      drafts: [makeDraft({ id: "card" }), epic],
-      situations: [discussionSituation("epic_cant_publish")],
-    });
 
-    expect(standingDetail(discussion)).toBe(
+    expect(standingDetail("epic_cant_publish", [makeDraft({ id: "card" }), epic])).toBe(
       "1 of 3 cards approved · approve one more, or discard the epic",
     );
   });
@@ -317,52 +217,60 @@ describe("standingDetail", () => {
   it("tells the approved cards of the discarded epic", () => {
     const drafts = [
       makeDraft({ id: "epic-1", kind: "epic", decision: "discarded" }),
-      makeDraft({
-        id: "card-1",
-        decision: "approved",
-        epic: makeDraftRef({ draft: "epic-1" }),
-        hold: { reason: "epic_discarded", title: "", left: 0, approved: 0, cards: 0 },
-      }),
-      makeDraft({
-        id: "card-2",
-        decision: "approved",
-        epic: makeDraftRef({ draft: "epic-1" }),
-        hold: { reason: "epic_discarded", title: "", left: 0, approved: 0, cards: 0 },
-      }),
+      heldCard("card-1", "epic-1"),
+      heldCard("card-2", "epic-1"),
     ];
-    const discussion = makeDiscussion({
-      drafts,
-      situations: [discussionSituation("epic_discarded")],
-    });
 
-    expect(standingDetail(discussion)).toBe(
+    expect(standingDetail("epic_discarded", drafts)).toBe(
       "2 approved cards of it won't publish · approve the epic again, or discard them",
     );
   });
 
-  it("tells what a discussion ready to archive published, without what it discarded", () => {
-    const discussion = makeDiscussion({
-      drafts: [
-        makeDraft({ published: true }),
-        makeDraft({ id: "two", published: true }),
-        makeDraft({ id: "three", decision: "discarded" }),
-      ],
-      situations: [discussionSituation("ready_to_archive", "closing")],
-    });
+  it("names the discarded epic that holds an approved card, as Show does", () => {
+    const quiet = makeDraft({ id: "epic-1", kind: "epic", decision: "discarded" });
+    const holding = makeDraft({ id: "epic-2", kind: "epic", decision: "discarded" });
+    const drafts = [quiet, holding, heldCard("card-1", "epic-2")];
 
-    expect(standingDetail(discussion)).toBe("2 published · or ask the agent for more cards below");
+    expect(standingEpic("epic_discarded", drafts)).toBe(holding);
+    expect(standingDetail("epic_discarded", drafts)).toBe(
+      "1 approved card of it won't publish · approve the epic again, or discard it",
+    );
   });
 
-  it("is null without a situation, for another one, and when the draft that explains it is gone", () => {
-    expect(standingDetail(makeDiscussion())).toBeNull();
+  it("is null when no draft given explains it", () => {
+    expect(standingDetail("epic_cant_publish", [])).toBeNull();
+    expect(standingDetail("epic_discarded", [])).toBeNull();
     expect(
-      standingDetail(makeDiscussion({ situations: [discussionSituation("drafts")] })),
+      standingDetail("epic_discarded", [
+        makeDraft({ id: "epic-1", kind: "epic", decision: "discarded" }),
+      ]),
     ).toBeNull();
+  });
+});
+
+describe("epicRepositoryOf", () => {
+  const draft = (repository: string, repositoryId: string): Draft =>
+    makeDraft({ repository, repositoryId });
+
+  it("is the repository most of the drafts are in", () => {
     expect(
-      standingDetail(makeDiscussion({ situations: [discussionSituation("epic_cant_publish")] })),
-    ).toBeNull();
-    expect(
-      standingDetail(makeDiscussion({ situations: [discussionSituation("epic_discarded")] })),
-    ).toBeNull();
+      epicRepositoryOf([
+        draft("acme/api", "r-api"),
+        draft("acme/web", "r-web"),
+        draft("acme/web", "r-web"),
+      ]),
+    ).toBe("r-web");
+  });
+
+  it("goes to the first by owner/name on a tie", () => {
+    expect(epicRepositoryOf([draft("acme/web", "r-web"), draft("acme/api", "r-api")])).toBe(
+      "r-api",
+    );
+  });
+
+  it("ignores drafts without a repository and is empty when none has one", () => {
+    expect(epicRepositoryOf([draft("", ""), draft("acme/web", "r-web")])).toBe("r-web");
+    expect(epicRepositoryOf([draft("", ""), draft("", "")])).toBe("");
+    expect(epicRepositoryOf([])).toBe("");
   });
 });

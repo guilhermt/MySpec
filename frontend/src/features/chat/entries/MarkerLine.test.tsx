@@ -406,4 +406,99 @@ describe("MarkerLine", () => {
       expect(api.openExternal).toHaveBeenCalledWith("https://github.com/dev/web/pull/31#r1");
     });
   });
+
+  describe("in a discussion", () => {
+    const discussion = { id: "discussion-1", documentRevision: 3, documents: true };
+    const inDiscussion = (marker: MarkerView) =>
+      renderWithStore(<MarkerLine view={marker} createdAt={AT} discussion={discussion} />);
+
+    it("reads the document of the discussion once opened, with its size and the way to Documents", async () => {
+      vi.mocked(api.readDiscussionArtifact).mockResolvedValueOnce(
+        "# Discussion\n\nThe understanding.",
+      );
+      const { user } = inDiscussion(
+        view({
+          text: "Written discussion.md",
+          body: { kind: "discussionDocument", name: "discussion.md", text: null },
+        }),
+      );
+
+      await user.click(screen.getByRole("button", { name: /^Written discussion\.md/ }));
+
+      expect(await screen.findByText("32 characters")).toBeVisible();
+      expect(api.readDiscussionArtifact).toHaveBeenCalledWith("discussion-1", "discussion.md");
+      await user.click(screen.getByRole("button", { name: "Open in Documents" }));
+      expect(useAppStore.getState().panel).toBe("documents");
+    });
+
+    it("shows the text it was given without reading anything", async () => {
+      const { user } = inDiscussion(
+        view({
+          text: "Context",
+          body: { kind: "discussionDocument", name: "context.md", text: "The context." },
+        }),
+      );
+
+      await user.click(screen.getByRole("button", { name: /^Context/ }));
+
+      expect(await screen.findByText("12 characters")).toBeVisible();
+      expect(api.readDiscussionArtifact).not.toHaveBeenCalled();
+    });
+
+    it("says when the document can't be read and tries again", async () => {
+      vi.mocked(api.readDiscussionArtifact).mockRejectedValueOnce(new Error("gone"));
+      const { user } = inDiscussion(
+        view({
+          text: "Updated discussion.md",
+          body: { kind: "discussionDocument", name: "discussion.md", text: null },
+        }),
+      );
+
+      await user.click(screen.getByRole("button", { name: /^Updated discussion\.md/ }));
+      await user.click(await screen.findByRole("button", { name: "Try again" }));
+
+      expect(api.readDiscussionArtifact).toHaveBeenCalledTimes(2);
+    });
+
+    it("lists the drafts with their state and links, and draws an error with its own time", async () => {
+      const { user } = inDiscussion(
+        view({
+          text: "Publication stopped",
+          tone: "error",
+          timeText: "14:29 – 15:12",
+          body: {
+            kind: "drafts",
+            rows: [
+              {
+                key: "epic",
+                glyph: "check",
+                prefix: "Epic · ",
+                title: "Billing",
+                status: "Created billing#479",
+                tone: "normal",
+                link: { label: "billing#479", url: "https://github.com/acme/billing/issues/479" },
+              },
+              {
+                key: "export",
+                glyph: "error",
+                prefix: "",
+                title: "Export",
+                status: "Rate limited",
+                tone: "error",
+                link: null,
+              },
+            ],
+          },
+        }),
+      );
+
+      const article = screen.getByRole("article");
+      expect(article).toHaveAccessibleName(expect.stringContaining("14:29 – 15:12"));
+      await user.click(screen.getByRole("button", { name: /^Publication stopped/ }));
+
+      expect(screen.getByText("Rate limited")).toHaveClass("text-state-error");
+      await user.click(screen.getByText("billing#479"));
+      expect(api.openExternal).toHaveBeenCalledWith("https://github.com/acme/billing/issues/479");
+    });
+  });
 });

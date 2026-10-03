@@ -21,6 +21,20 @@ export interface QuickReply {
   text: string;
 }
 
+/**
+ * DraftsComposer is what the composer of a discussion says about the drafts: the artifact can't be
+ * read, the round has drafts to change, or everything is on GitHub and the discussion can be archived.
+ */
+export type DraftsComposer = "unreadable" | "changes" | "archive" | null;
+
+/** ComposerStarter is a chip that starts the message: its text goes at the beginning of the box. */
+export interface ComposerStarter {
+  label: string;
+  /** tooltip says what happens: the start of the message the agent reads. */
+  tooltip: string;
+  text: string;
+}
+
 /** ComposerContext is what the composer needs to know to say whom it answers, and how. */
 export interface ComposerContext {
   /** who is whom the conversation talks to, inside a sentence: "implementer", "PRD agent" (speaker()). */
@@ -47,8 +61,10 @@ export interface ComposerContext {
   askForChange: boolean;
   /** reviseFindings is a pass with findings not sent or published yet: the review center, or the pull request of a task. */
   reviseFindings: boolean;
-  /** item is what a paused conversation resumes: task, review. */
+  /** item is what a paused conversation resumes: task, review, discussion. */
   item: string;
+  /** drafts is where the drafts of a discussion stand, null in any other conversation. */
+  drafts: DraftsComposer;
 }
 
 /** QUICK_REPLY_MAX is the most characters of an option a quick reply shows, "…" included. */
@@ -111,6 +127,10 @@ export function placeholderOf(c: ComposerContext): string {
     return `Sending resumes the ${c.item}…`;
   }
   if (c.stopped) {
+    // A discussion's session has no name to restart by: the material leaves who out.
+    if (c.item === "discussion") {
+      return "Sending restarts the session…";
+    }
     return `Sending restarts the ${c.who}'s session…`;
   }
   if (c.turnFailed) {
@@ -127,6 +147,15 @@ export function placeholderOf(c: ComposerContext): string {
   }
   if (c.chips.length > 0) {
     return `Answer ${alternatives(c.chips.map((chip) => chip.key))}, or reply to the ${c.who}…`;
+  }
+  if (c.drafts === "unreadable") {
+    return `Ask the ${c.who} to fix drafts.md…`;
+  }
+  if (c.drafts === "changes") {
+    return "Ask for changes: add, change or drop a draft…";
+  }
+  if (c.drafts === "archive") {
+    return `Ask for more cards, or reply to the ${c.who}…`;
   }
   if (c.reviseFindings) {
     return `Ask the ${c.who} to add, change or drop a finding…`;

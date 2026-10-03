@@ -1,91 +1,111 @@
 import { useEffect, useState } from "react";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { AuxPanel } from "@/components/system/AuxPanel";
+import { Button } from "@/components/system/Button";
+import { Icon } from "@/components/system/Icon";
+import { ICONS } from "@/components/system/icons";
+import { NoticeStrip } from "@/components/system/NoticeStrip";
+import { PanelRow } from "@/components/system/PanelRow";
+import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
 import { Markdown } from "@/features/chat/Markdown";
 import { useDiscussionArtifact } from "@/features/discussion/useDiscussionArtifact";
-import { Banner } from "@/features/notice/Notice";
 import type { DiscussionSummary } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
 
+/** LOADING_WIDTHS are the three bars of the skeleton while a document is read. */
 const LOADING_WIDTHS = ["w-1/2", "w-full", "w-3/4"];
 
-/** CONTEXT_FILE is the document the app writes for the agent when the discussion starts. */
-const CONTEXT_FILE = "context.md";
+/** DOCUMENTS are the documents of a discussion, in the order of the list. */
+const DOCUMENTS = [
+  { name: "context.md", label: "Context" },
+  { name: "discussion.md", label: "Document" },
+] as const;
 
-/** DOCUMENT_FILE is the document the agent writes about the demand. */
-const DOCUMENT_FILE = "discussion.md";
+type DocumentName = (typeof DOCUMENTS)[number]["name"];
 
-/** Tab is the document the panel is showing. */
-type Tab = "context" | "document";
+// documentNamed is the document a marker or a row of Details asked the panel to open at, if it names one.
+function documentNamed(file: string | null): DocumentName | null {
+  return DOCUMENTS.find((document) => document.name === file)?.name ?? null;
+}
 
 export interface DocumentsPanelProps {
   discussion: DiscussionSummary;
 }
 
-/** DocumentsPanel is what the discussion was given and what it has written, next to the conversation. */
+/**
+ * DocumentsPanel is what the discussion was given and what it has written, next to the conversation:
+ * the list of the two documents and the one chosen, read. It opens on the document asked for, or on
+ * the document of the agent once there is one and on the context before; open, it never changes the
+ * choice by itself.
+ */
 export function DocumentsPanel({ discussion }: DocumentsPanelProps) {
-  const [tab, setTab] = useState<Tab>(discussion.hasDocument ? "document" : "context");
-  const [dismissed, setDismissed] = useState("");
+  const openPanel = useAppStore((state) => state.openPanel);
+  const asked = useAppStore((state) => state.panelDocument);
+  const clearPanelDocument = useAppStore((state) => state.clearPanelDocument);
+  const [chosen, setChosen] = useState<DocumentName>(
+    () => documentNamed(asked) ?? (discussion.hasDocument ? "discussion.md" : "context.md"),
+  );
+  const [attempt, setAttempt] = useState(0);
 
-  // The document is the one worth reading as soon as the agent writes it; the
-  // user is free from there on.
+  // A document asked for opens, also with the panel already open.
   useEffect(() => {
-    if (discussion.hasDocument) {
-      setTab("document");
+    const name = documentNamed(asked);
+    if (name !== null) {
+      setChosen(name);
     }
-  }, [discussion.hasDocument]);
+    if (asked !== null) {
+      clearPanelDocument();
+    }
+  }, [asked, clearPanelDocument]);
 
-  const document = tab === "document" && discussion.hasDocument;
-  // The context is written once, when the discussion is created.
   const artifact = useDiscussionArtifact(
     discussion.id,
-    document ? DOCUMENT_FILE : CONTEXT_FILE,
-    document ? discussion.documentRevision : 0,
+    chosen,
+    chosen === "discussion.md" ? discussion.documentRevision : 0,
+    attempt,
   );
 
   return (
-    <section className="flex h-full min-w-0 flex-col bg-background">
-      <header className="flex h-9 shrink-0 items-center border-b px-3">
-        <ToggleGroup
-          aria-label="Documents"
-          size="sm"
-          value={[document ? "document" : "context"]}
-          onValueChange={(next: string[]) => {
-            const [value] = next;
-            if (value === "context" || value === "document") {
-              setTab(value);
-            }
-          }}
-        >
-          <ToggleGroupItem value="context">Context</ToggleGroupItem>
-          <ToggleGroupItem value="document" disabled={!discussion.hasDocument}>
-            Document
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </header>
-
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+    <AuxPanel id="documents" title="Documents" onClose={() => openPanel(null)}>
+      <div className="flex flex-col gap-(--space-3) px-(--space-4) pt-(--space-3) pb-(--space-6)">
+        <ul className="flex flex-col">
+          {DOCUMENTS.map((document) => (
+            <li key={document.name}>
+              <PanelRow
+                glyph={<Icon icon={ICONS.file} size="sm" />}
+                {...(document.name === "discussion.md" && !discussion.hasDocument
+                  ? {}
+                  : { pressed: document.name === chosen, onClick: () => setChosen(document.name) })}
+              >
+                {document.label}
+              </PanelRow>
+            </li>
+          ))}
+        </ul>
         {artifact.status === "loading" && (
-          <div className="flex flex-col gap-3">
+          <Skeleton label="Reading the document">
             {LOADING_WIDTHS.map((width) => (
-              <Skeleton key={width} className={`h-4 ${width}`} />
+              <SkeletonBar key={width} className={width} />
             ))}
-          </div>
+          </Skeleton>
         )}
-        {artifact.status === "error" && artifact.error !== dismissed && (
-          <Banner
-            className="bg-destructive/10"
+        {artifact.status === "error" && (
+          <NoticeStrip
             title="Couldn't read the document"
-            onDismiss={() => setDismissed(artifact.error)}
-          >
-            {artifact.error}
-          </Banner>
+            reason={artifact.error}
+            className="bg-state-error-veil"
+            action={
+              <Button size="xs" onClick={() => setAttempt((count) => count + 1)}>
+                Try again
+              </Button>
+            }
+          />
         )}
         {artifact.status === "ready" && (
-          <div className="max-w-[58.5rem] select-text">
+          <div className="select-text">
             <Markdown>{artifact.content}</Markdown>
           </div>
         )}
       </div>
-    </section>
+    </AuxPanel>
   );
 }

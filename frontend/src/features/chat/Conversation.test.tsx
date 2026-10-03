@@ -1,14 +1,15 @@
-import { act, screen } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Conversation } from "@/features/chat/Conversation";
 import { IDLE_SESSION } from "@/features/chat/session";
-import type { Entry, TaskSummary } from "@/lib/wails";
+import { api, type Draft, type Entry, type MarkerEntry, type TaskSummary } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
 import { useAppStore } from "@/store/app-store";
 import type { TranscriptState } from "@/store/transcript";
 import { renderWithStore } from "@/test/render";
 import {
   makeAction,
+  makeDraft,
   makeEntry,
   makeSituation,
   makeState,
@@ -807,6 +808,279 @@ describe("Conversation after", () => {
     );
     expect(places.every((place) => place >= 0)).toBe(true);
     expect([...places].sort((a, b) => a - b)).toEqual(places);
+  });
+
+  it("draws a node right before the entry it is keyed by", () => {
+    const first = marker("paused");
+    const second = makeEntry("user");
+    renderWithStore(
+      <Conversation
+        stage="prd"
+        taskId="task-1"
+        session={makeTask()}
+        before={new Map([[second.id, <p key="derived">The line before</p>]])}
+      />,
+      { state: withTask(), ui: { transcripts: ready([first, second]) } },
+    );
+
+    const text = screen.getByRole("feed").textContent ?? "";
+    expect(text.indexOf("Paused by you")).toBeLessThan(text.indexOf("The line before"));
+    expect(text.indexOf("The line before")).toBeLessThan(text.indexOf("Add a login screen"));
+  });
+
+  it("draws the node of an id it does not have before the nodes of after that are not there either", () => {
+    renderWithStore(
+      <Conversation
+        stage="prd"
+        taskId="task-1"
+        session={makeTask()}
+        after={new Map([["nowhere", <p key="after">The line after</p>]])}
+        before={new Map([["nowhere", <p key="before">The line before</p>]])}
+        endLine={<p>The end line</p>}
+        fixed={<p>The fixed card</p>}
+      />,
+      { state: withTask(), ui: { transcripts: ready([makeEntry("user")]) } },
+    );
+
+    const text = screen.getByRole("feed").textContent ?? "";
+    const places = ["The end line", "The line before", "The line after", "The fixed card"].map(
+      (part) => text.indexOf(part),
+    );
+    expect(places.every((place) => place >= 0)).toBe(true);
+    expect([...places].sort((a, b) => a - b)).toEqual(places);
+  });
+
+  it("never folds a stretch that holds a line drawn before an entry", () => {
+    const speeches = Array.from({ length: 12 }, (_, index) => {
+      const entry = makeEntry("assistant");
+      return entry.assistant === null
+        ? entry
+        : {
+            ...entry,
+            assistant: { ...entry.assistant, text: `Speech ${index}.`, messageId: `m${index}` },
+          };
+    });
+    const [first] = speeches;
+    renderWithStore(
+      <Conversation
+        stage="prd"
+        taskId="task-1"
+        session={makeTask()}
+        before={new Map([[first?.id ?? "", <p key="before">The line before</p>]])}
+      />,
+      { state: withTask(), ui: { transcripts: ready(speeches) } },
+    );
+
+    expect(screen.getByText("The line before")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /earlier/i })).not.toBeInTheDocument();
+  });
+
+  describe("the opening of a discussion", () => {
+    const prompt = makeEntry("user", {
+      user: {
+        text: "The context.",
+        pending: false,
+        prompt: true,
+        app: false,
+        sent: "",
+        appKind: "",
+        appPass: 0,
+        appRound: 0,
+        appRounds: 0,
+        appCount: 0,
+      },
+    });
+    const transcripts = {
+      "discussion-1|discussion": readyState([prompt]),
+    };
+    const input = (text: string) => ({
+      id: "discussion-1",
+      drafts: [],
+      text,
+      cards: [],
+      documentRevision: 0,
+      documents: true,
+    });
+
+    it("follows the start with the line Context and what the user wrote", () => {
+      renderWithStore(
+        <Conversation
+          stage="discussion"
+          taskId="discussion-1"
+          session={makeTask()}
+          discussion={input("Cap the overage.")}
+        />,
+        { ui: { transcripts } },
+      );
+
+      const feed = screen.getByRole("feed");
+      const context = within(feed).getByRole("button", { name: /^Context/ });
+      const message = within(feed).getByRole("article", { name: /^You/ });
+      expect(message).toHaveTextContent("Cap the overage.");
+      expect(
+        context.compareDocumentPosition(message) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("draws no message when the user wrote nothing", () => {
+      renderWithStore(
+        <Conversation
+          stage="discussion"
+          taskId="discussion-1"
+          session={makeTask()}
+          discussion={input("")}
+        />,
+        { ui: { transcripts } },
+      );
+
+      expect(
+        within(screen.getByRole("feed")).getByRole("button", { name: /^Context/ }),
+      ).toBeVisible();
+      expect(screen.queryByRole("article", { name: /^You/ })).not.toBeInTheDocument();
+    });
+
+    it("draws nothing of it outside a discussion", () => {
+      renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
+        state: withTask(),
+        ui: { transcripts: ready([prompt]) },
+      });
+
+      expect(screen.queryByRole("button", { name: /^Context/ })).not.toBeInTheDocument();
+    });
+  });
+
+  describe("the markers of a discussion", () => {
+    const withMarker = (fields: Partial<MarkerEntry>): Entry => {
+      const entry = makeEntry("marker");
+      if (entry.marker === null) {
+        throw new Error("a marker entry has a marker");
+      }
+      return { ...entry, marker: { ...entry.marker, ...fields } };
+    };
+    const prompt = (): Entry => {
+      const entry = makeEntry("user");
+      return entry.user === null
+        ? entry
+        : { ...entry, user: { ...entry.user, text: "The context.", prompt: true } };
+    };
+    const open = (index: number, round: number): Draft =>
+      makeDraft({ id: `d${index}`, position: index, title: `Draft ${index}`, round });
+    const created = (index: number, overrides: Partial<Draft> = {}): Draft =>
+      makeDraft({
+        id: `d${index}`,
+        position: index,
+        title: `Draft ${index}`,
+        repository: "dev/web",
+        number: 40 + index,
+        url: `https://github.com/dev/web/issues/${40 + index}`,
+        published: true,
+        outcome: "created",
+        decision: "approved",
+        round: 1,
+        ...overrides,
+      });
+    const show = (entries: Entry[], drafts: Draft[]) =>
+      renderWithStore(
+        <Conversation
+          stage="discussion"
+          taskId="discussion-1"
+          session={makeTask()}
+          discussion={{
+            id: "discussion-1",
+            drafts,
+            text: "Cap the overage.",
+            cards: [],
+            documentRevision: 0,
+            documents: true,
+          }}
+        />,
+        { ui: { transcripts: { "discussion-1|discussion": readyState(entries) } } },
+      );
+
+    it("opens the document the marker names and lists what a revision changed", async () => {
+      const { user } = show(
+        [
+          withMarker({
+            type: "discussion_started",
+            model: "claude-opus-4-8",
+            effort: "high",
+            board: "Roadmap",
+          }),
+          prompt(),
+          withMarker({ type: "discussion_document", first: true }),
+          withMarker({ type: "drafts_written", round: 1, count: 2 }),
+          withMarker({
+            type: "drafts_revised",
+            round: 1,
+            changed: 1,
+            before: [
+              {
+                title: "Old title",
+                kind: "new",
+                decision: "",
+                outcome: "",
+                reference: "",
+                changes: ["title"],
+                dropped: false,
+                added: false,
+                approvalCleared: false,
+              },
+            ],
+          }),
+        ],
+        [open(1, 1)],
+      );
+
+      const feed = screen.getByRole("feed");
+      expect(within(feed).getByRole("article", { name: /^Discussion started/ })).toBeVisible();
+      expect(within(feed).getByRole("article", { name: /^You/ })).toHaveTextContent(
+        "Cap the overage.",
+      );
+
+      await user.click(within(feed).getByRole("button", { name: /^Written discussion\.md/ }));
+      expect(api.readDiscussionArtifact).toHaveBeenCalledWith("discussion-1", "discussion.md");
+      expect(await within(feed).findByRole("button", { name: "Open in Documents" })).toBeVisible();
+
+      await user.click(within(feed).getByRole("button", { name: /^Drafts revised/ }));
+      expect(await within(feed).findByText("Old title")).toBeVisible();
+    });
+
+    it("folds a published round into one line with its links", async () => {
+      const drafts = [
+        created(1),
+        created(2),
+        created(3),
+        created(4),
+        created(5, { kind: "update", outcome: "updated" }),
+        open(6, 2),
+      ];
+      const { user } = show(
+        [
+          withMarker({ type: "discussion_started" }),
+          withMarker({ type: "drafts_written", round: 1, count: 5 }),
+          withMarker({ type: "drafts_revised", round: 1, changed: 1 }),
+          withMarker({ type: "drafts_published", round: 1 }),
+          withMarker({ type: "drafts_written", round: 2, count: 1 }),
+        ],
+        drafts,
+      );
+
+      const feed = screen.getByRole("feed");
+      const round = within(feed).getByRole("button", { name: /^Round 1/ });
+      expect(round).toHaveAccessibleName(
+        expect.stringContaining("Round 1 · 5 drafts, revised once · 4 created, 1 updated"),
+      );
+      expect(
+        within(feed).queryByRole("button", { name: /^Drafts revised/ }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(feed).queryByRole("article", { name: /^Drafts written · round 1/ }),
+      ).not.toBeInTheDocument();
+
+      await user.click(round);
+      await user.click(within(feed).getByText("web#41"));
+      expect(api.openExternal).toHaveBeenCalledWith("https://github.com/dev/web/issues/41");
+    });
   });
 
   it("never folds a stretch that holds a derived line", () => {

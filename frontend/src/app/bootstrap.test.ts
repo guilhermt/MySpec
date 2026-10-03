@@ -9,6 +9,7 @@ import {
   emitSituationStarted,
   emitState,
   emitTranscript,
+  makeDiscussion,
   makeEntry,
   makePullRequest,
   makeReviewSummary,
@@ -184,6 +185,24 @@ describe("bootstrap", () => {
     expect(useAppStore.getState().announcement?.text).toBe(
       announcement("Fix the login", situation),
     );
+  });
+
+  it("announces a situation of a discussion by its title, in its round", async () => {
+    vi.mocked(api.getState).mockResolvedValueOnce(
+      makeState({
+        discussions: [makeDiscussion({ id: "discussion-1", title: "Invoices", round: 2 })],
+      }),
+    );
+    await bootstrap(useAppStore);
+    const situation = makeSituation({
+      kind: "drafts",
+      taskId: "discussion-1",
+      place: { kind: "discussion", stage: "", step: 0 },
+    });
+
+    emitSituationStarted({ situation, focused: true });
+
+    expect(useAppStore.getState().announcement?.text).toBe("Invoices: decide drafts in round 2");
   });
 
   it("announces nothing when the window was away", async () => {

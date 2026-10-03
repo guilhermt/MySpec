@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/guilhermt/myspec/internal/frontmatter"
@@ -37,15 +38,30 @@ var repositoryName = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 // agent never writes an id that collides with one.
 const userIDPrefix = "user-"
 
-// titleMaxLen is the longest title a draft takes.
-const titleMaxLen = 256
-
 // dependencySeparator separates the references of a Depends on line.
 const dependencySeparator = ","
 
 // ErrUnreadable is a drafts artifact the app cannot act on: the agent wrote it
 // in a shape the product does not define.
 var ErrUnreadable = errors.New("discussion: the drafts can't be read")
+
+// Reason is why the drafts can't be read, as the user reads it: the rule the
+// file breaks, without the path of the file or the prefix of the package, with
+// a capital and a full stop. An error that is not about the format reads as
+// the app's generic sentence.
+func Reason(err error) string {
+	const generic = "The drafts can't be read."
+	if !errors.Is(err, ErrUnreadable) {
+		return generic
+	}
+	_, rule, found := strings.Cut(err.Error(), ErrUnreadable.Error()+": ")
+	rule = strings.TrimSpace(rule)
+	if !found || rule == "" {
+		return generic
+	}
+	first, size := utf8.DecodeRuneInString(rule)
+	return string(unicode.ToUpper(first)) + rule[size:] + "."
+}
 
 // ParsedDraft is one draft as the artifact has it, before the user edits or
 // decides anything about it.
@@ -240,8 +256,8 @@ func parseTexts(id string, lines []string) (title, body string, err error) {
 	if title == "" {
 		return "", "", fmt.Errorf("%w: draft %s: it has no title", ErrUnreadable, id)
 	}
-	if utf8.RuneCountInString(title) > titleMaxLen {
-		return "", "", fmt.Errorf("%w: draft %s: the title is longer than %d characters", ErrUnreadable, id, titleMaxLen)
+	if utf8.RuneCountInString(title) > EpicTitleMaxLen {
+		return "", "", fmt.Errorf("%w: draft %s: the title is longer than %d characters", ErrUnreadable, id, EpicTitleMaxLen)
 	}
 
 	body = strings.TrimSpace(strings.Join(lines[at+1:], "\n"))

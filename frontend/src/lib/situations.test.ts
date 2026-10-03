@@ -11,6 +11,7 @@ import {
   DURATION_SLOW_MS,
   discussionSituation,
   FLASH_MS,
+  listed,
   nextWaiting,
   prSituation,
   reviewerSituation,
@@ -18,6 +19,7 @@ import {
   reviewSituation,
   situationFragment,
   situationLabel,
+  situationPillState,
   situationTone,
   spokenWait,
   stageSituation,
@@ -327,8 +329,17 @@ describe("announcement", () => {
     expect(announcement("Login", situation)).toBe(expected);
   });
 
-  it("names no place for a review or a discussion", () => {
+  it("names no place for a review or a discussion before its first round", () => {
     expect(announcePlace(makeSituation({ place: REVIEW_PLACE }))).toBeNull();
+    expect(announcePlace(makeSituation({ place: DISCUSSION_PLACE }))).toBeNull();
+  });
+
+  it("names the round of a discussion", () => {
+    const situation = makeSituation({ kind: "drafts", place: DISCUSSION_PLACE });
+
+    expect(announcePlace(situation, 2)).toBe("round 2");
+    expect(announcement("Invoices", situation, 2)).toBe("Invoices: decide drafts in round 2");
+    expect(situationFragment(situation, 1)).toBe("decide drafts in round 1");
   });
 });
 
@@ -352,6 +363,27 @@ describe("situationFragment", () => {
     ],
   ])("tells %o as %s", (situation, expected) => {
     expect(situationFragment(situation)).toBe(expected);
+  });
+});
+
+describe("situationPillState", () => {
+  const question = makeSituation({ kind: "question", place: reviewerPlace(2) });
+  const failure = makeSituation({ kind: "session_error", group: "error", place: REVIEW_PLACE });
+  const archive = makeSituation({
+    kind: "ready_to_archive",
+    group: "closing",
+    place: { kind: "discussion", stage: "discussion", step: 0 },
+  });
+
+  it.each([
+    [question, 1, "waiting for you: question in Reviewer"],
+    [question, 3, "waiting for you: question in Reviewer, and 2 more"],
+    [failure, 1, "error: session error"],
+    [failure, 2, "error: session error, and 1 more"],
+    [archive, 1, "ready to archive"],
+    [archive, 2, "ready to archive, and 1 more"],
+  ])("tells %o of %i as %s", (situation, count, expected) => {
+    expect(situationPillState(situation, count)).toBe(expected);
   });
 });
 
@@ -439,6 +471,17 @@ describe("compactWait and spokenWait", () => {
   ])("tells a wait of %s", (_wait, startedAt, compact, spoken) => {
     expect(compactWait(startedAt, now)).toBe(compact);
     expect(spokenWait(startedAt, now)).toBe(spoken);
+  });
+});
+
+describe("listed", () => {
+  it.each<[string[], string]>([
+    [[], ""],
+    [["#455"], "#455"],
+    [["#455", "#461"], "#455 and #461"],
+    [["a", "b", "c"], "a, b and c"],
+  ])("joins %j as %j", (items, want) => {
+    expect(listed(items)).toBe(want);
   });
 });
 

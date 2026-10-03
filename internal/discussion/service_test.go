@@ -166,6 +166,16 @@ func TestAnEditIsRefusedWhenItDoesNotFitTheDraft(t *testing.T) {
 			discussion.ErrEmptyText,
 		},
 		{
+			"a blank body on a card",
+			func() error { return f.service.SetDraftText(ctx, d.ID, "one", "Title", " ") },
+			discussion.ErrEmptyText,
+		},
+		{
+			"a blank body on an epic of the agent",
+			func() error { return f.service.SetDraftText(ctx, d.ID, "epic", "Title", " ") },
+			discussion.ErrEmptyText,
+		},
+		{
 			"the repository of an update",
 			func() error { return f.service.SetDraftRepository(ctx, d.ID, "two", "acme", "web") },
 			discussion.ErrInvalidRef,
@@ -264,7 +274,7 @@ func TestGroupingCardsIntoAnEpicPointsEveryOneOfThemAtIt(t *testing.T) {
 		draftOf("five", "Kind: new", "Repository: acme/web"),
 	))
 
-	epic, err := f.service.GroupIntoEpic(t.Context(), d.ID, []string{"one", "two", "three"})
+	epic, err := f.service.GroupIntoEpic(t.Context(), d.ID, []string{"one", "two", "three"}, "  Billing  ", "acme", "ios")
 	if err != nil {
 		t.Fatalf("group into epic: %v", err)
 	}
@@ -272,11 +282,14 @@ func TestGroupingCardsIntoAnEpicPointsEveryOneOfThemAtIt(t *testing.T) {
 	if epic.ID != "user-epic-1" || epic.Source != discussion.SourceUser || epic.Kind != discussion.KindEpic {
 		t.Errorf("epic = %+v, want an epic of the user", epic)
 	}
-	if epic.FullName() != "acme/web" {
-		t.Errorf("repository = %s, want the one most cards are in", epic.FullName())
+	if epic.FullName() != "acme/ios" {
+		t.Errorf("repository = %s, want the one the user chose", epic.FullName())
 	}
-	if epic.Title != "" || epic.Body != "" {
-		t.Errorf("epic = %+v, want it written by the user", epic)
+	if epic.Title != "Billing" || epic.Body != "" || epic.Round != 1 {
+		t.Errorf("epic = %+v, want the title of the user, no body and the current round", epic)
+	}
+	if got := f.draft(d.ID, epic.ID); got.Title != "Billing" || got.TitleOriginal != "" {
+		t.Errorf("stored epic = %+v, want the title as the user left it", got)
 	}
 	for _, id := range []string{"one", "two", "three"} {
 		if got := f.draft(d.ID, id); got.Epic != epic.ID {
@@ -284,7 +297,7 @@ func TestGroupingCardsIntoAnEpicPointsEveryOneOfThemAtIt(t *testing.T) {
 		}
 	}
 
-	second, err := f.service.GroupIntoEpic(t.Context(), d.ID, []string{"four", "five"})
+	second, err := f.service.GroupIntoEpic(t.Context(), d.ID, []string{"four", "five"}, "Second", "acme", "web")
 	if err != nil {
 		t.Fatalf("group into epic: %v", err)
 	}
@@ -305,10 +318,10 @@ func TestGroupingIsRefusedWithoutTwoCardsThatCanStillMove(t *testing.T) {
 	))
 
 	ctx := t.Context()
-	if _, err := f.service.GroupIntoEpic(ctx, d.ID, []string{"one", "one"}); !errors.Is(err, discussion.ErrTooFewCards) {
+	if _, err := f.service.GroupIntoEpic(ctx, d.ID, []string{"one", "one"}, "Epic", "acme", "web"); !errors.Is(err, discussion.ErrTooFewCards) {
 		t.Errorf("error = %v, want ErrTooFewCards", err)
 	}
-	if _, err := f.service.GroupIntoEpic(ctx, d.ID, []string{"one", "epic"}); !errors.Is(err, discussion.ErrDraftNotFound) {
+	if _, err := f.service.GroupIntoEpic(ctx, d.ID, []string{"one", "epic"}, "Epic", "acme", "web"); !errors.Is(err, discussion.ErrDraftNotFound) {
 		t.Errorf("error = %v, want ErrDraftNotFound", err)
 	}
 
@@ -317,8 +330,77 @@ func TestGroupingIsRefusedWithoutTwoCardsThatCanStillMove(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("record publication: %v", err)
 	}
-	if _, err := f.service.GroupIntoEpic(ctx, d.ID, []string{"one", "two"}); !errors.Is(err, discussion.ErrPublished) {
-		t.Errorf("error = %v, want ErrPublished", err)
+	if _, err := f.service.GroupIntoEpic(ctx, d.ID, []string{"one", "two"}, "Epic", "acme", "web"); !errors.Is(err, discussion.ErrNotGroupable) {
+		t.Errorf("error = %v, want ErrNotGroupable", err)
+	}
+}
+
+func TestGroupingNeedsATitleOfAtMostTheLimit(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.record(d.ID, twoDrafts)
+	ctx := t.Context()
+
+	cards := []string{"one", "two"}
+	if _, err := f.service.GroupIntoEpic(ctx, d.ID, cards, "  ", "acme", "web"); !errors.Is(err, discussion.ErrEpicUntitled) {
+		t.Errorf("blank title = %v, want ErrEpicUntitled", err)
+	}
+	if _, err := f.service.GroupIntoEpic(ctx, d.ID, cards, strings.Repeat("é", discussion.EpicTitleMaxLen+1), "acme", "web"); !errors.Is(err, discussion.ErrEpicTitleTooLong) {
+		t.Errorf("long title = %v, want ErrEpicTitleTooLong", err)
+	}
+	if _, err := f.service.GroupIntoEpic(ctx, d.ID, cards, strings.Repeat("é", discussion.EpicTitleMaxLen), "acme", "web"); err != nil {
+		t.Errorf("title at the limit = %v, want nil", err)
+	}
+}
+
+func TestGroupingRefusesACardThatCanNotGoIntoAnEpic(t *testing.T) {
+	t.Parallel()
+
+	for _, c := range []struct {
+		name  string
+		setUp func(f *fixture, id string)
+	}{
+		{"of another round", func(f *fixture, id string) {
+			// The round 1 closes with everything discarded, and taking back the
+			// decision on one leaves it a loose card of the round 1, undecided.
+			f.record(id, plain("one", "two"))
+			f.decide(id, "one", discussion.DecisionDiscarded)
+			f.decide(id, "two", discussion.DecisionDiscarded)
+			f.record(id, plain("one", "two", "three", "four"))
+			f.decide(id, "one", discussion.DecisionNone)
+		}},
+		{"of another epic draft", func(f *fixture, id string) {
+			f.record(id, artifactOf(
+				draftOf("epic", "Kind: epic", "Repository: acme/web"),
+				draftOf("one", "Kind: new", "Repository: acme/web", "Epic: epic"),
+				draftOf("two", "Kind: new", "Repository: acme/web"),
+				draftOf("three", "Kind: new", "Repository: acme/web"),
+				draftOf("four", "Kind: new", "Repository: acme/web"),
+			))
+		}},
+		{"discarded", func(f *fixture, id string) {
+			f.record(id, fourCards)
+			f.decide(id, "one", discussion.DecisionDiscarded)
+		}},
+		{"started", func(f *fixture, id string) {
+			f.record(id, fourCards)
+			f.start(id, "one")
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			d := f.create()
+			c.setUp(f, d.ID)
+
+			_, err := f.service.GroupIntoEpic(t.Context(), d.ID, []string{"one", "three"}, "Epic", "acme", "web")
+			if !errors.Is(err, discussion.ErrNotGroupable) {
+				t.Errorf("error = %v, want ErrNotGroupable", err)
+			}
+		})
 	}
 }
 
@@ -839,9 +921,13 @@ func TestApprovingADraftWithoutATitleIsRefused(t *testing.T) {
 	d := f.create()
 	f.record(d.ID, chainArtifact)
 	ctx := t.Context()
-	epic, err := f.service.GroupIntoEpic(ctx, d.ID, []string{"two", "three"})
+	epic, err := f.service.GroupIntoEpic(ctx, d.ID, []string{"two", "three"}, "Epic", "acme", "web")
 	if err != nil {
 		t.Fatalf("group into epic: %v", err)
+	}
+	// A draft stored without a title: grouping always names the epic.
+	if err = f.service.RecordPublication(ctx, d.ID, epic.ID, func(draft *discussion.Draft) { draft.Title = "" }); err != nil {
+		t.Fatalf("clear title: %v", err)
 	}
 
 	if err = f.service.Decide(ctx, d.ID, epic.ID, discussion.DecisionApproved); !errors.Is(err, discussion.ErrUntitled) {
@@ -888,19 +974,95 @@ func TestGroupingRefusesACardOfAnEpicDraftAndTakesBackTheApprovalOfTheCards(t *t
 	f.approve(d.ID, "one", "two", "three")
 	ctx := t.Context()
 
-	if _, err := f.service.GroupIntoEpic(ctx, d.ID, []string{"one", "two"}); !errors.Is(err, discussion.ErrInvalidRef) {
-		t.Errorf("group a card of an epic = %v, want ErrInvalidRef", err)
+	if _, err := f.service.GroupIntoEpic(ctx, d.ID, []string{"one", "two"}, "Epic", "acme", "web"); !errors.Is(err, discussion.ErrNotGroupable) {
+		t.Errorf("group a card of an epic = %v, want ErrNotGroupable", err)
 	}
 	if got := f.draft(d.ID, "two").Decision; got != discussion.DecisionApproved {
 		t.Errorf("decision after a refusal = %q, want it kept", got)
 	}
 
-	if _, err := f.service.GroupIntoEpic(ctx, d.ID, []string{"two", "three"}); err != nil {
+	if _, err := f.service.GroupIntoEpic(ctx, d.ID, []string{"two", "three"}, "Epic", "acme", "web"); err != nil {
 		t.Fatalf("group into epic: %v", err)
 	}
 	for _, id := range []string{"two", "three"} {
 		if got := f.draft(d.ID, id).Decision; got != discussion.DecisionNone {
 			t.Errorf("decision of %s = %q, want it taken back", id, got)
 		}
+	}
+}
+
+func TestAnEpicOfTheUserTakesAnEmptyBody(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.record(d.ID, twoDrafts)
+	epic, err := f.service.GroupIntoEpic(t.Context(), d.ID, []string{"one", "two"}, "Billing", "acme", "web")
+	if err != nil {
+		t.Fatalf("group into epic: %v", err)
+	}
+
+	if err = f.service.SetDraftText(t.Context(), d.ID, epic.ID, "Billing", "  "); err != nil {
+		t.Fatalf("set text with an empty body = %v, want nil", err)
+	}
+	if got := f.draft(d.ID, epic.ID); got.Title != "Billing" || got.Body != "" {
+		t.Errorf("epic = %+v, want the title and no body", got)
+	}
+	if err = f.service.SetDraftText(t.Context(), d.ID, epic.ID, " ", "Body."); !errors.Is(err, discussion.ErrEmptyText) {
+		t.Errorf("set text with an empty title = %v, want ErrEmptyText", err)
+	}
+}
+
+func TestDecidingClearsTheClearedApproval(t *testing.T) {
+	t.Parallel()
+
+	for _, decision := range []discussion.Decision{discussion.DecisionApproved, discussion.DecisionNone} {
+		t.Run("decision "+string(decision), func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			d := f.create()
+			f.record(d.ID, plain("one", "two"))
+			f.approve(d.ID, "one")
+			f.record(d.ID, withBody(plain("one", "two"), "one", "Another body."))
+			if !f.draft(d.ID, "one").ApprovalCleared {
+				t.Fatal("approval cleared = false after a revision of an approved draft, want true")
+			}
+
+			f.decide(d.ID, "one", decision)
+
+			if f.draft(d.ID, "one").ApprovalCleared {
+				t.Errorf("approval cleared = true after deciding %q, want it cleared", decision)
+			}
+		})
+	}
+}
+
+func TestGroupingInTheRound2TakesTheHighestRoundWhateverTheOrderOfTheDrafts(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.record(d.ID, fourCards)
+	f.publish(d.ID, "one", "three", "four")
+	f.decide(d.ID, "two", discussion.DecisionDiscarded)
+	// two, discarded in the closed round 1, leaves the artifact and stays after the drafts of round 2.
+	f.record(d.ID, artifactOf(
+		draftOf("one", "Kind: new", "Repository: acme/web"),
+		draftOf("three", "Kind: new", "Repository: acme/web"),
+		draftOf("four", "Kind: new", "Repository: acme/web"),
+		draftOf("five", "Kind: new", "Repository: acme/web"),
+		draftOf("six", "Kind: new", "Repository: acme/web"),
+	))
+	if ids := f.draftIDs(d.ID); ids[len(ids)-1] != "two" {
+		t.Fatalf("drafts = %v, want two at the end", ids)
+	}
+
+	epic, err := f.service.GroupIntoEpic(t.Context(), d.ID, []string{"five", "six"}, "Later", "acme", "web")
+	if err != nil {
+		t.Fatalf("group into epic: %v", err)
+	}
+	if got := f.draft(d.ID, epic.ID); got.Round != 2 {
+		t.Errorf("round of the epic = %d, want 2", got.Round)
 	}
 }

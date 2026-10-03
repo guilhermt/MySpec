@@ -6,7 +6,7 @@ Uma sessão é uma conversa entre o usuário e o Claude Code conduzida pelo prod
 
 Um item, uma task, um review de pull request ou uma discussão, roda um processo `claude` por sessão ativa. Nas etapas de planejamento, uma task tem uma sessão ativa por vez: a da etapa em que está, nos dois modos. Na implementação, o step que roda tem a sua e, no modo `Agent`, a do seu revisor, e as duas podem estar vivas ao mesmo tempo. Na etapa de PR, a task tem a sessão da pull request e a do review dela. Um review de pull request do centro de review tem uma sessão só, na stage `review`, com todas as passadas, e uma discussão tem uma sessão só, na stage `discussion`. Cada sessão é identificada pela chave `{item, stage}`, com a stage sendo `prd`, `tech_spec`, `plan`, `one_shot`, `step:<n>`, `step_review:<n>`, `pr` ou `pr_review` numa task, `review` num review e `discussion` numa discussão; no código, o id do item é o campo `TaskID` da chave.
 
-Cada sessão guarda a sua conversa. Voltar a uma etapa retoma a sessão dela de onde ficou; avançar abre uma nova. As sessões de planejamento abrem no clone do repositório da task. A sessão de um step abre dentro da worktree da task, com o arquivo do step como primeira mensagem, ou com o documento One-Shot no step único de uma task One-Shot; a do revisor de um step, a de PR e a de review de PR abrem na mesma worktree com o prompt correspondente. A sessão de um review abre na worktree do review, em detached HEAD no head da pull request, com o prompt de review de PR, e começa com o marcador `review_started`, que guarda o modelo e o esforço da sessão e o modo do review (`publish` ou `apply`). A sessão de uma discussão abre na pasta de artefatos dela, com o prompt de discussão, e começa com o marcador `discussion_started`; ela não tem worktree, e cada clone dos repositórios do board entra como diretório adicional, ver [A conversa de uma discussão](#a-conversa-de-uma-discussão).
+Cada sessão guarda a sua conversa. Voltar a uma etapa retoma a sessão dela de onde ficou; avançar abre uma nova. As sessões de planejamento abrem no clone do repositório da task. A sessão de um step abre dentro da worktree da task, com o arquivo do step como primeira mensagem, ou com o documento One-Shot no step único de uma task One-Shot; a do revisor de um step, a de PR e a de review de PR abrem na mesma worktree com o prompt correspondente. A sessão de um review abre na worktree do review, em detached HEAD no head da pull request, com o prompt de review de PR, e começa com o marcador `review_started`, que guarda o modelo e o esforço da sessão e o modo do review (`publish` ou `apply`). A sessão de uma discussão abre na pasta de artefatos dela, com o prompt de discussão, e começa com o marcador `discussion_started`, que guarda o modelo e o esforço da sessão, o título do board e os épicos dos cards de que a discussão partiu (`owner/name#número`, cada um uma vez); ela não tem worktree, e cada clone dos repositórios do board entra como diretório adicional, ver [A conversa de uma discussão](#a-conversa-de-uma-discussão).
 
 ## Onde o binário está
 
@@ -58,7 +58,8 @@ O transcript de uma sessão é uma lista de entradas, cada uma de um tipo, grava
   - `review_published`, no review do centro de review, com o passe, o veredito, quantos apontamentos foram como comentário inline e quantos no corpo, se o resumo foi no corpo, se o corpo foi o mínimo (`Review with 2 inline comments.`) e o endereço do review no GitHub, depois de o GitHub aceitar a publicação;
   - `new_commits`, no review do centro de review, com os commits entre o head que o app conhecia e o novo (sha curto, assunto e autor, do mais antigo ao mais novo) e a contagem, `-1` quando o head de antes não está entre os commits lidos, caso em que a lista são os 20 últimos. É gravado a cada head novo que a leitura de cada minuto acha numa pull request cujo review já teve uma passada publicada;
   - `paused`, gravado pela própria pausa, só quando a sessão não estava pausada;
-  - `plan_invalid`, com os problemas do plano, quando as correções acabaram e o plano segue inválido. O transcript basta para não repetir: o marco só é gravado quando a lista difere da do último `plan_invalid` da conversa.
+  - `plan_invalid`, com os problemas do plano, quando as correções acabaram e o plano segue inválido. O transcript basta para não repetir: o marco só é gravado quando a lista difere da do último `plan_invalid` da conversa;
+  - os cinco marcos da discussão, gravados por `discussionflow` num único método, `MarkDiscussion`, que deduplica na conversa (ver [A conversa de uma discussão](#a-conversa-de-uma-discussão)).
 
 ## Catálogo de modelos
 
@@ -125,9 +126,19 @@ A sessão de uma discussão roda na pasta de artefatos dela, onde o agente escre
 `prompts.Render` acrescenta ao prompt de discussão, nesta ordem:
 
 1. `## Board`, quando o board ainda está cadastrado: o título, os repositórios administrados, o campo de módulo com as opções, ou a frase que diz que os rascunhos não têm módulo, e o status com que um card novo entra no board.
-2. `## Drafts format`, sempre: o formato exato de `drafts.md`, o cabeçalho `---` com `status`, `drafts` ou `none`, um bloco `## Draft: <id>` por rascunho, com `Kind`, `Repository` ou `Card`, `Module`, `Epic` e `Depends on`, e as seções `### Title` e `### Body`, com a regra de que o id é estável entre reescritas e que qualquer desvio torna o arquivo ilegível.
+2. `## Drafts format`, sempre: o formato exato de `drafts.md`, o cabeçalho `---` com `status`, `drafts` ou `none`, um bloco `## Draft: <id>` por rascunho, com `Kind`, `Repository` ou `Card`, `Module`, `Epic` e `Depends on`, e as seções `### Title` e `### Body`, com a regra de que o id é estável entre reescritas, de modo que um rascunho que muda mantém o id e um id novo é um rascunho novo, e que qualquer desvio torna o arquivo ilegível.
 
 Como as seções do review, nenhuma depende de placeholder, então um prompt editado as recebe também.
+
+Os marcos da discussão, além de `discussion_started`, são cinco, gravados por `discussionflow` com `session.Service.MarkDiscussion`:
+
+- `discussion_document`, com o carimbo do `discussion.md` (data de modificação e tamanho) e `first` no primeiro da conversa; o carimbo não vai ao frontend;
+- `drafts_written`, a primeira leitura legível de uma rodada que tem rascunhos, com a rodada e quantos rascunhos ela tem;
+- `drafts_revised`, uma leitura que mudou a rodada, com a rodada, quantos rascunhos mudaram, quantos entraram e quantos saíram, e a rodada como estava antes (`before`): uma linha por rascunho, com título, tipo, decisão, resultado, a referência no GitHub, os campos que a leitura mudou, e se saiu, entrou ou perdeu a aprovação;
+- `drafts_unreadable`, com a razão (`discussion.Reason`, a regra que o arquivo quebra, sem o caminho) e a rodada;
+- `drafts_published`, o primeiro rascunho de uma rodada que chegou ao GitHub ou falhou ao ir, com a rodada.
+
+A deduplicação mora na sessão, que tem a conversa, e por isso um reinício não repete nada: o documento é gravado uma vez por carimbo (comparado ao do último marco de documento), `drafts_published` uma vez por rodada, `drafts_written` só quando o último marco que escreveu ou revisou os rascunhos (`drafts_written` ou `drafts_revised`) não é um `drafts_written` da mesma rodada, para que uma rodada que o agente esvaziou volte escrita, `drafts_unreadable` uma vez por razão contra o último marco de rascunhos (`drafts_written`, `drafts_revised` ou `drafts_unreadable`), e `drafts_revised` sempre. Uma sessão fechada ou ausente não grava nada.
 
 ## Correções automáticas
 

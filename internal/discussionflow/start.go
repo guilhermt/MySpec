@@ -55,13 +55,16 @@ func (s *Service) Start(ctx context.Context, p StartParams) (string, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if err = s.sessions.Start(ctx, s.info(created, p.Choice), false); err != nil {
+	t := s.info(created, p.Choice)
+	t.Epics = epicsOf(cards)
+	if err = s.sessions.Start(ctx, t, false); err != nil {
 		// The discussion is the app's own and nothing of it was used yet: it
 		// goes with the conversation it could not have.
 		if delErr := s.discussions.Delete(ctx, created.ID); delErr != nil {
 			s.log.Error("delete discussion failed", "discussion", created.ID, "error", delErr)
+			return "", err
 		}
-		return "", err
+		return "", &UndoneError{Err: err}
 	}
 
 	s.log.Info("discussion started", "discussion", created.ID, "board", b.ID, "cards", len(cards))
@@ -197,9 +200,23 @@ func (s *Service) info(d discussion.Discussion, choice models.Choice) session.Ta
 		DocumentPath:   d.DocumentPath(),
 		DraftsPath:     d.DraftsPath(),
 		Board:          section,
+		BoardTitle:     d.BoardTitle,
 		ExtraDirs:      clones,
 		Choice:         choice,
 	}
+}
+
+// epicsOf are the epics of the cards, each once, as owner/name#number, in the
+// order of the cards.
+func epicsOf(cards []board.Card) []string {
+	var epics []string
+	for _, card := range cards {
+		if card.Epic == nil {
+			continue
+		}
+		epics = appendOnce(epics, fmt.Sprintf("%s#%d", card.Epic.FullName(), card.Epic.Number))
+	}
+	return epics
 }
 
 // clonesOf are the paths of the repositories of the board that are cloned and

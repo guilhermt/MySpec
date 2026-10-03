@@ -3,6 +3,7 @@
  * CSS and compare what an element paints with the token it should paint, resolved in the same theme.
  */
 
+import { within } from "@testing-library/react";
 import type { CSSProperties } from "react";
 import { inject, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
@@ -363,7 +364,9 @@ export async function withoutTooltip(elements: readonly HTMLElement[]): Promise<
     if (!shown) {
       missing.push(nameOf(element));
     }
-    await userEvent.unhover(element);
+    // The pointer leaves for the corner: unhover rests it in the middle of the page, which may be the
+    // element itself again, or another one with a tooltip.
+    (await pointerInTheCorner()).remove();
     // The tooltip that closes must be gone before the next element, or it would count for that one.
     await vi.waitFor(
       () => {
@@ -413,10 +416,21 @@ async function pointerInTheCorner(): Promise<HTMLElement> {
     height: "1px",
     zIndex: "2147483647",
   });
+  corner.dataset.testid = CORNER;
   document.body.append(corner);
-  await userEvent.hover(corner);
+  // The pixel is found by its id: a popup that mounts again in the body moves it among the children,
+  // and a path by position would then point at another element.
+  try {
+    await userEvent.hover(page.getByTestId(CORNER));
+  } catch (failure) {
+    corner.remove();
+    throw failure;
+  }
   return corner;
 }
+
+/** CORNER is the test id of the pixel pointerInTheCorner rests the pointer on. */
+const CORNER = "pointer-corner";
 
 /**
  * inkRuns are the widths, in CSS pixels, of the runs a screenshot of an element paints across its
@@ -457,4 +471,27 @@ export async function inkRuns(element: HTMLElement): Promise<number[]> {
     runs.push(run / scale);
   }
   return runs;
+}
+
+/**
+ * footerPlaces is where Cancel and the primary of a dialog stand in its footer: the line and the
+ * box of each, from the footer's top and right edge. A footer whose buttons never wrap nor move gives
+ * the same places with its disabled reason and without it.
+ */
+export function footerPlaces(dialog: HTMLElement, primary: RegExp) {
+  const footer = dialog.querySelector("[data-dialog-footer]");
+  if (footer === null) {
+    throw new Error("the dialog has no footer");
+  }
+  const box = footer.getBoundingClientRect();
+  const placeOf = (name: string | RegExp) => {
+    const button = within(dialog).getByRole("button", { name }).getBoundingClientRect();
+    return {
+      top: button.top - box.top,
+      right: box.right - button.right,
+      width: button.width,
+      height: button.height,
+    };
+  };
+  return { cancel: placeOf("Cancel"), primary: placeOf(primary) };
 }

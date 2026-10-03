@@ -51,6 +51,7 @@ type memSessions struct {
 	stored    map[session.Key]bool // the sessions ever created, open or not
 	calls     []string
 	startErr  error // returned by Start alone
+	markers   []session.MarkerEntry
 }
 
 func newSessions() *memSessions {
@@ -97,6 +98,29 @@ func (m *memSessions) Close(_ context.Context, k session.Key) error {
 	m.calls = append(m.calls, "close:"+k.TaskID)
 	delete(m.summaries, k)
 	return nil
+}
+
+// MarkDiscussion records a copy of the marker, without deduplicating: the rule
+// is the session's.
+func (m *memSessions) MarkDiscussion(_ context.Context, _ session.Key, marker *session.MarkerEntry) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.markers = append(m.markers, *marker)
+}
+
+// markersOf is the markers of a type the flow recorded, in order.
+func (m *memSessions) markersOf(t session.MarkerType) []session.MarkerEntry {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var found []session.MarkerEntry
+	for _, marker := range m.markers {
+		if marker.Type == t {
+			found = append(found, marker)
+		}
+	}
+	return found
 }
 
 func (m *memSessions) DiscardTask(_ context.Context, taskID string) error {
@@ -734,6 +758,7 @@ type memStore struct {
 	mu          sync.Mutex
 	discussions []discussion.Discussion
 	drafts      map[string][]discussion.Draft
+	deleteErr   error // returned by Delete alone
 
 	// writeErr is what the next writes of a draft the test picked answer
 	// with, and writeErrLeft how many of them still do.
@@ -814,6 +839,10 @@ func (m *memStore) UpdateArchived(_ context.Context, id string, archivedAt, upda
 func (m *memStore) Delete(_ context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if m.deleteErr != nil {
+		return m.deleteErr
+	}
 
 	if index := m.indexOf(id); index >= 0 {
 		m.discussions = slices.Delete(m.discussions, index, index+1)

@@ -1,38 +1,38 @@
-import { LoaderCircle, X } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
+import { Button } from "@/components/system/Button";
+import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
 import { Field } from "@/components/system/Field";
+import { IconButton } from "@/components/system/IconButton";
+import { Input } from "@/components/system/Input";
+import { ICONS } from "@/components/system/icons";
 import { Select } from "@/components/system/Select";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Shimmer } from "@/components/system/Shimmer";
+import { SunkenLine } from "@/components/system/SunkenLine";
+import { Textarea } from "@/components/system/Textarea";
+import { Tooltip } from "@/components/system/Tooltip";
 import { useNow } from "@/features/attention/useNow";
-import { DiscussionContextPreview } from "@/features/discussion/DiscussionContextPreview";
+import { Markdown } from "@/features/chat/Markdown";
 import {
   BOARD_FIELD_HELP,
+  boardLine,
   boardOptions,
-  canStart,
-  NOTHING_TO_DISCUSS,
-  READS_CLONES,
+  contextLine,
+  startReason,
   suggestedTitle,
-  TITLE_MAX,
-  titleProblem,
+  titleError,
+  titleHelp,
   unclonedRepositories,
+  whatHint,
 } from "@/features/discussion/new-discussion";
+import { UnclonedRepository } from "@/features/discussion/UnclonedRepository";
+import { useDiscussionContext } from "@/features/discussion/useDiscussionContext";
 import { ModelPicker } from "@/features/models/ModelPicker";
 import { issueLabel } from "@/lib/boards";
 import { messageOf } from "@/lib/errors";
 import { choiceOf, type ModelChoice } from "@/lib/models";
-import { cloneMissingText } from "@/lib/repositories";
-import type { Board, BoardCard, Repository, StageModel } from "@/lib/wails";
-import { changeRepositoryPath, cloneRepository, startDiscussion } from "@/store/actions";
+import { shortName } from "@/lib/repositories";
+import type { Board, BoardCard, StageModel } from "@/lib/wails";
+import { startDiscussion } from "@/store/actions";
 import {
   type NewDiscussionRef,
   useAppStore,
@@ -43,62 +43,35 @@ import {
 
 const NO_MODELS: readonly StageModel[] = [];
 
-/** COUNTER_FROM is the length after which the title says how much room is left. */
-const COUNTER_FROM = 100;
+const GONE = "This board is no longer in the app.";
 
-/** TITLE_TOO_LONG says what to do with a title that does not fit, as a suggested one may not. */
-const TITLE_TOO_LONG = `Use at most ${TITLE_MAX} characters.`;
+/** SECTION_LABEL is the type of the label of a part that is not a field: Cards, Model. */
+const SECTION_LABEL = "text-(length:--text-meta) leading-(--leading-meta) font-medium text-ink-2";
 
 /** NewDiscussionDialog starts a discussion of a board, over the cards picked on it. */
 export function NewDiscussionDialog() {
   const ref = useNewDiscussion();
-  const closeNewDiscussion = useAppStore((state) => state.closeNewDiscussion);
 
   if (ref === null) {
     return null;
   }
+  // Keyed by what the dialog opened for: another pick of cards starts afresh, without what was
+  // typed for the last. Choosing another board in the Board field keeps the key, and the text.
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) {
-          closeNewDiscussion();
-        }
-      }}
-    >
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>New discussion</DialogTitle>
-        </DialogHeader>
-        {/* Keyed by what the dialog opened for: another pick of cards starts afresh, without what
-            was typed for the last. Choosing another board in the Board field keeps the key, and
-            the text with it. */}
-        <NewDiscussionFields
-          key={ref.askBoard ? "ask" : `${ref.boardId}|${ref.cardKeys.join(",")}`}
-          reference={ref}
-        />
-      </DialogContent>
-    </Dialog>
+    <NewDiscussionFields
+      key={ref.askBoard ? "ask" : `${ref.boardId}|${ref.cardKeys.join(",")}`}
+      reference={ref}
+    />
   );
 }
 
 // NewDiscussionFields holds the board the discussion is about, and the form once the app has it.
 function NewDiscussionFields({ reference }: { reference: NewDiscussionRef }) {
-  const closeNewDiscussion = useAppStore((state) => state.closeNewDiscussion);
   const [boardId, setBoardId] = useState(reference.boardId);
   const board = useBoard(boardId);
 
   if (board === null) {
-    return (
-      <>
-        <p className="text-sm text-muted-foreground">This board is no longer in the app.</p>
-        <DialogFooter>
-          <Button type="button" variant="ghost" onClick={closeNewDiscussion}>
-            Cancel
-          </Button>
-        </DialogFooter>
-      </>
-    );
+    return <GoneBoard />;
   }
   return (
     <NewDiscussionForm
@@ -110,6 +83,30 @@ function NewDiscussionFields({ reference }: { reference: NewDiscussionRef }) {
   );
 }
 
+// GoneBoard is the dialog over a board that left the app: the way on is Cancel.
+function GoneBoard() {
+  const reasonId = useId();
+  const closeNewDiscussion = useAppStore((state) => state.closeNewDiscussion);
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => !open && closeNewDiscussion()}
+      title="New discussion"
+      size="wide"
+    >
+      <DialogBody>
+        <p>{GONE}</p>
+      </DialogBody>
+      <DialogFooter reason={{ id: reasonId, text: GONE }}>
+        <DialogCancel />
+        <Button variant="primary" shortcut="Ctrl ↵" disabled reasonId={reasonId}>
+          Start discussion
+        </Button>
+      </DialogFooter>
+    </Dialog>
+  );
+}
+
 interface NewDiscussionFormProps {
   board: Board;
   cardKeys: readonly string[];
@@ -118,21 +115,15 @@ interface NewDiscussionFormProps {
 }
 
 function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDiscussionFormProps) {
+  const reasonId = useId();
+  const contextId = useId();
   const closeNewDiscussion = useAppStore((state) => state.closeNewDiscussion);
-  const openDiscussion = useAppStore((state) => state.openDiscussion);
+  const go = useAppStore((state) => state.go);
   const defaults = useAppStore((state) => state.app?.modelDefaults ?? NO_MODELS);
-  const repositories = useRepositories();
   const app = useAppStore((state) => state.app);
+  const repositories = useRepositories();
   const now = useNow(60_000, askBoard);
-  const boardField = useRef<HTMLDivElement>(null);
-
-  // Asking the board, the focus starts on its field.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only when the dialog opens
-  useEffect(() => {
-    if (askBoard) {
-      boardField.current?.querySelector("button")?.focus();
-    }
-  }, []);
+  const boardTrigger = useRef<HTMLElement | null>(null);
 
   // A card that is no longer in the last reading of the board is left out
   // without a word: the discussion is about the ones that are.
@@ -144,20 +135,24 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
   const [title, setTitle] = useState(() => suggestedTitle(cards));
   const [text, setText] = useState("");
   const [choice, setChoice] = useState<ModelChoice>(() => choiceOf(defaults, "discussion"));
-  const [error, setError] = useState<string | null>(null);
+  const [refusal, setRefusal] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [showContext, setShowContext] = useState(false);
+  const context = useDiscussionContext(board.id, text, cards);
 
-  const problem = titleProblem(title);
-  const ready = canStart(title, text, cards);
+  const reason = startReason({ board: board.id, title, text, cards: cards.length });
   const uncloned = unclonedRepositories(board, repositories);
-  const nothingToDiscuss = text.trim() === "" && cards.length === 0;
+  const byDefault = (() => {
+    const standard = choiceOf(defaults, "discussion");
+    return standard.model === choice.model && standard.effort === choice.effort;
+  })();
 
   const start = () => {
-    if (!ready || starting) {
+    if (reason !== null || starting) {
       return;
     }
     setStarting(true);
-    setError(null);
+    setRefusal(null);
     startDiscussion({
       boardId: board.id,
       title: title.trim(),
@@ -168,198 +163,207 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
     })
       .then((id) => {
         closeNewDiscussion();
-        openDiscussion(id);
+        go({ kind: "discussion", id }, { focus: "title" });
       })
-      .catch((reason: unknown) => {
-        setError(messageOf(reason));
+      .catch((failure: unknown) => {
+        setRefusal(messageOf(failure));
         setStarting(false);
       });
   };
 
-  const onSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    start();
-  };
-
-  const onTextKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault();
-      start();
-    }
-  };
+  const footerText = starting ? "Starting the conversation…" : reason;
+  const help = titleHelp(title);
+  const problem = titleError(title);
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      {askBoard && app !== null ? (
-        <div ref={boardField}>
-          <Field label="Board" help={BOARD_FIELD_HELP}>
-            <Select
-              label="Board"
-              value={board.id}
-              options={boardOptions(app, now)}
-              onValueChange={onBoardChange}
-            />
-          </Field>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-0.5 rounded-lg border px-3 py-2">
-          <p className="text-sm font-medium">{board.title}</p>
-          <p className="text-xs text-muted-foreground">{`${board.owner} · #${board.number}`}</p>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="discussion-title">Title</Label>
-        <Input
-          id="discussion-title"
-          value={title}
-          autoFocus={!askBoard}
-          maxLength={TITLE_MAX}
-          autoComplete="off"
-          aria-invalid={problem === "too_long"}
-          onChange={(event) => setTitle(event.target.value)}
-        />
-        {problem === "too_long" ? (
-          <p className="text-xs text-destructive">{TITLE_TOO_LONG}</p>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !starting) {
+          closeNewDiscussion();
+        }
+      }}
+      title="New discussion"
+      size="wide"
+      closeDisabled={starting}
+      onConfirm={start}
+      {...(askBoard ? { initialFocus: boardTrigger } : {})}
+    >
+      <DialogBody className="gap-(--space-4)">
+        {askBoard && app !== null ? (
+          // Asking the board, the focus starts on its field; otherwise on the Title.
+          <div
+            ref={(field) => {
+              boardTrigger.current = field?.querySelector("button") ?? null;
+            }}
+          >
+            <Field label="Board" help={BOARD_FIELD_HELP}>
+              <Select
+                label="Board"
+                value={board.id}
+                options={boardOptions(app, now)}
+                disabled={starting}
+                onValueChange={onBoardChange}
+              />
+            </Field>
+          </div>
         ) : (
-          title.length > COUNTER_FROM && (
-            <p className="text-xs text-muted-foreground tabular-nums">{`${title.length}/${TITLE_MAX}`}</p>
-          )
-        )}
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="discussion-text">What to discuss</Label>
-        <Textarea
-          id="discussion-text"
-          rows={6}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={onTextKeyDown}
-          className="max-h-[40dvh] field-sizing-content"
-        />
-      </div>
-
-      {cards.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          <Label>Cards</Label>
-          <ul className="flex flex-col divide-y rounded-lg border">
-            {cards.map((card) => (
-              <li key={card.key} className="flex items-center gap-2 py-1.5 pr-1.5 pl-3">
-                <span className="min-w-0 flex-1 truncate text-sm">
-                  {`${issueLabel(card)} ${card.title} · ${card.repository}`}
+          <SunkenLine icon={ICONS.board}>
+            <span className="flex min-w-0 gap-(--space-2)">
+              <span className="shrink-0 font-medium text-ink-1">{board.title}</span>
+              <Tooltip content={boardLine(board, repositories)}>
+                <span className="min-w-0 truncate text-ink-3">
+                  {boardLine(board, repositories)}
                 </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`Remove ${issueLabel(card)}`}
-                  onClick={() =>
-                    setCards((current) => current.filter((item) => item.key !== card.key))
-                  }
-                >
-                  <X aria-hidden="true" />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <DiscussionContextPreview boardId={board.id} text={text} cards={cards} />
-
-      <div className="flex items-center justify-between gap-4">
-        <Label>Model</Label>
-        <ModelPicker label="Discussion" value={choice} onChange={setChoice} />
-      </div>
-
-      {uncloned.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          <Label>Repositories without a clone</Label>
-          <ul className="flex flex-col divide-y rounded-lg border">
-            {uncloned.map((repository) => (
-              <li key={repository.id}>
-                <UnclonedRepository repository={repository} />
-              </li>
-            ))}
-          </ul>
-          <p className="text-xs text-muted-foreground">{READS_CLONES}</p>
-        </div>
-      )}
-
-      {error !== null && (
-        <p role="alert" className="break-all text-sm text-destructive">
-          {error}
-        </p>
-      )}
-
-      <DialogFooter className="flex-col items-end gap-1.5 sm:flex-col sm:items-end">
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="ghost" onClick={closeNewDiscussion}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={!ready || starting}>
-            {starting ? "Starting…" : "Start discussion"}
-          </Button>
-        </div>
-        {nothingToDiscuss && <p className="text-xs text-muted-foreground">{NOTHING_TO_DISCUSS}</p>}
-      </DialogFooter>
-    </form>
-  );
-}
-
-/** UnclonedRepository offers the clone, or the path, a repository of the board is missing. */
-function UnclonedRepository({ repository }: { repository: Repository }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const act = (run: () => Promise<unknown>) => {
-    setBusy(true);
-    setError(null);
-    run()
-      .catch((reason: unknown) => setError(messageOf(reason)))
-      .finally(() => setBusy(false));
-  };
-
-  return (
-    <div className="flex flex-col gap-1.5 px-3 py-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="min-w-0 truncate text-sm">{repository.fullName}</span>
-        {repository.cloning ? (
-          <p role="status" className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
-            Cloning…
-          </p>
-        ) : repository.missing ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => act(() => changeRepositoryPath(repository.id))}
-          >
-            Change path
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => act(() => cloneRepository(repository.id))}
-          >
-            Clone
-          </Button>
+              </Tooltip>
+            </span>
+          </SunkenLine>
         )}
-      </div>
-      {repository.missing && (
-        <p className="break-all text-xs text-muted-foreground">{cloneMissingText(repository)}</p>
-      )}
-      {(error ?? (repository.cloneError === "" ? null : repository.cloneError)) !== null && (
-        <p role="alert" className="break-all text-xs text-destructive">
-          {error ?? repository.cloneError}
-        </p>
-      )}
-    </div>
+
+        <Field
+          label="Title"
+          {...(problem !== null ? { error: problem } : help !== "" ? { help } : {})}
+        >
+          <Input
+            value={title}
+            autoComplete="off"
+            disabled={starting}
+            onChange={(event) => setTitle(event.target.value)}
+          />
+        </Field>
+
+        <Field label="What to discuss" complement={whatHint(cards.length)}>
+          <Textarea
+            rows={3}
+            value={text}
+            disabled={starting}
+            onChange={(event) => setText(event.target.value)}
+            // field-sizing-content ignores rows: the field holds three lines at least, nine at most.
+            className="min-h-[calc(var(--leading-body)*3+var(--space-2)*2+var(--border)*2)] max-h-[calc(9*var(--leading-body)+var(--space-4))] field-sizing-content"
+          />
+        </Field>
+
+        {cards.length > 0 && (
+          <div className="flex flex-col gap-(--space-1)">
+            <span className={SECTION_LABEL}>
+              Cards <span className="font-normal text-ink-3">{cards.length}</span>
+            </span>
+            <ul className="flex flex-col divide-y divide-line-1 rounded-sm border border-line-1">
+              {cards.map((card) => (
+                // The line under a row is outside its height, so the × stays centred on a whole pixel.
+                <li
+                  key={card.key}
+                  className="box-content flex min-h-(--size-control) items-center gap-(--space-2) pr-(--space-1) pl-(--space-3) text-(length:--text-ui) leading-(--leading-ui)"
+                >
+                  <span className="shrink-0 font-mono text-(length:--text-meta) text-ink-3">
+                    {issueLabel(card)}
+                  </span>
+                  <Tooltip content={card.title}>
+                    <span className="min-w-0 flex-1 truncate text-ink-1">{card.title}</span>
+                  </Tooltip>
+                  <span className="shrink-0 text-ink-3">{shortName(card.repository)}</span>
+                  <IconButton
+                    size="xs"
+                    icon={ICONS.close}
+                    label={`Remove ${issueLabel(card)} from the discussion`}
+                    disabled={starting}
+                    onClick={() =>
+                      setCards((current) => current.filter((item) => item.key !== card.key))
+                    }
+                  />
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-(--space-2)">
+          {context.refreshing ? (
+            <SunkenLine
+              action={
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  disabled
+                  disabledReason="The cards are being read again."
+                >
+                  Show
+                </Button>
+              }
+            >
+              <span role="status">
+                <Shimmer>Refreshing the cards…</Shimmer>
+              </span>
+            </SunkenLine>
+          ) : (
+            <>
+              {context.failure !== null && (
+                <SunkenLine>
+                  <span role="alert">
+                    {`◇ Couldn't refresh the cards: ${context.failure}. The discussion will use the last reading.`}
+                  </span>
+                </SunkenLine>
+              )}
+              <SunkenLine
+                action={
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    aria-expanded={showContext}
+                    aria-controls={contextId}
+                    onClick={() => setShowContext((current) => !current)}
+                  >
+                    {showContext ? "Hide" : "Show"}
+                  </Button>
+                }
+              >
+                {contextLine(cards, context.text)}
+              </SunkenLine>
+            </>
+          )}
+          {showContext && (
+            <section
+              id={contextId}
+              aria-label="The context of the discussion"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: a box that scrolls is read with the keyboard
+              tabIndex={0}
+              className="max-h-[calc(9*var(--leading-body))] overflow-y-auto rounded-sm border border-line-1 px-(--space-3) py-(--space-2) text-(length:--text-body) leading-(--leading-body) text-ink-2 select-text focus-visible:focus-ring"
+            >
+              <Markdown>{context.text ?? ""}</Markdown>
+            </section>
+          )}
+        </div>
+
+        {uncloned.map((repository) => (
+          <UnclonedRepository key={repository.id} repository={repository} layout="strip" />
+        ))}
+
+        <div className="flex items-center gap-(--space-3)">
+          <span className={SECTION_LABEL}>Model</span>
+          <ModelPicker label="Discussion" value={choice} disabled={starting} onChange={setChoice} />
+          {byDefault && (
+            <span className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
+              From Defaults
+            </span>
+          )}
+        </div>
+      </DialogBody>
+      <DialogFooter
+        {...(footerText !== null ? { reason: { id: reasonId, text: footerText } } : {})}
+        {...(refusal !== null ? { refusal } : {})}
+      >
+        <DialogCancel disabled={starting} />
+        <Button
+          variant="primary"
+          shortcut="Ctrl ↵"
+          {...(reason !== null ? { disabled: true, reasonId } : {})}
+          loading={starting}
+          loadingLabel="Starting…"
+          onClick={start}
+        >
+          Start discussion
+        </Button>
+      </DialogFooter>
+    </Dialog>
   );
 }

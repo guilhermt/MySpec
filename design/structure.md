@@ -154,7 +154,7 @@ Um item sem situação mostra o que roda ou onde está. A gravidade ordena esses
 | Sessão ociosa, sem turno | Círculo fino | A posição | `idle` | Ocioso |
 | Sessão com erro sem situação | Círculo fino | `Session stopped · <posição>` | `idle` | Ocioso |
 
-O spinner do app é o mesmo do agente (`principles.md` §8), sem relógio e sem linha 3, e o nome acessível diz `working`, não `agent working`. Com duas conversas do mesmo item trabalhando, a linha fala da que está no turno mais antigo. O erro de uma sessão sem situação fica no cinza da árvore, porque a cor de atenção vem só das situações; a aba e a conversa dela o mostram como erro.
+O spinner do app é o mesmo do agente (`principles.md` §8), sem relógio e sem linha 3, e o nome acessível diz `working`, não `agent working`. A exceção é a discussão que publica com uma situação de pé: a linha 2 continua `Round R · publishing` com o spinner, porque o estado é o que o spinner diz, e a situação vai para a linha 3, com o chip de espera dela à direita (`Publish failed · Round 1` `!1m`, `Decide drafts · Round 1 · 2 of 5` `6m`). Com duas conversas do mesmo item trabalhando, a linha fala da que está no turno mais antigo. O erro de uma sessão sem situação fica no cinza da árvore, porque a cor de atenção vem só das situações; a aba e a conversa dela o mostram como erro.
 
 ### Gravidade e ordem
 

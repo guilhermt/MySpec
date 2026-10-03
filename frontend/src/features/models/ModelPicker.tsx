@@ -34,6 +34,8 @@ export interface ModelPickerProps {
   variant?: "field" | "inline";
   /** muted reads the value quietly, as a step that follows Implementation does. */
   muted?: boolean;
+  /** disabled keeps the choice read-only and the trigger dashed and focusable, as a disabled Select does. */
+  disabled?: boolean;
 }
 
 /** ModelPicker is the one control that picks a model and an effort, wherever the app offers it. */
@@ -43,6 +45,7 @@ export function ModelPicker({
   label,
   variant = "field",
   muted = false,
+  disabled = false,
 }: ModelPickerProps) {
   const catalog = useModelCatalog();
   const models = catalogModels(catalog);
@@ -65,7 +68,7 @@ export function ModelPicker({
   };
 
   return (
-    <DropdownMenu>
+    <DropdownMenu {...(disabled ? { open: false } : {})}>
       <DropdownMenuTrigger
         render={
           <Button
@@ -74,11 +77,13 @@ export function ModelPicker({
           />
         }
         aria-label={`${label} model: ${choiceText}${unavailable ? " · unavailable" : ""}`}
+        {...(disabled ? { "aria-disabled": true } : {})}
         className={cn(
           "tabular-nums",
           variant === "field" && "min-w-40 justify-between",
           variant === "inline" && !muted && "font-medium",
           muted && "text-muted-foreground",
+          "aria-disabled:dashed-disabled",
         )}
       >
         <span>{choiceText}</span>

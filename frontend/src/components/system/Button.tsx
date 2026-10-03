@@ -122,10 +122,15 @@ export function Button({
           {children}
           {shortcut !== undefined && (
             <span aria-hidden="true">
-              {/* The key of the action has no border and no body; on a solid button it keeps the ring of on-primary. */}
+              {/* The key of the action has no border and no body; on a solid button it keeps the ring of on-primary. A
+                  dashed solid button keeps the padding of that key, so the button is as wide in both states. */}
               <Kbd
                 variant={keyOnSolid ? "on-primary" : "default"}
-                className={cn("h-auto", !keyOnSolid && "border-0 bg-transparent px-0 shadow-none")}
+                className={cn(
+                  "h-auto",
+                  !keyOnSolid && "border-0 bg-transparent shadow-none",
+                  !solid && "px-0",
+                )}
               >
                 {shortcut}
               </Kbd>

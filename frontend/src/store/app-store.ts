@@ -40,6 +40,7 @@ import type {
   Board,
   BoardCard,
   DiscussionSummary,
+  Draft,
   Entry,
   Leftover,
   MarkerType,
@@ -143,6 +144,12 @@ export interface ReviewDialog {
   kind: "publish" | "again";
 }
 
+/** DiscussionDialog is the dialog of a discussion that is open: archiving, deleting or grouping drafts. */
+export interface DiscussionDialog {
+  discussionId: string;
+  kind: "archive" | "delete" | "group";
+}
+
 /** PullRef names one pull request: the repository it belongs to and its number. */
 export interface PullRef {
   repositoryId: string;
@@ -210,6 +217,11 @@ export interface AppStore {
   /** markerRequest is a marker of a task the conversation opens and focuses: the last one of its type. */
   markerRequest: { taskId: string; type: MarkerType } | null;
   /**
+   * draftRequest is a draft of a discussion the drafts card opens and focuses once it holds it: the
+   * epic a grouping just made. The card takes it and clears it.
+   */
+  draftRequest: { discussionId: string; draftId: string } | null;
+  /**
    * boardCardRequest is a card of a board the board view opens in its panel once it is on screen,
    * with its section expanded and the focus on its row; the view takes it and clears it. It is
    * never stacked nor stored.
@@ -253,6 +265,12 @@ export interface AppStore {
    * ⋯ and Ctrl+Enter open them, so the state lives here; it is neither in the stack nor stored.
    */
   reviewDialog: ReviewDialog | null;
+  /**
+   * discussionDialog is the archive, delete or group dialog of a discussion that is open, null when
+   * none is. The bar and the ⋯ open them, so the state lives here; it is neither in the stack nor
+   * stored.
+   */
+  discussionDialog: DiscussionDialog | null;
   /** newDiscussion is what the dialog that creates a discussion is open for, null when it is closed. */
   newDiscussion: NewDiscussionRef | null;
   /**
@@ -295,6 +313,9 @@ export interface AppStore {
   /** requestMarkerOpen asks the conversation of a task to open and focus its last marker of a type. */
   requestMarkerOpen: (taskId: string, type: MarkerType) => void;
   clearMarkerRequest: () => void;
+  /** requestDraft asks the drafts card of a discussion to open and focus one of its drafts. */
+  requestDraft: (discussionId: string, draftId: string) => void;
+  clearDraftRequest: () => void;
   /** openBoardCard opens a board with one of its cards in the panel. */
   openBoardCard: (boardId: string, key: string) => void;
   clearBoardCardRequest: () => void;
@@ -326,6 +347,8 @@ export interface AppStore {
   setPublishAttempt: (reviewId: string, attempt: PublishAttempt | null) => void;
   openReviewDialog: (reviewId: string, kind: ReviewDialog["kind"]) => void;
   closeReviewDialog: () => void;
+  openDiscussionDialog: (discussionId: string, kind: DiscussionDialog["kind"]) => void;
+  closeDiscussionDialog: () => void;
   setPendingReview: (pending: PullRef | null) => void;
   openDiscussion: (id: string) => void;
   openArchivedDiscussion: (id: string) => void;
@@ -571,6 +594,7 @@ function initialTaskUi(): Pick<
   | "transcripts"
   | "drafts"
   | "markerRequest"
+  | "draftRequest"
   | "boardCardRequest"
   | "openStepTab"
   | "prDrafts"
@@ -583,6 +607,7 @@ function initialTaskUi(): Pick<
   | "pendingReview"
   | "publishAttempts"
   | "reviewDialog"
+  | "discussionDialog"
   | "newDiscussion"
   | "textDrafts"
   | "lastRepositoryId"
@@ -594,6 +619,7 @@ function initialTaskUi(): Pick<
     transcripts: {},
     drafts: {},
     markerRequest: null,
+    draftRequest: null,
     boardCardRequest: null,
     openStepTab: {},
     prDrafts: {},
@@ -606,6 +632,7 @@ function initialTaskUi(): Pick<
     pendingReview: null,
     publishAttempts: {},
     reviewDialog: null,
+    discussionDialog: null,
     newDiscussion: null,
     textDrafts: {},
     lastRepositoryId: null,
@@ -916,6 +943,10 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     clearMarkerRequest: () => set({ markerRequest: null }),
 
+    requestDraft: (discussionId, draftId) => set({ draftRequest: { discussionId, draftId } }),
+
+    clearDraftRequest: () => set({ draftRequest: null }),
+
     openBoardCard: (boardId, key) =>
       leave(() =>
         set((state) => ({
@@ -975,6 +1006,10 @@ export const useAppStore = create<AppStore>()((set, get) => {
     openReviewDialog: (reviewId, kind) => set({ reviewDialog: { reviewId, kind } }),
 
     closeReviewDialog: () => set({ reviewDialog: null }),
+
+    openDiscussionDialog: (discussionId, kind) => set({ discussionDialog: { discussionId, kind } }),
+
+    closeDiscussionDialog: () => set({ discussionDialog: null }),
 
     setPendingReview: (pending) => set({ pendingReview: pending }),
 
@@ -1159,10 +1194,10 @@ export const useAppStore = create<AppStore>()((set, get) => {
       if (location === null) {
         return;
       }
-      // A task and a review take the focus to what their situation asks; a discussion, to the title.
+      // A task, a review and a discussion take the focus to what their situation asks.
       leave(() =>
         set((state) => ({
-          ...navigate(state, location, location.kind === "discussion" ? "title" : "request"),
+          ...navigate(state, location, "request"),
           openStepTab:
             location.kind === "task"
               ? withStepTab(state.openStepTab, itemId, place)
@@ -1449,6 +1484,18 @@ export function useOnScreenSituationId(): string | null {
 /** useFlashing is the situations whose brief highlight is showing, by id. */
 export function useFlashing(): ReadonlySet<string> {
   return useAppStore((state) => state.flashing);
+}
+
+/**
+ * storedDraft is a draft as the Go side has it now, null when the discussion
+ * no longer has it. It is read outside a render, by whoever needs what stands
+ * at the moment of a call rather than what the last render saw.
+ */
+export function storedDraft(discussionId: string, draftId: string): Draft | null {
+  const discussion = useAppStore
+    .getState()
+    .app?.discussions?.find((each) => each.id === discussionId);
+  return discussion?.drafts?.find((each) => each.id === draftId) ?? null;
 }
 
 export function usePrDraft(taskId: string): PrDraft | null {

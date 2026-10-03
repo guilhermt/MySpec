@@ -37,6 +37,7 @@ import type {
   DiscussionRepository,
   DiscussionSummary,
   Draft,
+  DraftBefore,
   DraftCurrent,
   DraftDependency,
   DraftHold,
@@ -143,6 +144,7 @@ export type {
   DiscussionRepository,
   DiscussionSummary,
   Draft,
+  DraftBefore,
   DraftCurrent,
   DraftDependency,
   DraftHold,
@@ -343,6 +345,11 @@ export type MarkerType =
   | "step_review_written"
   | "review_started"
   | "discussion_started"
+  | "discussion_document"
+  | "drafts_written"
+  | "drafts_revised"
+  | "drafts_unreadable"
+  | "drafts_published"
   | "stage_started"
   | "step_started"
   | "compacted"
@@ -847,6 +854,11 @@ export function asMarkerType(value: string): MarkerType {
     case "step_review_written":
     case "review_started":
     case "discussion_started":
+    case "discussion_document":
+    case "drafts_written":
+    case "drafts_revised":
+    case "drafts_unreadable":
+    case "drafts_published":
     case "stage_started":
     case "step_started":
     case "compacted":
@@ -1479,8 +1491,12 @@ export const api = {
     DiscussionService.RemoveDraftDependency(id, draftId, ref),
   decideDraft: (id: string, draftId: string, decision: DraftDecision): Promise<void> =>
     DiscussionService.DecideDraft(id, draftId, decision),
-  groupIntoEpic: (id: string, draftIds: string[]): Promise<string> =>
-    DiscussionService.GroupIntoEpic(id, draftIds),
+  groupIntoEpic: (
+    id: string,
+    draftIds: string[],
+    title: string,
+    repositoryId: string,
+  ): Promise<string> => DiscussionService.GroupIntoEpic(id, draftIds, title, repositoryId),
   retryPublish: (id: string, draftId: string): Promise<void> =>
     DiscussionService.RetryPublish(id, draftId),
   archiveDiscussion: (id: string): Promise<void> => DiscussionService.ArchiveDiscussion(id),

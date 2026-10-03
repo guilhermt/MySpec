@@ -206,7 +206,7 @@ func TestGroupingCardsIntoAnEpicPointsThemAtIt(t *testing.T) {
 	id := f.start(cardKey)
 	f.record(id, draftsArtifact)
 
-	epic, err := f.flow.GroupIntoEpic(t.Context(), id, []string{"export-invoices", "invoice-schema"})
+	epic, err := f.flow.GroupIntoEpic(t.Context(), id, []string{"export-invoices", "invoice-schema"}, "Epic", "acme", "web")
 	if err != nil {
 		t.Fatalf("group into epic: %v", err)
 	}
@@ -325,21 +325,24 @@ func TestADraftMemoryHoldsAsStartedRefusesDecisionsAndEdits(t *testing.T) {
 	f.approve(id, "invoice-report")
 	f.waitFailed(id, "invoice-report")
 
-	actions := map[string]func() error{
-		"decide": func() error {
+	actions := map[string]struct {
+		do   func() error
+		want error
+	}{
+		"decide": {func() error {
 			return f.flow.Decide(t.Context(), id, "invoice-report", discussion.DecisionDiscarded)
-		},
-		"edit the text": func() error {
+		}, discussion.ErrPublished},
+		"edit the text": {func() error {
 			return f.flow.SetDraftText(t.Context(), id, "invoice-report", "Another title", "Another body")
-		},
-		"group": func() error {
-			_, err := f.flow.GroupIntoEpic(t.Context(), id, []string{"invoice-report", "audit-log"})
+		}, discussion.ErrPublished},
+		"group": {func() error {
+			_, err := f.flow.GroupIntoEpic(t.Context(), id, []string{"invoice-report", "audit-log"}, "Epic", "acme", "web")
 			return err
-		},
+		}, discussion.ErrNotGroupable},
 	}
 	for name, action := range actions {
-		if err := action(); !errors.Is(err, discussion.ErrPublished) {
-			t.Errorf("%s a draft memory holds as started: got %v, want %v", name, err, discussion.ErrPublished)
+		if err := action.do(); !errors.Is(err, action.want) {
+			t.Errorf("%s a draft memory holds as started: got %v, want %v", name, err, action.want)
 		}
 	}
 }

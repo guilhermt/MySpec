@@ -579,7 +579,7 @@ describe("api", () => {
     await wails.api.addDraftDependency("discussion-1", "draft-1", "dev/web#12");
     await wails.api.removeDraftDependency("discussion-1", "draft-1", "dev/web#12");
     await wails.api.decideDraft("discussion-1", "draft-1", "approved");
-    await wails.api.groupIntoEpic("discussion-1", ["draft-1", "draft-2"]);
+    await wails.api.groupIntoEpic("discussion-1", ["draft-1", "draft-2"], "Epic", "repo-1");
     await wails.api.retryPublish("discussion-1", "draft-1");
     await wails.api.archiveDiscussion("discussion-1");
     await wails.api.deleteDiscussion("discussion-1");

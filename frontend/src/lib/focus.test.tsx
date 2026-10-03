@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { focusRequest, focusTitle } from "@/lib/focus";
+import { activeDraftId, currentDraftId, focusDraft, focusRequest, focusTitle } from "@/lib/focus";
 
 // Group is a question of the card: a radio group whose stop of Tab is the chosen option, else the
 // first, as the card draws it.
@@ -145,6 +145,24 @@ describe("focusRequest", () => {
     scroll.mockRestore();
   });
 
+  it("takes the focus to the draft the bar asks for, centred", () => {
+    render(
+      <div data-decision-card>
+        <button type="button" data-card-item="d1" />
+        <button type="button" data-card-item="d2" data-request-target="" />
+      </div>,
+    );
+    const target = document.querySelector<HTMLElement>('[data-card-item="d2"]');
+    const scroll = vi.fn();
+    if (target !== null) {
+      target.scrollIntoView = scroll;
+    }
+
+    expect(focusRequest("draft")).toBe(true);
+    expect(target).toHaveFocus();
+    expect(scroll).toHaveBeenCalledWith({ block: "center" });
+  });
+
   it("answers false without the target on screen", () => {
     render(<Screen />);
 
@@ -161,5 +179,83 @@ describe("focusTitle", () => {
     focusTitle();
 
     expect(screen.getByRole("heading", { name: "Add login" })).toHaveFocus();
+  });
+});
+
+// Card is the drafts card: the open draft is the current one and holds a Retry; the folded one is
+// a stop of its own.
+function Card({ retry = true }: { retry?: boolean }) {
+  return (
+    <div data-decision-card="">
+      <button type="button" aria-label="Draft 1" tabIndex={-1} data-card-item="draft-1" />
+      {/* biome-ignore lint/a11y/useSemanticElements: the open draft of the card is a group the system draws */}
+      {/* biome-ignore lint/a11y/noNoninteractiveTabindex: and the current draft holds the stop of Tab */}
+      <div role="group" aria-label="Draft 2" tabIndex={0} data-card-item="draft-2" data-current="">
+        {retry && (
+          <button type="button" data-retry="">
+            Retry
+          </button>
+        )}
+        <button type="button">Edit</button>
+      </div>
+    </div>
+  );
+}
+
+describe("focusDraft", () => {
+  it("takes the focus to the draft, centred", () => {
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    render(<Card />);
+
+    expect(focusDraft("draft-1", false)).toBe(true);
+
+    expect(screen.getByRole("button", { name: "Draft 1" })).toHaveFocus();
+    expect(scroll).toHaveBeenCalledWith({ block: "center" });
+    scroll.mockRestore();
+  });
+
+  it("goes on to the Retry of the draft on the next frame", async () => {
+    render(<Card />);
+
+    focusDraft("draft-2", true);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Retry" })).toHaveFocus());
+  });
+
+  it("stays on the draft when it has no Retry yet", async () => {
+    render(<Card retry={false} />);
+
+    focusDraft("draft-2", true);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    expect(screen.getByRole("group", { name: "Draft 2" })).toHaveFocus();
+  });
+
+  it("answers false when the draft is not on screen", () => {
+    render(<Card />);
+
+    expect(focusDraft("draft-9", false)).toBe(false);
+  });
+});
+
+describe("activeDraftId and currentDraftId", () => {
+  it("tell the draft around the focus and the current draft", () => {
+    render(<Card />);
+
+    expect(activeDraftId()).toBeNull();
+    expect(currentDraftId()).toBe("draft-2");
+
+    screen.getByRole("button", { name: "Edit" }).focus();
+    expect(activeDraftId()).toBe("draft-2");
+
+    screen.getByRole("button", { name: "Draft 1" }).focus();
+    expect(activeDraftId()).toBe("draft-1");
+  });
+
+  it("answer null without a card", () => {
+    render(<Screen />);
+
+    expect(activeDraftId()).toBeNull();
+    expect(currentDraftId()).toBeNull();
   });
 });

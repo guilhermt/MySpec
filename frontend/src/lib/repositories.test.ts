@@ -8,6 +8,7 @@ import {
   repositoryCounts,
   reviewCount,
   shortName,
+  shortRef,
   takenNames,
   taskCount,
   tasksInFilter,
@@ -31,6 +32,18 @@ describe("shortName", () => {
   it("is the whole thing when there is no owner", () => {
     expect(shortName("web")).toBe("web");
     expect(shortName("")).toBe("");
+  });
+});
+
+describe("shortRef", () => {
+  it("writes an issue with the name part of its repository", () => {
+    expect(shortRef("acme/billing#479")).toBe("billing#479");
+  });
+
+  it("keeps a reference without a number, or without an owner, as it is", () => {
+    expect(shortRef("acme/billing")).toBe("acme/billing");
+    expect(shortRef("billing#479")).toBe("billing#479");
+    expect(shortRef("")).toBe("");
   });
 });
 

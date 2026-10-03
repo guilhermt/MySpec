@@ -1,3 +1,4 @@
+import { isDecided, roundDrafts } from "@/features/discussion/drafts-card";
 import { reviewChecks, reviewPass, VERDICT_WORDS } from "@/features/reviews/review-header";
 import {
   discussionSessions,
@@ -22,7 +23,6 @@ import type {
   TaskSummary,
 } from "@/lib/wails";
 import {
-  asDiscussionStatus,
   asPlaceKind,
   asPRStatus,
   asPullReviewStatus,
@@ -52,6 +52,11 @@ export interface RowText {
   short: string;
 }
 
+/** RowLine3 is the third line of a row: what the agent does, or the situation under a publication. */
+export type RowLine3 =
+  | (RowText & { kind: "work"; verb: string; contextPercent: number })
+  | (RowText & { kind: "situation"; chip: Extract<RowClock, { kind: "chip" }> });
+
 /** ItemRow is one task, review or discussion of the tree, with everything its row reads. */
 export interface ItemRow {
   kind: "item";
@@ -70,10 +75,11 @@ export interface ItemRow {
   more: { count: number; tooltip: string } | null;
   clock: RowClock | null;
   /**
-   * line3 is what the agent does now, with the context it used; null unless an agent works. verb is
-   * what both forms start with: the action's verb, or the whole of what the conversation does.
+   * line3 is what the agent does now, with the context it used ("work"; verb is what both forms
+   * start with: the action's verb, or the whole of what the conversation does), or the situation
+   * that stands while a discussion publishes, with its chip ("situation"); null otherwise.
    */
-  line3: (RowText & { verb: string; contextPercent: number }) | null;
+  line3: RowLine3 | null;
   situationIds: string[];
   /** repositoryId is the repository a task lives in, which the filter looks at; null for a review or a discussion. */
   repositoryId: string | null;
@@ -246,13 +252,18 @@ function decided<T extends { decision: string }>(items: readonly T[]): { a: numb
 
 const prNumber = (task: TaskSummary) => task.pr?.prNumber ?? 0;
 
+/** discussionPosition is where a discussion stands: Discussing before its first drafts, the round after. */
+function discussionPosition(discussion: DiscussionSummary): string {
+  return discussion.round === 0 ? "Discussing" : `Round ${discussion.round}`;
+}
+
 /** position is where an item stands, as the accessible name and the paused line say it. */
 function position(owner: Owner): string {
   switch (owner.kind) {
     case "review":
       return `Pass ${reviewPass(owner.review)}`;
     case "discussion":
-      return "Discussing";
+      return discussionPosition(owner.discussion);
     case "task":
       return taskPosition(owner.task);
   }
@@ -301,7 +312,9 @@ function conversationPlace(owner: Owner, situation: Situation): RowText {
     case "review":
       return same(owner.kind === "review" ? `pass ${reviewPass(owner.review)}` : "pass 1");
     case "discussion":
-      return same("Discussing");
+      return same(
+        owner.kind === "discussion" ? discussionPosition(owner.discussion) : "Discussing",
+      );
   }
 }
 
@@ -315,6 +328,13 @@ const CONVERSATION_LABELS = {
 // passText is `pass K` of the owner, for the situations of a review.
 const passText = (owner: Owner) =>
   owner.kind === "review" ? `pass ${reviewPass(owner.review)}` : "pass 1";
+
+// roundText is a situation of a discussion with its round in the long form, as Epic discarded · Round 1.
+function roundText(text: string, owner: Owner): RowText {
+  return owner.kind === "discussion" && owner.discussion.round > 0
+    ? { long: `${text} · Round ${owner.discussion.round}`, short: text }
+    : same(text);
+}
 
 /** situationText is line 2 for one situation of an item, in its long and short forms. */
 function situationText(owner: Owner, situation: Situation): RowText {
@@ -447,18 +467,25 @@ function situationText(owner: Owner, situation: Situation): RowText {
     case "pass_blocked":
       return same(`Pass blocked · ${passText(owner)}`);
     case "publish_failed":
-      return same(
-        owner.kind === "review" ? `Publish failed · ${passText(owner)}` : "Publish failed",
-      );
+      return owner.kind === "discussion"
+        ? roundText("Publish failed", owner)
+        : same(owner.kind === "review" ? `Publish failed · ${passText(owner)}` : "Publish failed");
     case "drafts": {
-      const drafts = owner.kind === "discussion" ? (owner.discussion.drafts ?? []) : [];
-      const { a, b } = decided(drafts);
-      return { long: `Decide drafts · ${a} of ${b}`, short: `Decide drafts · ${a}/${b}` };
+      // Only the current round is counted, as the bar counts it.
+      const round = owner.kind === "discussion" ? owner.discussion.round : 0;
+      const mine =
+        owner.kind === "discussion" ? roundDrafts(owner.discussion.drafts ?? [], round) : [];
+      const a = mine.filter(isDecided).length;
+      const b = mine.length;
+      return {
+        long: `Decide drafts · Round ${round} · ${a} of ${b}`,
+        short: `Decide drafts · ${a}/${b}`,
+      };
     }
     case "epic_cant_publish":
-      return same("Epic can't publish");
+      return roundText("Epic can't publish", owner);
     case "epic_discarded":
-      return same("Epic discarded");
+      return roundText("Epic discarded", owner);
     case "ready_to_archive": {
       const drafts = owner.kind === "discussion" ? (owner.discussion.drafts ?? []) : [];
       const published = drafts.filter((draft) => draft.published).length;
@@ -626,12 +653,11 @@ function reviewStanding(review: ReviewSummary): Standing {
 }
 
 function discussionStanding(discussion: DiscussionSummary): Standing {
-  switch (asDiscussionStatus(discussion.status)) {
-    case "publishing":
-      return appWork(same("Publishing"));
-    default:
-      return sessionStanding(discussionSessions(discussion), "Discussing", same("Discussing"));
+  const place = discussionPosition(discussion);
+  if (discussion.publishing) {
+    return appWork({ long: `${place} · publishing`, short: "publishing" });
   }
+  return sessionStanding(discussionSessions(discussion), place, same(place));
 }
 
 /** shortAction is the target of an action cut to what tells it apart: the command and its subcommand, or the last segment of a path. */
@@ -713,19 +739,27 @@ function buildRow(owner: Owner, parts: RowParts, now: number): ItemRow {
   let tone = parts.standing.tone;
   let line2 = parts.standing.line2;
   let clock = parts.standing.clock;
+  let line3: ItemRow["line3"] = null;
+  // A discussion that publishes keeps the publication on the row, with its spinner and its clock:
+  // the situation that stands meanwhile is what line 3 says.
+  const publishing = owner.kind === "discussion" && owner.discussion.publishing;
   if (main !== undefined) {
     const group = GROUP_TONES[asSituationGroup(main.group)];
-    tone = group;
-    line2 = situationText(owner, main);
-    clock = {
+    const chip: Extract<RowClock, { kind: "chip" }> = {
       kind: "chip",
       tone: group,
       time: compactWait(main.startedAt, now),
       longTime: spokenWait(main.startedAt, now),
     };
+    if (publishing) {
+      line3 = { kind: "situation", ...situationText(owner, main), chip };
+    } else {
+      tone = group;
+      line2 = situationText(owner, main);
+      clock = chip;
+    }
   }
   const session = tone === "agent" ? workingSession(parts.sessions, now) : null;
-  let line3: ItemRow["line3"] = null;
   if (session !== null) {
     clock = {
       kind: "turn",
@@ -735,8 +769,14 @@ function buildRow(owner: Owner, parts: RowParts, now: number): ItemRow {
     const words = activity(session);
     line3 =
       session.actionLabel === ""
-        ? { ...same(words.row), verb: words.row, contextPercent: session.contextPercent }
+        ? {
+            kind: "work",
+            ...same(words.row),
+            verb: words.row,
+            contextPercent: session.contextPercent,
+          }
         : {
+            kind: "work",
             long: `${session.actionLabel} ${session.actionTarget}`,
             short: `${session.actionLabel} ${shortAction(session.actionLabel, session.actionTarget)}`,
             verb: session.actionLabel,
@@ -745,9 +785,10 @@ function buildRow(owner: Owner, parts: RowParts, now: number): ItemRow {
   }
 
   const sentences = [`${KIND_WORDS[parts.itemKind]} ${parts.name}.`];
-  if (main === undefined) {
+  if (main === undefined || publishing) {
     sentences.push(`${TONE_WORDS[tone]}, ${line2.long}.`);
-  } else {
+  }
+  if (main !== undefined) {
     const told = situations.map(
       (situation) =>
         `${GROUP_WORDS[asSituationGroup(situation.group)]}: ${situationText(owner, situation).long}, for ${forWait(situation.startedAt, now)}`,

@@ -896,6 +896,14 @@ func FromEntry(e session.Entry) Entry {
 			URL:           e.Marker.URL,
 			Commits:       fromMarkerCommits(e.Marker.Commits),
 			Count:         e.Marker.Count,
+			Board:         e.Marker.Board,
+			Epics:         names(e.Marker.Epics),
+			Round:         e.Marker.Round,
+			First:         e.Marker.First,
+			Changed:       e.Marker.Changed,
+			Added:         e.Marker.Added,
+			Dropped:       e.Marker.Dropped,
+			Before:        fromDraftBefore(e.Marker.Before),
 		}
 		if e.Marker.Findings != nil {
 			converted.Marker.Findings = *e.Marker.Findings
@@ -1847,7 +1855,9 @@ func FromDiscussions(
 			Text:             d.Text,
 			Status:           string(state.Status),
 			Cards:            fromDiscussionCards(d.Cards),
-			Drafts:           fromDrafts(state.Drafts, drafts, reading, byKey),
+			Drafts:           fromDrafts(state.Drafts, drafts, d.DraftsRevision, reading, byKey),
+			Round:            state.Round,
+			Publishing:       state.Publishing,
 			DraftsRead:       d.DraftsRead,
 			DraftsRevision:   d.DraftsRevision,
 			UnreadableDrafts: state.UnreadableDrafts,
@@ -1909,8 +1919,9 @@ func FromArchivedDiscussions(
 			BoardID:        d.BoardID,
 			Board:          d.BoardTitle,
 			Title:          d.Title,
+			Text:           d.Text,
 			Cards:          fromDiscussionCards(d.Cards),
-			Drafts:         fromDrafts(states, stored, nil, byKey),
+			Drafts:         fromDrafts(states, stored, 0, nil, byKey),
 			PublishedCount: published,
 			RepositoryIDs:  repositoryIDsOf(d, stored, repositoriesByFullName(repos)),
 			CreatedAt:      d.CreatedAt.Format(time.RFC3339),
@@ -2021,12 +2032,13 @@ func moduleOptionNames(reading *board.Reading) []string {
 func fromDrafts(
 	states []discussionflow.DraftState,
 	drafts []discussion.Draft,
+	draftsRevision int,
 	reading *board.Reading,
 	byKey map[string]Repository,
 ) []Draft {
 	converted := make([]Draft, len(states))
 	for i, state := range states {
-		converted[i] = fromDraft(state, drafts, reading, byKey)
+		converted[i] = fromDraft(state, drafts, draftsRevision, reading, byKey)
 	}
 	return converted
 }
@@ -2037,6 +2049,7 @@ func fromDrafts(
 func fromDraft(
 	state discussionflow.DraftState,
 	drafts []discussion.Draft,
+	draftsRevision int,
 	reading *board.Reading,
 	byKey map[string]Repository,
 ) Draft {
@@ -2067,6 +2080,13 @@ func fromDraft(
 		Publishing:   state.Publishing,
 		PublishError: d.PublishError,
 		Hold:         fromHold(state.Hold),
+
+		Round:            d.Round,
+		Revised:          d.RevisedReading > 0 && d.RevisedReading == draftsRevision,
+		ApprovalCleared:  d.ApprovalCleared,
+		ApprovePublishes: names(state.ApprovePublishes),
+		DiscardPublishes: names(state.DiscardPublishes),
+		ApproveHold:      fromHold(state.ApproveHold),
 	}
 	if d.Published.Done() {
 		converted.PublishedAt = d.Published.At.Format(time.RFC3339)
@@ -2247,6 +2267,25 @@ func fromMarkerCommits(commits []session.MarkerCommit) []MarkerCommit {
 	out := make([]MarkerCommit, 0, len(commits))
 	for _, commit := range commits {
 		out = append(out, MarkerCommit{SHA: commit.SHA, Subject: commit.Subject, Author: commit.Author})
+	}
+	return out
+}
+
+// fromDraftBefore converts the drafts of a drafts_revised marker; never nil.
+func fromDraftBefore(before []session.DraftBefore) []DraftBefore {
+	out := make([]DraftBefore, 0, len(before))
+	for _, b := range before {
+		out = append(out, DraftBefore{
+			Title:           b.Title,
+			Kind:            b.Kind,
+			Decision:        b.Decision,
+			Outcome:         b.Outcome,
+			Reference:       b.Reference,
+			Changes:         names(b.Changes),
+			Dropped:         b.Dropped,
+			Added:           b.Added,
+			ApprovalCleared: b.ApprovalCleared,
+		})
 	}
 	return out
 }

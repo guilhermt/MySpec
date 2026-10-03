@@ -53,6 +53,14 @@ const MARKER: MarkerEntry = {
   url: "",
   commits: [],
   count: 0,
+  board: "",
+  epics: [],
+  round: 0,
+  first: false,
+  changed: 0,
+  added: 0,
+  dropped: 0,
+  before: [],
 };
 const USER: UserEntry = {
   text: "",
@@ -595,6 +603,7 @@ describe("stretchFoldOf", () => {
     latestReport: new Map(),
     latestDecided: new Map(),
     oneShot: false,
+    discussion: null,
   };
   const stretch = (fields: Partial<Stretch>): Stretch => ({
     key: "entry-1",

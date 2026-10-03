@@ -110,6 +110,8 @@ type TaskInfo struct {
 	DocumentPath string   // the document of the understanding the agent writes
 	DraftsPath   string   // the file of drafts the agent writes and the app reads
 	Board        string   // the section that describes the board of the discussion
+	BoardTitle   string   // the title of the board, for the start of the discussion
+	Epics        []string // owner/name#number of the epics of the cards it started from
 }
 
 // Key is the session this task and stage are held under.
@@ -404,7 +406,10 @@ func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 	case t.Stage == DiscussionStage:
 		// A discussion has no stage to announce either: the item is the
 		// conversation itself.
-		marker = MarkerEntry{Type: MarkerDiscussionStarted}
+		marker = MarkerEntry{
+			Type: MarkerDiscussionStarted, Model: string(r.rec.Choice.Model), Effort: string(r.rec.Choice.Effort),
+			Board: t.BoardTitle, Epics: slices.Clone(t.Epics),
+		}
 	case t.Prompt == prompts.StageStepReview:
 		marker = MarkerEntry{Type: MarkerStepReviewStarted, Step: t.Step}
 	case t.Step > 0:
@@ -929,6 +934,77 @@ func (s *Service) MarkFindingsDecided(ctx context.Context, k Key, pass, approved
 	}
 	marker := &MarkerEntry{Type: MarkerFindingsDecided, Pass: pass, Approved: approved, Discarded: discarded}
 	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
+}
+
+// MarkDiscussion records a marker of a discussion, once: a document by its
+// stamp, the publication of a round by the round, the first readable reading
+// of a round against the last marker that wrote or revised the drafts, an
+// unreadable drafts.md by its reason against the last marker of the drafts. A
+// closed or absent session records nothing.
+func (s *Service) MarkDiscussion(ctx context.Context, k Key, marker *MarkerEntry) {
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(k)
+	if err != nil {
+		return
+	}
+	m := *marker
+	switch m.Type {
+	case MarkerDiscussionDocument:
+		first := true
+		for _, e := range slices.Backward(r.entries) {
+			if e.Kind != KindMarker || e.Marker == nil || e.Marker.Type != MarkerDiscussionDocument {
+				continue
+			}
+			if e.Marker.Stamp == m.Stamp {
+				return
+			}
+			first = false
+			break
+		}
+		m.First = first
+	case MarkerDraftsWritten:
+		// A round the agent emptied comes back written: only a reading the
+		// last marker of the drafts already wrote is the same one.
+		for _, e := range slices.Backward(r.entries) {
+			if e.Kind != KindMarker || e.Marker == nil ||
+				(e.Marker.Type != MarkerDraftsWritten && e.Marker.Type != MarkerDraftsRevised) {
+				continue
+			}
+			if e.Marker.Type == MarkerDraftsWritten && e.Marker.Round == m.Round {
+				return
+			}
+			break
+		}
+	case MarkerDraftsPublished:
+		for _, e := range r.entries {
+			if e.Kind == KindMarker && e.Marker != nil && e.Marker.Type == m.Type && e.Marker.Round == m.Round {
+				return
+			}
+		}
+	case MarkerDraftsUnreadable:
+		for _, e := range slices.Backward(r.entries) {
+			if e.Kind != KindMarker || e.Marker == nil {
+				continue
+			}
+			switch e.Marker.Type {
+			case MarkerDraftsWritten, MarkerDraftsRevised:
+			case MarkerDraftsUnreadable:
+				if e.Marker.Reason == m.Reason {
+					return
+				}
+			default:
+				continue
+			}
+			break
+		}
+	default:
+		// The other markers record as they come.
+	}
+	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &m}, n)
 }
 
 // MarkReviewPublished records that a pass was published on GitHub as a review.

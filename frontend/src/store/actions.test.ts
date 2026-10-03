@@ -11,7 +11,7 @@ import {
   approvePR,
   approveReview,
   approveStep,
-  archiveDiscussion,
+  archiveDiscussionInPlace,
   askReviewAgain,
   backToStage,
   browseRepository,
@@ -27,7 +27,7 @@ import {
   createTask,
   decideDraft,
   decideFindingInPlace,
-  deleteDiscussion,
+  deleteDiscussionInPlace,
   deleteReview,
   deleteTask,
   discardDraft,
@@ -35,7 +35,7 @@ import {
   discardStep,
   discussionContext,
   followTaskReviewMode,
-  groupIntoEpic,
+  groupIntoEpicInPlace,
   interrupt,
   loadTranscript,
   openExternal,
@@ -74,6 +74,7 @@ import {
   scanRepositories,
   sendMessageInPlace,
   setDraftEpic,
+  setDraftEpicInPlace,
   setDraftModule,
   setDraftRepository,
   setRepositoryFilter,
@@ -98,6 +99,7 @@ import {
   makeBoardPreview,
   makeBoardRepositoryOption,
   makeDiscussion,
+  makeDraft,
   makeEntry,
   makeRepository,
   makeReviewFilters,
@@ -211,15 +213,6 @@ describe("the app notice of a failed action", () => {
     expect(useAppStore.getState().error?.label).toBe(
       "Couldn't go back to the tech spec of add-login",
     );
-  });
-
-  it("names a discussion", async () => {
-    withState();
-    vi.mocked(api.archiveDiscussion).mockRejectedValueOnce(new Error("publishing"));
-
-    await archiveDiscussion("discussion-1");
-
-    expect(useAppStore.getState().error?.label).toBe("Couldn't archive Pricing tiers");
   });
 
   it("says to change the path of a missing clone", async () => {
@@ -535,8 +528,8 @@ describe("task actions", () => {
     ["deleteTask", () => deleteTask("item-1")],
     ["closeTask", () => closeTask("item-1")],
     ["deleteReview", () => deleteReview("item-1")],
-    ["archiveDiscussion", () => archiveDiscussion("item-1")],
-    ["deleteDiscussion", () => deleteDiscussion("item-1")],
+    ["archiveDiscussionInPlace", () => archiveDiscussionInPlace("item-1")],
+    ["deleteDiscussionInPlace", () => deleteDiscussionInPlace("item-1")],
   ])("%s marks the item whose page is not announced", async (_name, action) => {
     await action();
 
@@ -559,16 +552,6 @@ describe("task actions", () => {
       () => vi.mocked(api.deleteReview).mockRejectedValueOnce(new Error("busy")),
       () => deleteReview("item-1"),
     ],
-    [
-      "archiveDiscussion",
-      () => vi.mocked(api.archiveDiscussion).mockRejectedValueOnce(new Error("busy")),
-      () => archiveDiscussion("item-1"),
-    ],
-    [
-      "deleteDiscussion",
-      () => vi.mocked(api.deleteDiscussion).mockRejectedValueOnce(new Error("busy")),
-      () => deleteDiscussion("item-1"),
-    ],
   ])("%s forgets the mark when the removal fails", async (_name, refuse, action) => {
     refuse();
 
@@ -578,11 +561,35 @@ describe("task actions", () => {
     expect(useAppStore.getState().error?.detail).toBe("busy. Try again.");
   });
 
+  it.each([
+    [
+      "archiveDiscussionInPlace",
+      () => vi.mocked(api.archiveDiscussion).mockRejectedValueOnce(new Error("busy")),
+      () => archiveDiscussionInPlace("item-1"),
+    ],
+    [
+      "deleteDiscussionInPlace",
+      () => vi.mocked(api.deleteDiscussion).mockRejectedValueOnce(new Error("busy")),
+      () => deleteDiscussionInPlace("item-1"),
+    ],
+  ])("%s answers the refusal and forgets the mark", async (_name, refuse, action) => {
+    refuse();
+
+    expect(await action()).toBe("busy");
+    expect(useAppStore.getState().expectGone).toBeNull();
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("answers null when the removal of a discussion goes through", async () => {
+    expect(await archiveDiscussionInPlace("item-1")).toBeNull();
+    expect(await deleteDiscussionInPlace("item-1")).toBeNull();
+  });
+
   it("keeps the mark of a later removal when an earlier one fails", async () => {
     vi.mocked(api.deleteTask).mockRejectedValueOnce(new Error("busy"));
 
     const first = deleteTask("item-1");
-    await deleteDiscussion("item-2");
+    await deleteDiscussionInPlace("item-2");
     await first;
 
     expect(useAppStore.getState().expectGone).toBe("item-2");
@@ -1019,8 +1026,8 @@ describe("discussion actions reported in the app notice", () => {
     await removeDraftDependency("discussion-1", "draft-1", "draft-3");
     await decideDraft("discussion-1", "draft-1", "approved");
     await retryPublish("discussion-1", "draft-1");
-    await archiveDiscussion("discussion-1");
-    await deleteDiscussion("discussion-1");
+    await archiveDiscussionInPlace("discussion-1");
+    await deleteDiscussionInPlace("discussion-1");
 
     expect(api.setDraftText).toHaveBeenCalledWith(
       "discussion-1",
@@ -1039,34 +1046,69 @@ describe("discussion actions reported in the app notice", () => {
     expect(useAppStore.getState().error).toBeNull();
   });
 
-  it("report a failed discussion action in the app notice", async () => {
-    vi.mocked(api.archiveDiscussion).mockRejectedValueOnce(
-      new Error("a draft is still publishing"),
-    );
+  it("name the draft by its title when a decision fails", async () => {
+    const discussion = makeDiscussion({
+      drafts: [makeDraft({ id: "draft-1", title: "Overage on the invoice" })],
+    });
+    useAppStore.setState({ app: makeState({ discussions: [discussion] }) });
+    vi.mocked(api.decideDraft).mockRejectedValueOnce(new Error("A publication is running."));
 
-    await archiveDiscussion("discussion-1");
-
+    expect(await decideDraft("discussion-1", "draft-1", "approved")).toBe(false);
     expect(useAppStore.getState().error).toEqual({
-      label: "Couldn't archive",
-      detail: "a draft is still publishing. Try again.",
+      label: "Couldn't decide Overage on the invoice",
+      detail: "A publication is running. Try again.",
     });
   });
 
+  it("name the item when the draft of a failed decision is gone", async () => {
+    vi.mocked(api.decideDraft).mockRejectedValueOnce(new Error("no such draft"));
+
+    expect(await decideDraft("discussion-1", "draft-9", "approved")).toBe(false);
+    expect(useAppStore.getState().error?.label).toBe("Couldn't decide a draft of the item");
+  });
+
+  it("answer whether the decision went through", async () => {
+    expect(await decideDraft("discussion-1", "draft-1", "approved")).toBe(true);
+    expect(useAppStore.getState().error).toBeNull();
+  });
+});
+
+// The dialog and the cards of the drafts show the refusal where the user is, so
+// these reject instead of filling the app notice.
+describe("grouping and the epic of a draft shown in place", () => {
   it("answer the id of the epic the drafts were grouped into", async () => {
     vi.mocked(api.groupIntoEpic).mockResolvedValueOnce("draft-epic");
 
-    expect(await groupIntoEpic("discussion-1", ["draft-1", "draft-2"])).toBe("draft-epic");
-    expect(api.groupIntoEpic).toHaveBeenCalledWith("discussion-1", ["draft-1", "draft-2"]);
+    expect(
+      await groupIntoEpicInPlace("discussion-1", ["draft-1", "draft-2"], "Pricing", "repo-1"),
+    ).toEqual({ epicId: "draft-epic" });
+    expect(api.groupIntoEpic).toHaveBeenCalledWith(
+      "discussion-1",
+      ["draft-1", "draft-2"],
+      "Pricing",
+      "repo-1",
+    );
   });
 
-  it("answer an empty id when the drafts could not be grouped", async () => {
-    vi.mocked(api.groupIntoEpic).mockRejectedValueOnce(new Error("a draft is published"));
+  it("answer the refusal of a grouping without raising the app notice", async () => {
+    vi.mocked(api.groupIntoEpic).mockRejectedValueOnce(new Error("A publication is running."));
 
-    expect(await groupIntoEpic("discussion-1", ["draft-1"])).toBe("");
-    expect(useAppStore.getState().error).toEqual({
-      label: "Couldn't group the drafts of the item into an epic",
-      detail: "a draft is published. Try again.",
+    expect(await groupIntoEpicInPlace("discussion-1", ["draft-1"], "Pricing", "repo-1")).toEqual({
+      error: "A publication is running.",
     });
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("answer the refusal of the epic of a draft, or null", async () => {
+    expect(await setDraftEpicInPlace("discussion-1", "draft-1", "dev/web#3")).toBeNull();
+    expect(api.setDraftEpic).toHaveBeenCalledWith("discussion-1", "draft-1", "dev/web#3");
+
+    vi.mocked(api.setDraftEpic).mockRejectedValueOnce(new Error("dev/web#3 isn't an epic."));
+
+    expect(await setDraftEpicInPlace("discussion-1", "draft-1", "dev/web#3")).toBe(
+      "dev/web#3 isn't an epic.",
+    );
+    expect(useAppStore.getState().error).toBeNull();
   });
 });
 

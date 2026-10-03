@@ -150,7 +150,7 @@ func TestNoEditPutsADraftInTheRun(t *testing.T) {
 			approve: []string{"held-a", "held-b"},
 			edit: func(t *testing.T, f *fixture, id string) {
 				t.Helper()
-				if _, err := f.flow.GroupIntoEpic(t.Context(), id, []string{"held-a", "held-b"}); err != nil {
+				if _, err := f.flow.GroupIntoEpic(t.Context(), id, []string{"held-a", "held-b"}, "Epic", "acme", "web"); err != nil {
 					t.Fatalf("group into an epic: %v", err)
 				}
 			},

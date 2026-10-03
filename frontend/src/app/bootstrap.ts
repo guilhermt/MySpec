@@ -21,6 +21,11 @@ function itemName(store: AppStore, id: string): string | null {
   return task?.name ?? review?.title ?? discussion?.title ?? null;
 }
 
+// discussionRound is the round of the discussion with the id, 0 for an item that is not one.
+function discussionRound(store: AppStore, id: string): number {
+  return store.app?.discussions?.find((item) => item.id === id)?.round ?? 0;
+}
+
 // Subscribing before asking for the state means an event emitted in between is
 // applied instead of lost.
 export async function bootstrap(store: StoreApi<AppStore>): Promise<() => void> {
@@ -44,7 +49,11 @@ export async function bootstrap(store: StoreApi<AppStore>): Promise<() => void> 
     setTimeout(() => store.getState().unflashSituation(situation.id), FLASH_MS);
     const name = itemName(store.getState(), situation.taskId);
     if (name !== null) {
-      store.getState().announce(announcement(name, situation));
+      store
+        .getState()
+        .announce(
+          announcement(name, situation, discussionRound(store.getState(), situation.taskId)),
+        );
     }
   });
   // A modal dialog on screen holds what the user is doing there: the click on

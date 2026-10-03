@@ -44,6 +44,11 @@ describe("Dialog", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false, expect.anything());
   });
 
+  it("draws the close button disabled with closeDisabled", () => {
+    renderWithStore(<Subject closeDisabled />);
+    expect(screen.getByRole("button", { name: "Close" })).toHaveAttribute("aria-disabled", "true");
+  });
+
   it("closes on Escape", async () => {
     const onOpenChange = vi.fn();
     const { user } = renderWithStore(<Subject onOpenChange={onOpenChange} />);
@@ -151,6 +156,8 @@ describe("Dialog", () => {
       </Dialog>,
     );
     expect(screen.getByRole("alert")).toHaveTextContent("The branch already exists");
-    expect(screen.getByRole("button", { name: "Back" }).parentElement).toHaveClass("mr-auto");
+    const back = screen.getByRole("button", { name: "Back" }).parentElement;
+    expect(back?.parentElement?.firstElementChild).toBe(back);
+    expect(screen.getByRole("button", { name: "Cancel" }).parentElement).toHaveClass("ml-auto");
   });
 });

@@ -1206,6 +1206,10 @@ func TestTheReportFormatOfAReviewAsksForTheTitleOfEachFinding(t *testing.T) {
 	}
 }
 
+// keepsItsID is what the drafts format asks of the agent about a draft it
+// changes.
+const keepsItsID = "When you change a draft, keep its id; a new id is a new draft."
+
 func TestRenderAppendsTheSectionsOfADiscussionInOrder(t *testing.T) {
 	t.Parallel()
 
@@ -1224,6 +1228,9 @@ func TestRenderAppendsTheSectionsOfADiscussionInOrder(t *testing.T) {
 	}
 	if strings.Contains(got, "{{") {
 		t.Errorf("Render() = %q, want every placeholder of the sections replaced", got)
+	}
+	if !strings.Contains(got, keepsItsID) {
+		t.Errorf("Render() of an edited prompt = %q, want the drafts format to carry %q", got, keepsItsID)
 	}
 }
 
@@ -1284,6 +1291,7 @@ func TestRenderTheDefaultDiscussionPromptCarriesTheDraftsFormat(t *testing.T) {
 		"\n\n## Board\n\n" + boardSection,
 		"## Draft: <id>",
 		"`Kind` is `new`, `update` or `epic`.",
+		keepsItsID,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("rendered discussion prompt does not contain %q", want)

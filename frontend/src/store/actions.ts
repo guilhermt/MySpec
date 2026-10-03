@@ -1,3 +1,4 @@
+import { draftTitle } from "@/lib/drafts";
 import { messageOf, noticeDetail, type Remedy } from "@/lib/errors";
 import { locationTitle } from "@/lib/locations";
 import type { ModelChoice } from "@/lib/models";
@@ -27,7 +28,7 @@ import type {
   ThemePreference,
 } from "@/lib/wails";
 import { api } from "@/lib/wails";
-import { useAppStore } from "@/store/app-store";
+import { storedDraft, useAppStore } from "@/store/app-store";
 
 /** Failure is how the app notice names an action that failed: the action with its item, and what to do. */
 interface Failure {
@@ -905,6 +906,18 @@ export async function setDraftEpic(id: string, draftId: string, ref: string): Pr
 }
 
 /**
+ * setDraftEpicInPlace is setDraftEpic for the field of an existing issue: the refusal has its place
+ * under the field, so it is answered, or null, instead of raised in the app notice.
+ */
+export function setDraftEpicInPlace(
+  id: string,
+  draftId: string,
+  ref: string,
+): Promise<string | null> {
+  return inPlace(() => api.setDraftEpic(id, draftId, ref));
+}
+
+/**
  * addDraftDependency does not swallow its failure: the card of the draft shows
  * the refusal next to the field.
  */
@@ -923,24 +936,38 @@ export async function removeDraftDependency(
   );
 }
 
-/** decideDraft records what the user decided about one draft. */
-export async function decideDraft(
+/**
+ * decideDraft records what the user decided about one draft and answers whether it went through;
+ * the notice names the draft by its title.
+ */
+export function decideDraft(
   id: string,
   draftId: string,
   decision: DraftDecision,
-): Promise<void> {
-  await run(fail(`Couldn't decide a draft of ${theItem(id)}`, TRY), () =>
-    api.decideDraft(id, draftId, decision),
-  );
+): Promise<boolean> {
+  const draft = storedDraft(id, draftId);
+  const label =
+    draft === null
+      ? `Couldn't decide a draft of ${theItem(id)}`
+      : `Couldn't decide ${draftTitle(draft)}`;
+  return run(fail(label, TRY), () => api.decideDraft(id, draftId, decision));
 }
 
-/** groupIntoEpic puts the drafts under a new epic and answers its id; "" when it failed. */
-export async function groupIntoEpic(id: string, draftIds: string[]): Promise<string> {
+/**
+ * groupIntoEpicInPlace puts the drafts under a new epic: it answers the id of the epic, or the
+ * refusal for the footer of the dialog.
+ */
+export async function groupIntoEpicInPlace(
+  id: string,
+  draftIds: string[],
+  title: string,
+  repositoryId: string,
+): Promise<{ epicId: string } | { error: string }> {
   let epicId = "";
-  await run(fail(`Couldn't group the drafts of ${theItem(id)} into an epic`, TRY), async () => {
-    epicId = await api.groupIntoEpic(id, draftIds);
+  const error = await inPlace(async () => {
+    epicId = await api.groupIntoEpic(id, draftIds, title, repositoryId);
   });
-  return epicId;
+  return error === null ? { epicId } : { error };
 }
 
 /** retryPublish publishes a draft again, after a failure. */
@@ -950,16 +977,23 @@ export async function retryPublish(id: string, draftId: string): Promise<void> {
   );
 }
 
-/** archiveDiscussion ends the conversation and sends the discussion to the history. */
-export function archiveDiscussion(id: string): Promise<void> {
-  return runRemoval(id, fail(withItem("Couldn't archive", itemName(id)), TRY), () =>
-    api.archiveDiscussion(id),
-  );
+// removalInPlace runs the removal of an item whose refusal has a place of its own on screen: it
+// marks the item as runRemoval does, and answers the message of the failure, or null.
+async function removalInPlace(id: string, operation: () => Promise<void>): Promise<string | null> {
+  useAppStore.setState({ expectGone: id });
+  const error = await inPlace(operation);
+  if (error !== null && useAppStore.getState().expectGone === id) {
+    useAppStore.setState({ expectGone: null });
+  }
+  return error;
 }
 
-/** deleteDiscussion removes the discussion for good. */
-export function deleteDiscussion(id: string): Promise<void> {
-  return runRemoval(id, fail(withItem("Couldn't delete", itemName(id)), TRY), () =>
-    api.deleteDiscussion(id),
-  );
+/** archiveDiscussionInPlace ends the conversation and sends the discussion to the history; it answers the refusal, or null. */
+export function archiveDiscussionInPlace(id: string): Promise<string | null> {
+  return removalInPlace(id, () => api.archiveDiscussion(id));
+}
+
+/** deleteDiscussionInPlace removes the discussion for good; it answers the refusal, or null. */
+export function deleteDiscussionInPlace(id: string): Promise<string | null> {
+  return removalInPlace(id, () => api.deleteDiscussion(id));
 }

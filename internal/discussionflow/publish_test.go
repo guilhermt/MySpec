@@ -521,7 +521,7 @@ func TestADependencyGitHubRefusesIsDroppedWithAWarning(t *testing.T) {
 	if card.Dependencies[0].Detail != detail {
 		t.Errorf("the dependency says %q about GitHub", card.Dependencies[0].Detail)
 	}
-	want := []string{"Couldn't record the dependency on invoice-schema: " + detail}
+	want := []string{"Couldn't record the dependency on Invoice schema: " + detail}
 	if diff := cmp.Diff(want, card.Warnings); diff != "" {
 		t.Errorf("the card says the wrong thing about the dependency (-want +got):\n%s", diff)
 	}
@@ -587,8 +587,10 @@ func TestACycleIsBrokenByPositionAndTheDependencyItDropsIsAWarning(t *testing.T)
 	if len(first.Dependencies) != 1 || first.Dependencies[0].Dropped != discussion.DropUnavailable {
 		t.Fatalf("the dependency of the first card is %v, want an unavailable one", first.Dependencies)
 	}
-	if len(first.Warnings) != 1 || !strings.Contains(first.Warnings[0], "depend on each other") {
-		t.Errorf("the first card says %v about the dependency it lost", first.Warnings)
+	// The warning names the draft by its title, never by its id.
+	want := "Couldn't record the dependency on Export invoices as CSV: Export invoices as CSV is published after this card: the cards depend on each other."
+	if len(first.Warnings) != 1 || first.Warnings[0] != want {
+		t.Errorf("the first card says %v about the dependency it lost, want %q", first.Warnings, want)
 	}
 	if len(second.Dependencies) != 1 || !second.Dependencies[0].Linked {
 		t.Errorf("the dependency of the second card is %v, want it recorded", second.Dependencies)

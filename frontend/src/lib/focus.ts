@@ -1,15 +1,26 @@
 import { type FindingLike, nextToDecide, previousToDecide } from "@/lib/findings";
+import { revealItem } from "@/lib/reveal";
 
 /**
  * RequestFocus is where the focus goes on arriving at the request, and on Show: the pending card
  * (its first question without a choice, or its default answer), the first finding to decide of the
- * card of findings, the primary of the bar, the composer, or the bar itself when none of its
- * actions can be pressed.
+ * card of findings, the draft the bar asks for in the drafts card, the primary of the bar, the
+ * composer, or the bar itself when none of its actions can be pressed.
  */
-export type RequestFocus = "question" | "permission" | "finding" | "primary" | "composer" | "bar";
+export type RequestFocus =
+  | "question"
+  | "permission"
+  | "finding"
+  | "draft"
+  | "primary"
+  | "composer"
+  | "bar";
 
 /** COMPOSER is the field of the composer of the place on screen. */
 export const COMPOSER = "#composer-input";
+
+/** REQUEST_TARGET is the draft of the drafts card the bar asks for: the card gives it the attribute. */
+const REQUEST_TARGET = "[data-decision-card] [data-request-target]";
 
 /** BAR is the request bar of the place on screen. */
 const BAR = "[aria-label=Request]";
@@ -49,6 +60,8 @@ function targetOf(target: RequestFocus): HTMLElement | null {
           `${FINDING}[data-decided="false"]:not([data-disabled])`,
         ) ?? document.querySelector<HTMLElement>(FINDING)
       );
+    case "draft":
+      return document.querySelector<HTMLElement>(REQUEST_TARGET);
     case "primary":
       return (
         document.querySelector<HTMLElement>(
@@ -65,7 +78,8 @@ function targetOf(target: RequestFocus): HTMLElement | null {
 /**
  * focusRequest takes the focus to where the request asks it, scrolled into view: the first
  * question without a choice of the pending card, the default answer of the pending permission, the
- * first finding to decide, centred, the primary of the bar, the composer or the bar itself. False
+ * first finding to decide, centred, the draft the bar asks for, centred or by its top when it is
+ * taller than the conversation, the primary of the bar, the composer or the bar itself. False
  * when the target isn't on screen.
  */
 export function focusRequest(target: RequestFocus): boolean {
@@ -73,8 +87,14 @@ export function focusRequest(target: RequestFocus): boolean {
   if (element === null) {
     return false;
   }
-  element.focus();
-  element.scrollIntoView({ block: target === "finding" ? "center" : "nearest" });
+  if (target === "draft") {
+    // The draft comes into view, also when the target is its Retry: its head first.
+    element.focus({ preventScroll: true });
+    revealItem(element.closest<HTMLElement>("[data-card-item]") ?? element);
+  } else {
+    element.focus();
+    element.scrollIntoView({ block: target === "finding" ? "center" : "nearest" });
+  }
   return true;
 }
 
@@ -110,5 +130,44 @@ export function focusFindingToDecide(findings: readonly FindingLike[] | null, by
   }
   target.focus();
   target.scrollIntoView({ block: "center" });
+  return true;
+}
+
+/** DRAFT is the focusable element of a draft of the drafts card, open or folded. */
+const DRAFT = "[data-decision-card] [data-card-item]";
+
+/** activeDraftId is the draft of the drafts card around the focus; null when the focus is elsewhere. */
+export function activeDraftId(): string | null {
+  const focused = document.activeElement?.closest<HTMLElement>(DRAFT);
+  return focused?.dataset.cardItem ?? null;
+}
+
+/** currentDraftId is the draft of the drafts card that is the current one, open; null without a card. */
+export function currentDraftId(): string | null {
+  const current = document.querySelector<HTMLElement>(`${DRAFT}[data-current]`);
+  return current?.dataset.cardItem ?? null;
+}
+
+/**
+ * focusDraft takes the focus to a draft of the drafts card, scrolled to the centre, or by its top
+ * when it is taller than the conversation: the draft opens as it takes the focus. With retry, on the next frame it goes on to the Retry of the draft, which
+ * only exists once the draft is open. False when the draft is not on screen.
+ */
+export function focusDraft(id: string, retry: boolean): boolean {
+  const selector = `[data-decision-card] [data-card-item="${id}"]`;
+  const element = document.querySelector<HTMLElement>(selector);
+  if (element === null) {
+    return false;
+  }
+  element.focus();
+  revealItem(element);
+  if (retry) {
+    // The draft stays where it came into view: a Retry below a draft taller than the conversation
+    // takes the focus without scrolling its head away.
+    requestAnimationFrame(() => {
+      const button = document.querySelector<HTMLElement>(`${selector} [data-retry]`);
+      button?.focus({ preventScroll: true });
+    });
+  }
   return true;
 }

@@ -26,7 +26,7 @@ func (s *Service) Sync(ctx context.Context) {
 			s.log.Error("open discussion session failed", "discussion", d.ID, "error", err)
 			continue
 		}
-		s.stampDocument(s.lockOf(d.ID), d)
+		s.stampDocument(ctx, s.lockOf(d.ID), d)
 	}
 	for _, d := range active {
 		s.Check(d.ID)

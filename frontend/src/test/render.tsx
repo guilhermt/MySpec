@@ -25,6 +25,7 @@ export interface StoreOptions {
       | "transcripts"
       | "drafts"
       | "markerRequest"
+      | "draftRequest"
       | "boardCardRequest"
       | "openStepTab"
       | "prDrafts"
@@ -37,6 +38,7 @@ export interface StoreOptions {
       | "pendingReview"
       | "publishAttempts"
       | "reviewDialog"
+      | "discussionDialog"
       | "newDiscussion"
       | "textDrafts"
       | "sidebarCollapsed"
@@ -72,6 +74,7 @@ export function resetAppStore(options: StoreOptions = {}): void {
     transcripts: options.ui?.transcripts ?? {},
     drafts: options.ui?.drafts ?? {},
     markerRequest: options.ui?.markerRequest ?? null,
+    draftRequest: options.ui?.draftRequest ?? null,
     boardCardRequest: options.ui?.boardCardRequest ?? null,
     openStepTab: options.ui?.openStepTab ?? {},
     prDrafts: options.ui?.prDrafts ?? {},
@@ -84,6 +87,7 @@ export function resetAppStore(options: StoreOptions = {}): void {
     pendingReview: options.ui?.pendingReview ?? null,
     publishAttempts: options.ui?.publishAttempts ?? {},
     reviewDialog: options.ui?.reviewDialog ?? null,
+    discussionDialog: options.ui?.discussionDialog ?? null,
     newDiscussion: options.ui?.newDiscussion ?? null,
     textDrafts: options.ui?.textDrafts ?? {},
     sidebarCollapsed: options.ui?.sidebarCollapsed ?? new Set<string>(),

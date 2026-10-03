@@ -282,9 +282,9 @@ export const api = {
   decideDraft: vi.fn<(id: string, draftId: string, decision: DraftDecision) => Promise<void>>(() =>
     Promise.resolve(),
   ),
-  groupIntoEpic: vi.fn<(id: string, draftIds: string[]) => Promise<string>>(() =>
-    Promise.resolve("draft-epic"),
-  ),
+  groupIntoEpic: vi.fn<
+    (id: string, draftIds: string[], title: string, repositoryId: string) => Promise<string>
+  >(() => Promise.resolve("draft-epic")),
   retryPublish: vi.fn<(id: string, draftId: string) => Promise<void>>(() => Promise.resolve()),
   archiveDiscussion: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   deleteDiscussion: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
@@ -1114,6 +1114,8 @@ export function makeDiscussion(overrides: Partial<DiscussionSummary> = {}): Disc
     status: "discussing",
     cards: [makeDiscussionCard()],
     drafts: [],
+    round: 0,
+    publishing: false,
     draftsRead: false,
     draftsRevision: 0,
     unreadableDrafts: "",
@@ -1185,6 +1187,12 @@ export function makeDraft(overrides: Partial<Draft> = {}): Draft {
     publishError: "",
     hold: { reason: "", title: "", left: 0, approved: 0, cards: 0 },
     publishing: false,
+    round: 1,
+    revised: false,
+    approvalCleared: false,
+    approvePublishes: [],
+    discardPublishes: [],
+    approveHold: { reason: "", title: "", left: 0, approved: 0, cards: 0 },
     ...overrides,
   };
 }
@@ -1208,6 +1216,7 @@ export function makeArchivedDiscussion(
     boardId: "board-1",
     board: "Roadmap",
     title: "Invoices",
+    text: "Split the invoices screen.",
     cards: [makeDiscussionCard()],
     drafts: [makeDraft()],
     publishedCount: 1,
@@ -1349,6 +1358,14 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
           url: "",
           commits: [],
           count: 0,
+          board: "",
+          epics: [],
+          round: 0,
+          first: false,
+          changed: 0,
+          added: 0,
+          dropped: 0,
+          before: [],
         },
       };
     case "error":

@@ -192,13 +192,15 @@ export function MenuRadioItem({
   );
 }
 
-/** ItemAction is what Enter or a click does on a disabled item instead of choosing it: Clone. */
+/** ItemAction is what Enter or a click does on an item instead of choosing it: Clone, Existing issue…. */
 export interface ItemAction {
   label: string;
   onAction: () => void;
+  /** closes leaves the menu with the action, for one that opens something next to it: Existing issue…. Absent, the menu stays to show the action's progress. */
+  closes?: boolean;
 }
 
-/** actionItemLabel is the accessible name of a disabled item with an action: "acme/billing, not cloned. Enter clones it." */
+/** actionItemLabel is the accessible name of an item with an action: "acme/billing, not cloned. Enter clones it." */
 export function actionItemLabel(
   label: string,
   sub: string | undefined,
@@ -214,24 +216,27 @@ export interface MenuActionItemProps {
   sub?: string;
   subTone?: "error";
   action: ItemAction;
+  /** disabled is a choice that can't be made, offering the action in its place: Clone. Absent, the item is the action itself: Existing issue…. */
+  disabled?: boolean;
 }
 
 /**
- * MenuActionItem is a choice that can't be made and offers an action in its place: the label in the
- * fourth ink, the reason, and the action as ghost text on the right. It stays on the path of the
- * arrows, is not chosen, and keeps the menu open, so the action shows its own progress.
+ * MenuActionItem is an item that runs an action instead of being chosen: the label, the sub, and
+ * the action as ghost text on the right. Disabled, it is a choice that can't be made, in the fourth
+ * ink with aria-disabled; otherwise it is in the ink of any item. It stays on the path of the arrows
+ * and keeps the menu open, so the action shows its own progress, unless the action closes it.
  */
-export function MenuActionItem({ label, sub, subTone, action }: MenuActionItemProps) {
+export function MenuActionItem({ label, sub, subTone, action, disabled }: MenuActionItemProps) {
   return (
     <BaseMenu.Item
-      closeOnClick={false}
-      aria-disabled="true"
+      closeOnClick={action.closes === true}
+      {...(disabled ? { "aria-disabled": true } : {})}
       aria-label={actionItemLabel(label, sub, action)}
       onClick={() => action.onAction()}
       className={cn(
         "relative flex cursor-default items-center outline-hidden select-none",
         MENU_ITEM,
-        "text-ink-4 focus:text-ink-4",
+        disabled && "text-ink-4 focus:text-ink-4",
       )}
     >
       <span>{label}</span>

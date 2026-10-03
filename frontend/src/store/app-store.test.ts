@@ -13,6 +13,7 @@ import {
   initialNav,
   readLastItem,
   stepTabKey,
+  storedDraft,
   useAppStore,
   useArchivedDiscussion,
   useArchivedReview,
@@ -65,6 +66,7 @@ import {
   makeBoard,
   makeBoardCard,
   makeDiscussion,
+  makeDraft,
   makeEntry,
   makeMigration,
   makeModelCatalog,
@@ -896,6 +898,19 @@ describe("marker request", () => {
 
     useAppStore.getState().clearMarkerRequest();
     expect(useAppStore.getState().markerRequest).toBeNull();
+  });
+});
+
+describe("draft request", () => {
+  it("asks the drafts card of a discussion to open a draft, until it is cleared", () => {
+    useAppStore.getState().requestDraft("discussion-1", "draft-epic");
+    expect(useAppStore.getState().draftRequest).toEqual({
+      discussionId: "discussion-1",
+      draftId: "draft-epic",
+    });
+
+    useAppStore.getState().clearDraftRequest();
+    expect(useAppStore.getState().draftRequest).toBeNull();
   });
 });
 
@@ -1907,7 +1922,7 @@ describe("discussions", () => {
 
     useAppStore.getState().openSituation(DISCUSSION.id, DISCUSSION_PLACE);
     expect(location()).toEqual({ kind: "discussion", id: DISCUSSION.id });
-    expect(useAppStore.getState().pendingFocus).toBe("title");
+    expect(useAppStore.getState().pendingFocus).toBe("request");
   });
 
   it("is the situation of the open discussion on screen", () => {
@@ -1931,6 +1946,21 @@ describe("discussions", () => {
       useAppStore.getState().openDiscussion(DISCUSSION.id);
     });
     expect(result.current).toBe("s-drafts");
+  });
+});
+
+describe("storedDraft", () => {
+  it("reads a draft as the snapshot has it now, and null once the discussion no longer has it", () => {
+    const draft = makeDraft({ id: "draft-1", revision: 3 });
+    useAppStore
+      .getState()
+      .applyState(
+        withTasks({ discussions: [makeDiscussion({ id: "discussion-1", drafts: [draft] })] }),
+      );
+
+    expect(storedDraft("discussion-1", "draft-1")).toEqual(draft);
+    expect(storedDraft("discussion-1", "draft-gone")).toBeNull();
+    expect(storedDraft("discussion-gone", "draft-1")).toBeNull();
   });
 });
 
@@ -2825,6 +2855,23 @@ describe("the dialogs of a review", () => {
 
     act(() => useAppStore.getState().closeReviewDialog());
     expect(useAppStore.getState().reviewDialog).toBeNull();
+  });
+
+  it("opens and closes the dialog of a discussion", () => {
+    act(() => useAppStore.getState().openDiscussionDialog("discussion-1", "archive"));
+    expect(useAppStore.getState().discussionDialog).toEqual({
+      discussionId: "discussion-1",
+      kind: "archive",
+    });
+
+    act(() => useAppStore.getState().openDiscussionDialog("discussion-1", "delete"));
+    expect(useAppStore.getState().discussionDialog).toEqual({
+      discussionId: "discussion-1",
+      kind: "delete",
+    });
+
+    act(() => useAppStore.getState().closeDiscussionDialog());
+    expect(useAppStore.getState().discussionDialog).toBeNull();
   });
 
   it("drops the attempt and the dialog of a review a snapshot no longer has", () => {

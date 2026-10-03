@@ -11,6 +11,7 @@ import (
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -525,9 +526,13 @@ func (p *publication) dependencies(ctx context.Context, target *discussion.Draft
 // dependency records one blocked-by relation of a card.
 func (p *publication) dependency(ctx context.Context, target *discussion.Draft, i int) error {
 	dependency := target.Dependencies[i]
-	var blockingID string
+	var (
+		blockingID string
+		on         discussion.Draft
+		found      bool
+	)
 	if dependency.IsDraft() {
-		on, found := draftOf(p.drafts, dependency.Draft)
+		on, found = draftOf(p.drafts, dependency.Draft)
 		if !found || on.Decision == discussion.DecisionDiscarded {
 			return p.drop(ctx, target, i, discussion.DropDiscarded, "",
 				"The dependency on "+dependencyName(dependency, on, found)+" was discarded and dropped.")
@@ -538,7 +543,7 @@ func (p *publication) dependency(ctx context.Context, target *discussion.Draft, 
 			// round because they depend on each other.
 			detail := titleOf(on) + " is published after this card: the cards depend on each other."
 			return p.drop(ctx, target, i, discussion.DropUnavailable, detail,
-				"Couldn't record the dependency on "+dependency.String()+": "+detail)
+				"Couldn't record the dependency on "+dependencyName(dependency, on, found)+": "+detail)
 		}
 		blockingID = on.Published.NodeID
 	} else {
@@ -548,7 +553,7 @@ func (p *publication) dependency(ctx context.Context, target *discussion.Draft, 
 	if err := p.service.gh.AddBlockedBy(ctx, target.Published.NodeID, blockingID); err != nil {
 		detail := publishError(err, dependency.String(), onIssue)
 		return p.drop(ctx, target, i, discussion.DropUnavailable, detail,
-			"Couldn't record the dependency on "+dependency.String()+": "+detail)
+			"Couldn't record the dependency on "+dependencyName(dependency, on, found)+": "+detail)
 	}
 	p.wrote = true
 	return p.record(ctx, target, func(d *discussion.Draft) { d.Dependencies[i].Linked = true })
@@ -564,9 +569,19 @@ func (p *publication) done(ctx context.Context, target *discussion.Draft) error 
 	if err != nil {
 		return err
 	}
+	p.markRound(ctx, target)
 	p.service.log.Info("discussion draft published", "discussion", p.stored.ID, "draft", target.ID,
 		"outcome", string(target.Published.Outcome), "issue", target.Reference())
 	return nil
+}
+
+// markRound records that the round of a draft has a publication: the first
+// draft of the round that reached GitHub or failed writes the marker, and the
+// session keeps it once.
+func (p *publication) markRound(ctx context.Context, target *discussion.Draft) {
+	p.service.sessions.MarkDiscussion(ctx, sessionKey(p.stored.ID), &session.MarkerEntry{
+		Type: session.MarkerDraftsPublished, Round: target.Round,
+	})
 }
 
 // drop takes a dependency out of the publication, saying why.
@@ -605,6 +620,7 @@ func (p *publication) record(ctx context.Context, target *discussion.Draft,
 // sending the draft again. Closing the app before that loses it, and the next
 // run publishes the draft a second time.
 func (p *publication) fail(ctx context.Context, target discussion.Draft, err error) {
+	p.markRound(ctx, &target)
 	message := p.report(target, err)
 	writeErr := p.recordFailure(ctx, target, err, message)
 	if writeErr == nil {

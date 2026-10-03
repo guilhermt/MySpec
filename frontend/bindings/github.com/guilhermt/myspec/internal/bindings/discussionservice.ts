@@ -57,11 +57,11 @@ export function DiscussionContext(req: $models.DiscussionContextRequest): $Cance
 }
 
 /**
- * GroupIntoEpic creates an epic over the given cards and points every one of
- * them at it. It answers with the id of the epic.
+ * GroupIntoEpic puts loose card drafts of the current round under a new epic
+ * with this title, in this repository of the board, and answers with its id.
  */
-export function GroupIntoEpic(id: string, draftIDs: string[] | null): $CancellablePromise<string> {
-    return $Call.ByID(1067082565, id, draftIDs);
+export function GroupIntoEpic(id: string, draftIDs: string[] | null, title: string, repositoryID: string): $CancellablePromise<string> {
+    return $Call.ByID(1067082565, id, draftIDs, title, repositoryID);
 }
 
 /**

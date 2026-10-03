@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { Bot, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -259,6 +259,7 @@ describe("MenuActionItem", () => {
             label="acme/billing"
             sub="Not cloned"
             action={{ label: "Clone", onAction }}
+            disabled
           />
         </MenuContent>
       </Menu>,
@@ -273,5 +274,26 @@ describe("MenuActionItem", () => {
     await user.click(item);
     expect(onAction).toHaveBeenCalledTimes(2);
     expect(screen.getByRole("menu")).toBeInTheDocument();
+  });
+
+  it("is the action itself when not disabled: not aria-disabled, and Enter runs it", async () => {
+    const onAction = vi.fn();
+    const { user } = renderWithStore(
+      <Menu>
+        <MenuTrigger render={<Button />}>Epic</MenuTrigger>
+        <MenuContent>
+          <MenuActionItem
+            label="Existing issue…"
+            action={{ label: "Open", onAction, closes: true }}
+          />
+        </MenuContent>
+      </Menu>,
+    );
+    await user.click(screen.getByRole("button", { name: "Epic" }));
+    const item = await screen.findByRole("menuitem", { name: "Existing issue…. Enter opens it." });
+    expect(item).not.toHaveAttribute("aria-disabled");
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(onAction).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
   });
 });

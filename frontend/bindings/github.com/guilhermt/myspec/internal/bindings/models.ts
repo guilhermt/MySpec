@@ -89,6 +89,11 @@ export interface ArchivedDiscussion {
     "title": string;
 
     /**
+     * what the user wrote when creating it; "" for none
+     */
+    "text": string;
+
+    /**
      * never nil
      */
     "cards": DiscussionCard[] | null;
@@ -798,8 +803,18 @@ export interface DiscussionSummary {
     "drafts": Draft[] | null;
 
     /**
+     * Round is the current round of the drafts, 0 without any.
+     */
+    "round": number;
+
+    /**
+     * Publishing says a run that writes on GitHub is under way.
+     */
+    "publishing": boolean;
+
+    /**
      * DraftsRead says a readable drafts artifact was recorded, and
-     * DraftsRevision changes every time the artifact is read again and differs.
+     * DraftsRevision changes with every reading that opens or revises a round.
      */
     "draftsRead": boolean;
     "draftsRevision": number;
@@ -998,6 +1013,48 @@ export interface Draft {
      * Hold is what keeps the draft out of the next publication; Reason "" when nothing does.
      */
     "hold": DraftHold;
+    "round": number;
+
+    /**
+     * the last revision of the round changed it
+     */
+    "revised": boolean;
+
+    /**
+     * a revision took its approval
+     */
+    "approvalCleared": boolean;
+
+    /**
+     * ids, in the order of the run; never nil
+     */
+    "approvePublishes": string[] | null;
+
+    /**
+     * ids, in the order of the run; never nil
+     */
+    "discardPublishes": string[] | null;
+    "approveHold": DraftHold;
+}
+
+/**
+ * DraftBefore is a draft of a round as it was before a revision, or one the
+ * revision added.
+ */
+export interface DraftBefore {
+    "title": string;
+    "kind": string;
+    "decision": string;
+    "outcome": string;
+    "reference": string;
+
+    /**
+     * never nil
+     */
+    "changes": string[] | null;
+    "dropped": boolean;
+    "added": boolean;
+    "approvalCleared": boolean;
 }
 
 /**
@@ -1214,7 +1271,9 @@ export interface MarkerEntry {
      * review_published, new_commits, step_review_started,
      * step_review_written, review_started, discussion_started, stage_started,
      * step_started, compacted, interrupted, retried, committed, pr_opened,
-     * checks_read, draft_approved, changes_approved, paused or plan_invalid.
+     * checks_read, draft_approved, changes_approved, paused, plan_invalid,
+     * discussion_document, drafts_written, drafts_revised, drafts_unreadable
+     * or drafts_published.
      */
     "type": string;
     "preTokens": number;
@@ -1283,6 +1342,46 @@ export interface MarkerEntry {
     "url": string;
     "commits": MarkerCommit[] | null;
     "count": number;
+
+    /**
+     * discussion_started
+     */
+    "board": string;
+
+    /**
+     * discussion_started; never nil
+     */
+    "epics": string[] | null;
+
+    /**
+     * drafts_*
+     */
+    "round": number;
+
+    /**
+     * discussion_document
+     */
+    "first": boolean;
+
+    /**
+     * drafts_revised
+     */
+    "changed": number;
+
+    /**
+     * drafts_revised
+     */
+    "added": number;
+
+    /**
+     * drafts_revised
+     */
+    "dropped": number;
+
+    /**
+     * drafts_revised; never nil
+     */
+    "before": DraftBefore[] | null;
 }
 
 /**

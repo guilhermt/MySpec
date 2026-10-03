@@ -129,7 +129,7 @@ Numa superfície elevada (`--surface-2`), com anel `--line-2`, e `--brand-ring` 
 |---|---|
 | Número | `1`, em mono `--text-micro` e `--ink-3`, alinhado à direita |
 | Tipo | Etiqueta neutra contornada por `--line-2`: `New card`, `Epic`, ou `Update` seguida da referência do card (`gateway#461`, link para o GitHub). `Revised`, com o ícone de lápis, quando a última revisão do agente o mudou; o tooltip diz que a versão anterior está no marco `Drafts revised` |
-| Título | `--text-ui`, peso 600; o do épico em `--text-body`. Descartado, `--ink-2` |
+| Título | `--text-ui`, peso 600; o do épico em `--text-body`. Descartado, `--ink-2`: o rascunho descartado, épico ou card, vive pelo título em `--ink-2` e pelo estado `Discarded`, sem opacidade, e a decisão continua em tinta cheia para ser desfeita |
 | Campos | Uma linha em `--text-meta` e `--ink-3`, separada por `·`: o repositório, o módulo, o número de cards do épico, `In <épico existente>`, e numa atualização o que ela muda além do corpo, cada um só quando difere: `Now: <título atual>`, `Module now: <valor>`, `Epic now: <referência e título>` (`none`) |
 | Dependências | Uma linha: `Depends on` e os títulos dos rascunhos ou cards como links em `--brand-ink`. O link leva ao rascunho da rodada atual, que abre; um rascunho de uma rodada fechada e um card abrem a issue no GitHub; uma dependência registrada no GitHub tem o tooltip `Linked on GitHub`, e uma que saiu fica só no aviso. Numa atualização, `· On GitHub: #455` com as que o card já tem e o rascunho não diz. **Nunca o id** |
 | Avisos | Neutros, com o `◇`, um por linha em `--ink-2`: `acme/status-page is no longer managed by the board.`; `The dependency on <x> is no longer among the drafts.`; `The dependency on <x> was discarded and dropped.`; `The module <x> is no longer an option of the board.`; e, numa atualização, `This card isn't in the last reading of the board.`, `Refreshing the card…` com brilho, `Couldn't refresh the card: <motivo>. The draft shows the last reading.` |
@@ -184,7 +184,7 @@ Aprovar é uma escrita no GitHub e não tem confirmação. Por isso:
 - **Title**;
 - **Body**, em Markdown cru, numa área de texto em mono;
 - **Repository**, **Module** e **Epic**, como seletores lado a lado. O valor corta com reticências e tooltip. Numa atualização, o repositório é o do card, fixo. **Epic** tem, depois de um separador, **Existing issue…**, que abre o campo `owner/name#N`;
-- **Depends on**, com as dependências como chips com `×` (uma já registrada no GitHub não sai), e **Add a dependency**. Esse botão abre um `listbox` com os rascunhos da rodada pelo título, e com os cards do board por número ou título, com busca; uma busca que é um `dono/nome#N` fora deles oferece `Depend on <dono/nome#N>`.
+- **Depends on**, com as dependências como chips com `×` (uma já registrada no GitHub não sai), e **Add a dependency**. Esse botão abre um `listbox` com os rascunhos da rodada pelo título, e com os cards do board por número ou título, com busca; uma busca que é um `dono/nome#N` fora deles oferece `Depend on <dono/nome#N>`. O `listbox` abre sobre a edição, embaixo da linha quando cabe, e em cima quando há mais espaço acima, sem passar da borda da conversa.
 
 O título não se repete acima dos campos. Embaixo, `Saved as you type. The agent's next revision of this draft replaces your edits.` e **Done**; num aprovado, antes dela, `Changing the repository, the epic or a dependency clears the approval.` `Esc` fecha. O título e o corpo nunca ficam vazios, salvo o corpo de um épico do usuário.
 

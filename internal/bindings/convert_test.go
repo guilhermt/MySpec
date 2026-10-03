@@ -955,6 +955,12 @@ func markerDTO(m bindings.MarkerEntry) *bindings.MarkerEntry {
 	if m.Commits == nil {
 		m.Commits = []bindings.MarkerCommit{}
 	}
+	if m.Epics == nil {
+		m.Epics = []string{}
+	}
+	if m.Before == nil {
+		m.Before = []bindings.DraftBefore{}
+	}
 	return &m
 }
 
@@ -1046,6 +1052,52 @@ func TestFromEntryCarriesTheNewMarkerFields(t *testing.T) {
 				Type: "new_commits", Findings: -1, Count: -1,
 				Commits: []bindings.MarkerCommit{{SHA: "c19f02e", Subject: "Fix the time zone rule", Author: "rsouza"}},
 			}),
+		},
+		"discussion_started": {
+			marker: &session.MarkerEntry{
+				Type: session.MarkerDiscussionStarted, Model: "opus-5-5", Effort: "high",
+				Board: "Roadmap", Epics: []string{"acme/web#1"},
+			},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "discussion_started", Findings: -1, Model: "opus-5-5", Effort: "high",
+				Board: "Roadmap", Epics: []string{"acme/web#1"},
+			}),
+		},
+		"discussion_document": {
+			marker: &session.MarkerEntry{Type: session.MarkerDiscussionDocument, First: true, Stamp: "1-2"},
+			want:   markerDTO(bindings.MarkerEntry{Type: "discussion_document", Findings: -1, First: true}),
+		},
+		"drafts_written": {
+			marker: &session.MarkerEntry{Type: session.MarkerDraftsWritten, Round: 2, Count: 3},
+			want:   markerDTO(bindings.MarkerEntry{Type: "drafts_written", Findings: -1, Round: 2, Count: 3}),
+		},
+		"drafts_revised": {
+			marker: &session.MarkerEntry{
+				Type: session.MarkerDraftsRevised, Round: 1, Changed: 1, Added: 1, Dropped: 1,
+				Before: []session.DraftBefore{
+					{Title: "Export invoices", Kind: "new", Decision: "approved", Changes: []string{"title"}, ApprovalCleared: true},
+					{Title: "Invoice schema", Kind: "update", Dropped: true},
+					{Title: "Audit log", Kind: "new", Added: true},
+				},
+			},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "drafts_revised", Findings: -1, Round: 1, Changed: 1, Added: 1, Dropped: 1,
+				Before: []bindings.DraftBefore{
+					{Title: "Export invoices", Kind: "new", Decision: "approved", Changes: []string{"title"}, ApprovalCleared: true},
+					{Title: "Invoice schema", Kind: "update", Changes: []string{}, Dropped: true},
+					{Title: "Audit log", Kind: "new", Changes: []string{}, Added: true},
+				},
+			}),
+		},
+		"drafts_unreadable": {
+			marker: &session.MarkerEntry{Type: session.MarkerDraftsUnreadable, Round: 1, Reason: "It has no title."},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "drafts_unreadable", Findings: -1, Round: 1, Reason: "It has no title.",
+			}),
+		},
+		"drafts_published": {
+			marker: &session.MarkerEntry{Type: session.MarkerDraftsPublished, Round: 2},
+			want:   markerDTO(bindings.MarkerEntry{Type: "drafts_published", Findings: -1, Round: 2}),
 		},
 		"interrupted": {
 			marker: &session.MarkerEntry{Type: session.MarkerInterrupted, InterruptedBy: "user"},
@@ -2790,6 +2842,8 @@ func TestFromDiscussionsCarriesEveryDraftWithWhatTheReadingKnows(t *testing.T) {
 			URL:         "https://github.com/acme/web/issues/12",
 			Published:   true,
 			PublishedAt: readAt.Format(time.RFC3339),
+
+			ApprovePublishes: []string{}, DiscardPublishes: []string{},
 		},
 		{
 			ID: "export", Position: 2, Kind: "new", Source: "agent",
@@ -2803,6 +2857,8 @@ func TestFromDiscussionsCarriesEveryDraftWithWhatTheReadingKnows(t *testing.T) {
 			Warnings:     []string{},
 			PublishError: "gh: the issue could not be created",
 			Hold:         bindings.DraftHold{Reason: "draft", Title: "Add the login screen"},
+
+			ApprovePublishes: []string{}, DiscardPublishes: []string{},
 		},
 		{
 			ID: "the-epic", Position: 3, Kind: "epic", Source: "user",
@@ -2810,6 +2866,8 @@ func TestFromDiscussionsCarriesEveryDraftWithWhatTheReadingKnows(t *testing.T) {
 			Title:      "The invoices", Body: "Everything about them.",
 			Dependencies: []bindings.DraftDependency{},
 			Warnings:     []string{},
+
+			ApprovePublishes: []string{}, DiscardPublishes: []string{},
 		},
 	}
 	if diff := cmp.Diff(want, got.Drafts); diff != "" {
@@ -2862,6 +2920,64 @@ func TestFromDiscussionsCarriesWhatHoldsEachDraft(t *testing.T) {
 				t.Errorf("hold (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestFromDiscussionsCarriesWhatEachGestureWouldPublish(t *testing.T) {
+	t.Parallel()
+
+	states := discussionDrafts()
+	states[1].ApprovePublishes = []string{"the-epic", "export"}
+	states[1].DiscardPublishes = []string{"the-epic"}
+	states[1].ApproveHold = discussionflow.Hold{Reason: discussionflow.HoldCards, Left: 2}
+	state := discussionState(discussionflow.StatusDeciding, states...)
+
+	got := convertDiscussion(state, discussionReading(), true, nil).Drafts[1]
+
+	if diff := cmp.Diff([]string{"the-epic", "export"}, got.ApprovePublishes); diff != "" {
+		t.Errorf("approvePublishes (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]string{"the-epic"}, got.DiscardPublishes); diff != "" {
+		t.Errorf("discardPublishes (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(bindings.DraftHold{Reason: "cards", Left: 2}, got.ApproveHold); diff != "" {
+		t.Errorf("approveHold (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromDiscussionsMarksTheDraftsRevisedByTheLastReadingOnly(t *testing.T) {
+	t.Parallel()
+
+	states := discussionDrafts()
+	states[0].Draft.RevisedReading, states[0].Draft.ApprovalCleared = 2, true
+	states[1].Draft.RevisedReading = 1
+	state := discussionState(discussionflow.StatusDeciding, states...)
+
+	got := convertDiscussion(state, discussionReading(), true, nil)
+
+	revised := make([]bool, len(got.Drafts))
+	for i, draft := range got.Drafts {
+		revised[i] = draft.Revised
+	}
+	if diff := cmp.Diff([]bool{true, false, false}, revised); diff != "" {
+		t.Errorf("revised (-want +got):\n%s", diff)
+	}
+	if !got.Drafts[0].ApprovalCleared {
+		t.Error("approvalCleared = false, want the approval a revision took")
+	}
+}
+
+func TestFromDiscussionsCarriesTheRoundAndThePublicationUnderWay(t *testing.T) {
+	t.Parallel()
+
+	state := discussionState(discussionflow.StatusPublishing, discussionDrafts()...)
+	state.Round, state.Publishing = 3, true
+	state.Drafts[0].Draft.Round = 3
+
+	got := convertDiscussion(state, discussionReading(), true, nil)
+
+	if got.Round != 3 || !got.Publishing || got.Drafts[0].Round != 3 {
+		t.Errorf("round = %d, publishing = %v, draft round = %d, want 3, true, 3", got.Round, got.Publishing, got.Drafts[0].Round)
 	}
 }
 
@@ -2965,6 +3081,7 @@ func TestFromArchivedDiscussionsCountsWhatWasPublishedAndTheRepositoriesItTouche
 	archived := discussionState(discussionflow.StatusReadyToArchive).Discussion
 	archived.ArchivedAt = readAt.Add(time.Hour)
 	stored := []discussion.Draft{discussionDrafts()[0].Draft, discussionDrafts()[1].Draft}
+	stored[0].Round, stored[0].RevisedReading = 2, 2
 	stored[1].Published = discussion.Publication{
 		Outcome: discussion.OutcomeCreated, Number: 30,
 		URL: "https://github.com/acme/api/issues/30", At: readAt,
@@ -2984,6 +3101,9 @@ func TestFromArchivedDiscussionsCountsWhatWasPublishedAndTheRepositoriesItTouche
 	if got[0].Board != "Roadmap as it was" || got[0].Title != "The invoices of the quarter" {
 		t.Errorf("discussion = %+v, want the board and the title it recorded", got[0])
 	}
+	if got[0].Text != "What to do with them." {
+		t.Errorf("text = %q, want what the user wrote", got[0].Text)
+	}
 	if got[0].PublishedCount != 2 {
 		t.Errorf("publishedCount = %d, want 2", got[0].PublishedCount)
 	}
@@ -2992,6 +3112,13 @@ func TestFromArchivedDiscussionsCountsWhatWasPublishedAndTheRepositoriesItTouche
 	}
 	if got[0].ArchivedAt != readAt.Add(time.Hour).Format(time.RFC3339) {
 		t.Errorf("archivedAt = %q, want the instant it was archived", got[0].ArchivedAt)
+	}
+	if got[0].Drafts[0].Round != 2 || got[0].Drafts[0].Revised {
+		t.Errorf("draft round = %d, revised = %v, want 2, false: the history does not say revised", got[0].Drafts[0].Round, got[0].Drafts[0].Revised)
+	}
+	// A draft no reading revised is not revised either, though the history reads it with no revision.
+	if got[0].Drafts[1].Revised {
+		t.Error("revised = true for a draft never revised, want false")
 	}
 	if got[0].Drafts[0].Current != nil {
 		t.Errorf("current = %+v, want nil in the history", got[0].Drafts[0].Current)
