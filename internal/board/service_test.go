@@ -1183,8 +1183,10 @@ func TestPreviewEditSaysWhereEachRepositoryOfTheBoardGoesWhenUnchecked(t *testin
 		{ID: "repo-clone", Owner: "acme", Name: "clone", Path: "/src/clone", BoardID: boardID},
 		{ID: "repo-tasks", Owner: "acme", Name: "tasks", BoardID: boardID},
 		{ID: "repo-nothing", Owner: "acme", Name: "nothing", BoardID: boardID},
+		{ID: "repo-archived", Owner: "acme", Name: "archived", BoardID: boardID},
 	}
 	f.tasks["repo-tasks"] = 1
+	f.archived["repo-archived"] = 3
 
 	got, err := f.service.PreviewEdit(t.Context(), boardID)
 	if err != nil {
@@ -1195,6 +1197,7 @@ func TestPreviewEditSaysWhereEachRepositoryOfTheBoardGoesWhenUnchecked(t *testin
 		"acme/clone":     board.ReleaseNoBoard,
 		"acme/tasks":     board.ReleaseNoBoard,
 		"acme/nothing":   board.ReleaseLeave,
+		"acme/archived":  board.ReleaseNoBoard,
 		"acme/suggested": "",
 	}
 	for _, o := range got.Repositories {
@@ -1213,10 +1216,10 @@ func TestRemovalPreviewNamesTheRepositoriesByWhereTheyGo(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, board.Stored{})
 	f.repos.items = []repository.Repository{
-		{ID: "repo-web", Owner: "acme", Name: "web", Path: "/src/web", BoardID: boardID},
-		{ID: "repo-docs", Owner: "acme", Name: "docs", BoardID: boardID},
-		{ID: "repo-api", Owner: "Acme", Name: "api", BoardID: boardID},
-		{ID: "repo-lib", Owner: "acme", Name: "Lib", Path: "/src/lib", BoardID: boardID},
+		{ID: "repo-web", Owner: "acme", Name: "Web", Path: "/src/web", BoardID: boardID},
+		{ID: "repo-docs", Owner: "acme", Name: "Docs", BoardID: boardID},
+		{ID: "repo-api", Owner: "acme", Name: "api", BoardID: boardID},
+		{ID: "repo-lib", Owner: "acme", Name: "lib", Path: "/src/lib", BoardID: boardID},
 		{ID: "repo-free", Owner: "acme", Name: "free"},
 	}
 
@@ -1225,7 +1228,8 @@ func TestRemovalPreviewNamesTheRepositoriesByWhereTheyGo(t *testing.T) {
 		t.Fatalf("RemovalPreview() = %v, want nil", err)
 	}
 
-	want := board.Removal{ToNoBoard: []string{"acme/Lib", "acme/web"}, Removed: []string{"Acme/api", "acme/docs"}}
+	// A comparison that minded case would put the capitalized names first.
+	want := board.Removal{ToNoBoard: []string{"acme/lib", "acme/Web"}, Removed: []string{"acme/api", "acme/Docs"}}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("RemovalPreview() (-want +got):\n%s", diff)
 	}
@@ -1289,6 +1293,7 @@ func TestPreviewEditSaysWhatChangedInTheStatusesSinceTheSave(t *testing.T) {
 			wantGone: []string{"Blocked"}, wantNew: []string{doing.ID},
 		},
 		{name: "no saved statuses", saved: nil, now: []board.Option{todo, doing}},
+		{name: "a renamed one is neither gone nor new", saved: []board.Option{todo, done}, now: []board.Option{todo, {ID: done.ID, Name: "Shipped"}}},
 		{name: "the status of new cards is gone", saved: []board.Option{todo, gone}, newCard: gone.ID, now: []board.Option{todo}, wantGone: []string{"Blocked"}, wantCardGone: true},
 		{name: "the status of new cards is gone without saved statuses", saved: nil, newCard: gone.ID, now: []board.Option{todo}, wantCardGone: true},
 	}

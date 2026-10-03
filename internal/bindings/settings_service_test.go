@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
@@ -360,27 +362,53 @@ func (fullSettings) Get(context.Context, string) (string, bool, error) { return 
 
 func (s fullSettings) Set(context.Context, string, string) error { return s.err }
 
-func TestSetModelDefaultSaysWhenTheDiskIsFull(t *testing.T) {
+func TestTheSettersOfADefaultSayWhenTheDiskIsFull(t *testing.T) {
 	t.Parallel()
-	f := newFixture(t)
-	full, err := models.New(
-		t.Context(), fullSettings{err: fmt.Errorf("save: %w", syscall.ENOSPC)}, slog.New(slog.DiscardHandler), func() {},
-	)
+	full := fullSettings{err: fmt.Errorf("save: %w", syscall.ENOSPC)}
+	home, err := os.UserHomeDir()
 	if err != nil {
-		t.Fatalf("models.New() = %v, want nil", err)
+		t.Fatalf("os.UserHomeDir() = %v, want the home", err)
 	}
-	service := bindings.NewSettingsService(
-		f.theme, full, f.reviewModes, fakeLogin{}, f.dataDir, slog.New(slog.NewJSONHandler(f.logs, nil)),
-	)
 
-	err = service.SetModelDefault("prd", "sonnet", "high")
-	if err == nil {
-		t.Fatal("SetModelDefault() = nil, want an error")
+	// dirs are the data directory of the service and how the sentence names it.
+	tests := []struct {
+		name string
+		dirs func(f *fixture) (dataDir, shown string)
+	}{
+		{"outside the home", func(f *fixture) (string, string) { return f.dataDir, f.dataDir }},
+		{"under the home", func(*fixture) (string, string) {
+			return filepath.Join(home, ".local", "share", "myspec"), "~/.local/share/myspec"
+		}},
 	}
-	if want := "no space left on the disk of " + f.dataDir + ". Free some space, then try again."; err.Error() != want {
-		t.Errorf("SetModelDefault() = %q, want %q", err, want)
-	}
-	if !f.logged(t, "binding failed") {
-		t.Error("the failure was not logged as binding failed")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t)
+			fullModels, err := models.New(t.Context(), full, slog.New(slog.DiscardHandler), func() {})
+			if err != nil {
+				t.Fatalf("models.New() = %v, want nil", err)
+			}
+			fullModes, err := reviewmode.New(t.Context(), full, slog.New(slog.DiscardHandler), func() {})
+			if err != nil {
+				t.Fatalf("reviewmode.New() = %v, want nil", err)
+			}
+			dataDir, shown := test.dirs(f)
+			service := bindings.NewSettingsService(
+				f.theme, fullModels, fullModes, fakeLogin{}, dataDir, slog.New(slog.NewJSONHandler(f.logs, nil)),
+			)
+			want := "no space left on the disk of " + shown + ". Free some space, then try again."
+
+			for name, set := range map[string]func() error{
+				"SetModelDefault":      func() error { return service.SetModelDefault("prd", "sonnet", "high") },
+				"SetReviewModeDefault": func() error { return service.SetReviewModeDefault("agent") },
+			} {
+				if err := set(); err == nil || err.Error() != want {
+					t.Errorf("%s() = %v, want %q", name, err, want)
+				}
+			}
+			if !f.logged(t, "binding failed") {
+				t.Error("the failure was not logged as binding failed")
+			}
+		})
 	}
 }

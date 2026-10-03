@@ -20,6 +20,15 @@ describe("MODEL_GROUPS", () => {
     );
     expect(MODEL_GROUPS[3]?.label).toBe("Discussion");
   });
+
+  it("orders the stages of each group as the workflow runs them", () => {
+    expect(MODEL_GROUPS.map(({ stages }) => stages.map(({ stage }) => stage))).toEqual([
+      ["prd", "tech_spec", "plan", "one_shot"],
+      ["implementation", "step_review"],
+      ["pr", "pr_review"],
+      ["discussion"],
+    ]);
+  });
 });
 
 describe("changedText", () => {

@@ -8,6 +8,15 @@ import { ModelChip, type ModelChipProps } from "./ModelChip";
 
 const OPUS: ModelChoice = { model: "claude-opus-5-5[1m]", effort: "high" };
 
+/** OPENS_WITHIN_MS is past the moment a menu the click opens shows: the wait that proves it never does. */
+const OPENS_WITHIN_MS = 100;
+
+/** clickAndWait clicks the chip and waits as long as a menu takes to open. */
+async function clickAndWait(user: ReturnType<typeof renderChip>["user"], chip: HTMLElement) {
+  await user.click(chip);
+  await new Promise((done) => setTimeout(done, OPENS_WITHIN_MS));
+}
+
 function renderChip(
   props: Partial<ModelChipProps> = {},
   catalog: ModelCatalog = makeModelCatalog(),
@@ -107,7 +116,7 @@ describe("ModelChip", () => {
     const chip = screen.getByRole("button", { name: /Step 5 model/ });
     expect(chip).toHaveTextContent("Saving…");
     expect(chip).toHaveAttribute("aria-busy", "true");
-    await user.click(chip);
+    await clickAndWait(user, chip);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
@@ -122,7 +131,7 @@ describe("ModelChip", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       "Reading the models of Claude Code · the menu opens when it ends",
     );
-    await user.click(chip);
+    await clickAndWait(user, chip);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(screen.queryByText(/unavailable/)).not.toBeInTheDocument();
   });

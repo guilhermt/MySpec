@@ -61,7 +61,8 @@ type fixture struct {
 	changes   *changeCounter
 	taskCards []string                       // the keys TaskCards answers; set before a refresh
 	clones    map[string]repository.Identity // what Identify answers, by path
-	tasks     map[string]int                 // the tasks of each repository, by id
+	tasks     map[string]int                 // the active tasks of each repository, by id
+	archived  map[string]int                 // the archived tasks of each repository, by id
 	ids       int                            // how many ids NewID gave
 }
 
@@ -84,19 +85,20 @@ func newFixture(t *testing.T, stored board.Stored) *fixture {
 			}},
 			stored: map[string]board.Stored{boardID: stored},
 		},
-		github:  &fakeGitHub{},
-		reads:   &readRecorder{},
-		repos:   &memRepositories{},
-		changes: &changeCounter{},
-		clones:  map[string]repository.Identity{},
-		tasks:   map[string]int{},
+		github:   &fakeGitHub{},
+		reads:    &readRecorder{},
+		repos:    &memRepositories{},
+		changes:  &changeCounter{},
+		clones:   map[string]repository.Identity{},
+		tasks:    map[string]int{},
+		archived: map[string]int{},
 	}
 	f.service = board.New(board.Deps{
 		Store:        f.store,
 		GitHub:       f.github,
 		Repositories: f.repos,
 		Identify:     f.identify,
-		Counts:       func(id string) (int, int) { return f.tasks[id], 0 },
+		Counts:       func(id string) (int, int) { return f.tasks[id], f.archived[id] },
 		TaskCards:    func(string) []string { return f.taskCards },
 		Now:          func() time.Time { return base },
 		NewID:        f.newID,

@@ -1,10 +1,12 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import type { UserEvent } from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { AppShell } from "@/app/AppShell";
 import { MigrationRefused } from "@/features/migration/MigrationRefused";
 import { SettingsView } from "@/features/settings/SettingsView";
 import { StartScreen } from "@/features/startup/StartScreen";
+import type { Repository } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import {
   fixSettingsSceneClock,
@@ -61,6 +63,19 @@ const then =
   };
 
 const moreFor = (fullName: string) => click("button", `More for ${fullName}`);
+
+/** withRepository is the state of the page Repositories arriving with one repository changed, as the Go sends it. */
+const withRepository = (fullName: string, change: Partial<Repository>) => async () => {
+  const { state } = settingsScene("settings-repos", "");
+  act(() => {
+    useAppStore.getState().applyState({
+      ...state,
+      repositories: (state.repositories ?? []).map((repository) =>
+        repository.fullName === fullName ? { ...repository, ...change } : repository,
+      ),
+    });
+  });
+};
 
 // ---------------- The settings ----------------
 
@@ -211,6 +226,30 @@ const SETTINGS_ROWS: Row[] = [
     name: "Add",
   },
   {
+    control: "the refusal of Add owner/name",
+    scene: "settings-boards",
+    variation: "add-3",
+    steps: then(async (user) => {
+      api.checkBoardRepository.mockRejectedValue(
+        new Error("acme/nope doesn't exist or this account can't read it."),
+      );
+      // The step takes the focus to its first field a frame after it opens: typing before that
+      // would lose the keys to it.
+      await waitFor(() =>
+        expect(document.activeElement?.closest("[data-dialog-body]")).not.toBeNull(),
+      );
+      await user.type(
+        await screen.findByRole("textbox", { name: "Add a repository" }),
+        "acme/nope",
+      );
+      await user.click(screen.getByRole("button", { name: "Add" }));
+      await screen.findByText("acme/nope doesn't exist or this account can't read it.");
+    }),
+    role: "textbox",
+    name: "Add a repository",
+    description: "acme/nope doesn't exist or this account can't read it.",
+  },
+  {
     control: "the error when it saves",
     scene: "settings-boards",
     variation: "add-3",
@@ -242,6 +281,32 @@ const SETTINGS_ROWS: Row[] = [
   },
   { control: "Clone", scene: "settings-repos", role: "button", name: /^Clone/ },
   { control: "Change path", scene: "settings-repos", role: "button", name: "Change path…" },
+  {
+    control: "Change path, in the ⋯",
+    scene: "settings-repos",
+    steps: moreFor("acme/api"),
+    role: "menuitem",
+    name: "Change path…",
+  },
+  {
+    control: "the clone that runs",
+    scene: "settings-repos",
+    steps: withRepository("acme/billing", { cloning: true }),
+    role: "listitem",
+    name: /^acme\/billing/,
+    text: /Cloning…/,
+  },
+  {
+    control: "the clone that failed, with Try again",
+    scene: "settings-repos",
+    steps: withRepository("acme/billing", {
+      cloneError:
+        "fatal: unable to access 'https://github.com/acme/billing/': Could not resolve host",
+    }),
+    role: "listitem",
+    name: /^acme\/billing/,
+    text: /Could not resolve host\s*Try again/,
+  },
   {
     control: "Remove, with its reason",
     scene: "settings-repos",
@@ -347,6 +412,17 @@ const SETTINGS_ROWS: Row[] = [
     text: "Scanning your home folder…",
   },
   {
+    control: "the failure of the scan, with Try again",
+    scene: "settings-repos",
+    steps: then(async (user) => {
+      api.scanRepositories.mockRejectedValue(new Error("permission denied"));
+      await user.click(await screen.findByRole("button", { name: "Add repository" }));
+    }),
+    role: "dialog",
+    name: "Add repository",
+    text: /Couldn't scan your home folder: permission denied\s*Try again/,
+  },
+  {
     control: "the refusal of a row",
     scene: "settings-repos",
     variation: "add-failed",
@@ -400,6 +476,20 @@ const SETTINGS_ROWS: Row[] = [
     variation: "edit",
     role: "button",
     name: "Cancel",
+  },
+  {
+    control: "the failure of Save",
+    scene: "settings-prompts",
+    variation: "edit",
+    steps: then(async (user) => {
+      api.savePrompt.mockRejectedValue(new Error("database is locked"));
+      await user.type(await screen.findByRole("textbox", { name: "PRD prompt" }), "!");
+      await user.click(screen.getByRole("button", { name: /^Save/ }));
+      await screen.findByRole("alert");
+    }),
+    role: "alert",
+    name: "",
+    text: "Couldn't save the prompt: database is locked",
   },
   {
     control: "the column of placeholders",
@@ -538,6 +628,41 @@ describe("the one primary of each scene", () => {
     await waitFor(() => expect(document.body).not.toBeEmptyDOMElement());
 
     expect(primaries().length).toBeLessThanOrEqual(1);
+  });
+
+  // A page of Settings has no primary (10:373): its actions sit among the rows, and a block open
+  // on the page, as the review instructions, keeps its Save secondary.
+  const PAGES: (readonly [SettingsSceneName, string])[] = [
+    ...SETTINGS_VARIATIONS["settings-defaults"].map(
+      (variation) => ["settings-defaults", variation] as const,
+    ),
+    ["settings-boards", ""],
+    ["settings-boards", "empty"],
+    ["settings-repos", ""],
+    ["settings-repos", "instructions"],
+    ["settings-repos", "menu"],
+    ["settings-repos", "change-path"],
+    ["settings-repos", "empty"],
+    ["settings-prompts", ""],
+    ["settings-prompts", "view"],
+    ["settings-prompts", "list-failed"],
+    ["settings-prompts", "view-failed"],
+  ];
+
+  it.each(PAGES)("has no primary on the page in %s %s", async (name, variation) => {
+    await draw(settingsScene(name, variation));
+    await screen.findByRole("heading", { level: 2 });
+
+    expect(document.querySelector("[role='dialog'], [role='alertdialog']")).toBeNull();
+    expect(primaries()).toHaveLength(0);
+  });
+
+  it("makes Save the primary of the edit of a prompt, with Ctrl S", async () => {
+    await draw(settingsScene("settings-prompts", "edit"));
+    const save = await screen.findByRole("button", { name: /^Save/ });
+
+    expect(primaries()).toEqual([save]);
+    expect(save).toHaveTextContent("Ctrl S");
   });
 
   it.each(WELCOME_VARIATIONS)("has no primary in the welcome %s", async (variation) => {
