@@ -22,4 +22,18 @@ describe("SidebarTop", () => {
     expect(useAppStore.getState().sidebarRail).toBe(true);
     expect(localStorage.getItem(SIDEBAR_RAIL_KEY)).toBe("true");
   });
+
+  it("in the welcome mode dashes New with its reason and leaves out the collapse button", async () => {
+    const { user } = renderWithStore(<SidebarTop welcome />, { state: makeState() });
+
+    const create = screen.getByRole("button", { name: "New" });
+    expect(create).toHaveAttribute("aria-disabled", "true");
+    expect(create).toHaveAccessibleDescription("Register a board or a repository first");
+    expect(screen.queryByRole("button", { name: "Collapse the sidebar" })).not.toBeInTheDocument();
+
+    await user.click(create);
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(screen.getByText("MySpec")).toBeInTheDocument();
+  });
 });

@@ -19,15 +19,17 @@ import { SettingsView } from "@/features/settings/SettingsView";
 import { Sidebar } from "@/features/sidebar/Sidebar";
 import { TaskView } from "@/features/task/TaskView";
 import { NewTaskDialog } from "@/features/task-create/NewTaskDialog";
+import { Welcome } from "@/features/welcome/Welcome";
 import { cn } from "@/lib/utils";
-import { useLocation, useSidebarRail } from "@/store/app-store";
+import { useLocation, useSidebarRail, useWelcomeMode } from "@/store/app-store";
 
 /** LocationView is the screen of the place on screen. */
 function LocationView() {
   const location = useLocation();
+  const welcome = useWelcomeMode();
   switch (location.kind) {
     case "home":
-      return <Home />;
+      return welcome ? <Welcome /> : <Home />;
     case "board":
       return <BoardView key={location.id} boardId={location.id} />;
     case "reviews":
@@ -57,7 +59,8 @@ export function AppShell() {
   useViewedSituation();
   usePendingStart();
   usePendingReview();
-  const rail = useSidebarRail();
+  const welcome = useWelcomeMode();
+  const rail = useSidebarRail() && !welcome;
 
   return (
     <div

@@ -334,6 +334,17 @@
     container: main / inline-size;
   }
 
+  /* The reading column of the start and the welcome, centered on whole pixels below the head of the
+     window; the parent is the positioned box. */
+  .start-column {
+    position: absolute;
+    top: calc(var(--space-16) + var(--space-8));
+    left: round(50%, 1px);
+    width: 100%;
+    max-width: var(--measure-read);
+    translate: round(-50%, 1px) 0;
+  }
+
   /* The body of Settings: the navigation and the page side by side, the pair centered at a whole pixel
      with the page at --measure. The margin takes what the pair and its two sides leave over, rounded
      down; below 820px of main area the pair is one column of --measure, centered the same way, and the

@@ -8,16 +8,17 @@ import { SidebarTop } from "@/features/sidebar/SidebarTop";
 import { Tree } from "@/features/sidebar/Tree";
 import { NARROW_PX, SidebarWidthContext, useWidth } from "@/features/sidebar/useFits";
 import { useRevealOpenItem } from "@/features/sidebar/useRevealOpenItem";
-import { useSidebarRail } from "@/store/app-store";
+import { useSidebarRail, useWelcomeMode } from "@/store/app-store";
 
 /**
  * Sidebar is the Work sidebar. Open, it holds the top with New, the
  * repository filter, the tree with what is below the fold, and the foot;
- * collapsed, the strip. It measures its own width and tells the tree when it
+ * collapsed, the strip. In the welcome mode it is bare: the top and the foot. It measures its own width and tells the tree when it
  * is narrow.
  */
 export function Sidebar() {
-  const rail = useSidebarRail();
+  const welcome = useWelcomeMode();
+  const rail = useSidebarRail() && !welcome;
   const ref = useRef<HTMLElement>(null);
   const viewport = useRef<HTMLDivElement>(null);
   const width = useWidth(ref);
@@ -33,6 +34,12 @@ export function Sidebar() {
     >
       {rail ? (
         <SidebarRail />
+      ) : welcome ? (
+        <>
+          <SidebarTop welcome />
+          <span className="flex-1" />
+          <SidebarFooter welcome />
+        </>
       ) : (
         <SidebarWidthContext value={narrow}>
           <SidebarTop />

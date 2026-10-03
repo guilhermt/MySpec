@@ -62,6 +62,7 @@ import type {
   TranscriptEvent,
 } from "@/lib/wails";
 import { asPlaceKind, asTaskStage, asThemePreference, sessionKey } from "@/lib/wails";
+import { allowedInWelcome, welcomeMode } from "@/lib/welcome";
 import { firstTab } from "@/store/step-tab";
 import {
   applyEvent,
@@ -711,11 +712,16 @@ function navigate(
   return { ...common, back: beside(back, location), forward: [] };
 }
 
+// keptOut is whether the welcome mode does not keep a place: it opens the Home instead.
+function keptOut(app: State | null, place: Location): boolean {
+  return app !== null && welcomeMode(app) && !allowedInWelcome(app, place);
+}
+
 // reachable is whether Back or Forward can go to a place: it still exists and
 // is not the place on screen, which a place that left between them can hide
 // from beside.
 function reachable(app: State | null, place: Location, current: Location): boolean {
-  return locationExists(app, place) && !sameLocation(place, current);
+  return locationExists(app, place) && !sameLocation(place, current) && !keptOut(app, place);
 }
 
 // travel opens the nearest place behind (or ahead of) the current one it can
@@ -836,7 +842,11 @@ export const useAppStore = create<AppStore>()((set, get) => {
   };
 
   const go: AppStore["go"] = (location, options) =>
-    leave(() => set((state) => navigate(state, location, options?.focus ?? null)));
+    leave(() =>
+      set((state) =>
+        navigate(state, keptOut(state.app, location) ? HOME : location, options?.focus ?? null),
+      ),
+    );
 
   // A step through the history with nowhere to go does nothing, so it never
   // asks the user about an unsaved edit either.
@@ -874,17 +884,20 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     applyState: (next) => {
       set((state) => {
-        // With no repository and no board registered the welcome screen takes
-        // the place of everything the app shows of the tasks.
-        if ((next.repositories ?? []).length === 0 && (next.boards ?? []).length === 0) {
+        // With nothing registered and nothing active the Home welcomes: only the places the welcome
+        // mode keeps stay, and an open prompt edit stays with Settings.
+        if (welcomeMode(next)) {
+          const location = allowedInWelcome(next, state.location) ? state.location : HOME;
+          const keep = (place: Location) => allowedInWelcome(next, place);
           return {
             app: next,
             ...initialTaskUi(),
-            location: HOME,
+            location,
+            back: state.back.filter(keep),
+            forward: state.forward.filter(keep),
             panel: null,
             earlierConversation: null,
-            promptEdit: null,
-            pendingLeave: null,
+            ...(location.kind === "settings" ? {} : { promptEdit: null, pendingLeave: null }),
           };
         }
         const history = historyOf(next);
@@ -899,6 +912,9 @@ export const useAppStore = create<AppStore>()((set, get) => {
             : state.lastRepositoryId;
         const location = placeIn(state.app, next, state.location);
         const moved = location !== state.location;
+        // The first registration takes the Home of the welcome to the Home of the app: the row that
+        // opened the dialog is gone, so the title takes the focus.
+        const registered = welcomeMode(state.app) && location.kind === "home";
         // An item that left takes every conversation it had with it.
         const left = moved ? openItemId(state.location) : null;
         // The task archived while open has its page; every other one, a toast.
@@ -935,6 +951,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
               ? null
               : state.reviewDialog,
           location,
+          ...(registered ? { pendingFocus: "title" as const } : {}),
           back: moved ? beside(state.back, location) : state.back,
           forward: moved ? beside(state.forward, location) : state.forward,
           panel: moved ? null : state.panel,
@@ -975,10 +992,12 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     openBoardCard: (boardId, key) =>
       leave(() =>
-        set((state) => ({
-          ...navigate(state, { kind: "board", id: boardId }, null),
-          boardCardRequest: { boardId, key },
-        })),
+        set((state) => {
+          const board: Location = { kind: "board", id: boardId };
+          return keptOut(state.app, board)
+            ? navigate(state, HOME, null)
+            : { ...navigate(state, board, null), boardCardRequest: { boardId, key } };
+        }),
       ),
 
     clearBoardCardRequest: () => set({ boardCardRequest: null }),
@@ -1223,7 +1242,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
       // A task, a review and a discussion take the focus to what their situation asks.
       leave(() =>
         set((state) => ({
-          ...navigate(state, location, "request"),
+          ...navigate(state, keptOut(state.app, location) ? HOME : location, "request"),
           openStepTab:
             location.kind === "task"
               ? withStepTab(state.openStepTab, itemId, place)
@@ -1534,6 +1553,11 @@ export function usePrDraft(taskId: string): PrDraft | null {
 export interface ThemeState {
   preference: ThemePreference;
   systemDark: boolean;
+}
+
+/** useWelcomeMode is whether the app is the welcome: nothing registered and nothing active. */
+export function useWelcomeMode(): boolean {
+  return useAppStore((state) => welcomeMode(state.app));
 }
 
 /**

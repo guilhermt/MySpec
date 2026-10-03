@@ -139,4 +139,39 @@ describe("Sidebar", () => {
 
     expect(api.setRepositoryFilter).not.toHaveBeenCalled();
   });
+
+  it("is bare in the welcome mode: the top and the foot, with no filter, tree or collapsed strip", () => {
+    renderWithStore(<Sidebar />, {
+      state: makeState({
+        repositories: [],
+        boards: [],
+        tasks: [],
+        reviews: [],
+        discussions: [],
+        history: [],
+        reviewHistory: [],
+        discussionHistory: [],
+      }),
+      ui: { sidebarRail: true },
+    });
+
+    const work = screen.getByRole("complementary", { name: "Work" });
+    expect(within(work).getByText("MySpec")).toBeInTheDocument();
+    expect(within(work).getByRole("button", { name: "New" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(within(work).getByRole("button", { name: "History" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(within(work).getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(within(work).queryByRole("tree")).not.toBeInTheDocument();
+    expect(
+      within(work).queryByRole("button", { name: /^Repository filter/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(work).queryByRole("button", { name: "Collapse the sidebar" }),
+    ).not.toBeInTheDocument();
+  });
 });

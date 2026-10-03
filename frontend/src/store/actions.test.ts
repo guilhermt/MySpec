@@ -19,6 +19,7 @@ import {
   changeClonePath,
   changeRepositoryPath,
   checkBoardRepository,
+  checkMachine,
   chooseCloneFolder,
   cleanAndStartStep,
   cloneRepository,
@@ -796,6 +797,15 @@ describe("task actions", () => {
     vi.mocked(api.setReviewModeDefault).mockRejectedValueOnce(new Error("the disk is full"));
 
     expect(await setReviewModeDefaultInPlace("manual")).toBe("the disk is full");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("checks the machine and gives null when the call fails", async () => {
+    expect(await checkMachine()).toEqual({ claude: "found", gh: "ready" });
+
+    vi.mocked(api.checkMachine).mockRejectedValueOnce(new Error("no answer"));
+
+    expect(await checkMachine()).toBeNull();
     expect(useAppStore.getState().error).toBeNull();
   });
 

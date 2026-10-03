@@ -71,25 +71,40 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "Theme: System" })).toBeInTheDocument();
   });
 
-  it("renders the welcome screen without a registered repository", async () => {
-    vi.mocked(api.getState).mockResolvedValue(makeState({ repositories: [] }));
+  it("renders the welcome inside the shell when nothing is registered", async () => {
+    vi.mocked(api.getState).mockResolvedValue(
+      makeState({
+        repositories: [],
+        boards: [],
+        tasks: [],
+        reviews: [],
+        discussions: [],
+        history: [],
+        reviewHistory: [],
+        discussionHistory: [],
+      }),
+    );
 
     renderWithStore(<App />);
 
-    expect(await screen.findByRole("button", { name: /^Add repository/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Welcome to MySpec" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Add board/ })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /^Add repository/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Repository filter: All repositories" }),
+    ).not.toBeInTheDocument();
   });
 
-  it("leaves the welcome screen once a board is registered, even without a repository", async () => {
+  it("leaves the welcome once a board is registered, even without a repository", async () => {
     vi.mocked(api.getState).mockResolvedValue(
-      makeState({ repositories: [], boards: [makeBoard()] }),
+      makeState({ repositories: [], boards: [makeBoard()], tasks: [] }),
     );
 
     renderWithStore(<App />);
 
     expect(await screen.findByRole("button", { name: "Settings" })).toBeInTheDocument();
-    expect(
-      screen.queryByText("Register a board or a repository to start creating tasks."),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Welcome to MySpec" })).not.toBeInTheDocument();
   });
 
   it("renders the migration screen when the data could not be updated", async () => {

@@ -102,4 +102,23 @@ describe("NewMenu", () => {
 
     expect(useAppStore.getState().newTaskOpen).toBe(true);
   });
+
+  it("with a reason is dashed, says why and opens no menu", async () => {
+    const { user } = renderWithStore(
+      <NewMenu disabledReason="Register a board or a repository first" />,
+      {
+        state: makeState(),
+      },
+    );
+
+    const trigger = screen.getByRole("button", { name: "New" });
+    expect(trigger).toHaveAttribute("aria-disabled", "true");
+    expect(trigger).toHaveAccessibleDescription("Register a board or a repository first");
+
+    await user.click(trigger);
+    await user.keyboard("{Enter}");
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(useAppStore.getState().newTaskOpen).toBe(false);
+  });
 });

@@ -5,7 +5,6 @@ import { useGlobalShortcuts } from "@/app/useGlobalShortcuts";
 import { MigrationRefused } from "@/features/migration/MigrationRefused";
 import { StartScreen } from "@/features/startup/StartScreen";
 import { useApplyTheme } from "@/features/theme/useApplyTheme";
-import { WelcomeScreen } from "@/features/welcome/WelcomeScreen";
 import { useAppStore } from "@/store/app-store";
 
 export function App() {
@@ -39,9 +38,5 @@ export function App() {
     return <MigrationRefused migration={app.migration} />;
   }
 
-  return (app.repositories ?? []).length === 0 && (app.boards ?? []).length === 0 ? (
-    <WelcomeScreen />
-  ) : (
-    <AppShell />
-  );
+  return <AppShell />;
 }

@@ -13,6 +13,7 @@ import type {
   DiscussionContextRequest,
   DraftDecision,
   FindingDecision,
+  Machine,
   ModelStage,
   PermissionDecision,
   Prompt,
@@ -362,6 +363,15 @@ export async function followTaskReviewMode(taskId: string, step: number): Promis
  */
 export function getPrompt(stage: PromptStage): Promise<Prompt> {
   return api.getPrompt(stage);
+}
+
+/** checkMachine reads what the machine lacks; a call that fails says nothing, and null is "unknown". */
+export async function checkMachine(): Promise<Machine | null> {
+  try {
+    return await api.checkMachine();
+  } catch {
+    return null;
+  }
 }
 
 /** listPrompts reads which prompts are edited; the list shows its own failure. */

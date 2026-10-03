@@ -12,9 +12,8 @@ import { asStartupPhase } from "@/lib/wails";
 import { tryStartupAgain } from "@/store/actions";
 import { useSidebarRail, useStartup } from "@/store/app-store";
 
-/** COLUMN is the reading column of the start, centred on whole pixels, below the head of the window. */
-const COLUMN =
-  "absolute top-[calc(var(--space-16)+var(--space-8))] left-[round(50%,1px)] flex w-full max-w-(--measure-read) translate-x-[round(-50%,1px)] flex-col gap-(--space-8)";
+/** COLUMN is the reading column of the start, below the head of the window. */
+const COLUMN = "start-column flex flex-col gap-(--space-8)";
 
 const TITLE =
   "m-0 text-(length:--text-display) leading-(--leading-display) font-semibold text-ink-1";

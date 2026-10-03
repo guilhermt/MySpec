@@ -1,4 +1,5 @@
 import { History, Settings } from "lucide-react";
+import { useId } from "react";
 import { Button } from "@/components/system/Button";
 import { IconButton } from "@/components/system/IconButton";
 import { Tooltip } from "@/components/system/Tooltip";
@@ -16,6 +17,8 @@ import {
 export interface SidebarFooterProps {
   /** rail stacks the three as icon buttons, for the collapsed strip. */
   rail?: boolean;
+  /** welcome dashes History while nothing is archived: there is nothing to open. */
+  welcome?: boolean;
 }
 
 /** SETTINGS_SHORTCUT is the key that opens and closes the settings. */
@@ -23,6 +26,9 @@ const SETTINGS_SHORTCUT = "Ctrl+,";
 
 /** CURRENT marks the button of the place on screen, besides the tint of aria-pressed. */
 const CURRENT = "shadow-[inset_0_0_0_var(--border)_var(--brand-marker-ring)]";
+
+/** NOTHING_ARCHIVED is why History waits in the welcome mode. */
+const NOTHING_ARCHIVED = "Nothing archived yet";
 
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
@@ -39,7 +45,7 @@ function archivedText(tasks: number, reviews: number, discussions: number): stri
  * the theme, and Settings. History and Settings stay pressed while their place
  * is on screen, History also with an archived item.
  */
-export function SidebarFooter({ rail = false }: SidebarFooterProps) {
+export function SidebarFooter({ rail = false, welcome = false }: SidebarFooterProps) {
   const tasks = useHistory().length;
   const reviews = useReviewHistory().length;
   const discussions = useDiscussionHistory().length;
@@ -49,6 +55,7 @@ export function SidebarFooter({ rail = false }: SidebarFooterProps) {
   const openSettings = useAppStore((state) => state.openSettings);
   const closeSettings = useAppStore((state) => state.closeSettings);
 
+  const nothingId = useId();
   const total = tasks + reviews + discussions;
   const archived = total > 0 ? archivedText(tasks, reviews, discussions) : null;
   const current = (open: boolean) =>
@@ -80,6 +87,21 @@ export function SidebarFooter({ rail = false }: SidebarFooterProps) {
     );
   }
 
+  const settings = (
+    <Tooltip content="Settings" shortcut={SETTINGS_SHORTCUT}>
+      <Button
+        variant="ghost"
+        size="sm"
+        icon={Settings}
+        {...current(settingsOpen)}
+        onClick={toggleSettings}
+        className={cn(settingsOpen && CURRENT)}
+      >
+        Settings
+      </Button>
+    </Tooltip>
+  );
+
   const history = (
     <Button
       variant="ghost"
@@ -101,23 +123,39 @@ export function SidebarFooter({ rail = false }: SidebarFooterProps) {
     </Button>
   );
 
-  return (
-    <div className="flex h-(--size-head) shrink-0 items-center gap-(--space-1) px-(--space-2) shadow-[inset_0_var(--border)_0_var(--sidebar-line)]">
-      {archived === null ? history : <Tooltip content={archived}>{history}</Tooltip>}
-      <span className="flex-1" />
-      <ThemeButton />
-      <Tooltip content="Settings" shortcut={SETTINGS_SHORTCUT}>
+  // The welcome mode with nothing archived has nothing to open: History is dashed and says so.
+  const waiting = (
+    <>
+      <Tooltip content={NOTHING_ARCHIVED}>
         <Button
           variant="ghost"
           size="sm"
-          icon={Settings}
-          {...current(settingsOpen)}
-          onClick={toggleSettings}
-          className={cn(settingsOpen && CURRENT)}
+          icon={History}
+          aria-disabled
+          aria-describedby={nothingId}
+          onClick={() => undefined}
         >
-          Settings
+          History
         </Button>
       </Tooltip>
+      <span id={nothingId} className="sr-only">
+        {NOTHING_ARCHIVED}
+      </span>
+    </>
+  );
+
+  return (
+    <div className="flex h-(--size-head) shrink-0 items-center gap-(--space-1) px-(--space-2) shadow-[inset_0_var(--border)_0_var(--sidebar-line)]">
+      {welcome && archived === null ? (
+        waiting
+      ) : archived === null ? (
+        history
+      ) : (
+        <Tooltip content={archived}>{history}</Tooltip>
+      )}
+      <span className="flex-1" />
+      <ThemeButton />
+      {settings}
     </div>
   );
 }
