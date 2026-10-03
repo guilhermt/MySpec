@@ -22,6 +22,7 @@ func StartedForTest(t *testing.T, dirs xdg.Dirs) *bindings.Services {
 		t.Fatalf("prepare the directories: %v", err)
 	}
 	a := &App{log: slog.New(slog.DiscardHandler), dirs: dirs, services: bindings.NewWaitingServices()}
+	a.deps = a.desktopDeps()
 	a.publisher = newThrottle(publishWindow, a.publishNow)
 	a.startup = newStartup(a.attempt, func() {}, a.log, false, dirs.Data, dirs.LogPath())
 	a.pollCtx, a.stopPoll = context.WithCancel(context.Background())
