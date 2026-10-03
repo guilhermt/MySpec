@@ -15,6 +15,7 @@ import {
   conversationEdges,
   cutTexts,
   edgesOf,
+  footerPlaces,
   mainArea,
   NARROW_MAIN,
   offWholePixels,
@@ -336,6 +337,17 @@ describe.each(THEMES)("DiscussionView, the scenes in the %s theme", (theme) => {
       expect(primaries).toEqual(primary === null ? [] : [primary]);
 
       await capture(`discussion-${one.label.replace(/[?=&]/g, "-")}-${width}-${theme}`, area);
+
+      // The footer of the grouping keeps Cancel and Group 2 drafts where they are as the reason
+      // goes: the title written, the button stops waiting for it.
+      if (open !== null && one.flags.group === true) {
+        const reason = "Name the epic to group the drafts.";
+        expect(within(open).getByText(reason)).toBeInTheDocument();
+        const before = footerPlaces(open, /^Group 2 drafts/);
+        await user.type(within(open).getByRole("textbox", { name: /^Title of the epic/ }), "Tiers");
+        expect(within(open).queryByText(reason)).toBeNull();
+        expect(footerPlaces(open, /^Group 2 drafts/)).toEqual(before);
+      }
 
       // The list a marker of the drafts opens, after the capture that draws them closed as the mock
       // does: it stands on whole pixels and says what it cuts.

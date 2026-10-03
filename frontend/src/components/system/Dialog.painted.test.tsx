@@ -70,11 +70,44 @@ describe.each(THEMES)("Dialog in the %s theme", (theme) => {
   it("sinks the footer", () => {
     setTheme(theme);
     render(<Subject />);
-    const footer = screen.getByRole("button", { name: "Cancel" }).parentElement;
+    const footer = document.querySelector<HTMLElement>("[data-dialog-footer]");
     expect(footer).not.toBeNull();
     if (footer !== null) {
       expect(paintOf(footer, { background: "" })).toEqual({ background: token("--surface-0") });
     }
+  });
+
+  it("keeps Cancel and the confirmation in place beside a reason that does not fit, cut with its tooltip", async () => {
+    setTheme(theme);
+    const reason = "Write what to discuss or select at least one card, and name the discussion.";
+    const footer = (withReason: boolean) => (
+      <Dialog open onOpenChange={() => {}} title="Group drafts into an epic">
+        <DialogBody>Two drafts.</DialogBody>
+        <DialogFooter {...(withReason ? { reason: { id: "reason", text: reason } } : {})}>
+          <DialogCancel />
+          <Button variant="primary" shortcut="Ctrl ↵">
+            Group 2 drafts
+          </Button>
+        </DialogFooter>
+      </Dialog>
+    );
+    const places = () =>
+      ["Cancel", /^Group 2 drafts/].map((name) => {
+        const { x, y, width, height } = screen
+          .getByRole("button", { name })
+          .getBoundingClientRect();
+        return { x, y, width, height };
+      });
+    const { rerender } = render(footer(false));
+    const without = places();
+
+    rerender(footer(true));
+    expect(places()).toEqual(without);
+    const cut = document.getElementById("reason");
+    if (cut === null) throw new Error("the reason is not drawn");
+    expect(cut.scrollWidth).toBeGreaterThan(cut.clientWidth);
+    await userEvent.hover(cut);
+    await expect.poll(() => screen.queryByRole("tooltip")?.textContent).toBe(reason);
   });
 
   it("draws Cancel as a ghost, without a body", () => {

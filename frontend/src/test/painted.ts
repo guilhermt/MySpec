@@ -3,6 +3,7 @@
  * CSS and compare what an element paints with the token it should paint, resolved in the same theme.
  */
 
+import { within } from "@testing-library/react";
 import type { CSSProperties } from "react";
 import { inject, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
@@ -470,4 +471,24 @@ export async function inkRuns(element: HTMLElement): Promise<number[]> {
     runs.push(run / scale);
   }
   return runs;
+}
+
+/**
+ * footerPlaces is where Cancel and the primary of a dialog stand in its footer: the line of each,
+ * the right edge of the primary, and Cancel right before it. A footer whose buttons never wrap nor
+ * move gives the same places with its disabled reason and without it. The x of Cancel is left out:
+ * a dashed primary draws its key without the padding of the solid one, and Cancel follows its width.
+ */
+export function footerPlaces(dialog: HTMLElement, primary: RegExp) {
+  const footer = dialog.querySelector("[data-dialog-footer]");
+  if (footer === null) {
+    throw new Error("the dialog has no footer");
+  }
+  const box = footer.getBoundingClientRect();
+  const cancel = within(dialog).getByRole("button", { name: "Cancel" }).getBoundingClientRect();
+  const main = within(dialog).getByRole("button", { name: primary }).getBoundingClientRect();
+  return {
+    cancel: { top: cancel.top - box.top, height: cancel.height, before: main.left - cancel.right },
+    primary: { top: main.top - box.top, height: main.height, right: box.right - main.right },
+  };
 }

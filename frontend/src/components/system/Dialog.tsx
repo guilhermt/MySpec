@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { Button, type ButtonBaseProps, type ButtonLoading } from "./Button";
+import { CutText } from "./CutText";
 import { IconButton } from "./IconButton";
 import { ICONS } from "./icons";
 
@@ -189,28 +190,36 @@ export interface DialogFooterProps {
   refusal?: string;
 }
 
-/** DialogFooter holds the refusal, Back or the disabled reason on the left, and Cancel and the confirmation. */
+/**
+ * DialogFooter holds the refusal above, and on one line Back or the disabled reason on the left and
+ * Cancel and the confirmation on the right. The buttons never wrap nor move: the reason takes the
+ * space left and is cut, with its whole text in a tooltip.
+ */
 export function DialogFooter({ children, back, reason, refusal }: DialogFooterProps) {
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2 bg-surface-0 px-5 py-3 shadow-[inset_0_var(--border)_0_var(--line-1)]">
+    <div
+      data-dialog-footer=""
+      className="flex flex-col gap-2 bg-surface-0 px-5 py-3 shadow-[inset_0_var(--border)_0_var(--line-1)]"
+    >
       {refusal !== undefined && (
         <p
           role="alert"
-          className="basis-full text-(length:--text-meta) leading-(--leading-meta) text-state-error"
+          className="text-(length:--text-meta) leading-(--leading-meta) text-state-error"
         >
           {refusal}
         </p>
       )}
-      {back !== undefined && <div className="mr-auto">{back}</div>}
-      {reason !== undefined && (
-        <span
-          id={reason.id}
-          className="mr-auto text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
-        >
-          {reason.text}
-        </span>
-      )}
-      {children}
+      <div className="flex items-center gap-2">
+        {back !== undefined && <div className="shrink-0">{back}</div>}
+        {reason !== undefined && (
+          <CutText
+            id={reason.id}
+            text={reason.text}
+            className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
+          />
+        )}
+        <div className="ml-auto flex shrink-0 items-center gap-2">{children}</div>
+      </div>
     </div>
   );
 }

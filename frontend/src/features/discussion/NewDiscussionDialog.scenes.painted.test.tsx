@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NewDiscussionDialog } from "@/features/discussion/NewDiscussionDialog";
 import { api } from "@/lib/wails";
@@ -10,6 +10,7 @@ import {
 import {
   capture,
   cutTexts,
+  footerPlaces,
   mainArea,
   offWholePixels,
   setTheme,
@@ -62,7 +63,7 @@ async function draw(flags: DiscussionFlags, width: number) {
   );
   await drawn.after?.(user);
   await settle();
-  return screen.getByRole("dialog", { name: "New discussion" });
+  return { dialog: screen.getByRole("dialog", { name: "New discussion" }), user };
 }
 
 describe.each(THEMES)("NewDiscussionDialog, the scenes in the %s theme", (theme) => {
@@ -78,7 +79,7 @@ describe.each(THEMES)("NewDiscussionDialog, the scenes in the %s theme", (theme)
 
     it.each([WIDE_MAIN, HALF_MAIN])("draws it at the main area of %ipx", async (width) => {
       setTheme(theme);
-      const dialog = await draw(flags, width);
+      const { dialog, user } = await draw(flags, width);
 
       // The dialog is the wide one, and it and every part of its body stand on whole pixels.
       expect(dialog.getBoundingClientRect().width).toBe(DIALOG_WIDTH);
@@ -99,6 +100,21 @@ describe.each(THEMES)("NewDiscussionDialog, the scenes in the %s theme", (theme)
       expect(primaries[0]).toHaveAccessibleName(/^Start discussion/);
 
       await capture(`discussion-${label.replace("?", "-")}-${width}-${theme}`, dialog);
+
+      // Cancel and Start discussion stay where they are as a reason takes the footer: the title and
+      // what to discuss cleared, the footer says what is missing.
+      const before = footerPlaces(dialog, /^Start discussion/);
+      await user.clear(within(dialog).getByRole("textbox", { name: "Title" }));
+      await user.clear(within(dialog).getByRole("textbox", { name: /^What to discuss/ }));
+      expect(
+        within(dialog).getByText(
+          flags.home === true
+            ? "Write what to discuss or select at least one card."
+            : "Name the discussion to start it.",
+        ),
+      ).toBeInTheDocument();
+      expect(footerPlaces(dialog, /^Start discussion/)).toEqual(before);
+      expect(await withoutTooltip(cutTexts(dialog))).toEqual([]);
     });
   });
 });

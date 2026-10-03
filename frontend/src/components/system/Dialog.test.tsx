@@ -156,6 +156,8 @@ describe("Dialog", () => {
       </Dialog>,
     );
     expect(screen.getByRole("alert")).toHaveTextContent("The branch already exists");
-    expect(screen.getByRole("button", { name: "Back" }).parentElement).toHaveClass("mr-auto");
+    const back = screen.getByRole("button", { name: "Back" }).parentElement;
+    expect(back?.parentElement?.firstElementChild).toBe(back);
+    expect(screen.getByRole("button", { name: "Cancel" }).parentElement).toHaveClass("ml-auto");
   });
 });
