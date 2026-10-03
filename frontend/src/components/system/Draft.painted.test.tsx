@@ -147,18 +147,18 @@ describe.each(THEMES)("Draft in the %s theme", (theme) => {
     expect(title().color).toBe(token("--ink-3"));
   });
 
-  it("fades a discarded epic, never a discarded card", () => {
+  it.each([
+    ["epic", true],
+    ["card", false],
+  ])("keeps a discarded %s in full ink, its number too", (_kind, epic) => {
     setTheme(theme);
-    draw({ epic: true, discarded: true });
+    draw({ epic, discarded: true });
     const content = screen.getByText(TITLE).parentElement as Element;
-    expect(getComputedStyle(content).opacity).toBe("0.6");
-  });
-
-  it("keeps a discarded card in full ink", () => {
-    setTheme(theme);
-    draw({ discarded: true });
-    const content = screen.getByText(TITLE).parentElement as Element;
-    expect(getComputedStyle(content).opacity).toBe("1");
+    const number = content.previousElementSibling as Element;
+    expect([getComputedStyle(content).opacity, getComputedStyle(number).opacity]).toEqual([
+      "1",
+      "1",
+    ]);
   });
 
   it("writes the fields in the third ink and a warning in the second", () => {

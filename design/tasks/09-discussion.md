@@ -559,7 +559,7 @@ Testes: 19 arquivos em `features/discussion` (136 casos); cada um sai com o comp
 
 **O que a task 8 deixa para a 9.** Quatro pontos da crítica da task 8 (`design/research/critique-task-08.md`) ficam para esta task, que reescreve as peças onde eles vivem:
 - a linha da árvore diz `publishing` pelo spinner também durante uma corrida com uma situação de pé (`Publish failed`, `Decide drafts · 2/4`): o status é o que a pílula e o spinner dizem, e a situação é o que a linha 3 diz;
-- a opacidade do descartado cabe ao cartão do épico descartado, nunca aos cards aprovados que ele deixa de pé: eles ficam em tinta cheia, porque são o que a situação `Epic discarded` pede para decidir;
+- o descartado não tem opacidade: o épico descartado vive pelo título em `--ink-2` e pelo `Discarded`, como os cards, com a decisão em tinta cheia para ser desfeita, e os cards aprovados que ele deixa de pé ficam em tinta cheia, porque são o que a situação `Epic discarded` pede para decidir;
 - o cartão descartado diz `Discarded` em texto (§4.2, o canto de estado), nos cards e no épico;
 - `standsAlone` não existe mais no Go da cadeia: `epicOf` (`internal/discussion/chain.go`) faz o papel dele, e `orderTargets` fica.
 

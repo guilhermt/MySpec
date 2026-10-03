@@ -214,16 +214,11 @@ export function Draft({
     >
       <span
         aria-hidden="true"
-        className={cn(
-          "text-right font-mono text-(length:--text-micro) leading-(--leading-micro) text-ink-3 tabular-nums",
-          epic && discarded && "opacity-60",
-        )}
+        className="text-right font-mono text-(length:--text-micro) leading-(--leading-micro) text-ink-3 tabular-nums"
       >
         {number}
       </span>
-      <div
-        className={cn("flex min-w-0 flex-col gap-(--space-2)", epic && discarded && "opacity-60")}
-      >
+      <div className="flex min-w-0 flex-col gap-(--space-2)">
         <div className="flex flex-wrap items-center gap-(--space-2)">
           <Badge>
             {kind}

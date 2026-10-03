@@ -212,7 +212,7 @@ Um rascunho de card também pode apontar para um **épico existente**, por `dono
 
 ### Aprovar e publicar
 
-Cada rascunho aberto tem **Approve** (`A`) e **Discard** (`D`), que alternam: clicar na decisão ativa, ou repetir a tecla, a desfaz, enquanto o rascunho não começou e fora de uma corrida. Um rascunho descartado fica no cartão, esmaecido, e nunca é publicado. Só a decisão publica: editar um rascunho nunca escreve no GitHub (ver [Rascunhos de cards](#rascunhos-de-cards)).
+Cada rascunho aberto tem **Approve** (`A`) e **Discard** (`D`), que alternam: clicar na decisão ativa, ou repetir a tecla, a desfaz, enquanto o rascunho não começou e fora de uma corrida. Um rascunho descartado, card ou épico, fica no cartão com o título em tinta mais clara e o estado `Discarded`, e nunca é publicado. Só a decisão publica: editar um rascunho nunca escreve no GitHub (ver [Rascunhos de cards](#rascunhos-de-cards)).
 
 **A linha do gesto** diz, antes da decisão, o que ela publica agora, e é a descrição acessível de **Approve**:
 - `Approve publishes this card to GitHub now.`, ou numa cadeia `Approve publishes the epic, Tier limits and Overage on the monthly invoice and this card to GitHub now.`, e, quando **Discard** também completa uma cadeia, ` Discard publishes … now.`;
