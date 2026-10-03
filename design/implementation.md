@@ -35,8 +35,8 @@ Tamanhos: **P** até 4 steps, **M** de 5 a 8, **G** de 9 a 14. Um step é um com
 | 8 | Publicação em cadeia | M | 5–7 | **M2**, P26 |
 | 9 | A discussão | G | 9–12 | P3 (discussão), P24, P25 |
 | 10 | Settings, boas-vindas, início e migração | G | 9–14 | P31, P32, P34, P34b, P35, P36 |
-| 11 | History, arquivados, diálogos da task, avisos, toasts e notificações | M | 7–9 | P27–P30, P33, P37 |
-| 12 | Consistência e remoção do design antigo | M | 5–8 | nenhum |
+| 11 | History, arquivados, diálogos da task, avisos, toasts e notificações | G | 10–13 | P27–P30, P33, P37 |
+| 12 | Consistência e remoção do design antigo | M a G | 5–14, pelo relatório | nenhum |
 
 Onde a ordem difere da sugestão e por quê: a fundação e a tela da task são duas tasks cada, porque cada metade já é G e cada metade deixa o app inteiro e usável (o shell novo com as telas antigas dentro; o topo novo da task sobre a conversa antiga). **M1** é a task 7, depois do centro de review, porque o apontamento e o cartão de decisão são um componente só, e ele nasce na task 6, onde o produto já tem apontamentos estruturados (`features/reviews/FindingCard.tsx`); fazer M1 dentro da tela da task a tornaria a maior task da frente e obrigaria a construir o componente antes do lugar dele. **M2** é a task 8, própria e antes da discussão, porque é uma regra de workflow testável só em Go, contra o GitHub real, e a tela da discussão (task 9) não se desenha sem ela; separada, a regra é validada numa discussão de verdade antes de a tela mudar, com uma adaptação mínima do painel atual que mantém o app usável.
 
@@ -169,13 +169,13 @@ Onde a ordem difere da sugestão e por quê: a fundação e a tela da task são 
 - **`backend.md`:** P27 (`CloseResult` no `ArchivedTask`), P28 (rascunho e relatórios da PR no arquivado), P29 (o que o apagamento deixou, ligado ao item), P30 (arquivos não commitados e commits fora da base), P33 (History por partes), P37 (os textos das notificações).
 - **Fora:** nada.
 - **Dependências:** tasks 4, 6, 9 e 10.
-- **Tamanho:** M, 7–9 steps.
+- **Tamanho:** G, 10–13 steps (o material de entrada, `tasks/11-history-dialogs.md`, propõe 13: as peças do system num step próprio e as cenas em dois, 12a e 12b).
 - **Pronto:** as cenas de History, arquivados e diálogos; `text_test.go` cobre os 61 textos; a página da task apagada mostra o comando com **Copy**; `features.md` §Histórico, §Apagar uma task, §Voltar e descartar, §Descartar step, §Encerramento e arquivamento, §Depende de mim reescritos.
 
 ### 12. Consistência e remoção do design antigo
 
 - **Objetivo:** o app inteiro passa pelo passe do crítico contra o system, e o que sobrou do design antigo sai.
-- **Escopo:** o PRD desta task é o relatório do passe de consistência da frente (fase 5, o `design-critic` sobre o app rodando, nas larguras de `structure.md` §6 e nos dois modos); a remoção do que restou (`--status-*`, `.dark`, `react-resizable-panels` se nada mais o usa, os pacotes de Inter e JetBrains Mono, componentes e testes órfãos); as verificações que fecham a porta: nenhuma feature importa de `components/ui/`, nenhum `oklch(` fora de `tokens.css`, nenhuma classe de cor do shadcn (`bg-primary`, `text-muted-foreground`) fora da ponte; a varredura de largura (capturas a 1100, 1250, 1450, 2000 e 2560 px), de `prefers-reduced-motion` e de nomes acessíveis; a virtualização da conversa e do board se ficaram para trás; a pauta de polimento de `lab/08-visual-final/critique.md` §7 que ainda valer; `docs/` inteiro consistente (`features.md`, `overview.md`, `design-system.md`, `frontend.md`, `target-machine.md`).
+- **Escopo:** o PRD desta task é o relatório do passe de consistência da frente (fase 5, o `design-critic` sobre o app rodando, nas larguras de `structure.md` §6 e nos dois modos), `design/research/critique-task-12-pass.md`, que o coordenador roda depois do merge da task 11 e antes de o card ir para `Ready`, com as lacunas fechadas em `design/`; o que ele aponta, num step por área de tela; a remoção do que restou: os aliases `--status-*`, as classes de cor do shadcn fora da ponte, a escala de tipo do Tailwind, os laços e os ícones do `lucide-react` fora do system, `react-resizable-panels` e os primitivos de `components/ui/` sem uso, `ModelPicker` e `ReviewModePicker`, e os componentes e testes que as tasks 9 a 11 deixarem órfãos (o tema já é `data-theme`, e a Fira já é a única fonte); as verificações que fecham a porta: nenhuma feature importa de `components/ui/`, nenhum `oklch(` fora de `tokens.css`, nenhuma classe de cor do shadcn (`bg-primary`, `text-muted-foreground`) fora da ponte, nenhum tamanho de texto nem movimento fora dos tokens, nenhum arquivo nem dependência sem uso; a varredura de largura (capturas a 1100, 1250, 1450, 2000 e 2560 px), de `prefers-reduced-motion` e de nomes acessíveis; a virtualização da conversa e do board; a pauta de polimento de `lab/08-visual-final/critique.md` §7 que ainda valer e a pauta das críticas das tasks; `docs/` inteiro consistente (`features.md`, `overview.md`, `design-system.md`, `frontend.md`, `target-machine.md`). O material de entrada é `tasks/12-consistency.md`.
 - **A conversa longa, medida na task 4:** `frontend/src/dev/measure-conversation.tsx` (`?measure=conversation` no servidor de dev, [setup.md](../docs/development/setup.md)) monta uma conversa de 1.500 entradas, 15 vezes o p90, em quatro trechos, três dobrados (89 entradas montadas), com o agente escrevendo no fim. Rodada no WebKitGTK 2.52.6 da máquina alvo (WebKit 6.0 sobre GTK4, o motor do app), sem janela, pelo backend Broadway do GTK, que desenha sem GPU, três vezes em cada build; e uma vez no Chromium, para comparar:
 
   | | Primeira pintura (até o quadro seguinte ao commit) | Uma atualização de streaming (commit e layout), mediana e máximo |
@@ -197,7 +197,7 @@ Onde a ordem difere da sugestão e por quê: a fundação e a tela da task são 
 - **`changes.md`:** o que a crítica apontar como não cumprido.
 - **`backend.md`:** nenhum.
 - **Dependências:** todas.
-- **Tamanho:** M, 5–8 steps.
+- **Tamanho:** M a G, 5–14 steps, pelo relatório: a remoção, as verificações, a virtualização e a varredura ocupam cinco ou seis, e cada área de tela com itens no relatório ganha um step (`tasks/12-consistency.md` §8). Passar de 14 é mudança de escopo e vai ao usuário antes de `Ready`.
 - **Pronto:** o crítico não aponta inconsistência contra `principles.md` e `components.md`; `task check` verde com as verificações novas; a frente de design registra o fim da fase 5 em `design/README.md`.
 
 ## 3. Riscos

@@ -93,6 +93,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | Anatomia | Fina, sem trilho: o polegar em `--line-2`, raio `--radius-pill`, com `--border-2` de folga transparente; `--space-2-5` de largura |
 | Estados | Hover no polegar: `--line-3` |
 | Foco | A área que rola com o foco do teclado tem o anel de foco por dentro (`inset`), para não ser cortado pelo `overflow`; as entradas dentro dela têm o anel comum |
+| Toda área que rola | A mesma barra em toda área que rola: a do `scroll-area` e, numa área que rola nativamente (o corpo de um diálogo, um `listbox`, o compositor, a saída de um comando), a regra global `::-webkit-scrollbar`, com a mesma anatomia e sem trilho. O WebKitGTK nunca pinta a barra do GTK |
 | Faça | Deixe a rolagem nativa: a área que rola é `scroll-area` |
 | Não faça | Não esconda a barra de uma área que rola |
 
@@ -124,7 +125,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | Etiqueta | Contornada por `--line-2`, `--text-micro`, `--ink-2`, raio `--radius-xs`: `Draft` e a label de uma PR, o tipo do rascunho (`New card`, `Epic`, `Update gateway#461`), `Revised` com o lápis, `Default`/`Edited Sep 20` de um prompt (a editada em `--ink-1` com `--line-3`). **`Suggested`**: `--brand-tint`, anel `--brand-ring`, tinta `--brand-ink`, só ao lado do veredito que as decisões sugerem |
 | Tag | Mono de 12 px sobre `--surface-0`, raio `--radius-xs`, altura `--size-time-chip`: a ferramenta de uma permissão (`Bash`) |
 | Placeholder | Mono de 12 px (`--text-micro`) sobre `--surface-0`, contorno `--line-2`, `--ink-2`, altura `--size-kbd`, sem ligaduras: `{{prd_path}}`, no prompt e na coluna do editor |
-| Tecla | Mono de 12 px sobre `--surface-2`, borda `--line-2` com a de baixo em `--border-2`, `--size-kbd`. Dentro de um botão, a tecla da ação (`.k`); num primário, contorno `--brand-key-ring`, e num primário tracejado, sem contorno e com o mesmo padding, para o botão ter a mesma largura nos dois estados. `Ctrl J` usa `--brand-tint` e `--brand-ring` |
+| Tecla | Mono de 12 px sobre `--surface-2`, borda `--line-2` com a de baixo em `--border-2`, `--size-kbd`. Dentro de um botão, a tecla da ação (`.k`), sempre em caixa, sem corpo: contorno `--line-2` no secundário e no fantasma, `--brand-key-ring` no primário, `--line-1` com a tinta `--ink-4` no desabilitado; nunca solta num botão e em caixa no vizinho. A tecla do primário tracejado tem o mesmo padding da do primário habilitado, para o botão ter a mesma largura nos dois estados. `Ctrl J` usa `--brand-tint` e `--brand-ring` |
 | Faça | Escreva a tecla com a mesma forma em todas as ações de um grupo |
 | Não faça | Não use etiqueta para status: status é glifo |
 
@@ -613,7 +614,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 
 | | |
 |---|---|
-| Anatomia | Afundado, raio `--radius-md`, fio interno, na largura da coluna; cabeçalho com a linguagem, o caminho em mono e o intervalo de linhas (cada um quando existe) e **Copy**; o código em 13/20, sem números de linha |
+| Anatomia | Afundado, raio `--radius-md`, fio interno, na largura da coluna; cabeçalho com a linguagem, o caminho em mono e o intervalo de linhas (cada um quando existe) e **Copy**; o código em 13/20, sem números de linha. O **Copy** é o da Marca e cópia, o mesmo em todo bloco, curto ou cortado, com o nome `Copy the code`; o bloco não tem outra cópia |
 | Tinta | O código é todo em peso 400, sem itálico nem negrito: os quatro matizes `--code-*` e o comentário em `--code-comment` separam os tipos de token só pela cor |
 | Código longo | Na conversa, acima de 24 linhas, o bloco mostra as 20 primeiras e um rodapé de fio com **Show all 46 lines** e `26 more`; aberto, **Show less**. Vale também durante o streaming, a partir da linha 25, para o bloco não encolher quando a fala termina. Continua rolando na horizontal. Fora da conversa (painéis, prompts), não corta |
 | Estados de Copy | Hover, foco, copiado (visto e `Copied`), erro (`Can't copy · select the text`) |
@@ -728,8 +729,8 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 | Anatomia | `--size-node` de altura: chevron, o nome em `--text-meta` e peso 600, a contagem já filtrada em `--ink-4`, e o tooltip do que a seção reúne; uma seção final se diz no tooltip e no nome acessível, nunca no texto do cabeçalho |
 | Variantes | As seções de status do board, na ordem dele; as seções de Reviews (`Pending`, `In review`, `Reviewed`, `Yours and your tasks`); o dia no History (`Monday, Sep 22 5`), sem chevron |
 | Estados | Hover, foco, pressionado, recolhida (as finais começam recolhidas; o que o usuário recolhe é lembrado), vazia (contagem 0, sem chevron nem ação), todas escondidas pelo filtro, carregando |
-| Teclado | `←` recolhe, `→` expande; `Enter` alterna; numa linha, `←` recolhe a seção dela e foca o cabeçalho |
-| Acessibilidade | `treeitem` de nível 1 com `aria-expanded` |
+| Teclado | `←` recolhe, `→` expande; `Enter` alterna; numa linha, `←` recolhe a seção dela e foca o cabeçalho. O dia no History não recolhe: `→` vai à primeira linha dele, `←` e `Enter` não agem, e numa linha `←` só foca o cabeçalho do dia |
+| Acessibilidade | `treeitem` de nível 1 com `aria-expanded`; o dia no History, sempre aberto, com `aria-expanded="true"` fixo e o nome `Archived on Monday, Sep 22: 5` |
 | Não faça | Não esconda uma seção vazia: a lista não pula quando o filtro muda |
 
 ### Barra de filtros
@@ -794,7 +795,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 | Instâncias | Criação de task (`screens/board.md` §4), início de review, **Review again** e publicação (`review.md` §3, §11, §12), nova discussão, arquivar, apagar e agrupar (`discussion.md` §2, §11, §12), os de Settings, apagar task, descartar step e voltar a uma etapa (`screens/rest.md`) |
 | Estados | Padrão; confirmando (`Deleting…`, **Cancel** tracejado); falha (a razão em vermelho no rodapé, o diálogo fica aberto, e a confirmação volta a agir: ela é o repetir, sem um **Try again** ao lado) |
 | Tokens | `--scrim`, `--surface-3`, `--surface-0`, `--shadow-overlay`, `--radius-xl`, `--size-dialog`, `--size-dialog-wide` |
-| Teclado | Um diálogo destrutivo ou de confirmação abre com o foco em **Cancel**; um de criação, no primeiro campo. O foco fica preso; `Ctrl+Enter` confirma; `Esc` e o × fecham e devolvem o foco. `Ctrl+N`, `Ctrl+J` e `Ctrl+,` ficam inertes com um diálogo de criação aberto |
+| Teclado | Um diálogo destrutivo ou de confirmação abre com o foco em **Cancel**; um de criação, no primeiro campo. O foco fica preso; `Ctrl+Enter` confirma com o primário, e um diálogo cuja confirmação é perigosa não confirma por ele (`decisions.md`, 2026-10-02); `Esc` e o × fecham e devolvem o foco. `Ctrl+N`, `Ctrl+J` e `Ctrl+,` ficam inertes com um diálogo de criação aberto |
 | Acessibilidade | `role="dialog"` ou `alertdialog`, `aria-modal`, `aria-labelledby` |
 | Faça | Diga exatamente o que será perdido e o que fica |
 | Não faça | Não abra um lugar em diálogo. Lugares são páginas |
@@ -883,7 +884,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 | | |
 |---|---|
 | Marca | O quadrado da marca em `--brand` com o monograma em `--brand-on`: `sm` (`--size-mark`, raio `--radius-sm`) no topo da lateral; `lg` (`--space-8`, raio `--radius-md`, o monograma em `--space-5`) no início, nas boas-vindas e na migração |
-| **Copy** | Fantasma, só de ícone, num cabeçalho de bloco (`Copy the error`) e ao lado de um comando (`Copy gh auth login`); secundário, com o rótulo e o ícone, quando é a ação de uma página (**Copy the list**). Estados: padrão, hover, foco, copiado (o visto e `Copied` por 2 s), erro (`Can't copy · select the text`, em `--state-error`) |
+| **Copy** | Fantasma, só de ícone, num cabeçalho de bloco (`Copy the error`; num bloco de código, `Copy the code`) e ao lado de um comando (`Copy gh auth login`); secundário, com o rótulo e o ícone, quando é a ação de uma página (**Copy the list**). Estados: padrão, hover, foco, copiado (o visto e `Copied` por 2 s), erro (`Can't copy · select the text`, em `--state-error`) |
 | Bloco copiável | O bloco de código sem realce, para um erro ou um comando: afundado, raio `--radius-md`, o cabeçalho com o rótulo (`error`) e **Copy**, o texto em mono com os caminhos pelo `~`. No início que falhou; na página da task apagada (task 11) |
 
 ## Tamanhos de layout

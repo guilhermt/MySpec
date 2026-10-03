@@ -369,7 +369,7 @@ Sob o cabeçalho, na medida da conversa, quando algo bloqueia sem ser a situaç�
 | `Enter`, ↑↓ | Lista dos rascunhos | Abrem o rascunho dobrado, vão ao anterior e ao próximo |
 | `Alt+↓`, `Alt+↑` | Item com apontamentos ou rascunhos a decidir | Próximo e anterior por decidir |
 | `Ctrl+E` | Item com worktree; apontamento em foco | **Open in VS Code**; no apontamento, na linha |
-| `Ctrl+Enter` | Diálogos; barra de decisão | Confirma o diálogo; na barra ou no cartão, abre a publicação. Na PR da task e no modo Apply, não age |
+| `Ctrl+Enter` | Diálogos; barra de decisão | Confirma o diálogo pelo primário; um diálogo destrutivo, cuja confirmação é perigosa, não confirma por ele. Na barra ou no cartão, abre a publicação. Na PR da task e no modo Apply, não age |
 | 1–3 | Diálogo de publicação | Escolhem o veredito |
 | `Enter`, `Shift+Enter` | Compositor | Envia, quebra a linha |
 | `Ctrl+S` | Editor de prompt | Salva |
@@ -421,7 +421,7 @@ O design funciona de 1100 a 2600 px, sem pontos fixos de janela. Cada regra depe
 | Aviso do app | Uma ação sem lugar próprio que falhou: uma faixa no topo da área principal, com o trilho de erro, o rótulo com a ação (`Couldn't pause Rate limit per API key`) e o que fazer, até ser dispensada. Uma por vez |
 | Vazios | `No active items.` num board, `No review in progress.`, `No tasks in <repo>.`, `No artifacts yet`, e o estado vazio de cada lista, com o que faria algo aparecer e a ação |
 | Muitos itens na árvore | A árvore rola. O item aberto é trazido à vista. Os nós recolhem com resumo |
-| Muitos itens fora da árvore | A conversa longa fica legível pelos grupos dobrados e pelos marcos, com os trechos dobrados sem montar o conteúdo; a virtualização entra só se a medição da task 4 pedir. O board, com até 2.000 issues, rola com as seções finais recolhidas; a virtualização dele entra só se a medição da task 5 pedir (`tasks/05-board.md` §6). O History carrega os últimos 90 dias e busca os mais antigos quando a busca pede ou a rolagem chega ao fim |
+| Muitos itens fora da árvore | A conversa longa fica legível pelos grupos dobrados e pelos marcos, com os trechos dobrados sem montar o conteúdo. O board, com até 2.000 issues, rola com as seções finais recolhidas. As duas listas são virtualizadas: montam o que está à vista e o que o teclado e a barra do pedido alcançam (`screens/task.md` §12, `screens/board.md` §6), e o leitor de tela ouve a posição de cada linha entre todas. As linhas montadas ficam no fluxo da coluna, entre espaçadores em pixel inteiro, nunca posicionadas por `transform`, que cairia em meio pixel no WebKitGTK (`principles.md` 10). O History carrega os últimos 90 dias e busca os mais antigos quando a busca pede ou a rolagem chega ao fim |
 
 ## 8. Dados
 
