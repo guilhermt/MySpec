@@ -83,6 +83,7 @@ describe("RemoveRepositoryDialog", () => {
 
     expect(screen.getByRole("button", { name: "Removing…" })).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Close" })).toHaveAttribute("aria-disabled", "true");
     await user.keyboard("{Escape}");
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
 
