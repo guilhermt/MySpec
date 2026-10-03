@@ -52,6 +52,8 @@ describe("StartRow", () => {
   });
 });
 
+const NOW = Date.parse("2026-09-24T14:10:00Z");
+
 const LINE = {
   title: "Platform Roadmap",
   summary: "46 open cards · api, billing",
@@ -67,7 +69,9 @@ function board(props: Partial<BoardStartRowProps> = {}) {
     onClone: vi.fn(),
     onChangePath: vi.fn(),
   };
-  const rendered = renderWithStore(<BoardStartRow line={LINE} {...handlers} {...props} />);
+  const rendered = renderWithStore(
+    <BoardStartRow line={LINE} now={NOW} {...handlers} {...props} />,
+  );
   return { ...rendered, ...handlers };
 }
 
@@ -78,6 +82,24 @@ describe("BoardStartRow", () => {
     expect(button).toHaveTextContent("read 2m ago");
     await user.click(button);
     expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("says a failed reading as the product's age, with its times in the tooltip", async () => {
+    const { user } = board({
+      line: {
+        ...LINE,
+        reading: {
+          text: "◇ Read failed 18m ago",
+          tone: "failed",
+          shimmer: false,
+          failure: { failedAt: "2026-09-24T13:52:00Z", readAt: "2026-09-24T11:30:00Z" },
+        },
+      },
+    });
+    await user.hover(screen.getByText("Read failed 18m ago"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      /^Failed at \d\d:\d\d · last read at \d\d:\d\d$/,
+    );
   });
 
   it("offers Try again for a reading that failed, and Reading… while it runs", async () => {
@@ -95,6 +117,7 @@ describe("BoardStartRow", () => {
     rerender(
       <BoardStartRow
         line={{ ...LINE, blockers: [{ ...failed, reading: true }] }}
+        now={NOW}
         onOpen={() => {}}
         onRetryRead={() => {}}
         onClone={() => {}}
@@ -119,6 +142,7 @@ describe("BoardStartRow", () => {
     rerender(
       <BoardStartRow
         line={{ ...LINE, blockers: [{ ...blocker, text: "Cloning acme/api…", cloning: true }] }}
+        now={NOW}
         onOpen={() => {}}
         onRetryRead={() => {}}
         onClone={() => {}}

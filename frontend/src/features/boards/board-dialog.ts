@@ -196,12 +196,14 @@ export function consequence(option: BoardRepositoryOption, repository: Repositor
   if (has.length === 0) {
     return "Moves to No board.";
   }
-  return [
-    `Moves to No board: it has ${listOf(has)}.`,
-    ...(tasks > 0 ? ["Its tasks keep working."] : []),
-    ...(reviews > 0 ? ["Its reviews keep working."] : []),
-    ...(cloned ? ["Nothing on disk changes."] : []),
-  ].join(" ");
+  // One closing only, for what weighs most: the tasks, else the reviews, else the clone.
+  const closing =
+    tasks > 0
+      ? "Its tasks keep working."
+      : reviews > 0
+        ? "Its reviews keep working."
+        : "Nothing on disk changes.";
+  return `Moves to No board: it has ${listOf(has)}. ${closing}`;
 }
 
 /** footerSum is "acme/docs moves to No board, and acme/billing leaves MySpec."; "" with nothing unchecked. */

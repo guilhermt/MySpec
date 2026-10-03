@@ -37,7 +37,7 @@ export function stepViews(startup: Startup, now: number): StartStepView[] {
       elapsed: slow ? duration(now - Date.parse(step.startedAt)) : "",
       reason:
         slow && id === "clones" && step.detail !== ""
-          ? ` · ${displayPath(step.detail)} doesn't answer`
+          ? `${displayPath(step.detail)} doesn't answer`
           : "",
     };
   });

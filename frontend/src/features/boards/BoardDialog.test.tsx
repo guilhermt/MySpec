@@ -244,7 +244,9 @@ describe("BoardDialog, adding", () => {
     const field = await screen.findByRole("textbox", { name: "Add a repository" });
     const add = screen.getByRole("button", { name: "Add" });
     expect(add).toHaveAttribute("aria-disabled", "true");
+    expect(add).toHaveAccessibleDescription("Type a repository as owner/name.");
     await user.type(field, "dev/nope");
+    expect(add).not.toHaveAttribute("aria-describedby");
     await user.click(add);
 
     expect(api.checkBoardRepository).toHaveBeenCalledWith("", "dev/nope");
@@ -427,8 +429,7 @@ describe("BoardDialog, editing", () => {
     await user.click(screen.getByRole("checkbox", { name: "dev/web 4 cards" }));
     await user.click(screen.getByRole("checkbox", { name: "dev/docs 4 cards" }));
 
-    const web =
-      "Moves to No board: it has a clone and 3 archived tasks. Its tasks keep working. Nothing on disk changes.";
+    const web = "Moves to No board: it has a clone and 3 archived tasks. Its tasks keep working.";
     expect(screen.getByText(`→ ${web}`)).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "dev/web 4 cards" })).toHaveAccessibleDescription(
       `→ ${web}`,

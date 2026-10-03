@@ -53,7 +53,8 @@ export interface SelectProps {
   onValueChange: (value: string) => void;
   placeholder?: string;
   message?: ListMessage;
-  size?: "md" | "sm";
+  /** size is the height of the trigger; xs, inside a row, writes the choice in the meta size. */
+  size?: "md" | "sm" | "xs";
   /** variant is the look of the trigger: a field, or the trigger in the tone of the sidebar. */
   variant?: "field" | "sidebar";
   loading?: boolean;
@@ -110,6 +111,8 @@ export function Select({
       className={cn(
         SELECT_TRIGGER,
         size === "sm" && "h-(--size-control-sm)",
+        size === "xs" &&
+          "h-(--size-control-xs) gap-(--space-1) px-(--space-2) text-(length:--text-meta) leading-(--leading-meta)",
         variant === "sidebar" && SIDEBAR_TRIGGER,
       )}
     >

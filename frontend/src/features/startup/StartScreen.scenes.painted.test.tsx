@@ -7,6 +7,7 @@ import {
   cutTexts,
   edgesOf,
   offWholePixels,
+  resolve,
   setTheme,
   settle,
   THEMES,
@@ -92,6 +93,22 @@ describe.each(THEMES)("The start, the scenes in the %s theme", (theme) => {
 
       // What the screen cuts says its whole text in a tooltip.
       expect(await withoutTooltip(cutTexts(document.body))).toEqual([]);
+
+      // A step's label is whole on its line: a long path is what gives way.
+      for (const item of main.querySelectorAll("li")) {
+        const label = item.children[1];
+        if (label instanceof HTMLElement) {
+          expect(label.getBoundingClientRect().height, `${label.textContent} on one line`).toBe(
+            parseFloat(resolve("var(--leading-ui)", "height")),
+          );
+          expect(cutTexts(item), `${label.textContent} whole`).not.toContain(label);
+        }
+      }
+      if (variation === "slow-long") {
+        expect(cutTexts(main).map((element) => element.textContent)).toContain(
+          "/mnt/team-share/engineering/platform/infrastructure/terraform-modules doesn't answer",
+        );
+      }
 
       // The start has a primary only when it failed: Try again.
       expect(visiblePrimaries()).toHaveLength(failed ? 1 : 0);

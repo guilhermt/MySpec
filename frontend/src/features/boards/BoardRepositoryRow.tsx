@@ -40,8 +40,13 @@ export function BoardRepositoryRow({
   const text = linkText(option, repository);
 
   return (
-    <li className={cn("flex flex-col px-3 py-1.5", consequence !== "" && "bg-surface-0")}>
-      <div className="flex items-center gap-3">
+    <li
+      className={cn(
+        "flex flex-col px-(--space-3) py-(--space-1-5)",
+        consequence !== "" && "bg-surface-0",
+      )}
+    >
+      <div className="flex items-center gap-(--space-3)">
         <Checkbox
           checked={option.checked && !otherBoard}
           onCheckedChange={onCheckedChange}
@@ -53,16 +58,20 @@ export function BoardRepositoryRow({
           <span className="font-medium">{option.fullName}</span>{" "}
           <span className="text-ink-3">{pluralize(option.cards, "card")}</span>
         </Checkbox>
+        {/* With clones to pick, the picker gives way before its lead-in: Clone found · 2 clones: stays whole. */}
         {!otherBoard && (
           <CutText
             text={text}
-            className="ml-auto text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
+            className={cn(
+              "ml-auto text-(length:--text-meta) leading-(--leading-meta) text-ink-3",
+              picksClone && "shrink-0",
+            )}
           />
         )}
         {picksClone && (
-          <div className="w-1/3 min-w-0 shrink-0">
+          <div className="w-1/3 min-w-0">
             <Select
-              size="sm"
+              size="xs"
               label={`Clone of ${option.fullName}`}
               value={chosenClone}
               options={clones.map((clone) => ({ value: clone, label: displayPath(clone) }))}
@@ -75,7 +84,7 @@ export function BoardRepositoryRow({
       {consequence !== "" && (
         <p
           id={consequenceId}
-          className="pb-1 pl-[calc(var(--space-2)+var(--icon)+var(--space-2))] text-(length:--text-meta) leading-(--leading-meta) text-ink-2"
+          className="pb-(--space-1) pl-[calc(var(--space-2)+var(--icon)+var(--space-2))] text-(length:--text-meta) leading-(--leading-meta) text-ink-2"
         >
           {`→ ${consequence}`}
         </p>

@@ -60,3 +60,27 @@ describe.each(THEMES)("RepositoryRow in the %s theme", (theme) => {
       }
     }));
 });
+
+describe("RepositoryRow, the actions of its block lines", () => {
+  it("puts Try again of a failed clone at the right, where Clone stands", () => {
+    const missing = makeRepository({ id: "repo-1", name: "web", cloned: false, path: "" });
+    const failed = makeRepository({
+      id: "repo-2",
+      name: "api",
+      cloned: false,
+      path: "",
+      cloneError: "gh: repository not found",
+    });
+    resetAppStore({ state: makeState({ repositories: [missing, failed] }) });
+    render(
+      <ul style={{ width: "40rem" }}>
+        <RepositoryRow repository={missing} />
+        <RepositoryRow repository={failed} />
+      </ul>,
+    );
+
+    const right = (name: string) =>
+      screen.getByRole("button", { name }).getBoundingClientRect().right;
+    expect(right("Try again")).toBe(right("Clone"));
+  });
+});

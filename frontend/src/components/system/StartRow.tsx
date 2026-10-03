@@ -4,6 +4,7 @@ import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { ICONS, type IconGlyph } from "./icons";
 import { Kbd } from "./Kbd";
+import { ReadingAge } from "./ReadingAge";
 import { Shimmer } from "./Shimmer";
 import { Spinner } from "./Spinner";
 import { Tooltip } from "./Tooltip";
@@ -92,7 +93,13 @@ export type BlockerView =
 export interface BoardLineView {
   title: string;
   summary: string;
-  reading: { text: string; tone: "quiet" | "failed"; shimmer: boolean };
+  /** reading is the age on the right edge; failure, when the last reading failed, makes it the ReadingAge of the product. */
+  reading: {
+    text: string;
+    tone: "quiet" | "failed";
+    shimmer: boolean;
+    failure?: { failedAt: string; readAt: string };
+  };
   label: string;
   blockers: readonly BlockerView[];
 }
@@ -197,6 +204,8 @@ function Blockers({ blockers, ...actions }: BlockerActions & { blockers: readonl
 export interface BoardStartRowProps extends BlockerActions {
   onRetryRead: () => void;
   line: BoardLineView;
+  /** now is the clock the age of a failed reading is told against. */
+  now: number;
   onOpen: () => void;
 }
 
@@ -204,8 +213,11 @@ export interface BoardStartRowProps extends BlockerActions {
  * BoardStartRow is a board of the Home: the row that opens it, with the age of its reading on the
  * right, and under it a line for each thing that keeps its cards from starting a task.
  */
-export function BoardStartRow({ line, onOpen, ...actions }: BoardStartRowProps) {
+export function BoardStartRow({ line, now, onOpen, ...actions }: BoardStartRowProps) {
   const { reading } = line;
+  // A failed reading says its age as every list of the product does, with the times in the tooltip;
+  // read again, the text shimmers like the other ages of the Home.
+  const failure = reading.shimmer ? undefined : reading.failure;
   return (
     <div className="flex flex-col">
       <StartRow
@@ -215,15 +227,21 @@ export function BoardStartRow({ line, onOpen, ...actions }: BoardStartRowProps) 
         accessibleName={line.label}
         onClick={onOpen}
         trailing={
-          <span
-            className={cn(
-              "shrink-0 whitespace-nowrap",
-              META,
-              reading.tone === "failed" ? "text-ink-2" : "text-ink-3",
-            )}
-          >
-            {reading.shimmer ? <Shimmer>{reading.text}</Shimmer> : reading.text}
-          </span>
+          failure !== undefined ? (
+            <span className="shrink-0 whitespace-nowrap">
+              <ReadingAge readAt={failure.readAt} reading={false} now={now} failure={failure} />
+            </span>
+          ) : (
+            <span
+              className={cn(
+                "shrink-0 whitespace-nowrap",
+                META,
+                reading.tone === "failed" ? "text-ink-2" : "text-ink-3",
+              )}
+            >
+              {reading.shimmer ? <Shimmer>{reading.text}</Shimmer> : reading.text}
+            </span>
+          )
         }
       />
       <Blockers blockers={line.blockers} {...actions} />

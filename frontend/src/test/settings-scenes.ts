@@ -960,8 +960,11 @@ export function settingsScene(name: SettingsSceneName, variation: string): Setti
 
 // ---------------- The start, the welcome and the migration ----------------
 
-/** START_VARIATIONS are the moments of the start of the app, "" being the start that runs. */
-export const START_VARIATIONS = ["", "slow", "failed", "disk-full"] as const;
+/** START_VARIATIONS are the moments of the start of the app, "" being the start that runs; slow-long is the slow one on a long network path. */
+export const START_VARIATIONS = ["", "slow", "slow-long", "failed", "disk-full"] as const;
+
+/** LONG_CLONE is a clone on a network share, the real case of a slow start, longer than the column. */
+const LONG_CLONE = "/mnt/team-share/engineering/platform/infrastructure/terraform-modules";
 
 /** WELCOME_VARIATIONS are the moments of the welcome, "" being the machine with nothing missing. */
 export const WELCOME_VARIATIONS = ["", "no-login", "no-gh", "no-claude", "history"] as const;
@@ -985,6 +988,7 @@ export function startScene(variation: (typeof START_VARIATIONS)[number]): Settin
         }),
       };
     case "slow":
+    case "slow-long":
       return {
         ...base,
         startup: makeStartup({
@@ -994,7 +998,7 @@ export function startScene(variation: (typeof START_VARIATIONS)[number]): Settin
             clones({
               state: "running",
               startedAt: new Date(Date.parse(SCENE_NOW) - SLOW_FOR_MS).toISOString(),
-              detail: `${HOME}/code/infra`,
+              detail: variation === "slow" ? `${HOME}/code/infra` : LONG_CLONE,
             }),
           ],
         }),

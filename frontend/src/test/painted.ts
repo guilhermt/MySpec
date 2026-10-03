@@ -345,13 +345,16 @@ export function visiblePrimaries(root: ParentNode = document): Element[] {
   return [...root.querySelectorAll('[data-variant="primary"]')].filter(shows);
 }
 
-/** cutTexts are the elements under a root that cut their text with an ellipsis. */
+/** cutTexts are the elements under a root that cut their text with an ellipsis, on one line or past a clamp of lines. */
 export function cutTexts(root: ParentNode = document): HTMLElement[] {
-  return [...root.querySelectorAll<HTMLElement>("*")].filter(
-    (element) =>
-      getComputedStyle(element).textOverflow === "ellipsis" &&
-      element.scrollWidth > element.clientWidth,
-  );
+  return [...root.querySelectorAll<HTMLElement>("*")].filter((element) => {
+    const style = getComputedStyle(element);
+    return (
+      (style.textOverflow === "ellipsis" && element.scrollWidth > element.clientWidth) ||
+      (style.getPropertyValue("-webkit-line-clamp") !== "none" &&
+        element.scrollHeight > element.clientHeight)
+    );
+  });
 }
 
 /**

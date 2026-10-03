@@ -186,14 +186,15 @@ export function DialogBody({ children, className }: DialogBodyProps) {
 export interface DialogFooterProps {
   children: ReactNode;
   back?: ReactNode;
-  reason?: { id: string; text: string };
+  /** reason is what holds the primary back or what confirming does; lines 2 lets a long one wrap once. */
+  reason?: { id: string; text: string; lines?: 1 | 2 };
   refusal?: string;
 }
 
 /**
  * DialogFooter holds the refusal above, and on one line Back or the disabled reason on the left and
  * Cancel and the confirmation on the right. The buttons never wrap nor move: the reason takes the
- * space left and is cut, with its whole text in a tooltip.
+ * space left, on one line or two, and is cut, with its whole text in a tooltip.
  */
 export function DialogFooter({ children, back, reason, refusal }: DialogFooterProps) {
   return (
@@ -215,6 +216,7 @@ export function DialogFooter({ children, back, reason, refusal }: DialogFooterPr
           <CutText
             id={reason.id}
             text={reason.text}
+            lines={reason.lines ?? 1}
             className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
           />
         )}

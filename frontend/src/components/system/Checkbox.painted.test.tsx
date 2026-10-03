@@ -60,3 +60,18 @@ describe.each(THEMES)("Checkbox in the %s theme", (theme) => {
     );
   });
 });
+
+describe("Checkbox while it loads", () => {
+  it("keeps the text where the box left it", () => {
+    const row = (loading: boolean) => (
+      <Checkbox checked={false} onCheckedChange={() => {}} loading={loading}>
+        <span>Include tests</span>
+      </Checkbox>
+    );
+    const { rerender } = render(row(false));
+    const left = () => screen.getByText("Include tests").getBoundingClientRect().left;
+    const idle = left();
+    rerender(row(true));
+    expect(left()).toBe(idle);
+  });
+});
