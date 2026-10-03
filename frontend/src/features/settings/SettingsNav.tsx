@@ -53,6 +53,10 @@ export function SettingsNav() {
   }, [pendingFocus, open, clearPendingFocus]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    // A key with a modifier is someone else's, like Alt+← that goes back.
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+      return;
+    }
     const inline = list.current !== null && getComputedStyle(list.current).flexDirection === "row";
     const next = nextPage(open, event.key, inline);
     if (next === null) {
@@ -93,7 +97,7 @@ export function SettingsNav() {
               className={cn(
                 "flex h-(--size-control) items-center gap-(--space-2) rounded-sm px-(--space-2-5) text-(length:--text-ui) leading-(--leading-ui) text-ink-2 outline-none transition-colors duration-(--duration-fast) ease-standard hover:bg-veil-hover hover:text-ink-1 active:bg-veil-press focus-visible:focus-ring",
                 current &&
-                  "bg-brand-tint-plane font-medium shadow-[inset_0_0_0_var(--border)_var(--brand-ring)] hover:bg-brand-tint-plane active:bg-brand-tint-plane",
+                  "bg-brand-tint-plane font-medium text-ink-1 shadow-[inset_0_0_0_var(--border)_var(--brand-ring)] hover:bg-brand-tint-plane active:bg-brand-tint-plane",
               )}
             >
               <Icon icon={ICONS[icon]} tone={current ? "active" : "muted"} />

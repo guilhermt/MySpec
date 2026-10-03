@@ -830,9 +830,9 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 | | |
 |---|---|
 | Anatomia | À esquerda da página, fixa ao rolar, com largura `--snav-w`: **Defaults**, **Boards**, **Repositories**, **Prompts**, cada item com o ícone e o nome em `--text-ui`, `--size-control` de altura. **Repositories** leva `◇ N` com o número de clones inexistentes (um repositório sem clone não conta), com os repositórios no tooltip e na descrição |
-| Estados | Padrão (`--ink-2`), hover, foco, pressionado, página aberta (`--brand-tint-plane`, anel `--brand-ring`, ícone `--brand-ink`, peso 500, `aria-current="page"`) |
+| Estados | Padrão (`--ink-2`), hover, foco, pressionado, página aberta (`--brand-tint-plane`, anel `--brand-ring`, ícone `--brand-ink`, o nome em `--ink-1` e peso 500, `aria-current="page"`) |
 | Largura | Abaixo de 820 px de área principal, vira uma linha acima da página, sem ficar fixa |
-| Teclado | Uma parada de Tab. ↑↓ trocam de página, `Home` e `End` vão às pontas; em linha, ←→ também. Aberto por `Ctrl+,` ou por um link, o foco começa no item da página |
+| Teclado | Uma parada de Tab. ↑↓ trocam de página, `Home` e `End` vão às pontas; em linha, ←→ também. Uma seta com modificador (`Alt+←`) não é da navegação. Aberto por `Ctrl+,` ou por um link, o foco começa no item da página |
 | Página | O par navegação e página centrado em pixel inteiro, com `--space-12` entre os dois e a página em `--measure`. O cabeçalho da página: o título em `--text-title` 600, uma frase em `--ink-3` que diz para que ela serve, e à direita a ação da página, secundária (**Add board**, **Add repository**): Settings não tem primária. As seções têm o título em caixa alta de `--text-caps` e uma frase em `--text-meta` |
 
 ### Linha de Settings

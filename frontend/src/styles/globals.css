@@ -370,7 +370,7 @@
     position: sticky;
     top: var(--space-8);
   }
-  @container main (max-width: 820px) {
+  @container main (width < 820px) {
     .settings-body {
       grid-template-columns: minmax(0, var(--measure));
       row-gap: var(--space-6);
