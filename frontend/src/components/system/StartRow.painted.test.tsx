@@ -66,10 +66,16 @@ describe.each(THEMES)("StartRow in the %s theme", (theme) => {
         line={{
           title: "Platform Roadmap",
           summary: "46 open cards · api",
-          reading: { text: "◇ Read failed 18m ago", tone: "failed", shimmer: false },
+          reading: {
+            text: "◇ Read failed 18m ago",
+            tone: "failed",
+            shimmer: false,
+            failure: { failedAt: "2026-09-24T13:52:00Z", readAt: "2026-09-24T11:30:00Z" },
+          },
           label: "Platform Roadmap, 46 open cards, read failed 18m ago",
           blockers: [{ kind: "read-failed", message: "gh: rate limited", reading: false }],
         }}
+        now={Date.parse("2026-09-24T14:10:00Z")}
         onOpen={() => {}}
         onRetryRead={() => {}}
         onClone={() => {}}
@@ -80,9 +86,7 @@ describe.each(THEMES)("StartRow in the %s theme", (theme) => {
     const message = screen.getByText("gh: rate limited").getBoundingClientRect();
     expect(message.left).toBe(label.left);
     // The failure is neutral, never a situation.
-    expect(getComputedStyle(screen.getByText("◇ Read failed 18m ago")).color).toBe(
-      token("--ink-2"),
-    );
+    expect(getComputedStyle(screen.getByText("Read failed 18m ago")).color).toBe(token("--ink-2"));
   });
 
   it("draws the line of the repositories without a board as a group, not a button", () => {

@@ -142,8 +142,13 @@ export interface BoardLineModel {
   title: string;
   /** summary is "46 open cards · api, billing", "Not read yet · api" or "No open cards · api". */
   summary: string;
-  /** reading is what the right edge says: "read 2m ago", "◇ Read failed 18m ago" or "reading…". */
-  reading: { text: string; tone: "quiet" | "failed"; shimmer: boolean };
+  /** reading is what the right edge says: "read 2m ago", "◇ Read failed 18m ago" or "reading…"; failure is the failed one's times, for its tooltip. */
+  reading: {
+    text: string;
+    tone: "quiet" | "failed";
+    shimmer: boolean;
+    failure?: { failedAt: string; readAt: string };
+  };
   /** label is "Platform Roadmap, 46 open cards, read 2m ago". */
   label: string;
   blockers: BlockerModel[];
@@ -207,7 +212,12 @@ function readingOf(board: Board, now: number): BoardLineModel["reading"] {
     return { text: "reading…", tone: "quiet", shimmer };
   }
   if (board.failure !== null) {
-    return { text: `◇ Read failed ${age(board.failure.failedAt, now)}`, tone: "failed", shimmer };
+    return {
+      text: `◇ Read failed ${age(board.failure.failedAt, now)}`,
+      tone: "failed",
+      shimmer,
+      failure: { failedAt: board.failure.failedAt, readAt: board.readAt },
+    };
   }
   if (board.readAt !== "") {
     return { text: `read ${age(board.readAt, now)}`, tone: "quiet", shimmer };
