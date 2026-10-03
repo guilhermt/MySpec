@@ -203,7 +203,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Anatomia | Rótulo acima (`.field`), com o complemento em `--ink-3` (`optional`, `optional with cards`); caixa de `--size-control` com borda `--line-3` sobre `--surface-input`; ajuda ou erro abaixo |
-| Variantes | Input de uma linha; input em mono (nome da task, caminho); textarea de altura mínima `--size-composer-min`, redimensionável na vertical; textarea em mono (corpo de um rascunho, prompt); **busca** de `--size-control-sm`, com a lupa, o placeholder (`Search cards`) e a tecla `/`, que dá lugar a `×` com texto; contador a partir de 100 de 120 caracteres |
+| Variantes | Input de uma linha; input em mono (nome da task, caminho); textarea de altura mínima `--size-composer-min`, ou das linhas que `rows` pede, na entrelinha do texto dele (`--leading-body`, `--leading-code` num código), redimensionável na vertical; textarea em mono (corpo de um rascunho, prompt); **busca** de `--size-control-sm`, com a lupa, o placeholder (`Search cards`) e a tecla `/`, que dá lugar a `×` com texto; contador a partir de 100 de 120 caracteres |
 | Estados | Todos os comuns. Hover escurece a borda para `--ink-3`. Foco: borda `--focus` e halo. Erro: borda e trilho interno `--state-error`, a mensagem abaixo, validado enquanto se digita. Salvo enquanto se digita: a ajuda diz `Saved as you type.` |
 | Tokens | `--surface-input`, `--line-3`, `--focus`, `--focus-halo`, `--state-error`, `--error-rail`, `--text-ui`, `--text-body`, `--text-meta` |
 | Teclado | Na busca, `↓` vai à lista e `Esc` volta a ela |
