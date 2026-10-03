@@ -25,7 +25,8 @@ export function RepositoryMenu({
   onRemove,
   triggerRef,
 }: RepositoryMenuProps) {
-  const opensBlock = useRef(false);
+  // An item that opens a block or a dialog hands the focus to it; the menu doesn't take it back.
+  const handsFocus = useRef(false);
   const cloning = repository.cloning;
   const blocked = removeReason(repository);
 
@@ -45,10 +46,9 @@ export function RepositoryMenu({
       <MenuContent
         align="end"
         finalFocus={() => {
-          // The block that Review instructions… opens takes the focus; the menu doesn't take it back.
-          const keep = opensBlock.current;
-          opensBlock.current = false;
-          return !keep;
+          const handed = handsFocus.current;
+          handsFocus.current = false;
+          return !handed;
         }}
       >
         <MenuItem {...(cloning ? { disabledReason: CLONING } : {})} onClick={onChangePath}>
@@ -57,7 +57,7 @@ export function RepositoryMenu({
         <MenuItem
           sub={hasInstructions(repository) ? "Set" : "None"}
           onClick={() => {
-            opensBlock.current = true;
+            handsFocus.current = true;
             onReviewInstructions();
           }}
         >
@@ -71,7 +71,10 @@ export function RepositoryMenu({
             : blocked !== null
               ? { disabled: true, reason: blocked }
               : {})}
-          onClick={onRemove}
+          onClick={() => {
+            handsFocus.current = true;
+            onRemove();
+          }}
         >
           Remove…
         </MenuItem>
