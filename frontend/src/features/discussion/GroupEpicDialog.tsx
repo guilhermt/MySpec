@@ -9,6 +9,7 @@ import { Tooltip } from "@/components/system/Tooltip";
 import { epicRepositoryOf } from "@/features/discussion/discussion-status";
 import { EPIC_TITLE_MAX, groupable, groupReason } from "@/features/discussion/drafts-card";
 import { draftTitle } from "@/lib/drafts";
+import { counted } from "@/lib/situations";
 import type { DiscussionSummary } from "@/lib/wails";
 import { groupIntoEpicInPlace } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
@@ -162,7 +163,7 @@ export function GroupEpicDialog({ discussion, open, onOpenChange }: GroupEpicDia
           loadingLabel="Grouping…"
           onClick={() => void group()}
         >
-          {`Group ${marked.length} drafts`}
+          {`Group ${counted(marked.length, "draft")}`}
         </Button>
       </DialogFooter>
     </Dialog>

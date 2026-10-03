@@ -599,5 +599,3 @@ export function groupReason(title: string, picked: number): string | null {
     ? `Use at most ${EPIC_TITLE_MAX} characters in the title of the epic.`
     : null;
 }
-
-export type { DecisionView, DependencyView, DiffLine, DraftStateView, GestureLineView };

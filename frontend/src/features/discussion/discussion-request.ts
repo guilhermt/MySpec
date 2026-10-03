@@ -174,20 +174,22 @@ function barOf(discussion: DiscussionSummary, kind: DiscussionKind): DiscussionB
         target,
       };
     }
-    case "ready_to_archive":
+    case "ready_to_archive": {
+      const published = (discussion.drafts ?? []).filter((draft) => draft.published);
       return {
         form: "closing",
         label: "Ready to archive",
         place,
         progress: readyToArchiveDetail(
-          (discussion.drafts ?? []).filter((draft) => draft.published).length,
-          discussion.round,
+          published.length,
+          new Set(published.map((draft) => draft.round)).size,
         ),
         status: statusOf("Ready to archive", place),
         actions: [ARCHIVE],
         focus: "primary",
         target,
       };
+    }
   }
 }
 

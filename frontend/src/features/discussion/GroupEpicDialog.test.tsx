@@ -48,7 +48,9 @@ function draw(drafts: Draft[] = loose()) {
 }
 
 const group = (count: number) =>
-  screen.getByRole("button", { name: new RegExp(`^Group ${count} drafts`) });
+  screen.getByRole("button", {
+    name: new RegExp(`^Group ${count} draft${count === 1 ? "" : "s"}\\b`),
+  });
 
 beforeEach(() => {
   vi.clearAllMocks();

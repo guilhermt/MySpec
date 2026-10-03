@@ -257,7 +257,7 @@ describe("discussionRequestOf, the situations of the drafts", () => {
       "seven published in three rounds",
       Array.from({ length: 7 }, (_, i) =>
         draftOf(`d${i + 1}`, {
-          round: 3,
+          round: (i % 3) + 1,
           decision: "approved",
           published: true,
           outcome: "created",
