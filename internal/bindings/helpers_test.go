@@ -357,6 +357,12 @@ func (offlineGH) AddSubIssue(context.Context, string, string) error { return err
 
 func (offlineGH) AddBlockedBy(context.Context, string, string) error { return errOffline }
 
+// fakeLogin is the login of gh a test answers for: signed in unless err says
+// otherwise.
+type fakeLogin struct{ err error }
+
+func (l fakeLogin) SignedIn(context.Context) error { return l.err }
+
 // fixture wires the services the way internal/app does, over an in-memory
 // database and a folder picker the test answers for.
 type fixture struct {
@@ -561,7 +567,7 @@ func newFixture(t *testing.T) *fixture {
 
 	f.state = bindings.NewStateService(f.snapshot)
 	f.repoService = bindings.NewRepositoryService(f.repositories, f.picker, log)
-	f.settings = bindings.NewSettingsService(f.theme, f.models, f.reviewModes, f.dataDir, log)
+	f.settings = bindings.NewSettingsService(f.theme, f.models, f.reviewModes, fakeLogin{}, f.dataDir, log)
 	f.tasks = bindings.NewTaskService(
 		f.taskSvc, f.sessions, f.flow, f.models, f.reviewModes, f.repositories, f.boards, f.editor.open,
 		f.discussions.DocumentOfCard, f.hasConversation, log,
@@ -887,6 +893,7 @@ func (f *fixture) snapshot() bindings.State {
 		Theme:             string(f.theme.Preference()),
 		SystemDark:        f.theme.SystemDark(),
 		ModelDefaults:     bindings.FromModelSet(f.models.Defaults()),
+		ModelFactory:      bindings.FromModelSet(models.Factory()),
 		ReviewModeDefault: string(f.reviewModes.Default()),
 		Tasks: bindings.FromTasks(
 			f.taskSvc.List(), f.taskArtifacts, f.flow.Steps, f.flow.PullRequest, f.flow.Worktree, f.sessions.Conversations,

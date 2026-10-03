@@ -7,6 +7,7 @@ import * as DiscussionService from "./discussionservice.js";
 import * as RepositoryService from "./repositoryservice.js";
 import * as ReviewService from "./reviewservice.js";
 import * as SettingsService from "./settingsservice.js";
+import * as StartupService from "./startupservice.js";
 import * as StateService from "./stateservice.js";
 import * as TaskService from "./taskservice.js";
 export {
@@ -16,6 +17,7 @@ export {
     RepositoryService,
     ReviewService,
     SettingsService,
+    StartupService,
     StateService,
     TaskService
 };
@@ -64,6 +66,7 @@ export type {
     Entry,
     ErrorEntry,
     Leftover,
+    Machine,
     MarkerCommit,
     MarkerEntry,
     Migration,
@@ -80,6 +83,7 @@ export type {
     Place,
     PlanProblem,
     Prompt,
+    PromptListing,
     PullCard,
     PullLabel,
     PullRequest,
@@ -105,6 +109,9 @@ export type {
     StageModel,
     StartDiscussionRequest,
     StartReviewRequest,
+    Startup,
+    StartupFailure,
+    StartupStep,
     State,
     Step,
     StepBlock,

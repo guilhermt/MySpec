@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
+import { BoardRepositoryRow } from "@/features/boards/BoardRepositoryRow";
 import { choicesOf, chosenCloneOf } from "@/features/boards/board-dialog";
-import { RepositoryLinkRow } from "@/features/boards/RepositoryLinkRow";
 import { messageOf } from "@/lib/errors";
 import type { BoardRepositoryOption } from "@/lib/wails";
 import { addRepositoryToBoard, checkBoardRepository } from "@/store/actions";
+import { useRepositories } from "@/store/app-store";
 
 export interface AddToBoardDialogProps {
   boardId: string;
@@ -25,6 +26,7 @@ export function AddToBoardDialog({
   onOpenChange,
   onAdded,
 }: AddToBoardDialogProps) {
+  const repositories = useRepositories();
   const [option, setOption] = useState<BoardRepositoryOption | null>(null);
   const [chosenClones, setChosenClones] = useState<Record<string, string>>({});
   const [checking, setChecking] = useState(false);
@@ -97,8 +99,12 @@ export function AddToBoardDialog({
           checking && <p>Checking the repository…</p>
         ) : (
           <ul className="rounded-md border border-line-2">
-            <RepositoryLinkRow
+            <BoardRepositoryRow
               option={option}
+              repository={
+                repositories.find((repository) => repository.id === option.repositoryId) ?? null
+              }
+              consequence=""
               chosenClone={chosenCloneOf(option, chosenClones)}
               disabled={busy}
               onCheckedChange={(checked) => setOption({ ...option, checked })}

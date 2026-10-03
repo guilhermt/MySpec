@@ -1,6 +1,7 @@
 import {
   Archive,
   ArrowDown,
+  ArrowLeft,
   ArrowUpRight,
   Ban,
   BookMarked,
@@ -10,10 +11,13 @@ import {
   CircleAlert,
   Code,
   Contrast,
+  Copy,
   Download,
   Ellipsis,
+  FileTerminal,
   FileText,
   Flag,
+  Folder,
   FoldVertical,
   GitBranch,
   GitCommitHorizontal,
@@ -35,6 +39,7 @@ import {
   RefreshCw,
   RotateCw,
   Settings,
+  SlidersHorizontal,
   SquareCheck,
   Trash2,
   User,
@@ -100,6 +105,11 @@ export const ICONS = {
   plus: Plus,
   repository: BookMarked,
   epic: Layers,
+  defaults: SlidersHorizontal,
+  prompt: FileTerminal,
+  copy: Copy,
+  folder: Folder,
+  back: ArrowLeft,
 } as const satisfies Record<string, IconGlyph>;
 
 /** IconMeaning is the name of a meaning in ICONS. */

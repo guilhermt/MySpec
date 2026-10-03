@@ -181,7 +181,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | Anatomia | Pílula de `--size-chip` (28 px), rótulo em 13 px e peso 500, chevron quando abre. Em linhas densas, o chip `sm`: `--size-chip-sm` (22 px) com o rótulo em `--text-micro` |
 | Variantes | **Seletor de modelo e esforço** (`Opus · high ▾`), no compositor e nas linhas de modelo. **Filter**, que abre o menu de filtros. **Chip que alterna** (`Assigned to me`, `aria-pressed`). **Filtro ativo**: escolhido, com `×` que é botão; um filtro órfão leva `◇` e a razão no tooltip |
 | Escolha própria e padrão | Num seletor que segue um padrão (a task, **Defaults**, a fábrica), a escolha própria fica em `--ink-1`, peso 500, borda `--line-3`, com o padrão no tooltip (`Factory default: Fable 5.1 · high`); a que segue fica quieta (`--ink-2` numa linha de modelo, `--ink-3` no seletor de um step) |
-| Estados | Todos os comuns. Aberto ou escolhido: `--brand-tint` com anel `--brand-ring`. Salvando: spinner e `Saving…`. Lendo o catálogo: a escolha salva com brilho, e o menu não abre (`Reading the models of Claude Code · the menu opens when it ends`). Indisponível: `◇`, `· unavailable` e a razão no tooltip (`The installed Claude Code no longer lists Opus 4.1. A session still starts with it, and the CLI decides.`), sem trocar a escolha |
+| Estados | Todos os comuns. Aberto ou escolhido: `--brand-tint` com anel `--brand-ring`. Salvando: spinner e `Saving…`. Lendo o catálogo: a escolha salva com brilho, e o menu não abre (`Reading the models of Claude Code · the menu opens when it ends`). Indisponível: `◇`, `· unavailable` em `--ink-3` 400 e a razão no tooltip (`The installed Claude Code no longer lists Opus 4.1. A session still starts with it, and the CLI decides.`), sem trocar a escolha |
 | Tokens | `--surface-2`, `--line-2`, `--line-3`, `--brand-tint`, `--brand-ring`, `--radius-pill`, `--size-chip`, `--size-chip-sm`, `--text-meta`, `--text-micro` |
 | Teclado | `Enter` e `Space` abrem o menu; `aria-expanded`. O `×` de um filtro é uma parada própria |
 | Faça | Use para uma escolha que muda o contexto do lugar |
@@ -203,7 +203,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Anatomia | Rótulo acima (`.field`), com o complemento em `--ink-3` (`optional`, `optional with cards`); caixa de `--size-control` com borda `--line-3` sobre `--surface-input`; ajuda ou erro abaixo |
-| Variantes | Input de uma linha; input em mono (nome da task, caminho); textarea de altura mínima `--size-composer-min`, redimensionável na vertical; textarea em mono (corpo de um rascunho, prompt); **busca** de `--size-control-sm`, com a lupa, o placeholder (`Search cards`) e a tecla `/`, que dá lugar a `×` com texto; contador a partir de 100 de 120 caracteres |
+| Variantes | Input de uma linha; input em mono (nome da task, caminho); textarea de altura mínima `--size-composer-min`, ou das linhas que `rows` pede, na entrelinha do texto dele (`--leading-body`, `--leading-code` num código), redimensionável na vertical; textarea em mono (corpo de um rascunho, prompt); **busca** de `--size-control-sm`, com a lupa, o placeholder (`Search cards`) e a tecla `/`, que dá lugar a `×` com texto; contador a partir de 100 de 120 caracteres |
 | Estados | Todos os comuns. Hover escurece a borda para `--ink-3`. Foco: borda `--focus` e halo. Erro: borda e trilho interno `--state-error`, a mensagem abaixo, validado enquanto se digita. Salvo enquanto se digita: a ajuda diz `Saved as you type.` |
 | Tokens | `--surface-input`, `--line-3`, `--focus`, `--focus-halo`, `--state-error`, `--error-rail`, `--text-ui`, `--text-body`, `--text-meta` |
 | Teclado | Na busca, `↓` vai à lista e `Esc` volta a ela |
@@ -217,9 +217,10 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 |---|---|
 | Anatomia | Gatilho com a anatomia do input e um chevron; menu flutuante (`--surface-3`, `--shadow-float`, raio `--radius-lg`) com itens de `--size-control` |
 | Variantes | **Lista de escolha** (`listbox`: visto no escolhido). **Menu de ações** (`menu`: o destrutivo por último, depois de um separador, em `--state-error`). **Grupos**: legenda em caixa alta de `--text-caps` e nota. **Modelo e esforço**: dois grupos de `menuitemradio`, `Model` e `Effort · <modelo>`; um modelo sem esforço diz `<modelo> has no effort levels.` Só em Settings › Defaults, a escolha de fábrica leva a marca `factory` e o pé diz `From the Claude Code installed here, read when MySpec opened.` **Item que alterna em três estados** (sem filtro, oculto `−dependabot`, só este `+rsouza`), com o menu aberto enquanto se alterna. **Com busca**: um campo no alto, para os cards de um board. **Item desabilitado com ação**: `Not cloned` com **Clone** no próprio item; o item fica no percurso das setas com `aria-disabled`, não é escolhível, `Enter` nele aciona a ação, o nome acessível diz os dois (`acme/billing, not cloned. Enter clones it.`), e o menu fica aberto enquanto o item passa a `Cloning…` e depois a utilizável, sem ser escolhido sozinho. **Opção desabilitada com razão**: não escolhível, com a razão como subtítulo (`not read yet`). **Linha de texto**: uma linha entre os itens que não é item, na altura dele, em `--text-ui` e `--ink-3`, sem realce e fora do teclado; é o nível do breadcrumb dobrado que não é lugar, como o épico |
+| Select compacto | `xs`, dentro de uma linha: gatilho de `--size-control-xs`, com `--space-2` de folga, a escolha em `--text-meta` e o chevron; o menu é o mesmo. É o seletor do clone em `Clone found · 2 clones:`, na linha do repositório do diálogo de board |
 | Gatilho da lateral | O filtro por repositório usa o gatilho no tom da lateral: `--size-control-sm`, fundo `--sidebar-input`, borda `--sidebar-control`, rótulo em `--text-meta` e `--ink-2`. O menu é o mesmo |
-| Estados | Gatilho: os comuns. Item: realce em `--veil-hover` (hover e teclado), escolhido com visto em `--brand-ink`, desabilitado em `--ink-4` com o motivo, destrutivo em vermelho. Menu carregando e com erro, com a mensagem no lugar dos itens (`features.md`, Modelos e esforço, quando o catálogo nunca foi lido) |
-| Tokens | `--surface-3`, `--shadow-float`, `--veil-hover`, `--veil-press`, `--brand-ink`, `--state-error`, `--size-menu-min`, `--text-caps` |
+| Estados | Gatilho: os comuns. Item: realce em `--veil-hover` (hover e teclado), escolhido com visto em `--brand-ink`, desabilitado em `--ink-4` com o motivo, destrutivo em vermelho. Menu com uma mensagem no lugar dos itens (`MenuMessage`), em `--text-meta`: carregando, neutra em `--ink-3`; com erro, em `--state-error` e `alert`, com **Try again** quando há; com aviso (`notice`), em `--ink-2` e `status`, para o que deixa o menu sem itens sem ser uma falha dele, como o catálogo de modelos que nunca foi lido (`features.md`, Modelos e esforço) |
+| Tokens | `--surface-3`, `--shadow-float`, `--veil-hover`, `--veil-press`, `--brand-ink`, `--state-error`, `--size-menu-min`, `--size-control-xs`, `--text-caps` |
 | Teclado | ↑↓ realçam, `Enter` escolhe, `Esc` fecha e devolve o foco ao gatilho, letras saltam ao item |
 | Acessibilidade | `aria-haspopup`, `aria-expanded`, `aria-selected` ou `aria-checked`, `aria-disabled`; o item de três estados tem o estado no nome (`dependabot: hidden. Click to cycle.`) |
 | Faça | Marque uma escolha que o catálogo não tem mais como indisponível, sem trocá-la |
@@ -253,7 +254,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | Anatomia | Anel de `--icon` com borda `--line-3` sobre `--surface-input`; escolhido, a borda em `--brand` e o ponto de `--space-2` em `--brand` |
 | Estados | Padrão, hover (borda `--ink-3`), foco (anel por fora), escolhido, desabilitado (tracejado, sem fundo), erro (borda `--state-error` sobre `--state-error-veil`) |
 | Usos | Uma escolha entre poucas opções numa tabela ou lista: os status de um board (`Ends the work`, `New cards`) |
-| Acessibilidade | `radiogroup` com nome; ←→ ou ↑↓ trocam |
+| Acessibilidade | `radiogroup` com nome; ←→ ou ↑↓ trocam. Numa tabela, os rádios são `input` nativos de um mesmo `name`, cada um com o nome inteiro, e o grupo é o deles, sem um elemento que os envolva: o corpo continua o da tabela, e as setas numa caixa da mesma linha não trocam a escolha |
 | Faça | Use o rádio numa lista de opções curtas; use a opção de pergunta quando cada opção tem uma linha do que faz |
 
 ### Grupo de opções
@@ -298,7 +299,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 |---|---|
 | Anatomia | Uma linha por etapa: o nome da etapa (com a nota `Also where a review of someone's pull request starts` quando mais algo parte dela) e o chip de modelo e esforço à direita, que abre o `listbox` de modelo e esforço. Linhas separadas por `--line-1`, num grupo contornado |
 | Variantes | **Popover Models** da task e do review: as etapas do modo do item, e a nota `A stage takes its model when it starts. Each step not started can have its own, in Details.` **Lista do diálogo de criação**: dobrada sob o **resumo de modelos** (seção abaixo). **Settings › Defaults**: as nove etapas agrupadas por parte do workflow, com `6 of 9 changed from the factory defaults` |
-| Estados | Editável; própria ou mudada da fábrica (`--ink-1`, 500) e padrão (quieta); hover; foco; aberta; iniciada, sem edição (`Opus · medium · started`); salvando; erro ao salvar, com a razão e **Try again** sob a linha (`role="alert"`); indisponível (`◇`); lendo o catálogo (a escolha salva com brilho) |
+| Estados | Editável; própria ou mudada da fábrica (`--ink-1`, 500) e padrão (quieta); hover; foco; aberta; iniciada, sem edição (`Opus · medium · started`); salvando; erro ao salvar, com a razão e **Try again** fantasma `xs` sob a linha (`role="alert"`); indisponível (`◇`); lendo o catálogo (a escolha salva com brilho); catálogo nunca lido (o menu diz por quê no lugar dos itens, em `--ink-2`, nunca vermelho) |
 | Resumo de modelos | Uma linha que abre e fecha a lista no lugar, com o chevron. À direita: `Defaults`, ou a primeira etapa ajustada, `+N` e `the rest from Defaults` |
 | Teclado | `Esc` fecha o `listbox`, depois o popover, e o foco volta ao gatilho |
 | Faça | Salve cada escolha na hora |
@@ -830,9 +831,9 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 | | |
 |---|---|
 | Anatomia | À esquerda da página, fixa ao rolar, com largura `--snav-w`: **Defaults**, **Boards**, **Repositories**, **Prompts**, cada item com o ícone e o nome em `--text-ui`, `--size-control` de altura. **Repositories** leva `◇ N` com o número de clones inexistentes (um repositório sem clone não conta), com os repositórios no tooltip e na descrição |
-| Estados | Padrão (`--ink-2`), hover, foco, pressionado, página aberta (`--brand-tint-plane`, anel `--brand-ring`, ícone `--brand-ink`, peso 500, `aria-current="page"`) |
+| Estados | Padrão (`--ink-2`), hover, foco, pressionado, página aberta (`--brand-tint-plane`, anel `--brand-ring`, ícone `--brand-ink`, o nome em `--ink-1` e peso 500, `aria-current="page"`) |
 | Largura | Abaixo de 820 px de área principal, vira uma linha acima da página, sem ficar fixa |
-| Teclado | Uma parada de Tab. ↑↓ trocam de página, `Home` e `End` vão às pontas; em linha, ←→ também. Aberto por `Ctrl+,` ou por um link, o foco começa no item da página |
+| Teclado | Uma parada de Tab. ↑↓ trocam de página, `Home` e `End` vão às pontas; em linha, ←→ também. Uma seta com modificador (`Alt+←`) não é da navegação. Aberto por `Ctrl+,` ou por um link, o foco começa no item da página |
 | Página | O par navegação e página centrado em pixel inteiro, com `--space-12` entre os dois e a página em `--measure`. O cabeçalho da página: o título em `--text-title` 600, uma frase em `--ink-3` que diz para que ela serve, e à direita a ação da página, secundária (**Add board**, **Add repository**): Settings não tem primária. As seções têm o título em caixa alta de `--text-caps` e uma frase em `--text-meta` |
 
 ### Linha de Settings
@@ -840,7 +841,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 | | |
 |---|---|
 | Anatomia | Numa lista contornada por `--line-1`, linhas separadas por fios: o ícone, o nome em `--text-ui` e peso 500, uma ou duas linhas de detalhe em `--text-meta` `--ink-3` (caminhos em mono), e à direita o estado e as ações. O que bloqueia fica sob a linha, como faixa de aviso. As listas vêm em grupos com o título em `--text-meta` 600 e a contagem em `--ink-4` (`Needs a clone 3`, um por board, `No board`); um grupo vazio não aparece |
-| Variantes | **Board**: o título, o projeto no GitHub (link), os repositórios, os status finais e de cards novos, a idade da leitura (a do cabeçalho do board), **Edit…** e **Remove…**; sem board, a página tem o vazio sem ação. **Repositório**: o nome, o caminho (ou `Not cloned`), as contagens, `Review instructions set` quando há, e `⋯` (**Change path…**, **Review instructions…**, **Remove…**, desabilitado com a razão abaixo). **Prompt**: o nome, o que o prompt abre, a etiqueta `Default` ou `Edited Sep 20`, e o chevron; abre o prompt |
+| Variantes | **Board**: o título, o projeto no GitHub (link), os repositórios, os status finais e de cards novos, a idade da leitura (a do cabeçalho do board), **Edit…** e **Remove…**; sem board, a página tem o vazio com **Add board** sob o texto, pela regra do Estado vazio de página. **Repositório**: o nome, o caminho (ou `Not cloned`), as contagens, `Review instructions set` quando há, e `⋯` (**Change path…**, **Review instructions…**, **Remove…**, desabilitado com a razão abaixo). **Prompt**: o nome, o que o prompt abre, a etiqueta `Default` ou `Edited Sep 20`, e o chevron; abre o prompt |
 | Estados | Hover, foco, pressionado; lida, lendo, nunca lida, leitura falha (nunca vermelha), tentando; sem clone com **Clone**, clonando, clone falhou, clone inexistente com **Change path…**, **Change path** recusado |
 
 ### Repositório de um board, no diálogo
@@ -854,7 +855,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 
 | | |
 |---|---|
-| Anatomia | Em **Add repository**, uma linha por clone achado na pasta home: a caixa, o repositório e o caminho em mono; os já registrados dobrados no fim (`Already registered · 9`) |
+| Anatomia | Em **Add repository**, uma linha por clone achado na pasta home: a caixa, o repositório e o caminho em mono; os já registrados dobrados no fim (`Already registered 9`) |
 | Estados | Disponível, marcado, liga um clone (`Registered without a clone: this links the clone to it.`), hover, foco, desabilitado (registrado), cadastrando, recusado (a razão em vermelho), varrendo (`Scanning your home folder…`), a varredura falhou (com **Try again**), nada achado |
 
 ### Tabela de status
@@ -863,12 +864,14 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 |---|---|
 | Anatomia | No passo dos status do diálogo de board: uma linha por opção de status, na ordem do board, e duas colunas, `Ends the work` (caixa de seleção) e `New cards` (rádio); a última linha é `No status`, só com o rádio. Uma opção nova tem a etiqueta `new` |
 | Estados | Os da caixa e do rádio; a nota afundada no alto quando o board mudou desde o cadastro |
+| Acessibilidade | Uma `table` com o cabeçalho de colunas; a caixa e o rádio de cada linha sob o texto do cabeçalho da coluna deles. A caixa é `<status> ends the work`; os rádios, `New cards start in <status>` e `New cards start without a status`, um grupo pelo `name`, sob o cabeçalho `New cards` |
 
 ### Editor de prompt
 
 | | |
 |---|---|
-| Anatomia | **← <prompt>** no alto, o título (`Editing the PRD prompt`) e a frase; a área de texto em mono ocupando a coluna; à direita, em `--col-placeholders` e fixa ao rolar, a coluna **Placeholders**, cada um como etiqueta com o que ele vira e, quando se aplica, o que acontece sem ele; a barra fixa no pé com `Unsaved changes`, **Cancel** e **Save** `Ctrl S`, a primária |
+| Anatomia | **← <prompt>** no alto, o título (`Editing the PRD prompt`) e a frase; a área de texto em mono ocupando a coluna; à direita, em `--col-placeholders` e fixa ao rolar, a coluna **Placeholders**, cada um como etiqueta com o que ele vira e, quando se aplica, o que acontece sem ele; a barra fixa no pé com, à esquerda, a razão de **Save** tracejado (`Nothing changed yet.`), `Unsaved changes` ou a falha ao salvar, e à direita **Cancel** e **Save** `Ctrl S`, a primária, que não mudam de lugar enquanto se digita |
+| Prompt aberto | Na página do prompt, antes da edição, o texto renderizado em Markdown num bloco contornado por `--line-1`, com os títulos dele em `--text-ui` 600, menores que o título da página em `--text-title`, e cada placeholder conhecido como etiqueta |
 | Largura | Abaixo de 820 px de área principal, a coluna desce para baixo do editor |
 | Estados | Sem mudança (**Save** tracejado), com mudança, salvando, erro ao salvar. Sair com edição não salva pede `Discard your changes?` |
 
@@ -884,7 +887,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 | | |
 |---|---|
 | Marca | O quadrado da marca em `--brand` com o monograma em `--brand-on`: `sm` (`--size-mark`, raio `--radius-sm`) no topo da lateral; `lg` (`--space-8`, raio `--radius-md`, o monograma em `--space-5`) no início, nas boas-vindas e na migração |
-| **Copy** | Fantasma, só de ícone, num cabeçalho de bloco (`Copy the error`; num bloco de código, `Copy the code`) e ao lado de um comando (`Copy gh auth login`); secundário, com o rótulo e o ícone, quando é a ação de uma página (**Copy the list**). Estados: padrão, hover, foco, copiado (o visto e `Copied` por 2 s), erro (`Can't copy · select the text`, em `--state-error`) |
+| **Copy** | Fantasma, só de ícone, num cabeçalho de bloco (`Copy the error`; num bloco de código, `Copy the code`) e ao lado de um comando (`Copy gh auth login`); secundário, com o rótulo e o ícone, quando é a ação de uma página (**Copy the list**). Estados: padrão, hover, foco, copiado (o visto no lugar do ícone e `Copied` ao lado, por 2 s, sem mover o botão), erro (`Can't copy · select the text`, em `--state-error`) |
 | Bloco copiável | O bloco de código sem realce, para um erro ou um comando: afundado, raio `--radius-md`, o cabeçalho com o rótulo (`error`) e **Copy**, o texto em mono com os caminhos pelo `~`. No início que falhou; na página da task apagada (task 11) |
 
 ## Tamanhos de layout
@@ -913,4 +916,4 @@ Os tokens de medida e de layout da conversa, das listas, do painel da lista, do 
 | `--snav-w` | `calc(var(--space-16) * 3 + var(--space-4))` | Navegação de Settings |
 | `--size-popover` | `22rem` | Os popovers Review mode e Models |
 | `--size-composer-max` | `15rem` | A altura máxima da caixa do compositor, cerca de dez linhas |
-| `--col-placeholders` | `calc(var(--space-16) * 3.5)` | A coluna **Placeholders** do editor de prompt, 224 px; a task 10 o acrescenta a `tokens.css` |
+| `--col-placeholders` | `calc(var(--space-16) * 3.5)` | A coluna **Placeholders** do editor de prompt, 224 px |

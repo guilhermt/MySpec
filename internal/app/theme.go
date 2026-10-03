@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -22,6 +23,32 @@ const (
 
 // signalBuffer is how many portal signals may queue up before they are dropped.
 const signalBuffer = 10
+
+// readSystemDark asks the portal whether the desktop wants a dark interface,
+// before the window opens, so that the window and the first screen open in the
+// right theme. A desktop without the portal answers light.
+func readSystemDark(log *slog.Logger) bool {
+	conn, err := dbus.SessionBus()
+	if err != nil {
+		log.Warn("system theme unavailable", "err", err)
+		return false
+	}
+	dark, err := systemDark(conn)
+	if err != nil {
+		log.Warn("system theme unavailable", "err", err)
+		return false
+	}
+	return dark
+}
+
+// modeFor is the theme a desktop asking for dark or not gets before the
+// preference is read.
+func modeFor(dark bool) theme.Mode {
+	if dark {
+		return theme.ModeDark
+	}
+	return theme.ModeLight
+}
 
 // watchSystemTheme reads the desktop colour scheme and follows its changes.
 //

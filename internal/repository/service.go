@@ -135,10 +135,20 @@ func New(deps Deps) *Service {
 	}
 }
 
-// Sync loads the registered repositories, checks every clone and reads the
-// filter and the clone folder. A filter that names no registered repository counts as every
-// repository, and is left as it is in the settings. It does not call OnChange.
+// Sync loads the registered repositories and checks every clone. It does not
+// call OnChange.
 func (s *Service) Sync(ctx context.Context) error {
+	if err := s.Load(ctx); err != nil {
+		return err
+	}
+	return s.CheckClones(ctx, nil)
+}
+
+// Load reads the registered repositories, the filter and the clone folder,
+// without testing the clones. A filter that names no registered repository
+// counts as every repository, and is left as it is in the settings. It does not
+// call OnChange.
+func (s *Service) Load(ctx context.Context) error {
 	items, err := s.store.List(ctx)
 	if err != nil {
 		return fmt.Errorf("list repositories: %w", err)
@@ -153,13 +163,8 @@ func (s *Service) Sync(ctx context.Context) error {
 	}
 
 	slices.SortStableFunc(items, compare)
-	missing := map[string]bool{}
 	known := false
 	for _, repo := range items {
-		if repo.Cloned() && !IsClone(repo.Path) {
-			missing[repo.ID] = true
-			s.log.Warn("repository clone missing", "repository", repo.FullName(), "path", repo.Path)
-		}
 		known = known || repo.ID == filter
 	}
 	if !known {
@@ -167,7 +172,54 @@ func (s *Service) Sync(ctx context.Context) error {
 	}
 
 	s.mu.Lock()
-	s.items, s.missing, s.filter, s.cloneFolder = items, missing, filter, cloneFolder
+	s.items, s.filter, s.cloneFolder = items, filter, cloneFolder
+	s.mu.Unlock()
+	return nil
+}
+
+// WithPath is how many of the loaded repositories are tied to a clone.
+func (s *Service) WithPath() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	n := 0
+	for _, repo := range s.items {
+		if repo.Cloned() {
+			n++
+		}
+	}
+	return n
+}
+
+// CheckClones tests the clone of every loaded repository that has a path, in
+// order, and keeps which ones are gone. checking is called with the path before
+// each test and returns what to call when the test ends; nil is accepted. It
+// stops between two paths when ctx is done. It does not call OnChange.
+func (s *Service) CheckClones(ctx context.Context, checking func(path string) func()) error {
+	items := s.List()
+
+	missing := map[string]bool{}
+	for _, repo := range items {
+		if !repo.Cloned() {
+			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("check clones: %w", err)
+		}
+		done := func() {}
+		if checking != nil {
+			done = checking(repo.Path)
+		}
+		isClone := IsClone(repo.Path)
+		done()
+		if !isClone {
+			missing[repo.ID] = true
+			s.log.Warn("repository clone missing", "repository", repo.FullName(), "path", repo.Path)
+		}
+	}
+
+	s.mu.Lock()
+	s.missing = missing
 	s.mu.Unlock()
 	return nil
 }

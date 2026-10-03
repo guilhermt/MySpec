@@ -103,6 +103,29 @@ describe("Menu", () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it("says on its own line why an item is off, and describes the item with it", async () => {
+    const onClick = vi.fn();
+    const { user } = renderWithStore(
+      <Menu>
+        <MenuTrigger render={<Button />}>Actions</MenuTrigger>
+        <MenuContent>
+          <MenuItem destructive disabled reason="2 tasks: delete them first." onClick={onClick}>
+            Remove…
+          </MenuItem>
+        </MenuContent>
+      </Menu>,
+    );
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    const item = await screen.findByRole("menuitem", { name: /^Remove…/ });
+
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(item).toHaveAccessibleDescription("2 tasks: delete them first.");
+    expect(screen.getByText("2 tasks: delete them first.")).toHaveClass("text-ink-3");
+    expect(item).not.toHaveClass("text-state-error");
+    await user.click(item);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
   it("shows the key of an item", async () => {
     await open();
     expect(screen.getByText("Ctrl+E").tagName).toBe("KBD");
@@ -155,7 +178,7 @@ function Choices({ onValueChange = () => {} }: { onValueChange?: (value: string)
           <MenuRadioItem value="opus" icon={Bot}>
             Opus
           </MenuRadioItem>
-          <MenuRadioItem value="sonnet" sub="faster">
+          <MenuRadioItem value="sonnet" sub="faster" trailing="factory">
             Sonnet
           </MenuRadioItem>
           <MenuRadioItem value="fable" unavailable>
@@ -175,7 +198,7 @@ describe("MenuRadioItem", () => {
       "aria-checked",
       "true",
     );
-    expect(screen.getByRole("menuitemradio", { name: "Sonnet faster" })).toHaveAttribute(
+    expect(screen.getByRole("menuitemradio", { name: "Sonnet faster factory" })).toHaveAttribute(
       "aria-checked",
       "false",
     );
@@ -185,8 +208,16 @@ describe("MenuRadioItem", () => {
     const onValueChange = vi.fn();
     const { user } = renderWithStore(<Choices onValueChange={onValueChange} />);
     await user.click(screen.getByRole("button", { name: "Model" }));
-    await user.click(await screen.findByRole("menuitemradio", { name: "Sonnet faster" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "Sonnet faster factory" }));
     expect(onValueChange).toHaveBeenCalledWith("sonnet");
+  });
+
+  it("writes the trailing mark at the end of the item", async () => {
+    const { user } = renderWithStore(<Choices />);
+    await user.click(screen.getByRole("button", { name: "Model" }));
+    const item = await screen.findByRole("menuitemradio", { name: "Sonnet faster factory" });
+    expect(item.lastElementChild).toHaveTextContent("factory");
+    expect(screen.getByRole("menuitemradio", { name: "Opus" })).not.toHaveTextContent("factory");
   });
 
   it("keeps an unavailable choice with ◇, not to be chosen again", async () => {

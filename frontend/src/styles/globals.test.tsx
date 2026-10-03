@@ -139,6 +139,15 @@ describe("globals.css", () => {
     expect(halves).toEqual([]);
   });
 
+  it("sizes the Placeholders column of the prompt editor in whole pixels, 224px", () => {
+    const value = tokens.get("--col-placeholders") ?? "";
+    const space = (name: string) => pixels(tokens.get(name) ?? "");
+    const product = /^calc\(var\((--space-\d+)\) \* (\d+(?:\.\d+)?)\)$/.exec(value);
+
+    expect(product, value).not.toBeNull();
+    expect(space(product?.[1] ?? "") * Number(product?.[2])).toBe(224);
+  });
+
   it("rounds every layout width that depends on the window", () => {
     const unrounded = [...tokens].filter(
       ([name, value]) =>
@@ -217,6 +226,15 @@ describe("globals.css", () => {
 
   it("measures the panel beside the column from the width the stylesheet puts it there", () => {
     expect(GLOBALS).toContain(`@container main (min-width: ${AUX_PANEL_COLUMN_MIN}px) {`);
+  });
+
+  it("centers the pair of Settings at a whole pixel, with the page at --measure", () => {
+    expect(GLOBALS).toMatch(
+      /\.settings-body \{[^}]*max-width: calc\(var\(--snav-w\) \+ var\(--space-12\) \+ var\(--measure\) \+ 2 \* var\(--space-6\)\);[^}]*margin-left: max\(\s*0px,\s*round\(\s*down,\s*calc\(\(100% - var\(--snav-w\) - var\(--space-12\) - var\(--measure\) - 2 \* var\(--space-6\)\) \/ 2\),\s*1px\s*\)\s*\);/,
+    );
+    expect(GLOBALS).toMatch(
+      /@container main \(width < 820px\) \{\s*\.settings-body \{[^}]*grid-template-columns: minmax\(0, var\(--measure\)\);/,
+    );
   });
 
   it("rounds the width of the list panel and puts it beside the list from 800px of main area", () => {

@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import type { ReactNode, Ref } from "react";
 import { cn } from "@/lib/utils";
 import { IconButton } from "./IconButton";
@@ -124,7 +124,7 @@ export function PlaceHeader({
         <IconButton
           ref={backRef}
           label={`Back to ${back.title}`}
-          icon={ArrowLeft}
+          icon={ICONS.back}
           shortcut="Alt+←"
           size="sm"
           onClick={back.onClick}
@@ -133,7 +133,7 @@ export function PlaceHeader({
         <IconButton
           ref={backRef}
           label="Back"
-          icon={ArrowLeft}
+          icon={ICONS.back}
           size="sm"
           disabled
           disabledReason="Nothing to go back to"

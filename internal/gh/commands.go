@@ -55,6 +55,22 @@ func (r *Runner) Auth(ctx context.Context) error {
 	return nil
 }
 
+// SignedIn reports whether gh is installed and holds a login, asking only the
+// local gh: ErrNotFound without the executable, ErrNotAuthenticated without a
+// login. gh auth status asks the API and would say signed out on a machine
+// without a network; gh auth token answers from the local config. The token it
+// prints is discarded.
+func (r *Runner) SignedIn(ctx context.Context) error {
+	if _, err := r.Run(ctx, "", "auth", "token"); err != nil {
+		var ghErr *Error
+		if errors.As(err, &ghErr) && ghErr.ExitCode > 0 {
+			return fmt.Errorf("%w: %w", ErrNotAuthenticated, ghErr)
+		}
+		return err
+	}
+	return nil
+}
+
 // ViewPR reads the pull request of a branch, ErrNoPR when it has none. dir is
 // the worktree, which is what tells gh the repository to ask about.
 func (r *Runner) ViewPR(ctx context.Context, dir, branch string) (PR, error) {

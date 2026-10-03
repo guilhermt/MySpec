@@ -572,6 +572,143 @@ func TestSyncLoadsTheRepositoriesAndFindsTheClonesThatAreMissing(t *testing.T) {
 	}
 }
 
+// insertTwo registers a repository with a clone and one whose clone is gone,
+// and returns them as the service lists them: by owner/name.
+func insertTwo(t *testing.T, f fixture) (api, web repository.Repository) {
+	t.Helper()
+
+	root := t.TempDir()
+	web = repository.Repository{ID: "b", Owner: "dev", Name: "web", Path: clone(t, root, "web"), CreatedAt: base}
+	api = repository.Repository{ID: "a", Owner: "dev", Name: "api", Path: filepath.Join(root, "api"), CreatedAt: base}
+	for _, repo := range []repository.Repository{web, api} {
+		if err := f.store.Insert(t.Context(), repo); err != nil {
+			t.Fatalf("Insert(%s) = %v, want nil", repo.FullName(), err)
+		}
+	}
+	return api, web
+}
+
+func TestLoadReadsTheRepositoriesWithoutTestingTheClones(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	api, web := insertTwo(t, f)
+	if err := f.settings.Set(t.Context(), filterSetting, web.ID); err != nil {
+		t.Fatalf("Set(filter) = %v, want nil", err)
+	}
+
+	if err := f.service.Load(t.Context()); err != nil {
+		t.Fatalf("Load() = %v, want nil", err)
+	}
+
+	if diff := cmp.Diff([]repository.Repository{api, web}, f.service.List()); diff != "" {
+		t.Errorf("List() mismatch (-want +got):\n%s", diff)
+	}
+	if got := f.service.Filter(); got != web.ID {
+		t.Errorf("Filter() = %q, want %q", got, web.ID)
+	}
+	if f.service.Missing(api.ID) {
+		t.Errorf("Missing(%s) = true, want false before the clones are tested", api.FullName())
+	}
+	if got := f.logs.count(t, "repository clone missing"); got != 0 {
+		t.Errorf("missing clones logged = %d, want 0", got)
+	}
+}
+
+func TestWithPathCountsTheRepositoriesTiedToAClone(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.uncloned(t, "repo-3", "dev", "docs")
+	insertTwo(t, f)
+
+	if err := f.service.Load(t.Context()); err != nil {
+		t.Fatalf("Load() = %v, want nil", err)
+	}
+
+	if got := f.service.WithPath(); got != 2 {
+		t.Errorf("WithPath() = %d, want 2", got)
+	}
+}
+
+func TestCheckClonesCallsCheckingOncePerPathInOrderAndMarksTheMissingOne(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.uncloned(t, "repo-3", "dev", "docs")
+	api, web := insertTwo(t, f)
+	if err := f.service.Load(t.Context()); err != nil {
+		t.Fatalf("Load() = %v, want nil", err)
+	}
+
+	var started, finished []string
+	checking := func(path string) func() {
+		started = append(started, path)
+		return func() { finished = append(finished, path) }
+	}
+	if err := f.service.CheckClones(t.Context(), checking); err != nil {
+		t.Fatalf("CheckClones() = %v, want nil", err)
+	}
+
+	want := []string{api.Path, web.Path}
+	if diff := cmp.Diff(want, started); diff != "" {
+		t.Errorf("paths checked mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(want, finished); diff != "" {
+		t.Errorf("paths finished mismatch (-want +got):\n%s", diff)
+	}
+	if !f.service.Missing(api.ID) {
+		t.Errorf("Missing(%s) = false, want true", api.FullName())
+	}
+	if f.service.Missing(web.ID) {
+		t.Errorf("Missing(%s) = true, want false", web.FullName())
+	}
+	if got := f.logs.count(t, "repository clone missing"); got != 1 {
+		t.Errorf("missing clones logged = %d, want 1", got)
+	}
+}
+
+func TestCheckClonesAcceptsNoChecking(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	api, _ := insertTwo(t, f)
+	if err := f.service.Load(t.Context()); err != nil {
+		t.Fatalf("Load() = %v, want nil", err)
+	}
+
+	if err := f.service.CheckClones(t.Context(), nil); err != nil {
+		t.Fatalf("CheckClones(nil) = %v, want nil", err)
+	}
+
+	if !f.service.Missing(api.ID) {
+		t.Errorf("Missing(%s) = false, want true", api.FullName())
+	}
+}
+
+func TestCheckClonesStopsBetweenTwoPathsWhenTheContextIsCancelled(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	api, web := insertTwo(t, f)
+	if err := f.service.Load(t.Context()); err != nil {
+		t.Fatalf("Load() = %v, want nil", err)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	var started []string
+	checking := func(path string) func() {
+		started = append(started, path)
+		return cancel
+	}
+	err := f.service.CheckClones(ctx, checking)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("CheckClones() = %v, want context.Canceled", err)
+	}
+	if diff := cmp.Diff([]string{api.Path}, started); diff != "" {
+		t.Errorf("paths checked mismatch (-want +got):\n%s", diff)
+	}
+	if f.service.Missing(api.ID) || f.service.Missing(web.ID) {
+		t.Error("Missing() = true after a stopped check, want the previous answer kept")
+	}
+}
+
 func TestSyncIgnoresAFilterThatNamesNoRepository(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

@@ -345,6 +345,7 @@ describe("boardLines", () => {
       text: "◇ Read failed 18m ago",
       tone: "failed",
       shimmer: false,
+      failure: { failedAt: "2026-09-24T13:52:00Z", readAt: read },
     });
     expect(line?.label).toBe("Platform Roadmap, 2 open cards, Read failed 18m ago");
     expect(line?.blockers).toEqual([

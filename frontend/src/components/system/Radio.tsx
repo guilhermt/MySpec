@@ -94,3 +94,39 @@ export function Radio({ value, children }: RadioProps) {
     </BaseRadio.Root>
   );
 }
+
+export interface RadioInputProps {
+  /** name joins the radio to the others of the same choice; the arrows move among them. */
+  name: string;
+  value: string;
+  checked: boolean;
+  onChoose: (value: string) => void;
+  /** label is the accessible name, since the radio has no text beside it. */
+  label: string;
+}
+
+/**
+ * RadioInput is a radio alone, a native input grouped with the others by its name, for the radios
+ * spread over the rows of a table, where no element holds only them and a RadioGroup would take
+ * the other controls of the rows for its own. The arrows move the choice among the radios of the
+ * name, and the cell is the target, with the ring at its start like the box of a Checkbox.
+ */
+export function RadioInput({ name, value, checked, onChoose, label }: RadioInputProps) {
+  return (
+    <label className="group/radio grid min-h-(--size-control-sm) grid-cols-(--icon) place-items-center rounded-sm px-2 has-focus-visible:focus-ring">
+      <input
+        type="radio"
+        name={name}
+        value={value}
+        checked={checked}
+        onChange={() => onChoose(value)}
+        aria-label={label}
+        className="col-start-1 row-start-1 m-0 size-(--icon) appearance-none rounded-full border border-line-3 bg-surface-input outline-none checked:border-brand group-hover/radio:not-checked:border-ink-3"
+      />
+      <span
+        aria-hidden="true"
+        className="pointer-events-none col-start-1 row-start-1 size-2 scale-0 rounded-full bg-brand transition-transform duration-(--duration-fast) ease-standard group-has-checked/radio:scale-100"
+      />
+    </label>
+  );
+}

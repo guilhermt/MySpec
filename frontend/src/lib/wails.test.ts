@@ -7,6 +7,7 @@ import {
   asBoardFailureReason,
   asCardAction,
   asCatalogFailure,
+  asClaudeCheck,
   asCloseOutcome,
   asCloseSkipReason,
   asDependencyDrop,
@@ -19,6 +20,7 @@ import {
   asErrorKind,
   asFindingDecision,
   asFindingPlacement,
+  asGHCheck,
   asHoldReason,
   asInterruptedBy,
   asIssueState,
@@ -36,6 +38,7 @@ import {
   asPullRequestState,
   asPullReviewMode,
   asPullReviewStatus,
+  asReleaseKind,
   asRepositoryLinkKind,
   asRetryReason,
   asReviewFallback,
@@ -46,6 +49,10 @@ import {
   asSituationForm,
   asSituationGroup,
   asSituationKind,
+  asStartupCase,
+  asStartupPhase,
+  asStartupStepId,
+  asStartupStepState,
   asStepStatus,
   asTaskMode,
   asTaskStage,
@@ -74,6 +81,57 @@ describe("asThemePreference", () => {
 
   it("falls back to system", () => {
     expect(asThemePreference("sepia")).toBe("system");
+  });
+});
+
+describe("the startup unions", () => {
+  it("keep the values Go sends", () => {
+    expect(asStartupPhase("failed")).toBe("failed");
+    expect(asStartupPhase("ready")).toBe("ready");
+    expect(asStartupStepId("clones")).toBe("clones");
+    expect(asStartupStepState("running")).toBe("running");
+    expect(asStartupStepState("done")).toBe("done");
+    expect(asStartupCase("permission")).toBe("permission");
+    expect(asStartupCase("disk_full")).toBe("disk_full");
+  });
+
+  it("fall back to the first thing a startup shows", () => {
+    expect(asStartupPhase("paused")).toBe("starting");
+    expect(asStartupStepId("network")).toBe("data");
+    expect(asStartupStepState("stuck")).toBe("todo");
+    expect(asStartupCase("no_power")).toBe("other");
+  });
+
+  it("reach the startup service and its event", async () => {
+    await wails.api.getStartup();
+    await wails.api.tryStartupAgain();
+    wails.onStartupChanged(() => {});
+
+    expect(vi.mocked(Events.On).mock.calls.map(([name]) => name)).toContain("startup:changed");
+    expect(vi.mocked(Call.ByID)).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("asReleaseKind", () => {
+  it("keeps the values Go sends and turns anything else into none", () => {
+    expect(asReleaseKind("no_board")).toBe("no_board");
+    expect(asReleaseKind("leave")).toBe("leave");
+    expect(asReleaseKind("")).toBe("");
+    expect(asReleaseKind("delete")).toBe("");
+  });
+});
+
+describe("asClaudeCheck and asGHCheck", () => {
+  it("keep the values Go sends and turn anything else into unknown", () => {
+    expect(asClaudeCheck("found")).toBe("found");
+    expect(asClaudeCheck("not_found")).toBe("not_found");
+    expect(asClaudeCheck("unknown")).toBe("unknown");
+    expect(asClaudeCheck("broken")).toBe("unknown");
+    expect(asGHCheck("ready")).toBe("ready");
+    expect(asGHCheck("not_installed")).toBe("not_installed");
+    expect(asGHCheck("signed_out")).toBe("signed_out");
+    expect(asGHCheck("unknown")).toBe("unknown");
+    expect(asGHCheck("broken")).toBe("unknown");
   });
 });
 

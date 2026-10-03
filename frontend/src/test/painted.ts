@@ -131,6 +131,20 @@ export function mainArea(width: number): CSSProperties {
 }
 
 /**
+ * windowForMain is the width of the window whose main area is `main` wide with the sidebar open: the
+ * sidebar is a share of the window (--sidebar-width), so the window is found, not added up.
+ */
+export function windowForMain(main: number): number {
+  const sidebar = (window: number) => Math.min(380, Math.max(288, Math.floor(0.08 * window + 200)));
+  for (let window = main + 288; window <= main + 380; window++) {
+    if (window - sidebar(window) === main) {
+      return window;
+    }
+  }
+  throw new Error(`no window has a main area of ${main}px`);
+}
+
+/**
  * placeHeaderOneLine tells whether a place header keeps everything on one line: its height, nothing
  * past its edge and every button inside it.
  */
@@ -331,13 +345,16 @@ export function visiblePrimaries(root: ParentNode = document): Element[] {
   return [...root.querySelectorAll('[data-variant="primary"]')].filter(shows);
 }
 
-/** cutTexts are the elements under a root that cut their text with an ellipsis. */
+/** cutTexts are the elements under a root that cut their text with an ellipsis, on one line or past a clamp of lines. */
 export function cutTexts(root: ParentNode = document): HTMLElement[] {
-  return [...root.querySelectorAll<HTMLElement>("*")].filter(
-    (element) =>
-      getComputedStyle(element).textOverflow === "ellipsis" &&
-      element.scrollWidth > element.clientWidth,
-  );
+  return [...root.querySelectorAll<HTMLElement>("*")].filter((element) => {
+    const style = getComputedStyle(element);
+    return (
+      (style.textOverflow === "ellipsis" && element.scrollWidth > element.clientWidth) ||
+      (style.getPropertyValue("-webkit-line-clamp") !== "none" &&
+        element.scrollHeight > element.clientHeight)
+    );
+  });
 }
 
 /**

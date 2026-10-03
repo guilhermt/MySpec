@@ -9,6 +9,7 @@ import { renderWithStore, resetAppStore } from "@/test/render";
 import {
   makeBoard,
   makeDiscussion,
+  makeMigration,
   makePullRequestRow,
   makeReviewCenter,
   makeReviewSummary,
@@ -47,6 +48,20 @@ function waitingState() {
   });
 }
 
+// welcomeState is the app with nothing registered and nothing active.
+function welcomeState() {
+  return makeState({
+    repositories: [],
+    boards: [],
+    tasks: [],
+    reviews: [],
+    discussions: [],
+    history: [],
+    reviewHistory: [],
+    discussionHistory: [],
+  });
+}
+
 const TASK: Location = { kind: "task", id: "task-1" };
 const REVIEW: Location = { kind: "review", id: "review-1" };
 const HISTORY: Location = { kind: "history" };
@@ -69,10 +84,10 @@ describe("useGlobalShortcuts", () => {
     expect(screen.getByRole("button", { name: "Repository: dev/web" })).toBeInTheDocument();
   });
 
-  it("leaves Ctrl+N alone without a registered repository", async () => {
-    vi.mocked(api.getState).mockResolvedValue(makeState({ repositories: [] }));
+  it("leaves Ctrl+N alone in the welcome mode", async () => {
+    vi.mocked(api.getState).mockResolvedValue(welcomeState());
     const { user } = renderWithStore(<App />);
-    await screen.findByRole("button", { name: /^Add repository/ });
+    await screen.findByRole("heading", { name: "Welcome to MySpec" });
 
     await user.keyboard("{Control>}n{/Control}");
 
@@ -270,15 +285,17 @@ describe("useGlobalShortcuts", () => {
     expect(useAppStore.getState().newTaskCard).toEqual(card);
   });
 
-  it("leaves Ctrl+J alone without a registered repository", async () => {
-    vi.mocked(api.getState).mockResolvedValue(makeState({ repositories: [] }));
+  it("leaves Ctrl+J and Ctrl+E alone in the welcome mode", async () => {
+    vi.mocked(api.getState).mockResolvedValue(welcomeState());
     renderWithStore(<App />);
-    await screen.findByRole("button", { name: /^Add repository/ });
+    await screen.findByRole("heading", { name: "Welcome to MySpec" });
 
-    const shortcut = createEvent.keyDown(window, { key: "j", ctrlKey: true });
-    fireEvent(window, shortcut);
+    for (const key of ["j", "e"]) {
+      const shortcut = createEvent.keyDown(window, { key, ctrlKey: true });
+      fireEvent(window, shortcut);
 
-    expect(shortcut.defaultPrevented).toBe(false);
+      expect(shortcut.defaultPrevented).toBe(false);
+    }
   });
 
   it("toggles the settings on Ctrl+,", async () => {
@@ -306,15 +323,60 @@ describe("useGlobalShortcuts", () => {
     expect(await screen.findByRole("heading", { name: "Defaults" })).toBeInTheDocument();
   });
 
-  it("leaves Ctrl+, alone without a registered repository", async () => {
-    vi.mocked(api.getState).mockResolvedValue(makeState({ repositories: [] }));
+  it("toggles the settings on Ctrl+, in the welcome mode and closes them to the welcome", async () => {
+    vi.mocked(api.getState).mockResolvedValue(welcomeState());
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("heading", { name: "Welcome to MySpec" });
+
+    await user.keyboard("{Control>},{/Control}");
+    expect(await screen.findByRole("heading", { name: "Defaults" })).toBeInTheDocument();
+
+    await user.keyboard("{Control>},{/Control}");
+    const title = await screen.findByRole("heading", { name: "Welcome to MySpec" });
+    expect(title).toHaveFocus();
+  });
+
+  it("closes the settings on Esc in the welcome mode", async () => {
+    vi.mocked(api.getState).mockResolvedValue(welcomeState());
+    const { user } = renderWithStore(<App />);
+    await screen.findByRole("heading", { name: "Welcome to MySpec" });
+    await user.keyboard("{Control>},{/Control}");
+    await screen.findByRole("heading", { name: "Defaults" });
+
+    await user.keyboard("{Escape}");
+
+    expect(await screen.findByRole("heading", { name: "Welcome to MySpec" })).toBeInTheDocument();
+  });
+
+  it("goes back on Alt+← in the welcome mode", async () => {
+    vi.mocked(api.getState).mockResolvedValue(welcomeState());
     renderWithStore(<App />);
-    await screen.findByRole("button", { name: /^Add repository/ });
+    await screen.findByRole("heading", { name: "Welcome to MySpec" });
+    act(() => {
+      useAppStore.getState().openSettings();
+    });
+
+    act(() => {
+      press({ key: "ArrowLeft", altKey: true });
+    });
+
+    expect(useAppStore.getState().location).toEqual({ kind: "home" });
+    act(() => {
+      press({ key: "ArrowRight", altKey: true });
+    });
+    expect(useAppStore.getState().location.kind).toBe("settings");
+  });
+
+  it("answers to no shortcut on the refused migration", async () => {
+    vi.mocked(api.getState).mockResolvedValue(makeState({ migration: makeMigration() }));
+    renderWithStore(<App />);
+    await screen.findByRole("heading", { name: "MySpec couldn't be updated" });
 
     const shortcut = createEvent.keyDown(window, { key: ",", ctrlKey: true });
     fireEvent(window, shortcut);
 
     expect(shortcut.defaultPrevented).toBe(false);
+    expect(useAppStore.getState().location.kind).toBe("home");
   });
 
   it("goes back on Alt+← and forward on Alt+→", async () => {

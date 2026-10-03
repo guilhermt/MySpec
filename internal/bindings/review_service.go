@@ -42,6 +42,7 @@ type Worktrees interface {
 // conversation of a review goes through TaskService, like the one of a task:
 // the id of the review is the id of the item behind it.
 type ReviewService struct {
+	late      late[ReviewService]
 	flow      *reviewflow.Service
 	reviews   *prreview.Service
 	pulls     *pulls.Service
@@ -73,11 +74,19 @@ func NewReviewService(
 // repository again. The reading runs in the background and reaches the
 // interface with the state.
 func (s *ReviewService) RefreshPullRequests() {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return
+	}
 	s.pulls.Refresh()
 }
 
 // SetReviewFilters chooses what the Reviews view shows.
 func (s *ReviewService) SetReviewFilters(f ReviewFilters) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -90,6 +99,10 @@ func (s *ReviewService) SetReviewFilters(f ReviewFilters) error {
 // StartReview reviews a pull request: it creates the review, its worktree and
 // its conversation, and answers with the id of the review.
 func (s *ReviewService) StartReview(req StartReviewRequest) (string, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return "", err
+	}
 	choice, err := models.ParseChoice(req.Model, req.Effort)
 	if err != nil {
 		return "", s.fail("StartReview", err)
@@ -120,6 +133,10 @@ func (s *ReviewService) StartReview(req StartReviewRequest) (string, error) {
 // ReviewAgain asks the agent for another pass over the pull request as it is
 // now.
 func (s *ReviewService) ReviewAgain(id, instructions string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	// Another pass brings the worktree to the head of the pull request, which
 	// is git work.
 	ctx, cancel := context.WithTimeout(context.Background(), removeTimeout)
@@ -134,6 +151,10 @@ func (s *ReviewService) ReviewAgain(id, instructions string) error {
 // DecideFinding records what the user decided about one finding: "", approved
 // or discarded.
 func (s *ReviewService) DecideFinding(id string, pass, number int, decision string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	d, err := prreview.ParseDecision(decision)
 	if err != nil {
 		return s.fail("DecideFinding", err)
@@ -151,6 +172,10 @@ func (s *ReviewService) DecideFinding(id string, pass, number int, decision stri
 // SetFindingText records the text of a finding as the user left it, which is
 // what a published comment says.
 func (s *ReviewService) SetFindingText(id string, pass, number int, text string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -163,6 +188,10 @@ func (s *ReviewService) SetFindingText(id string, pass, number int, text string)
 // SetReviewSummary records the summary of a pass as the user left it, which is
 // what the body of a published review opens with.
 func (s *ReviewService) SetReviewSummary(id string, pass int, text string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -176,6 +205,10 @@ func (s *ReviewService) SetReviewSummary(id string, pass int, text string) error
 // with the verdict they chose: approve, request_changes or comment. The
 // summary of the pass goes in the body only with withSummary.
 func (s *ReviewService) PublishReview(id, verdict string, withSummary bool) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	v, err := prreview.ParseVerdict(verdict)
 	if err != nil {
 		return s.fail("PublishReview", err)
@@ -193,6 +226,10 @@ func (s *ReviewService) PublishReview(id, verdict string, withSummary bool) erro
 // RefreshPR reads the pull request of a review now, out of the minute, and
 // answers once the reading is over.
 func (s *ReviewService) RefreshPR(id string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
 	defer cancel()
 
@@ -205,6 +242,10 @@ func (s *ReviewService) RefreshPR(id string) error {
 // ApplyReview asks the agent to fix the findings the user approved, in the
 // worktree of the review.
 func (s *ReviewService) ApplyReview(id string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -217,6 +258,10 @@ func (s *ReviewService) ApplyReview(id string) error {
 // ApproveReview approves the changes the agent made and asks it to commit them
 // and push them to the pull request.
 func (s *ReviewService) ApproveReview(id string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -228,6 +273,10 @@ func (s *ReviewService) ApproveReview(id string) error {
 
 // ApproveRestOfFindings approves every finding of a pass that has no decision.
 func (s *ReviewService) ApproveRestOfFindings(id string, pass int) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -240,6 +289,10 @@ func (s *ReviewService) ApproveRestOfFindings(id string, pass int) error {
 // DeleteReview removes a review for good, active or archived, and answers with
 // what git could not remove.
 func (s *ReviewService) DeleteReview(id string) (DeleteResult, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return DeleteResult{}, err
+	}
 	// Deleting a review removes its worktree, which is git work.
 	ctx, cancel := context.WithTimeout(context.Background(), removeTimeout)
 	defer cancel()
@@ -254,6 +307,10 @@ func (s *ReviewService) DeleteReview(id string) (DeleteResult, error) {
 // ReadReviewArtifact returns the content of an artifact of a review by file
 // name: its context document or the report of one pass.
 func (s *ReviewService) ReadReviewArtifact(id, name string) (string, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return "", err
+	}
 	content, err := s.reviews.ReadArtifact(id, name)
 	if err != nil {
 		return "", s.fail("ReadReviewArtifact", err)
@@ -263,6 +320,10 @@ func (s *ReviewService) ReadReviewArtifact(id, name string) (string, error) {
 
 // OpenReviewInEditor opens the worktree of a review in the user's editor.
 func (s *ReviewService) OpenReviewInEditor(id string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	path, err := s.worktreeOf(id)
 	if err != nil {
 		return s.fail("OpenReviewInEditor", err)
@@ -277,6 +338,10 @@ func (s *ReviewService) OpenReviewInEditor(id string) error {
 // worktree of the review. A finding about the pull request as a whole points at
 // no line and cannot be opened.
 func (s *ReviewService) OpenFindingInEditor(id string, pass, number int) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	finding, err := s.findingOf(id, pass, number)
 	if err != nil {
 		return s.fail("OpenFindingInEditor", err)

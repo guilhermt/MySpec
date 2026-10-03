@@ -32,22 +32,24 @@ import (
 // the checks, reviewScreenVersion the one that brought the title of a finding
 // and the summary of a pass that was published, chainVersion the one that took
 // back the approval of the epics of the active discussions, roundsVersion the
-// one that brought the round of a draft, and latestVersion the version the
+// one that brought the round of a draft, savedStatusesVersion the one that
+// brought the statuses saved with a board, and latestVersion the version the
 // embedded migrations end at.
 const (
-	stagesVersion       = 3
-	commitsVersion      = 5
-	prVersion           = 6
-	modelsVersion       = 9
-	reviewModeVersion   = 10
-	modeVersion         = 11
-	boardsVersion       = 14
-	itemsVersion        = 15
-	taskScreenVersion   = 19
-	reviewScreenVersion = 21
-	chainVersion        = 23
-	roundsVersion       = 24
-	latestVersion       = 24
+	stagesVersion        = 3
+	commitsVersion       = 5
+	prVersion            = 6
+	modelsVersion        = 9
+	reviewModeVersion    = 10
+	modeVersion          = 11
+	boardsVersion        = 14
+	itemsVersion         = 15
+	taskScreenVersion    = 19
+	reviewScreenVersion  = 21
+	chainVersion         = 23
+	roundsVersion        = 24
+	savedStatusesVersion = 25
+	latestVersion        = 25
 )
 
 // upgradeTime is the instant the repositories of the fake upgrades are stamped
@@ -568,6 +570,55 @@ func TestTheTaskScreenMigrationAddsThePauseTheCommitTimeAndTheChecks(t *testing.
 		if got := readOne(t, db, d.query); got != "" {
 			t.Errorf("%s = %q, want it empty on a row recorded before the column", d.subject, got)
 		}
+	}
+}
+
+func TestTheSavedStatusesMigrationTakesTheStatusesOfTheLastGoodReading(t *testing.T) {
+	t.Parallel()
+
+	const statuses = `[{"id":"opt-1","name":"Todo"},{"id":"opt-2","name":"Done"}]`
+	tests := []struct {
+		name    string
+		reading string
+		want    string
+	}{
+		{name: "a good reading", reading: `{"projectId":"p","statuses":` + statuses + `}`, want: statuses},
+		{name: "no reading yet", reading: ``, want: ``},
+		{name: "a broken reading", reading: `not json`, want: ``},
+		{name: "a reading without statuses", reading: `{"projectId":"p"}`, want: ``},
+	}
+
+	db := openAt(t, savedStatusesVersion-1)
+	for i, tt := range tests {
+		id := fmt.Sprintf("board-%d", i)
+		boardStmt := `INSERT INTO boards (id, owner, owner_type, number, title, url, created_at)
+			VALUES (?, 'acme', 'organization', ?, 'Roadmap', 'https://github.com/orgs/acme/projects/1', '2026-09-06T10:00:00Z')`
+		if _, err := db.ExecContext(t.Context(), boardStmt, id, i+1); err != nil {
+			t.Fatalf("seed board %s: %v", tt.name, err)
+		}
+		if _, err := db.ExecContext(t.Context(), `INSERT INTO board_readings (board_id, reading) VALUES (?, ?)`, id, tt.reading); err != nil {
+			t.Fatalf("seed reading %s: %v", tt.name, err)
+		}
+	}
+	// A board without a row of readings gets none either.
+	const lonely = `INSERT INTO boards (id, owner, owner_type, number, title, url, created_at)
+		VALUES ('board-lonely', 'acme', 'organization', 99, 'Lonely', 'https://github.com/orgs/acme/projects/99', '2026-09-06T10:00:00Z')`
+	if _, err := db.ExecContext(t.Context(), lonely); err != nil {
+		t.Fatalf("seed board without readings: %v", err)
+	}
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), carryOver(t)); err != nil {
+		t.Fatalf("migrate() = %v, want nil", err)
+	}
+
+	for i, tt := range tests {
+		query := fmt.Sprintf(`SELECT saved_statuses FROM boards WHERE id = 'board-%d'`, i)
+		if got := readOne(t, db, query); got != tt.want {
+			t.Errorf("%s: saved_statuses = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+	if got := readOne(t, db, `SELECT saved_statuses FROM boards WHERE id = 'board-lonely'`); got != "" {
+		t.Errorf("a board without readings: saved_statuses = %q, want it empty", got)
 	}
 }
 

@@ -1,13 +1,26 @@
 package bindings_test
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/bindings"
+	"github.com/guilhermt/myspec/internal/claude"
+	"github.com/guilhermt/myspec/internal/claude/claudetest"
+	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/theme"
 )
@@ -226,5 +239,176 @@ func TestPromptOperationsRejectAnUnknownPrompt(t *testing.T) {
 	}
 	if f.logged(t, "binding failed") {
 		t.Error("a mistake the user can correct was logged as a failure")
+	}
+}
+
+func TestListPromptsSaysWhichPromptsAreEdited(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	listed, err := f.settings.ListPrompts()
+	if err != nil {
+		t.Fatalf("ListPrompts() = %v, want nil", err)
+	}
+	if len(listed) != len(prompts.Editable) {
+		t.Fatalf("ListPrompts() has %d prompts, want %d", len(listed), len(prompts.Editable))
+	}
+	for i, l := range listed {
+		if l.Modified || l.EditedAt != "" {
+			t.Errorf("ListPrompts()[%d] = %+v, want an unedited prompt", i, l)
+		}
+	}
+
+	if _, err = f.settings.SavePrompt("commit", "mine"); err != nil {
+		t.Fatalf("SavePrompt() = %v, want nil", err)
+	}
+	listed, err = f.settings.ListPrompts()
+	if err != nil {
+		t.Fatalf("ListPrompts() = %v, want nil", err)
+	}
+	for i, l := range listed {
+		stage := string(prompts.Editable[i])
+		if l.Stage != stage {
+			t.Errorf("ListPrompts()[%d].Stage = %q, want %q", i, l.Stage, stage)
+		}
+		edited := stage == "commit"
+		if l.Modified != edited || (l.EditedAt != "") != edited {
+			t.Errorf("ListPrompts()[%d] = %+v, want edited = %v", i, l, edited)
+		}
+	}
+	if _, err = time.Parse(time.RFC3339, listed[5].EditedAt); err != nil {
+		t.Errorf("EditedAt = %q, want RFC 3339", listed[5].EditedAt)
+	}
+}
+
+func TestGetPromptCarriesTheLinesAndTheTimeOfTheEdit(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	got, err := f.settings.SavePrompt("commit", "one\ntwo\n")
+	if err != nil {
+		t.Fatalf("SavePrompt() = %v, want nil", err)
+	}
+	if got.Lines != 2 || got.DefaultLines < 1 || got.EditedAt == "" {
+		t.Errorf("SavePrompt() = lines %d, default lines %d, edited %q", got.Lines, got.DefaultLines, got.EditedAt)
+	}
+}
+
+func TestCheckMachineSaysWhatTheMachineHas(t *testing.T) {
+	t.Parallel()
+
+	read := func(entries []claude.ModelEntry, err error) models.Reader {
+		return func(context.Context) ([]claude.ModelEntry, error) { return entries, err }
+	}
+	tests := []struct {
+		name      string
+		discovery models.Reader // nil: the reading has not ended
+		login     error
+		want      bindings.Machine
+	}{
+		{"all there", read(claudetest.Catalog, nil), nil, bindings.Machine{Claude: "found", GH: "ready"}},
+		{"reading still running", nil, nil, bindings.Machine{Claude: "unknown", GH: "ready"}},
+		{
+			"a CLI without the catalog request", read(nil, claude.ErrCatalogUnsupported), nil,
+			bindings.Machine{Claude: "found", GH: "ready"},
+		},
+		{
+			"no CLI", read(nil, claude.ErrNotFound), gh.ErrNotFound,
+			bindings.Machine{Claude: "not_found", GH: "not_installed"},
+		},
+		{
+			"a reading that failed", read(nil, errors.New("boom")), fmt.Errorf("%w: no login", gh.ErrNotAuthenticated),
+			bindings.Machine{Claude: "unknown", GH: "signed_out"},
+		},
+		{"gh that answered something else", nil, errors.New("timed out"), bindings.Machine{Claude: "unknown", GH: "unknown"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t)
+			if test.discovery != nil {
+				f.models.Discover(t.Context(), test.discovery)
+			}
+			service := bindings.NewSettingsService(
+				f.theme, f.models, f.reviewModes, fakeLogin{err: test.login}, f.dataDir, slog.New(slog.DiscardHandler),
+			)
+
+			if got := service.CheckMachine(); got != test.want {
+				t.Errorf("CheckMachine() = %+v, want %+v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestCheckMachineLogsAGhItCouldNotTell(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	service := bindings.NewSettingsService(
+		f.theme, f.models, f.reviewModes, fakeLogin{err: errors.New("timed out")}, f.dataDir,
+		slog.New(slog.NewJSONHandler(f.logs, nil)),
+	)
+
+	service.CheckMachine()
+
+	if !f.logged(t, "machine check failed") {
+		t.Error("the failure was not logged as machine check failed")
+	}
+}
+
+// fullSettings is a models.Settings whose writes fail with err.
+type fullSettings struct{ err error }
+
+func (fullSettings) Get(context.Context, string) (string, bool, error) { return "", false, nil }
+
+func (s fullSettings) Set(context.Context, string, string) error { return s.err }
+
+func TestTheSettersOfADefaultSayWhenTheDiskIsFull(t *testing.T) {
+	t.Parallel()
+	full := fullSettings{err: fmt.Errorf("save: %w", syscall.ENOSPC)}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("os.UserHomeDir() = %v, want the home", err)
+	}
+
+	// dirs are the data directory of the service and how the sentence names it.
+	tests := []struct {
+		name string
+		dirs func(f *fixture) (dataDir, shown string)
+	}{
+		{"outside the home", func(f *fixture) (string, string) { return f.dataDir, f.dataDir }},
+		{"under the home", func(*fixture) (string, string) {
+			return filepath.Join(home, ".local", "share", "myspec"), "~/.local/share/myspec"
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t)
+			fullModels, err := models.New(t.Context(), full, slog.New(slog.DiscardHandler), func() {})
+			if err != nil {
+				t.Fatalf("models.New() = %v, want nil", err)
+			}
+			fullModes, err := reviewmode.New(t.Context(), full, slog.New(slog.DiscardHandler), func() {})
+			if err != nil {
+				t.Fatalf("reviewmode.New() = %v, want nil", err)
+			}
+			dataDir, shown := test.dirs(f)
+			service := bindings.NewSettingsService(
+				f.theme, fullModels, fullModes, fakeLogin{}, dataDir, slog.New(slog.NewJSONHandler(f.logs, nil)),
+			)
+			want := "no space left on the disk of " + shown + ". Free some space, then try again."
+
+			for name, set := range map[string]func() error{
+				"SetModelDefault":      func() error { return service.SetModelDefault("prd", "sonnet", "high") },
+				"SetReviewModeDefault": func() error { return service.SetReviewModeDefault("agent") },
+			} {
+				if err := set(); err == nil || err.Error() != want {
+					t.Errorf("%s() = %v, want %q", name, err, want)
+				}
+			}
+			if !f.logged(t, "binding failed") {
+				t.Error("the failure was not logged as binding failed")
+			}
+		})
 	}
 }

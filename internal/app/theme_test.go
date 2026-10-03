@@ -95,3 +95,14 @@ func number(t *testing.T, text string) float64 {
 	}
 	return value
 }
+
+func TestTheWindowOpensInTheThemeTheDesktopAskedFor(t *testing.T) {
+	t.Parallel()
+
+	if got := app.ModeFor(true); got != theme.ModeDark {
+		t.Errorf("ModeFor(dark) = %q, want %q", got, theme.ModeDark)
+	}
+	if got := app.ModeFor(false); got != theme.ModeLight {
+		t.Errorf("ModeFor(light) = %q, want %q", got, theme.ModeLight)
+	}
+}

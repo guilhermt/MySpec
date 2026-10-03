@@ -437,6 +437,19 @@ export interface BoardPreview {
      * none.
      */
     "newCardStatus": string;
+
+    /**
+     * The three below are set in an edit: what changed in the Status field since
+     * the last save.
+     * never nil
+     */
+    "goneStatuses": string[] | null;
+
+    /**
+     * never nil
+     */
+    "newStatusIds": string[] | null;
+    "newCardStatusGone": boolean;
 }
 
 /**
@@ -446,6 +459,16 @@ export interface BoardPreview {
 export interface BoardRemoval {
     "toNoBoard": number;
     "removed": number;
+
+    /**
+     * owner/name, alphabetical; never nil
+     */
+    "toNoBoardNames": string[] | null;
+
+    /**
+     * never nil
+     */
+    "removedNames": string[] | null;
 }
 
 /**
@@ -481,6 +504,13 @@ export interface BoardRepositoryOption {
      */
     "clones": string[] | null;
     "otherBoard": string;
+
+    /**
+     * Release is no_board, leave or "", a string for the same reason as
+     * State.Theme: where the repository goes when unchecked in an edit of its own
+     * board.
+     */
+    "release": string;
 }
 
 /**
@@ -1252,6 +1282,24 @@ export interface Leftover {
 }
 
 /**
+ * Machine is what the app found out about the machine it runs on.
+ */
+export interface Machine {
+    /**
+     * Claude is found, not_found or unknown, a string for the same reason as
+     * State.Theme: unknown is a catalog read that has not finished or failed
+     * for another reason.
+     */
+    "claude": string;
+
+    /**
+     * GH is ready, not_installed, signed_out or unknown, a string for the same
+     * reason as State.Theme: unknown is a gh that answered something else.
+     */
+    "gh": string;
+}
+
+/**
  * MarkerCommit is a commit of a new_commits marker; the SHA is the short one.
  */
 export interface MarkerCommit {
@@ -1678,6 +1726,37 @@ export interface Prompt {
      * order the settings list them; never nil.
      */
     "placeholders": string[] | null;
+
+    /**
+     * RFC 3339; "" without an edit
+     */
+    "editedAt": string;
+
+    /**
+     * of the text, the final line break not counted
+     */
+    "lines": number;
+
+    /**
+     * of the default of the app
+     */
+    "defaultLines": number;
+}
+
+/**
+ * PromptListing is what the list of prompts shows of one, without its text.
+ */
+export interface PromptListing {
+    /**
+     * as Prompt.Stage
+     */
+    "stage": string;
+    "modified": boolean;
+
+    /**
+     * RFC 3339; "" without an edit
+     */
+    "editedAt": string;
 }
 
 /**
@@ -2703,6 +2782,89 @@ export interface StartReviewRequest {
 }
 
 /**
+ * Startup is where the startup of the app stands, before the first state.
+ */
+export interface Startup {
+    /**
+     * Phase is starting, failed or ready, a string for the same reason as
+     * State.Theme. A refused migration ends the startup ready, with the
+     * migration in the state.
+     */
+    "phase": string;
+
+    /**
+     * in order; never nil
+     */
+    "steps": StartupStep[] | null;
+
+    /**
+     * failed only
+     */
+    "failure": StartupFailure | null;
+
+    /**
+     * what the desktop asked for before the window opened
+     */
+    "systemDark": boolean;
+}
+
+/**
+ * StartupFailure is why the startup failed.
+ */
+export interface StartupFailure {
+    /**
+     * Case is permission, disk_full or other, a string for the same reason as
+     * State.Theme.
+     */
+    "case": string;
+
+    /**
+     * the error as the log has it
+     */
+    "error": string;
+
+    /**
+     * the resolved data directory
+     */
+    "dataDir": string;
+
+    /**
+     * the resolved log file
+     */
+    "logPath": string;
+}
+
+/**
+ * StartupStep is one step that holds the first screen.
+ */
+export interface StartupStep {
+    /**
+     * ID is data or clones, a string for the same reason as State.Theme.
+     */
+    "id": string;
+
+    /**
+     * State is todo, running or done, a string for the same reason as State.Theme.
+     */
+    "state": string;
+
+    /**
+     * RFC 3339 with milliseconds; "" before it starts
+     */
+    "startedAt": string;
+
+    /**
+     * clones: the repositories with a path
+     */
+    "count": number;
+
+    /**
+     * clones: the path whose test passed slowAfter; "" otherwise
+     */
+    "detail": string;
+}
+
+/**
  * State is everything the interface renders, produced by Go and never derived
  * on the frontend.
  */
@@ -2738,6 +2900,12 @@ export interface State {
      * order; never nil.
      */
     "modelDefaults": StageModel[] | null;
+
+    /**
+     * ModelFactory is the default every stage ships with, in the order of
+     * ModelDefaults; never nil.
+     */
+    "modelFactory": StageModel[] | null;
 
     /**
      * ModelCatalog is what the installed Claude Code offers, which every picker

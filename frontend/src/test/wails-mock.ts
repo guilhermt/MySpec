@@ -25,6 +25,7 @@ import type {
   Entry,
   EntryKind,
   FindingDecision,
+  Machine,
   MarkerCommit,
   Migration,
   ModelCatalog,
@@ -33,6 +34,7 @@ import type {
   PRCheck,
   PRReport,
   Prompt,
+  PromptListing,
   PromptStage,
   PullRequest,
   PullRequestRow,
@@ -55,6 +57,9 @@ import type {
   StageModel,
   StartDiscussionRequest,
   StartReviewRequest,
+  Startup,
+  StartupFailure,
+  StartupStep,
   State,
   Step,
   StepReviewer,
@@ -70,6 +75,8 @@ import type {
 } from "@/lib/wails";
 
 export const api = {
+  getStartup: vi.fn<() => Promise<Startup>>(() => Promise.resolve(makeStartup())),
+  tryStartupAgain: vi.fn<() => Promise<void>>(() => Promise.resolve()),
   getState: vi.fn<() => Promise<State>>(() => Promise.resolve(makeState())),
   scanRepositories: vi.fn<() => Promise<RepositoryCandidate[]>>(() => Promise.resolve([])),
   addRepository: vi.fn<(path: string) => Promise<void>>(() => Promise.resolve()),
@@ -95,7 +102,7 @@ export const api = {
   addBoard: vi.fn<(url: string, req: SaveBoardRequest) => Promise<void>>(() => Promise.resolve()),
   updateBoard: vi.fn<(id: string, req: SaveBoardRequest) => Promise<void>>(() => Promise.resolve()),
   previewRemoveBoard: vi.fn<(id: string) => Promise<BoardRemoval>>(() =>
-    Promise.resolve({ toNoBoard: 0, removed: 0 }),
+    Promise.resolve(makeBoardRemoval()),
   ),
   removeBoard: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   refreshBoard: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
@@ -115,11 +122,15 @@ export const api = {
     Promise.resolve(makePrompt({ stage })),
   ),
   savePrompt: vi.fn<(stage: PromptStage, text: string) => Promise<Prompt>>((stage, text) =>
-    Promise.resolve(makePrompt({ stage, text, modified: true })),
+    Promise.resolve(
+      makePrompt({ stage, text, modified: true, editedAt: new Date().toISOString() }),
+    ),
   ),
   restorePrompt: vi.fn<(stage: PromptStage) => Promise<Prompt>>((stage) =>
     Promise.resolve(makePrompt({ stage })),
   ),
+  listPrompts: vi.fn<() => Promise<PromptListing[]>>(() => Promise.resolve(makePromptListings())),
+  checkMachine: vi.fn<() => Promise<Machine>>(() => Promise.resolve(makeMachine())),
 
   createTask: vi.fn<(req: CreateTaskRequest) => Promise<string>>(() => Promise.resolve("task-1")),
   deleteTask: vi.fn<(taskId: string) => Promise<DeleteResult>>(() =>
@@ -295,10 +306,18 @@ export const api = {
   viewSituation: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
 };
 
+let startupHandlers: ((startup: Startup) => void)[] = [];
 let stateHandlers: ((state: State) => void)[] = [];
 let transcriptHandlers: ((event: TranscriptEvent) => void)[] = [];
 let situationStartedHandlers: ((event: SituationStarted) => void)[] = [];
 let situationOpenHandlers: ((event: SituationOpen) => void)[] = [];
+
+export const onStartupChanged = vi.fn((handler: (startup: Startup) => void): (() => void) => {
+  startupHandlers.push(handler);
+  return () => {
+    startupHandlers = startupHandlers.filter((registered) => registered !== handler);
+  };
+});
 
 export const onStateChanged = vi.fn((handler: (state: State) => void): (() => void) => {
   stateHandlers.push(handler);
@@ -333,6 +352,13 @@ export const onSituationOpen = vi.fn((handler: (event: SituationOpen) => void): 
     situationOpenHandlers = situationOpenHandlers.filter((registered) => registered !== handler);
   };
 });
+
+/** emitStartup delivers a startup:changed event to everything currently subscribed. */
+export function emitStartup(startup: Startup): void {
+  for (const handler of [...startupHandlers]) {
+    handler(startup);
+  }
+}
 
 /** emitState delivers a state:changed event to everything currently subscribed. */
 export function emitState(state: State): void {
@@ -370,6 +396,33 @@ export function transcriptSubscriberCount(): number {
   return transcriptHandlers.length;
 }
 
+/** makeStartupStep is a step of the startup that is done. */
+export function makeStartupStep(overrides: Partial<StartupStep> = {}): StartupStep {
+  return { id: "data", state: "done", startedAt: "", count: 0, detail: "", ...overrides };
+}
+
+/** makeStartupFailure is a startup that failed for a reason that is none of the known ones. */
+export function makeStartupFailure(overrides: Partial<StartupFailure> = {}): StartupFailure {
+  return {
+    case: "other",
+    error: "open database: unable to open database file",
+    dataDir: "/home/dev/.local/share/myspec",
+    logPath: "/home/dev/.local/state/myspec/myspec.log",
+    ...overrides,
+  };
+}
+
+/** makeStartup is a startup that is ready, its only step done. */
+export function makeStartup(overrides: Partial<Startup> = {}): Startup {
+  return {
+    phase: "ready",
+    steps: [makeStartupStep()],
+    failure: null,
+    systemDark: false,
+    ...overrides,
+  };
+}
+
 export function makeState(overrides: Partial<State> = {}): State {
   return {
     migration: null,
@@ -378,6 +431,7 @@ export function makeState(overrides: Partial<State> = {}): State {
     theme: "system",
     systemDark: false,
     modelDefaults: makeModelDefaults(),
+    modelFactory: makeModelDefaults(),
     modelCatalog: makeModelCatalog(),
     reviewModeDefault: "manual",
     tasks: [],
@@ -518,8 +572,13 @@ export function makeBoardRepositoryOption(
     path: "/home/dev/projects/web",
     clones: [],
     otherBoard: "",
+    release: "",
     ...overrides,
   };
+}
+
+export function makeBoardRemoval(overrides: Partial<BoardRemoval> = {}): BoardRemoval {
+  return { toNoBoard: 0, removed: 0, toNoBoardNames: [], removedNames: [], ...overrides };
 }
 
 export function makeBoardPreview(overrides: Partial<BoardPreview> = {}): BoardPreview {
@@ -536,6 +595,9 @@ export function makeBoardPreview(overrides: Partial<BoardPreview> = {}): BoardPr
     ],
     repositories: [makeBoardRepositoryOption()],
     newCardStatus: "",
+    goneStatuses: [],
+    newStatusIds: [],
+    newCardStatusGone: false,
     ...overrides,
   };
 }
@@ -884,8 +946,31 @@ export function makePrompt(overrides: Partial<Prompt> = {}): Prompt {
     text: "# PRD Creator\n\nWrite the PRD of {{task_name}}.\n",
     modified: false,
     placeholders: ["{{task_name}}", "{{artifacts_dir}}", "{{prd_path}}", "{{initial_context}}"],
+    editedAt: "",
+    lines: 3,
+    defaultLines: 3,
     ...overrides,
   };
+}
+
+/** makePromptListings are the nine prompts of the list, in workflow order, none edited. */
+export function makePromptListings(): PromptListing[] {
+  return [
+    "prd",
+    "tech_spec",
+    "plan",
+    "one_shot",
+    "step_review",
+    "commit",
+    "pr",
+    "pr_review",
+    "discussion",
+  ].map((stage) => ({ stage, modified: false, editedAt: "" }));
+}
+
+/** makeMachine is a machine that has claude and a gh signed in. */
+export function makeMachine(overrides: Partial<Machine> = {}): Machine {
+  return { claude: "found", gh: "ready", ...overrides };
 }
 
 export function makeReview(overrides: Partial<Review> = {}): Review {
@@ -1422,6 +1507,7 @@ export function makeTranscript(overrides: Partial<Transcript> = {}): Transcript 
 }
 
 export function resetWailsMock(): void {
+  startupHandlers = [];
   stateHandlers = [];
   transcriptHandlers = [];
   situationStartedHandlers = [];
@@ -1430,10 +1516,12 @@ export function resetWailsMock(): void {
   for (const fn of Object.values(api)) {
     fn.mockClear();
   }
+  onStartupChanged.mockClear();
   onStateChanged.mockClear();
   onTranscriptChanged.mockClear();
   onSituationStarted.mockClear();
   onSituationOpen.mockClear();
+  api.getStartup.mockImplementation(() => Promise.resolve(makeStartup()));
   api.getState.mockImplementation(() => Promise.resolve(makeState()));
   api.scanRepositories.mockImplementation(() => Promise.resolve([]));
   api.addRepository.mockImplementation(() => Promise.resolve());
@@ -1441,7 +1529,7 @@ export function resetWailsMock(): void {
   api.previewBoard.mockImplementation(() => Promise.resolve(makeBoardPreview()));
   api.previewEditBoard.mockImplementation(() => Promise.resolve(makeBoardPreview()));
   api.checkBoardRepository.mockImplementation(() => Promise.resolve(makeBoardRepositoryOption()));
-  api.previewRemoveBoard.mockImplementation(() => Promise.resolve({ toNoBoard: 0, removed: 0 }));
+  api.previewRemoveBoard.mockImplementation(() => Promise.resolve(makeBoardRemoval()));
   api.cardContext.mockImplementation(() => Promise.resolve("### Card: Add the login screen\n"));
   api.createTask.mockImplementation(() => Promise.resolve("task-1"));
   api.startReview.mockImplementation(() => Promise.resolve("review-1"));
@@ -1459,7 +1547,11 @@ export function resetWailsMock(): void {
   );
   api.getPrompt.mockImplementation((stage) => Promise.resolve(makePrompt({ stage })));
   api.savePrompt.mockImplementation((stage, text) =>
-    Promise.resolve(makePrompt({ stage, text, modified: true })),
+    Promise.resolve(
+      makePrompt({ stage, text, modified: true, editedAt: new Date().toISOString() }),
+    ),
   );
   api.restorePrompt.mockImplementation((stage) => Promise.resolve(makePrompt({ stage })));
+  api.listPrompts.mockImplementation(() => Promise.resolve(makePromptListings()));
+  api.checkMachine.mockImplementation(() => Promise.resolve(makeMachine()));
 }

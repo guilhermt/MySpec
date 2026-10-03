@@ -318,3 +318,35 @@ func TestCatalogIsACopy(t *testing.T) {
 		t.Errorf("Catalog() mismatch (-want +got):\n%s", diff)
 	}
 }
+
+func TestDiscoveryTellsHowTheReadingOfThisRunWent(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		read    models.Reader // nil: no reading ran
+		done    bool
+		failure models.CatalogFailure
+	}{
+		{"before the reading", nil, false, ""},
+		{"after a success", reading(claudetest.Catalog, nil), true, ""},
+		{"without a CLI", reading(nil, fmt.Errorf("x: %w", claude.ErrNotFound)), true, models.CatalogNotFound},
+		{"with a CLI that does not know the request", reading(nil, fmt.Errorf("x: %w", claude.ErrCatalogUnsupported)), true, models.CatalogUnsupported},
+		{"with a reading that errored", reading(nil, errors.New("boom")), true, models.CatalogFailed},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			service, _ := newService(t, newSettings(nil))
+			if tc.read != nil {
+				service.Discover(t.Context(), tc.read)
+			}
+
+			done, failure := service.Discovery()
+			if done != tc.done || failure != tc.failure {
+				t.Errorf("Discovery() = (%v, %q), want (%v, %q)", done, failure, tc.done, tc.failure)
+			}
+		})
+	}
+}

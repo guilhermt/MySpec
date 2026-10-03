@@ -2,7 +2,7 @@ import { screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
-import { Radio, RadioGroup } from "./Radio";
+import { Radio, RadioGroup, RadioInput } from "./Radio";
 
 function Subject({ onChange }: { onChange?: (value: string) => void }) {
   const [value, setValue] = useState("merge");
@@ -79,5 +79,60 @@ describe("Radio", () => {
       "aria-invalid",
       "true",
     );
+  });
+});
+
+function Inputs({ onChoose }: { onChoose: (value: string) => void }) {
+  const [value, setValue] = useState("todo");
+  const choose = (next: string) => {
+    setValue(next);
+    onChoose(next);
+  };
+  return (
+    <>
+      <RadioInput
+        name="fresh"
+        value="todo"
+        checked={value === "todo"}
+        onChoose={choose}
+        label="Todo"
+      />
+      <RadioInput
+        name="fresh"
+        value="done"
+        checked={value === "done"}
+        onChoose={choose}
+        label="Done"
+      />
+      <RadioInput name="other" value="x" checked={false} onChoose={() => {}} label="Elsewhere" />
+    </>
+  );
+}
+
+describe("RadioInput", () => {
+  it("is a native radio named by its label, checked when chosen", () => {
+    renderWithStore(<Inputs onChoose={() => {}} />);
+    expect(screen.getByRole("radio", { name: "Todo" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Done" })).not.toBeChecked();
+  });
+
+  it("reports the value chosen by a click anywhere on its cell", async () => {
+    const onChoose = vi.fn();
+    const { user } = renderWithStore(<Inputs onChoose={onChoose} />);
+    const cell = screen.getByRole("radio", { name: "Done" }).closest("label");
+    await user.click(cell as HTMLElement);
+    expect(onChoose).toHaveBeenCalledWith("done");
+  });
+
+  it("moves the choice with the arrows among the radios of its name only", async () => {
+    const onChoose = vi.fn();
+    const { user } = renderWithStore(<Inputs onChoose={onChoose} />);
+    screen.getByRole("radio", { name: "Todo" }).focus();
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("radio", { name: "Done" })).toHaveFocus();
+    expect(onChoose).toHaveBeenLastCalledWith("done");
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("radio", { name: "Todo" })).toHaveFocus();
+    expect(onChoose).toHaveBeenLastCalledWith("todo");
   });
 });

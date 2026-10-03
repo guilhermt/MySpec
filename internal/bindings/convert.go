@@ -105,13 +105,16 @@ func FromMigration(refused *upgrade.RefusedError) *Migration {
 
 // RefusedState is the whole state of an app whose data could not be migrated:
 // the cases to resolve and nothing of the product, which never opened.
-func RefusedState(refused *upgrade.RefusedError) State {
+// systemDark is what the desktop asked for before the window opened.
+func RefusedState(refused *upgrade.RefusedError, systemDark bool) State {
 	return State{
 		Migration:     FromMigration(refused),
 		Repositories:  []Repository{},
 		Boards:        []Board{},
 		Theme:         string(theme.System),
+		SystemDark:    systemDark,
 		ModelDefaults: []StageModel{},
+		ModelFactory:  FromModelSet(models.Factory()),
 		ModelCatalog:  ModelCatalog{Models: []CatalogModel{}},
 		Tasks:         []TaskSummary{},
 		History:       []ArchivedTask{},
@@ -172,7 +175,27 @@ func FromPrompt(p prompts.Prompt) Prompt {
 		Text:         p.Text,
 		Modified:     p.Modified,
 		Placeholders: placeholders,
+		EditedAt:     formatEditedAt(p.EditedAt),
+		Lines:        p.Lines,
+		DefaultLines: p.DefaultLines,
 	}
+}
+
+// FromListed converts the list of prompts, never nil.
+func FromListed(listed []prompts.Listed) []PromptListing {
+	converted := make([]PromptListing, len(listed))
+	for i, l := range listed {
+		converted[i] = PromptListing{Stage: string(l.Stage), Modified: l.Modified, EditedAt: formatEditedAt(l.EditedAt)}
+	}
+	return converted
+}
+
+// formatEditedAt is the time of an edit as RFC 3339, "" for the zero time.
+func formatEditedAt(at time.Time) string {
+	if at.IsZero() {
+		return ""
+	}
+	return at.Format(time.RFC3339)
 }
 
 // FromTasks converts the active tasks, pairing each with the artifacts of its
@@ -1264,6 +1287,21 @@ func FromBoardPreview(p board.Preview) BoardPreview {
 		Statuses:      statuses,
 		NewCardStatus: p.NewCardStatus,
 		Repositories:  repositories,
+
+		GoneStatuses:      append([]string{}, p.GoneStatuses...),
+		NewStatusIDs:      append([]string{}, p.NewStatusIDs...),
+		NewCardStatusGone: p.NewCardStatusGone,
+	}
+}
+
+// FromRemoval converts what removing a board does to its repositories. The
+// slices are always allocated so the frontend never sees null.
+func FromRemoval(r board.Removal) BoardRemoval {
+	return BoardRemoval{
+		ToNoBoard:      len(r.ToNoBoard),
+		Removed:        len(r.Removed),
+		ToNoBoardNames: append([]string{}, r.ToNoBoard...),
+		RemovedNames:   append([]string{}, r.Removed...),
 	}
 }
 
@@ -1283,6 +1321,7 @@ func FromBoardRepositoryOption(o board.RepositoryOption) BoardRepositoryOption {
 		Path:         o.Path,
 		Clones:       clones,
 		OtherBoard:   o.OtherBoard,
+		Release:      string(o.Release),
 	}
 }
 

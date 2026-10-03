@@ -175,6 +175,7 @@ export function Home() {
                 <BoardStartRow
                   key={line.boardId}
                   line={{ ...line, blockers: withErrors(line.blockers) }}
+                  now={now}
                   onOpen={() => openBoard(line.boardId)}
                   onRetryRead={() => void refreshBoard(line.boardId)}
                   {...actions}

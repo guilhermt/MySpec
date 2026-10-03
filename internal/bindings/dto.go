@@ -5,6 +5,41 @@ package bindings
 // EventStateChanged carries a whole State every time anything changes.
 const EventStateChanged = "state:changed"
 
+// EventStartupChanged carries the Startup whenever the startup moves.
+const EventStartupChanged = "startup:changed"
+
+// Startup is where the startup of the app stands, before the first state.
+type Startup struct {
+	// Phase is starting, failed or ready, a string for the same reason as
+	// State.Theme. A refused migration ends the startup ready, with the
+	// migration in the state.
+	Phase      string          `json:"phase"`
+	Steps      []StartupStep   `json:"steps"`      // in order; never nil
+	Failure    *StartupFailure `json:"failure"`    // failed only
+	SystemDark bool            `json:"systemDark"` // what the desktop asked for before the window opened
+}
+
+// StartupStep is one step that holds the first screen.
+type StartupStep struct {
+	// ID is data or clones, a string for the same reason as State.Theme.
+	ID string `json:"id"`
+	// State is todo, running or done, a string for the same reason as State.Theme.
+	State     string `json:"state"`
+	StartedAt string `json:"startedAt"` // RFC 3339 with milliseconds; "" before it starts
+	Count     int    `json:"count"`     // clones: the repositories with a path
+	Detail    string `json:"detail"`    // clones: the path whose test passed slowAfter; "" otherwise
+}
+
+// StartupFailure is why the startup failed.
+type StartupFailure struct {
+	// Case is permission, disk_full or other, a string for the same reason as
+	// State.Theme.
+	Case    string `json:"case"`
+	Error   string `json:"error"`   // the error as the log has it
+	DataDir string `json:"dataDir"` // the resolved data directory
+	LogPath string `json:"logPath"` // the resolved log file
+}
+
 // Repository is a registered repository, with what the app knows about its
 // clone and its tasks.
 type Repository struct {
@@ -79,6 +114,9 @@ type State struct {
 	// ModelDefaults are the choices a new task starts each stage with, in workflow
 	// order; never nil.
 	ModelDefaults []StageModel `json:"modelDefaults"`
+	// ModelFactory is the default every stage ships with, in the order of
+	// ModelDefaults; never nil.
+	ModelFactory []StageModel `json:"modelFactory"`
 	// ModelCatalog is what the installed Claude Code offers, which every picker
 	// lists.
 	ModelCatalog ModelCatalog `json:"modelCatalog"`
@@ -932,6 +970,27 @@ type Prompt struct {
 	// Placeholders are the placeholders the default of the prompt uses, in the
 	// order the settings list them; never nil.
 	Placeholders []string `json:"placeholders"`
+	EditedAt     string   `json:"editedAt"`     // RFC 3339; "" without an edit
+	Lines        int      `json:"lines"`        // of the text, the final line break not counted
+	DefaultLines int      `json:"defaultLines"` // of the default of the app
+}
+
+// PromptListing is what the list of prompts shows of one, without its text.
+type PromptListing struct {
+	Stage    string `json:"stage"` // as Prompt.Stage
+	Modified bool   `json:"modified"`
+	EditedAt string `json:"editedAt"` // RFC 3339; "" without an edit
+}
+
+// Machine is what the app found out about the machine it runs on.
+type Machine struct {
+	// Claude is found, not_found or unknown, a string for the same reason as
+	// State.Theme: unknown is a catalog read that has not finished or failed
+	// for another reason.
+	Claude string `json:"claude"`
+	// GH is ready, not_installed, signed_out or unknown, a string for the same
+	// reason as State.Theme: unknown is a gh that answered something else.
+	GH string `json:"gh"`
 }
 
 // CreateTaskRequest is the task the user filled in the creation dialog.
@@ -1103,6 +1162,10 @@ type BoardRepositoryOption struct {
 	Path         string   `json:"path"`
 	Clones       []string `json:"clones"` // never nil
 	OtherBoard   string   `json:"otherBoard"`
+	// Release is no_board, leave or "", a string for the same reason as
+	// State.Theme: where the repository goes when unchecked in an edit of its own
+	// board.
+	Release string `json:"release"`
 }
 
 // BoardPreview is what registering or editing a board shows before saving.
@@ -1118,6 +1181,11 @@ type BoardPreview struct {
 	// NewCardStatus is the option a card created by a discussion gets; "" for
 	// none.
 	NewCardStatus string `json:"newCardStatus"`
+	// The three below are set in an edit: what changed in the Status field since
+	// the last save.
+	GoneStatuses      []string `json:"goneStatuses"` // never nil
+	NewStatusIDs      []string `json:"newStatusIds"` // never nil
+	NewCardStatusGone bool     `json:"newCardStatusGone"`
 }
 
 // BoardRepositoryChoice is a repository the user checked in the board dialog.
@@ -1139,8 +1207,10 @@ type SaveBoardRequest struct {
 // BoardRemoval is what removing a board does to its repositories: how many go
 // to no board and how many are removed.
 type BoardRemoval struct {
-	ToNoBoard int `json:"toNoBoard"`
-	Removed   int `json:"removed"`
+	ToNoBoard      int      `json:"toNoBoard"`
+	Removed        int      `json:"removed"`
+	ToNoBoardNames []string `json:"toNoBoardNames"` // owner/name, alphabetical; never nil
+	RemovedNames   []string `json:"removedNames"`   // never nil
 }
 
 // ReviewCenter is the Reviews view: the open pull requests of every registered

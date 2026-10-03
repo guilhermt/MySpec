@@ -29,6 +29,7 @@ type Board struct {
 	Title         string
 	URL           string
 	FinalStatuses []string // option ids of the Status field; never nil
+	SavedStatuses []Option // the options of the Status field at the last save; nil before one
 	NewCardStatus string   // the option id of the Status field a card created by a discussion gets; "" for none
 	CreatedAt     time.Time
 }

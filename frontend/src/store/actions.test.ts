@@ -19,6 +19,7 @@ import {
   changeClonePath,
   changeRepositoryPath,
   checkBoardRepository,
+  checkMachine,
   chooseCloneFolder,
   cleanAndStartStep,
   cloneRepository,
@@ -37,6 +38,7 @@ import {
   followTaskReviewMode,
   groupIntoEpicInPlace,
   interrupt,
+  listPrompts,
   loadTranscript,
   openExternal,
   openFileInEditor,
@@ -77,17 +79,19 @@ import {
   setDraftEpicInPlace,
   setDraftModule,
   setDraftRepository,
+  setModelDefaultInPlace,
   setRepositoryFilter,
   setReviewFilters,
   setReviewInstructions,
   setReviewMode,
-  setReviewModeDefault,
+  setReviewModeDefaultInPlace,
   setReviewModeInPlace,
   setStageModelInPlace,
   setStepReviewMode,
   setTheme,
   startDiscussion,
   startReview,
+  tryStartupAgain,
   updateBoard,
 } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
@@ -97,6 +101,7 @@ import {
   makeBoard,
   makeBoardCard,
   makeBoardPreview,
+  makeBoardRemoval,
   makeBoardRepositoryOption,
   makeDiscussion,
   makeDraft,
@@ -341,23 +346,23 @@ describe("actions", () => {
     await removeRepository("repo-1");
     await setRepositoryFilter("repo-2");
     await setTheme("dark");
-    await setReviewModeDefault("agent");
+    await tryStartupAgain();
 
     expect(api.removeRepository).toHaveBeenCalledWith("repo-1");
     expect(api.setRepositoryFilter).toHaveBeenCalledWith("repo-2");
     expect(api.setTheme).toHaveBeenCalledWith("dark");
-    expect(api.setReviewModeDefault).toHaveBeenCalledWith("agent");
+    expect(api.tryStartupAgain).toHaveBeenCalledTimes(1);
     expect(useAppStore.getState().error).toBeNull();
   });
 
   it("stores the message of a rejected binding", async () => {
-    vi.mocked(api.removeRepository).mockRejectedValueOnce(new Error("remove failed"));
+    vi.mocked(api.setRepositoryFilter).mockRejectedValueOnce(new Error("filter failed"));
 
-    await removeRepository("repo-1");
+    await setRepositoryFilter("repo-2");
 
     expect(useAppStore.getState().error).toEqual({
-      label: "Couldn't remove the repository",
-      detail: "remove failed. Try again.",
+      label: "Couldn't show the tasks of the repository",
+      detail: "filter failed. Try again.",
     });
   });
 
@@ -426,16 +431,24 @@ describe("clone actions", () => {
     expect(useAppStore.getState().error).toBeNull();
   });
 
-  it("report a clone folder that could not be chosen in the app notice", async () => {
-    vi.mocked(api.chooseCloneFolder).mockRejectedValueOnce(new Error("no chooser"));
+  it("reject a repository that could not be removed instead of using the app notice", async () => {
+    vi.mocked(api.removeRepository).mockRejectedValueOnce(new Error("remove failed"));
 
-    await chooseCloneFolder();
+    await expect(removeRepository("repo-1")).rejects.toThrow("remove failed");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("answer null when the clone folder was chosen", async () => {
+    await expect(chooseCloneFolder()).resolves.toBeNull();
 
     expect(api.chooseCloneFolder).toHaveBeenCalledOnce();
-    expect(useAppStore.getState().error).toEqual({
-      label: "Couldn't choose the clone folder",
-      detail: "no chooser. Try again.",
-    });
+  });
+
+  it("answer the message of a clone folder that could not be chosen, without the app notice", async () => {
+    vi.mocked(api.chooseCloneFolder).mockRejectedValueOnce(new Error("no chooser"));
+
+    await expect(chooseCloneFolder()).resolves.toBe("no chooser");
+    expect(useAppStore.getState().error).toBeNull();
   });
 });
 
@@ -490,19 +503,20 @@ describe("board actions reported in the app notice", () => {
   });
 
   it("answer what removing a board takes with it", async () => {
-    vi.mocked(api.previewRemoveBoard).mockResolvedValueOnce({ toNoBoard: 2, removed: 1 });
+    vi.mocked(api.previewRemoveBoard).mockResolvedValueOnce(
+      makeBoardRemoval({ toNoBoard: 2, removed: 1 }),
+    );
 
-    expect(await previewRemoveBoard("board-1")).toEqual({ toNoBoard: 2, removed: 1 });
+    expect(await previewRemoveBoard("board-1")).toEqual(
+      makeBoardRemoval({ toNoBoard: 2, removed: 1 }),
+    );
   });
 
-  it("answer null when the removal could not be previewed", async () => {
+  it("pass the failure of the preview of a removal to the dialog", async () => {
     vi.mocked(api.previewRemoveBoard).mockRejectedValueOnce(new Error("board gone"));
 
-    expect(await previewRemoveBoard("board-1")).toBeNull();
-    expect(useAppStore.getState().error).toEqual({
-      label: "Couldn't check what removing the board takes with it",
-      detail: "board gone. Try again.",
-    });
+    await expect(previewRemoveBoard("board-1")).rejects.toThrow("board gone");
+    expect(useAppStore.getState().error).toBeNull();
   });
 
   it("answer the context of a card", async () => {
@@ -751,6 +765,56 @@ describe("task actions", () => {
     expect(
       await setStageModelInPlace("task-1", "plan", { model: "claude-sonnet-5", effort: "high" }),
     ).toBe("the stage has started");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("saves a default model in place, answering null and leaving the app notice alone", async () => {
+    const choice = { model: "claude-opus-5-5[1m]", effort: "low" };
+
+    expect(await setModelDefaultInPlace("pr", choice)).toBeNull();
+
+    expect(api.setModelDefault).toHaveBeenCalledWith("pr", "claude-opus-5-5[1m]", "low");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("answers the failure of saving a default model in place instead of the app notice", async () => {
+    vi.mocked(api.setModelDefault).mockRejectedValueOnce(new Error("the disk is full"));
+
+    expect(
+      await setModelDefaultInPlace("pr", { model: "claude-opus-5-5[1m]", effort: "low" }),
+    ).toBe("the disk is full");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("saves the default review mode in place, answering null and leaving the app notice alone", async () => {
+    expect(await setReviewModeDefaultInPlace("agent")).toBeNull();
+
+    expect(api.setReviewModeDefault).toHaveBeenCalledWith("agent");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("answers the failure of saving the default review mode in place instead of the app notice", async () => {
+    vi.mocked(api.setReviewModeDefault).mockRejectedValueOnce(new Error("the disk is full"));
+
+    expect(await setReviewModeDefaultInPlace("manual")).toBe("the disk is full");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("checks the machine and gives null when the call fails", async () => {
+    expect(await checkMachine()).toEqual({ claude: "found", gh: "ready" });
+
+    vi.mocked(api.checkMachine).mockRejectedValueOnce(new Error("no answer"));
+
+    expect(await checkMachine()).toBeNull();
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("lists the prompts and lets the failure through", async () => {
+    expect(await listPrompts()).toHaveLength(9);
+
+    vi.mocked(api.listPrompts).mockRejectedValueOnce(new Error("no prompts"));
+
+    await expect(listPrompts()).rejects.toThrow("no prompts");
     expect(useAppStore.getState().error).toBeNull();
   });
 

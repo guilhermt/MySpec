@@ -3,8 +3,8 @@ import { AppShell } from "@/app/AppShell";
 import { bootstrap } from "@/app/bootstrap";
 import { useGlobalShortcuts } from "@/app/useGlobalShortcuts";
 import { MigrationRefused } from "@/features/migration/MigrationRefused";
+import { StartScreen } from "@/features/startup/StartScreen";
 import { useApplyTheme } from "@/features/theme/useApplyTheme";
-import { WelcomeScreen } from "@/features/welcome/WelcomeScreen";
 import { useAppStore } from "@/store/app-store";
 
 export function App() {
@@ -30,7 +30,7 @@ export function App() {
   const app = useAppStore((state) => state.app);
 
   if (app === null) {
-    return <div className="h-dvh bg-background" />;
+    return <StartScreen />;
   }
 
   // A refused migration takes the whole app: nothing else was loaded.
@@ -38,9 +38,5 @@ export function App() {
     return <MigrationRefused migration={app.migration} />;
   }
 
-  return (app.repositories ?? []).length === 0 && (app.boards ?? []).length === 0 ? (
-    <WelcomeScreen />
-  ) : (
-    <AppShell />
-  );
+  return <AppShell />;
 }

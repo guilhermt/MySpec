@@ -13,9 +13,11 @@ import type {
   DiscussionContextRequest,
   DraftDecision,
   FindingDecision,
+  Machine,
   ModelStage,
   PermissionDecision,
   Prompt,
+  PromptListing,
   PromptStage,
   RepositoryCandidate,
   ReviewFilters,
@@ -158,14 +160,14 @@ export function cloneRepository(id: string): Promise<boolean> {
   return api.cloneRepository(id);
 }
 
-/** chooseCloneFolder asks for the folder new clones go to. */
-export async function chooseCloneFolder(): Promise<void> {
-  await run(fail("Couldn't choose the clone folder", TRY), () => api.chooseCloneFolder());
+/** chooseCloneFolder asks for the folder new clones go to; it answers the message of a failure, which the page shows under its row. */
+export function chooseCloneFolder(): Promise<string | null> {
+  return inPlace(() => api.chooseCloneFolder());
 }
 
 /**
  * previewBoard, previewEditBoard, checkBoardRepository, addBoard, updateBoard,
- * removeBoard, refreshCard and addRepositoryToBoard do not swallow their
+ * previewRemoveBoard, removeBoard, refreshCard and addRepositoryToBoard do not swallow their
  * failure: the dialog or the panel that asked shows it where the user is.
  */
 export function previewBoard(url: string): Promise<BoardPreview> {
@@ -207,18 +209,11 @@ export function addRepositoryToBoard(
 }
 
 /**
- * previewRemoveBoard says what removing a board takes with it; null when it
- * could not tell, with the reason in the app notice.
+ * previewRemoveBoard says what removing a board takes with it; the dialog that asked tells it when
+ * the reading fails.
  */
-export async function previewRemoveBoard(id: string): Promise<BoardRemoval | null> {
-  let removal: BoardRemoval | null = null;
-  await run(
-    fail(`Couldn't check what removing ${boardTitle(id) || "the board"} takes with it`, TRY),
-    async () => {
-      removal = await api.previewRemoveBoard(id);
-    },
-  );
-  return removal;
+export function previewRemoveBoard(id: string): Promise<BoardRemoval> {
+  return api.previewRemoveBoard(id);
 }
 
 /** refreshBoard starts a reading of a board; the result arrives with the state. */
@@ -237,11 +232,9 @@ export async function cardContext(boardId: string, key: string): Promise<string>
   return context;
 }
 
-/** removeRepository removes a repository that has no task. */
-export async function removeRepository(id: string): Promise<void> {
-  await run(fail(withItem("Couldn't remove the repository", repositoryName(id)), TRY), () =>
-    api.removeRepository(id),
-  );
+/** removeRepository removes a repository that has no task; the dialog that asked shows a failure in its footer. */
+export function removeRepository(id: string): Promise<void> {
+  return api.removeRepository(id);
 }
 
 /** setRepositoryFilter chooses the repository the task list and the history show. */
@@ -257,22 +250,32 @@ export async function setRepositoryFilter(id: string): Promise<void> {
   );
 }
 
+/** tryStartupAgain runs the startup again from its first step, after it failed. */
+export async function tryStartupAgain(): Promise<void> {
+  await run(fail("Couldn't try again", TRY), () => api.tryStartupAgain());
+}
+
 export async function setTheme(preference: ThemePreference): Promise<void> {
   await run(fail("Couldn't change the theme", TRY), () => api.setTheme(preference));
 }
 
-/** setModelDefault changes what the app gives a stage of the tasks created next. */
-export async function setModelDefault(stage: ModelStage, choice: ModelChoice): Promise<void> {
-  await run(fail("Couldn't change the default model", TRY), () =>
-    api.setModelDefault(stage, choice.model, choice.effort),
-  );
+/**
+ * setModelDefaultInPlace changes what the app gives a stage of the tasks created next, from a row of
+ * Defaults that shows its own failure under it: it answers the message of the failure, or null.
+ */
+export function setModelDefaultInPlace(
+  stage: ModelStage,
+  choice: ModelChoice,
+): Promise<string | null> {
+  return inPlace(() => api.setModelDefault(stage, choice.model, choice.effort));
 }
 
-/** setReviewModeDefault changes who reviews the steps of the tasks created next. */
-export async function setReviewModeDefault(mode: ReviewMode): Promise<void> {
-  await run(fail("Couldn't change the default review mode", TRY), () =>
-    api.setReviewModeDefault(mode),
-  );
+/**
+ * setReviewModeDefaultInPlace changes who reviews the steps of the tasks created next, from the
+ * options of Defaults, which show their own failure under them: it answers the message, or null.
+ */
+export function setReviewModeDefaultInPlace(mode: ReviewMode): Promise<string | null> {
+  return inPlace(() => api.setReviewModeDefault(mode));
 }
 
 /** setStageModel changes what a stage of a task runs with, before it starts. */
@@ -360,6 +363,20 @@ export async function followTaskReviewMode(taskId: string, step: number): Promis
  */
 export function getPrompt(stage: PromptStage): Promise<Prompt> {
   return api.getPrompt(stage);
+}
+
+/** checkMachine reads what the machine lacks; a call that fails says nothing, and null is "unknown". */
+export async function checkMachine(): Promise<Machine | null> {
+  try {
+    return await api.checkMachine();
+  } catch {
+    return null;
+  }
+}
+
+/** listPrompts reads which prompts are edited; the list shows its own failure. */
+export function listPrompts(): Promise<PromptListing[]> {
+  return api.listPrompts();
 }
 
 export function savePrompt(stage: PromptStage, text: string): Promise<Prompt> {

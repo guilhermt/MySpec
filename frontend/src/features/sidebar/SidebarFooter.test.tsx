@@ -119,4 +119,28 @@ describe("SidebarFooter", () => {
 
     expect(useAppStore.getState().location).toEqual({ kind: "settings", section: "defaults" });
   });
+
+  it("in the welcome mode dashes History with nothing archived and still opens Settings", async () => {
+    const { user } = renderWithStore(<SidebarFooter welcome />, { state: makeState() });
+
+    const history = screen.getByRole("button", { name: "History" });
+    expect(history).toHaveAttribute("aria-disabled", "true");
+    expect(history).toHaveAccessibleDescription("Nothing archived yet");
+
+    await user.click(history);
+    expect(useAppStore.getState().location.kind).toBe("home");
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    expect(useAppStore.getState().location.kind).toBe("settings");
+  });
+
+  it("in the welcome mode opens History once something is archived", async () => {
+    const { user } = renderWithStore(<SidebarFooter welcome />, { state: archive() });
+    expect(screen.getByRole("button", { name: "History 3" })).not.toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await user.click(screen.getByRole("button", { name: "History 3" }));
+    expect(useAppStore.getState().location.kind).toBe("history");
+  });
 });

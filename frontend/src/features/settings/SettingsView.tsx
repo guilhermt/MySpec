@@ -1,84 +1,88 @@
-import { FolderGit2, SlidersHorizontal, SquareKanban } from "lucide-react";
-import { type ReactNode, useId } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
+import { Tooltip } from "@/components/system/Tooltip";
 import { BoardsPage } from "@/features/boards/BoardsPage";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { RepositoriesPage } from "@/features/repositories/RepositoriesPage";
 import { Defaults } from "@/features/settings/Defaults";
 import { DiscardChangesDialog } from "@/features/settings/DiscardChangesDialog";
-import { PromptPane } from "@/features/settings/PromptPane";
-import { PROMPTS } from "@/features/settings/prompts";
-import { cn } from "@/lib/utils";
-import { type SettingsSection, useAppStore, useSettingsUi } from "@/store/app-store";
+import { PromptEditor } from "@/features/settings/PromptEditor";
+import { PromptPage } from "@/features/settings/PromptPage";
+import { PromptsPage } from "@/features/settings/PromptsPage";
+import { SettingsNav } from "@/features/settings/SettingsNav";
+import { pageOf } from "@/features/settings/settings-nav";
+import { usePrompt } from "@/features/settings/usePrompt";
+import { locationTitle } from "@/lib/locations";
+import type { PromptStage } from "@/lib/wails";
+import { useAppStore, useBackTarget, useSettingsUi } from "@/store/app-store";
 
-const NAV_ITEM =
-  "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm outline-none transition-colors duration-[var(--duration-fast)] hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset [&_svg]:size-4 [&_svg]:text-muted-foreground";
+/**
+ * PromptOfStage is the area of one prompt: its page, or its editor while it is edited. It reads the
+ * prompt once for both, and a page that comes back from the editor puts the focus on Edit.
+ */
+function PromptOfStage({ stage }: { stage: PromptStage }) {
+  const { promptEdit } = useSettingsUi();
+  const { state, setPrompt, retry } = usePrompt(stage);
+  const editing = promptEdit?.stage === stage;
+  const [wasEditing, setWasEditing] = useState(editing);
+  const [focus, setFocus] = useState<"title" | "edit">("title");
+  if (editing !== wasEditing) {
+    setWasEditing(editing);
+    setFocus(editing ? "title" : "edit");
+  }
 
-/** NavItem is one section of the settings in the navigation, selected or not. */
-function NavItem({ section, children }: { section: SettingsSection; children: ReactNode }) {
-  const { settingsSection } = useSettingsUi();
-  const selectSettingsSection = useAppStore((state) => state.selectSettingsSection);
-  const selected = settingsSection === section;
-
+  if (editing && state.status === "ready") {
+    return <PromptEditor stage={stage} prompt={state.prompt} onSaved={setPrompt} />;
+  }
   return (
-    <button
-      type="button"
-      aria-current={selected ? "page" : undefined}
-      onClick={() => selectSettingsSection(section)}
-      className={cn(NAV_ITEM, selected && "bg-accent font-medium")}
-    >
-      {children}
-    </button>
+    <PromptPage stage={stage} state={state} onRetry={retry} onReset={setPrompt} focus={focus} />
   );
 }
 
-/** SettingsView is the settings of the app: the defaults of a new task, the boards, the repositories and the prompts. */
+/** SettingsView is the settings of the app: the defaults of a new task, the boards, the repositories and the prompts, one page at a time beside their navigation. */
 export function SettingsView() {
   const { settingsSection } = useSettingsUi();
-  const promptsId = useId();
+  const app = useAppStore((state) => state.app);
   const closeSettings = useAppStore((state) => state.closeSettings);
+  const backTarget = useBackTarget();
+  const body = useRef<HTMLDivElement>(null);
+  const page = pageOf(settingsSection);
+
+  // A page opens at its top.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the page is the trigger.
+  useEffect(() => {
+    if (body.current !== null) {
+      body.current.scrollTop = 0;
+    }
+  }, [page]);
+
+  const closeTip =
+    backTarget === null
+      ? "Close Settings · Esc"
+      : `Close Settings and go back to ${locationTitle(app, backTarget)} · Esc`;
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-1 text-ink-1">
       <LocationHeader>
-        <Button variant="ghost" size="sm" shortcut="Esc" onClick={() => closeSettings()}>
-          Close
-        </Button>
+        <Tooltip content={closeTip}>
+          <Button variant="ghost" size="sm" shortcut="Esc" onClick={() => closeSettings()}>
+            Close
+          </Button>
+        </Tooltip>
       </LocationHeader>
-      <div className="flex min-h-0 flex-1">
-        <nav aria-label="Settings" className="flex w-56 shrink-0 flex-col gap-0.5 border-r p-2">
-          <NavItem section="defaults">
-            <SlidersHorizontal aria-hidden="true" />
-            Defaults
-          </NavItem>
-          <NavItem section="boards">
-            <SquareKanban aria-hidden="true" />
-            Boards
-          </NavItem>
-          <NavItem section="repositories">
-            <FolderGit2 aria-hidden="true" />
-            Repositories
-          </NavItem>
-          <h2 id={promptsId} className="mt-3 px-2 pb-1 text-xs font-medium text-muted-foreground">
-            Prompts
-          </h2>
-          <ul aria-labelledby={promptsId} className="flex flex-col gap-0.5">
-            {PROMPTS.map((prompt) => (
-              <li key={prompt.stage}>
-                <NavItem section={prompt.stage}>{prompt.name}</NavItem>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <div className="min-w-0 flex-1">
+      <div ref={body} className="relative min-h-0 flex-1 overflow-y-auto">
+        <div className="settings-body">
+          <SettingsNav />
           {settingsSection === "defaults" ? (
             <Defaults />
           ) : settingsSection === "boards" ? (
             <BoardsPage />
           ) : settingsSection === "repositories" ? (
             <RepositoriesPage />
+          ) : settingsSection === "prompts" ? (
+            <PromptsPage />
           ) : (
-            <PromptPane key={settingsSection} stage={settingsSection} />
+            <PromptOfStage key={settingsSection} stage={settingsSection} />
           )}
         </div>
       </div>

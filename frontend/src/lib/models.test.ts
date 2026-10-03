@@ -9,6 +9,7 @@ import {
   modelStageLabel,
   modelStagesOf,
   takesEffort,
+  unavailableReason,
   withChoice,
 } from "@/lib/models";
 import { makeCatalogModel, makeModelCatalog, makeModelDefaults } from "@/test/wails-mock";
@@ -107,6 +108,24 @@ describe("choiceUnavailable", () => {
     expect(choiceUnavailable(EMPTY_CATALOG, { model: "claude-sonnet-5", effort: "high" })).toBe(
       true,
     );
+  });
+});
+
+describe("unavailableReason", () => {
+  it("says the installed Claude Code no longer lists a model", () => {
+    expect(unavailableReason(CATALOG, { model: "claude-opus-4-1", effort: "high" })).toBe(
+      "The installed Claude Code no longer lists Opus 4.1. A session still starts with it, and the CLI decides.",
+    );
+  });
+
+  it("says it doesn't offer an effort for a model it lists", () => {
+    expect(unavailableReason(CATALOG, { model: "claude-sonnet-5", effort: "ultra" })).toBe(
+      "The installed Claude Code doesn't offer ultra for Sonnet 5. A session still starts with it, and the CLI decides.",
+    );
+  });
+
+  it("says nothing of a choice the catalog has", () => {
+    expect(unavailableReason(CATALOG, { model: "claude-sonnet-5", effort: "high" })).toBe("");
   });
 });
 

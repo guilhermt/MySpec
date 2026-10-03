@@ -41,6 +41,8 @@ type Service struct {
 	defaults Set
 	catalog  Catalog
 	failure  CatalogFailure
+	// discovered is whether the reading of the catalog of this run ended.
+	discovered bool
 }
 
 // New reads the saved defaults and the saved catalog. Without a saved value
@@ -159,12 +161,22 @@ func (s *Service) Discover(ctx context.Context, read Reader) {
 	s.mu.Lock()
 	s.catalog = catalog
 	s.failure = ""
+	s.discovered = true
 	s.mu.Unlock()
 
 	s.log.Info("model catalog read", "models", len(catalog.Models))
 	if s.onChange != nil {
 		s.onChange()
 	}
+}
+
+// Discovery is how the reading of the catalog of this run went: done is false
+// while it runs, and failure is "" when it succeeded.
+func (s *Service) Discovery() (done bool, failure CatalogFailure) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.discovered, s.failure
 }
 
 // catalogFailureOf tells apart the ways a reading fails, as the interface
@@ -187,6 +199,7 @@ func (s *Service) failed(failure CatalogFailure, reason string) {
 
 	s.mu.Lock()
 	s.failure = failure
+	s.discovered = true
 	s.mu.Unlock()
 
 	if s.onChange != nil {

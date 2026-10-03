@@ -1,8 +1,10 @@
+import { displayPath, displayPaths } from "@/lib/paths";
 import {
   asMigrationCaseKind,
   type Migration,
   type MigrationCase,
   type MigrationCaseKind,
+  type MigrationTask,
 } from "@/lib/wails";
 
 // The order the screen lists the kinds in: the tasks that belong nowhere first,
@@ -41,4 +43,34 @@ export function casesByKind(
     kind,
     cases: all.filter((item) => asMigrationCaseKind(item.kind) === kind),
   })).filter((group) => group.cases.length > 0);
+}
+
+/** caseWhere is where a case happened: the clone or the owner/name, or the workspace of a task at the root of one. */
+export function caseWhere(item: MigrationCase): string {
+  return displayPath(item.repository !== "" ? item.repository : (item.tasks?.[0]?.workspace ?? ""));
+}
+
+/** taskWhere is where a task lives: its workspace, and its path when it has one. */
+export function taskWhere(task: MigrationTask): string {
+  return task.path === ""
+    ? displayPath(task.workspace)
+    : `${displayPath(task.workspace)} · ${displayPath(task.path)}`;
+}
+
+/** copyText is the list of cases as plain text, for the user to take to the previous version. */
+export function copyText(migration: Migration): string {
+  const lines = ["MySpec couldn't be updated"];
+  for (const group of casesByKind(migration)) {
+    lines.push("", caseTitle(group.kind), caseHint(group.kind));
+    for (const item of group.cases) {
+      lines.push(`- ${caseWhere(item)}`);
+      if (item.detail !== "") {
+        lines.push(`  ${displayPaths(item.detail)}`);
+      }
+      for (const task of item.tasks ?? []) {
+        lines.push(`  - ${task.name} · ${taskWhere(task)}`);
+      }
+    }
+  }
+  return lines.join("\n");
 }

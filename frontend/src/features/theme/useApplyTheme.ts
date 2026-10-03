@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import type { Mode } from "@/features/theme/theme";
-import { effectiveMode, THEME_STORAGE_KEY } from "@/features/theme/theme";
-import { useThemeState } from "@/store/app-store";
+import { effectiveMode, paintMode, writeStoredPreference } from "@/features/theme/theme";
+import { useAppStore, useThemeState } from "@/store/app-store";
 
 /** useEffectiveMode is the mode the interface is painted in right now. */
 export function useEffectiveMode(): Mode {
@@ -9,18 +9,20 @@ export function useEffectiveMode(): Mode {
   return effectiveMode(preference, systemDark);
 }
 
+/**
+ * useApplyTheme paints the mode of the state. Before the first state it paints nothing: what
+ * index.html applied stands, and the theme button of the start paints a choice itself.
+ */
 export function useApplyTheme(): void {
   const mode = useEffectiveMode();
+  const { preference } = useThemeState();
+  const started = useAppStore((state) => state.app !== null);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = mode;
-    document.documentElement.style.colorScheme = mode;
-    try {
-      // Remembered only so the next launch paints the right colours before React
-      // runs; the preference itself lives in the app database.
-      localStorage.setItem(THEME_STORAGE_KEY, mode);
-    } catch {
-      // Storage can be unavailable; the applied mode is what matters.
+    if (!started) {
+      return;
     }
-  }, [mode]);
+    paintMode(mode);
+    writeStoredPreference(preference);
+  }, [started, mode, preference]);
 }

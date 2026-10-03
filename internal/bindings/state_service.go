@@ -7,6 +7,7 @@ const callTimeout = 5 * time.Second
 
 // StateService hands the frontend the state it renders.
 type StateService struct {
+	late     late[StateService]
 	snapshot func() State
 }
 
@@ -18,5 +19,9 @@ func NewStateService(snapshot func() State) *StateService {
 // GetState returns the current snapshot. It is how the frontend gets its first
 // state; every later one arrives with EventStateChanged.
 func (s *StateService) GetState() State {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return State{}
+	}
 	return s.snapshot()
 }

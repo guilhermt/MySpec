@@ -5,17 +5,21 @@ import { focusRequest } from "@/lib/focus";
 import { layerOpen, modalOpen } from "@/lib/layers";
 import { openItemId } from "@/lib/locations";
 import { nextWaiting } from "@/lib/situations";
+import { welcomeMode } from "@/lib/welcome";
 import { openInEditor, openReviewInEditor } from "@/store/actions";
 import { type AppStore, useAppStore } from "@/store/app-store";
 
-// The shortcuts belong to the product itself: the welcome screen and the
-// refused migration answer to none of them.
-function productOnScreen(store: AppStore): boolean {
-  return (
-    store.app !== null &&
-    store.app.migration === null &&
-    ((store.app.repositories ?? []).length > 0 || (store.app.boards ?? []).length > 0)
-  );
+// shortcutAllowed says whether the product answers to a shortcut: the refused migration answers to
+// none, and the welcome mode only to Settings and to the history of places, since it has no task,
+// review or editor to act on.
+function shortcutAllowed(store: AppStore, event: KeyboardEvent): boolean {
+  if (store.app === null || store.app.migration !== null) {
+    return false;
+  }
+  if (!welcomeMode(store.app)) {
+    return true;
+  }
+  return event.key === "," || event.key.startsWith("Arrow");
 }
 
 // runShortcut runs what a Ctrl or Cmd shortcut does.
@@ -79,7 +83,12 @@ export function useGlobalShortcuts(): void {
       const store = useAppStore.getState();
       // What the place on screen took for itself is not the global one's: Ctrl+E on a finding opens its
       // line, and the worktree stays closed.
-      if (event.defaultPrevented || event.repeat || !isShortcut(event) || !productOnScreen(store)) {
+      if (
+        event.defaultPrevented ||
+        event.repeat ||
+        !isShortcut(event) ||
+        !shortcutAllowed(store, event)
+      ) {
         return;
       }
       event.preventDefault();

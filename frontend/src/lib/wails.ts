@@ -45,6 +45,7 @@ import type {
   Entry,
   ErrorEntry,
   Leftover,
+  Machine,
   MarkerCommit,
   MarkerEntry,
   Migration,
@@ -61,6 +62,7 @@ import type {
   PRReport,
   PRTrouble,
   Prompt,
+  PromptListing,
   PullCard,
   PullLabel,
   PullRequest,
@@ -86,6 +88,9 @@ import type {
   StageModel,
   StartDiscussionRequest,
   StartReviewRequest,
+  Startup,
+  StartupFailure,
+  StartupStep,
   State,
   Step,
   StepBlock,
@@ -104,6 +109,7 @@ import type {
 import * as RepositoryService from "@bindings/repositoryservice";
 import * as ReviewService from "@bindings/reviewservice";
 import * as SettingsService from "@bindings/settingsservice";
+import * as StartupService from "@bindings/startupservice";
 import * as StateService from "@bindings/stateservice";
 import * as TaskService from "@bindings/taskservice";
 import { Browser, Events } from "@wailsio/runtime";
@@ -152,6 +158,7 @@ export type {
   Entry,
   ErrorEntry,
   Leftover,
+  Machine,
   MarkerCommit,
   MarkerEntry,
   Migration,
@@ -168,6 +175,7 @@ export type {
   PRReport,
   PRTrouble,
   Prompt,
+  PromptListing,
   PullCard,
   PullLabel,
   PullRequest,
@@ -193,6 +201,9 @@ export type {
   StageModel,
   StartDiscussionRequest,
   StartReviewRequest,
+  Startup,
+  StartupFailure,
+  StartupStep,
   State,
   Step,
   StepBlock,
@@ -570,6 +581,89 @@ export function asThemePreference(value: string): ThemePreference {
       return value;
     default:
       return "system";
+  }
+}
+
+/** StartupPhase is where the startup of the app stands. */
+export type StartupPhase = "starting" | "failed" | "ready";
+/** StartupStepId is a step that holds the first screen. */
+export type StartupStepId = "data" | "clones";
+export type StartupStepState = "todo" | "running" | "done";
+/** StartupCase is why the startup failed. */
+export type StartupCase = "permission" | "disk_full" | "other";
+
+export function asStartupPhase(value: string): StartupPhase {
+  switch (value) {
+    case "starting":
+    case "failed":
+    case "ready":
+      return value;
+    default:
+      return "starting";
+  }
+}
+
+export function asStartupStepId(value: string): StartupStepId {
+  return value === "clones" ? "clones" : "data";
+}
+
+export function asStartupStepState(value: string): StartupStepState {
+  switch (value) {
+    case "running":
+    case "done":
+      return value;
+    default:
+      return "todo";
+  }
+}
+
+export function asStartupCase(value: string): StartupCase {
+  switch (value) {
+    case "permission":
+    case "disk_full":
+      return value;
+    default:
+      return "other";
+  }
+}
+
+/** ReleaseKind is where a repository unchecked from its board goes; "" outside an edit of its own board. */
+export type ReleaseKind = "" | "no_board" | "leave";
+
+export function asReleaseKind(value: string): ReleaseKind {
+  switch (value) {
+    case "no_board":
+    case "leave":
+      return value;
+    default:
+      return "";
+  }
+}
+
+/** ClaudeCheck is what the check of the machine found of the claude CLI. */
+export type ClaudeCheck = "found" | "not_found" | "unknown";
+
+export function asClaudeCheck(value: string): ClaudeCheck {
+  switch (value) {
+    case "found":
+    case "not_found":
+      return value;
+    default:
+      return "unknown";
+  }
+}
+
+/** GHCheck is what the check of the machine found of gh and its login. */
+export type GHCheck = "ready" | "not_installed" | "signed_out" | "unknown";
+
+export function asGHCheck(value: string): GHCheck {
+  switch (value) {
+    case "ready":
+    case "not_installed":
+    case "signed_out":
+      return value;
+    default:
+      return "unknown";
   }
 }
 
@@ -1319,6 +1413,8 @@ export function asHoldReason(value: string): HoldReason {
 }
 
 export const api = {
+  getStartup: (): Promise<Startup> => StartupService.GetStartup(),
+  tryStartupAgain: (): Promise<void> => StartupService.TryAgain(),
   getState: (): Promise<State> => StateService.GetState(),
   scanRepositories: async (): Promise<RepositoryCandidate[]> =>
     (await RepositoryService.ScanRepositories()) ?? [],
@@ -1358,6 +1454,8 @@ export const api = {
   savePrompt: (stage: PromptStage, text: string): Promise<Prompt> =>
     SettingsService.SavePrompt(stage, text),
   restorePrompt: (stage: PromptStage): Promise<Prompt> => SettingsService.RestorePrompt(stage),
+  listPrompts: async (): Promise<PromptListing[]> => (await SettingsService.ListPrompts()) ?? [],
+  checkMachine: (): Promise<Machine> => SettingsService.CheckMachine(),
 
   createTask: (req: CreateTaskRequest): Promise<string> => TaskService.CreateTask(req),
   deleteTask: (taskId: string): Promise<DeleteResult> => TaskService.DeleteTask(taskId),
@@ -1506,6 +1604,10 @@ export const api = {
 
   viewSituation: (id: string): Promise<void> => AttentionService.ViewSituation(id),
 };
+
+export function onStartupChanged(handler: (startup: Startup) => void): () => void {
+  return Events.On("startup:changed", (event) => handler(event.data));
+}
 
 export function onStateChanged(handler: (state: State) => void): () => void {
   return Events.On("state:changed", (event) => handler(event.data));

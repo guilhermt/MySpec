@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/guilhermt/myspec/internal/gh"
 )
@@ -110,6 +111,20 @@ type Prompt struct {
 	// order of placeholderOrder. What the user's edit kept of them is not what
 	// they are: the list is about the default.
 	Placeholders []string
+	// EditedAt is when the user last saved an edit: the time of the file; zero
+	// without an edit.
+	EditedAt time.Time
+	// Lines and DefaultLines are how many lines the text and the default have,
+	// the final line break not counted.
+	Lines, DefaultLines int
+}
+
+// lineCount is how many lines text has, the final line break not counted.
+func lineCount(text string) int {
+	if text == "" {
+		return 0
+	}
+	return strings.Count(strings.TrimSuffix(text, "\n"), "\n") + 1
 }
 
 // contextPathPlaceholder names the context document of a review of a pull
@@ -324,7 +339,7 @@ func Prepare(dataDir string, log *slog.Logger) error {
 	}
 
 	for _, stage := range Editable {
-		edited, ok, err := editedText(dataDir, stage)
+		text, _, ok, err := edited(dataDir, stage)
 		if err != nil {
 			return err
 		}
@@ -336,7 +351,7 @@ func Prepare(dataDir string, log *slog.Logger) error {
 		if err != nil {
 			return err
 		}
-		if edited != embedded {
+		if text != embedded {
 			continue
 		}
 
@@ -357,15 +372,19 @@ func Read(dataDir string, stage Stage) (Prompt, error) {
 		return Prompt{}, err
 	}
 
-	edited, ok, err := editedText(dataDir, stage)
+	text, at, ok, err := edited(dataDir, stage)
 	if err != nil {
 		return Prompt{}, err
 	}
 
-	prompt := Prompt{Stage: stage, Text: embedded, Modified: ok, Placeholders: []string{}}
-	if ok {
-		prompt.Text = edited
+	prompt := Prompt{
+		Stage: stage, Text: embedded, Modified: ok, Placeholders: []string{},
+		EditedAt: at, DefaultLines: lineCount(embedded),
 	}
+	if ok {
+		prompt.Text = text
+	}
+	prompt.Lines = lineCount(prompt.Text)
 	for _, placeholder := range placeholderOrder {
 		if strings.Contains(embedded, placeholder) {
 			prompt.Placeholders = append(prompt.Placeholders, placeholder)
@@ -417,24 +436,58 @@ func defaultText(stage Stage) (string, error) {
 	return string(content), nil
 }
 
-// editedText is the edit of a prompt in the data directory; ok is false when
-// the user has none.
-func editedText(dataDir string, stage Stage) (text string, ok bool, err error) {
+// edited is the edit of a prompt in the data directory and when it was saved;
+// ok is false when the user has none.
+func edited(dataDir string, stage Stage) (text string, at time.Time, ok bool, err error) {
 	path := pathFor(dataDir, stage)
+	info, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", time.Time{}, false, nil
+		}
+		return "", time.Time{}, false, fmt.Errorf("read prompt %s: %w", path, err)
+	}
 	content, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return "", false, nil
+			return "", time.Time{}, false, nil
 		}
-		return "", false, fmt.Errorf("read prompt %s: %w", path, err)
+		return "", time.Time{}, false, fmt.Errorf("read prompt %s: %w", path, err)
 	}
-	return string(content), true, nil
+	return string(content), info.ModTime(), true, nil
+}
+
+// Listed is what the list of prompts shows of one: whether the user edited it,
+// and when.
+type Listed struct {
+	Stage    Stage
+	Modified bool
+	EditedAt time.Time // zero without an edit
+}
+
+// List is every editable prompt in workflow order, read from the times of the
+// files alone.
+func List(dataDir string) ([]Listed, error) {
+	listed := make([]Listed, 0, len(Editable))
+	for _, stage := range Editable {
+		path := pathFor(dataDir, stage)
+		info, err := os.Stat(path)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			listed = append(listed, Listed{Stage: stage})
+		case err != nil:
+			return nil, fmt.Errorf("list prompts: %w", err)
+		default:
+			listed = append(listed, Listed{Stage: stage, Modified: true, EditedAt: info.ModTime()})
+		}
+	}
+	return listed, nil
 }
 
 // source is the text a session of a stage starts with: the edit when there is
 // one, the default otherwise.
 func source(dataDir string, stage Stage) (string, error) {
-	text, ok, err := editedText(dataDir, stage)
+	text, _, ok, err := edited(dataDir, stage)
 	if err != nil {
 		return "", err
 	}

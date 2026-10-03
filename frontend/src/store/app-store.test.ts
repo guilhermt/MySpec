@@ -75,6 +75,7 @@ import {
   makeReviewCenter,
   makeReviewSummary,
   makeSituation,
+  makeStartup,
   makeState,
   makeStep,
   makeStepReviewer,
@@ -103,6 +104,18 @@ function withTasks(overrides = {}) {
   return makeState({ repositories: [WEB, API], tasks: [WEB_TASK, API_TASK], ...overrides });
 }
 
+// WELCOME is the state with nothing registered and nothing active.
+const WELCOME = makeState({
+  repositories: [],
+  boards: [],
+  tasks: [],
+  reviews: [],
+  discussions: [],
+  history: [],
+  reviewHistory: [],
+  discussionHistory: [],
+});
+
 // WEB_KEY is the session of the web task in the stage its fixture is in.
 const WEB_KEY = sessionKey(WEB_TASK.id, WEB_TASK.stage);
 
@@ -124,7 +137,74 @@ function location(): Location {
 }
 
 beforeEach(() => {
+  localStorage.clear();
   resetAppStore();
+});
+
+describe("applyStartup", () => {
+  it("is null until the first answer and keeps the latest one", () => {
+    expect(useAppStore.getState().startup).toBeNull();
+
+    useAppStore.getState().applyStartup(makeStartup({ phase: "starting" }));
+    useAppStore.getState().applyStartup(makeStartup({ phase: "ready" }));
+
+    expect(useAppStore.getState().startup?.phase).toBe("ready");
+  });
+});
+
+describe("the theme before the first state", () => {
+  it("keeps the chosen theme until a state has it, and then lets it go", () => {
+    useAppStore.getState().chooseStartupTheme("dark");
+
+    useAppStore.getState().applyState(makeState({ theme: "light" }));
+    expect(useAppStore.getState().startupTheme).toBe("dark");
+
+    useAppStore.getState().applyState(makeState({ theme: "dark" }));
+    expect(useAppStore.getState().startupTheme).toBeNull();
+  });
+
+  it("shows the chosen theme over the saved one", () => {
+    useAppStore.getState().chooseStartupTheme("dark");
+    useAppStore.getState().applyState(makeState({ theme: "light" }));
+    const { result, rerender } = renderHook(() => useThemeState());
+    expect(result.current.preference).toBe("dark");
+
+    act(() => {
+      useAppStore.getState().clearStartupTheme();
+    });
+    rerender();
+    expect(result.current.preference).toBe("light");
+  });
+});
+
+describe("useThemeState before the first state", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("takes the stored preference and the system the start reported", () => {
+    localStorage.setItem("myspec.theme.preference", "dark");
+    useAppStore.getState().applyStartup(makeStartup({ systemDark: true }));
+
+    const { result } = renderHook(() => useThemeState());
+
+    expect(result.current).toEqual({ preference: "dark", systemDark: true });
+  });
+
+  it("is system with a light desktop when nothing is known", () => {
+    const { result } = renderHook(() => useThemeState());
+
+    expect(result.current).toEqual({ preference: "system", systemDark: false });
+  });
+
+  it("takes the stored preference, not the state's, for a refused migration", () => {
+    localStorage.setItem("myspec.theme.preference", "light");
+    useAppStore.getState().applyState(makeState({ migration: makeMigration(), theme: "dark" }));
+
+    const { result } = renderHook(() => useThemeState());
+
+    expect(result.current.preference).toBe("light");
+  });
 });
 
 describe("applyState", () => {
@@ -137,15 +217,93 @@ describe("applyState", () => {
     expect(location()).toEqual({ kind: "task", id: API_TASK.id });
   });
 
-  // The welcome screen takes the place of everything the app shows of the tasks.
-  it("clears the screen when the last repository is gone", () => {
+  // The welcome mode keeps only the places it can show.
+  it("goes Home when the last repository is gone", () => {
     useAppStore.getState().applyState(withTasks());
     useAppStore.getState().openTask(API_TASK.id);
-    useAppStore.getState().openSettings();
 
-    useAppStore.getState().applyState(makeState({ repositories: [], tasks: [] }));
+    useAppStore.getState().applyState(WELCOME);
 
     expect(location()).toEqual(HOME);
+  });
+
+  it("keeps Settings and its unsaved edit when the last repository is gone", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openSettings();
+    useAppStore.getState().startPromptEdit("prd", "text");
+    useAppStore.getState().setPromptEditText("edited");
+
+    useAppStore.getState().applyState(WELCOME);
+
+    expect(location().kind).toBe("settings");
+    expect(useAppStore.getState().promptEdit).toMatchObject({ text: "edited" });
+  });
+
+  it("keeps History only with something archived", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openHistory();
+
+    useAppStore.getState().applyState(WELCOME);
+    expect(location()).toEqual(HOME);
+
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openHistory();
+    useAppStore.getState().applyState({ ...WELCOME, history: [makeArchivedTask()] });
+    expect(location()).toEqual({ kind: "history" });
+  });
+
+  it("stays out of the welcome mode with an active discussion of a board that was removed", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openTask(API_TASK.id);
+
+    useAppStore
+      .getState()
+      .applyState({ ...WELCOME, discussions: [makeDiscussion({ boardId: "" })] });
+
+    expect(location().kind).toBe("gone");
+  });
+
+  it("sends a place the welcome mode does not keep to Home, and keeps Settings and History", () => {
+    useAppStore.getState().applyState(WELCOME);
+
+    useAppStore.getState().go({ kind: "board", id: "board-1" });
+    expect(location()).toEqual(HOME);
+
+    useAppStore.getState().go({ kind: "history" });
+    expect(location()).toEqual(HOME);
+
+    useAppStore.getState().openSettings("boards");
+    expect(location()).toEqual({ kind: "settings", section: "boards" });
+  });
+
+  it("opens a card of a board on Home in the welcome mode", () => {
+    useAppStore.getState().applyState(WELCOME);
+
+    useAppStore.getState().openBoardCard("board-1", "dev/web#1");
+
+    expect(location()).toEqual(HOME);
+    expect(useAppStore.getState().boardCardRequest).toBeNull();
+  });
+
+  it("asks the Home of the app for the title once the first repository is registered", () => {
+    useAppStore.getState().applyState(WELCOME);
+    useAppStore.getState().clearPendingFocus();
+
+    useAppStore.getState().applyState(withTasks());
+
+    expect(location()).toEqual(HOME);
+    expect(useAppStore.getState().pendingFocus).toBe("title");
+  });
+
+  it("leaves Settings as Settings once the first repository is registered", () => {
+    useAppStore.getState().applyState(WELCOME);
+    useAppStore.getState().openSettings();
+    useAppStore.getState().clearPendingFocus();
+
+    useAppStore.getState().applyState(withTasks());
+
+    expect(location().kind).toBe("settings");
+    expect(useAppStore.getState().pendingFocus).toBeNull();
   });
 
   it("forgets the last repository used once it is no longer registered", () => {
@@ -1321,6 +1479,20 @@ describe("settings", () => {
 
     expect(location()).toEqual({ kind: "task", id: WEB_TASK.id });
     expect(useAppStore.getState().promptEdit).toBeNull();
+  });
+
+  it("keeps the prompt the user returned from until the list clears it", () => {
+    useAppStore.getState().openSettings("prd");
+
+    useAppStore.getState().setPromptReturn("prd");
+    useAppStore.getState().selectSettingsSection("prompts");
+
+    expect(useAppStore.getState().promptReturn).toBe("prd");
+    expect(location()).toEqual({ kind: "settings", section: "prompts" });
+
+    useAppStore.getState().setPromptReturn(null);
+
+    expect(useAppStore.getState().promptReturn).toBeNull();
   });
 
   it("closes the editor after a save without asking", () => {
@@ -2602,17 +2774,29 @@ describe("place in a new snapshot", () => {
     expect(useAppStore.getState().panel).toBeNull();
   });
 
-  it("goes Home on the welcome screen and keeps the places behind and ahead", () => {
+  it("keeps behind and ahead only the places the welcome mode keeps", () => {
     useAppStore.getState().applyState(withTasks());
-    const back: Location[] = [HOME];
-    const forward: Location[] = [{ kind: "history" }];
-    useAppStore.setState({ location: { kind: "task", id: WEB_TASK.id }, back, forward });
+    const settings: Location = { kind: "settings", section: "defaults" };
+    useAppStore.setState({
+      location: { kind: "task", id: WEB_TASK.id },
+      back: [HOME, { kind: "board", id: "board-1" }, settings],
+      forward: [{ kind: "history" }, { kind: "reviews" }],
+    });
 
-    useAppStore.getState().applyState(makeState({ repositories: [], tasks: [] }));
+    useAppStore.getState().applyState(WELCOME);
 
     expect(location()).toEqual(HOME);
-    expect(useAppStore.getState().back).toBe(back);
-    expect(useAppStore.getState().forward).toBe(forward);
+    expect(useAppStore.getState().back).toEqual([HOME, settings]);
+    expect(useAppStore.getState().forward).toEqual([]);
+  });
+
+  it("does not travel to a place the welcome mode does not keep", () => {
+    useAppStore.getState().applyState(WELCOME);
+    useAppStore.setState({ back: [{ kind: "board", id: "board-1" }] });
+
+    useAppStore.getState().goBack();
+
+    expect(location()).toEqual(HOME);
   });
 });
 

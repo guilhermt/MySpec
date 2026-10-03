@@ -140,4 +140,16 @@ describe.each(THEMES)("Chip in the %s theme", (theme) => {
     const choice = screen.getByText("Opus · high");
     expect(getComputedStyle(choice).animationName).toBe("shimmer");
   });
+
+  it("writes · unavailable in the third ink, in the regular weight", () => {
+    setTheme(theme);
+    render(
+      <Chip kind="toggle" unavailableReason="Not in this plan">
+        Fable
+      </Chip>,
+    );
+
+    const suffix = getComputedStyle(screen.getByText("· unavailable"));
+    expect([suffix.color, suffix.fontWeight]).toEqual([token("--ink-3"), "400"]);
+  });
 });

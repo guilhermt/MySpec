@@ -1,69 +1,51 @@
-import { screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { BoardsPage } from "@/features/boards/BoardsPage";
 import { api, type State } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeBoard, makeState } from "@/test/wails-mock";
+import { makeBoard, makeBoardRemoval, makeRepository, makeState } from "@/test/wails-mock";
 
 function page(state: State = makeState({ boards: [makeBoard()] })) {
   return renderWithStore(<BoardsPage />, { state });
 }
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("BoardsPage", () => {
-  it("says there are no boards yet", () => {
+  it("says there are no boards yet, with Add board under the text", () => {
     page(makeState({ boards: [] }));
 
-    expect(screen.getByRole("heading", { name: "Boards" })).toBeInTheDocument();
-    expect(screen.getByText("No boards yet.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Boards", level: 2 })).toBeInTheDocument();
+    expect(screen.getByText("No boards yet")).toBeInTheDocument();
+    expect(
+      screen.getByText("Add a board to start tasks from the cards of a GitHub project."),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Add board" })).toHaveLength(2);
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
   });
 
-  it("lists each board with its owner, link, repositories, statuses and last reading", () => {
+  it("lists the boards in the order of the state, each named", () => {
     vi.useFakeTimers({ now: Date.parse("2026-09-16T12:03:00Z"), shouldAdvanceTime: true });
     page(
       makeState({
         boards: [
-          makeBoard({ newCardStatus: "todo" }),
-          makeBoard({
-            id: "board-2",
-            title: "Support",
-            owner: "ana",
-            ownerType: "user",
-            url: "https://github.com/users/ana/projects/1",
-            repositoryIds: [],
-            failure: {
-              reason: "missing_scope",
-              message: "gh can't read projects. Run gh auth refresh -s read:project.",
-              failedAt: "2026-09-16T12:00:00Z",
-            },
-          }),
+          makeBoard({ title: "Alpha" }),
+          makeBoard({ id: "board-2", title: "Support", owner: "ana", repositoryIds: [] }),
         ],
+        repositories: [makeRepository()],
       }),
     );
-    vi.useRealTimers();
 
-    const [roadmap, support] = screen.getAllByRole("listitem");
-    if (roadmap === undefined || support === undefined) {
-      throw new Error("expected two boards");
-    }
-    expect(roadmap).toHaveTextContent("Roadmap");
-    expect(roadmap).toHaveTextContent("dev · Organization · 1 repository");
-    expect(
-      within(roadmap).getByRole("link", { name: "https://github.com/orgs/dev/projects/3" }),
-    ).toBeInTheDocument();
-    expect(roadmap).toHaveTextContent("Final: Done · New cards: Todo");
-    expect(roadmap).toHaveTextContent("checked 3m ago");
-    expect(support).toHaveTextContent("ana · User · 0 repositories");
-    expect(support).toHaveTextContent(
-      "gh can't read projects. Run gh auth refresh -s read:project.",
-    );
-  });
-
-  it("opens the link of a board in the browser", async () => {
-    const { user } = page();
-
-    await user.click(screen.getByRole("link", { name: "https://github.com/orgs/dev/projects/3" }));
-
-    expect(api.openExternal).toHaveBeenCalledWith("https://github.com/orgs/dev/projects/3");
+    const names = within(screen.getByRole("list", { name: "Boards" }))
+      .getAllByRole("listitem")
+      .map((item) => item.getAttribute("aria-label"));
+    expect(names).toEqual([
+      "Alpha, dev, 1 repository, read 3m ago",
+      "Support, ana, 0 repositories, read 3m ago",
+    ]);
+    expect(screen.getAllByRole("button", { name: "Add board" })).toHaveLength(1);
   });
 
   it("opens the dialog that adds a board", async () => {
@@ -72,23 +54,23 @@ describe("BoardsPage", () => {
     await user.click(screen.getByRole("button", { name: "Add board" }));
 
     expect(await screen.findByRole("dialog", { name: "Add board" })).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Board URL" })).toBeInTheDocument();
   });
 
-  it("edits a board, reading it again", async () => {
+  it("opens the dialog that edits a board", async () => {
     const { user } = page();
 
-    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Edit Roadmap" }));
 
     expect(await screen.findByRole("dialog", { name: "Edit board" })).toBeInTheDocument();
-    expect(api.previewEditBoard).toHaveBeenCalledWith("board-1");
   });
 
-  it("asks before removing a board", async () => {
+  it("takes the focus to the title when a board is removed", async () => {
+    vi.mocked(api.previewRemoveBoard).mockResolvedValue(makeBoardRemoval());
     const { user } = page();
 
-    await user.click(screen.getByRole("button", { name: "Remove" }));
+    await user.click(screen.getByRole("button", { name: "Remove Roadmap" }));
+    await user.click(await screen.findByRole("button", { name: "Remove board" }));
 
-    expect(await screen.findByText("Remove Roadmap?")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Boards" })).toHaveFocus());
   });
 });

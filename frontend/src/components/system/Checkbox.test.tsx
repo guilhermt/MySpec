@@ -65,6 +65,20 @@ describe("Checkbox", () => {
     expect(box).toHaveAttribute("aria-checked", "false");
   });
 
+  it("is described by a line outside the row", () => {
+    renderWithStore(
+      <>
+        <Checkbox checked={false} onCheckedChange={() => {}} describedBy="note">
+          Include tests
+        </Checkbox>
+        <p id="note">Tests run first</p>
+      </>,
+    );
+    expect(screen.getByRole("checkbox", { name: "Include tests" })).toHaveAccessibleDescription(
+      "Tests run first",
+    );
+  });
+
   it("is busy while loading", async () => {
     const onCheckedChange = vi.fn();
     const { user } = renderWithStore(

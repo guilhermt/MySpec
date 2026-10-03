@@ -24,6 +24,7 @@ type FolderPicker interface {
 
 // RepositoryService is the repository API the frontend calls.
 type RepositoryService struct {
+	late         late[RepositoryService]
 	repositories *repository.Service
 	picker       FolderPicker
 	log          *slog.Logger
@@ -39,6 +40,10 @@ func NewRepositoryService(
 // ScanRepositories lists the clones of GitHub repositories under the home
 // folder, marking the ones whose repository is already registered.
 func (s *RepositoryService) ScanRepositories() ([]RepositoryCandidate, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return nil, err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), scanTimeout)
 	defer cancel()
 
@@ -52,6 +57,10 @@ func (s *RepositoryService) ScanRepositories() ([]RepositoryCandidate, error) {
 // AddRepository registers the clone at path. A folder the app refuses comes
 // back as the sentence the user reads.
 func (s *RepositoryService) AddRepository(path string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), gitCallTimeout)
 	defer cancel()
 
@@ -65,6 +74,10 @@ func (s *RepositoryService) AddRepository(path string) error {
 // registers it, reporting whether it did. Cancelling changes nothing and is not
 // an error; a folder the app refuses comes back as the sentence the user reads.
 func (s *RepositoryService) BrowseRepository() (bool, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return false, err
+	}
 	path, ok, err := s.picker.PickFolder("Add repository", os.Getenv("HOME"))
 	if err != nil {
 		return false, s.fail("BrowseRepository", err)
@@ -85,6 +98,10 @@ func (s *RepositoryService) BrowseRepository() (bool, error) {
 // ChangeRepositoryPath asks for the new folder of the clone of a repository.
 // changed is false when the user cancelled the folder chooser.
 func (s *RepositoryService) ChangeRepositoryPath(id string) (changed bool, err error) {
+	s, err = s.late.resolve(s)
+	if err != nil {
+		return false, err
+	}
 	repo, ok := s.repositories.Get(id)
 	if !ok {
 		return false, s.fail("ChangeRepositoryPath", repository.ErrNotFound)
@@ -114,6 +131,10 @@ func (s *RepositoryService) ChangeRepositoryPath(id string) (changed bool, err e
 // asking for the folder first when none was chosen. started is false when the
 // user cancelled the folder chooser; the clone itself runs in the background.
 func (s *RepositoryService) CloneRepository(id string) (started bool, err error) {
+	s, err = s.late.resolve(s)
+	if err != nil {
+		return false, err
+	}
 	folder := ""
 	if s.repositories.CloneFolder() == "" {
 		chosen, picked, pickErr := s.picker.PickFolder("Choose the clone folder", os.Getenv("HOME"))
@@ -144,6 +165,10 @@ func (s *RepositoryService) CloneRepository(id string) (started bool, err error)
 // ChooseCloneFolder asks for the clone folder with the native chooser.
 // Cancelling changes nothing.
 func (s *RepositoryService) ChooseCloneFolder() error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	startIn := s.repositories.CloneFolder()
 	if startIn == "" {
 		startIn = os.Getenv("HOME")
@@ -167,6 +192,10 @@ func (s *RepositoryService) ChooseCloneFolder() error {
 
 // RemoveRepository removes a repository that has no task.
 func (s *RepositoryService) RemoveRepository(id string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -179,6 +208,10 @@ func (s *RepositoryService) RemoveRepository(id string) error {
 // SetReviewInstructions records what every pull request review of a repository
 // is told, on top of what the user writes for a review of its own.
 func (s *RepositoryService) SetReviewInstructions(id, text string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -191,6 +224,10 @@ func (s *RepositoryService) SetReviewInstructions(id, text string) error {
 // SetRepositoryFilter chooses the repository the task list and the history
 // show; "" shows them all.
 func (s *RepositoryService) SetRepositoryFilter(id string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 

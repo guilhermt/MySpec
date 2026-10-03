@@ -162,7 +162,7 @@ func TestCardContextIsTheContextOfTheCardWithoutAdditionalText(t *testing.T) {
 	}
 }
 
-func TestPreviewRemoveBoardCountsTheRepositoriesThatGoToNoBoard(t *testing.T) {
+func TestPreviewRemoveBoardNamesTheRepositoriesThatGoToNoBoard(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -173,7 +173,7 @@ func TestPreviewRemoveBoardCountsTheRepositoriesThatGoToNoBoard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PreviewRemoveBoard() = %v, want nil", err)
 	}
-	if diff := cmp.Diff(bindings.BoardRemoval{ToNoBoard: 1}, got); diff != "" {
+	if diff := cmp.Diff(bindings.BoardRemoval{ToNoBoard: 1, ToNoBoardNames: []string{"dev/web"}, RemovedNames: []string{}}, got); diff != "" {
 		t.Errorf("PreviewRemoveBoard() mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -190,11 +190,15 @@ func TestFromBoardPreviewCarriesTheStatusesAndTheRepositories(t *testing.T) {
 			{Option: board.Option{ID: "todo", Name: "Todo"}},
 			{Option: board.Option{ID: "done", Name: "Done"}, Final: true},
 		},
-		NewCardStatus: "todo",
+		NewCardStatus:     "todo",
+		GoneStatuses:      []string{"Blocked"},
+		NewStatusIDs:      []string{"done"},
+		NewCardStatusGone: true,
 		Repositories: []board.RepositoryOption{
 			{
 				Identity: repository.Identity{Owner: "acme", Name: "api"}, Cards: 2, Checked: true,
 				Link: board.LinkClone, Path: "/src/api", Clones: []string{"/src/api", "/work/api"},
+				Release: board.ReleaseNoBoard,
 			},
 			{
 				Identity: repository.Identity{Owner: "acme", Name: "web"}, Cards: 5,
@@ -208,12 +212,15 @@ func TestFromBoardPreviewCarriesTheStatusesAndTheRepositories(t *testing.T) {
 	want := bindings.BoardPreview{
 		URL: "https://github.com/users/acme/projects/3", Owner: "acme", OwnerType: "user", Number: 3,
 		Title: "Roadmap", HasStatus: true,
-		Statuses:      []bindings.BoardStatus{{ID: "todo", Name: "Todo"}, {ID: "done", Name: "Done", Final: true}},
-		NewCardStatus: "todo",
+		Statuses:          []bindings.BoardStatus{{ID: "todo", Name: "Todo"}, {ID: "done", Name: "Done", Final: true}},
+		NewCardStatus:     "todo",
+		GoneStatuses:      []string{"Blocked"},
+		NewStatusIDs:      []string{"done"},
+		NewCardStatusGone: true,
 		Repositories: []bindings.BoardRepositoryOption{
 			{
 				Owner: "acme", Name: "api", FullName: "acme/api", Cards: 2, Checked: true, Link: "clone",
-				Path: "/src/api", Clones: []string{"/src/api", "/work/api"},
+				Path: "/src/api", Clones: []string{"/src/api", "/work/api"}, Release: "no_board",
 			},
 			{
 				Owner: "acme", Name: "web", FullName: "acme/web", Cards: 5, Link: "other_board",
@@ -224,7 +231,7 @@ func TestFromBoardPreviewCarriesTheStatusesAndTheRepositories(t *testing.T) {
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("FromBoardPreview() mismatch (-want +got):\n%s", diff)
 	}
-	if empty := bindings.FromBoardPreview(board.Preview{}); empty.Statuses == nil || empty.Repositories == nil {
+	if empty := bindings.FromBoardPreview(board.Preview{}); empty.Statuses == nil || empty.Repositories == nil || empty.GoneStatuses == nil || empty.NewStatusIDs == nil {
 		t.Errorf("FromBoardPreview(empty) = %+v, want empty slices", empty)
 	}
 }

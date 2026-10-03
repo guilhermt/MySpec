@@ -49,6 +49,11 @@ describe("Icon", () => {
     "plus",
     "repository",
     "epic",
+    "defaults",
+    "prompt",
+    "copy",
+    "folder",
+    "back",
   ] as const)("has the %s icon, distinct from retry", (meaning) => {
     expect(ICONS[meaning]).toBeDefined();
     expect(ICONS[meaning]).not.toBe(ICONS.retry);

@@ -13,9 +13,10 @@ const catalogTimeout = 20 * time.Second
 
 // discoverModels reads the catalog of the installed CLI once, in the
 // background, and hands it to the models service. It runs in the data
-// directory, so that the CLI never reads a project of the user.
-func (a *App) discoverModels(dataDir string) {
-	ctx, cancel := context.WithTimeout(context.Background(), catalogTimeout)
+// directory, so that the CLI never reads a project of the user. It stops when
+// ctx ends, with the app.
+func (a *App) discoverModels(ctx context.Context, dataDir string) {
+	ctx, cancel := context.WithTimeout(ctx, catalogTimeout)
 	defer cancel()
 
 	a.models.Discover(ctx, func(ctx context.Context) ([]claude.ModelEntry, error) {

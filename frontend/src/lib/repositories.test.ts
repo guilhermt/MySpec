@@ -4,8 +4,6 @@ import {
   defaultRepositoryId,
   filterLabel,
   findRepository,
-  removeBlockedText,
-  repositoryCounts,
   reviewCount,
   shortName,
   shortRef,
@@ -80,50 +78,6 @@ describe("reviewCount", () => {
     expect(reviewCount(3)).toBe("3 reviews");
     expect(reviewCount(1, "active")).toBe("1 active review");
     expect(reviewCount(0, "archived")).toBe("0 archived reviews");
-  });
-});
-
-describe("repositoryCounts", () => {
-  it("reads the tasks alone when the repository has no review", () => {
-    expect(repositoryCounts(makeRepository({ activeTasks: 2, archivedTasks: 5 }))).toBe(
-      "2 active tasks · 5 archived tasks",
-    );
-  });
-
-  it("adds the reviews, active and archived together", () => {
-    const repository = makeRepository({ activeReviews: 1, archivedReviews: 2 });
-
-    expect(repositoryCounts(repository)).toBe("0 active tasks · 0 archived tasks · 3 reviews");
-  });
-});
-
-describe("removeBlockedText", () => {
-  it("is null for a repository with no task and no review", () => {
-    expect(removeBlockedText(web)).toBeNull();
-  });
-
-  it("says how many tasks stand in the way", () => {
-    const busy = makeRepository({ activeTasks: 2, archivedTasks: 1 });
-
-    expect(removeBlockedText(busy)).toBe(
-      "dev/web has 2 active tasks and 1 archived task. Delete them before removing the repository.",
-    );
-  });
-
-  it("says how many reviews stand in the way once no task does", () => {
-    const reviewed = makeRepository({ activeReviews: 1, archivedReviews: 2 });
-
-    expect(removeBlockedText(reviewed)).toBe(
-      "dev/web has 1 active review and 2 archived reviews. Delete them before removing the repository.",
-    );
-  });
-
-  it("names the tasks first when there are tasks and reviews", () => {
-    const both = makeRepository({ activeTasks: 1, activeReviews: 1 });
-
-    expect(removeBlockedText(both)).toBe(
-      "dev/web has 1 active task and 0 archived tasks. Delete them before removing the repository.",
-    );
   });
 });
 

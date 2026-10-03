@@ -43,7 +43,7 @@ export function LocationHeader({ progress, children }: LocationHeaderProps) {
   // with nowhere left to go leaves the focus on Back. What a situation of a task or a review asks is
   // the screen of the item's to settle.
   useEffect(() => {
-    if (pendingFocus === null || pendingFocus === "request") {
+    if (pendingFocus === null || pendingFocus === "request" || pendingFocus === "nav") {
       return;
     }
     const target =

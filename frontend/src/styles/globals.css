@@ -334,6 +334,57 @@
     container: main / inline-size;
   }
 
+  /* The reading column of the start and the welcome, centered on whole pixels below the head of the
+     window; the parent is the positioned box. */
+  .start-column {
+    position: absolute;
+    top: calc(var(--space-16) + var(--space-8));
+    left: round(50%, 1px);
+    width: 100%;
+    max-width: var(--measure-read);
+    translate: round(-50%, 1px) 0;
+  }
+
+  /* The body of Settings: the navigation and the page side by side, the pair centered at a whole pixel
+     with the page at --measure. The margin takes what the pair and its two sides leave over, rounded
+     down; below 820px of main area the pair is one column of --measure, centered the same way, and the
+     navigation, now a row, stops being sticky. */
+  .settings-body {
+    display: grid;
+    grid-template-columns: var(--snav-w) minmax(0, var(--measure));
+    column-gap: var(--space-12);
+    align-items: start;
+    max-width: calc(var(--snav-w) + var(--space-12) + var(--measure) + 2 * var(--space-6));
+    box-sizing: border-box;
+    padding: var(--space-8) var(--space-6) var(--space-16);
+    margin-left: max(
+      0px,
+      round(
+        down,
+        calc((100% - var(--snav-w) - var(--space-12) - var(--measure) - 2 * var(--space-6)) / 2),
+        1px
+      )
+    );
+  }
+  .settings-nav {
+    position: sticky;
+    top: var(--space-8);
+  }
+  @container main (width < 820px) {
+    .settings-body {
+      grid-template-columns: minmax(0, var(--measure));
+      row-gap: var(--space-6);
+      max-width: calc(var(--measure) + 2 * var(--space-6));
+      margin-left: max(
+        0px,
+        round(down, calc((100% - var(--measure) - 2 * var(--space-6)) / 2), 1px)
+      );
+    }
+    .settings-nav {
+      position: static;
+    }
+  }
+
   /* The area of a list, a board or Reviews, is the container its bar measures itself against. */
   .list-area {
     container: list / inline-size;
@@ -508,9 +559,10 @@
   }
 }
 
-/* The body of a draft of a discussion: its headings at the size of the UI, under the title of the
-   draft, which reads first. Unlayered, so it wins over the sizes Streamdown gives its headings. */
-.draft-body :is(h1, h2, h3, h4, h5, h6) {
+/* Markdown under a title of its own, like the body of a draft of a discussion or a prompt on its
+   page: its headings at the size of the UI, under that title, which reads first. Unlayered, so it
+   wins over the sizes Streamdown gives its headings. */
+.ui-headings :is(h1, h2, h3, h4, h5, h6) {
   font-size: var(--text-ui);
   line-height: var(--leading-ui);
   font-weight: 600;

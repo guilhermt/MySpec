@@ -1,5 +1,5 @@
 import { Menu as BaseMenu } from "@base-ui/react/menu";
-import type { ComponentProps, ReactNode } from "react";
+import { type ComponentProps, type ReactNode, useId } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -74,34 +74,57 @@ export interface MenuItemProps
   shortcut?: string;
   sub?: string;
   destructive?: boolean;
+  /** disabledReason disables the item and says why on the same line, after the label. */
   disabledReason?: string;
+  /** reason says on a line of its own under the label why the item is off, and describes it; the caller disables it. */
+  reason?: string;
 }
 
-/** MenuItem is a menu row: icon, label, sub, key, destructive or disabled with the reason. */
+/**
+ * MenuItem is a menu row: icon, label, sub, key, destructive or disabled with the reason. A
+ * destructive item that is disabled is not drawn in the error ink: what can't be done is not a
+ * danger.
+ */
 export function MenuItem({
   icon,
   shortcut,
   sub,
   destructive,
   disabledReason,
+  reason,
   children,
   ...props
 }: MenuItemProps) {
+  const reasonId = useId();
+  const disabled = disabledReason !== undefined || props.disabled === true;
+  const danger = destructive === true && !disabled;
   return (
     <DropdownMenuItem
       {...props}
       {...(disabledReason !== undefined ? { disabled: true } : {})}
-      variant={destructive ? "destructive" : "default"}
+      {...(reason !== undefined ? { "aria-describedby": reasonId } : {})}
+      variant={danger ? "destructive" : "default"}
       className={cn(
         MENU_ITEM,
-        destructive &&
+        reason !== undefined && "h-auto py-1",
+        danger &&
           "text-state-error data-[variant=destructive]:text-state-error data-[variant=destructive]:focus:bg-state-error-veil dark:data-[variant=destructive]:focus:bg-state-error-veil data-[variant=destructive]:focus:text-state-error data-[variant=destructive]:*:[svg]:text-state-error",
       )}
     >
       {icon !== undefined && <Icon icon={icon} size="md" tone="muted" />}
-      <span>
-        {children}
-        {disabledReason !== undefined && ` · ${disabledReason}`}
+      <span className="flex flex-col">
+        <span>
+          {children}
+          {disabledReason !== undefined && ` · ${disabledReason}`}
+        </span>
+        {reason !== undefined && (
+          <span
+            id={reasonId}
+            className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
+          >
+            {reason}
+          </span>
+        )}
       </span>
       {sub !== undefined && " "}
       {sub !== undefined && (
@@ -136,6 +159,8 @@ export interface MenuRadioItemProps {
   unavailable?: boolean;
   /** disabled is a choice that can't be made, its reason in sub. */
   disabled?: boolean;
+  /** trailing is the small mark at the end of the item: "factory". */
+  trailing?: string;
 }
 
 /** MenuSub is the small text after the label of an item: its sub, or the reason a choice is off. */
@@ -164,6 +189,7 @@ export function MenuRadioItem({
   subTone,
   unavailable,
   disabled,
+  trailing,
 }: MenuRadioItemProps) {
   return (
     <BaseMenu.RadioItem
@@ -188,6 +214,12 @@ export function MenuRadioItem({
       </span>
       {sub !== undefined && " "}
       {sub !== undefined && <MenuSub tone={subTone}>{sub}</MenuSub>}
+      {trailing !== undefined && " "}
+      {trailing !== undefined && (
+        <span className="ml-auto pl-(--space-3) text-(length:--text-micro) leading-(--leading-micro) text-ink-3">
+          {trailing}
+        </span>
+      )}
     </BaseMenu.RadioItem>
   );
 }
@@ -316,7 +348,8 @@ export function MenuCycleItem({ label, state, onStateChange }: MenuCycleItemProp
 
 export interface MenuMessageProps {
   children: ReactNode;
-  tone?: "neutral" | "error";
+  /** tone is neutral while the menu loads, notice for what keeps it empty but isn't an error, error when it fails. */
+  tone?: "neutral" | "notice" | "error";
   onRetry?: () => void;
 }
 
@@ -329,6 +362,7 @@ export function MenuMessage({ children, tone = "neutral", onRetry }: MenuMessage
         role={error ? "alert" : "status"}
         className={cn(
           "max-w-(--size-tooltip-max) text-(length:--text-meta) leading-(--leading-meta) text-ink-3",
+          tone === "notice" && "text-ink-2",
           error && "text-state-error",
         )}
       >
@@ -345,6 +379,8 @@ export function MenuMessage({ children, tone = "neutral", onRetry }: MenuMessage
 
 export interface MenuTextProps {
   children: ReactNode;
+  /** micro writes the line small, as the foot of a menu does. */
+  micro?: boolean;
 }
 
 /**
@@ -352,9 +388,16 @@ export interface MenuTextProps {
  * that is not a place, like an epic. It has the height of an item and the third ink, and takes
  * neither the highlight nor the keyboard.
  */
-export function MenuText({ children }: MenuTextProps) {
+export function MenuText({ children, micro = false }: MenuTextProps) {
   return (
-    <div className="flex min-h-(--size-control) items-center px-2 text-(length:--text-ui) leading-(--leading-ui) text-ink-3">
+    <div
+      className={cn(
+        "flex min-h-(--size-control) items-center px-2 text-ink-3",
+        micro
+          ? "text-(length:--text-micro) leading-(--leading-micro)"
+          : "text-(length:--text-ui) leading-(--leading-ui)",
+      )}
+    >
       {children}
     </div>
   );

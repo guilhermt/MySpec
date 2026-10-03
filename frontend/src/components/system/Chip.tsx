@@ -126,7 +126,12 @@ export function Chip({
       {error && <StateGlyph state="error" size="sm" />}
       {unavailable && <StateGlyph state="blocked" size="sm" />}
       {reading ? <Shimmer>{children}</Shimmer> : children}
-      {unavailable && " · unavailable"}
+      {unavailable && (
+        <>
+          {" "}
+          <span className="font-normal text-ink-3">· unavailable</span>
+        </>
+      )}
       {kind === "menu" && <Icon icon={ChevronDown} size="xs" />}
     </>
   );

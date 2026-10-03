@@ -15,10 +15,26 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as $models from "./models.js";
 
 /**
+ * CheckMachine looks at what the app needs of the machine: the claude CLI, from
+ * the reading of the catalog of this run, and gh with a login. What it can't
+ * tell is unknown.
+ */
+export function CheckMachine(): $CancellablePromise<$models.Machine> {
+    return $Call.ByID(3164437063);
+}
+
+/**
  * GetPrompt reads a prompt as the settings show it.
  */
 export function GetPrompt(stage: string): $CancellablePromise<$models.Prompt> {
     return $Call.ByID(769625320, stage);
+}
+
+/**
+ * ListPrompts says which prompts the user edited and when, without their text.
+ */
+export function ListPrompts(): $CancellablePromise<$models.PromptListing[] | null> {
+    return $Call.ByID(1474603361);
 }
 
 /**

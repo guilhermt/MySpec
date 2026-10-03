@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
+import { readStoredPreference } from "@/features/theme/theme";
 import { boardOfRepository, findBoard } from "@/lib/boards";
 import {
   type GoneLocation,
@@ -53,6 +54,7 @@ import type {
   ReviewSummary,
   ReviewVerdict,
   Situation,
+  Startup,
   State,
   TaskSummary,
   ThemePreference,
@@ -60,6 +62,7 @@ import type {
   TranscriptEvent,
 } from "@/lib/wails";
 import { asPlaceKind, asTaskStage, asThemePreference, sessionKey } from "@/lib/wails";
+import { allowedInWelcome, welcomeMode } from "@/lib/welcome";
 import { firstTab } from "@/store/step-tab";
 import {
   applyEvent,
@@ -176,6 +179,10 @@ export interface AppError {
 }
 
 export interface AppStore {
+  /** startup is where the startup of the app stands; null before the first answer. */
+  startup: Startup | null;
+  /** startupTheme is the theme chosen before the first state, sent once it arrives. */
+  startupTheme: ThemePreference | null;
   app: State | null;
   /** error is the failure the app notice shows, until it is dismissed or the next one replaces it. */
   error: AppError | null;
@@ -199,10 +206,10 @@ export interface AppStore {
   earlierConversation: EarlierConversation | null;
   /**
    * pendingFocus is where the focus goes once the new place is on screen: its title, the back or
-   * forward button, or what the situation of a task or a review asks (request), which the screen of
-   * the item settles.
+   * forward button, what the situation of a task or a review asks (request), which the screen of
+   * the item settles, or the open page of the navigation of Settings (nav).
    */
-  pendingFocus: "title" | "back" | "forward" | "request" | null;
+  pendingFocus: "title" | "back" | "forward" | "request" | "nav" | null;
   /** sidebarRail is the sidebar collapsed into its strip; kept across runs. */
   sidebarRail: boolean;
   /** toasts are the notices of items that left without being open, the oldest first, three at most. */
@@ -299,12 +306,20 @@ export interface AppStore {
   promptEdit: PromptEdit | null;
   /** pendingLeave is the navigation that waits for the user to discard the unsaved edit of a prompt. */
   pendingLeave: (() => void) | null;
+  /**
+   * promptReturn is the prompt whose page the user just left for the list: the list puts the focus
+   * on its row and clears it.
+   */
+  promptReturn: PromptStage | null;
 
+  applyStartup: (next: Startup) => void;
+  chooseStartupTheme: (preference: ThemePreference) => void;
+  clearStartupTheme: () => void;
   applyState: (next: State) => void;
   setError: (error: AppError | null) => void;
 
   /** go opens a place: the current one goes behind it and whatever was ahead is dropped. */
-  go: (location: Location, options?: { focus?: "title" | "back" | "forward" }) => void;
+  go: (location: Location, options?: { focus?: "title" | "back" | "forward" | "nav" }) => void;
   /** goBack opens the nearest place behind the current one that still exists; with none, nothing happens. */
   goBack: (options?: { focus?: "title" | "back" }) => void;
   /** goForward opens the nearest place ahead of the current one that still exists; with none, nothing happens. */
@@ -392,7 +407,7 @@ export interface AppStore {
   /** openSituation opens an item where one of its situations is. */
   openSituation: (itemId: string, place: Place) => void;
 
-  openSettings: (section?: SettingsSection) => void;
+  openSettings: (section?: SettingsSection, focus?: "nav" | null) => void;
   closeSettings: () => void;
   selectSettingsSection: (section: SettingsSection) => void;
   startPromptEdit: (stage: PromptStage, text: string) => void;
@@ -403,6 +418,7 @@ export interface AppStore {
   finishPromptEdit: () => void;
   confirmLeave: () => void;
   cancelLeave: () => void;
+  setPromptReturn: (stage: PromptStage | null) => void;
 }
 
 /** PrDraft is the title and the description of a pull request being edited. */
@@ -696,11 +712,16 @@ function navigate(
   return { ...common, back: beside(back, location), forward: [] };
 }
 
+// keptOut is whether the welcome mode does not keep a place: it opens the Home instead.
+function keptOut(app: State | null, place: Location): boolean {
+  return app !== null && welcomeMode(app) && !allowedInWelcome(app, place);
+}
+
 // reachable is whether Back or Forward can go to a place: it still exists and
 // is not the place on screen, which a place that left between them can hide
 // from beside.
 function reachable(app: State | null, place: Location, current: Location): boolean {
-  return locationExists(app, place) && !sameLocation(place, current);
+  return locationExists(app, place) && !sameLocation(place, current) && !keptOut(app, place);
 }
 
 // travel opens the nearest place behind (or ahead of) the current one it can
@@ -821,7 +842,11 @@ export const useAppStore = create<AppStore>()((set, get) => {
   };
 
   const go: AppStore["go"] = (location, options) =>
-    leave(() => set((state) => navigate(state, location, options?.focus ?? null)));
+    leave(() =>
+      set((state) =>
+        navigate(state, keptOut(state.app, location) ? HOME : location, options?.focus ?? null),
+      ),
+    );
 
   // A step through the history with nowhere to go does nothing, so it never
   // asks the user about an unsaved edit either.
@@ -834,6 +859,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
   };
 
   return {
+    startup: null,
+    startupTheme: null,
     app: null,
     error: null,
     ...initialNav(),
@@ -847,22 +874,30 @@ export const useAppStore = create<AppStore>()((set, get) => {
     expectGone: null,
     promptEdit: null,
     pendingLeave: null,
+    promptReturn: null,
     sidebarCollapsed: new Set(readStored(SIDEBAR_COLLAPSED_KEY, [], isStringList)),
     ...initialTaskUi(),
 
-    applyState: (next) =>
+    applyStartup: (next) => set({ startup: next }),
+    chooseStartupTheme: (preference) => set({ startupTheme: preference }),
+    clearStartupTheme: () => set({ startupTheme: null }),
+
+    applyState: (next) => {
       set((state) => {
-        // With no repository and no board registered the welcome screen takes
-        // the place of everything the app shows of the tasks.
-        if ((next.repositories ?? []).length === 0 && (next.boards ?? []).length === 0) {
+        // With nothing registered and nothing active the Home welcomes: only the places the welcome
+        // mode keeps stay, and an open prompt edit stays with Settings.
+        if (welcomeMode(next)) {
+          const location = allowedInWelcome(next, state.location) ? state.location : HOME;
+          const keep = (place: Location) => allowedInWelcome(next, place);
           return {
             app: next,
             ...initialTaskUi(),
-            location: HOME,
+            location,
+            back: state.back.filter(keep),
+            forward: state.forward.filter(keep),
             panel: null,
             earlierConversation: null,
-            promptEdit: null,
-            pendingLeave: null,
+            ...(location.kind === "settings" ? {} : { promptEdit: null, pendingLeave: null }),
           };
         }
         const history = historyOf(next);
@@ -877,6 +912,9 @@ export const useAppStore = create<AppStore>()((set, get) => {
             : state.lastRepositoryId;
         const location = placeIn(state.app, next, state.location);
         const moved = location !== state.location;
+        // The first registration takes the Home of the welcome to the Home of the app: the row that
+        // opened the dialog is gone, so the title takes the focus.
+        const registered = welcomeMode(state.app) && location.kind === "home";
         // An item that left takes every conversation it had with it.
         const left = moved ? openItemId(state.location) : null;
         // The task archived while open has its page; every other one, a toast.
@@ -913,6 +951,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
               ? null
               : state.reviewDialog,
           location,
+          ...(registered ? { pendingFocus: "title" as const } : {}),
           back: moved ? beside(state.back, location) : state.back,
           forward: moved ? beside(state.forward, location) : state.forward,
           panel: moved ? null : state.panel,
@@ -923,7 +962,11 @@ export const useAppStore = create<AppStore>()((set, get) => {
           transcripts:
             left === null ? state.transcripts : withoutTaskTranscripts(state.transcripts, left),
         };
-      }),
+      });
+      if (get().startupTheme === next.theme) {
+        set({ startupTheme: null });
+      }
+    },
 
     setError: (error) => set({ error }),
 
@@ -949,10 +992,12 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     openBoardCard: (boardId, key) =>
       leave(() =>
-        set((state) => ({
-          ...navigate(state, { kind: "board", id: boardId }, null),
-          boardCardRequest: { boardId, key },
-        })),
+        set((state) => {
+          const board: Location = { kind: "board", id: boardId };
+          return keptOut(state.app, board)
+            ? navigate(state, HOME, null)
+            : { ...navigate(state, board, null), boardCardRequest: { boardId, key } };
+        }),
       ),
 
     clearBoardCardRequest: () => set({ boardCardRequest: null }),
@@ -1197,7 +1242,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
       // A task, a review and a discussion take the focus to what their situation asks.
       leave(() =>
         set((state) => ({
-          ...navigate(state, location, "request"),
+          ...navigate(state, keptOut(state.app, location) ? HOME : location, "request"),
           openStepTab:
             location.kind === "task"
               ? withStepTab(state.openStepTab, itemId, place)
@@ -1206,7 +1251,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
       );
     },
 
-    openSettings: (section) => go({ kind: "settings", section: section ?? "defaults" }),
+    openSettings: (section, focus = "nav") =>
+      go({ kind: "settings", section: section ?? "defaults" }, focus === null ? {} : { focus }),
 
     // Settings close back to the place before them, skipping the ones that no
     // longer exist; with none, to Home.
@@ -1236,6 +1282,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
     },
 
     cancelLeave: () => set({ pendingLeave: null }),
+
+    setPromptReturn: (stage) => set({ promptReturn: stage }),
   };
 });
 
@@ -1507,13 +1555,39 @@ export interface ThemeState {
   systemDark: boolean;
 }
 
+/** useWelcomeMode is whether the app is the welcome: nothing registered and nothing active. */
+export function useWelcomeMode(): boolean {
+  return useAppStore((state) => welcomeMode(state.app));
+}
+
+/**
+ * useThemeState is the theme the interface shows. Before the first state it is the choice made at
+ * the start or the preference of the last state; a refused migration has no theme of its own.
+ */
 export function useThemeState(): ThemeState {
   return useAppStore(
-    useShallow((state) => ({
-      preference: asThemePreference(state.app?.theme ?? "system"),
-      systemDark: state.app?.systemDark ?? false,
-    })),
+    useShallow((state): ThemeState => {
+      const { app, startup, startupTheme } = state;
+      if (app === null) {
+        return {
+          preference: startupTheme ?? readStoredPreference() ?? "system",
+          systemDark: startup?.systemDark ?? false,
+        };
+      }
+      if (app.migration !== null) {
+        return { preference: readStoredPreference() ?? "system", systemDark: app.systemDark };
+      }
+      return {
+        preference: startupTheme ?? asThemePreference(app.theme),
+        systemDark: app.systemDark,
+      };
+    }),
   );
+}
+
+/** useStartup is where the startup of the app stands, null before the first answer. */
+export function useStartup(): Startup | null {
+  return useAppStore((state) => state.startup);
 }
 
 export function useHistory(): readonly ArchivedTask[] {

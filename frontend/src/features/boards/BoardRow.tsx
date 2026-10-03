@@ -1,61 +1,153 @@
-import { TriangleAlert } from "lucide-react";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/system/Button";
+import { CutText } from "@/components/system/CutText";
+import { ICONS } from "@/components/system/icons";
+import { Link } from "@/components/system/Link";
+import { ReadingAge } from "@/components/system/ReadingAge";
+import { Spinner } from "@/components/system/Spinner";
+import { SunkenLine } from "@/components/system/SunkenLine";
+import { Tooltip } from "@/components/system/Tooltip";
 import { useNow } from "@/features/attention/useNow";
 import { BoardDialog } from "@/features/boards/BoardDialog";
-import { pluralize } from "@/features/boards/board-dialog";
-import { ownerText, readingText, statusesText } from "@/features/boards/boards-page";
+import {
+  boardRowName,
+  finalsLine,
+  projectRef,
+  repositoriesLine,
+} from "@/features/boards/boards-page";
 import { RemoveBoardDialog } from "@/features/boards/RemoveBoardDialog";
-import { ExternalLink } from "@/features/chat/ExternalLink";
+import { SettingsRow } from "@/features/settings/SettingsList";
 import type { Board } from "@/lib/wails";
+import { openExternal, refreshBoard } from "@/store/actions";
+import { useRepositories } from "@/store/app-store";
 
 /** READING_CLOCK_MS is how often the time since the last reading is told again: a minute. */
 const READING_CLOCK_MS = 60_000;
 
+const META = "text-(length:--text-meta) leading-(--leading-meta)";
+
 export interface BoardRowProps {
   board: Board;
+  /** onRemoved is called when the board is gone, for the page to place the focus. */
+  onRemoved?: () => void;
 }
 
-/** BoardRow is one registered board: who owns it, what it manages, how its last reading went, and what can be done to it. */
-export function BoardRow({ board }: BoardRowProps) {
+/** BoardRow is one registered board: what it manages, how its last reading went, and what can be done to it. */
+export function BoardRow({ board, onRemoved }: BoardRowProps) {
+  const repositories = useRepositories();
   const [editing, setEditing] = useState(false);
   const [removing, setRemoving] = useState(false);
-  const now = useNow(READING_CLOCK_MS, board.failure === null && board.readAt !== "");
+  const now = useNow(READING_CLOCK_MS, true);
+  const failure = board.failure;
+  // A failure that was there when the page opened is read with the page; one that comes after is announced.
+  const failedAtFirst = useRef(failure !== null);
+  useEffect(() => {
+    if (failure === null) {
+      failedAtFirst.current = false;
+    }
+  }, [failure]);
+  const count = (board.repositoryIds ?? []).length;
+  const repositoriesText = repositoriesLine(board, repositories);
 
   return (
-    <li className="flex flex-col gap-1 px-4 py-3">
-      <div className="flex items-center gap-2">
-        <span className="min-w-0 truncate font-medium">{board.title}</span>
-        <span className="flex-1" />
-        <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
-          Edit
-        </Button>
-        <Button variant="ghost" size="sm" onClick={() => setRemoving(true)}>
-          Remove
-        </Button>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        {`${ownerText(board)} · ${pluralize((board.repositoryIds ?? []).length, "repository", "repositories")}`}
-      </p>
-      <ExternalLink
-        href={board.url}
-        className="w-fit break-all text-xs text-muted-foreground underline-offset-4 hover:underline"
-      >
-        {board.url}
-      </ExternalLink>
-      {statusesText(board) !== "" && (
-        <p className="text-xs text-muted-foreground">{statusesText(board)}</p>
-      )}
-      {board.failure === null ? (
-        <p className="text-xs text-muted-foreground">{readingText(board, now)}</p>
-      ) : (
-        <p className="flex items-start gap-1.5 text-xs text-destructive">
-          <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-          <span className="break-all">{readingText(board, now)}</span>
-        </p>
-      )}
+    <>
+      <SettingsRow
+        icon="board"
+        name={boardRowName(board, count, now)}
+        lines={
+          <>
+            <div className="flex min-w-0 items-baseline gap-(--space-2)">
+              <span className="min-w-0 truncate text-(length:--text-ui) leading-(--leading-ui) font-medium text-ink-1">
+                {board.title}
+              </span>
+              <Tooltip content={`Open the project on GitHub · ${board.url}`}>
+                <Link
+                  href={board.url}
+                  external
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void openExternal(board.url);
+                  }}
+                  className={`shrink-0 ${META}`}
+                >
+                  {projectRef(board)}
+                </Link>
+              </Tooltip>
+            </div>
+            <CutText text={repositoriesText} className={`${META} text-ink-3`} />
+            <span className={`${META} text-ink-3`}>{finalsLine(board)}</span>
+          </>
+        }
+        trailing={
+          <>
+            <ReadingAge
+              readAt={board.readAt}
+              reading={board.reading}
+              now={now}
+              never
+              {...(failure === null ? {} : { failure })}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-label={`Edit ${board.title}`}
+              onClick={() => setEditing(true)}
+            >
+              Edit…
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label={`Remove ${board.title}`}
+              onClick={() => setRemoving(true)}
+            >
+              Remove…
+            </Button>
+          </>
+        }
+        below={
+          failure === null ? undefined : (
+            <div
+              {...(failedAtFirst.current ? {} : { role: "alert" })}
+              className="ml-[calc(var(--icon)+var(--space-3))]"
+            >
+              <SunkenLine
+                icon="blocked"
+                className="min-h-(--size-control-sm) py-(--space-1) pr-(--space-3)"
+                action={
+                  board.reading ? (
+                    <span
+                      aria-busy="true"
+                      className={`inline-flex items-center gap-(--space-1-5) text-ink-3 ${META}`}
+                    >
+                      <Spinner />
+                      Reading…
+                    </span>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      icon={ICONS.refresh}
+                      onClick={() => void refreshBoard(board.id)}
+                    >
+                      Try again
+                    </Button>
+                  )
+                }
+              >
+                {failure.message} The last reading stays in use.
+              </SunkenLine>
+            </div>
+          )
+        }
+      />
       <BoardDialog mode="edit" boardId={board.id} open={editing} onOpenChange={setEditing} />
-      <RemoveBoardDialog board={board} open={removing} onOpenChange={setRemoving} />
-    </li>
+      <RemoveBoardDialog
+        board={board}
+        open={removing}
+        onOpenChange={setRemoving}
+        {...(onRemoved === undefined ? {} : { onRemoved })}
+      />
+    </>
   );
 }

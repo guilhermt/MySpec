@@ -96,3 +96,73 @@ export const PLACEHOLDERS: Readonly<Record<string, PlaceholderMeta>> = {
     whenRemoved: "Without it, the instruction is added at the end when it applies.",
   },
 };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const EDITED_DAY = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+const EDITED_DAY_OF_YEAR = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
+
+/** editedLabel is "Edited today", "Edited yesterday", "Edited Sep 20", "Edited Sep 20, 2025". */
+export function editedLabel(editedAt: string, now: number): string {
+  const date = new Date(editedAt);
+  const today = new Date(now);
+  const dayStart = (day: Date) =>
+    new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+  switch (Math.round((dayStart(today) - dayStart(date)) / DAY_MS)) {
+    case 0:
+      return "Edited today";
+    case 1:
+      return "Edited yesterday";
+    default:
+      return date.getFullYear() === today.getFullYear()
+        ? `Edited ${EDITED_DAY.format(date)}`
+        : `Edited ${EDITED_DAY_OF_YEAR.format(date)}`;
+  }
+}
+
+/**
+ * linesText is "Your version has 92 lines; the default of this version has 87.", or, with as many
+ * lines, "Your version and the default of this version both have 87 lines."
+ */
+export function linesText(lines: number, defaultLines: number): string {
+  const count = (n: number) => `${n} ${n === 1 ? "line" : "lines"}`;
+  if (lines === defaultLines) {
+    return `Your version and the default of this version both have ${count(lines)}.`;
+  }
+  return `Your version has ${count(lines)}; the default of this version has ${defaultLines}.`;
+}
+
+const CODE_FENCE = /^ {0,3}(`{3,}|~{3,})/;
+
+/**
+ * withPlaceholderCode wraps every known placeholder outside a code block in backticks, so Markdown
+ * hands it over as inline code. A placeholder already in backticks, or in a fenced block, stays as it is.
+ */
+export function withPlaceholderCode(text: string): string {
+  const names = Object.keys(PLACEHOLDERS);
+  const pattern = new RegExp(
+    `\`[^\`\n]*\`|${names.map((name) => name.replace(/[{}]/g, "\\$&")).join("|")}`,
+    "g",
+  );
+  let fence: string | null = null;
+  return text
+    .split("\n")
+    .map((line) => {
+      const mark = CODE_FENCE.exec(line)?.[1];
+      if (fence !== null) {
+        if (mark !== undefined && mark[0] === fence[0] && mark.length >= fence.length) {
+          fence = null;
+        }
+        return line;
+      }
+      if (mark !== undefined) {
+        fence = mark;
+        return line;
+      }
+      return line.replace(pattern, (match) => (match.startsWith("`") ? match : `\`${match}\``));
+    })
+    .join("\n");
+}

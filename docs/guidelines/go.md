@@ -26,7 +26,8 @@ Go 1.27, módulo `github.com/guilhermt/myspec`. O que está aqui é o que o cód
 
 ## Concorrência
 
-- Todo trabalho de banco recebe um `context.Context` com timeout: `startupTimeout` antes da janela, `callTimeout` numa chamada da interface, um maior quando há git envolvido.
+- Todo trabalho de banco recebe um `context.Context` com timeout: `callTimeout` em cada chamada ao banco, do início e da interface, `openTimeout` ao abrir o banco, que roda as migrations, e um maior quando há git envolvido. O início não tem prazo total.
+- O trabalho do início roda numa goroutine que um contexto cancelável encerra: uma tentativa devolve o erro com `%w` (o caso da falha vem do `errors.Is`), fecha o que abriu quando falha e checa o contexto entre os itens de um laço longo.
 - Um mutex protege o estado de um service; os callbacks são chamados fora do mutex. Um trabalho longo (parar um processo, rodar git) nunca roda com o mutex tomado.
 - Callbacks que chegam de goroutines de outros services (sessão, watcher) não bloqueiam: `flow.Check` enfileira uma avaliação e volta na hora, coalescendo rajadas numa avaliação depois da que está em curso.
 - Uma operação por task por vez em `flow`, e uma operação de git por repositório por vez.
@@ -48,6 +49,7 @@ Go 1.27, módulo `github.com/guilhermt/myspec`. O que está aqui é o que o cód
 - Enums nos DTOs são `string`, com o comentário listando os valores possíveis e a frase "a string for the same reason as State.Theme". O frontend estreita com `asX` em `lib/wails.ts`.
 - A conversão do domínio para DTO fica em `convert.go`, com um `FromX` por tipo, testado.
 - Um método de service é uma operação do usuário, com timeout, tradução de erro e uma linha de log quando falha. Mudou um service, um DTO ou um evento: `task generate`.
+- Todo service de binding tem o campo `late late[XService]` como primeiro campo, e todo método exportado começa resolvendo-o: `s, err := s.late.resolve(s)`, devolvendo o zero e `err` quando falha. O service que `NewX` constrói responde sempre; o placeholder que `bindings.NewWaitingServices` registra no Wails antes de o app estar pronto responde `MySpec is starting.` até `Services.Bind` entregar o service de verdade. Um método novo ganha as mesmas linhas, e nenhum método exportado entra numa struct de binding só para servir ao Go (o Wails o publicaria ao frontend). O `StartupService` é o único que nunca espera.
 
 ## Estilo
 
