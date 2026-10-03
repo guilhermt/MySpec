@@ -332,7 +332,7 @@ function BoardForm({ boardId, onOpenChange }: BoardFormProps) {
               {readError}
             </p>
           ) : (
-            <p role="status" className="flex items-center gap-2">
+            <p role="status" className="flex items-center gap-(--space-2)">
               <Spinner tone="current" />
               {READING_TEXT}
             </p>
@@ -402,7 +402,7 @@ function BoardForm({ boardId, onOpenChange }: BoardFormProps) {
                 label="Add a repository"
                 {...(checkError !== null ? { error: checkError } : {})}
               >
-                <div className="relative flex gap-2">
+                <div className="relative flex gap-(--space-2)">
                   <Input
                     mono
                     placeholder="owner/name"
