@@ -98,7 +98,11 @@ A publicação roda numa goroutine da discussão, uma por vez, então nenhuma av
 
 ### Composição e injeção
 
-`app.Run` monta os services na ordem das dependências, cada um recebendo as suas por uma struct `Deps` e um `*slog.Logger`. Não há variável global: quem precisa de algo recebe no construtor. Os callbacks `OnChange` de cada service convergem para `app.publish`, que pede ao limitador de `app/throttle.go` um snapshot emitido como `state:changed`.
+`app.Run` abre a janela antes dos dados, em dois tempos. No primeiro, lê o tema do sistema no portal, registra no Wails os oito services de binding como placeholders (`bindings.NewWaitingServices`) e o `StartupService`, que nunca espera, cria a janela com o fundo do tema e dispara o início. No segundo, o início roda numa goroutine, uma tentativa por vez, e monta o app: `startup` (`app/startup.go`) é o executor, que guarda a fase (`starting`, `failed` ou `ready`), os passos e a falha, e a tentativa (`app/attempt.go`) é o trabalho que ele injeta. A tentativa sonda o diretório de dados (`store.Probe`), abre o banco e as migrations, monta os services na ordem das dependências, cada um recebendo as suas por uma struct `Deps` e um `*slog.Logger`, lê o que o primeiro estado precisa (passo `data`), testa os clones dos repositórios com caminho (passo `clones`, só quando há algum), retoma as sessões e entrega ao Wails os services de verdade (`Services.Bind`), que passam a responder no lugar dos placeholders. Antes disso, uma chamada de binding responde `MySpec is starting.`. Só depois do `ready` ela busca o catálogo de modelos, assina o tema do sistema, liga o ciclo de consulta das pull requests e publica o primeiro estado.
+
+Uma tentativa que falha fecha o que abriu e deixa a fase em `failed`, com o caso (`permission`, `disk_full` ou `other`), o erro e os caminhos; `StartupService.TryAgain` recomeça do primeiro passo no mesmo processo. A janela ainda não tem tela para a falha: o app escreve `myspec: start: <erro>` no stderr e sai com o código 1. Uma migração que o app recusa não é falha: o início termina `ready` com só o `StateService` ligado, que responde `bindings.RefusedState`, e o frontend vê `state.migration`. Não há prazo total para o início: cada chamada ao banco tem `callTimeout`, e abrir o banco tem `openTimeout`, porque as migrations movem arquivos. Quando a janela fecha, `shutdown` cancela a tentativa em curso e espera que ela feche o que abriu.
+
+Não há variável global: quem precisa de algo recebe no construtor. Os callbacks `OnChange` de cada service convergem para `app.publish`, que pede ao limitador de `app/throttle.go` um snapshot emitido como `state:changed`; antes do `ready` não há estado a enviar e a publicação não faz nada.
 
 ### O estado que o frontend vê
 
@@ -112,10 +116,11 @@ Os enums dos DTOs viajam como `string`, com um comentário listando os valores, 
 
 ### Eventos
 
-Quatro eventos tipados, registrados em `bindings.RegisterEvents` antes de `application.New`:
+Cinco eventos tipados, registrados em `bindings.RegisterEvents` antes de `application.New`:
 
 | Evento | Carrega | Quando |
 |---|---|---|
+| `startup:changed` | `Startup`: fase, passos, falha e o tema do sistema | Cada movimento do início, antes do primeiro estado |
 | `state:changed` | `State` inteiro | Qualquer mudança em qualquer service |
 | `transcript:changed` | um `TranscriptEvent`: entrada nova, texto em streaming, remoção ou reset | A cada mudança numa conversa |
 | `situation:started` | a situação e se a janela estava em foco | Uma situação nova começa; dirige o piscar |
@@ -158,6 +163,8 @@ A implementação de uma task One-Shot não tem caminho próprio em `flow`. A in
 ### Fronteira com o Go
 
 `lib/wails.ts` é o único arquivo que importa os bindings gerados e o runtime do Wails. Ele reexporta os tipos dos DTOs, define as uniões de strings e as funções `asX` que estreitam os enums, expõe o objeto `api` com uma função por método dos services e as funções `onX` que assinam os eventos. Tudo que está fora de `lib/wails.ts` fala com o Go por essas funções, e os testes substituem só elas.
+
+`app/bootstrap.ts` abre a conexão em dois passos. `bootstrap` segue o início (`api.getStartup` e `startup:changed`), guarda cada `Startup` no store e, no primeiro `ready`, chama `connect`, que assina os eventos, pede o estado e o aplica. Antes do `ready`, qualquer outra chamada responderia `MySpec is starting.`; por isso o estado só é pedido depois dele, e uma só vez.
 
 ### Store
 

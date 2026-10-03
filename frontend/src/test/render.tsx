@@ -58,6 +58,7 @@ export interface RenderWithStoreResult extends RenderResult {
 
 export function resetAppStore(options: StoreOptions = {}): void {
   useAppStore.setState({
+    startup: null,
     app: options.state ?? null,
     error: options.ui?.error ?? null,
     location: options.ui?.location ?? HOME,

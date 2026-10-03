@@ -53,6 +53,7 @@ import type {
   ReviewSummary,
   ReviewVerdict,
   Situation,
+  Startup,
   State,
   TaskSummary,
   ThemePreference,
@@ -176,6 +177,8 @@ export interface AppError {
 }
 
 export interface AppStore {
+  /** startup is where the startup of the app stands; null before the first answer. */
+  startup: Startup | null;
   app: State | null;
   /** error is the failure the app notice shows, until it is dismissed or the next one replaces it. */
   error: AppError | null;
@@ -300,6 +303,7 @@ export interface AppStore {
   /** pendingLeave is the navigation that waits for the user to discard the unsaved edit of a prompt. */
   pendingLeave: (() => void) | null;
 
+  applyStartup: (next: Startup) => void;
   applyState: (next: State) => void;
   setError: (error: AppError | null) => void;
 
@@ -834,6 +838,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
   };
 
   return {
+    startup: null,
     app: null,
     error: null,
     ...initialNav(),
@@ -849,6 +854,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
     pendingLeave: null,
     sidebarCollapsed: new Set(readStored(SIDEBAR_COLLAPSED_KEY, [], isStringList)),
     ...initialTaskUi(),
+
+    applyStartup: (next) => set({ startup: next }),
 
     applyState: (next) =>
       set((state) => {

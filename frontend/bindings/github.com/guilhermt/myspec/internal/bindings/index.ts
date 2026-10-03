@@ -7,6 +7,7 @@ import * as DiscussionService from "./discussionservice.js";
 import * as RepositoryService from "./repositoryservice.js";
 import * as ReviewService from "./reviewservice.js";
 import * as SettingsService from "./settingsservice.js";
+import * as StartupService from "./startupservice.js";
 import * as StateService from "./stateservice.js";
 import * as TaskService from "./taskservice.js";
 export {
@@ -16,6 +17,7 @@ export {
     RepositoryService,
     ReviewService,
     SettingsService,
+    StartupService,
     StateService,
     TaskService
 };

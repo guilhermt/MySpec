@@ -3,10 +3,13 @@ import { modalOpen } from "@/lib/layers";
 import { announcement, FLASH_MS } from "@/lib/situations";
 import {
   api,
+  asStartupPhase,
   onSituationOpen,
   onSituationStarted,
+  onStartupChanged,
   onStateChanged,
   onTranscriptChanged,
+  type Startup,
   sessionKey,
 } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
@@ -26,9 +29,37 @@ function discussionRound(store: AppStore, id: string): number {
   return store.app?.discussions?.find((item) => item.id === id)?.round ?? 0;
 }
 
+// The window opens before the data: the startup is followed until it is ready,
+// and only then are the state and its events asked for.
+export async function bootstrap(store: StoreApi<AppStore>): Promise<() => void> {
+  let stopConnected: (() => void) | null = null;
+  let connecting = false;
+  let stopped = false;
+  const follow = (startup: Startup) => {
+    store.getState().applyStartup(startup);
+    if (asStartupPhase(startup.phase) === "ready" && !connecting) {
+      connecting = true;
+      void connect(store).then((stop) => {
+        if (stopped) {
+          stop();
+          return;
+        }
+        stopConnected = stop;
+      });
+    }
+  };
+  const stopStartup = onStartupChanged(follow);
+  follow(await api.getStartup());
+  return () => {
+    stopped = true;
+    stopStartup();
+    stopConnected?.();
+  };
+}
+
 // Subscribing before asking for the state means an event emitted in between is
 // applied instead of lost.
-export async function bootstrap(store: StoreApi<AppStore>): Promise<() => void> {
+export async function connect(store: StoreApi<AppStore>): Promise<() => void> {
   const stopTranscript = onTranscriptChanged((event) => {
     store.getState().applyTranscriptEvent(event);
     // A reset says the conversation changed wholesale; only a conversation

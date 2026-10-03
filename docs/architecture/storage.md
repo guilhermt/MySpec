@@ -59,7 +59,9 @@ Os prompts padrão vivem no binário, em `internal/prompts/defaults/`. O diretó
 
 A migration 0012 é a que cadastra os repositórios, e é na transação dela que roda o `store.Upgrade` que o app injeta, o pacote `internal/upgrade`. Ele lê cada task de um banco que ainda guarda áreas de trabalho, identifica o clone dela pelo remote `origin`, cadastra um repositório por identidade, liga a task a ele, move os artefatos para a pasta nova e renomeia os arquivos da etapa de PR, que já não carregam o slug de um repositório. Uma task arquivada da raiz de uma área de trabalho é descartada, artefatos incluídos.
 
-O upgrade é tudo ou nada. Ele recusa, sem escrever nada, quando encontra uma task ativa na raiz de uma área de trabalho, um clone que ele não consegue identificar no GitHub ou duas tasks com o mesmo nome num repositório. Uma recusa desfaz o que já tinha sido movido no disco, a transação não commita, o banco fica na versão anterior — que a versão anterior do app abre inteira — e o app mostra a tela de migração recusada com os casos a resolver, no lugar do produto. Com o commit feito, as pastas descartadas e a pasta `workspaces/` são apagadas.
+O upgrade roda dentro do início do app (ver [overview.md](./overview.md#composição-e-injeção)), com o prazo de um minuto para abrir o banco, porque ele move arquivos. Antes dele, uma sonda do diretório de dados (listar, criar, escrever e apagar um arquivo) separa a falta de permissão e o disco cheio, que o SQLite não distingue ao abrir uma pasta, de qualquer outra falha.
+
+O upgrade é tudo ou nada. Ele recusa, sem escrever nada, quando encontra uma task ativa na raiz de uma área de trabalho, um clone que ele não consegue identificar no GitHub ou duas tasks com o mesmo nome num repositório. Uma recusa desfaz o que já tinha sido movido no disco, a transação não commita, o banco fica na versão anterior — que a versão anterior do app abre inteira — e o app abre a janela e termina o início `ready` só com o estado da migração recusada, que mostra os casos a resolver no lugar do produto. Com o commit feito, as pastas descartadas e a pasta `workspaces/` são apagadas.
 
 ### Artefatos
 

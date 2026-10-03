@@ -26,7 +26,8 @@ Go 1.27, módulo `github.com/guilhermt/myspec`. O que está aqui é o que o cód
 
 ## Concorrência
 
-- Todo trabalho de banco recebe um `context.Context` com timeout: `startupTimeout` antes da janela, `callTimeout` numa chamada da interface, um maior quando há git envolvido.
+- Todo trabalho de banco recebe um `context.Context` com timeout: `callTimeout` em cada chamada ao banco, do início e da interface, `openTimeout` ao abrir o banco, que roda as migrations, e um maior quando há git envolvido. O início não tem prazo total.
+- O trabalho do início roda numa goroutine que um contexto cancelável encerra: uma tentativa devolve o erro com `%w` (o caso da falha vem do `errors.Is`), fecha o que abriu quando falha e checa o contexto entre os itens de um laço longo.
 - Um mutex protege o estado de um service; os callbacks são chamados fora do mutex. Um trabalho longo (parar um processo, rodar git) nunca roda com o mutex tomado.
 - Callbacks que chegam de goroutines de outros services (sessão, watcher) não bloqueiam: `flow.Check` enfileira uma avaliação e volta na hora, coalescendo rajadas numa avaliação depois da que está em curso.
 - Uma operação por task por vez em `flow`, e uma operação de git por repositório por vez.

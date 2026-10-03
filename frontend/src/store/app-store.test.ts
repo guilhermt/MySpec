@@ -75,6 +75,7 @@ import {
   makeReviewCenter,
   makeReviewSummary,
   makeSituation,
+  makeStartup,
   makeState,
   makeStep,
   makeStepReviewer,
@@ -125,6 +126,17 @@ function location(): Location {
 
 beforeEach(() => {
   resetAppStore();
+});
+
+describe("applyStartup", () => {
+  it("is null until the first answer and keeps the latest one", () => {
+    expect(useAppStore.getState().startup).toBeNull();
+
+    useAppStore.getState().applyStartup(makeStartup({ phase: "starting" }));
+    useAppStore.getState().applyStartup(makeStartup({ phase: "ready" }));
+
+    expect(useAppStore.getState().startup?.phase).toBe("ready");
+  });
 });
 
 describe("applyState", () => {

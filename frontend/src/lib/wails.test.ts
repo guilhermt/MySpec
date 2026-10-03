@@ -49,6 +49,10 @@ import {
   asSituationForm,
   asSituationGroup,
   asSituationKind,
+  asStartupCase,
+  asStartupPhase,
+  asStartupStepId,
+  asStartupStepState,
   asStepStatus,
   asTaskMode,
   asTaskStage,
@@ -77,6 +81,34 @@ describe("asThemePreference", () => {
 
   it("falls back to system", () => {
     expect(asThemePreference("sepia")).toBe("system");
+  });
+});
+
+describe("the startup unions", () => {
+  it("keep the values Go sends", () => {
+    expect(asStartupPhase("failed")).toBe("failed");
+    expect(asStartupPhase("ready")).toBe("ready");
+    expect(asStartupStepId("clones")).toBe("clones");
+    expect(asStartupStepState("running")).toBe("running");
+    expect(asStartupStepState("done")).toBe("done");
+    expect(asStartupCase("permission")).toBe("permission");
+    expect(asStartupCase("disk_full")).toBe("disk_full");
+  });
+
+  it("fall back to the first thing a startup shows", () => {
+    expect(asStartupPhase("paused")).toBe("starting");
+    expect(asStartupStepId("network")).toBe("data");
+    expect(asStartupStepState("stuck")).toBe("todo");
+    expect(asStartupCase("no_power")).toBe("other");
+  });
+
+  it("reach the startup service and its event", async () => {
+    await wails.api.getStartup();
+    await wails.api.tryStartupAgain();
+    wails.onStartupChanged(() => {});
+
+    expect(vi.mocked(Events.On).mock.calls.map(([name]) => name)).toContain("startup:changed");
+    expect(vi.mocked(Call.ByID)).toHaveBeenCalledTimes(2);
   });
 });
 

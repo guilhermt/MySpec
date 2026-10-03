@@ -1648,7 +1648,7 @@ func TestRefusedStateCarriesTheCasesAndNothingElse(t *testing.T) {
 		},
 	}}
 
-	got := bindings.RefusedState(refused)
+	got := bindings.RefusedState(refused, true)
 
 	want := bindings.State{
 		Migration: &bindings.Migration{Cases: []bindings.MigrationCase{
@@ -1668,6 +1668,7 @@ func TestRefusedStateCarriesTheCasesAndNothingElse(t *testing.T) {
 		Repositories:  []bindings.Repository{},
 		Boards:        []bindings.Board{},
 		Theme:         "system",
+		SystemDark:    true,
 		ModelDefaults: []bindings.StageModel{},
 		ModelFactory:  bindings.FromModelSet(models.Factory()),
 		ModelCatalog:  bindings.ModelCatalog{Models: []bindings.CatalogModel{}},

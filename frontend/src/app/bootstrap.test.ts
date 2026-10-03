@@ -1,5 +1,6 @@
+import { waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { bootstrap } from "@/app/bootstrap";
+import { bootstrap, connect } from "@/app/bootstrap";
 import { announcement, FLASH_MS } from "@/lib/situations";
 import { api, onSituationOpen, onSituationStarted, type Place } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
@@ -7,6 +8,7 @@ import { resetAppStore } from "@/test/render";
 import {
   emitSituationOpen,
   emitSituationStarted,
+  emitStartup,
   emitState,
   emitTranscript,
   makeDiscussion,
@@ -14,6 +16,9 @@ import {
   makePullRequest,
   makeReviewSummary,
   makeSituation,
+  makeStartup,
+  makeStartupFailure,
+  makeStartupStep,
   makeState,
   makeTask,
   makeTranscript,
@@ -39,7 +44,7 @@ function inPR() {
   });
 }
 
-describe("bootstrap", () => {
+describe("connect", () => {
   it("subscribes before asking for the state", async () => {
     let subscribersWhenAsked = -1;
     let transcriptSubscribersWhenAsked = -1;
@@ -53,7 +58,7 @@ describe("bootstrap", () => {
       return Promise.resolve(makeState());
     });
 
-    await bootstrap(useAppStore);
+    await connect(useAppStore);
 
     expect(subscribersWhenAsked).toBe(1);
     expect(transcriptSubscribersWhenAsked).toBe(1);
@@ -63,13 +68,13 @@ describe("bootstrap", () => {
   it("applies the first snapshot to the store", async () => {
     vi.mocked(api.getState).mockResolvedValueOnce(makeState({ theme: "dark" }));
 
-    await bootstrap(useAppStore);
+    await connect(useAppStore);
 
     expect(useAppStore.getState().app?.theme).toBe("dark");
   });
 
   it("applies a later state:changed event", async () => {
-    await bootstrap(useAppStore);
+    await connect(useAppStore);
 
     emitState(makeState({ repositoryFilter: "repo-1" }));
 
@@ -78,7 +83,7 @@ describe("bootstrap", () => {
 
   it("stops applying events once unsubscribed", async () => {
     vi.mocked(api.getState).mockResolvedValueOnce(inPR());
-    const unsubscribe = await bootstrap(useAppStore);
+    const unsubscribe = await connect(useAppStore);
     unsubscribe();
 
     expect(subscriberCount()).toBe(0);
@@ -94,7 +99,7 @@ describe("bootstrap", () => {
   });
 
   it("applies a transcript:changed event to the conversation it belongs to", async () => {
-    await bootstrap(useAppStore);
+    await connect(useAppStore);
     useAppStore.getState().setTranscript(makeTranscript({ taskId: "task-1" }));
     const entry = makeEntry("user", { id: "a", seq: 1 });
 
@@ -104,7 +109,7 @@ describe("bootstrap", () => {
   });
 
   it("reads the conversation again when it is reset", async () => {
-    await bootstrap(useAppStore);
+    await connect(useAppStore);
     useAppStore.getState().setTranscript(makeTranscript({ taskId: "task-1" }));
 
     emitTranscript({
@@ -123,7 +128,7 @@ describe("bootstrap", () => {
   });
 
   it("leaves a reset alone when the conversation was never loaded", async () => {
-    await bootstrap(useAppStore);
+    await connect(useAppStore);
 
     emitTranscript({
       taskId: "task-1",
@@ -139,7 +144,7 @@ describe("bootstrap", () => {
   });
 
   it("highlights a situation that started under the eyes of the user, for a moment", async () => {
-    await bootstrap(useAppStore);
+    await connect(useAppStore);
     vi.useFakeTimers();
 
     emitSituationStarted({ situation: makeSituation({ id: "s1" }), focused: true });
@@ -153,7 +158,7 @@ describe("bootstrap", () => {
   });
 
   it("leaves the highlight to the notification when the window was away", async () => {
-    await bootstrap(useAppStore);
+    await connect(useAppStore);
 
     emitSituationStarted({ situation: makeSituation({ id: "s1" }), focused: false });
 
@@ -164,7 +169,7 @@ describe("bootstrap", () => {
     vi.mocked(api.getState).mockResolvedValueOnce(
       makeState({ tasks: [makeTask({ id: "task-1", name: "add-login" })] }),
     );
-    await bootstrap(useAppStore);
+    await connect(useAppStore);
 
     emitSituationStarted({ situation: makeSituation({ taskId: "task-1" }), focused: true });
 
@@ -177,7 +182,7 @@ describe("bootstrap", () => {
     vi.mocked(api.getState).mockResolvedValueOnce(
       makeState({ reviews: [makeReviewSummary({ id: "review-1", title: "Fix the login" })] }),
     );
-    await bootstrap(useAppStore);
+    await connect(useAppStore);
     const situation = makeSituation({ taskId: "review-1", place: REVIEW_PLACE });
 
     emitSituationStarted({ situation, focused: true });
@@ -193,7 +198,7 @@ describe("bootstrap", () => {
         discussions: [makeDiscussion({ id: "discussion-1", title: "Invoices", round: 2 })],
       }),
     );
-    await bootstrap(useAppStore);
+    await connect(useAppStore);
     const situation = makeSituation({
       kind: "drafts",
       taskId: "discussion-1",
@@ -207,7 +212,7 @@ describe("bootstrap", () => {
 
   it("announces nothing when the window was away", async () => {
     vi.mocked(api.getState).mockResolvedValueOnce(makeState({ tasks: [makeTask()] }));
-    await bootstrap(useAppStore);
+    await connect(useAppStore);
 
     emitSituationStarted({ situation: makeSituation({ taskId: "task-1" }), focused: false });
 
@@ -215,7 +220,7 @@ describe("bootstrap", () => {
   });
 
   it("announces nothing for an item the state does not have", async () => {
-    await bootstrap(useAppStore);
+    await connect(useAppStore);
 
     emitSituationStarted({ situation: makeSituation({ taskId: "task-gone" }), focused: true });
 
@@ -224,7 +229,7 @@ describe("bootstrap", () => {
 
   it("opens the place of a notification the user clicked", async () => {
     vi.mocked(api.getState).mockResolvedValueOnce(inPR());
-    await bootstrap(useAppStore);
+    await connect(useAppStore);
 
     emitSituationOpen({ taskId: "task-1", place: PR_PLACE });
 
@@ -233,7 +238,7 @@ describe("bootstrap", () => {
 
   it("leaves a modal dialog where it is when the user clicks a notification", async () => {
     vi.mocked(api.getState).mockResolvedValueOnce(inPR());
-    await bootstrap(useAppStore);
+    await connect(useAppStore);
     const dialog = document.createElement("div");
     dialog.setAttribute("data-slot", "dialog-content");
     document.body.append(dialog);
@@ -242,5 +247,61 @@ describe("bootstrap", () => {
 
     expect(useAppStore.getState().location).toEqual({ kind: "home" });
     dialog.remove();
+  });
+});
+
+describe("bootstrap", () => {
+  it("waits for the startup to be ready before asking for the state", async () => {
+    vi.mocked(api.getStartup).mockResolvedValueOnce(
+      makeStartup({ phase: "starting", steps: [makeStartupStep({ state: "running" })] }),
+    );
+
+    await bootstrap(useAppStore);
+    await Promise.resolve();
+
+    expect(useAppStore.getState().startup?.phase).toBe("starting");
+    expect(api.getState).not.toHaveBeenCalled();
+    expect(subscriberCount()).toBe(0);
+  });
+
+  it("applies the ready that arrives as an event and then asks for the state", async () => {
+    vi.mocked(api.getStartup).mockResolvedValueOnce(makeStartup({ phase: "starting" }));
+    vi.mocked(api.getState).mockResolvedValueOnce(makeState({ theme: "dark" }));
+    await bootstrap(useAppStore);
+
+    emitStartup(makeStartup({ phase: "ready" }));
+
+    await waitFor(() => expect(useAppStore.getState().app?.theme).toBe("dark"));
+    expect(useAppStore.getState().startup?.phase).toBe("ready");
+  });
+
+  it("keeps a failure on the store without asking for the state", async () => {
+    vi.mocked(api.getStartup).mockResolvedValueOnce(makeStartup({ phase: "starting" }));
+    await bootstrap(useAppStore);
+
+    emitStartup(makeStartup({ phase: "failed", failure: makeStartupFailure() }));
+
+    expect(useAppStore.getState().startup?.failure?.case).toBe("other");
+    expect(api.getState).not.toHaveBeenCalled();
+  });
+
+  it("connects once when ready arrives twice", async () => {
+    await bootstrap(useAppStore);
+
+    emitStartup(makeStartup({ phase: "ready" }));
+    emitStartup(makeStartup({ phase: "ready" }));
+
+    await waitFor(() => expect(useAppStore.getState().app).not.toBeNull());
+    expect(api.getState).toHaveBeenCalledTimes(1);
+    expect(subscriberCount()).toBe(1);
+  });
+
+  it("stops the connection that was still being made when it is disposed", async () => {
+    const dispose = await bootstrap(useAppStore);
+
+    dispose();
+
+    await waitFor(() => expect(api.getState).toHaveBeenCalled());
+    await waitFor(() => expect(subscriberCount()).toBe(0));
   });
 });

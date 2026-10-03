@@ -196,6 +196,10 @@ func (a *App) publish() {
 
 // publishNow sends the whole state to the frontend.
 func (a *App) publishNow() {
+	// Before the startup ends there is no state to send.
+	if !a.isReady() {
+		return
+	}
 	a.publishMu.Lock()
 	defer a.publishMu.Unlock()
 

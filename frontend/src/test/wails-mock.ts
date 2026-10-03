@@ -57,6 +57,9 @@ import type {
   StageModel,
   StartDiscussionRequest,
   StartReviewRequest,
+  Startup,
+  StartupFailure,
+  StartupStep,
   State,
   Step,
   StepReviewer,
@@ -72,6 +75,8 @@ import type {
 } from "@/lib/wails";
 
 export const api = {
+  getStartup: vi.fn<() => Promise<Startup>>(() => Promise.resolve(makeStartup())),
+  tryStartupAgain: vi.fn<() => Promise<void>>(() => Promise.resolve()),
   getState: vi.fn<() => Promise<State>>(() => Promise.resolve(makeState())),
   scanRepositories: vi.fn<() => Promise<RepositoryCandidate[]>>(() => Promise.resolve([])),
   addRepository: vi.fn<(path: string) => Promise<void>>(() => Promise.resolve()),
@@ -299,10 +304,18 @@ export const api = {
   viewSituation: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
 };
 
+let startupHandlers: ((startup: Startup) => void)[] = [];
 let stateHandlers: ((state: State) => void)[] = [];
 let transcriptHandlers: ((event: TranscriptEvent) => void)[] = [];
 let situationStartedHandlers: ((event: SituationStarted) => void)[] = [];
 let situationOpenHandlers: ((event: SituationOpen) => void)[] = [];
+
+export const onStartupChanged = vi.fn((handler: (startup: Startup) => void): (() => void) => {
+  startupHandlers.push(handler);
+  return () => {
+    startupHandlers = startupHandlers.filter((registered) => registered !== handler);
+  };
+});
 
 export const onStateChanged = vi.fn((handler: (state: State) => void): (() => void) => {
   stateHandlers.push(handler);
@@ -338,6 +351,13 @@ export const onSituationOpen = vi.fn((handler: (event: SituationOpen) => void): 
   };
 });
 
+/** emitStartup delivers a startup:changed event to everything currently subscribed. */
+export function emitStartup(startup: Startup): void {
+  for (const handler of [...startupHandlers]) {
+    handler(startup);
+  }
+}
+
 /** emitState delivers a state:changed event to everything currently subscribed. */
 export function emitState(state: State): void {
   for (const handler of [...stateHandlers]) {
@@ -372,6 +392,33 @@ export function subscriberCount(): number {
 
 export function transcriptSubscriberCount(): number {
   return transcriptHandlers.length;
+}
+
+/** makeStartupStep is a step of the startup that is done. */
+export function makeStartupStep(overrides: Partial<StartupStep> = {}): StartupStep {
+  return { id: "data", state: "done", startedAt: "", count: 0, detail: "", ...overrides };
+}
+
+/** makeStartupFailure is a startup that failed for a reason that is none of the known ones. */
+export function makeStartupFailure(overrides: Partial<StartupFailure> = {}): StartupFailure {
+  return {
+    case: "other",
+    error: "open database: unable to open database file",
+    dataDir: "/home/dev/.local/share/myspec",
+    logPath: "/home/dev/.local/state/myspec/myspec.log",
+    ...overrides,
+  };
+}
+
+/** makeStartup is a startup that is ready, its only step done. */
+export function makeStartup(overrides: Partial<Startup> = {}): Startup {
+  return {
+    phase: "ready",
+    steps: [makeStartupStep()],
+    failure: null,
+    systemDark: false,
+    ...overrides,
+  };
 }
 
 export function makeState(overrides: Partial<State> = {}): State {
@@ -1458,6 +1505,7 @@ export function makeTranscript(overrides: Partial<Transcript> = {}): Transcript 
 }
 
 export function resetWailsMock(): void {
+  startupHandlers = [];
   stateHandlers = [];
   transcriptHandlers = [];
   situationStartedHandlers = [];
@@ -1466,10 +1514,12 @@ export function resetWailsMock(): void {
   for (const fn of Object.values(api)) {
     fn.mockClear();
   }
+  onStartupChanged.mockClear();
   onStateChanged.mockClear();
   onTranscriptChanged.mockClear();
   onSituationStarted.mockClear();
   onSituationOpen.mockClear();
+  api.getStartup.mockImplementation(() => Promise.resolve(makeStartup()));
   api.getState.mockImplementation(() => Promise.resolve(makeState()));
   api.scanRepositories.mockImplementation(() => Promise.resolve([]));
   api.addRepository.mockImplementation(() => Promise.resolve());

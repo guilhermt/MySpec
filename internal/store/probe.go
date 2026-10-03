@@ -14,27 +14,27 @@ import (
 func Probe(dir string) error {
 	d, err := os.Open(dir)
 	if err != nil {
-		return fmt.Errorf("open %s: %w", dir, err)
+		return fmt.Errorf("probe: %w", err)
 	}
 	_, err = d.Readdirnames(1)
 	_ = d.Close()
 	if err != nil && !errors.Is(err, io.EOF) {
-		return fmt.Errorf("read %s: %w", dir, err)
+		return fmt.Errorf("probe: %w", err)
 	}
 
 	f, err := os.CreateTemp(dir, ".probe-*")
 	if err != nil {
-		return fmt.Errorf("create a file in %s: %w", dir, err)
+		return fmt.Errorf("probe: %w", err)
 	}
 	name := f.Name()
 	defer func() { _ = os.Remove(name) }()
 
 	if _, err = f.Write([]byte{0}); err != nil {
 		_ = f.Close()
-		return fmt.Errorf("write in %s: %w", dir, err)
+		return fmt.Errorf("probe: %w", err)
 	}
 	if err = f.Close(); err != nil {
-		return fmt.Errorf("write in %s: %w", dir, err)
+		return fmt.Errorf("probe: %w", err)
 	}
 	return nil
 }

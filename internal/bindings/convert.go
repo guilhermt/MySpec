@@ -105,12 +105,14 @@ func FromMigration(refused *upgrade.RefusedError) *Migration {
 
 // RefusedState is the whole state of an app whose data could not be migrated:
 // the cases to resolve and nothing of the product, which never opened.
-func RefusedState(refused *upgrade.RefusedError) State {
+// systemDark is what the desktop asked for before the window opened.
+func RefusedState(refused *upgrade.RefusedError, systemDark bool) State {
 	return State{
 		Migration:     FromMigration(refused),
 		Repositories:  []Repository{},
 		Boards:        []Board{},
 		Theme:         string(theme.System),
+		SystemDark:    systemDark,
 		ModelDefaults: []StageModel{},
 		ModelFactory:  FromModelSet(models.Factory()),
 		ModelCatalog:  ModelCatalog{Models: []CatalogModel{}},
