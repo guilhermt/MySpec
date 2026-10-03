@@ -342,8 +342,31 @@ export function discussionComposerContext(discussion: DiscussionSummary): Discus
   };
 }
 
-/** discussionStarters are the starters of the composer: Ask for changes, Ask to fix the drafts; empty for none. */
+// conversationHolds says the conversation takes the composer before the drafts, in the rows of the
+// table of the composer above them: paused, a session stopped on an error or a turn that failed, a
+// question or a permission pending, the agent working.
+function conversationHolds(discussion: DiscussionSummary): boolean {
+  const status = asSessionStatus(discussion.sessionStatus);
+  return (
+    status === "paused" ||
+    status === "error" ||
+    discussion.lastError !== "" ||
+    discussion.turnFailed ||
+    status === "needs_answer" ||
+    status === "needs_permission" ||
+    status === "working" ||
+    discussion.turnRunning
+  );
+}
+
+/**
+ * discussionStarters are the starters of the composer: Ask for changes, Ask to fix the drafts; empty
+ * for none, and while the conversation holds the composer.
+ */
 export function discussionStarters(discussion: DiscussionSummary): ComposerStarter[] {
+  if (conversationHolds(discussion)) {
+    return [];
+  }
   switch (discussionComposerContext(discussion).drafts) {
     case "unreadable":
       return [

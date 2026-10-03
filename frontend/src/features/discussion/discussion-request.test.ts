@@ -653,6 +653,19 @@ describe("discussionStarters", () => {
   ])("offers nothing %s", (_name, found) => {
     expect(discussionStarters(found)).toEqual([]);
   });
+
+  it.each<[string, Partial<DiscussionSummary>]>([
+    ["paused", { sessionStatus: "paused" }],
+    ["with the session stopped on an error", { sessionStatus: "error" }],
+    ["with the error the session stopped on", { lastError: "exit 1" }],
+    ["after a turn that failed", { turnFailed: true }],
+    ["with a question pending", { sessionStatus: "needs_answer" }],
+    ["with a permission pending", { sessionStatus: "needs_permission" }],
+    ["while the agent works", { sessionStatus: "working" }],
+    ["while a turn runs", { turnRunning: true }],
+  ])("offers nothing %s, with drafts to change", (_name, session) => {
+    expect(discussionStarters(discussion([draftOf("d1")], session))).toEqual([]);
+  });
 });
 
 describe("discussionOtherPrimary", () => {
