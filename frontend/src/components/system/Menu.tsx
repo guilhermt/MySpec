@@ -1,5 +1,5 @@
 import { Menu as BaseMenu } from "@base-ui/react/menu";
-import type { ComponentProps, ReactNode } from "react";
+import { type ComponentProps, type ReactNode, useId } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -74,34 +74,57 @@ export interface MenuItemProps
   shortcut?: string;
   sub?: string;
   destructive?: boolean;
+  /** disabledReason disables the item and says why on the same line, after the label. */
   disabledReason?: string;
+  /** reason says on a line of its own under the label why the item is off, and describes it; the caller disables it. */
+  reason?: string;
 }
 
-/** MenuItem is a menu row: icon, label, sub, key, destructive or disabled with the reason. */
+/**
+ * MenuItem is a menu row: icon, label, sub, key, destructive or disabled with the reason. A
+ * destructive item that is disabled is not drawn in the error ink: what can't be done is not a
+ * danger.
+ */
 export function MenuItem({
   icon,
   shortcut,
   sub,
   destructive,
   disabledReason,
+  reason,
   children,
   ...props
 }: MenuItemProps) {
+  const reasonId = useId();
+  const disabled = disabledReason !== undefined || props.disabled === true;
+  const danger = destructive === true && !disabled;
   return (
     <DropdownMenuItem
       {...props}
       {...(disabledReason !== undefined ? { disabled: true } : {})}
-      variant={destructive ? "destructive" : "default"}
+      {...(reason !== undefined ? { "aria-describedby": reasonId } : {})}
+      variant={danger ? "destructive" : "default"}
       className={cn(
         MENU_ITEM,
-        destructive &&
+        reason !== undefined && "h-auto py-1",
+        danger &&
           "text-state-error data-[variant=destructive]:text-state-error data-[variant=destructive]:focus:bg-state-error-veil dark:data-[variant=destructive]:focus:bg-state-error-veil data-[variant=destructive]:focus:text-state-error data-[variant=destructive]:*:[svg]:text-state-error",
       )}
     >
       {icon !== undefined && <Icon icon={icon} size="md" tone="muted" />}
-      <span>
-        {children}
-        {disabledReason !== undefined && ` · ${disabledReason}`}
+      <span className="flex flex-col">
+        <span>
+          {children}
+          {disabledReason !== undefined && ` · ${disabledReason}`}
+        </span>
+        {reason !== undefined && (
+          <span
+            id={reasonId}
+            className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
+          >
+            {reason}
+          </span>
+        )}
       </span>
       {sub !== undefined && " "}
       {sub !== undefined && (

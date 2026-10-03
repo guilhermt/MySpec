@@ -1,176 +1,195 @@
-import { ChevronRight, LoaderCircle, TriangleAlert } from "lucide-react";
-import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useRef, useState } from "react";
+import { Button } from "@/components/system/Button";
+import { ICONS } from "@/components/system/icons";
+import { Spinner } from "@/components/system/Spinner";
+import { SunkenLine } from "@/components/system/SunkenLine";
 import { RemoveRepositoryDialog } from "@/features/repositories/RemoveRepositoryDialog";
+import { RepositoryMenu } from "@/features/repositories/RepositoryMenu";
+import { ReviewInstructionsBlock } from "@/features/repositories/ReviewInstructionsBlock";
+import {
+  type BlockLineView,
+  blockLine,
+  countsLine,
+  pathLine,
+  rowName,
+} from "@/features/repositories/repositories-page";
+import { SettingsRow } from "@/features/settings/SettingsList";
 import { messageOf } from "@/lib/errors";
-import { cloneMissingText, removeBlockedText, repositoryCounts } from "@/lib/repositories";
-import { cn } from "@/lib/utils";
+import { displayPath, displayPaths } from "@/lib/paths";
 import type { Repository } from "@/lib/wails";
-import { changeRepositoryPath, cloneRepository, setReviewInstructions } from "@/store/actions";
-import { useBoard } from "@/store/app-store";
+import { changeRepositoryPath, cloneRepository } from "@/store/actions";
+import { useAppStore, useBoard } from "@/store/app-store";
 
-interface ReviewInstructionsProps {
-  repository: Repository;
-  /** attempt runs an action, showing its refusal on the row; true when it went through. */
-  attempt: (action: () => Promise<unknown>) => Promise<boolean>;
-}
-
-/**
- * ReviewInstructions is what every review of a pull request of the repository
- * is told, edited in place. The saved text shows until the user changes it.
- */
-function ReviewInstructions({ repository, attempt }: ReviewInstructionsProps) {
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<string | null>(null);
-  const saved = repository.reviewInstructions;
-  const text = draft ?? saved;
-
-  const save = async () => {
-    if (await attempt(() => setReviewInstructions(repository.id, text))) {
-      setDraft(null);
-    }
-  };
-
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex items-center gap-1 rounded-md text-xs text-muted-foreground transition-colors hover:text-foreground">
-        <ChevronRight
-          aria-hidden="true"
-          className={cn("size-3.5 transition-transform", open && "rotate-90")}
-        />
-        Review instructions
-        <span className="font-medium">{saved.trim() === "" ? "None" : "Set"}</span>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="flex flex-col gap-2 pt-2">
-        <Textarea
-          rows={6}
-          aria-label={`Review instructions for ${repository.fullName}`}
-          value={text}
-          onChange={(event) => setDraft(event.target.value)}
-          className="text-sm"
-        />
-        <p className="text-xs text-muted-foreground">
-          Added to every pull request review of this repository, including the reviews of task pull
-          requests.
-        </p>
-        <div className="flex justify-end gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setDraft(null);
-              setOpen(false);
-            }}
-          >
-            Cancel
-          </Button>
-          <Button size="sm" disabled={text === saved} onClick={() => void save()}>
-            Save
-          </Button>
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
+const META = "text-(length:--text-meta) leading-(--leading-meta)";
 
 export interface RepositoryRowProps {
   repository: Repository;
+  /** inNeedsAClone says the row is in the group of the repositories that need a clone, which names the board on its line. */
+  inNeedsAClone?: boolean;
+  /** onRemoved is called when the repository is gone, for the page to place the focus. */
+  onRemoved?: () => void;
 }
 
-/**
- * RepositoryRow is one registered repository: its board, where its clone is,
- * what it holds, what its reviews are told, and what can be done to it.
- */
-export function RepositoryRow({ repository }: RepositoryRowProps) {
-  const [error, setError] = useState<string | null>(null);
-  const [removing, setRemoving] = useState(false);
+/** RepositoryRow is one registered repository: where its clone is, what it holds, and what can be done to it. */
+export function RepositoryRow({
+  repository,
+  inNeedsAClone = false,
+  onRemoved,
+}: RepositoryRowProps) {
   const board = useBoard(repository.boardId);
-  const blocked = removeBlockedText(repository);
+  const cloneFolder = useAppStore((state) => state.app?.cloneFolder ?? "");
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const menuTrigger = useRef<HTMLButtonElement>(null);
+  const block = blockLine(repository, cloneFolder);
+  // A line that was there when the page opened is read with the page; one that comes after is announced.
+  const firstBlock = useRef(block?.kind ?? null);
 
   // The refusal of an action shows on the row that asked for it.
-  const attempt = async (action: () => Promise<unknown>): Promise<boolean> => {
-    setError(null);
+  const attempt = async (action: () => Promise<unknown>) => {
+    setRefusal(null);
     try {
       await action();
-      return true;
     } catch (failure) {
-      setError(messageOf(failure));
-      return false;
+      setRefusal(displayPaths(messageOf(failure)));
     }
   };
+  const changePath = () => void attempt(() => changeRepositoryPath(repository.id));
+  const clone = () => void attempt(() => cloneRepository(repository.id));
+  const closeInstructions = () => {
+    setInstructionsOpen(false);
+    menuTrigger.current?.focus();
+  };
 
-  const removeButton = (
-    <Button variant="ghost" size="sm" disabled={blocked !== null} onClick={() => setRemoving(true)}>
-      Remove
-    </Button>
-  );
+  const counts = countsLine(repository);
+  const line = pathLine(repository, board?.title ?? null, inNeedsAClone);
+  const path = repository.cloned ? displayPath(repository.path) : "";
+  const at = path === "" ? -1 : line.indexOf(path);
 
   return (
-    <li className="flex flex-col gap-1 px-4 py-3">
-      <div className="flex items-center gap-2">
-        <span className="min-w-0 truncate font-medium">{repository.fullName}</span>
-        {board !== null && <Badge variant="outline">{`Board: ${board.title}`}</Badge>}
-        <span className="flex-1" />
-        {repository.cloning && (
-          <span role="status" className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
-            Cloning…
-          </span>
-        )}
-        {!repository.cloned && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={repository.cloning}
-            onClick={() => void attempt(() => cloneRepository(repository.id))}
-          >
-            Clone
-          </Button>
-        )}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void attempt(() => changeRepositoryPath(repository.id))}
-        >
-          Change path
+    <>
+      <SettingsRow
+        icon="repository"
+        name={rowName(repository)}
+        lines={
+          <>
+            <span className="min-w-0 truncate text-(length:--text-ui) leading-(--leading-ui) font-medium text-ink-1">
+              {repository.fullName}
+            </span>
+            <span className={`min-w-0 break-all text-ink-3 ${META}`}>
+              {at === -1 ? (
+                line
+              ) : (
+                <>
+                  {line.slice(0, at)}
+                  <span className="font-mono text-ink-2">{path}</span>
+                  {line.slice(at + path.length)}
+                </>
+              )}
+            </span>
+            <span className={`hidden text-ink-3 tabular-nums @max-[820px]/main:block ${META}`}>
+              {counts}
+            </span>
+          </>
+        }
+        trailing={
+          <>
+            <span
+              className={`whitespace-nowrap text-ink-3 tabular-nums @max-[820px]/main:hidden ${META}`}
+            >
+              {counts}
+            </span>
+            <RepositoryMenu
+              repository={repository}
+              triggerRef={menuTrigger}
+              onChangePath={changePath}
+              onReviewInstructions={() => setInstructionsOpen(true)}
+              onRemove={() => setRemoving(true)}
+            />
+          </>
+        }
+        below={
+          block === null && refusal === null && !instructionsOpen ? undefined : (
+            <div className="ml-[calc(var(--icon)+var(--space-3))] flex flex-col gap-(--space-2)">
+              {block !== null && (
+                <BlockLine
+                  block={block}
+                  announced={block.kind !== firstBlock.current}
+                  onClone={clone}
+                  onChangePath={changePath}
+                />
+              )}
+              {refusal !== null && (
+                <p role="alert" className={`text-state-error ${META}`}>
+                  {refusal}
+                </p>
+              )}
+              {instructionsOpen && (
+                <ReviewInstructionsBlock repository={repository} onClose={closeInstructions} />
+              )}
+            </div>
+          )
+        }
+      />
+      <RemoveRepositoryDialog
+        repository={repository}
+        open={removing}
+        onOpenChange={setRemoving}
+        {...(onRemoved === undefined ? {} : { onRemoved })}
+      />
+    </>
+  );
+}
+
+interface BlockLineProps {
+  block: BlockLineView;
+  /** announced makes the line an alert: it came while the page was open. */
+  announced: boolean;
+  onClone: () => void;
+  onChangePath: () => void;
+}
+
+/** BlockLine is what a row says under it when its clone is missing, running or failed, with the action that answers it. */
+function BlockLine({ block, announced, onClone, onChangePath }: BlockLineProps) {
+  if (block.kind === "cloning") {
+    return (
+      <p role="status" className={`flex items-center gap-(--space-1-5) text-ink-3 ${META}`}>
+        <Spinner />
+        {block.text}
+      </p>
+    );
+  }
+  if (block.kind === "failed") {
+    return (
+      <div role="alert" className={`flex items-center gap-(--space-2) text-state-error ${META}`}>
+        <span className="min-w-0 break-words">{block.text}</span>
+        <Button variant="ghost" size="xs" onClick={onClone}>
+          Try again
         </Button>
-        {blocked === null ? (
-          removeButton
-        ) : (
-          <Tooltip>
-            <TooltipTrigger render={<span />}>{removeButton}</TooltipTrigger>
-            <TooltipContent>{blocked}</TooltipContent>
-          </Tooltip>
-        )}
       </div>
-      {repository.cloned ? (
-        <p className="break-all font-mono text-xs text-muted-foreground">{repository.path}</p>
-      ) : (
-        <p className="text-xs text-muted-foreground">Not cloned</p>
-      )}
-      <p className="text-xs text-muted-foreground">{repositoryCounts(repository)}</p>
-      <ReviewInstructions repository={repository} attempt={attempt} />
-      {repository.missing && (
-        <p className="flex items-start gap-1.5 text-xs text-[var(--status-attention)]">
-          <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-          <span className="break-all">{cloneMissingText(repository)}</span>
-        </p>
-      )}
-      {repository.cloneError !== "" && (
-        <p role="alert" className="break-all text-xs text-destructive">
-          {repository.cloneError}
-        </p>
-      )}
-      {error !== null && (
-        <p role="alert" className="text-xs text-destructive">
-          {error}
-        </p>
-      )}
-      <RemoveRepositoryDialog repository={repository} open={removing} onOpenChange={setRemoving} />
-    </li>
+    );
+  }
+  const clone = block.kind === "no-clone";
+  return (
+    <div {...(announced ? { role: "alert" } : {})}>
+      <SunkenLine
+        icon="blocked"
+        className="min-h-(--size-control-sm) py-(--space-1) pr-(--space-3)"
+        action={
+          clone ? (
+            <Button variant="ghost" size="xs" icon={ICONS.clone} onClick={onClone}>
+              Clone
+            </Button>
+          ) : (
+            <Button variant="ghost" size="xs" onClick={onChangePath}>
+              Change path…
+            </Button>
+          )
+        }
+      >
+        {block.text}
+      </SunkenLine>
+    </div>
   );
 }

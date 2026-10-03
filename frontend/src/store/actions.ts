@@ -159,9 +159,9 @@ export function cloneRepository(id: string): Promise<boolean> {
   return api.cloneRepository(id);
 }
 
-/** chooseCloneFolder asks for the folder new clones go to. */
-export async function chooseCloneFolder(): Promise<void> {
-  await run(fail("Couldn't choose the clone folder", TRY), () => api.chooseCloneFolder());
+/** chooseCloneFolder asks for the folder new clones go to; it answers the message of a failure, which the page shows under its row. */
+export function chooseCloneFolder(): Promise<string | null> {
+  return inPlace(() => api.chooseCloneFolder());
 }
 
 /**
@@ -231,11 +231,9 @@ export async function cardContext(boardId: string, key: string): Promise<string>
   return context;
 }
 
-/** removeRepository removes a repository that has no task. */
-export async function removeRepository(id: string): Promise<void> {
-  await run(fail(withItem("Couldn't remove the repository", repositoryName(id)), TRY), () =>
-    api.removeRepository(id),
-  );
+/** removeRepository removes a repository that has no task; the dialog that asked shows a failure in its footer. */
+export function removeRepository(id: string): Promise<void> {
+  return api.removeRepository(id);
 }
 
 /** setRepositoryFilter chooses the repository the task list and the history show. */

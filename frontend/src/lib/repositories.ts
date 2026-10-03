@@ -42,38 +42,6 @@ export function reviewCount(count: number, kind?: "active" | "archived"): string
   return kind === undefined ? `${count} ${noun}` : `${count} ${kind} ${noun}`;
 }
 
-/** repositoryCounts is what a repository holds: its tasks, and its reviews when it has any. */
-export function repositoryCounts(repository: Repository): string {
-  const parts = [
-    taskCount(repository.activeTasks, "active"),
-    taskCount(repository.archivedTasks, "archived"),
-  ];
-  const reviews = repository.activeReviews + repository.archivedReviews;
-  if (reviews > 0) {
-    parts.push(reviewCount(reviews));
-  }
-  return parts.join(" · ");
-}
-
-/**
- * removeBlockedText says what keeps a repository from being removed, null when
- * nothing does: its tasks first, then its reviews of pull requests.
- */
-export function removeBlockedText(repository: Repository): string | null {
-  const fix = "Delete them before removing the repository.";
-  if (repository.activeTasks > 0 || repository.archivedTasks > 0) {
-    const active = taskCount(repository.activeTasks, "active");
-    const archived = taskCount(repository.archivedTasks, "archived");
-    return `${repository.fullName} has ${active} and ${archived}. ${fix}`;
-  }
-  if (repository.activeReviews > 0 || repository.archivedReviews > 0) {
-    const active = reviewCount(repository.activeReviews, "active");
-    const archived = reviewCount(repository.archivedReviews, "archived");
-    return `${repository.fullName} has ${active} and ${archived}. ${fix}`;
-  }
-  return null;
-}
-
 /** filterLabel names what the filter shows: "All repositories" or owner/name. */
 export function filterLabel(app: State | null, filter: string): string {
   return findRepository(app, filter)?.fullName ?? "All repositories";

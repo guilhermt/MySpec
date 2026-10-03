@@ -103,6 +103,29 @@ describe("Menu", () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it("says on its own line why an item is off, and describes the item with it", async () => {
+    const onClick = vi.fn();
+    const { user } = renderWithStore(
+      <Menu>
+        <MenuTrigger render={<Button />}>Actions</MenuTrigger>
+        <MenuContent>
+          <MenuItem destructive disabled reason="2 tasks: delete them first." onClick={onClick}>
+            Remove…
+          </MenuItem>
+        </MenuContent>
+      </Menu>,
+    );
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    const item = await screen.findByRole("menuitem", { name: /^Remove…/ });
+
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(item).toHaveAccessibleDescription("2 tasks: delete them first.");
+    expect(screen.getByText("2 tasks: delete them first.")).toHaveClass("text-ink-3");
+    expect(item).not.toHaveClass("text-state-error");
+    await user.click(item);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
   it("shows the key of an item", async () => {
     await open();
     expect(screen.getByText("Ctrl+E").tagName).toBe("KBD");

@@ -1,40 +1,77 @@
-import { Plus } from "lucide-react";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { useMemo, useRef, useState } from "react";
+import { Button } from "@/components/system/Button";
+import { EmptyState } from "@/components/system/EmptyState";
+import { ICONS } from "@/components/system/icons";
 import { AddRepositoryDialog } from "@/features/repositories/AddRepositoryDialog";
-import { CloneFolderField } from "@/features/repositories/CloneFolderField";
+import { CloneFolderSection } from "@/features/repositories/CloneFolderSection";
 import { RepositoryRow } from "@/features/repositories/RepositoryRow";
-import { useRepositories } from "@/store/app-store";
+import { NEEDS_A_CLONE_ID, repositoryGroups } from "@/features/repositories/repositories-page";
+import { SettingsGroup, SettingsList } from "@/features/settings/SettingsList";
+import { SettingsPage } from "@/features/settings/SettingsPage";
+import { useAppStore, useBoards, useRepositories } from "@/store/app-store";
 
 /** RepositoriesPage is the settings page of the repositories the tasks belong to. */
 export function RepositoriesPage() {
   const repositories = useRepositories();
+  const boards = useBoards();
+  const openSettings = useAppStore((state) => state.openSettings);
   const [adding, setAdding] = useState(false);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const groups = useMemo(() => repositoryGroups(repositories, boards), [repositories, boards]);
+
+  const add = (
+    <Button variant="secondary" size="sm" icon={ICONS.plus} onClick={() => setAdding(true)}>
+      Add repository
+    </Button>
+  );
 
   return (
-    <section className="h-full overflow-y-auto p-8">
-      <div className="flex w-full max-w-[43rem] flex-col gap-8">
-        <header className="flex flex-col gap-2">
-          <div className="flex items-center gap-4">
-            <h2 className="text-[1.5rem] font-semibold">Repositories</h2>
-            <span className="flex-1" />
-            <Button size="sm" onClick={() => setAdding(true)}>
-              <Plus />
-              Add repository
-            </Button>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            The repositories your tasks belong to, each tied to its local clone.
-          </p>
-        </header>
-        <CloneFolderField />
-        <ul className="flex flex-col divide-y rounded-lg border">
-          {repositories.map((repository) => (
-            <RepositoryRow key={repository.id} repository={repository} />
+    <SettingsPage
+      title="Repositories"
+      sentence="The repositories your tasks belong to, each tied to its local clone."
+      titleRef={titleRef}
+      action={add}
+    >
+      {groups.length === 0 ? (
+        <EmptyState
+          title="No repositories yet"
+          action={
+            <div className="flex items-center gap-(--space-2)">
+              {add}
+              <Button variant="ghost" size="sm" onClick={() => openSettings("boards")}>
+                Go to Boards
+              </Button>
+            </div>
+          }
+        >
+          Add a clone from this machine, or add a board: the repositories of its issues come with
+          it.
+        </EmptyState>
+      ) : (
+        <div className="flex flex-col gap-(--space-6)">
+          {groups.map((group) => (
+            <SettingsGroup
+              key={group.id}
+              title={group.title}
+              count={group.repositories.length}
+              {...(group.note === "" ? {} : { note: group.note })}
+            >
+              <SettingsList>
+                {group.repositories.map((repository) => (
+                  <RepositoryRow
+                    key={repository.id}
+                    repository={repository}
+                    inNeedsAClone={group.id === NEEDS_A_CLONE_ID}
+                    onRemoved={() => titleRef.current?.focus()}
+                  />
+                ))}
+              </SettingsList>
+            </SettingsGroup>
           ))}
-        </ul>
-      </div>
+        </div>
+      )}
+      <CloneFolderSection />
       <AddRepositoryDialog open={adding} onOpenChange={setAdding} />
-    </section>
+    </SettingsPage>
   );
 }

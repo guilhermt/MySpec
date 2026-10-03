@@ -355,13 +355,13 @@ describe("actions", () => {
   });
 
   it("stores the message of a rejected binding", async () => {
-    vi.mocked(api.removeRepository).mockRejectedValueOnce(new Error("remove failed"));
+    vi.mocked(api.setRepositoryFilter).mockRejectedValueOnce(new Error("filter failed"));
 
-    await removeRepository("repo-1");
+    await setRepositoryFilter("repo-2");
 
     expect(useAppStore.getState().error).toEqual({
-      label: "Couldn't remove the repository",
-      detail: "remove failed. Try again.",
+      label: "Couldn't show the tasks of the repository",
+      detail: "filter failed. Try again.",
     });
   });
 
@@ -430,16 +430,24 @@ describe("clone actions", () => {
     expect(useAppStore.getState().error).toBeNull();
   });
 
-  it("report a clone folder that could not be chosen in the app notice", async () => {
-    vi.mocked(api.chooseCloneFolder).mockRejectedValueOnce(new Error("no chooser"));
+  it("reject a repository that could not be removed instead of using the app notice", async () => {
+    vi.mocked(api.removeRepository).mockRejectedValueOnce(new Error("remove failed"));
 
-    await chooseCloneFolder();
+    await expect(removeRepository("repo-1")).rejects.toThrow("remove failed");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("answer null when the clone folder was chosen", async () => {
+    await expect(chooseCloneFolder()).resolves.toBeNull();
 
     expect(api.chooseCloneFolder).toHaveBeenCalledOnce();
-    expect(useAppStore.getState().error).toEqual({
-      label: "Couldn't choose the clone folder",
-      detail: "no chooser. Try again.",
-    });
+  });
+
+  it("answer the message of a clone folder that could not be chosen, without the app notice", async () => {
+    vi.mocked(api.chooseCloneFolder).mockRejectedValueOnce(new Error("no chooser"));
+
+    await expect(chooseCloneFolder()).resolves.toBe("no chooser");
+    expect(useAppStore.getState().error).toBeNull();
   });
 });
 
