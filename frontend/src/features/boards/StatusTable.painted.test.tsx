@@ -72,4 +72,24 @@ describe.each(THEMES)("StatusTable in the %s theme", (theme) => {
     expect(none.getBoundingClientRect().left).toBe(fresh);
     expect(offWholePixels(screen.getAllByRole("row"))).toEqual([]);
   });
+
+  it("makes the cell the target of its box and of its radio", () => {
+    setTheme(theme);
+    table();
+    const inner = (cell: Element) => {
+      const style = getComputedStyle(cell);
+      return (
+        cell.getBoundingClientRect().width -
+        Number.parseFloat(style.paddingLeft) -
+        Number.parseFloat(style.paddingRight)
+      );
+    };
+    for (const name of ["Todo", "QA"]) {
+      const box = screen.getByRole("checkbox", { name: `${name} ends the work` });
+      expect(box.getBoundingClientRect().width).toBe(inner(box.closest("td") as Element));
+      const radio = screen.getByRole("radio", { name: `New cards start in ${name}` });
+      const target = radio.closest("label") as Element;
+      expect(target.getBoundingClientRect().width).toBe(inner(radio.closest("td") as Element));
+    }
+  });
 });

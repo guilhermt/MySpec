@@ -109,11 +109,11 @@ export interface RadioInputProps {
  * RadioInput is a radio alone, a native input grouped with the others by its name, for the radios
  * spread over the rows of a table, where no element holds only them and a RadioGroup would take
  * the other controls of the rows for its own. The arrows move the choice among the radios of the
- * name, and the cell is the target.
+ * name, and the cell is the target, with the ring at its start like the box of a Checkbox.
  */
 export function RadioInput({ name, value, checked, onChoose, label }: RadioInputProps) {
   return (
-    <label className="group/radio grid min-h-(--size-control-sm) w-fit place-items-center rounded-sm px-2 has-focus-visible:focus-ring">
+    <label className="group/radio grid min-h-(--size-control-sm) grid-cols-(--icon) place-items-center rounded-sm px-2 has-focus-visible:focus-ring">
       <input
         type="radio"
         name={name}
