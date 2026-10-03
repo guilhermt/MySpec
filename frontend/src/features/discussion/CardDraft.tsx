@@ -154,7 +154,11 @@ export function CardDraft({
         onGitHub={onGitHub(draft)}
         warnings={warningsOf(draft, reading)}
         refreshing={reading.kind === "refreshing"}
-        body={<Markdown cutCode>{draft.body}</Markdown>}
+        body={
+          <Markdown cutCode className="draft-body">
+            {draft.body}
+          </Markdown>
+        }
         changes={changes}
         gesture={gestureLineOf(draft, discussion, editing)}
         state={draftStateOf(draft, now)}

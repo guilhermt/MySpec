@@ -508,6 +508,14 @@
   }
 }
 
+/* The body of a draft of a discussion: its headings at the size of the UI, under the title of the
+   draft, which reads first. Unlayered, so it wins over the sizes Streamdown gives its headings. */
+.draft-body :is(h1, h2, h3, h4, h5, h6) {
+  font-size: var(--text-ui);
+  line-height: var(--leading-ui);
+  font-weight: 600;
+}
+
 /* Selected text takes the identity, mixed as a marker. */
 ::selection {
   background: color-mix(in srgb, var(--brand) var(--mix-marker), transparent);

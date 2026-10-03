@@ -1,12 +1,25 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Markdown } from "@/features/chat/Markdown";
-import { paintOf, setTheme, THEMES, token } from "@/test/painted";
+import { paintOf, resolve, setTheme, THEMES, token } from "@/test/painted";
 import { renderWithStore } from "@/test/render";
 
 const LONG = Array.from({ length: 30 }, (_, at) => `line ${at + 1}`).join("\n");
 
 describe.each(THEMES)("Markdown in %s", (theme) => {
+  it("draws the headings of the body of a draft at the size of the UI, in 600", async () => {
+    setTheme(theme);
+    renderWithStore(<Markdown className="draft-body">{"## Context\n\nThe invoice."}</Markdown>);
+
+    const heading = await screen.findByRole("heading", { name: "Context" });
+    const style = getComputedStyle(heading);
+    expect([style.fontSize, style.lineHeight, style.fontWeight]).toEqual([
+      resolve("var(--text-ui)", "font-size"),
+      resolve("var(--leading-ui)", "line-height"),
+      "600",
+    ]);
+  });
+
   it("puts Copy of a cut block at the end of the block's header, in the header's height", async () => {
     setTheme(theme);
     const { container } = renderWithStore(
