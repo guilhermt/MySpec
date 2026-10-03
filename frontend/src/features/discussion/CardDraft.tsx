@@ -155,7 +155,7 @@ export function CardDraft({
         warnings={warningsOf(draft, reading)}
         refreshing={reading.kind === "refreshing"}
         body={
-          <Markdown cutCode className="draft-body">
+          <Markdown cutCode className="ui-headings">
             {draft.body}
           </Markdown>
         }

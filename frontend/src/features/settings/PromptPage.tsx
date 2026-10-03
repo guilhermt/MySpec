@@ -181,7 +181,9 @@ export function PromptPage({ stage, state, onRetry, onReset, focus }: PromptPage
         {prompt !== null && (
           <div className="flex flex-col gap-(--space-3)">
             <div className="rounded-md px-(--space-6) py-(--space-5) shadow-[inset_0_0_0_var(--border)_var(--line-1)] select-text">
-              <Markdown renderInlineCode={drawPlaceholder}>{text}</Markdown>
+              <Markdown className="ui-headings" renderInlineCode={drawPlaceholder}>
+                {text}
+              </Markdown>
             </div>
             <p className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
               MySpec fills the placeholders when a session starts. A session that is running keeps
