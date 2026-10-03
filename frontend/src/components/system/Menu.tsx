@@ -348,7 +348,8 @@ export function MenuCycleItem({ label, state, onStateChange }: MenuCycleItemProp
 
 export interface MenuMessageProps {
   children: ReactNode;
-  tone?: "neutral" | "error";
+  /** tone is neutral while the menu loads, notice for what keeps it empty but isn't an error, error when it fails. */
+  tone?: "neutral" | "notice" | "error";
   onRetry?: () => void;
 }
 
@@ -361,6 +362,7 @@ export function MenuMessage({ children, tone = "neutral", onRetry }: MenuMessage
         role={error ? "alert" : "status"}
         className={cn(
           "max-w-(--size-tooltip-max) text-(length:--text-meta) leading-(--leading-meta) text-ink-3",
+          tone === "notice" && "text-ink-2",
           error && "text-state-error",
         )}
       >

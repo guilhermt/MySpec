@@ -42,4 +42,54 @@ describe.each(THEMES)("CopyButton in the %s theme", (theme) => {
     await userEvent.click(screen.getByRole("button"));
     expect(getComputedStyle(await screen.findByRole("alert")).color).toBe(token("--state-error"));
   });
+
+  it.each([
+    ["icon", "after"],
+    ["icon", "before"],
+    ["page", "after"],
+  ] as const)(
+    "keeps the %s button in its place and its width, copied with the note %s it",
+    async (variant, note) => {
+      setTheme(theme);
+      stubClipboard(() => Promise.resolve());
+      render(
+        <div
+          style={{
+            display: "flex",
+            justifyContent: note === "after" ? "start" : "end",
+            width: 400,
+          }}
+        >
+          <CopyButton variant={variant} label="Copy the error" text="x" note={note} />
+        </div>,
+      );
+      const button = screen.getByRole("button");
+      const box = (button.parentElement as HTMLElement).getBoundingClientRect();
+      const before = button.getBoundingClientRect();
+
+      await userEvent.click(button);
+      const copied = (await screen.findAllByText("Copied")).find((el) => !el.matches(".sr-only"));
+      expect((button.parentElement as HTMLElement).getBoundingClientRect()).toEqual(box);
+      expect(button.getBoundingClientRect()).toEqual(before);
+      const text = (copied as Element).getBoundingClientRect();
+      if (note === "after") {
+        expect(text.left).toBeGreaterThanOrEqual(before.right);
+      } else {
+        expect(text.right).toBeLessThanOrEqual(before.left);
+      }
+    },
+  );
+
+  it("shows one check when copied, the button's", async () => {
+    setTheme(theme);
+    stubClipboard(() => Promise.resolve());
+    const { container } = render(<CopyButton variant="icon" label="Copy the error" text="x" />);
+    const glyphs = () => container.querySelectorAll("svg").length;
+    const idle = glyphs();
+
+    await userEvent.click(screen.getByRole("button"));
+    await screen.findAllByText("Copied");
+    expect(glyphs()).toBe(idle);
+    expect(container.querySelector("[data-copy-note] svg")).toBeNull();
+  });
 });

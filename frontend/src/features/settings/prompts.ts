@@ -123,9 +123,16 @@ export function editedLabel(editedAt: string, now: number): string {
   }
 }
 
-/** linesText is "Your version has 92 lines; the default of this version has 87." */
+/**
+ * linesText is "Your version has 92 lines; the default of this version has 87.", or, with as many
+ * lines, "Your version and the default of this version both have 87 lines."
+ */
 export function linesText(lines: number, defaultLines: number): string {
-  return `Your version has ${lines} ${lines === 1 ? "line" : "lines"}; the default of this version has ${defaultLines}.`;
+  const count = (n: number) => `${n} ${n === 1 ? "line" : "lines"}`;
+  if (lines === defaultLines) {
+    return `Your version and the default of this version both have ${count(lines)}.`;
+  }
+  return `Your version has ${count(lines)}; the default of this version has ${defaultLines}.`;
 }
 
 const CODE_FENCE = /^ {0,3}(`{3,}|~{3,})/;

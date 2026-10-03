@@ -59,7 +59,9 @@ describe("editedLabel", () => {
 describe("linesText", () => {
   it.each([
     [92, 87, "Your version has 92 lines; the default of this version has 87."],
-    [1, 1, "Your version has 1 line; the default of this version has 1."],
+    [1, 3, "Your version has 1 line; the default of this version has 3."],
+    [87, 87, "Your version and the default of this version both have 87 lines."],
+    [1, 1, "Your version and the default of this version both have 1 line."],
     [0, 3, "Your version has 0 lines; the default of this version has 3."],
   ])("says %i and %i", (lines, defaultLines, text) => {
     expect(linesText(lines, defaultLines)).toBe(text);

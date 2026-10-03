@@ -7,9 +7,9 @@ import { renderWithStore } from "@/test/render";
 const LONG = Array.from({ length: 30 }, (_, at) => `line ${at + 1}`).join("\n");
 
 describe.each(THEMES)("Markdown in %s", (theme) => {
-  it("draws the headings of the body of a draft at the size of the UI, in 600", async () => {
+  it("draws the headings under a title of its own at the size of the UI, in 600", async () => {
     setTheme(theme);
-    renderWithStore(<Markdown className="draft-body">{"## Context\n\nThe invoice."}</Markdown>);
+    renderWithStore(<Markdown className="ui-headings">{"## Context\n\nThe invoice."}</Markdown>);
 
     const heading = await screen.findByRole("heading", { name: "Context" });
     const style = getComputedStyle(heading);

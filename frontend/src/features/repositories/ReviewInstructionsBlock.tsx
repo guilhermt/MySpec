@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { Textarea } from "@/components/system/Textarea";
 import { messageOf } from "@/lib/errors";
@@ -23,6 +23,7 @@ export function ReviewInstructionsBlock({ repository, onClose }: ReviewInstructi
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const field = useRef<HTMLTextAreaElement>(null);
+  const reasonId = useId();
 
   useEffect(() => {
     const element = field.current;
@@ -81,21 +82,29 @@ export function ReviewInstructionsBlock({ repository, onClose }: ReviewInstructi
           {failure}
         </p>
       )}
-      <div className="flex items-center justify-end gap-(--space-2)">
-        <Button variant="ghost" size="sm" disabled={saving} onClick={onClose}>
-          Cancel
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          loading={saving}
-          loadingLabel="Saving…"
-          disabled={unchanged}
-          {...(unchanged ? { disabledReason: "Nothing changed yet." } : {})}
-          onClick={() => void save()}
-        >
-          Save
-        </Button>
+      {/* The reason stands on the left, so Cancel and Save never move while typing. */}
+      <div className="flex items-center gap-(--space-2)">
+        {unchanged && (
+          <p id={reasonId} className={`text-ink-3 ${META}`}>
+            Nothing changed yet.
+          </p>
+        )}
+        <div className="ml-auto flex items-center gap-(--space-2)">
+          <Button variant="ghost" size="sm" disabled={saving} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={saving}
+            loadingLabel="Saving…"
+            disabled={unchanged}
+            {...(unchanged ? { reasonId } : {})}
+            onClick={() => void save()}
+          >
+            Save
+          </Button>
+        </div>
       </div>
     </div>
   );

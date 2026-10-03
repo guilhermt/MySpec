@@ -370,7 +370,7 @@
     position: sticky;
     top: var(--space-8);
   }
-  @container main (max-width: 820px) {
+  @container main (width < 820px) {
     .settings-body {
       grid-template-columns: minmax(0, var(--measure));
       row-gap: var(--space-6);
@@ -559,9 +559,10 @@
   }
 }
 
-/* The body of a draft of a discussion: its headings at the size of the UI, under the title of the
-   draft, which reads first. Unlayered, so it wins over the sizes Streamdown gives its headings. */
-.draft-body :is(h1, h2, h3, h4, h5, h6) {
+/* Markdown under a title of its own, like the body of a draft of a discussion or a prompt on its
+   page: its headings at the size of the UI, under that title, which reads first. Unlayered, so it
+   wins over the sizes Streamdown gives its headings. */
+.ui-headings :is(h1, h2, h3, h4, h5, h6) {
   font-size: var(--text-ui);
   line-height: var(--leading-ui);
   font-weight: 600;

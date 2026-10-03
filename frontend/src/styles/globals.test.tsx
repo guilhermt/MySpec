@@ -233,7 +233,7 @@ describe("globals.css", () => {
       /\.settings-body \{[^}]*max-width: calc\(var\(--snav-w\) \+ var\(--space-12\) \+ var\(--measure\) \+ 2 \* var\(--space-6\)\);[^}]*margin-left: max\(\s*0px,\s*round\(\s*down,\s*calc\(\(100% - var\(--snav-w\) - var\(--space-12\) - var\(--measure\) - 2 \* var\(--space-6\)\) \/ 2\),\s*1px\s*\)\s*\);/,
     );
     expect(GLOBALS).toMatch(
-      /@container main \(max-width: 820px\) \{\s*\.settings-body \{[^}]*grid-template-columns: minmax\(0, var\(--measure\)\);/,
+      /@container main \(width < 820px\) \{\s*\.settings-body \{[^}]*grid-template-columns: minmax\(0, var\(--measure\)\);/,
     );
   });
 

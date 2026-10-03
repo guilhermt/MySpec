@@ -181,7 +181,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | Anatomia | Pílula de `--size-chip` (28 px), rótulo em 13 px e peso 500, chevron quando abre. Em linhas densas, o chip `sm`: `--size-chip-sm` (22 px) com o rótulo em `--text-micro` |
 | Variantes | **Seletor de modelo e esforço** (`Opus · high ▾`), no compositor e nas linhas de modelo. **Filter**, que abre o menu de filtros. **Chip que alterna** (`Assigned to me`, `aria-pressed`). **Filtro ativo**: escolhido, com `×` que é botão; um filtro órfão leva `◇` e a razão no tooltip |
 | Escolha própria e padrão | Num seletor que segue um padrão (a task, **Defaults**, a fábrica), a escolha própria fica em `--ink-1`, peso 500, borda `--line-3`, com o padrão no tooltip (`Factory default: Fable 5.1 · high`); a que segue fica quieta (`--ink-2` numa linha de modelo, `--ink-3` no seletor de um step) |
-| Estados | Todos os comuns. Aberto ou escolhido: `--brand-tint` com anel `--brand-ring`. Salvando: spinner e `Saving…`. Lendo o catálogo: a escolha salva com brilho, e o menu não abre (`Reading the models of Claude Code · the menu opens when it ends`). Indisponível: `◇`, `· unavailable` e a razão no tooltip (`The installed Claude Code no longer lists Opus 4.1. A session still starts with it, and the CLI decides.`), sem trocar a escolha |
+| Estados | Todos os comuns. Aberto ou escolhido: `--brand-tint` com anel `--brand-ring`. Salvando: spinner e `Saving…`. Lendo o catálogo: a escolha salva com brilho, e o menu não abre (`Reading the models of Claude Code · the menu opens when it ends`). Indisponível: `◇`, `· unavailable` em `--ink-3` 400 e a razão no tooltip (`The installed Claude Code no longer lists Opus 4.1. A session still starts with it, and the CLI decides.`), sem trocar a escolha |
 | Tokens | `--surface-2`, `--line-2`, `--line-3`, `--brand-tint`, `--brand-ring`, `--radius-pill`, `--size-chip`, `--size-chip-sm`, `--text-meta`, `--text-micro` |
 | Teclado | `Enter` e `Space` abrem o menu; `aria-expanded`. O `×` de um filtro é uma parada própria |
 | Faça | Use para uma escolha que muda o contexto do lugar |
@@ -203,7 +203,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Anatomia | Rótulo acima (`.field`), com o complemento em `--ink-3` (`optional`, `optional with cards`); caixa de `--size-control` com borda `--line-3` sobre `--surface-input`; ajuda ou erro abaixo |
-| Variantes | Input de uma linha; input em mono (nome da task, caminho); textarea de altura mínima `--size-composer-min`, redimensionável na vertical; textarea em mono (corpo de um rascunho, prompt); **busca** de `--size-control-sm`, com a lupa, o placeholder (`Search cards`) e a tecla `/`, que dá lugar a `×` com texto; contador a partir de 100 de 120 caracteres |
+| Variantes | Input de uma linha; input em mono (nome da task, caminho); textarea de altura mínima `--size-composer-min`, ou das linhas que `rows` pede, na entrelinha do texto dele (`--leading-body`, `--leading-code` num código), redimensionável na vertical; textarea em mono (corpo de um rascunho, prompt); **busca** de `--size-control-sm`, com a lupa, o placeholder (`Search cards`) e a tecla `/`, que dá lugar a `×` com texto; contador a partir de 100 de 120 caracteres |
 | Estados | Todos os comuns. Hover escurece a borda para `--ink-3`. Foco: borda `--focus` e halo. Erro: borda e trilho interno `--state-error`, a mensagem abaixo, validado enquanto se digita. Salvo enquanto se digita: a ajuda diz `Saved as you type.` |
 | Tokens | `--surface-input`, `--line-3`, `--focus`, `--focus-halo`, `--state-error`, `--error-rail`, `--text-ui`, `--text-body`, `--text-meta` |
 | Teclado | Na busca, `↓` vai à lista e `Esc` volta a ela |
@@ -298,7 +298,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 |---|---|
 | Anatomia | Uma linha por etapa: o nome da etapa (com a nota `Also where a review of someone's pull request starts` quando mais algo parte dela) e o chip de modelo e esforço à direita, que abre o `listbox` de modelo e esforço. Linhas separadas por `--line-1`, num grupo contornado |
 | Variantes | **Popover Models** da task e do review: as etapas do modo do item, e a nota `A stage takes its model when it starts. Each step not started can have its own, in Details.` **Lista do diálogo de criação**: dobrada sob o **resumo de modelos** (seção abaixo). **Settings › Defaults**: as nove etapas agrupadas por parte do workflow, com `6 of 9 changed from the factory defaults` |
-| Estados | Editável; própria ou mudada da fábrica (`--ink-1`, 500) e padrão (quieta); hover; foco; aberta; iniciada, sem edição (`Opus · medium · started`); salvando; erro ao salvar, com a razão e **Try again** sob a linha (`role="alert"`); indisponível (`◇`); lendo o catálogo (a escolha salva com brilho) |
+| Estados | Editável; própria ou mudada da fábrica (`--ink-1`, 500) e padrão (quieta); hover; foco; aberta; iniciada, sem edição (`Opus · medium · started`); salvando; erro ao salvar, com a razão e **Try again** fantasma `xs` sob a linha (`role="alert"`); indisponível (`◇`); lendo o catálogo (a escolha salva com brilho); catálogo nunca lido (o menu diz por quê no lugar dos itens, em `--ink-2`, nunca vermelho) |
 | Resumo de modelos | Uma linha que abre e fecha a lista no lugar, com o chevron. À direita: `Defaults`, ou a primeira etapa ajustada, `+N` e `the rest from Defaults` |
 | Teclado | `Esc` fecha o `listbox`, depois o popover, e o foco volta ao gatilho |
 | Faça | Salve cada escolha na hora |
@@ -830,9 +830,9 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 | | |
 |---|---|
 | Anatomia | À esquerda da página, fixa ao rolar, com largura `--snav-w`: **Defaults**, **Boards**, **Repositories**, **Prompts**, cada item com o ícone e o nome em `--text-ui`, `--size-control` de altura. **Repositories** leva `◇ N` com o número de clones inexistentes (um repositório sem clone não conta), com os repositórios no tooltip e na descrição |
-| Estados | Padrão (`--ink-2`), hover, foco, pressionado, página aberta (`--brand-tint-plane`, anel `--brand-ring`, ícone `--brand-ink`, peso 500, `aria-current="page"`) |
+| Estados | Padrão (`--ink-2`), hover, foco, pressionado, página aberta (`--brand-tint-plane`, anel `--brand-ring`, ícone `--brand-ink`, o nome em `--ink-1` e peso 500, `aria-current="page"`) |
 | Largura | Abaixo de 820 px de área principal, vira uma linha acima da página, sem ficar fixa |
-| Teclado | Uma parada de Tab. ↑↓ trocam de página, `Home` e `End` vão às pontas; em linha, ←→ também. Aberto por `Ctrl+,` ou por um link, o foco começa no item da página |
+| Teclado | Uma parada de Tab. ↑↓ trocam de página, `Home` e `End` vão às pontas; em linha, ←→ também. Uma seta com modificador (`Alt+←`) não é da navegação. Aberto por `Ctrl+,` ou por um link, o foco começa no item da página |
 | Página | O par navegação e página centrado em pixel inteiro, com `--space-12` entre os dois e a página em `--measure`. O cabeçalho da página: o título em `--text-title` 600, uma frase em `--ink-3` que diz para que ela serve, e à direita a ação da página, secundária (**Add board**, **Add repository**): Settings não tem primária. As seções têm o título em caixa alta de `--text-caps` e uma frase em `--text-meta` |
 
 ### Linha de Settings
@@ -869,7 +869,8 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 
 | | |
 |---|---|
-| Anatomia | **← <prompt>** no alto, o título (`Editing the PRD prompt`) e a frase; a área de texto em mono ocupando a coluna; à direita, em `--col-placeholders` e fixa ao rolar, a coluna **Placeholders**, cada um como etiqueta com o que ele vira e, quando se aplica, o que acontece sem ele; a barra fixa no pé com `Unsaved changes`, **Cancel** e **Save** `Ctrl S`, a primária |
+| Anatomia | **← <prompt>** no alto, o título (`Editing the PRD prompt`) e a frase; a área de texto em mono ocupando a coluna; à direita, em `--col-placeholders` e fixa ao rolar, a coluna **Placeholders**, cada um como etiqueta com o que ele vira e, quando se aplica, o que acontece sem ele; a barra fixa no pé com, à esquerda, a razão de **Save** tracejado (`Nothing changed yet.`), `Unsaved changes` ou a falha ao salvar, e à direita **Cancel** e **Save** `Ctrl S`, a primária, que não mudam de lugar enquanto se digita |
+| Prompt aberto | Na página do prompt, antes da edição, o texto renderizado em Markdown num bloco contornado por `--line-1`, com os títulos dele em `--text-ui` 600, menores que o título da página em `--text-title`, e cada placeholder conhecido como etiqueta |
 | Largura | Abaixo de 820 px de área principal, a coluna desce para baixo do editor |
 | Estados | Sem mudança (**Save** tracejado), com mudança, salvando, erro ao salvar. Sair com edição não salva pede `Discard your changes?` |
 
@@ -885,7 +886,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 | | |
 |---|---|
 | Marca | O quadrado da marca em `--brand` com o monograma em `--brand-on`: `sm` (`--size-mark`, raio `--radius-sm`) no topo da lateral; `lg` (`--space-8`, raio `--radius-md`, o monograma em `--space-5`) no início, nas boas-vindas e na migração |
-| **Copy** | Fantasma, só de ícone, num cabeçalho de bloco (`Copy the error`; num bloco de código, `Copy the code`) e ao lado de um comando (`Copy gh auth login`); secundário, com o rótulo e o ícone, quando é a ação de uma página (**Copy the list**). Estados: padrão, hover, foco, copiado (o visto e `Copied` por 2 s), erro (`Can't copy · select the text`, em `--state-error`) |
+| **Copy** | Fantasma, só de ícone, num cabeçalho de bloco (`Copy the error`; num bloco de código, `Copy the code`) e ao lado de um comando (`Copy gh auth login`); secundário, com o rótulo e o ícone, quando é a ação de uma página (**Copy the list**). Estados: padrão, hover, foco, copiado (o visto no lugar do ícone e `Copied` ao lado, por 2 s, sem mover o botão), erro (`Can't copy · select the text`, em `--state-error`) |
 | Bloco copiável | O bloco de código sem realce, para um erro ou um comando: afundado, raio `--radius-md`, o cabeçalho com o rótulo (`error`) e **Copy**, o texto em mono com os caminhos pelo `~`. No início que falhou; na página da task apagada (task 11) |
 
 ## Tamanhos de layout

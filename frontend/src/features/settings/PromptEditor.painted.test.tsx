@@ -1,11 +1,12 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import { mainArea, paintOf, resolve, setTheme, THEMES, token } from "@/test/painted";
 import { renderWithStore } from "@/test/render";
 import { makePrompt, makeState } from "@/test/wails-mock";
 import { PromptEditor } from "./PromptEditor";
 
-function editor(width: number) {
+function editor(width: number, text = "Write it better.") {
   renderWithStore(
     <div style={mainArea(width)}>
       <PromptEditor stage="prd" prompt={makePrompt()} onSaved={() => {}} />
@@ -14,7 +15,7 @@ function editor(width: number) {
       state: makeState(),
       ui: {
         location: { kind: "settings", section: "prd" },
-        promptEdit: { stage: "prd", original: "Write it.", text: "Write it better." },
+        promptEdit: { stage: "prd", original: "Write it.", text },
       },
     },
   );
@@ -22,6 +23,19 @@ function editor(width: number) {
 
 const column = () => screen.getByRole("complementary", { name: "Placeholders" });
 const bar = () => screen.getByText("Unsaved changes").parentElement as HTMLElement;
+
+/** places is where the bar's first text and its two buttons stand, from the bar's left and right edges. */
+function places() {
+  const cancel = screen.getByRole("button", { name: "Cancel" });
+  const foot = cancel.parentElement?.parentElement as HTMLElement;
+  const box = foot.getBoundingClientRect();
+  const right = (element: Element) => box.right - element.getBoundingClientRect().right;
+  return {
+    text: (foot.firstElementChild as HTMLElement).getBoundingClientRect().left - box.left,
+    cancel: right(cancel),
+    save: right(screen.getByRole("button", { name: /^Save/ })),
+  };
+}
 
 describe.each(THEMES)("PromptEditor in the %s theme", (theme) => {
   it("gives the Placeholders column its token beside the text from 820px of main area", () => {
@@ -61,6 +75,20 @@ describe.each(THEMES)("PromptEditor in the %s theme", (theme) => {
     expect(field.getBoundingClientRect().height).toBeGreaterThanOrEqual(
       24 * Number.parseFloat(resolve("var(--leading-code)", "line-height")),
     );
+  });
+
+  it("keeps Cancel and Save in place with the reason on the left and without it", async () => {
+    setTheme(theme);
+    editor(1000, "Write it.");
+    const reason = screen.getByText("Nothing changed yet.");
+    const before = places();
+
+    expect(reason.getBoundingClientRect().right).toBeLessThan(
+      screen.getByRole("button", { name: "Cancel" }).getBoundingClientRect().left,
+    );
+    await userEvent.type(screen.getByRole("textbox", { name: "PRD prompt" }), "!");
+    expect(screen.getByText("Unsaved changes")).toBeVisible();
+    expect(places()).toEqual(before);
   });
 
   it("sticks the bar to the foot with the first surface and a rule on top", () => {

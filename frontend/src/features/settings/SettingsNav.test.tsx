@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { SettingsNav } from "@/features/settings/SettingsNav";
 import type { SettingsSection } from "@/lib/locations";
@@ -140,6 +140,21 @@ describe("SettingsNav", () => {
     await user.keyboard("{ArrowLeft}{ArrowLeft}");
 
     expect(section()).toBe("defaults");
+  });
+
+  it.each([
+    ["Alt", { altKey: true }],
+    ["Ctrl", { ctrlKey: true }],
+    ["Meta", { metaKey: true }],
+    ["Shift", { shiftKey: true }],
+  ])("leaves an arrow with %s to whoever else takes it", (_, modifier) => {
+    nav("boards");
+    screen.getByRole("list").style.flexDirection = "row";
+
+    const kept = fireEvent.keyDown(link("Boards"), { key: "ArrowLeft", ...modifier });
+
+    expect(kept).toBe(true);
+    expect(section()).toBe("boards");
   });
 
   it("takes the focus to the open page when Settings is opened by the keyboard, and not by the click", () => {

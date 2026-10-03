@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { mainArea, paintOf, resolve, setTheme, THEMES, token } from "@/test/painted";
@@ -24,7 +24,7 @@ const link = (name: string) => screen.getByRole("link", { name });
 const iconOf = (name: string) => link(name).querySelector("svg") as SVGElement;
 
 describe.each(THEMES)("SettingsNav in the %s theme", (theme) => {
-  it("tints the open page with the brand plane and the ring stuck to it, its icon in the brand ink and its name in 500", () => {
+  it("tints the open page with the brand plane and the ring stuck to it, its icon in the brand ink and its name in the first ink, 500", () => {
     setTheme(theme);
     nav();
 
@@ -33,6 +33,7 @@ describe.each(THEMES)("SettingsNav in the %s theme", (theme) => {
       background: token("--brand-tint-plane"),
       shadow: resolve("inset 0 0 0 var(--border) var(--brand-ring)", "box-shadow"),
       height: resolve("var(--size-control)", "height"),
+      color: token("--ink-1"),
     };
     expect(paintOf(open, want)).toEqual(want);
     expect(getComputedStyle(open).fontWeight).toBe("500");
@@ -83,13 +84,31 @@ describe.each(THEMES)("SettingsNav in the %s theme", (theme) => {
 
   it("is a column from 820px of main area", () => {
     setTheme(theme);
-    nav(1000);
+    nav(820);
     expect(getComputedStyle(screen.getByRole("list")).flexDirection).toBe("column");
   });
 
   it("is a row below 820px of main area", () => {
     setTheme(theme);
-    nav(812);
+    nav(819);
     expect(getComputedStyle(screen.getByRole("list")).flexDirection).toBe("row");
+  });
+
+  it.each([
+    [820, 2],
+    [819, 1],
+  ])("puts the navigation beside the page at %ipx of main area in %i columns", (width, columns) => {
+    setTheme(theme);
+    render(
+      <div style={mainArea(width)}>
+        <div data-testid="body" className="settings-body">
+          <nav className="settings-nav" />
+          <div />
+        </div>
+      </div>,
+    );
+    expect(getComputedStyle(screen.getByTestId("body")).gridTemplateColumns.split(" ").length).toBe(
+      columns,
+    );
   });
 });

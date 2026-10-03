@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 import { Button } from "./Button";
-import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
 import { ICONS } from "./icons";
 
@@ -12,12 +12,27 @@ export interface CopyButtonProps {
   /** label names the button: "Copy the error", "Copy gh auth login", "Copy the list". */
   label: string;
   variant: "icon" | "page";
+  /**
+   * note is the side Copied and the failure stand on, away from the edge the button keeps: after it
+   * by default, before it where the button ends a line, as in the header of a CopyBlock.
+   */
+  note?: "after" | "before";
 }
 
 type Result = "idle" | "copied" | "failed";
 
-/** CopyButton copies a text to the clipboard and says whether it did; when it can't, the text stays to be selected. */
-export function CopyButton({ text, label, variant }: CopyButtonProps) {
+/** NOTE is what the button says beside it, out of the flow, on the side of note. */
+const NOTE =
+  "absolute inset-y-0 flex items-center text-(length:--text-micro) leading-(--leading-micro) whitespace-nowrap";
+const AFTER = "left-[calc(100%+var(--space-2))]";
+const BEFORE = "right-[calc(100%+var(--space-2))]";
+
+/**
+ * CopyButton copies a text to the clipboard and says whether it did; when it can't, the text stays to
+ * be selected. Copied, the button shows the check and Copied stands beside it, out of the flow, so the
+ * button keeps its width and its place.
+ */
+export function CopyButton({ text, label, variant, note = "after" }: CopyButtonProps) {
   const [result, setResult] = useState<Result>("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -36,7 +51,7 @@ export function CopyButton({ text, label, variant }: CopyButtonProps) {
   }
 
   return (
-    <span className="inline-flex shrink-0 items-center gap-(--space-2)">
+    <span className="relative inline-flex shrink-0 items-center">
       {variant === "icon" ? (
         <IconButton
           label={label}
@@ -54,15 +69,18 @@ export function CopyButton({ text, label, variant }: CopyButtonProps) {
         </Button>
       )}
       {result === "copied" && (
-        <span className="inline-flex items-center gap-(--space-1) text-(length:--text-micro) leading-(--leading-micro) text-ink-3">
-          <Icon icon={ICONS.done} size="xs" />
+        <span
+          data-copy-note=""
+          className={cn(NOTE, note === "after" ? AFTER : BEFORE, "text-ink-3")}
+        >
           Copied
         </span>
       )}
       {result === "failed" && (
         <span
           role="alert"
-          className="text-(length:--text-micro) leading-(--leading-micro) text-state-error"
+          data-copy-note=""
+          className={cn(NOTE, note === "after" ? AFTER : BEFORE, "text-state-error")}
         >
           Can't copy · select the text
         </span>

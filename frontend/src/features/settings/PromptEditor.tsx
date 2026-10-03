@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { ICONS } from "@/components/system/icons";
 import { Placeholder } from "@/components/system/Placeholder";
@@ -74,6 +74,7 @@ export function PromptEditor({ stage, prompt, onSaved }: PromptEditorProps) {
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const field = useRef<HTMLTextAreaElement>(null);
+  const reasonId = useId();
 
   // The editor opens with the cursor at the start of the text.
   useEffect(() => {
@@ -138,7 +139,15 @@ export function PromptEditor({ stage, prompt, onSaved }: PromptEditorProps) {
         </div>
       </SettingsPage>
       <div className="sticky bottom-0 flex items-center gap-(--space-3) bg-surface-1 p-(--space-3) shadow-[inset_0_var(--border)_0_var(--line-1)]">
-        {failure !== null ? (
+        {/* What the bar says stands on the left, so Cancel and Save never move while typing. */}
+        {!changed ? (
+          <p
+            id={reasonId}
+            className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
+          >
+            Nothing changed yet.
+          </p>
+        ) : failure !== null ? (
           <p
             role="alert"
             className="text-(length:--text-meta) leading-(--leading-meta) text-state-error"
@@ -146,11 +155,9 @@ export function PromptEditor({ stage, prompt, onSaved }: PromptEditorProps) {
             {`Couldn't save the prompt: ${failure}`}
           </p>
         ) : (
-          changed && (
-            <p className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
-              Unsaved changes
-            </p>
-          )
+          <p className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
+            Unsaved changes
+          </p>
         )}
         <div className="ml-auto flex items-center gap-(--space-2)">
           <Button variant="ghost" size="sm" onClick={cancelPromptEdit}>
@@ -162,7 +169,7 @@ export function PromptEditor({ stage, prompt, onSaved }: PromptEditorProps) {
             shortcut="Ctrl S"
             loading={saving}
             loadingLabel="Saving…"
-            {...(changed ? {} : { disabled: true, disabledReason: "Nothing changed yet." })}
+            {...(changed ? {} : { disabled: true, reasonId })}
             onClick={save}
           >
             Save
