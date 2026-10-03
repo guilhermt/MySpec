@@ -2,9 +2,7 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"os"
 	"sync"
 	"time"
 
@@ -81,7 +79,6 @@ type startup struct {
 
 	attempt   func(ctx context.Context, p *progress) error // the work; it cleans up what it opened when it fails
 	onChange  func()                                       // publishes startup:changed
-	onFailure func(err error)                              // told once an attempt fails; may be nil
 	now       func() time.Time
 	slowAfter time.Duration
 	log       *slog.Logger
@@ -165,9 +162,6 @@ func (s *startup) run(ctx context.Context, cancel context.CancelFunc, done chan 
 		return
 	}
 	s.onChange()
-	if err != nil && s.onFailure != nil {
-		s.onFailure(err)
-	}
 }
 
 // tryAgain runs the startup again from its first step; it does nothing unless
@@ -299,17 +293,5 @@ func (p *progress) checking(path string) func() {
 func (a *App) emitStartup() {
 	if wails, _ := a.handles(); wails != nil {
 		wails.Event.Emit(bindings.EventStartupChanged, a.startup.snapshot())
-	}
-}
-
-// quitOnFailure ends the app when the startup fails, with the reason on the
-// terminal: the window has no screen for it yet. A failure can come before the
-// Wails loop runs, and Quit does nothing until then.
-func (a *App) quitOnFailure(err error) {
-	fmt.Fprintf(os.Stderr, "myspec: start: %v\n", err)
-	a.startFailed.Store(true)
-	<-a.started
-	if wails, _ := a.handles(); wails != nil {
-		wails.Quit()
 	}
 }

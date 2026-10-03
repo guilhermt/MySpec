@@ -9,11 +9,9 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
-	"github.com/wailsapp/wails/v3/pkg/events"
 
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
@@ -85,10 +83,8 @@ type App struct {
 	notifier       *notify.Notifier // nil when the desktop has no notification service
 	player         *chime.Player    // nil when there is no notifier or the chime could not be installed
 
-	pollCtx     context.Context // ends when the app does; what runs in the background for as long as it runs
-	stopPoll    context.CancelFunc
-	startFailed atomic.Bool   // the startup failed and the app is quitting
-	started     chan struct{} // closed when the Wails loop runs, the earliest the app can quit
+	pollCtx  context.Context // ends when the app does; what runs in the background for as long as it runs
+	stopPoll context.CancelFunc
 
 	mu      sync.Mutex
 	wails   *application.App
@@ -129,20 +125,16 @@ func Run(cfg Config) int {
 
 	applyWebKitEnvironment()
 
-	a := &App{log: log, dirs: dirs, services: bindings.NewWaitingServices(), started: make(chan struct{})}
+	a := &App{log: log, dirs: dirs, services: bindings.NewWaitingServices()}
 	a.publisher = newThrottle(publishWindow, a.publishNow)
 	a.systemDark = readSystemDark(log)
 	a.startup = newStartup(a.attempt, a.emitStartup, log, a.systemDark, dirs.Data, dirs.LogPath())
-	a.startup.onFailure = a.quitOnFailure
 	a.pollCtx, a.stopPoll = context.WithCancel(context.Background())
 	defer a.stopPoll()
 
 	bindings.RegisterEvents()
 	wails := application.New(a.options(cfg))
 	a.setWails(wails)
-	wails.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
-		close(a.started)
-	})
 	a.openWindow(cfg, modeFor(a.systemDark))
 	a.startup.start()
 
@@ -160,7 +152,7 @@ func Run(cfg Config) int {
 		closers[i]()
 	}
 	log.Info("app stopped")
-	if runErr != nil || a.startFailed.Load() {
+	if runErr != nil {
 		return exitFailure
 	}
 	return exitSuccess

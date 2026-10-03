@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
+import { readStoredPreference } from "@/features/theme/theme";
 import { boardOfRepository, findBoard } from "@/lib/boards";
 import {
   type GoneLocation,
@@ -179,6 +180,8 @@ export interface AppError {
 export interface AppStore {
   /** startup is where the startup of the app stands; null before the first answer. */
   startup: Startup | null;
+  /** startupTheme is the theme chosen before the first state, sent once it arrives. */
+  startupTheme: ThemePreference | null;
   app: State | null;
   /** error is the failure the app notice shows, until it is dismissed or the next one replaces it. */
   error: AppError | null;
@@ -304,6 +307,8 @@ export interface AppStore {
   pendingLeave: (() => void) | null;
 
   applyStartup: (next: Startup) => void;
+  chooseStartupTheme: (preference: ThemePreference) => void;
+  clearStartupTheme: () => void;
   applyState: (next: State) => void;
   setError: (error: AppError | null) => void;
 
@@ -839,6 +844,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
   return {
     startup: null,
+    startupTheme: null,
     app: null,
     error: null,
     ...initialNav(),
@@ -856,8 +862,10 @@ export const useAppStore = create<AppStore>()((set, get) => {
     ...initialTaskUi(),
 
     applyStartup: (next) => set({ startup: next }),
+    chooseStartupTheme: (preference) => set({ startupTheme: preference }),
+    clearStartupTheme: () => set({ startupTheme: null }),
 
-    applyState: (next) =>
+    applyState: (next) => {
       set((state) => {
         // With no repository and no board registered the welcome screen takes
         // the place of everything the app shows of the tasks.
@@ -930,7 +938,11 @@ export const useAppStore = create<AppStore>()((set, get) => {
           transcripts:
             left === null ? state.transcripts : withoutTaskTranscripts(state.transcripts, left),
         };
-      }),
+      });
+      if (get().startupTheme === next.theme) {
+        set({ startupTheme: null });
+      }
+    },
 
     setError: (error) => set({ error }),
 
@@ -1514,13 +1526,34 @@ export interface ThemeState {
   systemDark: boolean;
 }
 
+/**
+ * useThemeState is the theme the interface shows. Before the first state it is the choice made at
+ * the start or the preference of the last state; a refused migration has no theme of its own.
+ */
 export function useThemeState(): ThemeState {
   return useAppStore(
-    useShallow((state) => ({
-      preference: asThemePreference(state.app?.theme ?? "system"),
-      systemDark: state.app?.systemDark ?? false,
-    })),
+    useShallow((state): ThemeState => {
+      const { app, startup, startupTheme } = state;
+      if (app === null) {
+        return {
+          preference: startupTheme ?? readStoredPreference() ?? "system",
+          systemDark: startup?.systemDark ?? false,
+        };
+      }
+      if (app.migration !== null) {
+        return { preference: readStoredPreference() ?? "system", systemDark: app.systemDark };
+      }
+      return {
+        preference: startupTheme ?? asThemePreference(app.theme),
+        systemDark: app.systemDark,
+      };
+    }),
   );
+}
+
+/** useStartup is where the startup of the app stands, null before the first answer. */
+export function useStartup(): Startup | null {
+  return useAppStore((state) => state.startup);
 }
 
 export function useHistory(): readonly ArchivedTask[] {

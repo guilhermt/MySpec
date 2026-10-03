@@ -88,6 +88,7 @@ import {
   setTheme,
   startDiscussion,
   startReview,
+  tryStartupAgain,
   updateBoard,
 } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
@@ -343,11 +344,13 @@ describe("actions", () => {
     await setRepositoryFilter("repo-2");
     await setTheme("dark");
     await setReviewModeDefault("agent");
+    await tryStartupAgain();
 
     expect(api.removeRepository).toHaveBeenCalledWith("repo-1");
     expect(api.setRepositoryFilter).toHaveBeenCalledWith("repo-2");
     expect(api.setTheme).toHaveBeenCalledWith("dark");
     expect(api.setReviewModeDefault).toHaveBeenCalledWith("agent");
+    expect(api.tryStartupAgain).toHaveBeenCalledTimes(1);
     expect(useAppStore.getState().error).toBeNull();
   });
 

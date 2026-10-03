@@ -2,11 +2,12 @@ import { type RenderResult, render } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { HOME } from "@/lib/locations";
-import type { State } from "@/lib/wails";
+import type { Startup, State } from "@/lib/wails";
 import { type AppStore, useAppStore } from "@/store/app-store";
 
 export interface StoreOptions {
   state?: State | null;
+  startup?: Startup | null;
   ui?: Partial<
     Pick<
       AppStore,
@@ -58,7 +59,8 @@ export interface RenderWithStoreResult extends RenderResult {
 
 export function resetAppStore(options: StoreOptions = {}): void {
   useAppStore.setState({
-    startup: null,
+    startup: options.startup ?? null,
+    startupTheme: null,
     app: options.state ?? null,
     error: options.ui?.error ?? null,
     location: options.ui?.location ?? HOME,

@@ -342,6 +342,18 @@ Quando o caminho cadastrado não existe, não é um diretório ou não é mais u
 
 Uma worktree já criada continua sendo usada normalmente: as sessões rodam nela, não no clone. O produto verifica o caminho ao iniciar e a cada ação que precisa dele; não observa o disco continuamente.
 
+### Início do app
+
+A janela abre antes de o produto abrir os dados e mostra o início até ele terminar. A barra lateral aparece em esqueleto (`Loading your work`), só com a marca, `MySpec` e o seletor de tema, ou como a faixa de 60 px quando está recolhida. A área principal espera 400 ms sem que o início termine, para uma abertura normal não piscar, e então mostra `Starting MySpec…` com os passos: `Opening your data` e, quando há repositórios com caminho, `Checking the clones of 12 repositories` (`the clone of 1 repository`). Um passo acima de 3 s mostra o tempo (`12s`, `1m 15s`) e, no dos clones, o primeiro caminho que não responde (`· ~/code/infra doesn't answer`). O início não tem prazo total.
+
+Quando o início falha, a barra lateral fica parada e a área principal diz `MySpec couldn't start`, o texto do caso, o erro num bloco com **Copy** (`Copy the error`) e **Try again** `Enter`, com o foco. `Enter` com o foco no corpo da tela também tenta de novo; com o foco em **Copy** ou no seletor de tema, `Enter` é do botão. **Try again** recomeça o início do primeiro passo, no mesmo processo. Os textos, com o diretório de dados e o log resolvidos:
+
+- permissão negada: `MySpec can't open its data. Nothing was changed: your tasks, documents and worktrees are as they were. Give your user back the folder ~/.local/share/myspec, then try again.`
+- disco cheio: `MySpec can't open its data: the disk of ~/.local/share/myspec is full. Free some space, then try again.`
+- qualquer outra: `MySpec couldn't finish starting. If trying again fails the same way, the log at ~/.local/state/myspec/myspec.log says what happened before it.`
+
+O seletor de tema funciona no início: mostra a preferência guardada, aplica o modo na hora e a escolha é salva quando os dados abrem. Uma migração recusada termina o início e abre a tela da migração.
+
 ### Tela de boas-vindas e barra lateral
 
 Enquanto nenhum board e nenhum repositório estão cadastrados, o produto mostra a tela de boas-vindas no lugar da task, com o nome do produto, a linha `Register a board or a repository to start creating tasks.` e dois botões: **Add board**, que abre o mesmo diálogo da página **Boards**, e **Add repository**, que abre o mesmo diálogo da página **Repositories**. Ao cadastrar o primeiro board ou o primeiro repositório, a tela dá lugar à visão principal.

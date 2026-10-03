@@ -12,7 +12,7 @@ import {
   type Startup,
   sessionKey,
 } from "@/lib/wails";
-import { loadTranscript } from "@/store/actions";
+import { loadTranscript, setTheme } from "@/store/actions";
 import type { AppStore } from "@/store/app-store";
 
 // itemName is the name of the task, review or discussion with the id, null
@@ -94,7 +94,14 @@ export async function connect(store: StoreApi<AppStore>): Promise<() => void> {
       store.getState().openSituation(event.taskId, event.place);
     }
   });
-  store.getState().applyState(await api.getState());
+  const state = await api.getState();
+  store.getState().applyState(state);
+  // The theme chosen at the start goes now that the database answers.
+  const chosen = store.getState().startupTheme;
+  if (chosen !== null && chosen !== state.theme && state.migration === null) {
+    await setTheme(chosen);
+    store.getState().clearStartupTheme();
+  }
   return () => {
     stopState();
     stopTranscript();

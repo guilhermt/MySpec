@@ -257,6 +257,11 @@ export async function setRepositoryFilter(id: string): Promise<void> {
   );
 }
 
+/** tryStartupAgain runs the startup again from its first step, after it failed. */
+export async function tryStartupAgain(): Promise<void> {
+  await run(fail("Couldn't try again", TRY), () => api.tryStartupAgain());
+}
+
 export async function setTheme(preference: ThemePreference): Promise<void> {
   await run(fail("Couldn't change the theme", TRY), () => api.setTheme(preference));
 }

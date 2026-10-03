@@ -125,6 +125,7 @@ function location(): Location {
 }
 
 beforeEach(() => {
+  localStorage.clear();
   resetAppStore();
 });
 
@@ -136,6 +137,61 @@ describe("applyStartup", () => {
     useAppStore.getState().applyStartup(makeStartup({ phase: "ready" }));
 
     expect(useAppStore.getState().startup?.phase).toBe("ready");
+  });
+});
+
+describe("the theme before the first state", () => {
+  it("keeps the chosen theme until a state has it, and then lets it go", () => {
+    useAppStore.getState().chooseStartupTheme("dark");
+
+    useAppStore.getState().applyState(makeState({ theme: "light" }));
+    expect(useAppStore.getState().startupTheme).toBe("dark");
+
+    useAppStore.getState().applyState(makeState({ theme: "dark" }));
+    expect(useAppStore.getState().startupTheme).toBeNull();
+  });
+
+  it("shows the chosen theme over the saved one", () => {
+    useAppStore.getState().chooseStartupTheme("dark");
+    useAppStore.getState().applyState(makeState({ theme: "light" }));
+    const { result, rerender } = renderHook(() => useThemeState());
+    expect(result.current.preference).toBe("dark");
+
+    act(() => {
+      useAppStore.getState().clearStartupTheme();
+    });
+    rerender();
+    expect(result.current.preference).toBe("light");
+  });
+});
+
+describe("useThemeState before the first state", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("takes the stored preference and the system the start reported", () => {
+    localStorage.setItem("myspec.theme.preference", "dark");
+    useAppStore.getState().applyStartup(makeStartup({ systemDark: true }));
+
+    const { result } = renderHook(() => useThemeState());
+
+    expect(result.current).toEqual({ preference: "dark", systemDark: true });
+  });
+
+  it("is system with a light desktop when nothing is known", () => {
+    const { result } = renderHook(() => useThemeState());
+
+    expect(result.current).toEqual({ preference: "system", systemDark: false });
+  });
+
+  it("takes the stored preference, not the state's, for a refused migration", () => {
+    localStorage.setItem("myspec.theme.preference", "light");
+    useAppStore.getState().applyState(makeState({ migration: makeMigration(), theme: "dark" }));
+
+    const { result } = renderHook(() => useThemeState());
+
+    expect(result.current.preference).toBe("light");
   });
 });
 

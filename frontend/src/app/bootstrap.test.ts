@@ -250,6 +250,34 @@ describe("connect", () => {
   });
 });
 
+describe("connect and the theme chosen at the start", () => {
+  it("sends the theme chosen before the first state when it differs from the saved one", async () => {
+    vi.mocked(api.getState).mockResolvedValue(makeState({ theme: "system" }));
+    useAppStore.getState().chooseStartupTheme("dark");
+
+    await connect(useAppStore);
+
+    expect(api.setTheme).toHaveBeenCalledWith("dark");
+    expect(useAppStore.getState().startupTheme).toBeNull();
+  });
+
+  it("sends nothing when the choice is what the state has", async () => {
+    vi.mocked(api.getState).mockResolvedValue(makeState({ theme: "dark" }));
+    useAppStore.getState().chooseStartupTheme("dark");
+
+    await connect(useAppStore);
+
+    expect(api.setTheme).not.toHaveBeenCalled();
+    expect(useAppStore.getState().startupTheme).toBeNull();
+  });
+
+  it("sends nothing when no theme was chosen", async () => {
+    await connect(useAppStore);
+
+    expect(api.setTheme).not.toHaveBeenCalled();
+  });
+});
+
 describe("bootstrap", () => {
   it("waits for the startup to be ready before asking for the state", async () => {
     vi.mocked(api.getStartup).mockResolvedValueOnce(
