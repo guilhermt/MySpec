@@ -88,7 +88,10 @@ export function Checkbox({
       )}
     >
       {loading ? (
-        <Spinner tone="current" />
+        // The spinner stands in the box's own square, so the text beside it never moves.
+        <span aria-hidden="true" className="grid size-(--icon) shrink-0 place-items-center">
+          <Spinner tone="current" />
+        </span>
       ) : (
         <CheckboxSign checked={checked} {...(disabled ? { disabled } : {})} row>
           <BaseCheckbox.Indicator>
