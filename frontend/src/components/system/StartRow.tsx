@@ -229,7 +229,13 @@ export function BoardStartRow({ line, now, onOpen, ...actions }: BoardStartRowPr
         trailing={
           failure !== undefined ? (
             <span className="shrink-0 whitespace-nowrap">
-              <ReadingAge readAt={failure.readAt} reading={false} now={now} failure={failure} />
+              <ReadingAge
+                readAt={failure.readAt}
+                reading={false}
+                now={now}
+                failure={failure}
+                size="meta"
+              />
             </span>
           ) : (
             <span
