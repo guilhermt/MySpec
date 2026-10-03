@@ -840,7 +840,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 | | |
 |---|---|
 | Anatomia | Numa lista contornada por `--line-1`, linhas separadas por fios: o ícone, o nome em `--text-ui` e peso 500, uma ou duas linhas de detalhe em `--text-meta` `--ink-3` (caminhos em mono), e à direita o estado e as ações. O que bloqueia fica sob a linha, como faixa de aviso. As listas vêm em grupos com o título em `--text-meta` 600 e a contagem em `--ink-4` (`Needs a clone 3`, um por board, `No board`); um grupo vazio não aparece |
-| Variantes | **Board**: o título, o projeto no GitHub (link), os repositórios, os status finais e de cards novos, a idade da leitura (a do cabeçalho do board), **Edit…** e **Remove…**; sem board, a página tem o vazio sem ação. **Repositório**: o nome, o caminho (ou `Not cloned`), as contagens, `Review instructions set` quando há, e `⋯` (**Change path…**, **Review instructions…**, **Remove…**, desabilitado com a razão abaixo). **Prompt**: o nome, o que o prompt abre, a etiqueta `Default` ou `Edited Sep 20`, e o chevron; abre o prompt |
+| Variantes | **Board**: o título, o projeto no GitHub (link), os repositórios, os status finais e de cards novos, a idade da leitura (a do cabeçalho do board), **Edit…** e **Remove…**; sem board, a página tem o vazio com **Add board** sob o texto, pela regra do Estado vazio de página. **Repositório**: o nome, o caminho (ou `Not cloned`), as contagens, `Review instructions set` quando há, e `⋯` (**Change path…**, **Review instructions…**, **Remove…**, desabilitado com a razão abaixo). **Prompt**: o nome, o que o prompt abre, a etiqueta `Default` ou `Edited Sep 20`, e o chevron; abre o prompt |
 | Estados | Hover, foco, pressionado; lida, lendo, nunca lida, leitura falha (nunca vermelha), tentando; sem clone com **Clone**, clonando, clone falhou, clone inexistente com **Change path…**, **Change path** recusado |
 
 ### Repositório de um board, no diálogo
@@ -854,7 +854,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 
 | | |
 |---|---|
-| Anatomia | Em **Add repository**, uma linha por clone achado na pasta home: a caixa, o repositório e o caminho em mono; os já registrados dobrados no fim (`Already registered · 9`) |
+| Anatomia | Em **Add repository**, uma linha por clone achado na pasta home: a caixa, o repositório e o caminho em mono; os já registrados dobrados no fim (`Already registered 9`) |
 | Estados | Disponível, marcado, liga um clone (`Registered without a clone: this links the clone to it.`), hover, foco, desabilitado (registrado), cadastrando, recusado (a razão em vermelho), varrendo (`Scanning your home folder…`), a varredura falhou (com **Try again**), nada achado |
 
 ### Tabela de status
