@@ -18,6 +18,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/platform/chime"
+	"github.com/guilhermt/myspec/internal/platform/notify"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
@@ -36,6 +37,29 @@ import (
 // openTimeout bounds opening the database: the migrations and the upgrade of
 // the data move files.
 const openTimeout = time.Minute
+
+// attemptDeps are what an attempt reaches outside its data directory with: the
+// probe of the directory, the database, gh, the notifications of the desktop and
+// what a ready app runs in the background. Run gives the real ones; the tests
+// give fakes, so that a real attempt runs over a temporary directory without a
+// desktop, a CLI or GitHub.
+type attemptDeps struct {
+	probe         func(dir string) error
+	openStore     func(ctx context.Context, path string, log *slog.Logger, upgrade store.Upgrade) (*store.Store, error)
+	ghBinary      string                                  // empty looks gh up on the PATH
+	notifications func(chimePath string) *notify.Notifier // nil when the desktop has no notification service
+	background    func()                                  // starts what a ready app runs for as long as it runs
+}
+
+// desktopDeps are the deps of the app the user runs.
+func (a *App) desktopDeps() attemptDeps {
+	return attemptDeps{
+		probe:         store.Probe,
+		openStore:     store.Open,
+		notifications: a.startNotifications,
+		background:    a.runInBackground,
+	}
+}
 
 // withTimeout runs f with the time one call to the database has.
 func withTimeout(ctx context.Context, f func(ctx context.Context) error) error {
@@ -72,7 +96,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	p.begin(stepData)
 
 	log := a.log
-	if err = store.Probe(a.dirs.Data); err != nil {
+	if err = a.deps.probe(a.dirs.Data); err != nil {
 		return fmt.Errorf("data directory: %w", err)
 	}
 
@@ -80,7 +104,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	identifier := repository.NewIdentifier(gitRunner)
 
 	openCtx, cancelOpen := context.WithTimeout(ctx, openTimeout)
-	st, err := store.Open(openCtx, a.dirs.DatabasePath(), log, upgrade.New(upgrade.Deps{
+	st, err := a.deps.openStore(openCtx, a.dirs.DatabasePath(), log, upgrade.New(upgrade.Deps{
 		Identify: identifier.Identify,
 		DataDir:  a.dirs.Data,
 		Log:      log,
@@ -112,7 +136,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	if chimeErr != nil {
 		log.Warn("install chime failed", "err", chimeErr)
 	}
-	a.notifier = a.startNotifications(chimePath)
+	a.notifier = a.deps.notifications(chimePath)
 	// A notifier that could not start is no notifier at all, not a nil one
 	// behind the interface.
 	var notifier attention.Notifier
@@ -174,7 +198,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	if err = withTimeout(ctx, sessions.LoadConversations); err != nil {
 		return fmt.Errorf("read sessions: %w", err)
 	}
-	ghRunner := gh.New(gh.Deps{Log: log})
+	ghRunner := gh.New(gh.Deps{Log: log, Binary: a.deps.ghBinary})
 	repositories := repository.New(repository.Deps{
 		Store:         st.Repositories,
 		Settings:      st.Settings,
@@ -298,7 +322,14 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 		a.dirs.Data, log,
 	))
 	a.markReady()
+	a.deps.background()
+	a.publish()
+	return nil
+}
 
+// runInBackground starts what reads the machine and GitHub for as long as the
+// app runs.
+func (a *App) runInBackground() {
 	// The catalog of models comes from the CLI on the machine and must not hold
 	// the interface: it is read in the background and reaches it with the state.
 	go a.discoverModels(a.pollCtx, a.dirs.Data)
@@ -306,8 +337,6 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	// The pull requests the app waits for are merged outside it, so it asks
 	// GitHub about them on a timer of its own for as long as it runs.
 	go a.pollPRs(a.pollCtx)
-	a.publish()
-	return nil
 }
 
 // bound are the services the interface calls, built over the ones the attempt

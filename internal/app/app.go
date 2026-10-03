@@ -63,7 +63,8 @@ type App struct {
 	dirs           xdg.Dirs
 	services       *bindings.Services // the placeholders Wails holds, bound when the startup ends
 	startup        *startup
-	systemDark     bool // what the desktop asked for before the window opened
+	deps           attemptDeps // what an attempt reaches outside the data directory with
+	systemDark     bool        // what the desktop asked for before the window opened
 	repositories   *repository.Service
 	theme          *theme.Service
 	models         *models.Service
@@ -128,6 +129,7 @@ func Run(cfg Config) int {
 	a := &App{log: log, dirs: dirs, services: bindings.NewWaitingServices()}
 	a.publisher = newThrottle(publishWindow, a.publishNow)
 	a.systemDark = readSystemDark(log)
+	a.deps = a.desktopDeps()
 	a.startup = newStartup(a.attempt, a.emitStartup, log, a.systemDark, dirs.Data, dirs.LogPath())
 	a.pollCtx, a.stopPoll = context.WithCancel(context.Background())
 	defer a.stopPoll()

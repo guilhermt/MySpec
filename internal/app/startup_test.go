@@ -300,3 +300,125 @@ func TestCloseCancelsTheAttemptAndKeepsAnotherFromStarting(t *testing.T) {
 		t.Errorf("Phase = failed after the window closed, want the cancelled attempt not shown")
 	}
 }
+
+func TestASlowStepIsOneAboveThreeSeconds(t *testing.T) {
+	t.Parallel()
+
+	if app.SlowAfter != 3*time.Second {
+		t.Errorf("SlowAfter = %v, want 3s", app.SlowAfter)
+	}
+}
+
+func TestTheFirstSlowPathIsTheOneTheStepNames(t *testing.T) {
+	t.Parallel()
+	next := make(chan struct{})
+	release := make(chan struct{})
+	s, published := app.NewStartupForTest(func(_ context.Context, p *app.Progress) error {
+		p.Begin("clones")
+		p.CloneCount(2)
+		done := p.Checking("/home/dev/web")
+		<-next
+		done()
+		done = p.Checking("/home/dev/api")
+		<-release
+		done()
+		p.Finish("clones")
+		return nil
+	}, clock(), time.Millisecond)
+
+	s.Start()
+	waitFor(t, published, func(got bindings.Startup) bool {
+		return len(got.Steps) == 2 && got.Steps[1].Detail == "/home/dev/web"
+	})
+	close(next)
+	// The next publish is the watch of the second path running out.
+	second := <-published
+	close(release)
+
+	if detail := second.Steps[1].Detail; detail != "/home/dev/web" {
+		t.Errorf("Detail = %q after a second slow path, want the first one", detail)
+	}
+}
+
+// TestAPathThatEndedInTimeIsNeverNamed waits for a watch that must not fire, so
+// it runs alone.
+func TestAPathThatEndedInTimeIsNeverNamed(t *testing.T) {
+	const slow = 20 * time.Millisecond
+	next := make(chan struct{})
+	release := make(chan struct{})
+	s, published := app.NewStartupForTest(func(_ context.Context, p *app.Progress) error {
+		p.Begin("clones")
+		p.CloneCount(2)
+		p.Checking("/home/dev/web")()
+		<-next
+		done := p.Checking("/home/dev/api")
+		<-release
+		done()
+		p.Finish("clones")
+		return nil
+	}, clock(), slow)
+
+	s.Start()
+	time.Sleep(5 * slow)
+	if detail := s.Snapshot().Steps[1].Detail; detail != "" {
+		t.Fatalf("Detail = %q after a path that ended in time, want none", detail)
+	}
+	close(next)
+	got := waitFor(t, published, func(got bindings.Startup) bool {
+		return len(got.Steps) == 2 && got.Steps[1].Detail != ""
+	})
+	close(release)
+
+	if detail := got.Steps[1].Detail; detail != "/home/dev/api" {
+		t.Errorf("Detail = %q, want the path still running", detail)
+	}
+}
+
+// TestAWatchThatRunsOutAfterTheStepEndedNamesNothing waits for a watch that
+// fires on a finished step, so it runs alone.
+func TestAWatchThatRunsOutAfterTheStepEndedNamesNothing(t *testing.T) {
+	const slow = 20 * time.Millisecond
+	s, published := app.NewStartupForTest(func(_ context.Context, p *app.Progress) error {
+		p.Begin("clones")
+		p.CloneCount(1)
+		// The step ends before its watch is stopped, as when the watch fires
+		// while the test of the path returns.
+		done := p.Checking("/home/dev/web")
+		p.Finish("clones")
+		defer done()
+		time.Sleep(5 * slow)
+		return nil
+	}, clock(), slow)
+
+	s.Start()
+	got := waitFor(t, published, phaseIs("ready"))
+
+	if detail := got.Steps[1].Detail; detail != "" {
+		t.Errorf("Detail = %q on a finished step, want none", detail)
+	}
+}
+
+// TestNothingIsPublishedAfterTheWindowClosed waits for a publish that must not
+// come, so it runs alone.
+func TestNothingIsPublishedAfterTheWindowClosed(t *testing.T) {
+	var before int
+	var published <-chan bindings.Startup
+	var s *app.Startup
+	s, published = app.NewStartupForTest(func(ctx context.Context, p *app.Progress) error {
+		p.Begin("data")
+		<-ctx.Done()
+		before = len(published)
+		return ctx.Err()
+	}, clock(), time.Hour)
+
+	s.Start()
+	waitFor(t, published, func(got bindings.Startup) bool {
+		return len(got.Steps) == 1 && got.Steps[0].State == "running"
+	})
+	s.Close()
+	time.Sleep(50 * time.Millisecond)
+
+	if after := len(published); after != before {
+		t.Errorf("%d snapshots published after the window closed, want none", after-before)
+	}
+}
