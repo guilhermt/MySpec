@@ -914,4 +914,4 @@ Os tokens de medida e de layout da conversa, das listas, do painel da lista, do 
 | `--snav-w` | `calc(var(--space-16) * 3 + var(--space-4))` | Navegação de Settings |
 | `--size-popover` | `22rem` | Os popovers Review mode e Models |
 | `--size-composer-max` | `15rem` | A altura máxima da caixa do compositor, cerca de dez linhas |
-| `--col-placeholders` | `calc(var(--space-16) * 4 + var(--space-8))` | A coluna **Placeholders** do editor de prompt, 288 px |
+| `--col-placeholders` | `calc(var(--space-16) * 3.5)` | A coluna **Placeholders** do editor de prompt, 224 px |

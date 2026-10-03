@@ -109,7 +109,7 @@
   --col-result: calc(var(--space-16) * 4);                         /* History row: PR #1279 · 6 steps · dev not updated */
   --col-time: var(--space-12);                                     /* History row: 15:02 */
   --snav-w: calc(var(--space-16) * 3 + var(--space-4));            /* Settings navigation: Repositories ◇ 1 */
-  --col-placeholders: calc(var(--space-16) * 4 + var(--space-8));  /* the Placeholders column of the prompt editor: {{initial_context}} and what it becomes */
+  --col-placeholders: calc(var(--space-16) * 3.5);                 /* the Placeholders column of the prompt editor: {{initial_context}} and what it becomes */
   --notice-detail-min: calc(var(--space-16) * 4);                  /* the app notice's detail: narrower, it goes under the label */
 
   /* Small fixed pieces of content. */

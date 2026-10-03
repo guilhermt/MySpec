@@ -139,13 +139,13 @@ describe("globals.css", () => {
     expect(halves).toEqual([]);
   });
 
-  it("sizes the Placeholders column of the prompt editor in whole pixels, 288px", () => {
+  it("sizes the Placeholders column of the prompt editor in whole pixels, 224px", () => {
     const value = tokens.get("--col-placeholders") ?? "";
     const space = (name: string) => pixels(tokens.get(name) ?? "");
-    const sum = /^calc\(var\((--space-\d+)\) \* (\d+) \+ var\((--space-\d+)\)\)$/.exec(value);
+    const product = /^calc\(var\((--space-\d+)\) \* (\d+(?:\.\d+)?)\)$/.exec(value);
 
-    expect(sum, value).not.toBeNull();
-    expect(space(sum?.[1] ?? "") * Number(sum?.[2]) + space(sum?.[3] ?? "")).toBe(288);
+    expect(product, value).not.toBeNull();
+    expect(space(product?.[1] ?? "") * Number(product?.[2])).toBe(224);
   });
 
   it("rounds every layout width that depends on the window", () => {

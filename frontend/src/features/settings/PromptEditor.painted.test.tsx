@@ -24,11 +24,13 @@ const column = () => screen.getByRole("complementary", { name: "Placeholders" })
 const bar = () => screen.getByText("Unsaved changes").parentElement as HTMLElement;
 
 describe.each(THEMES)("PromptEditor in the %s theme", (theme) => {
-  it("gives the Placeholders column 288px beside the text from 820px of main area", () => {
+  it("gives the Placeholders column its token beside the text from 820px of main area", () => {
     setTheme(theme);
     editor(1000);
 
-    expect(column().getBoundingClientRect().width).toBe(288);
+    expect(`${column().getBoundingClientRect().width}px`).toBe(
+      resolve("var(--col-placeholders)", "width"),
+    );
     expect(getComputedStyle(column()).position).toBe("sticky");
     const field = screen.getByRole("textbox", { name: "PRD prompt" });
     expect(column().getBoundingClientRect().left).toBeGreaterThan(
