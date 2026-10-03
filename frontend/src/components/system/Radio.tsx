@@ -1,6 +1,6 @@
 import { Radio as BaseRadio } from "@base-ui/react/radio";
 import { RadioGroup as BaseRadioGroup } from "@base-ui/react/radio-group";
-import { createContext, type ReactElement, type ReactNode, useContext, useId } from "react";
+import { createContext, type ReactNode, useContext, useId } from "react";
 import { cn } from "@/lib/utils";
 
 export interface RadioGroupProps {
@@ -8,8 +8,6 @@ export interface RadioGroupProps {
   value: string;
   onValueChange: (value: string) => void;
   children: ReactNode;
-  /** render is the element the group is drawn as, like a tbody whose rows hold the radios. */
-  render?: ReactElement;
   orientation?: "vertical" | "horizontal";
   invalid?: boolean;
   disabled?: boolean;
@@ -18,9 +16,7 @@ export interface RadioGroupProps {
 
 export interface RadioProps {
   value: string;
-  /** label names a radio that has no text beside it, like one in a table cell. */
-  label?: string;
-  children?: ReactNode;
+  children: ReactNode;
 }
 
 /** RingState tells each radio of the group how to draw its ring. */
@@ -32,7 +28,6 @@ export function RadioGroup({
   value,
   onValueChange,
   children,
-  render,
   orientation = "vertical",
   invalid = false,
   disabled = false,
@@ -43,7 +38,6 @@ export function RadioGroup({
 
   const group = (
     <BaseRadioGroup
-      {...(render !== undefined ? { render } : {})}
       aria-label={label}
       value={value}
       onValueChange={(next) => {
@@ -73,14 +67,13 @@ export function RadioGroup({
 }
 
 /** Radio is one row of a RadioGroup, with the ring drawn at its start. */
-export function Radio({ value, label, children }: RadioProps) {
+export function Radio({ value, children }: RadioProps) {
   const { invalid, disabled } = useContext(RingState);
   return (
     <BaseRadio.Root
       value={value}
       render={<div />}
       nativeButton={false}
-      {...(label !== undefined ? { "aria-label": label } : {})}
       className={cn(
         "group/radio flex min-h-(--size-control-sm) items-center gap-2 rounded-sm px-2 text-(length:--text-meta) leading-(--leading-meta) focus-visible:focus-ring",
         disabled ? "text-ink-4" : "text-ink-1",
@@ -99,5 +92,41 @@ export function Radio({ value, label, children }: RadioProps) {
       </span>
       {children}
     </BaseRadio.Root>
+  );
+}
+
+export interface RadioInputProps {
+  /** name joins the radio to the others of the same choice; the arrows move among them. */
+  name: string;
+  value: string;
+  checked: boolean;
+  onChoose: (value: string) => void;
+  /** label is the accessible name, since the radio has no text beside it. */
+  label: string;
+}
+
+/**
+ * RadioInput is a radio alone, a native input grouped with the others by its name, for the radios
+ * spread over the rows of a table, where no element holds only them and a RadioGroup would take
+ * the other controls of the rows for its own. The arrows move the choice among the radios of the
+ * name, and the cell is the target.
+ */
+export function RadioInput({ name, value, checked, onChoose, label }: RadioInputProps) {
+  return (
+    <label className="group/radio grid min-h-(--size-control-sm) w-fit place-items-center rounded-sm px-2 has-focus-visible:focus-ring">
+      <input
+        type="radio"
+        name={name}
+        value={value}
+        checked={checked}
+        onChange={() => onChoose(value)}
+        aria-label={label}
+        className="col-start-1 row-start-1 m-0 size-(--icon) appearance-none rounded-full border border-line-3 bg-surface-input outline-none checked:border-brand group-hover/radio:not-checked:border-ink-3"
+      />
+      <span
+        aria-hidden="true"
+        className="pointer-events-none col-start-1 row-start-1 size-2 scale-0 rounded-full bg-brand transition-transform duration-(--duration-fast) ease-standard group-has-checked/radio:scale-100"
+      />
+    </label>
   );
 }

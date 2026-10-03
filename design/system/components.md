@@ -253,7 +253,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | Anatomia | Anel de `--icon` com borda `--line-3` sobre `--surface-input`; escolhido, a borda em `--brand` e o ponto de `--space-2` em `--brand` |
 | Estados | Padrão, hover (borda `--ink-3`), foco (anel por fora), escolhido, desabilitado (tracejado, sem fundo), erro (borda `--state-error` sobre `--state-error-veil`) |
 | Usos | Uma escolha entre poucas opções numa tabela ou lista: os status de um board (`Ends the work`, `New cards`) |
-| Acessibilidade | `radiogroup` com nome; ←→ ou ↑↓ trocam |
+| Acessibilidade | `radiogroup` com nome; ←→ ou ↑↓ trocam. Numa tabela, os rádios são `input` nativos de um mesmo `name`, cada um com o nome inteiro, e o grupo é o deles, sem um elemento que os envolva: o corpo continua o da tabela, e as setas numa caixa da mesma linha não trocam a escolha |
 | Faça | Use o rádio numa lista de opções curtas; use a opção de pergunta quando cada opção tem uma linha do que faz |
 
 ### Grupo de opções
@@ -863,6 +863,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 |---|---|
 | Anatomia | No passo dos status do diálogo de board: uma linha por opção de status, na ordem do board, e duas colunas, `Ends the work` (caixa de seleção) e `New cards` (rádio); a última linha é `No status`, só com o rádio. Uma opção nova tem a etiqueta `new` |
 | Estados | Os da caixa e do rádio; a nota afundada no alto quando o board mudou desde o cadastro |
+| Acessibilidade | Uma `table` com o cabeçalho de colunas; a caixa e o rádio de cada linha sob o texto do cabeçalho da coluna deles. A caixa é `<status> ends the work`; os rádios, `New cards start in <status>` e `New cards start without a status`, um grupo pelo `name`, sob o cabeçalho `New cards` |
 
 ### Editor de prompt
 

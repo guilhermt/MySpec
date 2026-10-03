@@ -66,9 +66,6 @@ export function Checkbox({
   const row = (
     <BaseCheckbox.Root
       render={<div />}
-      // Inside a radio group, Base UI takes a checkbox for an item of the group's roving focus and
-      // drops its tab stop; the box keeps its own.
-      tabIndex={0}
       checked={checked}
       onCheckedChange={(next) => {
         if (!inert) onCheckedChange(next);

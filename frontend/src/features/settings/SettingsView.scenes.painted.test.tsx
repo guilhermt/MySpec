@@ -103,7 +103,9 @@ function parts(area: HTMLElement): Element[] {
     ...area.querySelectorAll("nav, aside, fieldset, table, li, [role='alert'], [role='status']"),
     ...area.querySelectorAll(".settings-body > *"),
     ...document.body.querySelectorAll("[role='dialog'], [role='alertdialog']"),
-    ...document.body.querySelectorAll("[role='dialog'] [role='alert'], [role='dialog'] li"),
+    ...document.body.querySelectorAll(
+      "[role='dialog'] [role='alert'], [role='dialog'] li, [role='dialog'] table, [role='dialog'] tr",
+    ),
   ];
 }
 

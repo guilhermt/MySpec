@@ -1,6 +1,7 @@
+import { useId } from "react";
 import { Badge } from "@/components/system/Badge";
 import { Checkbox } from "@/components/system/Checkbox";
-import { Radio, RadioGroup } from "@/components/system/Radio";
+import { RadioInput } from "@/components/system/Radio";
 import type { BoardStatus } from "@/lib/wails";
 
 export interface StatusTableProps {
@@ -16,13 +17,16 @@ export interface StatusTableProps {
 }
 
 const HEAD =
-  "px-3 py-2 text-left text-(length:--text-caps) leading-(--leading-caps) font-bold tracking-(--tracking-caps) text-ink-3 uppercase";
-const CELL = "px-3 py-1";
+  "px-(--space-3) py-(--space-2) text-left text-(length:--text-caps) leading-(--leading-caps) font-bold tracking-(--tracking-caps) text-ink-3 uppercase";
+const CELL = "px-(--space-3) py-(--space-1)";
+/** CONTROL is a cell of a box or a radio, whose own inset puts the sign under the column's head. */
+const CONTROL = "px-(--space-1) py-(--space-1)";
 
 /**
  * StatusTable is the step of the statuses of a board: for each option of the Status field, whether it
- * ends the work on a card and whether cards a discussion publishes start in it. The radios are the
- * group Status of new cards, which is the table body.
+ * ends the work on a card and whether cards a discussion publishes start in it. The radios are one
+ * group by their name, under the head New cards: the body stays the table's, and the arrows on a box
+ * never move the status of new cards.
  */
 export function StatusTable({
   statuses,
@@ -32,6 +36,7 @@ export function StatusTable({
   onFinal,
   onNewCard,
 }: StatusTableProps) {
+  const group = useId();
   return (
     <div className="overflow-auto rounded-md border border-line-1">
       <table className="w-full border-collapse">
@@ -48,21 +53,16 @@ export function StatusTable({
             </th>
           </tr>
         </thead>
-        <RadioGroup
-          label="Status of new cards"
-          value={newCardStatus}
-          onValueChange={onNewCard}
-          render={<tbody />}
-        >
+        <tbody>
           {statuses.map((status) => (
             <tr key={status.id} className="shadow-[inset_0_var(--border)_0_var(--line-1)]">
               <th scope="row" className={`${CELL} text-left font-normal text-ink-1`}>
-                <span className="inline-flex items-center gap-2">
+                <span className="inline-flex items-center gap-(--space-2)">
                   {status.name}
                   {newIds.has(status.id) && <Badge>new</Badge>}
                 </span>
               </th>
-              <td className={CELL}>
+              <td className={CONTROL}>
                 <Checkbox
                   checked={finals.has(status.id)}
                   onCheckedChange={(checked) => onFinal(status.id, checked)}
@@ -70,8 +70,14 @@ export function StatusTable({
                   <span className="sr-only">{`${status.name} ends the work`}</span>
                 </Checkbox>
               </td>
-              <td className={CELL}>
-                <Radio value={status.id} label={`New cards start in ${status.name}`} />
+              <td className={CONTROL}>
+                <RadioInput
+                  name={group}
+                  value={status.id}
+                  checked={newCardStatus === status.id}
+                  onChoose={onNewCard}
+                  label={`New cards start in ${status.name}`}
+                />
               </td>
             </tr>
           ))}
@@ -79,12 +85,18 @@ export function StatusTable({
             <th scope="row" className={`${CELL} text-left font-normal text-ink-3`}>
               No status
             </th>
-            <td className={CELL} />
-            <td className={CELL}>
-              <Radio value="" label="New cards start without a status" />
+            <td className={CONTROL} />
+            <td className={CONTROL}>
+              <RadioInput
+                name={group}
+                value=""
+                checked={newCardStatus === ""}
+                onChoose={onNewCard}
+                label="New cards start without a status"
+              />
             </td>
           </tr>
-        </RadioGroup>
+        </tbody>
       </table>
     </div>
   );

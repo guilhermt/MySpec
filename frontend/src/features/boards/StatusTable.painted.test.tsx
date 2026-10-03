@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { StatusTable } from "@/features/boards/StatusTable";
-import { resolve, setTheme, THEMES, token } from "@/test/painted";
+import { offWholePixels, resolve, setTheme, THEMES, token } from "@/test/painted";
 
 function table() {
   return render(
@@ -48,13 +48,28 @@ describe.each(THEMES)("StatusTable in the %s theme", (theme) => {
     table();
     const box = screen.getByRole("checkbox", { name: "QA ends the work" }).querySelector("span");
     expect(getComputedStyle(box as Element).backgroundColor).toBe(token("--brand"));
-    const ring = screen
-      .getByRole("radio", { name: "New cards start in Todo" })
-      .querySelector("span");
-    expect(getComputedStyle(ring as Element).borderTopColor).toBe(token("--brand"));
-    const other = screen
-      .getByRole("radio", { name: "New cards start in QA" })
-      .querySelector("span");
-    expect(getComputedStyle(other as Element).borderTopColor).toBe(token("--line-3"));
+    const ring = screen.getByRole("radio", { name: "New cards start in Todo" });
+    expect(getComputedStyle(ring).borderTopColor).toBe(token("--brand"));
+    const other = screen.getByRole("radio", { name: "New cards start in QA" });
+    expect(getComputedStyle(other).borderTopColor).toBe(token("--line-3"));
+  });
+
+  it("puts each box and radio under the head of its column, every row on whole pixels", () => {
+    setTheme(theme);
+    table();
+    const textStart = (head: HTMLElement) =>
+      head.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(head).paddingLeft);
+    const ends = textStart(screen.getByRole("columnheader", { name: "Ends the work" }));
+    const fresh = textStart(screen.getByRole("columnheader", { name: "New cards" }));
+    for (const name of ["Todo", "QA"]) {
+      const box = screen.getByRole("checkbox", { name: `${name} ends the work` });
+      const sign = box.querySelector("span") as Element;
+      expect(sign.getBoundingClientRect().left).toBe(ends);
+      const radio = screen.getByRole("radio", { name: `New cards start in ${name}` });
+      expect(radio.getBoundingClientRect().left).toBe(fresh);
+    }
+    const none = screen.getByRole("radio", { name: "New cards start without a status" });
+    expect(none.getBoundingClientRect().left).toBe(fresh);
+    expect(offWholePixels(screen.getAllByRole("row"))).toEqual([]);
   });
 });
