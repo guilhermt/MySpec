@@ -366,6 +366,13 @@ describe.each(THEMES)("DiscussionView, the scenes in the %s theme", (theme) => {
         expect(outside.map((part) => part.textContent)).toEqual([]);
       }
 
+      // The capture comes before the pointer passes over what is cut, which scrolls the conversation
+      // to it. The page that the discussion leaves shows no tooltip of its focus.
+      if (one.gone !== undefined) {
+        expect(document.querySelector('[role="tooltip"]')).toBeNull();
+      }
+      await capture(`discussion-${one.label.replace(/[?=&]/g, "-")}-${width}-${theme}`, area);
+
       // What the top layer cuts says its whole text in a tooltip: the title and the line 2 of a
       // folded draft, the value of a selector of Edit, the list of a marker. A modal dialog takes the
       // pointer from the screen under it, which the same scene without the dialog checks.
@@ -385,12 +392,6 @@ describe.each(THEMES)("DiscussionView, the scenes in the %s theme", (theme) => {
       const primaries = visiblePrimaries(open ?? document).map(labelOf);
       const primary = primaryOf(one);
       expect(primaries).toEqual(primary === null ? [] : [primary]);
-
-      // The page that the discussion leaves shows no tooltip of its focus.
-      if (one.gone !== undefined) {
-        expect(document.querySelector('[role="tooltip"]')).toBeNull();
-      }
-      await capture(`discussion-${one.label.replace(/[?=&]/g, "-")}-${width}-${theme}`, area);
 
       // With text in the composer, Send is the one primary where neither the bar nor a card draws
       // one (§4.2, A primária em cada cena).
@@ -440,6 +441,10 @@ describe.each(THEMES)("DiscussionView, the scenes in the %s theme", (theme) => {
         }
         await user.click(add);
         const listbox = await within(area).findByRole("listbox", { name: "Depend on" });
+        // The search of the listbox holds the focus as it opens.
+        expect(document.activeElement).toBe(
+          within(area).getByRole("combobox", { name: "Search drafts and cards" }),
+        );
         const picker = listbox.closest<HTMLElement>("[data-picker-place]");
         expect(picker).not.toBeNull();
         if (picker !== null) {

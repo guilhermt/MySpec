@@ -73,7 +73,8 @@ function PlacedPicker({ children }: { children: ReactNode }) {
       style={place === null ? undefined : { height: place.height }}
       className={cn(
         "absolute left-0 z-(--z-float) flex w-(--size-popover) max-w-full flex-col",
-        place === null && "invisible",
+        // Measured unseen but focusable: the search takes the focus as the listbox opens.
+        place === null && "opacity-0",
         place?.up === true ? "bottom-full mb-(--space-1)" : "top-full mt-(--space-1)",
       )}
     >
