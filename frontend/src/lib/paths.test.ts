@@ -31,6 +31,11 @@ describe("displayPaths", () => {
     ["/srv/code/api", "/srv/code/api"],
     ["/homework/api", "/homework/api"],
     ["no path here", "no path here"],
+    ["`/home/dev/x` is gone", "`~/x` is gone"],
+    ["/mnt/backup/home/guilherme/x", "/mnt/backup/home/guilherme/x"],
+    ["/srv/home/code/api is a clone", "/srv/home/code/api is a clone"],
+    ["Can't open /tmp/scratchpad/app/home/dev/web", "Can't open /tmp/scratchpad/app/home/dev/web"],
+    ["/mnt/home/dev and /home/dev", "/mnt/home/dev and ~"],
   ])("writes %j as %j", (text, want) => {
     expect(displayPaths(text)).toBe(want);
   });
