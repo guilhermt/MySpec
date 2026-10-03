@@ -30,8 +30,8 @@ async function withAnimations(test: () => Promise<void>) {
   }
 }
 
-/** SETTLED_MS is past the slowest animation of the system, --duration-slow (280ms). */
-const SETTLED_MS = 400;
+/** nextFrame waits for the frame the focus guards of a popup move the focus in. */
+const nextFrame = () => new Promise((done) => requestAnimationFrame(() => done(undefined)));
 
 describe.each(THEMES)("RepositoryRow in the %s theme", (theme) => {
   it("opens Remove from the ⋯ with the focus on Cancel, held in the dialog", () =>
@@ -48,15 +48,17 @@ describe.each(THEMES)("RepositoryRow in the %s theme", (theme) => {
       await userEvent.click(screen.getByRole("button", { name: "More for dev/web" }));
       await userEvent.click(await screen.findByRole("menuitem", { name: "Remove…" }));
       const dialog = await screen.findByRole("alertdialog", { name: "Remove dev/web?" });
-      // The focus the menu would give back comes once its exit animation ends: the test waits past
-      // the slowest duration, to prove it never comes.
-      await new Promise((done) => setTimeout(done, SETTLED_MS));
+      // The focus the menu would give back comes once its exit animation ends: the test waits for
+      // the menu to leave and a frame more, to prove it never comes.
+      await expect.poll(() => document.querySelector("[role='menu']")).toBeNull();
+      await nextFrame();
 
       const cancel = within(dialog).getByRole("button", { name: "Cancel" });
       expect(document.activeElement).toBe(cancel);
       for (let press = 0; press < 4; press++) {
         await userEvent.tab();
-        expect(dialog.contains(document.activeElement)).toBe(true);
+        // A Tab past the last control lands on a focus guard, which hands the focus back in a frame.
+        await expect.poll(() => dialog.contains(document.activeElement)).toBe(true);
       }
     }));
 });
