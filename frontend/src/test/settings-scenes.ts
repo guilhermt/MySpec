@@ -283,6 +283,11 @@ const ARCHIVED: readonly (readonly [kind: "t" | "o" | "r", where: string])[] = [
   ["o", "gateway"],
 ];
 
+/** WEB_INSTRUCTIONS are the review instructions acme/web has saved, as the mock writes them. */
+const WEB_INSTRUCTIONS = `Every form uses react-hook-form with the zod schema next to it; flag a form that validates by hand.
+Components under src/ui are shared: a change there needs a story in Storybook.
+Ignore the generated files under src/api/gen.`;
+
 const repositoryId = (fullName: string) => `repo-${fullName.split("/")[1]}`;
 
 const repositoryOf = (entry: SceneRepository): Repository => {
@@ -447,6 +452,8 @@ const newBoard = (overrides: Partial<BoardPreview> = {}): BoardPreview =>
       { id: "done", name: "Done", final: true },
       { id: "canceled", name: "Canceled", final: false },
     ],
+    // The pre-marking of the Go: the finals by their names, and To do for the cards a discussion publishes.
+    newCardStatus: "to-do",
     repositories: [
       option("acme/data-pipelines", 38, {
         link: "clone",
@@ -459,7 +466,7 @@ const newBoard = (overrides: Partial<BoardPreview> = {}): BoardPreview =>
         path: `${HOME}/code/warehouse`,
         clones: [`${HOME}/code/warehouse`, `${HOME}/src/warehouse-old`],
       }),
-      option("acme/dbt-models", 9, { link: "uncloned", path: "" }),
+      option("acme/dbt-models", 9, { link: "uncloned", path: "", repositoryId: "" }),
       option("acme/api", 4, {
         link: "other_board",
         checked: false,
@@ -496,7 +503,8 @@ const editedBoard = (): BoardPreview =>
     newStatusIds: ["qa"],
     repositories: [
       option("acme/api", 48),
-      option("acme/billing", 22, { link: "uncloned", path: "", release: "leave" }),
+      // Registered without a clone: the Go links it as registered, with no path.
+      option("acme/billing", 22, { link: "registered", path: "", release: "leave" }),
       option("acme/docs", 9, { release: "no_board" }),
       option("acme/gateway", 17),
       option("acme/sdk-js", 4, { path: `${HOME}/src/sdk-js` }),
@@ -657,7 +665,7 @@ function boardsScene(variation: string): SettingsSceneSetup {
         after: async (user) => {
           api.previewBoard.mockRejectedValue(
             new Error(
-              "The board doesn't exist or this account can't read it. Check the number, or run gh auth refresh -s read:project.",
+              "The board doesn't exist or this account can't read it. Check the number and that this account can see the project.",
             ),
           );
           await add(user);
@@ -832,6 +840,14 @@ function repositoriesScene(variation: string): SettingsSceneSetup {
     case "instructions":
       return {
         ...base,
+        state: sceneState({
+          repositories: REPOSITORIES.map((entry) => {
+            const repository = repositoryOf(entry);
+            return entry.fullName === "acme/web"
+              ? { ...repository, reviewInstructions: WEB_INSTRUCTIONS }
+              : repository;
+          }),
+        }),
         after: async (user) => {
           await more(user, "acme/web");
           await user.click(await screen.findByRole("menuitem", { name: /^Review instructions…/ }));

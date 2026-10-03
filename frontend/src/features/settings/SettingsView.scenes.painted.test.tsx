@@ -157,6 +157,15 @@ describe.each(THEMES)("Settings, the scenes in the %s theme", (theme) => {
       // The layer on top has one primary at most.
       expect(visiblePrimaries().length).toBeLessThanOrEqual(1);
 
+      // A tooltip the focus left open would cover the screen in the capture: the focus leaves first.
+      if (document.querySelector('[role="tooltip"]') !== null) {
+        (document.activeElement as HTMLElement | null)?.blur();
+        await vi.waitFor(() => {
+          if (document.querySelector('[role="tooltip"]') !== null)
+            throw new Error("a tooltip is open");
+        });
+      }
+
       await capture(`${name}${variation === "" ? "" : `-${variation}`}-${width}-${theme}`, area);
     },
   );
