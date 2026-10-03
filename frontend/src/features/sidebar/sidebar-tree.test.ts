@@ -860,6 +860,47 @@ describe("the line of an item without a situation", () => {
       line2: { long: "Round 1 · publishing", short: "publishing" },
     });
   });
+
+  it.each<[string, Partial<Situation>, Partial<DiscussionSummary>, string, string, string]>([
+    [
+      "drafts to decide",
+      { kind: "drafts", place: DISCUSSION_PLACE },
+      { drafts: [makeDraft({ id: "a", decision: "approved" }), makeDraft({ id: "b" })] },
+      "Decide drafts · Round 1 · 1 of 2",
+      "Decide drafts · 1/2",
+      "wait",
+    ],
+    [
+      "a publication that failed",
+      { kind: "publish_failed", group: "error", place: DISCUSSION_PLACE },
+      {},
+      "Publish failed · Round 1",
+      "Publish failed",
+      "error",
+    ],
+  ])(
+    "keeps a publication on the row with %s standing, the situation on line 3",
+    (_case, fields, discussion, long, short, tone) => {
+      const row = discussionRow(
+        discussionWith({
+          round: 1,
+          publishing: true,
+          situations: [situation(fields)],
+          ...discussion,
+        }),
+        NOW,
+      );
+
+      expect(row).toMatchObject({
+        tone: "app",
+        waiting: true,
+        line2: { long: "Round 1 · publishing", short: "publishing" },
+        clock: null,
+        line3: { kind: "situation", long, short, chip: { kind: "chip", tone, time: "2h" } },
+      });
+      expect(row.label).toContain(`working, Round 1 · publishing. `);
+    },
+  );
 });
 
 describe("line 3", () => {
@@ -896,7 +937,7 @@ describe("line 3", () => {
   ])("tells %s", (_case, fields, long, short, verb) => {
     const row = taskRow(makeState(), taskWith({ stage: "plan", ...working, ...fields }), NOW);
 
-    expect(row.line3).toEqual({ long, short, verb, contextPercent: 42 });
+    expect(row.line3).toEqual({ kind: "work", long, short, verb, contextPercent: 42 });
   });
 
   it("follows the session in the oldest turn, with its clock", () => {
@@ -924,6 +965,7 @@ describe("line 3", () => {
 
     expect(taskRow(makeState(), task, NOW)).toMatchObject({
       line3: {
+        kind: "work",
         long: "Running go test ./internal/api/ratelimit",
         short: "Running go test …/ratelimit",
         verb: "Running",
@@ -941,6 +983,7 @@ describe("line 3", () => {
     );
 
     expect(row.line3).toEqual({
+      kind: "work",
       long: "Writing PRD.md",
       short: "Writing PRD.md",
       verb: "Writing",

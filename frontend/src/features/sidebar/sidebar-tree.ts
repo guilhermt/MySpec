@@ -52,6 +52,11 @@ export interface RowText {
   short: string;
 }
 
+/** RowLine3 is the third line of a row: what the agent does, or the situation under a publication. */
+export type RowLine3 =
+  | (RowText & { kind: "work"; verb: string; contextPercent: number })
+  | (RowText & { kind: "situation"; chip: Extract<RowClock, { kind: "chip" }> });
+
 /** ItemRow is one task, review or discussion of the tree, with everything its row reads. */
 export interface ItemRow {
   kind: "item";
@@ -70,10 +75,11 @@ export interface ItemRow {
   more: { count: number; tooltip: string } | null;
   clock: RowClock | null;
   /**
-   * line3 is what the agent does now, with the context it used; null unless an agent works. verb is
-   * what both forms start with: the action's verb, or the whole of what the conversation does.
+   * line3 is what the agent does now, with the context it used ("work"; verb is what both forms
+   * start with: the action's verb, or the whole of what the conversation does), or the situation
+   * that stands while a discussion publishes, with its chip ("situation"); null otherwise.
    */
-  line3: (RowText & { verb: string; contextPercent: number }) | null;
+  line3: RowLine3 | null;
   situationIds: string[];
   /** repositoryId is the repository a task lives in, which the filter looks at; null for a review or a discussion. */
   repositoryId: string | null;
@@ -733,19 +739,27 @@ function buildRow(owner: Owner, parts: RowParts, now: number): ItemRow {
   let tone = parts.standing.tone;
   let line2 = parts.standing.line2;
   let clock = parts.standing.clock;
+  let line3: ItemRow["line3"] = null;
+  // A discussion that publishes keeps the publication on the row, with its spinner and its clock:
+  // the situation that stands meanwhile is what line 3 says.
+  const publishing = owner.kind === "discussion" && owner.discussion.publishing;
   if (main !== undefined) {
     const group = GROUP_TONES[asSituationGroup(main.group)];
-    tone = group;
-    line2 = situationText(owner, main);
-    clock = {
+    const chip: Extract<RowClock, { kind: "chip" }> = {
       kind: "chip",
       tone: group,
       time: compactWait(main.startedAt, now),
       longTime: spokenWait(main.startedAt, now),
     };
+    if (publishing) {
+      line3 = { kind: "situation", ...situationText(owner, main), chip };
+    } else {
+      tone = group;
+      line2 = situationText(owner, main);
+      clock = chip;
+    }
   }
   const session = tone === "agent" ? workingSession(parts.sessions, now) : null;
-  let line3: ItemRow["line3"] = null;
   if (session !== null) {
     clock = {
       kind: "turn",
@@ -755,8 +769,14 @@ function buildRow(owner: Owner, parts: RowParts, now: number): ItemRow {
     const words = activity(session);
     line3 =
       session.actionLabel === ""
-        ? { ...same(words.row), verb: words.row, contextPercent: session.contextPercent }
+        ? {
+            kind: "work",
+            ...same(words.row),
+            verb: words.row,
+            contextPercent: session.contextPercent,
+          }
         : {
+            kind: "work",
             long: `${session.actionLabel} ${session.actionTarget}`,
             short: `${session.actionLabel} ${shortAction(session.actionLabel, session.actionTarget)}`,
             verb: session.actionLabel,
@@ -765,9 +785,10 @@ function buildRow(owner: Owner, parts: RowParts, now: number): ItemRow {
   }
 
   const sentences = [`${KIND_WORDS[parts.itemKind]} ${parts.name}.`];
-  if (main === undefined) {
+  if (main === undefined || publishing) {
     sentences.push(`${TONE_WORDS[tone]}, ${line2.long}.`);
-  } else {
+  }
+  if (main !== undefined) {
     const told = situations.map(
       (situation) =>
         `${GROUP_WORDS[asSituationGroup(situation.group)]}: ${situationText(owner, situation).long}, for ${forWait(situation.startedAt, now)}`,

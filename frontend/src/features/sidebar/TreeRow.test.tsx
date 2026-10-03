@@ -378,6 +378,30 @@ describe("TreeRow", () => {
     expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "40");
   });
 
+  it("draws a publication on line 2 and the situation that stands on line 3, with its chip", () => {
+    renderRow(
+      discussionRow(
+        makeDiscussion({
+          round: 1,
+          publishing: true,
+          situations: [
+            makeSituation({
+              kind: "publish_failed",
+              group: "error",
+              place: { kind: "discussion", stage: "", step: 0 },
+              startedAt: TWO_HOURS_AGO,
+            }),
+          ],
+        }),
+        NOW,
+      ),
+    );
+
+    const row = screen.getByRole("treeitem");
+    expect(row).toHaveTextContent(/Round 1 · publishing.*Publish failed · Round 1.*2h/);
+    expect(row).not.toHaveClass("error-rail-bar");
+  });
+
   it("shimmers line 2 while GitHub has not reported the pull request", () => {
     renderRow(
       rowOf(

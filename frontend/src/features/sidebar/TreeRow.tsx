@@ -205,7 +205,7 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
           )}
         </span>
 
-        {work !== null && (
+        {work?.kind === "work" && (
           <>
             <span />
             <span
@@ -228,6 +228,29 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
                 percent={work.contextPercent}
                 compact={narrow}
                 detail={`Context window ${Math.round(work.contextPercent)}% used`}
+              />
+            </span>
+          </>
+        )}
+        {/* The situation that stands while a discussion publishes, with its chip. */}
+        {work?.kind === "situation" && (
+          <>
+            <span />
+            <span
+              ref={line3}
+              className="relative min-w-0 truncate text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
+            >
+              {!narrow && line3Fits ? work.long : work.short}
+              <span ref={line3Measure} aria-hidden="true" className={MEASURE}>
+                {work.long}
+              </span>
+            </span>
+            <span className="flex items-center justify-self-end">
+              <TimeChip
+                tone={work.chip.tone}
+                time={work.chip.time}
+                longTime={work.chip.longTime}
+                raised={selected && work.chip.tone === "close"}
               />
             </span>
           </>
