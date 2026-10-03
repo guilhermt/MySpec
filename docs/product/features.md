@@ -12,7 +12,14 @@ Um repositório pertence a no máximo um board, e é o board do repositório que
 
 ### Página Boards
 
-As configurações têm a página **Boards**. Ela lista os boards cadastrados, em ordem alfabética de título, cada um com o título, o dono e o tipo (`Organization` ou `User`), a quantidade de repositórios administrados, o link para o GitHub, os status do board na linha `Final: <finais> · New cards: <status de cards novos>`, a última leitura (`checked 3m ago`, `Not read yet` ou a falha da última leitura) e as ações **Edit** e **Remove**. Acima da lista fica **Add board**.
+As configurações têm a página **Boards**, com o título, a frase `The GitHub projects your tasks start from, each with the repositories it manages.` e **Add board** no cabeçalho. Ela lista os boards cadastrados, em ordem alfabética de título, numa lista contornada. Cada linha mostra:
+
+- o título e o projeto como link para o GitHub (`acme/projects/7`, com `Open the project on GitHub · <URL>` no tooltip);
+- o tipo do dono, a quantidade de repositórios administrados e os nomes deles em ordem alfabética (`Organization · 6 repositories: api, billing, docs`; `1 repository: api`; `No repositories`), com `dono/nome` em todos quando algum repositório não é do dono do board; a linha é cortada com o texto inteiro no tooltip;
+- os status do board em `Final: <finais> · New cards: <status de cards novos>`, com `None` onde não há, ou `No Status field: its cards end when their issues close` num board sem campo de status;
+- a idade da leitura (`Read 2m ago`, `Not read yet`, `Reading…` ou `Read failed 18m ago`) e as ações **Edit…** e **Remove…**.
+
+Quando a última leitura falhou, uma linha afundada sob a linha do board diz a falha (ver [Falhas](#falhas)), `The last reading stays in use.` e **Try again**, que lê o board de novo e diz `Reading…` enquanto lê. A linha é anunciada ao leitor de tela só quando a falha chega com a página aberta. Sem board, a página diz `No boards yet` e `Add a board to start tasks from the cards of a GitHub project.`, com **Add board** sob o texto. Remover um board leva o foco ao título da página.
 
 ### Cadastrar um board
 
@@ -41,7 +48,9 @@ Cada repositório diz como ficará ligado ao produto:
 
 **Edit** relê a estrutura do board no GitHub e reabre as mesmas escolhas, confirmadas com **Save**. Os status finais vêm como o board os guarda: opções que deixaram de existir somem e opções novas aparecem desmarcadas. O status de cards novos vem como está e volta a `None` quando a opção deixou de existir. Os repositórios do board vêm marcados, e os outros repositórios das issues aparecem desmarcados. Acrescentar um repositório segue as regras do cadastro. Um repositório desmarcado sai do board: vai para o grupo sem board quando tem clone, tasks ou reviews de pull request, e sai do produto quando não tem nada disso. As tasks dele não mudam.
 
-**Remove** pede confirmação e diz o que acontece: `N repositories move to No board and M leave MySpec. Tasks keep their cards, and nothing changes on GitHub or on disk.` Os repositórios do board com clone, com tasks ou com reviews de pull request, ativos ou arquivados, passam ao grupo sem board; os que não têm nada disso saem do produto. As tasks criadas de cards do board continuam guardando o card e funcionando, e passam ao grupo **No board** da barra lateral. Nada é alterado no GitHub nem no disco.
+**Remove…** abre um diálogo de confirmação, com o foco em **Cancel**, que diz o que acontece: `5 repositories move to No board and 1 leaves MySpec. Tasks keep their cards, and nothing changes on GitHub or on disk.` A frase não tem a parte que dá zero (`1 repository moves to No board.`, `2 repositories leave MySpec.`, `The board has no repositories.`), e uma linha afundada nomeia os repositórios de cada destino: `To No board: api, docs` e `Leaves MySpec: billing, with no clone, tasks or reviews`. Os repositórios do board com clone, com tasks ou com reviews de pull request, ativos ou arquivados, passam ao grupo sem board; os que não têm nada disso saem do produto. As tasks criadas de cards do board continuam guardando o card e funcionando, e passam ao grupo **No board** da barra lateral. Nada é alterado no GitHub nem no disco.
+
+Enquanto o diálogo lê o que acontece, ele diz `The board leaves MySpec.`, e **Remove board** já vale; se a leitura falha, o diálogo mantém essa frase e acrescenta `Couldn't tell what happens to its repositories: <mensagem>`. Removendo, o botão diz `Removing…` e o diálogo não fecha; uma falha da remoção fica no rodapé, com o diálogo aberto. `Ctrl+Enter` não confirma.
 
 ### Leitura dos cards
 

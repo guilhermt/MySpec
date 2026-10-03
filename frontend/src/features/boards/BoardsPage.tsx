@@ -1,42 +1,44 @@
-import { Plus } from "lucide-react";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { useRef, useState } from "react";
+import { Button } from "@/components/system/Button";
+import { EmptyState } from "@/components/system/EmptyState";
+import { ICONS } from "@/components/system/icons";
 import { BoardDialog } from "@/features/boards/BoardDialog";
 import { BoardRow } from "@/features/boards/BoardRow";
+import { SettingsList } from "@/features/settings/SettingsList";
+import { SettingsPage } from "@/features/settings/SettingsPage";
 import { useBoards } from "@/store/app-store";
 
 /** BoardsPage is the settings page of the GitHub project boards the tasks can come from. */
 export function BoardsPage() {
   const boards = useBoards();
   const [adding, setAdding] = useState(false);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+
+  const add = (
+    <Button variant="secondary" size="sm" icon={ICONS.plus} onClick={() => setAdding(true)}>
+      Add board
+    </Button>
+  );
 
   return (
-    <section className="h-full overflow-y-auto p-8">
-      <div className="flex w-full max-w-[43rem] flex-col gap-8">
-        <header className="flex flex-col gap-2">
-          <div className="flex items-center gap-4">
-            <h2 className="text-[1.5rem] font-semibold">Boards</h2>
-            <span className="flex-1" />
-            <Button size="sm" onClick={() => setAdding(true)}>
-              <Plus />
-              Add board
-            </Button>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            The GitHub projects your tasks start from, each with the repositories it manages.
-          </p>
-        </header>
-        {boards.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No boards yet.</p>
-        ) : (
-          <ul className="flex flex-col divide-y rounded-lg border">
-            {boards.map((board) => (
-              <BoardRow key={board.id} board={board} />
-            ))}
-          </ul>
-        )}
-      </div>
+    <SettingsPage
+      title="Boards"
+      sentence="The GitHub projects your tasks start from, each with the repositories it manages."
+      titleRef={titleRef}
+      action={add}
+    >
+      {boards.length === 0 ? (
+        <EmptyState title="No boards yet" action={add}>
+          Add a board to start tasks from the cards of a GitHub project.
+        </EmptyState>
+      ) : (
+        <SettingsList label="Boards">
+          {boards.map((board) => (
+            <BoardRow key={board.id} board={board} onRemoved={() => titleRef.current?.focus()} />
+          ))}
+        </SettingsList>
+      )}
       <BoardDialog mode="add" open={adding} onOpenChange={setAdding} />
-    </section>
+    </SettingsPage>
   );
 }

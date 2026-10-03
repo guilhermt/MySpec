@@ -503,14 +503,11 @@ describe("board actions reported in the app notice", () => {
     );
   });
 
-  it("answer null when the removal could not be previewed", async () => {
+  it("pass the failure of the preview of a removal to the dialog", async () => {
     vi.mocked(api.previewRemoveBoard).mockRejectedValueOnce(new Error("board gone"));
 
-    expect(await previewRemoveBoard("board-1")).toBeNull();
-    expect(useAppStore.getState().error).toEqual({
-      label: "Couldn't check what removing the board takes with it",
-      detail: "board gone. Try again.",
-    });
+    await expect(previewRemoveBoard("board-1")).rejects.toThrow("board gone");
+    expect(useAppStore.getState().error).toBeNull();
   });
 
   it("answer the context of a card", async () => {

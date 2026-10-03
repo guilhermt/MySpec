@@ -166,7 +166,7 @@ export async function chooseCloneFolder(): Promise<void> {
 
 /**
  * previewBoard, previewEditBoard, checkBoardRepository, addBoard, updateBoard,
- * removeBoard, refreshCard and addRepositoryToBoard do not swallow their
+ * previewRemoveBoard, removeBoard, refreshCard and addRepositoryToBoard do not swallow their
  * failure: the dialog or the panel that asked shows it where the user is.
  */
 export function previewBoard(url: string): Promise<BoardPreview> {
@@ -208,18 +208,11 @@ export function addRepositoryToBoard(
 }
 
 /**
- * previewRemoveBoard says what removing a board takes with it; null when it
- * could not tell, with the reason in the app notice.
+ * previewRemoveBoard says what removing a board takes with it; the dialog that asked tells it when
+ * the reading fails.
  */
-export async function previewRemoveBoard(id: string): Promise<BoardRemoval | null> {
-  let removal: BoardRemoval | null = null;
-  await run(
-    fail(`Couldn't check what removing ${boardTitle(id) || "the board"} takes with it`, TRY),
-    async () => {
-      removal = await api.previewRemoveBoard(id);
-    },
-  );
-  return removal;
+export function previewRemoveBoard(id: string): Promise<BoardRemoval> {
+  return api.previewRemoveBoard(id);
 }
 
 /** refreshBoard starts a reading of a board; the result arrives with the state. */
