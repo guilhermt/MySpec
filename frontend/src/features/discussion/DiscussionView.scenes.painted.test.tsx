@@ -407,6 +407,14 @@ describe.each(THEMES)("DiscussionView, the scenes in the %s theme", (theme) => {
           const box = element.getBoundingClientRect();
           return box.top >= view.top && box.bottom <= view.bottom;
         };
+        // Body holds six lines at least, which the field sized to its content would not.
+        const body = within(area).getByRole("textbox", { name: /^Body/ });
+        expect(getComputedStyle(body).minHeight).toBe(
+          resolve(
+            "calc(var(--leading-body) * 6 + var(--space-2) * 2 + var(--border) * 2)",
+            "min-height",
+          ),
+        );
         const add = within(area).getByRole("button", { name: /^Add a dependency/ });
         expect(inside(add)).toBe(true);
         // The row is taken near the bottom of the conversation, where the listbox has no room below.

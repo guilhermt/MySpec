@@ -13,6 +13,7 @@ import {
   footerPlaces,
   mainArea,
   offWholePixels,
+  resolve,
   setTheme,
   settle,
   THEMES,
@@ -114,6 +115,11 @@ describe.each(THEMES)("NewDiscussionDialog, the scenes in the %s theme", (theme)
         ),
       ).toBeInTheDocument();
       expect(footerPlaces(dialog, /^Start discussion/)).toEqual(before);
+      // Empty, What to discuss still holds three lines.
+      const what = within(dialog).getByRole("textbox", { name: /^What to discuss/ });
+      expect(`${what.getBoundingClientRect().height}px`).toBe(
+        resolve("calc(var(--leading-body) * 3 + var(--space-2) * 2 + var(--border) * 2)", "height"),
+      );
       expect(await withoutTooltip(cutTexts(dialog))).toEqual([]);
     });
   });

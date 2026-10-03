@@ -303,7 +303,8 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
           value={body.value}
           onChange={(event) => body.onChange(event.target.value)}
           onBlur={body.onBlur}
-          className="max-h-(--size-composer-max) field-sizing-content"
+          // field-sizing-content ignores rows: the field holds six lines of the text at least.
+          className="min-h-[calc(var(--leading-body)*6+var(--space-2)*2+var(--border)*2)] max-h-(--size-composer-max) field-sizing-content"
           {...lock}
         />
       </Field>

@@ -238,7 +238,8 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
             value={text}
             disabled={starting}
             onChange={(event) => setText(event.target.value)}
-            className="min-h-0 max-h-[calc(9*var(--leading-body)+var(--space-4))] field-sizing-content"
+            // field-sizing-content ignores rows: the field holds three lines at least, nine at most.
+            className="min-h-[calc(var(--leading-body)*3+var(--space-2)*2+var(--border)*2)] max-h-[calc(9*var(--leading-body)+var(--space-4))] field-sizing-content"
           />
         </Field>
 
