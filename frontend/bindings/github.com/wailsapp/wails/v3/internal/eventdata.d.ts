@@ -14,6 +14,7 @@ declare module "@wailsio/runtime" {
         interface CustomEvents {
             "situation:open": bindings$0.SituationOpen;
             "situation:started": bindings$0.SituationStarted;
+            "startup:changed": bindings$0.Startup;
             "state:changed": bindings$0.State;
             "transcript:changed": bindings$0.TranscriptEvent;
         }

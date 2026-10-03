@@ -44,6 +44,7 @@ type Editor func(paths ...string) error
 
 // TaskService is the task, session and flow API the frontend calls.
 type TaskService struct {
+	late            late[TaskService]
 	tasks           *task.Service
 	sessions        *session.Service
 	flow            *flow.Service
@@ -101,6 +102,10 @@ func NewTaskService(
 // A session that fails to start undoes the task, so a half-created one is
 // never left behind.
 func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return "", err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -220,6 +225,10 @@ func epicOf(card board.Card) *task.CardEpic {
 // and removes it with its artifacts. What git could not remove comes back for
 // the user to clean up: it never keeps the task.
 func (s *TaskService) DeleteTask(taskID string) (DeleteResult, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return DeleteResult{}, err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), removeTimeout)
 	defer cancel()
 
@@ -233,6 +242,10 @@ func (s *TaskService) DeleteTask(taskID string) (DeleteResult, error) {
 // PreviewDelete reads what deleting a task would destroy, which is what the
 // confirmation dialog spells out before the user agrees to it.
 func (s *TaskService) PreviewDelete(taskID string) (DeletePreview, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return DeletePreview{}, err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), removeTimeout)
 	defer cancel()
 
@@ -247,6 +260,10 @@ func (s *TaskService) PreviewDelete(taskID string) (DeletePreview, error) {
 // was merged and updates the base branch of its clone. It returns as soon as
 // the work is scheduled; what git does arrives as state.
 func (s *TaskService) CloseTask(taskID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -260,6 +277,10 @@ func (s *TaskService) CloseTask(taskID string) error {
 // named by its stage. It is how the frontend gets its first one; every later
 // change arrives with EventTranscriptChanged.
 func (s *TaskService) GetTranscript(taskID, stage string) (Transcript, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return Transcript{}, err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -282,6 +303,10 @@ func (s *TaskService) GetTranscript(taskID, stage string) (Transcript, error) {
 // GetActionOutput returns the whole output of an action of one session of an
 // item, named by its stage, open or closed.
 func (s *TaskService) GetActionOutput(taskID, stage, entryID string) (ActionOutput, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return ActionOutput{}, err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -295,6 +320,10 @@ func (s *TaskService) GetActionOutput(taskID, stage, entryID string) (ActionOutp
 // BackToStage reopens a finished stage of a task, throwing away what came
 // after it. The stage is prd, tech_spec or one_shot.
 func (s *TaskService) BackToStage(taskID, stage string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	target, err := task.ParseStage(stage)
 	if err != nil {
 		return s.fail("BackToStage", err)
@@ -313,6 +342,10 @@ func (s *TaskService) BackToStage(taskID, stage string) error {
 // DiscardStage throws away a stage and everything after it, and starts the
 // stage again. The stage is prd, tech_spec, plan or one_shot.
 func (s *TaskService) DiscardStage(taskID, stage string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	target, err := task.ParseStage(stage)
 	if err != nil {
 		return s.fail("DiscardStage", err)
@@ -330,6 +363,10 @@ func (s *TaskService) DiscardStage(taskID, stage string) error {
 
 // ContinueStage moves a task that is revisiting a stage on to the next one.
 func (s *TaskService) ContinueStage(taskID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -342,6 +379,10 @@ func (s *TaskService) ContinueStage(taskID string) error {
 // RetryStep prepares a blocked step again, which is what the user asks for
 // after fixing whatever git complained about.
 func (s *TaskService) RetryStep(taskID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -354,6 +395,10 @@ func (s *TaskService) RetryStep(taskID string) error {
 // CleanAndStartStep throws away every change of the worktree of a step blocked
 // by a dirty one and prepares it again.
 func (s *TaskService) CleanAndStartStep(taskID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -366,6 +411,10 @@ func (s *TaskService) CleanAndStartStep(taskID string) error {
 // DiscardStep throws away the conversation of the current step and starts it
 // over, optionally cleaning its worktree first.
 func (s *TaskService) DiscardStep(taskID string, cleanWorktree bool) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -378,6 +427,10 @@ func (s *TaskService) DiscardStep(taskID string, cleanWorktree bool) error {
 // SetStageModel changes the model and effort of a stage of a task, for the
 // sessions of it that are still to start.
 func (s *TaskService) SetStageModel(taskID, stage, model, effort string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	target, err := models.ParseStage(stage)
 	if err != nil {
 		return s.fail("SetStageModel", err)
@@ -398,6 +451,10 @@ func (s *TaskService) SetStageModel(taskID, stage, model, effort string) error {
 
 // SetStepModel changes the model and effort of a step that has not started.
 func (s *TaskService) SetStepModel(taskID string, step int, model, effort string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	c, err := models.ParseChoice(model, effort)
 	if err != nil {
 		return s.fail("SetStepModel", err)
@@ -416,6 +473,10 @@ func (s *TaskService) SetStepModel(taskID string, step int, model, effort string
 // message on. The stage names the session: prd, tech_spec, plan, one_shot,
 // step:<n>, step_review:<n>, pr or pr_review.
 func (s *TaskService) SetSessionModel(taskID, stage, model, effort string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	c, err := models.ParseChoice(model, effort)
 	if err != nil {
 		return s.fail("SetSessionModel", err)
@@ -433,6 +494,10 @@ func (s *TaskService) SetSessionModel(taskID, stage, model, effort string) error
 // SetReviewMode changes who reviews the steps of a task that are still to
 // start and have no mode of their own.
 func (s *TaskService) SetReviewMode(taskID, mode string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	target, err := reviewmode.ParseMode(mode)
 	if err != nil {
 		return s.fail("SetReviewMode", err)
@@ -449,6 +514,10 @@ func (s *TaskService) SetReviewMode(taskID, mode string) error {
 
 // SetStepReviewMode changes who reviews a step that has not started.
 func (s *TaskService) SetStepReviewMode(taskID string, step int, mode string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	target, err := reviewmode.ParseMode(mode)
 	if err != nil {
 		return s.fail("SetStepReviewMode", err)
@@ -466,6 +535,10 @@ func (s *TaskService) SetStepReviewMode(taskID string, step int, mode string) er
 // ClearStepReviewMode makes a step that has not started follow the review mode
 // of the task again.
 func (s *TaskService) ClearStepReviewMode(taskID string, step int) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -478,6 +551,10 @@ func (s *TaskService) ClearStepReviewMode(taskID string, step int) error {
 // ReviewStepMyself takes the review of the current step of a task back from
 // the agent.
 func (s *TaskService) ReviewStepMyself(taskID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -489,6 +566,10 @@ func (s *TaskService) ReviewStepMyself(taskID string) error {
 
 // OpenInEditor opens the worktree of a task in the editor.
 func (s *TaskService) OpenInEditor(taskID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	worktree, err := s.worktreeOf(taskID)
 	if err != nil {
 		return s.fail("OpenInEditor", err)
@@ -511,6 +592,10 @@ func (s *TaskService) worktreeOf(taskID string) (string, error) {
 // ApproveStep approves the review of the current step of a task and asks the
 // agent to commit what is staged.
 func (s *TaskService) ApproveStep(taskID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -523,6 +608,10 @@ func (s *TaskService) ApproveStep(taskID string) error {
 // OpenFileInEditor opens one file of the worktree of a task in the editor, in
 // the window of that worktree.
 func (s *TaskService) OpenFileInEditor(taskID, path string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	worktree, err := s.worktreeOf(taskID)
 	if err != nil {
 		return s.fail("OpenFileInEditor", err)
@@ -542,6 +631,10 @@ func (s *TaskService) OpenFileInEditor(taskID, path string) error {
 // OpenPR writes the draft the user approved and asks the agent to open the
 // pull request of the task from it.
 func (s *TaskService) OpenPR(taskID, title, body string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -554,6 +647,10 @@ func (s *TaskService) OpenPR(taskID, title, body string) error {
 // ApprovePR approves the review of the changes a pass of the pull request
 // review produced and asks the agent to commit and push them.
 func (s *TaskService) ApprovePR(taskID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -567,6 +664,10 @@ func (s *TaskService) ApprovePR(taskID string) error {
 // current pass of the review of the pull request: "approved", "discarded",
 // or "" to take the decision back.
 func (s *TaskService) DecidePRFinding(taskID string, pass, number int, decision string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	d, err := prreport.ParseDecision(decision)
 	if err != nil {
 		return s.fail("DecidePRFinding", err)
@@ -584,6 +685,10 @@ func (s *TaskService) DecidePRFinding(taskID string, pass, number int, decision 
 // SetPRFindingText replaces the text of a finding of the current pass of the
 // review of the pull request.
 func (s *TaskService) SetPRFindingText(taskID string, pass, number int, text string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -596,6 +701,10 @@ func (s *TaskService) SetPRFindingText(taskID string, pass, number int, text str
 // ApproveRestOfPRFindings approves every finding of the pass that has no
 // decision.
 func (s *TaskService) ApproveRestOfPRFindings(taskID string, pass int) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -607,6 +716,10 @@ func (s *TaskService) ApproveRestOfPRFindings(taskID string, pass int) error {
 
 // ApplyPRFindings sends the approved findings of the current pass to the agent.
 func (s *TaskService) ApplyPRFindings(taskID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -619,6 +732,10 @@ func (s *TaskService) ApplyPRFindings(taskID string) error {
 // OpenPRFindingInEditor opens VS Code on the worktree of the task at the line
 // of a finding of the review of its pull request.
 func (s *TaskService) OpenPRFindingInEditor(taskID string, pass, number int) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	finding, err := s.prFindingOf(taskID, pass, number)
 	if err != nil {
 		return s.fail("OpenPRFindingInEditor", err)
@@ -662,6 +779,10 @@ func (s *TaskService) prFindingOf(taskID string, pass, number int) (prreport.Fin
 // ReviewAgain ends the review session of a task and starts a new pass over its
 // pull request.
 func (s *TaskService) ReviewAgain(taskID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -673,6 +794,10 @@ func (s *TaskService) ReviewAgain(taskID string) error {
 
 // DiscardDraft throws away the draft of a task and prepares the stage again.
 func (s *TaskService) DiscardDraft(taskID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -684,6 +809,10 @@ func (s *TaskService) DiscardDraft(taskID string) error {
 
 // RetryPR prepares a blocked pull request stage again.
 func (s *TaskService) RetryPR(taskID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -696,6 +825,10 @@ func (s *TaskService) RetryPR(taskID string) error {
 // RefreshPR reads the pull request of a task again. It returns as soon as the
 // reading is scheduled; what it finds arrives as state.
 func (s *TaskService) RefreshPR(taskID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -708,6 +841,10 @@ func (s *TaskService) RefreshPR(taskID string) error {
 // SendMessage queues a message for the agent, delivered right away when the
 // session is free.
 func (s *TaskService) SendMessage(taskID, stage, text string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -719,6 +856,10 @@ func (s *TaskService) SendMessage(taskID, stage, text string) error {
 
 // RemovePending drops a queued message before it reaches the agent.
 func (s *TaskService) RemovePending(taskID, stage, entryID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -730,6 +871,10 @@ func (s *TaskService) RemovePending(taskID, stage, entryID string) error {
 
 // Interrupt aborts the running turn of a task, leaving the session alive.
 func (s *TaskService) Interrupt(taskID, stage string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -741,6 +886,10 @@ func (s *TaskService) Interrupt(taskID, stage string) error {
 
 // Pause stops the process of a task and holds every message until Resume.
 func (s *TaskService) Pause(taskID, stage string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -752,6 +901,10 @@ func (s *TaskService) Pause(taskID, stage string) error {
 
 // Resume lifts a pause and delivers what was queued meanwhile.
 func (s *TaskService) Resume(taskID, stage string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -763,6 +916,10 @@ func (s *TaskService) Resume(taskID, stage string) error {
 
 // Retry clears the last error of a task and starts its process again.
 func (s *TaskService) Retry(taskID, stage string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -776,6 +933,10 @@ func (s *TaskService) Retry(taskID, stage string) error {
 // decision is allow, allow_session or deny; message is the reason a denial
 // gives the agent.
 func (s *TaskService) AnswerPermission(taskID, stage, requestID, decision, message string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	parsed, err := parseDecision(decision)
 	if err != nil {
 		return s.fail("AnswerPermission", err)
@@ -794,6 +955,10 @@ func (s *TaskService) AnswerPermission(taskID, stage, requestID, decision, messa
 // AnswerQuestion answers the pending structured question of a task, mapping
 // each question text to the chosen label.
 func (s *TaskService) AnswerQuestion(taskID, stage, requestID string, answers map[string]string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -806,6 +971,10 @@ func (s *TaskService) AnswerQuestion(taskID, stage, requestID string, answers ma
 
 // ReadArtifact returns the content of an artifact of a task by file name.
 func (s *TaskService) ReadArtifact(taskID, name string) (string, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return "", err
+	}
 	content, err := s.tasks.ReadArtifact(taskID, name)
 	if err != nil {
 		return "", s.fail("ReadArtifact", err)

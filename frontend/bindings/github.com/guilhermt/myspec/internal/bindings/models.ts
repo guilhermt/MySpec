@@ -2782,6 +2782,89 @@ export interface StartReviewRequest {
 }
 
 /**
+ * Startup is where the startup of the app stands, before the first state.
+ */
+export interface Startup {
+    /**
+     * Phase is starting, failed or ready, a string for the same reason as
+     * State.Theme. A refused migration ends the startup ready, with the
+     * migration in the state.
+     */
+    "phase": string;
+
+    /**
+     * in order; never nil
+     */
+    "steps": StartupStep[] | null;
+
+    /**
+     * failed only
+     */
+    "failure": StartupFailure | null;
+
+    /**
+     * what the desktop asked for before the window opened
+     */
+    "systemDark": boolean;
+}
+
+/**
+ * StartupFailure is why the startup failed.
+ */
+export interface StartupFailure {
+    /**
+     * Case is permission, disk_full or other, a string for the same reason as
+     * State.Theme.
+     */
+    "case": string;
+
+    /**
+     * the error as the log has it
+     */
+    "error": string;
+
+    /**
+     * the resolved data directory
+     */
+    "dataDir": string;
+
+    /**
+     * the resolved log file
+     */
+    "logPath": string;
+}
+
+/**
+ * StartupStep is one step that holds the first screen.
+ */
+export interface StartupStep {
+    /**
+     * ID is data or clones, a string for the same reason as State.Theme.
+     */
+    "id": string;
+
+    /**
+     * State is todo, running or done, a string for the same reason as State.Theme.
+     */
+    "state": string;
+
+    /**
+     * RFC 3339 with milliseconds; "" before it starts
+     */
+    "startedAt": string;
+
+    /**
+     * clones: the repositories with a path
+     */
+    "count": number;
+
+    /**
+     * clones: the path whose test passed slowAfter; "" otherwise
+     */
+    "detail": string;
+}
+
+/**
  * State is everything the interface renders, produced by Go and never derived
  * on the frontend.
  */

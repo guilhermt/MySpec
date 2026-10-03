@@ -24,6 +24,7 @@ type GHLogin interface {
 
 // SettingsService is the settings API the frontend calls.
 type SettingsService struct {
+	late        late[SettingsService]
 	theme       *theme.Service
 	defaults    *models.Service
 	reviewModes *reviewmode.Service
@@ -55,6 +56,10 @@ func NewSettingsService(
 
 // SetTheme stores the theme preference: system, light or dark.
 func (s *SettingsService) SetTheme(preference string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	pref, err := theme.ParsePreference(preference)
 	if err != nil {
 		s.log.Error("binding failed", "method", "SetTheme", "err", err)
@@ -73,6 +78,10 @@ func (s *SettingsService) SetTheme(preference string) error {
 
 // SetModelDefault stores the model and effort new tasks start a stage with.
 func (s *SettingsService) SetModelDefault(stage, model, effort string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	target, err := models.ParseStage(stage)
 	if err != nil {
 		return s.fail("SetModelDefault", err)
@@ -94,6 +103,10 @@ func (s *SettingsService) SetModelDefault(stage, model, effort string) error {
 // SetReviewModeDefault stores who reviews the steps of the tasks created from
 // now on: manual or agent.
 func (s *SettingsService) SetReviewModeDefault(mode string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	target, err := reviewmode.ParseMode(mode)
 	if err != nil {
 		return s.fail("SetReviewModeDefault", err)
@@ -110,6 +123,10 @@ func (s *SettingsService) SetReviewModeDefault(mode string) error {
 
 // ListPrompts says which prompts the user edited and when, without their text.
 func (s *SettingsService) ListPrompts() ([]PromptListing, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return nil, err
+	}
 	listed, err := prompts.List(s.dataDir)
 	if err != nil {
 		return nil, s.fail("ListPrompts", err)
@@ -121,6 +138,10 @@ func (s *SettingsService) ListPrompts() ([]PromptListing, error) {
 // the reading of the catalog of this run, and gh with a login. What it can't
 // tell is unknown.
 func (s *SettingsService) CheckMachine() Machine {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return Machine{}
+	}
 	machine := Machine{Claude: "unknown", GH: "unknown"}
 
 	if done, failure := s.defaults.Discovery(); done {
@@ -152,6 +173,10 @@ func (s *SettingsService) CheckMachine() Machine {
 
 // GetPrompt reads a prompt as the settings show it.
 func (s *SettingsService) GetPrompt(stage string) (Prompt, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return Prompt{}, err
+	}
 	target, err := prompts.ParseStage(stage)
 	if err != nil {
 		return Prompt{}, s.fail("GetPrompt", err)
@@ -167,6 +192,10 @@ func (s *SettingsService) GetPrompt(stage string) (Prompt, error) {
 // SavePrompt stores the text of a prompt. The text of the default is no edit:
 // the prompt follows the default again.
 func (s *SettingsService) SavePrompt(stage, text string) (Prompt, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return Prompt{}, err
+	}
 	target, err := prompts.ParseStage(stage)
 	if err != nil {
 		return Prompt{}, s.fail("SavePrompt", err)
@@ -183,6 +212,10 @@ func (s *SettingsService) SavePrompt(stage, text string) (Prompt, error) {
 // RestorePrompt throws the edit of a prompt away, so that it follows the
 // default of the app again.
 func (s *SettingsService) RestorePrompt(stage string) (Prompt, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return Prompt{}, err
+	}
 	target, err := prompts.ParseStage(stage)
 	if err != nil {
 		return Prompt{}, s.fail("RestorePrompt", err)

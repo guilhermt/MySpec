@@ -17,6 +17,7 @@ import (
 // of a discussion goes through TaskService, like the one of a task: the id of
 // the discussion is the id of the item behind it.
 type DiscussionService struct {
+	late         late[DiscussionService]
 	flow         *discussionflow.Service
 	discussions  *discussion.Service
 	repositories *repository.Service
@@ -42,6 +43,10 @@ func NewDiscussionService(
 // discussion with its artifact folder and its conversation, and answers with
 // the id of the discussion.
 func (s *DiscussionService) StartDiscussion(req StartDiscussionRequest) (string, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return "", err
+	}
 	choice, err := models.ParseChoice(req.Model, req.Effort)
 	if err != nil {
 		return "", s.fail("StartDiscussion", err)
@@ -72,6 +77,10 @@ func (s *DiscussionService) StartDiscussion(req StartDiscussionRequest) (string,
 // the stored reading of the board. It creates nothing: the dialog shows it
 // while the user is still choosing what to discuss, with no title yet.
 func (s *DiscussionService) DiscussionContext(req DiscussionContextRequest) (string, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return "", err
+	}
 	text, err := s.flow.Context(req.BoardID, "", req.Text, req.Cards)
 	if err != nil {
 		return "", s.fail("DiscussionContext", err)
@@ -82,6 +91,10 @@ func (s *DiscussionService) DiscussionContext(req DiscussionContextRequest) (str
 // SetDraftText records the title and the body the user left on a draft, which
 // is what a publication sends.
 func (s *DiscussionService) SetDraftText(id, draftID, title, body string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -94,6 +107,10 @@ func (s *DiscussionService) SetDraftText(id, draftID, title, body string) error 
 // SetDraftRepository records the registered repository a new card or an epic
 // is created in.
 func (s *DiscussionService) SetDraftRepository(id, draftID, repositoryID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	repo, err := s.boardRepository(id, repositoryID, "draft "+draftID)
 	if err != nil {
 		return s.fail("SetDraftRepository", err)
@@ -110,6 +127,10 @@ func (s *DiscussionService) SetDraftRepository(id, draftID, repositoryID string)
 
 // SetDraftModule records the module of a card; "" is a card with none.
 func (s *DiscussionService) SetDraftModule(id, draftID, module string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -122,6 +143,10 @@ func (s *DiscussionService) SetDraftModule(id, draftID, module string) error {
 // SetDraftEpic records the epic of a card: an epic draft of the discussion, an
 // issue as owner/name#number, or "" for none.
 func (s *DiscussionService) SetDraftEpic(id, draftID, ref string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -133,6 +158,10 @@ func (s *DiscussionService) SetDraftEpic(id, draftID, ref string) error {
 
 // AddDraftDependency records that a card can only start after another one.
 func (s *DiscussionService) AddDraftDependency(id, draftID, ref string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -144,6 +173,10 @@ func (s *DiscussionService) AddDraftDependency(id, draftID, ref string) error {
 
 // RemoveDraftDependency drops a dependency of a card.
 func (s *DiscussionService) RemoveDraftDependency(id, draftID, ref string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -156,6 +189,10 @@ func (s *DiscussionService) RemoveDraftDependency(id, draftID, ref string) error
 // DecideDraft records what the user decided about one draft: "", approved or
 // discarded.
 func (s *DiscussionService) DecideDraft(id, draftID, decision string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	d, err := discussion.ParseDecision(decision)
 	if err != nil {
 		return s.fail("DecideDraft", err)
@@ -173,6 +210,10 @@ func (s *DiscussionService) DecideDraft(id, draftID, decision string) error {
 // GroupIntoEpic puts loose card drafts of the current round under a new epic
 // with this title, in this repository of the board, and answers with its id.
 func (s *DiscussionService) GroupIntoEpic(id string, draftIDs []string, title, repositoryID string) (string, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return "", err
+	}
 	repo, err := s.boardRepository(id, repositoryID, "the epic")
 	if err != nil {
 		return "", s.fail("GroupIntoEpic", err)
@@ -191,6 +232,10 @@ func (s *DiscussionService) GroupIntoEpic(id string, draftIDs []string, title, r
 // RetryPublish sends a draft whose publication failed to GitHub again, from
 // the step it stopped at.
 func (s *DiscussionService) RetryPublish(id, draftID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -203,6 +248,10 @@ func (s *DiscussionService) RetryPublish(id, draftID string) error {
 // ArchiveDiscussion takes a discussion out of the list and into the history,
 // with its conversation kept for the user to read.
 func (s *DiscussionService) ArchiveDiscussion(id string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -215,6 +264,10 @@ func (s *DiscussionService) ArchiveDiscussion(id string) error {
 // DeleteDiscussion removes a discussion for good, active or in the history.
 // What it already published on GitHub stays there.
 func (s *DiscussionService) DeleteDiscussion(id string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
@@ -227,6 +280,10 @@ func (s *DiscussionService) DeleteDiscussion(id string) error {
 // ReadDiscussionArtifact returns the content of an artifact of a discussion by
 // file name: context.md, discussion.md or drafts.md.
 func (s *DiscussionService) ReadDiscussionArtifact(id, name string) (string, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return "", err
+	}
 	content, err := s.discussions.ReadArtifact(id, name)
 	if err != nil {
 		return "", s.fail("ReadDiscussionArtifact", err)

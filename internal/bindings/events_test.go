@@ -15,6 +15,7 @@ func TestRegisterEventsRegistersEveryEvent(t *testing.T) {
 
 	for _, name := range []string{
 		bindings.EventStateChanged,
+		bindings.EventStartupChanged,
 		bindings.EventTranscriptChanged,
 		bindings.EventSituationStarted,
 		bindings.EventSituationOpen,

@@ -5,6 +5,41 @@ package bindings
 // EventStateChanged carries a whole State every time anything changes.
 const EventStateChanged = "state:changed"
 
+// EventStartupChanged carries the Startup whenever the startup moves.
+const EventStartupChanged = "startup:changed"
+
+// Startup is where the startup of the app stands, before the first state.
+type Startup struct {
+	// Phase is starting, failed or ready, a string for the same reason as
+	// State.Theme. A refused migration ends the startup ready, with the
+	// migration in the state.
+	Phase      string          `json:"phase"`
+	Steps      []StartupStep   `json:"steps"`      // in order; never nil
+	Failure    *StartupFailure `json:"failure"`    // failed only
+	SystemDark bool            `json:"systemDark"` // what the desktop asked for before the window opened
+}
+
+// StartupStep is one step that holds the first screen.
+type StartupStep struct {
+	// ID is data or clones, a string for the same reason as State.Theme.
+	ID string `json:"id"`
+	// State is todo, running or done, a string for the same reason as State.Theme.
+	State     string `json:"state"`
+	StartedAt string `json:"startedAt"` // RFC 3339 with milliseconds; "" before it starts
+	Count     int    `json:"count"`     // clones: the repositories with a path
+	Detail    string `json:"detail"`    // clones: the path whose test passed slowAfter; "" otherwise
+}
+
+// StartupFailure is why the startup failed.
+type StartupFailure struct {
+	// Case is permission, disk_full or other, a string for the same reason as
+	// State.Theme.
+	Case    string `json:"case"`
+	Error   string `json:"error"`   // the error as the log has it
+	DataDir string `json:"dataDir"` // the resolved data directory
+	LogPath string `json:"logPath"` // the resolved log file
+}
+
 // Repository is a registered repository, with what the app knows about its
 // clone and its tasks.
 type Repository struct {
