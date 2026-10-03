@@ -115,12 +115,15 @@ const CASES: Case[] = [
   scene("drafts", {}, "deleted"),
 ];
 
-// widthsOf are the main areas a case is drawn at; the ten drafts and Details of done at the
-// narrowest one too.
+// widthsOf are the main areas a case is drawn at; the ten drafts, Details of done and the edit of
+// draft 3 at the narrowest one too, where the edit cuts the title of a folded draft and the value of
+// Epic.
 const widthsOf = ({ label }: Case) => [
   WIDE_MAIN,
   HALF_MAIN,
-  ...(label === "many" || label === "done?panel=Details" ? [NARROW_MAIN] : []),
+  ...(label === "many" || label === "done?panel=Details" || label === "drafts?edit"
+    ? [NARROW_MAIN]
+    : []),
 ];
 
 /**

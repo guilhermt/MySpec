@@ -1,6 +1,7 @@
 import { ChevronDown } from "lucide-react";
 import { Fragment, useId } from "react";
 import { cn } from "@/lib/utils";
+import { CutText } from "./CutText";
 import { Icon } from "./Icon";
 import {
   type ItemAction,
@@ -112,13 +113,13 @@ export function Select({
         variant === "sidebar" && SIDEBAR_TRIGGER,
       )}
     >
-      <span className="truncate">
+      <CutText text={chosen !== undefined ? choiceName(chosen) : placeholder}>
         {chosen === undefined ? (
           <span className="text-ink-4">{placeholder}</span>
         ) : (
           <ChosenText choice={chosen} loading={loading === true} />
         )}
-      </span>
+      </CutText>
       <Icon icon={ChevronDown} size="sm" tone="muted" />
     </MenuTrigger>
   );

@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { ChecksList } from "@/components/system/ChecksList";
+import { CutText } from "@/components/system/CutText";
 import { Finding } from "@/components/system/Finding";
 import { DraftGlyph } from "@/components/system/FoldedDraft";
 import { Icon } from "@/components/system/Icon";
@@ -145,18 +146,17 @@ function DraftsBody({ rows }: { rows: readonly DraftRowView[] }) {
           <Tooltip content={row.title}>
             <span className="min-w-0 truncate">{row.title}</span>
           </Tooltip>
-          <span
+          <CutText
+            text={row.status}
             className={cn(
-              "ml-auto max-w-1/2 shrink-0 truncate text-(length:--text-meta) leading-(--leading-meta)",
+              "ml-auto max-w-1/2 shrink-0 text-(length:--text-meta) leading-(--leading-meta)",
               row.tone === "error"
                 ? "text-state-error"
                 : row.tone === "quiet"
                   ? "text-ink-3"
                   : "text-ink-2",
             )}
-          >
-            {row.status}
-          </span>
+          />
           {row.link !== null && (
             <Button
               variant="ghost"
@@ -304,9 +304,7 @@ export function MarkerLine({
       >
         {reading ? <Shimmer>{view.text}</Shimmer> : view.text}
       </span>
-      {view.complement !== "" && (
-        <span className="min-w-0 truncate text-ink-3">{view.complement}</span>
-      )}
+      {view.complement !== "" && <CutText text={view.complement} className="text-ink-3" />}
       {/* The link is an action of its own: a line that opens is a button, which holds no other. */}
       {view.link !== undefined && !opens && (
         <Button
