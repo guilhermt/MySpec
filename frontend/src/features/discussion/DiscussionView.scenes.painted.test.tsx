@@ -392,6 +392,20 @@ describe.each(THEMES)("DiscussionView, the scenes in the %s theme", (theme) => {
       }
       await capture(`discussion-${one.label.replace(/[?=&]/g, "-")}-${width}-${theme}`, area);
 
+      // With text in the composer, Send is the one primary where neither the bar nor a card draws
+      // one (§4.2, A primária em cada cena).
+      if (
+        Object.keys(one.flags).length === 0 &&
+        one.gone === undefined &&
+        ["talk", "unreadable", "drafts", "rewrite", "publish", "many"].includes(one.name)
+      ) {
+        const composer = within(area).getByRole("textbox", { name: /^Reply to the agent/ });
+        await user.click(composer);
+        await user.keyboard("Go on");
+        expect(visiblePrimaries(document).map(labelOf)).toEqual(["Send"]);
+        await user.clear(composer);
+      }
+
       // The edit of draft 3 opened in the conversation with its fields: Add a dependency is in view,
       // and the listbox it opens stays inside the conversation, above the row when below has no room.
       if (one.flags.edit === true) {

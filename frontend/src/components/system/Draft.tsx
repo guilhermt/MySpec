@@ -192,9 +192,6 @@ export function Draft({
       )}
     >
       <StateText state={state} onOpenLink={onOpenLink} />
-      {decided && reason === null && decision.shown && (
-        <span className="font-normal text-ink-3">· click again to undo</span>
-      )}
     </span>
   );
 
@@ -381,6 +378,10 @@ export function Draft({
                 Retry
               </Button>
             </Tooltip>
+          )}
+          {/* The way to undo comes after the whole state, the Retry of a failure included. */}
+          {decided && reason === null && decision.shown && state.open !== null && (
+            <span className={cn(META, "text-ink-3")}>· click again to undo</span>
           )}
           {decision.shown && (
             <span className="ml-auto">

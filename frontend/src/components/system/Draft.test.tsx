@@ -248,6 +248,15 @@ describe("Draft", () => {
         ...overrides,
       });
 
+    it("says how to undo the approval after Retry, never between the reason and it", () => {
+      failed();
+
+      const undo = screen.getByText("· click again to undo");
+      const order = button("Retry").compareDocumentPosition(undo);
+      expect(order & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.getByText("GitHub refused the label billing.")).not.toContainElement(undo);
+    });
+
     it("says why and retries", async () => {
       const user = userEvent.setup();
       const { onRetry, group } = failed();
