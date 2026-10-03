@@ -131,6 +131,20 @@ export function mainArea(width: number): CSSProperties {
 }
 
 /**
+ * windowForMain is the width of the window whose main area is `main` wide with the sidebar open: the
+ * sidebar is a share of the window (--sidebar-width), so the window is found, not added up.
+ */
+export function windowForMain(main: number): number {
+  const sidebar = (window: number) => Math.min(380, Math.max(288, Math.floor(0.08 * window + 200)));
+  for (let window = main + 288; window <= main + 380; window++) {
+    if (window - sidebar(window) === main) {
+      return window;
+    }
+  }
+  throw new Error(`no window has a main area of ${main}px`);
+}
+
+/**
  * placeHeaderOneLine tells whether a place header keeps everything on one line: its height, nothing
  * past its edge and every button inside it.
  */

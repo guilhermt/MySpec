@@ -26,15 +26,21 @@ import type {
 import { MOBILE_ID, PLATFORM_ID, SCENE_NOW, TOOLS_ID } from "@/test/board-scenes";
 import {
   api,
+  makeArchivedTask,
   makeBoard,
   makeBoardPreview,
   makeBoardRemoval,
   makeBoardRepositoryOption,
+  makeMachine,
+  makeMigration,
   makeModelCatalog,
   makeModelDefaults,
   makePrompt,
   makePromptListings,
   makeRepository,
+  makeStartup,
+  makeStartupFailure,
+  makeStartupStep,
   makeState,
 } from "@/test/wails-mock";
 
@@ -934,4 +940,150 @@ export function settingsScene(name: SettingsSceneName, variation: string): Setti
     case "settings-prompts":
       return promptsScene(variation);
   }
+}
+
+// ---------------- The start, the welcome and the migration ----------------
+
+/** START_VARIATIONS are the moments of the start of the app, "" being the start that runs. */
+export const START_VARIATIONS = ["", "slow", "failed", "disk-full"] as const;
+
+/** WELCOME_VARIATIONS are the moments of the welcome, "" being the machine with nothing missing. */
+export const WELCOME_VARIATIONS = ["", "no-login", "no-gh", "no-claude", "history"] as const;
+
+/** SLOW_FOR is how long the step of the clones has been running in the slow start. */
+const SLOW_FOR_MS = 12_000;
+
+/** startScene is the start of the app at a moment: running, with the clones slow, or failed. */
+export function startScene(variation: (typeof START_VARIATIONS)[number]): SettingsSceneSetup {
+  const base = { state: makeState(), location: { kind: "home" } as Location, storage: {} };
+  const data = makeStartupStep({ id: "data", state: "done" });
+  const clones = (overrides: Partial<Parameters<typeof makeStartupStep>[0]>) =>
+    makeStartupStep({ id: "clones", count: 12, ...overrides });
+  switch (variation) {
+    case "":
+      return {
+        ...base,
+        startup: makeStartup({
+          phase: "starting",
+          steps: [data, clones({ state: "running", startedAt: at(0) })],
+        }),
+      };
+    case "slow":
+      return {
+        ...base,
+        startup: makeStartup({
+          phase: "starting",
+          steps: [
+            data,
+            clones({
+              state: "running",
+              startedAt: new Date(Date.parse(SCENE_NOW) - SLOW_FOR_MS).toISOString(),
+              detail: `${HOME}/code/infra`,
+            }),
+          ],
+        }),
+      };
+    case "failed":
+    case "disk-full": {
+      const full = variation === "disk-full";
+      return {
+        ...base,
+        startup: makeStartup({
+          phase: "failed",
+          steps: [makeStartupStep({ id: "data", state: "failed" })],
+          failure: makeStartupFailure({
+            case: full ? "disk_full" : "permission",
+            error: full
+              ? `open ${HOME}/.local/share/myspec/myspec.db: no space left on device`
+              : `open ${HOME}/.local/share/myspec/myspec.db: permission denied\nthe folder belongs to root (drwx------ root root)`,
+            dataDir: `${HOME}/.local/share/myspec`,
+            logPath: `${HOME}/.local/state/myspec/myspec.log`,
+          }),
+        }),
+      };
+    }
+  }
+}
+
+/** welcomeScene is the welcome at a moment: nothing registered, with what the machine lacks. */
+export function welcomeScene(variation: (typeof WELCOME_VARIATIONS)[number]): SettingsSceneSetup {
+  const empty = (overrides: Partial<State> = {}) =>
+    sceneState({
+      repositories: [],
+      boards: [],
+      tasks: [],
+      reviews: [],
+      discussions: [],
+      ...overrides,
+    });
+  const base = { state: empty(), location: { kind: "home" } as Location, storage: {} };
+  switch (variation) {
+    case "":
+      return { ...base, machine: makeMachine() };
+    case "no-login":
+      return { ...base, machine: makeMachine({ gh: "signed_out" }) };
+    case "no-gh":
+      return { ...base, machine: makeMachine({ gh: "not_installed" }) };
+    case "no-claude":
+      return { ...base, machine: makeMachine({ claude: "not_found" }) };
+    case "history":
+      return {
+        ...base,
+        state: empty({
+          history: [
+            makeArchivedTask({
+              id: "archived-1",
+              name: "idempotency-keys",
+              repository: "acme/api",
+              archivedAt: at(60 * 24 * 3),
+            }),
+          ],
+        }),
+        machine: makeMachine(),
+      };
+  }
+}
+
+/** migrationScene is the refused migration: one case of each kind, with the tasks. */
+export function migrationScene(): SettingsSceneSetup {
+  return {
+    state: makeState({
+      migration: makeMigration({
+        cases: [
+          {
+            kind: "root_task",
+            repository: `${HOME}/work`,
+            detail: "",
+            tasks: [
+              { name: "billing-export", workspace: `${HOME}/work`, path: "" },
+              { name: "fix-ci-cache", workspace: `${HOME}/work`, path: "" },
+            ],
+          },
+          {
+            kind: "no_origin",
+            repository: `${HOME}/work/legacy-portal`,
+            detail: "The origin remote is not on GitHub: git@gitlab.com:acme/legacy-portal.git",
+            tasks: [
+              {
+                name: "portal-sso",
+                workspace: `${HOME}/work`,
+                path: `${HOME}/work/legacy-portal`,
+              },
+            ],
+          },
+          {
+            kind: "name_conflict",
+            repository: "acme/api",
+            detail: "",
+            tasks: [
+              { name: "rate-limit", workspace: `${HOME}/work`, path: `${HOME}/work/api` },
+              { name: "rate-limit", workspace: `${HOME}/code`, path: `${HOME}/code/api` },
+            ],
+          },
+        ],
+      }),
+    }),
+    location: { kind: "home" },
+    storage: {},
+  };
 }
