@@ -135,6 +135,10 @@ describe.each(THEMES)("Settings, the scenes in the %s theme", (theme) => {
         expect(nav.getBoundingClientRect().height, "the navigation as a row").toBeLessThan(
           pageBox.getBoundingClientRect().height,
         );
+        const tops = new Set(
+          [...nav.querySelectorAll("a")].map((link) => link.getBoundingClientRect().top),
+        );
+        expect([...tops], "every page of the navigation on one line").toHaveLength(1);
       } else {
         expect(edgesOf(nav).right, "the navigation at the left").toBeLessThanOrEqual(
           edgesOf(pageBox).left,
