@@ -11,7 +11,7 @@ import {
   token,
 } from "@/test/painted";
 import { ICONS } from "./icons";
-import { BoardStartRow, NoBoardRow, StartRow } from "./StartRow";
+import { BoardStartRow, type BoardStartRowProps, NoBoardRow, StartRow } from "./StartRow";
 
 function draw(disabledReason?: string) {
   render(
@@ -87,6 +87,34 @@ describe.each(THEMES)("StartRow in the %s theme", (theme) => {
     expect(message.left).toBe(label.left);
     // The failure is neutral, never a situation.
     expect(getComputedStyle(screen.getByText("Read failed 18m ago")).color).toBe(token("--ink-2"));
+  });
+
+  it("tells the age of a failed reading at the size of the ages beside it", () => {
+    setTheme(theme);
+    const row = (title: string, reading: BoardStartRowProps["line"]["reading"]) => (
+      <BoardStartRow
+        line={{ title, summary: "46 open cards · api", reading, label: title, blockers: [] }}
+        now={Date.parse("2026-09-24T14:10:00Z")}
+        onOpen={() => {}}
+        onRetryRead={() => {}}
+        onClone={() => {}}
+        onChangePath={() => {}}
+      />
+    );
+    render(
+      <>
+        {row("Platform Roadmap", {
+          text: "◇ Read failed 18m ago",
+          tone: "failed",
+          shimmer: false,
+          failure: { failedAt: "2026-09-24T13:52:00Z", readAt: "2026-09-24T11:30:00Z" },
+        })}
+        {row("Mobile", { text: "read 1d ago", tone: "quiet", shimmer: false })}
+      </>,
+    );
+    const failed = getComputedStyle(screen.getByText("Read failed 18m ago")).fontSize;
+    expect(failed).toBe(getComputedStyle(screen.getByText("read 1d ago")).fontSize);
+    expect(failed).toBe(resolve("var(--text-meta)", "font-size"));
   });
 
   it("draws the line of the repositories without a board as a group, not a button", () => {
