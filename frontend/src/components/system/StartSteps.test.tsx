@@ -5,7 +5,13 @@ import { StartSteps, type StartStepView } from "./StartSteps";
 
 const STEPS: StartStepView[] = [
   { id: "open", label: "Opening your data", state: "done", elapsed: "0.4s", reason: "" },
-  { id: "clones", label: "Checking the clones", state: "running", elapsed: "3s", reason: "slow" },
+  {
+    id: "clones",
+    label: "Checking the clones",
+    state: "running",
+    elapsed: "3s",
+    reason: "~/code/infra doesn't answer",
+  },
   { id: "load", label: "Loading your work", state: "todo", elapsed: "", reason: "" },
 ];
 
@@ -15,7 +21,7 @@ describe("StartSteps", () => {
     const items = screen.getAllByRole("listitem");
     expect(items.map((item) => item.textContent)).toEqual([
       "Opening your data0.4s",
-      "Checking the clones3s slow",
+      "Checking the clones3s · ~/code/infra doesn't answer",
       "Loading your work",
     ]);
   });

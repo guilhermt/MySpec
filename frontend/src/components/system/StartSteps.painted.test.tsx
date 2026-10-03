@@ -1,11 +1,17 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { resolve, setTheme, THEMES, token } from "@/test/painted";
+import { resolve, setTheme, THEMES, token, withoutTooltip } from "@/test/painted";
 import { StartSteps, type StartStepView } from "./StartSteps";
 
 const STEPS: StartStepView[] = [
   { id: "open", label: "Opening your data", state: "done", elapsed: "0.4s", reason: "" },
-  { id: "clones", label: "Checking the clones", state: "running", elapsed: "3s", reason: "slow" },
+  {
+    id: "clones",
+    label: "Checking the clones",
+    state: "running",
+    elapsed: "3s",
+    reason: "~/code/infra doesn't answer",
+  },
   { id: "load", label: "Loading your work", state: "todo", elapsed: "", reason: "" },
 ];
 
@@ -25,10 +31,39 @@ describe.each(THEMES)("StartSteps in the %s theme", (theme) => {
   it("writes the time and the reason in the meta size, third ink, tabular", () => {
     setTheme(theme);
     render(<StartSteps steps={STEPS} />);
-    const style = getComputedStyle(screen.getByText("3s slow"));
-    expect(style.color).toBe(token("--ink-3"));
-    expect(style.fontSize).toBe(resolve("var(--text-meta)", "font-size"));
-    expect(style.fontVariantNumeric).toContain("tabular-nums");
+    for (const text of ["3s", "~/code/infra doesn't answer"]) {
+      const style = getComputedStyle(screen.getByText(text));
+      expect(style.color).toBe(token("--ink-3"));
+      expect(style.fontSize).toBe(resolve("var(--text-meta)", "font-size"));
+      expect(style.fontVariantNumeric).toContain("tabular-nums");
+    }
+  });
+
+  it("keeps the label whole and cuts the reason of a long path, with its tooltip", async () => {
+    setTheme(theme);
+    const path = "/mnt/team-share/engineering/platform/infrastructure/terraform-modules";
+    render(
+      <div style={{ width: "24rem" }}>
+        <StartSteps
+          steps={[
+            {
+              id: "clones",
+              label: "Checking the clones",
+              state: "running",
+              elapsed: "12s",
+              reason: `${path} doesn't answer`,
+            },
+          ]}
+        />
+      </div>,
+    );
+    const label = screen.getByText("Checking the clones");
+    expect(label.getBoundingClientRect().height).toBe(
+      parseFloat(resolve("var(--leading-ui)", "height")),
+    );
+    const reason = screen.getByText(`${path} doesn't answer`);
+    expect(reason.scrollWidth).toBeGreaterThan(reason.clientWidth);
+    expect(await withoutTooltip([reason])).toEqual([]);
   });
 
   it("lays each step in three columns", () => {

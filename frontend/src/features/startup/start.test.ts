@@ -61,7 +61,7 @@ describe("stepViews", () => {
     expect(stepViews(startup, at(2900)).map((view) => view.reason)).toEqual(["", ""]);
     expect(stepViews(startup, at(5000)).map((view) => view.reason)).toEqual([
       "",
-      " · ~/code/infra doesn't answer",
+      "~/code/infra doesn't answer",
     ]);
   });
 
