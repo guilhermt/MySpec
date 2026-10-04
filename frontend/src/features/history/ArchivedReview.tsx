@@ -4,15 +4,18 @@ import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
 import { Tag } from "@/components/system/Tag";
-import { FindingsBody, MarkerLine } from "@/features/chat/entries/MarkerLine";
+import { Tooltip } from "@/components/system/Tooltip";
+import { MarkerLine } from "@/features/chat/entries/MarkerLine";
 import type { MarkerView } from "@/features/chat/markers";
 import { ArchivedBody } from "@/features/history/ArchivedBody";
 import { ArchivedFacts } from "@/features/history/ArchivedFacts";
+import { ArchivedFindings } from "@/features/history/ArchivedFindings";
 import { ArchivedMarkers } from "@/features/history/ArchivedMarkers";
 import { ArchivedMenu } from "@/features/history/ArchivedMenu";
+import { ArchivedTags } from "@/features/history/ArchivedTags";
 import {
   archivedReviewFacts,
-  outFindingViews,
+  outFindings,
   passHeading,
   recordedPasses,
 } from "@/features/history/archived";
@@ -22,6 +25,7 @@ import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { DeleteReviewDialog } from "@/features/reviews/DeleteReviewDialog";
 import { outcomeLabel } from "@/features/reviews/review-status";
 import { olderKey } from "@/lib/history";
+import { shortRef } from "@/lib/repositories";
 import type { ReviewPass } from "@/lib/wails";
 import { openExternal } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
@@ -31,7 +35,7 @@ function reportMarker(pass: ReviewPass): MarkerView {
   return {
     icon: "file",
     text: "Report",
-    complement: `reviews/pass-${pass.pass}.md`,
+    complement: pass.file,
     body: { kind: "artifact", name: pass.file, openIn: "artifacts" },
     timeHidden: true,
   };
@@ -47,7 +51,7 @@ interface PassSectionProps {
 // PassSection is one pass of the review: what became of it and when, the findings that left it and its report.
 function PassSection({ reviewId, mode, pass, now }: PassSectionProps) {
   const { title, outcome, time } = passHeading(pass, now);
-  const findings = outFindingViews(pass, mode, now);
+  const findings = outFindings(pass, mode);
   return (
     <section
       aria-label={title}
@@ -62,13 +66,7 @@ function PassSection({ reviewId, mode, pass, now }: PassSectionProps) {
           </span>
         )}
       </div>
-      {findings.length > 0 && (
-        <FindingsBody
-          body={{ kind: "findings", pass: pass.pass, findings }}
-          review={null}
-          task={null}
-        />
-      )}
+      {findings.length > 0 && <ArchivedFindings pass={pass.pass} findings={findings} />}
       <ArchivedMarkers label={`Report of pass ${pass.pass}`}>
         <MarkerLine
           view={reportMarker(pass)}
@@ -129,13 +127,20 @@ export function ArchivedReview({ reviewId }: ArchivedReviewProps) {
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-      <LocationHeader>
-        <Icon icon={ICONS.review} className="text-ink-3" />
-        <Tag>{outcomeLabel(review.outcome)}</Tag>
-        <Button variant="ghost" size="sm" onClick={() => void openExternal(review.url)}>
-          Open on GitHub
-          <Icon icon={ICONS.external} size="sm" />
-        </Button>
+      <LocationHeader
+        lead={<Icon icon={ICONS.review} className="text-ink-3" />}
+        progress={
+          <ArchivedTags>
+            <Tag>{outcomeLabel(review.outcome)}</Tag>
+          </ArchivedTags>
+        }
+      >
+        <Tooltip content={`Open ${shortRef(`${review.repository}#${review.number}`)} on GitHub`}>
+          <Button variant="ghost" size="sm" onClick={() => void openExternal(review.url)}>
+            Open on GitHub
+            <Icon icon={ICONS.external} size="sm" />
+          </Button>
+        </Tooltip>
         <ArchivedMenu tooltip="Delete from History" onDelete={openDialog} triggerRef={moreRef} />
       </LocationHeader>
 

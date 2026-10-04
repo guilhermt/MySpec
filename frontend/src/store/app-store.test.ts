@@ -3208,6 +3208,37 @@ describe("the History beyond the window", () => {
     expect(location()).toEqual({ kind: "archived-task", id: OLD.id });
   });
 
+  it.each([
+    [
+      "review",
+      {
+        tasks: {},
+        reviews: { "review-beyond": makeArchivedReview({ id: "review-beyond" }) },
+        discussions: {},
+      },
+      { kind: "archived-review", id: "review-beyond" },
+    ],
+    [
+      "discussion",
+      {
+        tasks: {},
+        reviews: {},
+        discussions: { "discussion-beyond": makeArchivedDiscussion({ id: "discussion-beyond" }) },
+      },
+      { kind: "archived-discussion", id: "discussion-beyond" },
+    ],
+  ] as const)(
+    "keeps the page of an archived %s that is in the cache",
+    (_, olderArchived, place) => {
+      resetAppStore({ ui: { olderArchived, location: place } });
+      useAppStore.getState().applyState(withTasks());
+
+      useAppStore.getState().applyState(withTasks());
+
+      expect(location()).toEqual(place);
+    },
+  );
+
   it("keeps the page of an archived item the Go is looking for", () => {
     resetAppStore({
       ui: {

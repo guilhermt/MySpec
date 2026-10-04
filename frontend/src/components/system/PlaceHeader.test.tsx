@@ -160,4 +160,25 @@ describe("PlaceHeader", () => {
     expect(title.compareDocumentPosition(progress)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(progress.compareDocumentPosition(pause)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
+
+  it("draws what leads the title right before it, after the breadcrumb", () => {
+    renderWithStore(
+      <PlaceHeader
+        back={null}
+        forward={null}
+        crumbs={[{ label: "History" }]}
+        title="Idempotency keys"
+        titleRef={createRef()}
+        backRef={createRef()}
+        forwardRef={createRef()}
+        lead={<span role="img" aria-label="Task" />}
+      />,
+    );
+
+    const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
+    const lead = screen.getByRole("img", { name: "Task" });
+    const title = screen.getByRole("heading", { level: 1 });
+    expect(crumbs.compareDocumentPosition(lead)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(lead.compareDocumentPosition(title)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
 });

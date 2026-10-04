@@ -175,7 +175,7 @@ describe.each(THEMES)("HistoryView, the scenes in the %s theme", (theme) => {
       );
 
       // What the list cuts says its whole text in a tooltip.
-      expect(await withoutTooltip(cutTexts(area).slice(0, 8))).toEqual([]);
+      expect(await withoutTooltip(cutTexts(area))).toEqual([]);
 
       // The History draws no primary: a list, the empty states and a line that failed have none.
       expect(visiblePrimaries()).toEqual([]);

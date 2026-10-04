@@ -26,7 +26,9 @@ export interface PlaceHeaderProps {
   titleRef: Ref<HTMLHeadingElement>;
   backRef: Ref<HTMLButtonElement>;
   forwardRef: Ref<HTMLButtonElement>;
-  /** progress is where the item stands, drawn after the title and never shrunk: the stepper of a task. */
+  /** lead is what goes right before the title, never shrunk: the glyph of the kind of an archived item. */
+  lead?: ReactNode;
+  /** progress is where the item stands, drawn after the title and never shrunk: the stepper of a task, the tags of an archived item. */
   progress?: ReactNode;
   /** children is what the place holds on the right, in its order. */
   children?: ReactNode;
@@ -101,7 +103,7 @@ function Breadcrumb({ crumbs }: { crumbs: readonly PlaceCrumb[] }) {
 
 /**
  * PlaceHeader is the band on top of a place: back and forward through the history, the breadcrumb,
- * the title, the progress of the item, and on the right what the place holds. Nothing in it wraps;
+ * what leads the title, the title, the progress of the item, and on the right what the place holds. Nothing in it wraps;
  * the title cuts last, with the whole name in its tooltip. Below 900px of main area the pieces on the
  * right draw closer.
  */
@@ -113,6 +115,7 @@ export function PlaceHeader({
   titleRef,
   backRef,
   forwardRef,
+  lead,
   progress,
   children,
 }: PlaceHeaderProps) {
@@ -150,6 +153,7 @@ export function PlaceHeader({
         />
       )}
       {crumbs.length > 0 && <Breadcrumb crumbs={crumbs} />}
+      {lead !== undefined && <div className="flex shrink-0 items-center">{lead}</div>}
       <Tooltip content={title}>
         <h1
           ref={titleRef}

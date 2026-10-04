@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { messageOf, noticeDetail } from "@/lib/errors";
+import { isMissingFile, messageOf, noticeDetail } from "@/lib/errors";
 
 describe("messageOf", () => {
   it("is the message of an error", () => {
@@ -24,5 +24,16 @@ describe("noticeDetail", () => {
     ["", "Try again.", "Try again."],
   ] as const)("says %j with %j as %j", (message, remedy, want) => {
     expect(noticeDetail(message, remedy)).toBe(want);
+  });
+});
+
+describe("isMissingFile", () => {
+  it("tells a file that isn't there from a read that failed", () => {
+    expect(
+      isMissingFile(
+        "read artifact /d/discussion.md: open /d/discussion.md: no such file or directory",
+      ),
+    ).toBe(true);
+    expect(isMissingFile("read artifact /d/discussion.md: permission denied")).toBe(false);
   });
 });

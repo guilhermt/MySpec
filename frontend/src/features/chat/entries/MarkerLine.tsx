@@ -58,8 +58,8 @@ export const LINE =
 // ERROR_RAIL is the rail of an error on the edge of a line.
 const ERROR_RAIL = "shadow-[inset_var(--error-rail)_0_0_var(--state-error)]";
 
-// SUNKEN is the block a marker opens into, in the width of the column.
-const SUNKEN =
+// SUNKEN is the block a marker opens into, in the width of the column; History draws it too.
+export const SUNKEN =
   "mt-(--space-1) rounded-md bg-surface-0 px-(--space-4) py-(--space-3) shadow-[inset_0_0_0_var(--border)_var(--line-1)]";
 
 function ProblemsBody({ problems }: { problems: readonly PlanProblem[] }) {

@@ -94,6 +94,35 @@ describe("historyRow of a task", () => {
 
     expect(foreign.where).toBe("other/web");
   });
+
+  it("writes owner/name when another repository has the same name, with or without a board", () => {
+    const app = makeState({
+      repositories: [
+        makeRepository({ id: "repo-1", fullName: "acme/api", boardId: "board-1" }),
+        makeRepository({ id: "repo-2", fullName: "globex/api", boardId: "" }),
+        makeRepository({ id: "repo-3", fullName: "acme/web", boardId: "board-1" }),
+      ],
+      boards: [makeBoard({ owner: "acme" })],
+    });
+    const of = (repositoryId: string, repository: string) =>
+      historyRow(task({ repositoryId, repository }), app, NOW, false).where;
+
+    expect(of("repo-1", "acme/api")).toBe("acme/api");
+    expect(of("repo-2", "globex/api")).toBe("globex/api");
+    expect(of("repo-3", "acme/web")).toBe("web");
+  });
+
+  it("knows the repositories the archived items name, even ones no longer registered", () => {
+    const gone = makeArchivedTask({ id: "task-gone", repositoryId: "", repository: "globex/api" });
+    const app = makeState({
+      repositories: [makeRepository({ id: "repo-1", fullName: "acme/api" })],
+      history: [gone],
+    });
+
+    expect(
+      historyRow(task({ repositoryId: "repo-1", repository: "acme/api" }), app, NOW, false).where,
+    ).toBe("acme/api");
+  });
 });
 
 describe("historyRow of a review", () => {

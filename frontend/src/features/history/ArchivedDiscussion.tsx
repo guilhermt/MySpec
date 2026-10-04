@@ -4,6 +4,7 @@ import { CutText } from "@/components/system/CutText";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import { Link } from "@/components/system/Link";
+import { NoticeStrip } from "@/components/system/NoticeStrip";
 import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
 import { Tag } from "@/components/system/Tag";
 import { Tooltip } from "@/components/system/Tooltip";
@@ -21,6 +22,7 @@ import { ArchivedFacts } from "@/features/history/ArchivedFacts";
 import { ArchivedMarkers } from "@/features/history/ArchivedMarkers";
 import { ArchivedMenu } from "@/features/history/ArchivedMenu";
 import { ArchivedSection } from "@/features/history/ArchivedSection";
+import { ArchivedTags } from "@/features/history/ArchivedTags";
 import {
   archivedDiscussionFacts,
   type PublishedRow,
@@ -29,6 +31,7 @@ import {
 import { historyEntries, historyNeighbor } from "@/features/history/history-list";
 import { useArchivedItem } from "@/features/history/useArchivedItem";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
+import { isMissingFile } from "@/lib/errors";
 import { olderKey } from "@/lib/history";
 import { counted } from "@/lib/situations";
 import { cn } from "@/lib/utils";
@@ -121,8 +124,9 @@ export function ArchivedDiscussion({ discussionId }: ArchivedDiscussionProps) {
   const [deleting, setDeleting] = useState(false);
   const [neighbor, setNeighbor] = useState<string | null>(null);
   const [conversationOpen, setConversationOpen] = useState(false);
-  // The document never changes again, so it is read once, at revision zero.
-  const artifact = useDiscussionArtifact(discussionId, DOCUMENT_FILE, 0, 0);
+  // The document never changes again, so it is read once, at revision zero, and again on Try again.
+  const [attempt, setAttempt] = useState(0);
+  const artifact = useDiscussionArtifact(discussionId, DOCUMENT_FILE, 0, attempt);
 
   // The conversation of a discussion of History is fetched when it opens; nothing arrives after that.
   useEffect(() => {
@@ -162,7 +166,9 @@ export function ArchivedDiscussion({ discussionId }: ArchivedDiscussionProps) {
 
   const now = Date.now();
   const rows = publishedRows(discussion);
-  // A document that is not there, or that cannot be read, is a discussion that never wrote one.
+  // A document that is not there, or empty, is a discussion that never wrote one; one that is there
+  // and cannot be read says the failure in place of its line.
+  const failed = artifact.status === "error" && !isMissingFile(artifact.error);
   const written =
     artifact.status === "loading" ||
     (artifact.status === "ready" && artifact.content.trim() !== "");
@@ -202,9 +208,14 @@ export function ArchivedDiscussion({ discussionId }: ArchivedDiscussionProps) {
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-      <LocationHeader>
-        <Icon icon={ICONS.discussion} className="text-ink-3" />
-        <Tag>Archived</Tag>
+      <LocationHeader
+        lead={<Icon icon={ICONS.discussion} className="text-ink-3" />}
+        progress={
+          <ArchivedTags>
+            <Tag>Archived</Tag>
+          </ArchivedTags>
+        }
+      >
         {board !== null && (
           <Tooltip content="Open the board">
             <Button
@@ -233,13 +244,27 @@ export function ArchivedDiscussion({ discussionId }: ArchivedDiscussionProps) {
         )}
 
         <ArchivedSection title="Document and conversation">
+          {failed && (
+            <NoticeStrip
+              title={`Couldn't read ${DOCUMENT_FILE}`}
+              reason={artifact.error}
+              className="bg-state-error-veil"
+              action={
+                <Button size="xs" onClick={() => setAttempt((count) => count + 1)}>
+                  Try again
+                </Button>
+              }
+            />
+          )}
           <Collapsible open={conversationOpen} onOpenChange={setConversationOpen}>
             <ArchivedMarkers label="Document and conversation">
-              <MarkerLine
-                view={documentView}
-                createdAt=""
-                discussion={{ id: discussion.id, documentRevision: 0, documents: false }}
-              />
+              {!failed && (
+                <MarkerLine
+                  view={documentView}
+                  createdAt=""
+                  discussion={{ id: discussion.id, documentRevision: 0, documents: false }}
+                />
+              )}
               <ConversationLine open={conversationOpen} complement={complement} />
             </ArchivedMarkers>
             <CollapsibleContent>
