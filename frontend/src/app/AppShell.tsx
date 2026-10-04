@@ -1,9 +1,9 @@
 import { useViewedSituation } from "@/features/attention/useViewedSituation";
 import { BoardView } from "@/features/board/BoardView";
 import { usePendingStart } from "@/features/board/usePendingStart";
-import { ArchivedDiscussionView } from "@/features/discussion/ArchivedDiscussionView";
 import { DiscussionView } from "@/features/discussion/DiscussionView";
 import { NewDiscussionDialog } from "@/features/discussion/NewDiscussionDialog";
+import { ArchivedDiscussion } from "@/features/history/ArchivedDiscussion";
 import { ArchivedReview } from "@/features/history/ArchivedReview";
 import { ArchivedTask } from "@/features/history/ArchivedTask";
 import { HistoryPanel } from "@/features/history/HistoryPanel";
@@ -49,7 +49,7 @@ function LocationView() {
     case "archived-review":
       return <ArchivedReview key={location.id} reviewId={location.id} />;
     case "archived-discussion":
-      return <ArchivedDiscussionView key={location.id} discussionId={location.id} />;
+      return <ArchivedDiscussion key={location.id} discussionId={location.id} />;
     case "gone":
       return <GoneView key={`${location.item}:${location.id}`} location={location} />;
   }

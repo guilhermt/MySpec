@@ -1,18 +1,23 @@
 import type { FindingView } from "@/components/system/Finding";
 import type { MarkerView } from "@/features/chat/markers";
+import { epicGroups, kindLabel, looseDrafts } from "@/features/discussion/discussion-status";
 import { passFindingViews } from "@/features/reviews/review-conversation";
 import { verdictLabel } from "@/features/reviews/review-status";
+import { draftTitle, publishedOutcome } from "@/lib/drafts";
 import { shortRef } from "@/lib/repositories";
-import { counted } from "@/lib/situations";
+import { counted, listed } from "@/lib/situations";
 import { isOneShot } from "@/lib/task-modes";
 import type {
+  ArchivedDiscussion,
   ArchivedPRReport,
   ArchivedReview,
   ArchivedStep,
   ArchivedTask,
+  Draft,
   ReviewPass,
   StepReport,
 } from "@/lib/wails";
+import { asDraftKind, asDraftOutcome } from "@/lib/wails";
 import { dateAt } from "@/lib/when";
 
 /** stepsOf are the steps of an archived task; the Go sends none as null. */
@@ -289,4 +294,122 @@ export function passHeading(pass: ReviewPass, now: number): PassHeading {
 /** outFindingViews are the findings of a pass that left it, published or sent, as the system draws them. */
 export function outFindingViews(pass: ReviewPass, mode: string, now: number): FindingView[] {
   return passFindingViews(pass, mode, now).filter((view) => view.decision === "approved");
+}
+
+/**
+ * publishedSentence is what became of the drafts of a discussion: "4 of 5 drafts: 3 created, 1
+ * updated" (only the parts that exist), "None of 5 drafts"; "" when it had no draft.
+ */
+export function publishedSentence(drafts: readonly Draft[]): string {
+  if (drafts.length === 0) {
+    return "";
+  }
+  const total = drafts.length === 1 ? "1 draft" : `${drafts.length} drafts`;
+  const published = drafts.filter((draft) => draft.published).length;
+  if (published === 0) {
+    return `None of ${total}`;
+  }
+  const outcome = publishedOutcome(drafts);
+  return `${published} of ${total}${outcome === "" ? "" : `: ${outcome}`}`;
+}
+
+// roundsSentence is how many rounds published, "1 round"; "" when none did.
+function roundsSentence(drafts: readonly Draft[]): string {
+  const rounds = new Set(drafts.filter((draft) => draft.published).map((draft) => draft.round));
+  return rounds.size === 0 ? "" : counted(rounds.size, "round");
+}
+
+/**
+ * archivedDiscussionFacts are the facts of an archived discussion: its board with the cards it started
+ * from, when it started, when it was archived with the rounds it took, and what it published.
+ */
+export function archivedDiscussionFacts(
+  discussion: ArchivedDiscussion,
+  now: number,
+): ArchivedFact[] {
+  const drafts = discussion.drafts ?? [];
+  const cards = (discussion.cards ?? []).map((card) =>
+    shortRef(`${card.repository}#${card.number}`),
+  );
+  const facts: ArchivedFact[] = [
+    {
+      label: "Board",
+      value: cards.length === 0 ? discussion.board : `${discussion.board} · from ${listed(cards)}`,
+    },
+    { label: "Started", value: archivedDate(discussion.createdAt, now) },
+  ];
+  const archived = archivedDate(discussion.archivedAt, now);
+  const rounds = roundsSentence(drafts);
+  facts.push({ label: "Archived", value: rounds === "" ? archived : `${archived} · ${rounds}` });
+  const published = publishedSentence(drafts);
+  if (published !== "") {
+    facts.push({ label: "Published", value: published });
+  }
+  return facts;
+}
+
+/** PublishedRow is a draft of an archived discussion as What it published lists it. */
+export interface PublishedRow {
+  /** id is the id of the draft. */
+  id: string;
+  kind: "epic" | "card" | "update";
+  /** label is the tag of the kind: Epic, New card or Update. */
+  label: string;
+  title: string;
+  indented: boolean;
+  outcome:
+    | { kind: "link"; text: string; href: string; tooltip: string }
+    | { kind: "text"; text: string };
+}
+
+// outcomeOf is what became of a draft: the issue it made or changed, or why nothing went.
+function outcomeOf(draft: Draft): PublishedRow["outcome"] {
+  if (draft.published) {
+    const ref = shortRef(`${draft.repository}#${draft.number}`);
+    const done = asDraftOutcome(draft.outcome) === "updated" ? "Updated" : "Created";
+    return {
+      kind: "link",
+      text: `${done} ${ref}`,
+      href: draft.url,
+      tooltip: `Open ${ref} on GitHub`,
+    };
+  }
+  if (draft.decision === "discarded") {
+    return { kind: "text", text: "Not published · discarded" };
+  }
+  if (draft.publishError !== "") {
+    return { kind: "text", text: "Not published · failed" };
+  }
+  return {
+    kind: "text",
+    text: draft.decision === "" ? "Not published · not decided" : "Not published",
+  };
+}
+
+/**
+ * publishedRows are the drafts of an archived discussion in the order of their position, the cards of
+ * an epic right after it, indented.
+ */
+export function publishedRows(discussion: ArchivedDiscussion): PublishedRow[] {
+  const drafts = discussion.drafts ?? [];
+  const row = (draft: Draft, indented: boolean): PublishedRow => {
+    const kind = asDraftKind(draft.kind);
+    return {
+      id: draft.id,
+      kind: kind === "new" ? "card" : kind,
+      label: kindLabel(draft),
+      title: draftTitle(draft),
+      indented,
+      outcome: outcomeOf(draft),
+    };
+  };
+  const groups = epicGroups(drafts).map((group) => ({
+    position: group.epic.position,
+    rows: [row(group.epic, false), ...group.members.map((member) => row(member, true))],
+  }));
+  const loose = looseDrafts(drafts).map((draft) => ({
+    position: draft.position,
+    rows: [row(draft, false)],
+  }));
+  return [...groups, ...loose].sort((a, b) => a.position - b.position).flatMap((part) => part.rows);
 }

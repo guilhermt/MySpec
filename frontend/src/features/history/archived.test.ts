@@ -1,20 +1,26 @@
 import { describe, expect, it } from "vitest";
 import {
   archivedDate,
+  archivedDiscussionFacts,
   archivedReviewFacts,
   archivedTaskFacts,
   archivedTaskTabs,
   deleteTaskStays,
   outFindingViews,
   passHeading,
+  publishedRows,
+  publishedSentence,
   reportMarker,
   reviewedSentence,
   stepMarkers,
 } from "@/features/history/archived";
 import {
+  makeArchivedDiscussion,
   makeArchivedReview,
   makeArchivedTask,
   makeCloseResult,
+  makeDiscussionCard,
+  makeDraft,
   makeReviewFinding,
   makeReviewPass,
   makeTaskCard,
@@ -382,5 +388,126 @@ describe("outFindingViews", () => {
       "Inline comment · published Sep 23, 13:41",
       "In the review body · published Sep 23, 13:41",
     ]);
+  });
+});
+
+const made = (id: string, overrides: Parameters<typeof makeDraft>[0] = {}) =>
+  makeDraft({ id, position: Number(id.replace("d", "")), ...overrides });
+const created = (id: string, number: number, overrides: Parameters<typeof makeDraft>[0] = {}) =>
+  made(id, {
+    repository: "acme/api",
+    number,
+    url: `https://github.com/acme/api/issues/${number}`,
+    published: true,
+    outcome: "created",
+    ...overrides,
+  });
+
+describe("publishedSentence", () => {
+  it.each([
+    [
+      "created and updated",
+      [
+        created("d1", 1),
+        created("d2", 2),
+        created("d3", 3),
+        created("d4", 4, { outcome: "updated" }),
+        made("d5"),
+      ],
+      "4 of 5 drafts: 3 created, 1 updated",
+    ],
+    ["only the parts that exist", [created("d1", 1), made("d2")], "1 of 2 drafts: 1 created"],
+    ["nothing published", [made("d1"), made("d2"), made("d3")], "None of 3 drafts"],
+    ["a single draft", [made("d1")], "None of 1 draft"],
+    ["no drafts", [], ""],
+  ])("writes %s", (_, drafts, want) => {
+    expect(publishedSentence(drafts)).toBe(want);
+  });
+});
+
+describe("archivedDiscussionFacts", () => {
+  const discussion = makeArchivedDiscussion({
+    board: "Platform Roadmap",
+    cards: [
+      makeDiscussionCard({ repository: "acme/api", number: 447 }),
+      makeDiscussionCard({ repository: "acme/api", number: 449 }),
+    ],
+    drafts: [created("d1", 452, { round: 1 }), created("d2", 453, { round: 2 }), made("d3")],
+    createdAt: local(2026, 8, 24, 10, 2),
+    archivedAt: local(2026, 8, 24, 11, 47),
+  });
+
+  it("says the board with its cards, the dates with the rounds, and what it published", () => {
+    expect(archivedDiscussionFacts(discussion, NOW)).toEqual([
+      { label: "Board", value: "Platform Roadmap · from api#447 and api#449" },
+      { label: "Started", value: "Sep 24 at 10:02" },
+      { label: "Archived", value: "Sep 24 at 11:47 · 2 rounds" },
+      { label: "Published", value: "2 of 3 drafts: 2 created" },
+    ]);
+  });
+
+  it("leaves out the cards, the rounds and the publication that it doesn't have", () => {
+    const bare = makeArchivedDiscussion({
+      board: "Platform Roadmap",
+      cards: [],
+      drafts: [],
+      createdAt: local(2026, 8, 24, 10, 2),
+      archivedAt: local(2026, 8, 24, 11, 47),
+    });
+
+    expect(archivedDiscussionFacts(bare, NOW)).toEqual([
+      { label: "Board", value: "Platform Roadmap" },
+      { label: "Started", value: "Sep 24 at 10:02" },
+      { label: "Archived", value: "Sep 24 at 11:47" },
+    ]);
+  });
+});
+
+describe("publishedRows", () => {
+  it("lists the drafts by position, the cards of an epic right after it and indented", () => {
+    const epic = made("d2", { kind: "epic", title: "Webhooks", repository: "acme/api" });
+    const card = created("d4", 452, {
+      title: "Retry failed deliveries",
+      epic: { draft: "d2", key: "", reference: "", title: "Webhooks", url: "" },
+    });
+    const rows = publishedRows(
+      makeArchivedDiscussion({
+        drafts: [
+          created("d1", 440, {
+            kind: "update",
+            title: "Fix the gateway",
+            repository: "acme/gateway",
+            outcome: "updated",
+          }),
+          epic,
+          made("d3", { title: "Dropped idea", decision: "discarded" }),
+          card,
+        ],
+      }),
+    );
+
+    expect(rows.map((row) => [row.kind, row.label, row.title, row.indented])).toEqual([
+      ["update", "Update", "Fix the gateway", false],
+      ["epic", "Epic", "Webhooks", false],
+      ["card", "New card", "Retry failed deliveries", true],
+      ["card", "New card", "Dropped idea", false],
+    ]);
+    expect(rows[0]?.outcome).toEqual({
+      kind: "link",
+      text: "Updated gateway#440",
+      href: "https://github.com/acme/api/issues/440",
+      tooltip: "Open gateway#440 on GitHub",
+    });
+    expect(rows[2]?.outcome).toMatchObject({ kind: "link", text: "Created api#452" });
+  });
+
+  it.each([
+    ["discarded", { decision: "discarded" }, "Not published · discarded"],
+    ["not decided", { decision: "" }, "Not published · not decided"],
+    ["failed", { decision: "approved", publishError: "rate limited" }, "Not published · failed"],
+  ])("says why a draft that is %s didn't publish", (_, overrides, text) => {
+    const [row] = publishedRows(makeArchivedDiscussion({ drafts: [made("d1", overrides)] }));
+
+    expect(row?.outcome).toEqual({ kind: "text", text });
   });
 });

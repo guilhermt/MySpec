@@ -52,7 +52,7 @@ const FOOTS: Record<"artifacts" | "details" | "reports", { panel: PanelId; label
 
 // LINE is the one line of a marker: the text on the edge of the column, the veil of the hover
 // bleeding --space-2 past it.
-const LINE =
+export const LINE =
   "-mx-(--space-2) flex min-h-(--size-control-sm) min-w-0 items-center gap-(--space-2) rounded-sm px-(--space-2) text-left text-(length:--text-meta) leading-(--leading-meta) text-ink-3";
 
 // ERROR_RAIL is the rail of an error on the edge of a line.
