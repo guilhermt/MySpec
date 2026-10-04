@@ -215,9 +215,12 @@ export function ArchivedTask({ taskId }: ArchivedTaskProps) {
   const openDialog = () => {
     const { app, olderArchived, olderLists, historyQuery } = useAppStore.getState();
     const filter = app?.repositoryFilter ?? "";
-    const ids = olderLists[olderKey("", "")]?.ids ?? [];
+    const ids = olderLists[olderKey(historyQuery, filter)]?.ids ?? [];
     setNeighbor(
-      historyNeighbor(historyEntries(app, olderArchived, ids, historyQuery, filter), task.id),
+      historyNeighbor(
+        historyEntries(app, { archived: olderArchived, ids }, historyQuery, filter, null),
+        task.id,
+      ),
     );
     setDeleting(true);
   };

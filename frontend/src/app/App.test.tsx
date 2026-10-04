@@ -211,7 +211,7 @@ describe("App", () => {
     await screen.findByRole("treeitem", { name: /^task add-login\./ });
 
     await user.click(screen.getByRole("button", { name: /^History/ }));
-    await user.click(screen.getByRole("button", { name: /fix-header/ }));
+    await user.click(screen.getByRole("treeitem", { name: /fix-header/ }));
 
     expect(screen.getByText("Archived", { selector: "span" })).toBeInTheDocument();
 

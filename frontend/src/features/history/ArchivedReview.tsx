@@ -117,9 +117,12 @@ export function ArchivedReview({ reviewId }: ArchivedReviewProps) {
   const openDialog = () => {
     const { app, olderArchived, olderLists, historyQuery } = useAppStore.getState();
     const filter = app?.repositoryFilter ?? "";
-    const ids = olderLists[olderKey("", "")]?.ids ?? [];
+    const ids = olderLists[olderKey(historyQuery, filter)]?.ids ?? [];
     setNeighbor(
-      historyNeighbor(historyEntries(app, olderArchived, ids, historyQuery, filter), review.id),
+      historyNeighbor(
+        historyEntries(app, { archived: olderArchived, ids }, historyQuery, filter, null),
+        review.id,
+      ),
     );
     setDeleting(true);
   };

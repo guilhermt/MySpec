@@ -6,7 +6,7 @@ import { NewDiscussionDialog } from "@/features/discussion/NewDiscussionDialog";
 import { ArchivedDiscussion } from "@/features/history/ArchivedDiscussion";
 import { ArchivedReview } from "@/features/history/ArchivedReview";
 import { ArchivedTask } from "@/features/history/ArchivedTask";
-import { HistoryPanel } from "@/features/history/HistoryPanel";
+import { HistoryView } from "@/features/history/HistoryView";
 import { Home } from "@/features/home/Home";
 import { GoneView } from "@/features/navigation/GoneView";
 import { AppNotices } from "@/features/notice/AppNotices";
@@ -35,7 +35,7 @@ function LocationView() {
     case "reviews":
       return <ReviewsView />;
     case "history":
-      return <HistoryPanel />;
+      return <HistoryView />;
     case "settings":
       return <SettingsView />;
     case "task":

@@ -25,8 +25,8 @@ function parse(iso: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-// daysBefore is how many calendar days, in local time, a date lies before now: 0 today, 1 yesterday.
-function daysBefore(date: Date, now: number): number {
+/** daysBefore is how many calendar days, in local time, a date lies before now: 0 today, 1 yesterday. */
+export function daysBefore(date: Date, now: number): number {
   const today = new Date(now);
   const start = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   return Math.round((start(today) - start(date)) / DAY_MS);
@@ -49,6 +49,23 @@ export function clockTime(iso: string, now: number): string {
         ? `${DAY.format(date)}, ${clock}`
         : `${DAY_OF_YEAR.format(date)}, ${clock}`;
   }
+}
+
+/** clockOf is the hour of a time, 09:14 whatever the day; "" for none. */
+export function clockOf(iso: string): string {
+  const date = parse(iso);
+  return date === null ? "" : CLOCK.format(date);
+}
+
+/** dayOf is the day of a time without its hour: Sep 24, Sep 24, 2025 before this year; "" for none. */
+export function dayOf(iso: string, now: number): string {
+  const date = parse(iso);
+  if (date === null) {
+    return "";
+  }
+  return date.getFullYear() === new Date(now).getFullYear()
+    ? DAY.format(date)
+    : DAY_OF_YEAR.format(date);
 }
 
 /** dateAt is a day and its time as the History writes them: Sep 24 at 14:51, Sep 24, 2025 at 14:51 before this year; "" for none. */

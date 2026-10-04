@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   age,
   ageLong,
+  clockOf,
   clockOrDateAt,
   clockTime,
   dateAt,
+  dayOf,
   duration,
   fullTime,
   readClock,
@@ -149,5 +151,20 @@ describe("duration", () => {
     [-5_000, "0s"],
   ])("reads %i ms as %s", (ms, text) => {
     expect(duration(ms)).toBe(text);
+  });
+});
+
+describe("clockOf and dayOf", () => {
+  const now = new Date(2026, 8, 24, 15, 10).getTime();
+
+  it("reads the hour of any day and the day without its hour", () => {
+    expect(clockOf(new Date(2026, 8, 21, 9, 5).toISOString())).toBe("09:05");
+    expect(dayOf(new Date(2026, 8, 21, 9, 5).toISOString(), now)).toBe("Sep 21");
+    expect(dayOf(new Date(2025, 8, 21, 9, 5).toISOString(), now)).toBe("Sep 21, 2025");
+  });
+
+  it("says nothing of a time that is not there", () => {
+    expect(clockOf("")).toBe("");
+    expect(dayOf("nope", now)).toBe("");
   });
 });

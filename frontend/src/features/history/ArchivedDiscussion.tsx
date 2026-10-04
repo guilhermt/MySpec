@@ -190,9 +190,12 @@ export function ArchivedDiscussion({ discussionId }: ArchivedDiscussionProps) {
   const openDialog = () => {
     const { app, olderArchived, olderLists, historyQuery } = useAppStore.getState();
     const filter = app?.repositoryFilter ?? "";
-    const ids = olderLists[olderKey("", "")]?.ids ?? [];
+    const ids = olderLists[olderKey(historyQuery, filter)]?.ids ?? [];
     setNeighbor(
-      historyNeighbor(historyEntries(app, olderArchived, ids, historyQuery, filter), discussion.id),
+      historyNeighbor(
+        historyEntries(app, { archived: olderArchived, ids }, historyQuery, filter, null),
+        discussion.id,
+      ),
     );
     setDeleting(true);
   };

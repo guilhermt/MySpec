@@ -67,8 +67,9 @@ export interface ListTree {
 
 /**
  * useListTree is the keyboard of a list as a tree, shared by the lists of the board and of Reviews:
- * one tab stop, the arrows, Home and End walking the entries, ← and → folding the sections, Enter on
- * a header folding it and on an item acting on it, and the focus of a row that leaves the list going
+ * one tab stop, the arrows, Home and End walking the entries, ← and → folding the sections (on a
+ * header that never folds, → goes to its first item), Enter on a header folding it and on an item
+ * acting on it, and the focus of a row that leaves the list going
  * to the next item, the one before, or its header. The view handles the letters.
  */
 export function useListTree<S extends string>({
@@ -83,17 +84,19 @@ export function useListTree<S extends string>({
   const entries = useMemo(() => flat.map(entryId), [flat]);
 
   // The tab stop: the entry the focus was last on, the open item, the first item, the first header.
+  // A list whose headers never fold has its first header, which the arrows walk down from.
   const tabStop = useMemo(() => {
     const visible = new Set(entries);
+    const folds = flat.some((entry) => entry.kind === "section" && entry.foldable);
     return (
       [focused, openKey === null ? null : `item:${openKey}`].find(
         (id) => id !== null && visible.has(id),
       ) ??
-      entries.find((id) => id.startsWith("item:")) ??
+      (folds ? entries.find((id) => id.startsWith("item:")) : undefined) ??
       entries[0] ??
       null
     );
-  }, [entries, focused, openKey]);
+  }, [entries, flat, focused, openKey]);
 
   // An item that leaves takes the focus with it: it goes to the next item, the one before, or the header.
   useLayoutEffect(() => {
@@ -167,12 +170,22 @@ export function useListTree<S extends string>({
           onToggleSection(entry.sectionId);
         }
         break;
-      case "ArrowRight":
-        if (header === null || !header.collapsed) {
+      case "ArrowRight": {
+        if (header === null) {
           return;
         }
-        onToggleSection(header.id);
+        if (header.collapsed) {
+          onToggleSection(header.id);
+          break;
+        }
+        // A header that never folds takes the focus to its first item.
+        const next = flat[index + 1];
+        if (header.foldable || next?.kind !== "item" || next.sectionId !== header.id) {
+          return;
+        }
+        focusEntry(entries[index + 1]);
         break;
+      }
       case "Enter":
         if (header !== null) {
           if (!header.foldable) {
