@@ -73,3 +73,47 @@ export function ListSectionHeader({
   );
   return tooltip === null ? header : <Tooltip content={tooltip}>{header}</Tooltip>;
 }
+
+export interface DaySectionHeaderProps {
+  /** id is the day the list keys it by, on data-section-id. */
+  id: string;
+  name: string;
+  count: number;
+  /** label is the accessible name and the tooltip: "Archived on Monday, Sep 22: 5". */
+  label: string;
+  /** tabStop is the header the list's one tab stop sits on. */
+  tabStop: boolean;
+  onFocus: () => void;
+}
+
+/** DaySectionHeader is the header of a day of the History, a treeitem of level 1 that is always open: no chevron, no action. */
+export function DaySectionHeader({
+  id,
+  name,
+  count,
+  label,
+  tabStop,
+  onFocus,
+}: DaySectionHeaderProps) {
+  return (
+    <Tooltip content={label}>
+      <div
+        role="treeitem"
+        aria-level={1}
+        aria-expanded="true"
+        aria-label={label}
+        data-section-id={id}
+        tabIndex={tabStop ? 0 : -1}
+        onFocus={onFocus}
+        className="flex min-h-(--size-node) cursor-default items-center rounded-sm px-(--space-2) text-ink-2 outline-none hover:bg-veil-hover focus-visible:focus-ring"
+      >
+        <span className="inline-flex min-w-0 items-baseline gap-(--space-2) text-(length:--text-meta) leading-(--leading-meta) font-semibold">
+          {name}
+          <span className="text-(length:--text-micro) leading-(--leading-micro) font-normal tabular-nums text-ink-4">
+            {count}
+          </span>
+        </span>
+      </div>
+    </Tooltip>
+  );
+}

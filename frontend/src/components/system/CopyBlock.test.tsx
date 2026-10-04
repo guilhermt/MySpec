@@ -19,4 +19,11 @@ describe("CopyBlock", () => {
     await user.click(screen.getByRole("button", { name: "Copy the error" }));
     expect(writeText).toHaveBeenCalledWith("boom");
   });
+
+  it("writes the heading as a phrase when asked", () => {
+    renderWithStore(
+      <CopyBlock label="What stayed" heading="sentence" copyLabel="Copy it" text="boom" />,
+    );
+    expect(screen.getByText("What stayed")).toBeInTheDocument();
+  });
 });

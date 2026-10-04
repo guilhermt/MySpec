@@ -11,6 +11,8 @@ export const TOAST_MS = 10_000;
 export interface ToastProps {
   icon: IconGlyph;
   text: string;
+  /** detail is under the text, in the third ink, and wraps. */
+  detail?: string;
   action: { label: string; onClick: () => void };
   onDismiss: () => void;
   /** duration is how long the toast stays, counted only while it has neither the pointer nor the focus. */
@@ -28,6 +30,7 @@ export interface ToastProps {
 export function Toast({
   icon,
   text,
+  detail,
   action,
   onDismiss,
   duration = TOAST_MS,
@@ -82,6 +85,11 @@ export function Toast({
       </span>
       <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
         <p className="min-w-0 break-words">{text}</p>
+        {detail !== undefined && (
+          <p className="min-w-(--notice-detail-min) break-words text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
+            {detail}
+          </p>
+        )}
         <Button
           variant="ghost"
           size="sm"
