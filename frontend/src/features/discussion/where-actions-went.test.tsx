@@ -1121,7 +1121,7 @@ const ROWS: Row[] = [
     where: "card",
     holder: BETA,
     role: "textbox",
-    name: /^Body$/,
+    name: /^Body Markdown$/,
   },
   {
     origin: "DraftCard",
@@ -1129,7 +1129,7 @@ const ROWS: Row[] = [
     state: "a card",
     draw: view(DECIDING),
     steps: then(edit, async (user) => {
-      await user.type(screen.getByRole("textbox", { name: "Body" }), " As CSV.");
+      await user.type(screen.getByRole("textbox", { name: "Body Markdown" }), " As CSV.");
       await user.tab();
     }),
     where: "card",
@@ -1147,11 +1147,14 @@ const ROWS: Row[] = [
     control: "Body, never empty",
     state: "a card",
     draw: view(DECIDING),
-    steps: then(edit, async (user) => user.clear(screen.getByRole("textbox", { name: "Body" }))),
+    steps: then(edit, async (user) =>
+      user.clear(screen.getByRole("textbox", { name: "Body Markdown" })),
+    ),
     where: "card",
     holder: BETA,
     text: /Write the body\./,
-    check: (place) => expect(within(place).getByRole("textbox", { name: "Body" })).toBeInvalid(),
+    check: (place) =>
+      expect(within(place).getByRole("textbox", { name: "Body Markdown" })).toBeInvalid(),
   },
   {
     origin: "DraftCard",

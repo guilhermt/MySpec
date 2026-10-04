@@ -40,6 +40,8 @@ export function ConversationColumn({
         // The list corrects the scroll when a row above the view changes height; the browser does not.
         "[overflow-anchor:none]",
         fadeTop ? "conversation-fade" : "conversation-fade-bottom",
+        // What floats over the end is room the scroll keeps free: a control brought into view stays above it.
+        endRoom && "scroll-pb-[calc(var(--space-4)+var(--size-control-sm))]",
       )}
       {...(label !== undefined ? { label } : {})}
       {...(viewportRef !== undefined ? { viewportRef } : {})}

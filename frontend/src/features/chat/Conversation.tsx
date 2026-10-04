@@ -2,6 +2,7 @@ import {
   Fragment,
   memo,
   type ReactNode,
+  type RefObject,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -50,6 +51,7 @@ import type { SessionState } from "@/features/chat/session";
 import { useAutoScroll } from "@/features/chat/useAutoScroll";
 import { type FeedUnits, useFeed } from "@/features/chat/useFeed";
 import { decidedMarkerIds, reportMarkerIds } from "@/features/reviews/review-conversation";
+import { bottomPadding } from "@/lib/reveal";
 import {
   asPermissionStatus,
   asSituationKind,
@@ -367,6 +369,53 @@ export interface ConversationProps {
   replyWaiting?: boolean;
   /** endRoom leaves room at the end as high as the way back to the end: a discussion, whose card of drafts ends its conversation. */
   endRoom?: boolean;
+  /** pillAvoids is a selector: the way back to the end isn't drawn while an element that matches crosses the strip it floats in. */
+  pillAvoids?: string;
+}
+
+/**
+ * usePillCovered tells whether an element that matches the selector crosses the strip at the bottom
+ * of the viewport, as high as its scroll padding: where the way back to the end floats. It measures
+ * on the scroll and when the content resizes, a frame later.
+ */
+function usePillCovered(
+  viewportRef: RefObject<HTMLDivElement | null>,
+  contentRef: RefObject<HTMLDivElement | null>,
+  selector: string | undefined,
+): boolean {
+  const [covered, setCovered] = useState(false);
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (selector === undefined || viewport === null) {
+      setCovered(false);
+      return;
+    }
+    let frame = 0;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const box = viewport.getBoundingClientRect();
+        const strip = box.bottom - bottomPadding(viewport);
+        const crosses = [...viewport.querySelectorAll<HTMLElement>(selector)].some((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.bottom > strip && rect.top < box.bottom;
+        });
+        setCovered(crosses);
+      });
+    };
+    measure();
+    viewport.addEventListener("scroll", measure, { passive: true });
+    const observer = new ResizeObserver(measure);
+    if (contentRef.current !== null) {
+      observer.observe(contentRef.current);
+    }
+    return () => {
+      cancelAnimationFrame(frame);
+      viewport.removeEventListener("scroll", measure);
+      observer.disconnect();
+    };
+  }, [viewportRef, contentRef, selector]);
+  return covered;
 }
 
 /** Conversation is everything that was said and done, from the top down, as a feed. */
@@ -383,6 +432,7 @@ export function Conversation({
   activity,
   replyWaiting = false,
   endRoom = false,
+  pillAvoids,
 }: ConversationProps) {
   const transcript = useTranscript(taskId, stage);
   const task = useTask(taskId);
@@ -394,6 +444,7 @@ export function Conversation({
   const contentRef = useRef<HTMLDivElement>(null);
   const feedRef = useRef<HTMLDivElement>(null);
   const [atTop, setAtTop] = useState(true);
+  const pillCovered = usePillCovered(viewportRef, contentRef, pillAvoids);
   // currentUnit is the unit that holds the tab stop of the feed, -1 for the tail: it stays mounted.
   const [currentUnit, setCurrentUnit] = useState(-1);
 
@@ -695,7 +746,7 @@ export function Conversation({
           )}
         </div>
       </ConversationColumn>
-      {!atBottom && (
+      {!atBottom && !pillCovered && (
         <BackToEnd
           newCount={newCount}
           voice={voice}

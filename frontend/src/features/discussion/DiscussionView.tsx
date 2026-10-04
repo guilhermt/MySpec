@@ -50,6 +50,7 @@ function DiscussionConversation({ discussion }: { discussion: DiscussionSummary 
       before={before}
       replyWaiting={replyWaiting}
       endRoom
+      pillAvoids="[data-current]"
     />
   );
 }

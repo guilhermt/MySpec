@@ -21,7 +21,7 @@ function round(overrides: Record<string, Partial<Draft>> = {}): Draft[] {
 function draw(
   drafts: Draft[],
   discussion: Partial<DiscussionSummary> = {},
-  target: { draft: string; retry: boolean } | null = null,
+  target: { draft: string; retry: boolean; approve: boolean } | null = null,
   ui: Parameters<typeof renderWithStore>[1] extends infer O ? O : never = {},
 ) {
   const summary = makeDiscussion({ drafts, round: 1, status: "deciding", ...discussion });
@@ -90,7 +90,7 @@ describe("DraftsCard", () => {
   });
 
   it("opens the draft the request names", () => {
-    draw(round(), {}, { draft: "c", retry: false });
+    draw(round(), {}, { draft: "c", retry: false, approve: false });
 
     expect(open("c")).toBe(true);
     expect(open("epic-1")).toBe(false);

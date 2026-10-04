@@ -359,11 +359,31 @@ describe.each(THEMES)("DiscussionView, the scenes in the %s theme", (theme) => {
           throw new Error("the current draft is not drawn in the conversation");
         }
         const view = scroller.getBoundingClientRect();
-        const outside = head.filter((part) => {
-          const box = part.getBoundingClientRect();
-          return box.top < view.top || box.bottom > view.bottom;
-        });
-        expect(outside.map((part) => part.textContent)).toEqual([]);
+        // The button the bar asks for (the Retry, the Approve of the epic discarded) stands whole
+        // above the room kept for the way back to the end; any other request shows the head.
+        const control = current.querySelector<HTMLElement>(
+          "[data-retry][data-request-target], [data-request-control]",
+        );
+        if (control !== null) {
+          const padding = Number.parseFloat(getComputedStyle(scroller).scrollPaddingBottom);
+          expect(padding).toBeGreaterThan(0);
+          expect(control.getBoundingClientRect().bottom).toBeLessThanOrEqual(view.bottom - padding);
+          expect(control.getBoundingClientRect().top).toBeGreaterThanOrEqual(view.top);
+        } else {
+          const outside = head.filter((part) => {
+            const box = part.getBoundingClientRect();
+            return box.top < view.top || box.bottom > view.bottom;
+          });
+          expect(outside.map((part) => part.textContent)).toEqual([]);
+        }
+      }
+
+      // The way back to the end is not drawn over the current draft.
+      const pill = within(area).queryByRole("button", { name: /Go to the end/ });
+      if (pill !== null && current !== null) {
+        const over = pill.getBoundingClientRect();
+        const draft = current.getBoundingClientRect();
+        expect(over.bottom <= draft.top || over.top >= draft.bottom).toBe(true);
       }
 
       // The capture comes before the pointer passes over what is cut, which scrolls the conversation

@@ -32,7 +32,7 @@ const MINUTE = 60_000;
 export interface DraftsCardProps {
   discussion: DiscussionSummary;
   /** target is the draft the request bar names, opened as the current one, and whether it is its Retry. */
-  target: { draft: string; retry: boolean } | null;
+  target: { draft: string; retry: boolean; approve: boolean } | null;
 }
 
 // Slot holds a draft, open or folded. The two are different elements, so one that held the focus as

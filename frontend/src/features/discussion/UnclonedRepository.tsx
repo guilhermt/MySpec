@@ -34,7 +34,7 @@ export function UnclonedRepository({ repository, layout = "line" }: UnclonedRepo
       return (
         <p
           role="status"
-          className="flex items-center gap-2 py-1.5 pl-4 text-(length:--text-meta) leading-(--leading-meta) text-ink-2"
+          className="flex items-center gap-(--space-2) py-(--space-1-5) pl-(--space-4) text-(length:--text-meta) leading-(--leading-meta) text-ink-2"
         >
           <Spinner />
           {`Cloning ${repository.fullName}…`}

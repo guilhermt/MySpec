@@ -39,8 +39,8 @@ export type DiscussionRequestAction = "show" | "retrySession" | "nextToDecide" |
 
 /** DiscussionRequestModel is the request bar of the discussion screen. */
 export type DiscussionRequestModel = RequestModel<DiscussionRequestAction, RequestFocus> & {
-  /** target is the draft Show opens and the arrival focuses, with its Retry; null for none. */
-  target: { draft: string; retry: boolean } | null;
+  /** target is the draft Show opens and the arrival focuses, with its Retry or its Approve when the bar asks for the button; null for none. */
+  target: { draft: string; retry: boolean; approve: boolean } | null;
 };
 
 type DiscussionButton = RequestButton<DiscussionRequestAction>;
@@ -105,16 +105,19 @@ function targetOf(
   switch (kind) {
     case "drafts": {
       const draft = nextToDecide(entries, null, 1);
-      return draft === null ? null : { draft, retry: false };
+      return draft === null ? null : { draft, retry: false, approve: false };
     }
     case "epic_cant_publish":
     case "epic_discarded": {
       const epic = standingEpic(kind, drafts);
-      return epic === undefined ? null : { draft: epic.id, retry: false };
+      // The discarded epic asks for its Approve; the one that can't publish asks to be looked at.
+      return epic === undefined
+        ? null
+        : { draft: epic.id, retry: false, approve: kind === "epic_discarded" };
     }
     case "publish_failed": {
       const failed = drafts.find((draft) => draft.publishError !== "");
-      return failed === undefined ? null : { draft: failed.id, retry: true };
+      return failed === undefined ? null : { draft: failed.id, retry: true, approve: false };
     }
     case "ready_to_archive":
       return null;

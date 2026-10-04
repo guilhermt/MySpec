@@ -82,7 +82,7 @@ export function DependencyPicker({
   const pending = useRef(false);
 
   useEffect(() => {
-    search.current?.focus();
+    search.current?.focus({ preventScroll: true });
   }, []);
 
   const { groups, typed } = pickerModel(query, drafts, cards);

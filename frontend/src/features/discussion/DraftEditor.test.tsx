@@ -41,7 +41,7 @@ describe("DraftEditor, the fields", () => {
     draw(makeDraft());
 
     expect(screen.getByRole("textbox", { name: "Title" })).toHaveFocus();
-    expect(screen.getByRole("textbox", { name: "Body" })).toHaveValue(
+    expect(screen.getByRole("textbox", { name: "Body Markdown" })).toHaveValue(
       "A button that exports the list.",
     );
     expect(screen.getByRole("button", { name: "Repository: dev/web" })).toBeInTheDocument();
@@ -127,7 +127,7 @@ describe("DraftEditor, the texts", () => {
   it("never saves a blank body of an agent's epic", async () => {
     const { user } = draw(makeDraft({ kind: "epic", title: "Pricing tiers" }));
 
-    await user.clear(screen.getByRole("textbox", { name: "Body" }));
+    await user.clear(screen.getByRole("textbox", { name: "Body Markdown" }));
 
     expect(screen.getByText("Write the body.")).toBeInTheDocument();
     await user.tab();
@@ -139,7 +139,7 @@ describe("DraftEditor, the texts", () => {
       makeDraft({ id: "epic-9", kind: "epic", source: "user", title: "Pricing" }),
     );
 
-    await user.clear(screen.getByRole("textbox", { name: "Body" }));
+    await user.clear(screen.getByRole("textbox", { name: "Body Markdown" }));
     await user.tab();
 
     expect(screen.queryByText("Write the body.")).not.toBeInTheDocument();
@@ -308,7 +308,10 @@ describe("DraftEditor, during a publication", () => {
     draw(makeDraft(), { publishing: true });
 
     expect(screen.getByRole("textbox", { name: "Title" })).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByRole("textbox", { name: "Body" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("textbox", { name: "Body Markdown" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
     expect(screen.getByRole("button", { name: /^Repository/ })).toHaveAttribute(
       "aria-disabled",
       "true",

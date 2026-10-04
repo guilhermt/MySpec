@@ -505,7 +505,7 @@ Conferido nas capturas `discussion-*` (as treze cenas e as flags, 2180, 978 e 81
 
 ### Problemas
 
-**D1 · Deve. A ação que a barra aponta fica abaixo da dobra, sob o esmaecido e a pílula `↓`.**
+**D1 · Deve. A ação que a barra aponta fica abaixo da dobra, sob o esmaecido e a pílula `↓`.** · **Fechado no step 12**
 
 - Com o atual rolado pelo topo (`lib/reveal.ts`), num rascunho alto a linha da decisão chega fora de vista:
   - em `discussion-partial-fail-978`, o **Retry** (a saída de `Publish failed`, e com o foco) aparece sob o esmaecido e sob a pílula `↓`;
@@ -514,17 +514,17 @@ Conferido nas capturas `discussion-*` (as treze cenas e as flags, 2180, 978 e 81
 - `ConversationColumn.tsx:51` (`endRoom`) dá respiro só no fim da coluna, não sob o atual.
 - Regra: `screens/discussion.md` §8 (**Show** leva ao rascunho onde fica **Retry**); `principles.md` 9 (o foco à vista) e 7. A crítica 9 aceitou a troca para o caso do teclado; o **Show** de uma situação que pede um botão é outro caso. Lacuna L11.
 
-**D2 · Pode esperar. A edição mantém Edit `E` vivo e o rótulo Body sem `Markdown`.**
+**D2 · Pode esperar. A edição mantém Edit `E` vivo e o rótulo Body sem `Markdown`.** · **Fechado no step 12**
 
 - `features/discussion/drafts-card.ts:498–505` só desabilita a decisão durante a edição (`Finish editing to decide`); `editReason` fica `null`, e **Edit** `E` continua ao lado de **Done** (`components/system/Draft.tsx:386–400`). `DraftEditor.tsx:298` não tem o complemento `Markdown` de `09:239`.
 - Origem: crítica 9, segunda leitura, aberto.
 
-**D3 · Pode esperar. Valores soltos onde há token.**
+**D3 · Pode esperar. Valores soltos onde há token.** · **Fechado no step 12**
 
 - `features/discussion/UnclonedRepository.tsx:37` (`gap-2 py-1.5 pl-4`) e `DraftEditor.tsx:316` (`py-1`). O item 12 da crítica 9 trocou os dos diálogos, não estes.
 - Regra: `docs/architecture/design-system.md` (Utilitários).
 
-**D4 · Pode esperar. O repositório dos cards do diálogo sai curto.**
+**D4 · Pode esperar. O repositório dos cards do diálogo sai curto.** · **Fechado no step 12**
 
 - `NewDiscussionDialog.tsx:264` usa `shortName` (`billing`, `gateway`); `09:106` diz "o repositório curto (`acme/billing`)", com um exemplo que não é curto. A régua se contradiz. Lacuna L12.
 
@@ -720,16 +720,16 @@ As faixas sempre `role="alert"` (`critique-task-06.md:173`), o anel de foco (`cr
 | `critique-task-09.md` (1), o épico descartado a 60% | Feito | Sem `opacity` no `Draft.tsx`; `discussion-epic-off-*` com o título em `--ink-2` e o corpo em tinta cheia | — |
 | `critique-task-09.md` (2), a pastilha onde não há | Feito | `discussion-request.ts:345–369` | — |
 | `critique-task-09.md` (3), os títulos do corpo | Feito no rascunho | `CardDraft.tsx:158` (`ui-headings`); não no `Documents` nem no corpo do marco | S6 · **Fechado no step 8** |
-| `critique-task-09.md` (4), o que fica sob a barra | Vale em parte | A edição rola e o `listbox` sobe; a pílula `↓` cobre o atual | D1 |
+| `critique-task-09.md` (4), o que fica sob a barra · **Fechado no step 12** | Vale em parte | A edição rola e o `listbox` sobe; a pílula `↓` cobre o atual | D1 |
 | `critique-task-09.md` (5, 6, 8, 9, 10, 11) | Feito | Segunda leitura da crítica 9; o 8 conferido no app (`✓ Created api#479 · 13:58`) | — |
 | `critique-task-09.md` (7), as áreas de texto | Feito | `DraftEditor.tsx:307`, `NewDiscussionDialog.tsx:241–242`; três linhas em `discussion-start-*` | — |
-| `critique-task-09.md` (12), os valores soltos | Vale em parte | Os diálogos com `--space-*`; sobram `UnclonedRepository.tsx:37` e `DraftEditor.tsx:316` | D3 |
+| `critique-task-09.md` (12), os valores soltos · **Fechado no step 12** | Vale em parte | Os diálogos com `--space-*`; sobram `UnclonedRepository.tsx:37` e `DraftEditor.tsx:316` | D3 |
 | `critique-task-09.md` (13), os miúdos | Feito, menos a idade | `· click again to undo` depois de **Retry** no app | S17 · **Fechado no step 8** |
-| `critique-task-09.md`, segunda leitura: a pílula `↓` sobre o atual | Vale | `discussion-drafts-978`/`-812` | D1 |
-| `critique-task-09.md`, segunda leitura: **Edit** ao lado de **Done**, **Body** sem `Markdown` | Vale | `drafts-card.ts:498–505`; `DraftEditor.tsx:298` | D2 |
+| `critique-task-09.md`, segunda leitura: a pílula `↓` sobre o atual · **Fechado no step 12** | Vale | `discussion-drafts-978`/`-812` | D1 |
+| `critique-task-09.md`, segunda leitura: **Edit** ao lado de **Done**, **Body** sem `Markdown` · **Fechado no step 12** | Vale | `drafts-card.ts:498–505`; `DraftEditor.tsx:298` | D2 |
 | `critique-task-09.md`, segunda leitura: o tooltip sempre na lista e no dobrado | Vale | `MarkerLine.tsx:174`, `FoldedDraft.tsx:59` | S22 · **Fechado no step 7** |
 | `critique-task-09.md`, novo: a razão cortada do rodapé pelo teclado | Vale | **Group drafts into an epic** | S21 · **Fechado no step 7** |
-| `critique-task-09.md`, novo: a decisão abaixo da dobra | Vale | `discussion-partial-fail-978`, `discussion-epic-off-978` | D1 |
+| `critique-task-09.md`, novo: a decisão abaixo da dobra · **Fechado no step 12** | Vale | `discussion-partial-fail-978`, `discussion-epic-off-978` | D1 |
 | `critique-task-10.md`, o `Textarea` com `rows` (`DraftEditor` 6) | Feito | Sem mudança visível em `discussion-drafts-edit-*` | — |
 
 ### Settings, History e diálogos

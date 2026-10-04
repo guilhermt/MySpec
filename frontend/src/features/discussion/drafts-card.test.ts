@@ -979,7 +979,7 @@ describe("decisionOf", () => {
       shown: true,
       approveReason: "Finish editing to decide",
       discardReason: "Finish editing to decide",
-      editReason: null,
+      editReason: "Finish editing first",
     });
   });
 

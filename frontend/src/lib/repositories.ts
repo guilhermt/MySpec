@@ -16,6 +16,33 @@ export function shortName(fullName: string): string {
   return slash === -1 ? fullName : fullName.slice(slash + 1);
 }
 
+// SHARED is, for each state, the short names more than one repository answers to.
+const SHARED = new WeakMap<State, ReadonlySet<string>>();
+
+/**
+ * sharedNames are the short names, in lower case, of the repositories the state knows, registered or
+ * named by an archived item of the window, that two or more of them answer to: acme/api and globex/api.
+ */
+export function sharedNames(app: State): ReadonlySet<string> {
+  const known = SHARED.get(app);
+  if (known !== undefined) {
+    return known;
+  }
+  const owners = new Map<string, Set<string>>();
+  const names = [
+    ...(app.repositories ?? []).map((repository) => repository.fullName),
+    ...(app.history ?? []).map((task) => task.repository),
+    ...(app.reviewHistory ?? []).map((review) => review.repository),
+  ];
+  for (const fullName of names) {
+    const name = shortName(fullName).toLowerCase();
+    owners.set(name, (owners.get(name) ?? new Set()).add(fullName.toLowerCase()));
+  }
+  const shared = new Set([...owners].filter(([, full]) => full.size > 1).map(([name]) => name));
+  SHARED.set(app, shared);
+  return shared;
+}
+
 /** shortRef is an issue as the screen writes it, "billing#479" for "acme/billing#479". */
 export function shortRef(reference: string): string {
   const hash = reference.lastIndexOf("#");

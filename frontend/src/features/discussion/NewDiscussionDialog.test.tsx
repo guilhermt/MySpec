@@ -104,6 +104,24 @@ describe("NewDiscussionDialog", () => {
     );
   });
 
+  it("writes the repository of a card short", () => {
+    open(["dev/web#12"]);
+
+    expect(screen.getByText("web", { selector: "span" })).toBeInTheDocument();
+  });
+
+  it("writes the repository of a card with its owner when another repository has the name", () => {
+    renderWithStore(<NewDiscussionDialog />, {
+      state: makeState({
+        repositories: [makeRepository(), makeRepository({ id: "repo-2", fullName: "other/web" })],
+        boards: [makeBoard({ cards: [LOGIN], repositoryIds: ["repo-1"] })],
+      }),
+      ui: { newDiscussion: { boardId: "board-1", cardKeys: ["dev/web#12"], askBoard: false } },
+    });
+
+    expect(screen.getByText("dev/web", { selector: "span" })).toBeInTheDocument();
+  });
+
   it("drops a card the user takes out of the discussion", async () => {
     const { user } = open(["dev/web#12", "dev/web#13"]);
 
