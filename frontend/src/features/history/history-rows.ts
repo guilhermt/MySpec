@@ -9,13 +9,40 @@ import { isOneShot } from "@/lib/task-modes";
 import type { ArchivedDiscussion, ArchivedReview, ArchivedTask, State } from "@/lib/wails";
 import { clockOf } from "@/lib/when";
 
+// SHARED is, for each state, the short names more than one repository answers to.
+const SHARED = new WeakMap<State, ReadonlySet<string>>();
+
+// sharedNames are the short names, in lower case, of the repositories the state knows, registered or
+// named by an archived item of the window, that two or more of them answer to: acme/api and globex/api.
+function sharedNames(app: State): ReadonlySet<string> {
+  const known = SHARED.get(app);
+  if (known !== undefined) {
+    return known;
+  }
+  const owners = new Map<string, Set<string>>();
+  const names = [
+    ...(app.repositories ?? []).map((repository) => repository.fullName),
+    ...(app.history ?? []).map((task) => task.repository),
+    ...(app.reviewHistory ?? []).map((review) => review.repository),
+  ];
+  for (const fullName of names) {
+    const name = shortName(fullName).toLowerCase();
+    owners.set(name, (owners.get(name) ?? new Set()).add(fullName.toLowerCase()));
+  }
+  const shared = new Set([...owners].filter(([, full]) => full.size > 1).map(([name]) => name));
+  SHARED.set(app, shared);
+  return shared;
+}
+
 // shortRepository is the repository as a row writes it: the name, or owner/name when the owner is
-// not the one of the board of the item, so two repositories called api are not mistaken.
+// not the one of the board of the item or another repository has the same name, so two repositories
+// called api are not mistaken.
 function shortRepository(app: State, repositoryId: string, fullName: string): string {
   const board = boardOfRepository(app, repositoryId);
   const foreign =
     board !== null && !fullName.toLowerCase().startsWith(`${board.owner.toLowerCase()}/`);
-  return foreign ? fullName : shortName(fullName);
+  const shared = sharedNames(app).has(shortName(fullName).toLowerCase());
+  return foreign || shared ? fullName : shortName(fullName);
 }
 
 /** RowText is what a row says of an item, before the time and the name that go with it. */
