@@ -204,7 +204,7 @@ Fica acima do compositor, na coluna da conversa, com a mesma borda esquerda e di
 | `pr_blocked` | `PR blocked` e a razão do `gh` ou do git | **Try again** | — | erro |
 | `plan_invalid` | `Plan still invalid` e o número de problemas; os problemas estão no marco `The plan is still invalid` na conversa, gravado quando as correções automáticas acabam | **Show problems**, que abre o marco com os problemas; a correção vai pelo compositor. **Discard and restart the plan…** no `⋯` | — | tingida |
 | `ready_to_continue` | `Ready to continue · Tech spec` | **Continue** | — | tingida |
-| `step_review` (`Manual`, ou depois de três rodadas ou de **Review myself**) | `Review step 4 9m` · `5 of 7 files staged · 71%`, depois `Approve step 4` | **Open in VS Code**, **Approve** (tracejado com `Stage 2 more files` até 100%) | — | tingida |
+| `step_review` (`Manual`, ou depois de três rodadas ou de **Review myself**) | `Review step 4 9m` · `5 of 7 files staged · 71%`, depois `Approve step 4` | **Open in VS Code** `Ctrl E`, **Approve** (tracejado com `Stage 2 more files` até 100%) | — | tingida |
 | `step_empty` | `Step 4 has no changes` | **Discard step 4…** (repetida do `⋯`); pedir uma mudança pelo compositor | — | tingida |
 | `draft` | `Draft to approve` | **Approve draft** (primária), **Discard draft** (repetida do `⋯`). O rascunho, editável, fica na conversa | — | tingida |
 | `findings` · decide | `Decide findings · PR review · pass 1 12m` · `1 of 4 decided` (e `· the worktree has changes` quando há) | **Next to decide** `Alt ↓`, **Approve the rest** (secundários), **Apply approved** (primária tracejada com `Decide 3 more`) | `A` e `D` no apontamento em foco, `Alt+↓` e `Alt+↑` | de decisão |

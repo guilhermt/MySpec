@@ -178,7 +178,7 @@ A 1250 px com o painel aberto, `#474 Usage alerts at 80% of the plan` tem embaix
    - sem ativa, a arquivada mais recente (`Archived task: 409-hash-api-keys-at-rest`, um link que abre no History);
    - a discussão, quando o card está numa, de entrada ou como autora ativa (`In the discussion Usage-based pricing tiers`, um link), ou a autora arquivada (`From the discussion Usage alerts`, que abre no History).
 6. **Os campos**, numa lista de chave e valor em `--text-meta`: os campos preenchidos do board (`Module`, `Estimate`, datas), na ordem que o GitHub devolve, e `Assignees`.
-7. **O corpo**, em Markdown, no registro de leitura (`--text-read`), com títulos em `--text-body` e peso 600, código, tabelas, imagens e mermaid, depois de um fio. Um corpo vazio diz `No description.`
+7. **O corpo**, em Markdown, no registro de leitura (`--text-read`), com títulos em `--text-ui` e peso 600, código, tabelas, imagens e mermaid, depois de um fio. Um corpo vazio diz `No description.`
 8. **As relações**, cada grupo com o título em caixa alta e uma linha por card (número, título, status), e cada card do board abre com um clique:
    - **Epic**, com `2 of 8 finished`;
    - **Cards of the epic · 6**, os irmãos com o status no board, ou o estado da issue fora dele (um irmão fora do board é um link externo);
