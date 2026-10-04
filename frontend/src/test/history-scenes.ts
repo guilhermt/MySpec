@@ -404,7 +404,7 @@ function reviewOf(row: Row, index: number): ArchivedReview {
   const passes: ReviewPass[] = Array.from({ length: passCount(more) }, (_, pass) =>
     makeReviewPass({
       pass: pass + 1,
-      file: `reviews/pass-${pass + 1}.md`,
+      file: `review-${pass + 1}.md`,
       published: true,
       publishedAt: at(day, "09:00"),
       verdict: pass + 1 === passCount(more) ? "approve" : "request_changes",
@@ -569,7 +569,7 @@ function openedReview(mode: "publish" | "apply"): ArchivedReview {
   const pass = (number: number, when: string, findings: ReviewFinding[]): ReviewPass =>
     makeReviewPass({
       pass: number,
-      file: `reviews/pass-${number}.md`,
+      file: `review-${number}.md`,
       findings,
       published: !apply,
       publishedAt: apply ? "" : at(23, when),
@@ -755,9 +755,9 @@ const DOCUMENTS: Record<string, string> = {
   "pr/review-1.md":
     "## Findings\n\n1. The migration adds the index without CONCURRENTLY and locks the table.\n2. The 24 hours are a literal in two places.",
   "pr/review-2.md": "Both findings fixed. The checks pass and the branch merges clean into dev.",
-  "reviews/pass-1.md":
+  "review-1.md":
     "The move to react-hook-form keeps every field and the submit flow, and the six checks pass. Two things to fix before merging.",
-  "reviews/pass-2.md":
+  "review-2.md":
     "Both findings fixed in 3f1a9c0. Nothing else changed. The checks pass and the branch merges clean into dev.",
   ...Object.fromEntries(
     REPORTS.flatMap((passes, step) =>
