@@ -92,6 +92,7 @@ O jsdom roda sem CSS, então um teste nele não vê a cascata: uma classe presen
 - `makeState`, `makeRepository`, `makeTask`, `makeStep`, `makePullRequest`, `makeSituation`, `makeTranscript`... de `wails-mock.ts` fabricam DTOs completos com valores plausíveis, aceitando `Partial` para o que o teste quer diferente. Um DTO novo ganha a sua fábrica.
 - `api.x` é um `vi.fn` por função; o teste verifica a chamada com `expect(api.approveStep).toHaveBeenCalledWith(...)`. O mock é zerado depois de cada teste.
 - Eventos do Go são simulados chamando as ações do store (`applyState`, `applyTranscriptEvent`), não disparando o runtime.
+- Um item de menu que abre um diálogo entrega o foco a ele, e o menu não o toma de volta. O jsdom não toca a animação de saída do menu, então a devolução do foco viria antes de o diálogo abrir e nada a veria; `withMenuExitAnimation` de `src/test/menu-exit.ts` dá ao menu uma saída de 50 ms, e `menuGone` espera ele sair e o quadro seguinte, para o teste provar o foco no diálogo depois da devolução, como no app.
 
 ## O que um teste novo cobre
 

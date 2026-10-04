@@ -2,6 +2,7 @@ import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { TaskMenu } from "@/features/task/TaskMenu";
 import { api, type TaskSummary } from "@/lib/wails";
+import { menuGone, withMenuExitAnimation } from "@/test/menu-exit";
 import { renderWithStore } from "@/test/render";
 import { makePullRequest, makeState, makeStep, makeTask } from "@/test/wails-mock";
 
@@ -115,6 +116,27 @@ describe("TaskMenu", () => {
 
     expect(await screen.findByRole("alertdialog")).toHaveTextContent("Delete “add-login”?");
   });
+
+  it.each([
+    ["Delete task…", {}, "Delete “add-login”?"],
+    ["Discard step 1…", IMPLEMENTING, /^Discard step 1/],
+  ] as const)(
+    "opens %s on Cancel, which the menu doesn't take back to the ⋯",
+    async (item, overrides, title) => {
+      await withMenuExitAnimation(async () => {
+        const { user } = menu(overrides);
+        const trigger = screen.getByRole("button", { name: "More actions" });
+        await openMenu(user);
+
+        await user.click(screen.getByRole("menuitem", { name: item }));
+        const dialog = await screen.findByRole("alertdialog", { name: title });
+        await menuGone();
+
+        expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+        expect(trigger).not.toHaveFocus();
+      });
+    },
+  );
 
   it("opens the review mode popover from the ⋯ and returns the focus to it", async () => {
     const { user } = menu({ reviewMode: "agent" });
