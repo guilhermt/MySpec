@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ReviewMenu } from "@/features/reviews/ReviewMenu";
 import { api, type ReviewSummary } from "@/lib/wails";
@@ -100,5 +100,21 @@ describe("ReviewMenu", () => {
     expect(api.deleteReview).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole("button", { name: "Delete review" }));
     expect(api.deleteReview).toHaveBeenCalledWith("review-1");
+  });
+
+  it("hands the focus to the dialog the deletion opens and takes it back on Cancel", async () => {
+    const { user } = menu();
+    await openMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Delete review…" }));
+
+    const dialog = await screen.findByRole("alertdialog");
+    await waitFor(() =>
+      expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus(),
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "More actions" })).toHaveFocus());
+    expect(api.deleteReview).not.toHaveBeenCalled();
   });
 });

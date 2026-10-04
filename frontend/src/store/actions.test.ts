@@ -30,7 +30,7 @@ import {
   decideDraft,
   decideFindingInPlace,
   deleteDiscussionInPlace,
-  deleteReview,
+  deleteReviewInPlace,
   deleteTask,
   discardDraft,
   discardStage,
@@ -549,7 +549,7 @@ describe("task actions", () => {
   it.each([
     ["deleteTask", () => deleteTask("item-1")],
     ["closeTask", () => closeTask("item-1")],
-    ["deleteReview", () => deleteReview("item-1")],
+    ["deleteReviewInPlace", () => deleteReviewInPlace("item-1")],
     ["archiveDiscussionInPlace", () => archiveDiscussionInPlace("item-1")],
     ["deleteDiscussionInPlace", () => deleteDiscussionInPlace("item-1")],
   ])("%s marks the item whose page is not announced", async (_name, action) => {
@@ -568,11 +568,6 @@ describe("task actions", () => {
       "closeTask",
       () => vi.mocked(api.closeTask).mockRejectedValueOnce(new Error("busy")),
       () => closeTask("item-1"),
-    ],
-    [
-      "deleteReview",
-      () => vi.mocked(api.deleteReview).mockRejectedValueOnce(new Error("busy")),
-      () => deleteReview("item-1"),
     ],
   ])("%s forgets the mark when the removal fails", async (_name, refuse, action) => {
     refuse();
@@ -593,6 +588,11 @@ describe("task actions", () => {
       "deleteDiscussionInPlace",
       () => vi.mocked(api.deleteDiscussion).mockRejectedValueOnce(new Error("busy")),
       () => deleteDiscussionInPlace("item-1"),
+    ],
+    [
+      "deleteReviewInPlace",
+      () => vi.mocked(api.deleteReview).mockRejectedValueOnce(new Error("busy")),
+      () => deleteReviewInPlace("item-1"),
     ],
   ])("%s answers the refusal and forgets the mark", async (_name, refuse, action) => {
     refuse();
@@ -1010,7 +1010,7 @@ describe("review actions reported in the app notice", () => {
     });
   });
 
-  it("say what the deletion of a review left behind", async () => {
+  it("say, by the id of the review, what its deletion left behind", async () => {
     const leftover = makeLeftover({
       worktree: {
         path: "/home/dev/worktrees/dev/web/pr_31",
@@ -1020,16 +1020,18 @@ describe("review actions reported in the app notice", () => {
     });
     vi.mocked(api.deleteReview).mockResolvedValueOnce({ leftover });
 
-    await deleteReview("review-1");
+    expect(await deleteReviewInPlace("review-1")).toBeNull();
 
     expect(api.deleteReview).toHaveBeenCalledWith("review-1");
     expect(useAppStore.getState().leftover).toEqual(leftover);
+    expect(useAppStore.getState().leftovers).toEqual({ "review-1": leftover });
   });
 
   it("say nothing when the deletion of a review left nothing behind", async () => {
-    await deleteReview("review-1");
+    await deleteReviewInPlace("review-1");
 
     expect(useAppStore.getState().leftover).toBeNull();
+    expect(useAppStore.getState().leftovers).toEqual({});
   });
 });
 

@@ -46,6 +46,7 @@ export interface StoreOptions {
       | "lastRepositoryId"
       | "historyQuery"
       | "leftover"
+      | "leftovers"
       | "flashing"
       | "promptEdit"
       | "pendingLeave"
@@ -102,6 +103,7 @@ export function resetAppStore(options: StoreOptions = {}): void {
     lastRepositoryId: options.ui?.lastRepositoryId ?? null,
     historyQuery: options.ui?.historyQuery ?? "",
     leftover: options.ui?.leftover ?? null,
+    leftovers: options.ui?.leftovers ?? {},
     flashing: options.ui?.flashing ?? new Set<string>(),
     promptEdit: options.ui?.promptEdit ?? null,
     pendingLeave: options.ui?.pendingLeave ?? null,

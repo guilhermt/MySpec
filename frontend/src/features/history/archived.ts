@@ -1,7 +1,18 @@
+import type { FindingView } from "@/components/system/Finding";
 import type { MarkerView } from "@/features/chat/markers";
+import { passFindingViews } from "@/features/reviews/review-conversation";
+import { verdictLabel } from "@/features/reviews/review-status";
 import { shortRef } from "@/lib/repositories";
+import { counted } from "@/lib/situations";
 import { isOneShot } from "@/lib/task-modes";
-import type { ArchivedPRReport, ArchivedStep, ArchivedTask, StepReport } from "@/lib/wails";
+import type {
+  ArchivedPRReport,
+  ArchivedReview,
+  ArchivedStep,
+  ArchivedTask,
+  ReviewPass,
+  StepReport,
+} from "@/lib/wails";
 import { dateAt } from "@/lib/when";
 
 /** stepsOf are the steps of an archived task; the Go sends none as null. */
@@ -159,4 +170,123 @@ export function deleteTaskStays(task: ArchivedTask): string {
     return `Nothing changes on GitHub: the card ${card} stays.`;
   }
   return "Nothing changes on GitHub.";
+}
+
+/** recordedPasses are the passes of an archived review that have a report; the Go sends none as null. */
+export function recordedPasses(review: ArchivedReview): ReviewPass[] {
+  return (review.passes ?? []).filter((pass) => pass.file !== "");
+}
+
+// ofAll is how a count of the passes reads: "published" for the only one, "both published" for two,
+// "all published" for more, "2 published" for a part.
+function ofAll(count: number, total: number, said: string): string {
+  if (count < total) {
+    return `${count} ${said}`;
+  }
+  return total === 1 ? said : `${total === 2 ? "both" : "all"} ${said}`;
+}
+
+/**
+ * reviewedSentence is what became of the passes of a review that wrote a report: "2 passes, both
+ * published", "3 passes, 2 published", "2 passes, none published", and, for the passes sent to the agent in
+ * Apply mode, "1 pass, sent to the agent". "" when no pass wrote a report.
+ */
+export function reviewedSentence(passes: readonly ReviewPass[]): string {
+  const written = passes.filter((pass) => pass.file !== "");
+  if (written.length === 0) {
+    return "";
+  }
+  const published = written.filter((pass) => pass.published).length;
+  const sent = written.filter((pass) => pass.sent).length;
+  const total = written.length === 1 ? "1 pass" : `${written.length} passes`;
+  if (published === 0 && sent === 0) {
+    return `${total}, none published`;
+  }
+  const parts = [
+    ...(published === 0 ? [] : [ofAll(published, written.length, "published")]),
+    ...(sent === 0 ? [] : [ofAll(sent, written.length, "sent to the agent")]),
+  ];
+  return `${total}, ${parts.join(" and ")}`;
+}
+
+// reviewPullRequestValue is what the Pull request fact says of the pull request of a review.
+function reviewPullRequestValue(review: ArchivedReview, ref: string, now: number): string {
+  const author = review.author === "" ? "" : ` by ${review.author}`;
+  if (review.outcome === "merged") {
+    const into = review.baseBranch === "" ? "" : ` into ${review.baseBranch}`;
+    const by = review.mergedBy === "" ? "" : ` by ${review.mergedBy}`;
+    const at = archivedDate(review.mergedAt, now);
+    return `${ref}${author} · merged${into}${by}${at === "" ? "" : ` · ${at}`}`;
+  }
+  const at = archivedDate(review.closedAt, now);
+  return `${ref}${author} · closed${at === "" ? "" : ` · ${at}`}`;
+}
+
+/**
+ * archivedReviewFacts are the facts of an archived review: its pull request with what became of it, its
+ * card, when it started, what became of its passes and, when the pull request has no hour to carry it,
+ * when it was archived.
+ */
+export function archivedReviewFacts(review: ArchivedReview, now: number): ArchivedFact[] {
+  const ref = shortRef(`${review.repository}#${review.number}`);
+  const facts: ArchivedFact[] = [
+    {
+      label: "Pull request",
+      value: reviewPullRequestValue(review, ref, now),
+      link: { text: ref, href: review.url, tooltip: `Open ${ref} on GitHub` },
+    },
+  ];
+  const { card } = review;
+  if (card !== null) {
+    const cardRef = shortRef(`${review.repository}#${card.number}`);
+    facts.push({
+      label: "Card",
+      value: `${cardRef} · ${card.title}`,
+      link: { text: cardRef, href: card.url, tooltip: `Open ${cardRef} on GitHub` },
+    });
+  }
+  facts.push({ label: "Started", value: archivedDate(review.createdAt, now) });
+  const reviewed = reviewedSentence(review.passes ?? []);
+  if (reviewed !== "") {
+    facts.push({ label: "Reviewed", value: reviewed });
+  }
+  const hour = review.outcome === "merged" ? review.mergedAt : review.closedAt;
+  if (hour === "") {
+    facts.push({ label: "Archived", value: archivedDate(review.archivedAt, now) });
+  }
+  return facts;
+}
+
+/** PassHeading is the line of a pass of an archived review: its title, what became of it and when. */
+export interface PassHeading {
+  title: string;
+  outcome: string;
+  time: string;
+}
+
+/**
+ * passHeading is the line of a pass: "Pass 1" with its verdict (or, in Apply mode, the findings sent to
+ * the agent; "not published" when nothing left) and the moment it left, "" when that wasn't kept.
+ */
+export function passHeading(pass: ReviewPass, now: number): PassHeading {
+  const title = `Pass ${pass.pass}`;
+  if (pass.published) {
+    const at = archivedDate(pass.publishedAt, now);
+    return { title, outcome: verdictLabel(pass.verdict), time: at === "" ? "" : `published ${at}` };
+  }
+  if (pass.sent) {
+    const approved = (pass.findings ?? []).filter((finding) => finding.decision === "approved");
+    const at = archivedDate(pass.sentAt, now);
+    return {
+      title,
+      outcome: `${counted(approved.length, "finding")} sent to the agent`,
+      time: at === "" ? "" : `sent ${at}`,
+    };
+  }
+  return { title, outcome: "not published", time: "" };
+}
+
+/** outFindingViews are the findings of a pass that left it, published or sent, as the system draws them. */
+export function outFindingViews(pass: ReviewPass, mode: string, now: number): FindingView[] {
+  return passFindingViews(pass, mode, now).filter((view) => view.decision === "approved");
 }

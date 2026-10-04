@@ -98,7 +98,8 @@ function ChecksBody({ body }: { body: Extract<MarkerView["body"], { kind: "check
   );
 }
 
-function FindingsBody({
+/** FindingsBody is the findings of a pass in the sunken block a marker opens into; History draws it too. */
+export function FindingsBody({
   body,
   review,
   task,

@@ -867,16 +867,6 @@ export function approveRestOfFindings(id: string, pass: number): Promise<boolean
   );
 }
 
-/** deleteReview removes the review for good and reports what stayed on disk. */
-export function deleteReview(id: string): Promise<void> {
-  return runRemoval(id, fail(withItem("Couldn't delete", itemName(id)), TRY), async () => {
-    const result = await api.deleteReview(id);
-    if (result.leftover !== null) {
-      useAppStore.getState().setLeftover(result.leftover);
-    }
-  });
-}
-
 /**
  * startDiscussion and discussionContext do not swallow their failure: the
  * dialog that creates a discussion shows it next to the form.
@@ -1007,6 +997,21 @@ async function removalInPlace(id: string, operation: () => Promise<void>): Promi
     useAppStore.setState({ expectGone: null });
   }
   return error;
+}
+
+/**
+ * deleteReviewInPlace removes the active review for good and reports what stayed on disk; it answers
+ * the refusal, or null.
+ */
+export async function deleteReviewInPlace(id: string): Promise<string | null> {
+  return removalInPlace(id, async () => {
+    const result = await api.deleteReview(id);
+    if (result.leftover !== null) {
+      const { leftover } = result;
+      useAppStore.getState().setLeftover(leftover);
+      useAppStore.setState((state) => ({ leftovers: { ...state.leftovers, [id]: leftover } }));
+    }
+  });
 }
 
 /** archiveDiscussionInPlace ends the conversation and sends the discussion to the history; it answers the refusal, or null. */

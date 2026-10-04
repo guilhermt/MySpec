@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { MenuRow } from "@/components/MenuRow";
 import { IconButton } from "@/components/system/IconButton";
 import { ICONS } from "@/components/system/icons";
@@ -28,6 +28,9 @@ export interface ReviewMenuProps {
 export function ReviewMenu({ review }: ReviewMenuProps) {
   const [deleting, setDeleting] = useState(false);
   const [reading, setReading] = useState(false);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  // The item that opens the dialog hands it the focus; the menu doesn't take it back.
+  const handsFocus = useRef(false);
   const openReviewDialog = useAppStore((state) => state.openReviewDialog);
   const groups = reviewMenu(review, useNow(MINUTE, true));
 
@@ -56,6 +59,7 @@ export function ReviewMenu({ review }: ReviewMenuProps) {
         openReviewDialog(review.id, "again");
         break;
       case "deleteReview":
+        handsFocus.current = true;
         setDeleting(true);
         break;
     }
@@ -64,8 +68,17 @@ export function ReviewMenu({ review }: ReviewMenuProps) {
   return (
     <>
       <Menu>
-        <MenuTrigger render={<IconButton label="More actions" icon={ICONS.more} size="sm" />} />
-        <MenuContent align="end">
+        <MenuTrigger
+          render={<IconButton ref={moreRef} label="More actions" icon={ICONS.more} size="sm" />}
+        />
+        <MenuContent
+          align="end"
+          finalFocus={() => {
+            const handed = handsFocus.current;
+            handsFocus.current = false;
+            return !handed;
+          }}
+        >
           {groups.map((group) => (
             <Fragment key={group.label ?? "last"}>
               {group.label === null && <MenuSeparator />}
@@ -86,7 +99,16 @@ export function ReviewMenu({ review }: ReviewMenuProps) {
         </MenuContent>
       </Menu>
 
-      <DeleteReviewDialog review={review} open={deleting} onOpenChange={setDeleting} />
+      <DeleteReviewDialog
+        review={review}
+        open={deleting}
+        onOpenChange={(open) => {
+          setDeleting(open);
+          if (!open) {
+            moreRef.current?.focus();
+          }
+        }}
+      />
     </>
   );
 }

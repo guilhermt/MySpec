@@ -4,13 +4,13 @@ import { usePendingStart } from "@/features/board/usePendingStart";
 import { ArchivedDiscussionView } from "@/features/discussion/ArchivedDiscussionView";
 import { DiscussionView } from "@/features/discussion/DiscussionView";
 import { NewDiscussionDialog } from "@/features/discussion/NewDiscussionDialog";
+import { ArchivedReview } from "@/features/history/ArchivedReview";
 import { ArchivedTask } from "@/features/history/ArchivedTask";
 import { HistoryPanel } from "@/features/history/HistoryPanel";
 import { Home } from "@/features/home/Home";
 import { GoneView } from "@/features/navigation/GoneView";
 import { AppNotices } from "@/features/notice/AppNotices";
 import { ShellToasts } from "@/features/notice/ShellToasts";
-import { ArchivedReviewView } from "@/features/reviews/ArchivedReviewView";
 import { ReviewsView } from "@/features/reviews/ReviewsView";
 import { ReviewView } from "@/features/reviews/ReviewView";
 import { StartReviewDialog } from "@/features/reviews/StartReviewDialog";
@@ -47,7 +47,7 @@ function LocationView() {
     case "archived-task":
       return <ArchivedTask key={location.id} taskId={location.id} />;
     case "archived-review":
-      return <ArchivedReviewView key={location.id} reviewId={location.id} />;
+      return <ArchivedReview key={location.id} reviewId={location.id} />;
     case "archived-discussion":
       return <ArchivedDiscussionView key={location.id} discussionId={location.id} />;
     case "gone":

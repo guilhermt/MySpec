@@ -298,6 +298,8 @@ export interface AppStore {
   historyQuery: string;
   /** leftover is what the last deletion could not remove from disk, until dismissed. */
   leftover: Leftover | null;
+  /** leftovers are what git couldn't remove when an item was deleted, by its id, while the app runs. */
+  leftovers: Readonly<Record<string, Leftover>>;
   /**
    * flashing are the situations that just started while the user was looking,
    * by id, for the brief highlight.
@@ -706,6 +708,7 @@ function initialTaskUi(): Pick<
   | "historyQuery"
   | "historyFocus"
   | "leftover"
+  | "leftovers"
   | "flashing"
 > {
   return {
@@ -732,6 +735,7 @@ function initialTaskUi(): Pick<
     historyQuery: "",
     historyFocus: null,
     leftover: null,
+    leftovers: {},
     flashing: new Set<string>(),
   };
 }

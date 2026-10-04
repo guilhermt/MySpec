@@ -1,13 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
   archivedDate,
+  archivedReviewFacts,
   archivedTaskFacts,
   archivedTaskTabs,
   deleteTaskStays,
+  outFindingViews,
+  passHeading,
   reportMarker,
+  reviewedSentence,
   stepMarkers,
 } from "@/features/history/archived";
-import { makeArchivedTask, makeCloseResult, makeTaskCard } from "@/test/wails-mock";
+import {
+  makeArchivedReview,
+  makeArchivedTask,
+  makeCloseResult,
+  makeReviewFinding,
+  makeReviewPass,
+  makeTaskCard,
+} from "@/test/wails-mock";
 
 // NOW is Sunday, September 27, 2026, 15:00 in the local time of the runner.
 const NOW = new Date(2026, 8, 27, 15, 0).getTime();
@@ -212,5 +223,164 @@ describe("deleteTaskStays", () => {
     ["neither", { ...TASK, card: null, pr: null }, "Nothing changes on GitHub."],
   ])("says what stays with %s", (_, task, text) => {
     expect(deleteTaskStays(task)).toBe(text);
+  });
+});
+
+const pass = (overrides: Parameters<typeof makeReviewPass>[0] = {}) => makeReviewPass(overrides);
+
+describe("reviewedSentence", () => {
+  it.each([
+    ["no pass", [], ""],
+    ["a pass without report", [pass({ file: "" })], ""],
+    [
+      "both published",
+      [pass({ published: true }), pass({ pass: 2, published: true })],
+      "2 passes, both published",
+    ],
+    ["one published", [pass({ published: true })], "1 pass, published"],
+    [
+      "some published",
+      [pass({ published: true }), pass({ pass: 2, published: true }), pass({ pass: 3 })],
+      "3 passes, 2 published",
+    ],
+    ["none published", [pass(), pass({ pass: 2 })], "2 passes, none published"],
+    [
+      "both sent",
+      [pass({ sent: true }), pass({ pass: 2, sent: true })],
+      "2 passes, both sent to the agent",
+    ],
+    ["one sent", [pass({ sent: true })], "1 pass, sent to the agent"],
+    [
+      "published and sent",
+      [pass({ published: true }), pass({ pass: 2, sent: true }), pass({ pass: 3, file: "" })],
+      "2 passes, 1 published and 1 sent to the agent",
+    ],
+    [
+      "one of each among three",
+      [pass({ published: true }), pass({ pass: 2, sent: true }), pass({ pass: 3 })],
+      "3 passes, 1 published and 1 sent to the agent",
+    ],
+  ])("says %s", (_, passes, want) => {
+    expect(reviewedSentence(passes)).toBe(want);
+  });
+});
+
+describe("archivedReviewFacts", () => {
+  const REVIEW = makeArchivedReview({
+    repository: "acme/web",
+    number: 2291,
+    author: "tchen",
+    outcome: "merged",
+    baseBranch: "dev",
+    mergedBy: "rsouza",
+    mergedAt: local(2026, 8, 23, 16, 20),
+    createdAt: local(2026, 8, 22, 9, 14),
+    passes: [pass({ published: true }), pass({ pass: 2, published: true })],
+  });
+
+  it("says the pull request, when it started and what became of the passes", () => {
+    expect(archivedReviewFacts(REVIEW, NOW)).toEqual([
+      {
+        label: "Pull request",
+        value: "web#2291 by tchen · merged into dev by rsouza · Sep 23 at 16:20",
+        link: {
+          text: "web#2291",
+          href: "https://github.com/dev/web/pull/31",
+          tooltip: "Open web#2291 on GitHub",
+        },
+      },
+      { label: "Started", value: "Sep 22 at 09:14" },
+      { label: "Reviewed", value: "2 passes, both published" },
+    ]);
+  });
+
+  it("says a closed pull request, and the card with its title", () => {
+    const facts = archivedReviewFacts(
+      {
+        ...REVIEW,
+        outcome: "closed",
+        closedAt: local(2026, 8, 23, 16, 20),
+        card: {
+          boardId: "board-1",
+          number: 2238,
+          title: "Settings form keeps the old validation",
+          url: "https://github.com/acme/web/issues/2238",
+          status: "Done",
+        },
+      },
+      NOW,
+    );
+
+    expect(facts.map(({ label, value }) => [label, value])).toEqual([
+      ["Pull request", "web#2291 by tchen · closed · Sep 23 at 16:20"],
+      ["Card", "web#2238 · Settings form keeps the old validation"],
+      ["Started", "Sep 22 at 09:14"],
+      ["Reviewed", "2 passes, both published"],
+    ]);
+  });
+
+  it("says when it was archived only for a pull request with no hour, after the passes", () => {
+    const facts = archivedReviewFacts(
+      { ...REVIEW, mergedAt: "", mergedBy: "", archivedAt: local(2026, 8, 23, 16, 21) },
+      NOW,
+    );
+
+    expect(facts[0]?.value).toBe("web#2291 by tchen · merged into dev");
+    expect(facts.at(-1)).toEqual({ label: "Archived", value: "Sep 23 at 16:21" });
+  });
+});
+
+describe("passHeading", () => {
+  it.each([
+    [
+      "a published pass",
+      pass({
+        published: true,
+        verdict: "request_changes",
+        publishedAt: local(2026, 8, 23, 13, 41),
+      }),
+      { title: "Pass 1", outcome: "Request changes", time: "published Sep 23 at 13:41" },
+    ],
+    [
+      "an approval without the hour",
+      pass({ published: true, verdict: "approve" }),
+      { title: "Pass 1", outcome: "Approve", time: "" },
+    ],
+    [
+      "a pass sent to the agent",
+      pass({
+        sent: true,
+        sentAt: local(2026, 8, 23, 13, 41),
+        findings: [
+          makeReviewFinding({ decision: "approved" }),
+          makeReviewFinding({ number: 2, decision: "approved" }),
+          makeReviewFinding({ number: 3, decision: "discarded" }),
+        ],
+      }),
+      { title: "Pass 1", outcome: "2 findings sent to the agent", time: "sent Sep 23 at 13:41" },
+    ],
+    ["a pass that left nowhere", pass(), { title: "Pass 1", outcome: "not published", time: "" }],
+  ])("writes %s", (_, one, want) => {
+    expect(passHeading(one, NOW)).toEqual(want);
+  });
+});
+
+describe("outFindingViews", () => {
+  it("keeps the findings that left, with where each went", () => {
+    const published = pass({
+      published: true,
+      publishedAt: local(2026, 8, 23, 13, 41),
+      findings: [
+        makeReviewFinding({ decision: "approved", placement: "inline" }),
+        makeReviewFinding({ number: 2, decision: "approved", placement: "body" }),
+        makeReviewFinding({ number: 3, decision: "discarded" }),
+        makeReviewFinding({ number: 4, decision: "" }),
+      ],
+    });
+
+    expect(outFindingViews(published, "publish", NOW).map((view) => view.disabled)).toEqual([
+      "Inline comment · published Sep 23, 13:41",
+      "In the review body · published Sep 23, 13:41",
+    ]);
   });
 });
