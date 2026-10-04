@@ -362,16 +362,17 @@ const SPOKEN: Record<FilterCycle, string> = {
   only: "only this",
 };
 
-/** MenuCycleItem cycles a filter through any, hidden and only, and keeps the menu open. */
+/** MenuCycleItem cycles a filter through any, hidden and only, and keeps the menu open, with the check column of the other filter items. */
 export function MenuCycleItem({ label, state, onStateChange }: MenuCycleItemProps) {
   return (
     <DropdownMenuItem
       closeOnClick={false}
       aria-label={`${label}: ${SPOKEN[state]}. Click to cycle.`}
       onClick={() => onStateChange(NEXT[state])}
-      className={MENU_ITEM}
+      className={cn("flex items-center", MENU_ITEM)}
     >
-      {`${PREFIX[state]}${label}`}
+      <span aria-hidden="true" className="size-(--icon) shrink-0" />
+      <span>{`${PREFIX[state]}${label}`}</span>
     </DropdownMenuItem>
   );
 }

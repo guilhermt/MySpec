@@ -122,3 +122,21 @@ describe("decidedCounts", () => {
     expect(isDecided(finding(3))).toBe(false);
   });
 });
+
+describe("findingName with code in the title", () => {
+  it("reads the title without its backticks", () => {
+    const named = findingName(
+      {
+        number: 1,
+        decision: "",
+        path: "pnpm-lock.yaml",
+        line: 3,
+        title: "Pins two versions of `vite`",
+      },
+      2,
+    );
+    expect(named).toBe(
+      "Finding 1 of 2: Pins two versions of vite. pnpm-lock.yaml, line 3. Not decided.",
+    );
+  });
+});

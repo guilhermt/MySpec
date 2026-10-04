@@ -190,7 +190,7 @@ function StartReviewFields({ pull, row, gone }: StartReviewFieldsProps) {
 
         {waiting !== null && <SunkenLine icon="github">{waiting}</SunkenLine>}
 
-        <div inert={starting} className="flex flex-col gap-1">
+        <div inert={starting} className="flex flex-col gap-(--space-1)">
           <span className="text-(length:--text-meta) leading-(--leading-meta) font-medium text-ink-2">
             Model
           </span>

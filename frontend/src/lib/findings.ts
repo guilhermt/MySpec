@@ -1,4 +1,5 @@
 import type { FindingView } from "@/components/system/Finding";
+import { spokenTitle } from "@/lib/inline-code";
 
 /** FindingLike is what the rules of the findings read of a finding: its number, its decision, its location. */
 export interface FindingLike {
@@ -81,7 +82,7 @@ const STATES: Record<string, string> = {
 /** findingName is the accessible name of a finding: "Finding 2 of 3: <title>. <file>, line 31. Not decided." */
 export function findingName(finding: FindingLike, total: number): string {
   const where = finding.path === "" ? "General" : `${finding.path}, line ${finding.line}`;
-  const said = finding.title === "" ? [where] : [finding.title, where];
+  const said = finding.title === "" ? [where] : [spokenTitle(finding.title), where];
   const state = STATES[finding.decision] ?? STATES[""];
   return `Finding ${finding.number} of ${total}: ${said.join(". ")}. ${state}.`;
 }

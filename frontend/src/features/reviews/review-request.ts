@@ -107,7 +107,8 @@ function publishButton(disabledReason?: string): ReviewButton {
     label: "Publish review…",
     variant: "primary",
     loadingLabel: "",
-    ...(disabledReason === undefined ? { shortcut: "Ctrl ↵" } : { disabledReason }),
+    shortcut: "Ctrl ↵",
+    ...(disabledReason === undefined ? {} : { disabledReason }),
   };
 }
 

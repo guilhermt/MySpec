@@ -13,7 +13,11 @@ export interface NoticeStripProps {
   className?: string;
 }
 
-/** NoticeStrip is the strip that says something could not be read, with the action that retries. */
+/**
+ * NoticeStrip is the strip that says something could not be read, with the action that retries. The
+ * title and the reason are one text that wraps in whole lines; in a narrow list the action drops to
+ * a line of its own, at the end.
+ */
 export function NoticeStrip({
   id,
   title,
@@ -35,9 +39,11 @@ export function NoticeStrip({
       )}
     >
       <StateGlyph state="blocked" />
-      <span className="font-semibold text-ink-1 whitespace-nowrap">{title}</span>
-      <span className="min-w-0 flex-1 text-ink-2">{reason}</span>
-      {action}
+      <p className="min-w-0 flex-[1_1_var(--notice-detail-min)]">
+        <span className="font-semibold text-ink-1">{title}</span>
+        {reason !== undefined && <span className="text-ink-2"> {reason}</span>}
+      </p>
+      {action !== undefined && <div className="ml-auto flex shrink-0">{action}</div>}
       {error !== undefined && <span className="basis-full text-state-error">{error}</span>}
     </div>
   );

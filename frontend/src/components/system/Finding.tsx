@@ -1,4 +1,5 @@
 import { type KeyboardEvent, type ReactNode, useEffect, useRef } from "react";
+import { inlineCode } from "@/lib/inline-code";
 import { cn } from "@/lib/utils";
 import { Button } from "./Button";
 import { IconButton } from "./IconButton";
@@ -198,7 +199,7 @@ export function Finding({
                 discarded ? "text-ink-2" : "text-ink-1",
               )}
             >
-              {model.title}
+              {inlineCode(model.title)}
             </p>
             {locationLink}
           </>

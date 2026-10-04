@@ -440,28 +440,28 @@ Fontes: as capturas `reviews-*` e `review-*` (978 e 2180; `reviews-list` também
 
 ### Problemas
 
-**R1 · Bloqueia. A faixa de falha por repositório quebra numa lista estreita.**
+**R1 · Bloqueia. A faixa de falha por repositório quebra numa lista estreita.** · **Fechado no step 11**
 
 - Visto a 1100, com o painel da PR aberto (lista de 452 px): cada uma das três faixas `Couldn't read guilhermt/… · 8m ago` ficou com uns 200 px de altura e a razão numa coluna de uma palavra por linha; na última, a razão passa por baixo de **Try again** (`accou…` cortado pelo botão); a lista começa 700 px abaixo do cabeçalho.
 - Causa: `components/system/NoticeStrip.tsx:38–39`. O título é `whitespace-nowrap`, e a razão é `min-w-0 flex-1`, então encolhe até a largura de uma palavra em vez de descer para a linha de baixo, apesar do `flex-wrap` (`:32`). A faixa do board (`features/board/BoardReadingStates.tsx:45`) e `Couldn't check GitHub` (`features/reviews/CheckStrip.tsx:44`) usam o mesmo componente.
 - Regra: `components.md` Faixa de aviso; `principles.md` 10 ("de 1100 a 2600, contínuo"); `screens/review.md` §2.7. Lacuna L20.
 
-**R2 · Deve. Publish review… tracejado perde a tecla e muda de largura.**
+**R2 · Deve. Publish review… tracejado perde a tecla e muda de largura.** · **Fechado no step 11**
 
 - `features/reviews/review-request.ts:107–110` só põe `shortcut: "Ctrl ↵"` sem `disabledReason`. No app (1100), o botão passou de `Publish review…` tracejado para `Publish review… Ctrl ↵`, 40 px mais largo, ao decidir o último apontamento. O diálogo de criação, pelo contrário, mantém `Create Ctrl ↵` tracejado.
 - Regra: `components.md` Botão ("Um botão não muda de largura com o estado: tracejado, o primário … mantém a tecla com o mesmo padding") e Etiqueta e tecla.
 
-**R3 · Pode esperar. No menu Filter, Board e Repository têm a coluna do visto, e Author e Label não.**
+**R3 · Pode esperar. No menu Filter, Board e Repository têm a coluna do visto, e Author e Label não.** · **Fechado no step 11**
 
 - `components/system/Menu.tsx:296–315` (`MenuCheckboxItem`, com o indicador `size-(--icon)`) contra `:336–346` (`MenuCycleItem`, sem ele).
 - Regra: `components.md` Select, menu e listbox; pauta `critique-task-06.md:212` (11): um recuo só.
 
-**R4 · Pode esperar. A consulta do GitHub não tem um teste contra o schema público.**
+**R4 · Pode esperar. A consulta do GitHub não tem um teste contra o schema público.** · **Fechado no step 11**
 
 - `internal/pulls/github_test.go:264`; nenhum teste de `internal/pulls` cita um schema.
 - Regra: pauta `critique-task-06.md:155` (1): um teste contra o schema público do GitHub, sem rede.
 
-**R5 · Pode esperar. `gap-1` onde existe `--space-1`.**
+**R5 · Pode esperar. `gap-1` onde existe `--space-1`.** · **Fechado no step 11**
 
 - `features/reviews/StartReviewDialog.tsx:193`.
 - Regra: `docs/architecture/design-system.md` (Utilitários).
@@ -605,7 +605,7 @@ O que `design/` não decidia ou contradizia, com a decisão que o coordenador to
 - **L15 · A largura do menu de um `Select` e a razão longa de um item** (B4). `components.md` não fixa a largura máxima do menu nem o corte do subtítulo. **Decisão:** o menu de um `Select` tem largura máxima `--size-menu-max` (um token novo, 320 px, `calc(var(--space-16) * 5)`), ou a do gatilho se for maior, e o subtítulo de um item corta com tooltip. **Registrar em:** `components.md` Select, menu e listbox (o Seletor); `tokens.css`. O token é mudança do produto: entra em `design/system/tokens.css` pela pull request da task, no step que o usa (`implementation.md:20`), e `components.md` registra o valor antes. A coluna do visto nos itens com ação, que a leitura também recomendava, já é regra (Anatomia: itens alinhados) e é parte de B4. **Implementa:** B4.
 - **L16 · A régua se contradiz sobre o `role` da faixa** (S10; leitura do board). `screens/board.md` §8 diz "A faixa da falha é `role="alert"`", contra `components.md:448` e `12:350` (§4.3 #16). **Decisão:** a faixa da falha é `role="alert"` só na chegada; `screens/board.md` §8 passa a dizer o que §4.3 #16 e `components.md:448` dizem. **Registrar em:** `screens/board.md` §8. **Implementa:** S10.
 - **L17 · O texto longo de uma linha de bloqueio da Home** (B3; leitura do board). Um caminho longo quebra em três linhas, e `screens/board.md` §2.2 não diz se a linha quebra ou corta. **Decisão:** um caminho longo numa linha de bloqueio da Home corta com tooltip, nunca quebra. **Registrar em:** `screens/board.md` §2 (2.2). **Implementa:** B3.
-- **L18 · O título de um apontamento com código** (leitura de Reviews). Os títulos do relatório trazem crases, que aparecem cruas no app (``The lockfile pins two versions of `vite` ``) e entram assim no nome acessível; `components/system/Finding.tsx:201` desenha o título como texto puro, e `screens/review.md` §9 só fixa `--text-ui` 600. **Decisão:** um título de apontamento com código em linha desenha o código como código (mono sobre `--surface-0`, como o texto do apontamento), e o nome acessível fica sem as crases. **Registrar em:** `components.md` Apontamento. **Implementa:** código em `Finding.tsx`, sem item próprio.
+- **L18 · O título de um apontamento com código** · **Fechado no step 11** (leitura de Reviews). Os títulos do relatório trazem crases, que aparecem cruas no app (``The lockfile pins two versions of `vite` ``) e entram assim no nome acessível; `components/system/Finding.tsx:201` desenha o título como texto puro, e `screens/review.md` §9 só fixa `--text-ui` 600. **Decisão:** um título de apontamento com código em linha desenha o código como código (mono sobre `--surface-0`, como o texto do apontamento), e o nome acessível fica sem as crases. **Registrar em:** `components.md` Apontamento. **Implementa:** código em `Finding.tsx`, sem item próprio.
 - **L19 · Um relógio só para o tempo de uma situação** (S17; leitura de Reviews). A régua pede uma idade por significado, mas não diz que a árvore, a barra e **Continue** dividem o mesmo tique. **Decisão:** um relógio só para os chips de espera, um `useNow` compartilhado no store, para a barra e a árvore nunca discordarem. **Registrar em:** `structure.md` §7. **Implementa:** S17.
 - **L20 · A faixa de falha numa lista estreita** (R1). `components.md` Faixa de aviso não diz como a faixa cede. **Decisão:** numa lista estreita, a faixa de aviso por repositório quebra a razão sob o título em linhas inteiras e põe **Try again** à direita numa linha própria; nunca uma palavra por linha. **Registrar em:** `components.md` Faixa de aviso. **Implementa:** R1.
 - **L21 · O prompt do produto pendente** (T1; decisão do coordenador sobre o bloqueio da task). **Decisão:** o prompt do produto ao começar um step nunca aparece como mensagem do usuário com **Remove**: enquanto pendente, é o marco em linha `Step 3 started` sem ação, e o Go não aceita apagá-lo (`RemovePending`). **Registrar em:** `screens/task.md` §6. **Implementa:** T1.
@@ -706,8 +706,8 @@ Cada item da pauta de polimento (`lab/08-visual-final/critique.md` §7; `12:272�
 
 | Origem | Estado | Evidência | Item |
 |---|---|---|---|
-| `critique-task-06.md:155` (1), o schema do GitHub | Vale | `internal/pulls/github_test.go:264` | R4 |
-| `critique-task-06.md:212` (11), o recuo do visto no **Filter** | Vale | `Menu.tsx:296–315` contra `:336–346` | R3 |
+| `critique-task-06.md:155` (1), o schema do GitHub | Vale | `internal/pulls/github_test.go:264` | R4 · **Fechado no step 11** |
+| `critique-task-06.md:212` (11), o recuo do visto no **Filter** | Vale | `Menu.tsx:296–315` contra `:336–346` | R3 · **Fechado no step 11** |
 | `critique-task-06.md:343` (Novo), `Ctrl E` no **Open in VS Code** da barra | Feito na régua | O coordenador escreveu `Ctrl E` em `tasks/06-review.md:223` e em `screens/task.md:207`, a linha do `step_review`; o botão já a tem desde a task 6. Não é código | — |
 | `critique-task-10.md`, miúdos, o `Textarea` com `rows` em `StartReviewDialog`, `ReviewAgainDialog` e `PublishDialog` | Feito | `components/system/Textarea.tsx` respeita `rows`. No app, **Add instructions** e **Edit** do resumo não foram abertos | — |
 

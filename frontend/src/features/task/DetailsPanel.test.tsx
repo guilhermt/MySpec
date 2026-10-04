@@ -346,7 +346,7 @@ describe("DetailsPanel, reports", () => {
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Couldn't read step-reviews/1-1.mdno such file",
+      "Couldn't read step-reviews/1-1.md no such file",
     );
     vi.mocked(api.readArtifact).mockResolvedValue("# Clean");
     await user.click(screen.getByRole("button", { name: "Try again" }));

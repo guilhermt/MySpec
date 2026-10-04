@@ -190,7 +190,7 @@ describe("ArtifactsPanel", () => {
     await user.click(screen.getByRole("button", { name: "PRD" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Couldn't read PRD.mdpermission denied",
+      "Couldn't read PRD.md permission denied",
     );
     vi.mocked(api.readArtifact).mockResolvedValue("# Login");
     await user.click(screen.getByRole("button", { name: "Try again" }));

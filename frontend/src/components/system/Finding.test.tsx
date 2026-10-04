@@ -46,6 +46,19 @@ describe("Finding", () => {
     expect(screen.getByText("Inline comment · published 13:41")).toBeInTheDocument();
   });
 
+  it("draws the code of a title as code", () => {
+    renderWithStore(
+      <Finding
+        model={view({ title: "Pins two versions of `vite`", disabled: null })}
+        current={false}
+        onOpenLine={vi.fn()}
+        onOpenEditor={vi.fn()}
+        renderText={(text) => <p>{text}</p>}
+      />,
+    );
+    expect(screen.getByText("vite").tagName).toBe("CODE");
+  });
+
   it("opens the line on GitHub when its location is clicked", async () => {
     const onOpenLine = vi.fn();
     renderWithStore(
