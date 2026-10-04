@@ -49,7 +49,7 @@ async function draw(variant: string, width: number) {
     <div style={{ ...mainArea(width), height: "800px", display: "flex" }}>
       <HistoryView />
     </div>,
-    { state: scene.state, ui: { location: scene.location } },
+    { state: scene.state, ui: { location: scene.location, back: scene.back } },
   );
   await scene.after?.(user);
   await settle();
@@ -104,6 +104,10 @@ describe.each(THEMES)("HistoryView, the scenes in the %s theme", (theme) => {
       // The header keeps one line, and nothing on it covers anything else.
       expect(placeHeaderOneLine(band)).toBe(true);
       expect(overlaps(placeHeaderPieces(band))).toBe(false);
+      // ← has a place behind it, as it has in the app.
+      expect(
+        within(band).getByRole("button", { name: /^Back to /, hidden: true }),
+      ).not.toHaveAttribute("aria-disabled", "true");
 
       // Every row, day, bar and line of the list stands on whole pixels.
       expect(offWholePixels(parts(area))).toEqual([]);
@@ -140,6 +144,16 @@ describe.each(THEMES)("HistoryView, the scenes in the %s theme", (theme) => {
       if (variant === "" || variant === "fresh") {
         expect(rows).toHaveLength(HISTORY_ITEMS);
         expect(area.querySelectorAll("[data-section-id]")).toHaveLength(DAYS);
+      }
+      // The line the older items add under the list is in the area the capture takes.
+      if (variant === "older-loading" || variant === "older-failed") {
+        const line = area.querySelector("[data-older-sentinel] + p");
+        expect(line).toHaveTextContent(
+          variant === "older-loading" ? "Loading older items…" : "Couldn't load older items: ",
+        );
+        const { top, bottom } = area.getBoundingClientRect();
+        const box = line?.getBoundingClientRect();
+        expect(box !== undefined && box.top >= top && box.bottom <= bottom).toBe(true);
       }
       // The row just archived is the one selected, the first.
       if (variant === "fresh") {

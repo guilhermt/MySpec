@@ -1,5 +1,7 @@
-import { within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
+import { AppShell } from "@/app/AppShell";
 import { ArchivedDiscussion } from "@/features/history/ArchivedDiscussion";
 import { ArchivedReview } from "@/features/history/ArchivedReview";
 import { ArchivedTask } from "@/features/history/ArchivedTask";
@@ -11,6 +13,7 @@ import {
 } from "@/test/history-scenes";
 import {
   capture,
+  centeredInWindow,
   cutTexts,
   footerPlaces,
   mainArea,
@@ -23,6 +26,7 @@ import {
   settle,
   THEMES,
   visiblePrimaries,
+  windowForMain,
   withoutTooltip,
 } from "@/test/painted";
 import { renderWithStore } from "@/test/render";
@@ -54,10 +58,18 @@ function viewOf(name: HistorySceneName, id: string) {
   }
 }
 
-// draw draws the screen of an archived item in a main area of a width, and does what the scene has the user do.
+const VIEWPORT = { width: window.innerWidth, height: window.innerHeight };
+
+afterEach(async () => {
+  await page.viewport(VIEWPORT.width, VIEWPORT.height);
+});
+
+// draw draws the screen of an archived item in a main area of a width, and does what the scene has
+// the user do. A scene with a dialog draws the whole window, the sidebar beside the area, so the
+// dialog centers over the window as it does in the app; the capture then takes the window.
 async function draw(name: HistorySceneName, variant: string, width: number) {
   const scene = historyScene(name, variant);
-  const { location } = scene;
+  const { location, back } = scene;
   if (
     location.kind !== "archived-task" &&
     location.kind !== "archived-review" &&
@@ -65,11 +77,19 @@ async function draw(name: HistorySceneName, variant: string, width: number) {
   ) {
     throw new Error("the scene is not an archived item");
   }
+  const windowed = variant === "delete";
+  if (windowed) {
+    await page.viewport(windowForMain(width), VIEWPORT.height);
+  }
   const { container, user } = renderWithStore(
-    <div style={{ ...mainArea(width), height: "800px", display: "flex" }}>
-      {viewOf(name, location.id)}
-    </div>,
-    { state: scene.state, ui: { location } },
+    windowed ? (
+      <AppShell />
+    ) : (
+      <div style={{ ...mainArea(width), height: "800px", display: "flex" }}>
+        {viewOf(name, location.id)}
+      </div>
+    ),
+    { state: scene.state, ui: { location, back } },
   );
   // The documents, the transcript and the reports are read before the screen is drawn.
   await vi.waitFor(() => {
@@ -79,11 +99,13 @@ async function draw(name: HistorySceneName, variant: string, width: number) {
   });
   await scene.after?.(user);
   await settle();
-  const area = container.firstElementChild;
-  if (!(area instanceof HTMLElement)) {
+  const frame = container.firstElementChild;
+  if (!(frame instanceof HTMLElement)) {
     throw new Error("the main area is not drawn");
   }
-  return { area, band: within(area).getByRole("banner", { hidden: true }), user };
+  const area = windowed ? screen.getByRole("main", { hidden: true }) : frame;
+  expect(area.getBoundingClientRect().width).toBe(width);
+  return { area, frame, band: within(area).getByRole("banner", { hidden: true }), user };
 }
 
 // dialog is the dialog open over the screen, null when none is.
@@ -107,11 +129,15 @@ describe.each(THEMES)("The archived items, the scenes in the %s theme", (theme) 
 
     it.each(WIDTHS)("draws it at the main area of %ipx", async (width) => {
       setTheme(theme);
-      const { area, band, user } = await draw(name, variant, width);
+      const { area, frame, band, user } = await draw(name, variant, width);
 
       // The header keeps one line, and nothing on it covers anything else.
       expect(placeHeaderOneLine(band)).toBe(true);
       expect(overlaps(placeHeaderPieces(band))).toBe(false);
+      // ← has a place behind it, as it has in the app.
+      expect(
+        within(band).getByRole("button", { name: /^Back to /, hidden: true }),
+      ).not.toHaveAttribute("aria-disabled", "true");
 
       // Every box of the screen stands on whole pixels.
       expect(offWholePixels(parts(area, band))).toEqual([]);
@@ -123,6 +149,7 @@ describe.each(THEMES)("The archived items, the scenes in the %s theme", (theme) 
         expect(open.getBoundingClientRect().top).toBe(
           parseFloat(resolve("round(8vh, 1px)", "top")),
         );
+        expect(centeredInWindow(open, area)).toBe(true);
         const { cancel, primary } = footerPlaces(open, /^Delete /);
         expect(cancel.top).toBe(primary.top);
         expect(primary.right).toBeLessThan(cancel.right);
@@ -139,7 +166,7 @@ describe.each(THEMES)("The archived items, the scenes in the %s theme", (theme) 
       }
       await capture(
         `history-${name}${variant === "" ? "" : `-${variant}`}-${width}-${theme}`,
-        area,
+        frame,
       );
 
       // What the top layer cuts says its whole text in a tooltip. A modal dialog takes the pointer
