@@ -491,6 +491,8 @@ De 5 a 14 commits, M a G, pelo relatório (`implementation.md` §2). Cada um é 
 
 Cada step de área escreve no relatório, ao lado de cada item, o commit que o fecha. Depois do último step, e antes do merge, o `design-critic` revisa a branch e acrescenta `Revisão da branch` ao relatório (`implementation.md:21`); as divergências são corrigidas em commits da própria branch.
 
+**Da crítica da task 11** (`design/research/critique-task-11.md`, "Podem esperar" 15): cinco commits da task 11 passaram do teto de 1,5 mil linhas de `implementation.md` §1 (`50726a9`, `8d29c99`, `bd89d45`, `1c4fee2`, `ecc3a62`); fica registrado, sem ação nesta task. E um teste intermitente fora da task, `features/boards/BoardDialog.test.tsx:249` (`aria-describedby` logo depois de digitar), entra na pauta de estabilidade desta task.
+
 ## 9. Para o usuário confirmar
 
 Nada. O que a task muda é forma, verificação ou desempenho, dentro do que o usuário aprovou ao aprovar o plano (`implementation.md` §4). O passe roda antes de `Ready`, e o que ele achar de comportamento passa pelo coordenador e por `changes.md` antes de a task começar; uma mudança que altere um fluxo, apague dado ou desdiga o aprovado vai ao usuário pelo coordenador, com mock e recomendação. O tamanho, de 5 a 14 steps, é do plano e está registrado em `implementation.md`; passar de 14 seria mudança de escopo e vai ao usuário antes de `Ready`.
