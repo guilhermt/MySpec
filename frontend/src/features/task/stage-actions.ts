@@ -6,6 +6,7 @@ import {
   asStepStatus,
   asTaskMode,
   asTaskStage,
+  type StepStatus,
   type TaskMode,
   type TaskStage,
   type TaskSummary,
@@ -61,10 +62,19 @@ function reportsOf(task: TaskSummary): number {
   return startedSteps(task).reduce((sum, step) => sum + (step.reports ?? []).length, 0);
 }
 
-// startedSteps are the steps that began, up to the one the task is on.
+// UNSTARTED are the statuses of a step that has run nothing yet: waiting its turn, getting its
+// worktree ready, or held back before its first turn.
+const UNSTARTED: ReadonlySet<StepStatus> = new Set(["not_started", "preparing", "blocked"]);
+
+// startedSteps are the steps that began: the ones with a conversation, or that ran (every done step
+// once the task is past the implementation). A step held back before its first turn has nothing to lose.
 function startedSteps(task: TaskSummary) {
+  const conversations = new Set((task.conversations ?? []).map((each) => each.stage));
   return (task.steps ?? []).filter(
-    (step) => asStepStatus(step.status) !== "not_started" && step.number <= task.currentStep,
+    (step) =>
+      !UNSTARTED.has(asStepStatus(step.status)) ||
+      conversations.has(`step:${step.number}`) ||
+      conversations.has(`step_review:${step.number}`),
   );
 }
 

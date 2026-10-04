@@ -113,17 +113,83 @@ describe("stage actions", () => {
     ]);
   });
 
+  it("loses the PRD with its conversation and its document", () => {
+    expect(lostItems(makeTask({ stage: "prd" }), "discard", "prd", null)).toEqual([
+      "the PRD conversation and document",
+    ]);
+  });
+
   it.each([
     [
       "the steps that began and their reports",
-      3,
+      implementing().steps,
       "the conversations of steps 1 to 3 and their 4 review reports",
     ],
-    ["a single step", 1, "the conversation of step 1 and its 2 review reports"],
-  ])("lists %s", (_name, current, expected) => {
-    const task = implementing({ currentStep: current });
+    [
+      "a single step",
+      [
+        makeStep({ number: 1, status: "implementing", reports: [report, report] }),
+        makeStep({ number: 2 }),
+      ],
+      "the conversation of step 1 and its 2 review reports",
+    ],
+    [
+      "a single report",
+      [makeStep({ number: 1, status: "implementing", reports: [report] }), makeStep({ number: 2 })],
+      "the conversation of step 1 and its 1 review report",
+    ],
+  ])("lists %s", (_name, steps, expected) => {
+    const task = implementing({ currentStep: 1, steps });
 
     expect(lostItems(task, "back", "plan", ready(0))[0]).toBe(expected);
+  });
+
+  it("leaves out a step held back before its first turn, and keeps one held back after it", () => {
+    const steps = [
+      makeStep({ number: 1, status: "done", reports: [report] }),
+      makeStep({ number: 2, status: "blocked" }),
+      makeStep({ number: 3 }),
+    ];
+    const blocked = implementing({ currentStep: 2, steps });
+
+    expect(lostItems(blocked, "back", "plan", ready(0))[0]).toBe(
+      "the conversation of step 1 and its 1 review report",
+    );
+
+    const resumed = implementing({
+      currentStep: 2,
+      steps,
+      conversations: [
+        { stage: "step:1", startedAt: "2026-09-24T10:00:00Z" },
+        { stage: "step:2", startedAt: "2026-09-24T11:00:00Z" },
+      ],
+    });
+
+    expect(lostItems(resumed, "back", "plan", ready(0))[0]).toBe(
+      "the conversations of steps 1 to 2 and their 1 review report",
+    );
+  });
+
+  it("loses every step of the implementation from the pull request, where no step is current", () => {
+    // Every step is done in the PR stage, and the state says so with a current step of 0.
+    const task = implementing({
+      stage: "pr",
+      currentStep: 0,
+      steps: [
+        makeStep({ number: 1, status: "done", reports: [report, report] }),
+        makeStep({ number: 2, status: "done", reports: [report] }),
+        makeStep({ number: 3, status: "done" }),
+      ],
+      pr: makePullRequest({ draft: DRAFT, sessionStage: "pr", reports: [] }),
+    });
+
+    expect(lostItems(task, "back", "prd", ready(0))).toEqual([
+      "the tech spec conversation and document",
+      "the plan conversation and the 3 step files",
+      "the conversations of steps 1 to 3 and their 3 review reports",
+      "the pull request draft and the PR conversation",
+      "the worktree and the branch add-login",
+    ]);
   });
 
   it("leaves the reports out when there are none", () => {
