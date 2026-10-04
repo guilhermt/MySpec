@@ -23,6 +23,8 @@ if (measure === "conversation") {
   );
 } else if (measure === "board") {
   void import("@/dev/measure-board").then(({ measureBoard }) => measureBoard(container));
+} else if (measure === "history") {
+  void import("@/dev/measure-history").then(({ measureHistory }) => measureHistory(container));
 } else {
   createRoot(container).render(
     <StrictMode>

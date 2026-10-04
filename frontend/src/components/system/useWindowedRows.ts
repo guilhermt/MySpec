@@ -45,8 +45,8 @@ export interface WindowedRows {
   parts: readonly WindowPart[];
   /** measureRef goes on the element of each mounted row, with data-index={index}. */
   measureRef: (element: HTMLElement | null) => void;
-  /** scrollToIndex brings a row into view, aligned to the nearest edge (or to "end"), never smoothly. */
-  scrollToIndex: (index: number, align?: "auto" | "end") => void;
+  /** scrollToIndex brings a row into view, aligned to the nearest edge (or to "end" or "center"), never smoothly. */
+  scrollToIndex: (index: number, align?: "auto" | "end" | "center") => void;
   /** mounted tells whether a row is in the DOM now. */
   mounted: (index: number) => boolean;
 }
@@ -202,7 +202,7 @@ export function useWindowedRows({
   const mountedIndexes = useMemo(() => new Set(items.map((item) => item.index)), [items]);
 
   const scrollToIndex = useCallback(
-    (index: number, align: "auto" | "end" = "auto") =>
+    (index: number, align: "auto" | "end" | "center" = "auto") =>
       virtualizer.scrollToIndex(index, { align, behavior: "auto" }),
     [virtualizer],
   );

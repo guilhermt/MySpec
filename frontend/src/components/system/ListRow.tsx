@@ -600,19 +600,30 @@ export interface HistoryRowProps {
   fresh: boolean;
   /** tabStop is the row the list's one tab stop sits on. */
   tabStop: boolean;
-  onActivate: () => void;
-  onFocus: () => void;
+  /** setSize and posInSet say where the row is among the rows of its day: a windowed list, whose DOM does not, gives them. */
+  setSize?: number;
+  posInSet?: number;
+  /** index is the position in a windowed list (data-index), and ref its measure. */
+  index?: number;
+  ref?: Ref<HTMLDivElement>;
+  /** onActivate and onFocus get the key of the row, so one function serves every row and a memo holds. */
+  onActivate: (key: string) => void;
+  onFocus: (key: string) => void;
 }
 
 /**
  * HistoryRow is the row of an archived item in the History: a treeitem of level 2 on the columns
  * --col-where, --col-result and --col-time. Under 860px of the list, where and result go to a second
- * line under the name, whole.
+ * line under the name, whole. A memo, so a key that moves the focus draws only the rows it touches.
  */
-export function HistoryRow({
+export const HistoryRow = memo(function HistoryRow({
   model,
   fresh,
   tabStop,
+  setSize,
+  posInSet,
+  index,
+  ref,
   onActivate,
   onFocus,
 }: HistoryRowProps): ReactElement {
@@ -624,14 +635,18 @@ export function HistoryRow({
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the list owns the keyboard of its rows
     <div
+      ref={ref}
+      data-index={index}
       role="treeitem"
       aria-level={2}
+      aria-setsize={setSize}
+      aria-posinset={posInSet}
       aria-label={model.label}
       {...(fresh ? { "aria-selected": true } : {})}
       tabIndex={tabStop ? 0 : -1}
       data-row-key={model.key}
-      onClick={onActivate}
-      onFocus={onFocus}
+      onClick={() => onActivate(model.key)}
+      onFocus={() => onFocus(model.key)}
       className={cn(
         ROW,
         "gap-x-(--space-3) grid-cols-[var(--icon)_minmax(0,1fr)_var(--col-where)_var(--col-result)_var(--col-time)]",
@@ -688,4 +703,4 @@ export function HistoryRow({
       </span>
     </div>
   );
-}
+});

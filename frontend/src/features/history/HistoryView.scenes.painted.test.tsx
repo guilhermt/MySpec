@@ -43,10 +43,10 @@ const TWO_LINES = 860;
 const DAYS = 12;
 
 // draw draws the History in a main area of a width, and does what the scene has the user do.
-async function draw(variant: string, width: number) {
+async function draw(variant: string, width: number, height = 800) {
   const scene = historyScene("history", variant);
   const { container, user } = renderWithStore(
-    <div style={{ ...mainArea(width), height: "800px", display: "flex" }}>
+    <div style={{ ...mainArea(width), height: `${height}px`, display: "flex" }}>
       <HistoryView />
     </div>,
     { state: scene.state, ui: { location: scene.location, back: scene.back } },
@@ -93,13 +93,18 @@ function parts(area: HTMLElement): Element[] {
   ];
 }
 
+/** ALL_ROWS_HEIGHT is the height of an area that shows every row of the history scene: 44 rows of 52px and 12 days of 44px at the most. */
+const ALL_ROWS_HEIGHT = 3200;
+
 describe.each(THEMES)("HistoryView, the scenes in the %s theme", (theme) => {
   describe.each(HISTORY_VARIANTS.history)("the history scene, variant “%s”", (variant) => {
     fixHistorySceneClock(historyScene("history", variant));
 
     it.each(WIDTHS)("draws it at the main area of %ipx", async (width) => {
       setTheme(theme);
-      const { area, band } = await draw(variant, width);
+      // The list is windowed: the plain list is drawn in an area tall enough to mount every row.
+      const whole = variant === "" || variant === "fresh";
+      const { area, band } = await draw(variant, width, whole ? ALL_ROWS_HEIGHT : undefined);
 
       // The header keeps one line, and nothing on it covers anything else.
       expect(placeHeaderOneLine(band)).toBe(true);

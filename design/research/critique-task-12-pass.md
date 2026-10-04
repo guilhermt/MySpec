@@ -544,7 +544,7 @@ Visto no app real (a mesma sessão da área do system), nas cinco janelas e nos 
 
 ### Problemas
 
-**H1 · Deve. O History passou das metas, e a condição da janela dele está cumprida.**
+**H1 · Deve. O History passou das metas, e a condição da janela dele está cumprida.** · **Fechado no step 4**
 
 - Onde: `docs/development/target-machine.md:78–79`. Com 400 itens, a primeira pintura tem mediana quente de 404 a 501 ms, contra a meta de 300; `↓` tem mediana de 134 a 145 ms, contra 16. A linha 81 diz que "a virtualização da lista é decisão da task 12". No app, com 80 itens, a lista andou sem atraso visível; a medida é do Chromium, não do WebKitGTK.
 - Regra: o material da task 12 na base do passe (§3, Fora: a virtualização do History "entra aqui só se a medida da 11 passar das metas da task 5; então o History ganha uma janela como a do board, com a medida dela"); com a condição cumprida, o material a põe no step 4 (§8). `structure.md` §7 ainda diz que o History "carrega os últimos 90 dias", sem janela.
@@ -570,7 +570,7 @@ Visto no app real (a mesma sessão da área do system), nas cinco janelas e nos 
 - `features/repositories/ScanCloneRow.tsx:41`, `:48`, `:51`, `:61` e `:70` (`px-3 py-1.5`, `py-1`, `gap-2`, `pb-1`), que a correção da task 10 deixou de fora (ela tratou `BoardRepositoryRow`); `AddRepositoryDialog.tsx:191`, `:196`, `:220`, `:227` e `:230` (`gap-2`, `gap-3`); `features/startup/StartSidebar.tsx:20` (`h-4`, onde o Esqueleto pede barras de `--space-4`).
 - Regra: `tokens.css` (cabeçalho); `components.md` Esqueleto.
 
-**H6 · Pode esperar. Uma frase em inglês na documentação.**
+**H6 · Pode esperar. Uma frase em inglês na documentação.** · **Fechado no step 4**
 
 - `docs/development/target-machine.md:83` começa com "To measure on the target machine:". A documentação é em português (`CLAUDE.md`, Convenções).
 
@@ -748,7 +748,7 @@ As faixas sempre `role="alert"` (`critique-task-06.md:173`), o anel de foco (`cr
 | `critique-task-11.md` (16), os testes Go intermitentes | Vale | `reviewflow/apply_test.go:679`, `bindings/task_service_test.go:1372`, sem mudança. Não rodados | H7 |
 | `critique-task-11.md`, segunda leitura: o `↓` da busca põe o primeiro dia atrás da barra | Feito | `SearchInput.tsx:75–78` previne a ação padrão; `BELOW_THE_BAR` em `HistoryView.tsx:50–51`. No app, a lista andou pelo teclado com o anel à vista | — |
 | `critique-task-11.md`, segunda leitura: a janela dos reviews no estado sem prova | Feito | `internal/app/state_test.go:78–84` semeia `review-first` e `review-before` | — |
-| `critique-task-11.md`, segunda leitura: `HistoryView.measure` sob carga | Feito; as metas absolutas falham | O teto relativo de 30 vezes contra 40 itens (`target-machine.md:72`) | H1 |
+| `critique-task-11.md`, segunda leitura: `HistoryView.measure` sob carga | Feito; as metas absolutas falham | O teto relativo de 30 vezes contra 40 itens (`target-machine.md:72`) | H1 · **Fechado no step 4** |
 | `critique-task-11.md`, segunda leitura: `isMissingFile` frágil | Vale (opinião) | `lib/errors.ts:34` | H8 |
 | `critique-task-11.md`, segunda leitura: `UNSTARTED` sem `preparing` | Feito | `features/task/stage-actions.ts:67` | — |
 | Estabilidade: `features/boards/BoardDialog.test.tsx:249` (`12:496`) | Vale | `aria-describedby` logo depois de digitar | H7 |

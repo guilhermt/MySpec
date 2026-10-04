@@ -1,4 +1,4 @@
-import type { Ref } from "react";
+import { memo, type Ref } from "react";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons";
@@ -98,29 +98,50 @@ export interface DaySectionHeaderProps {
   label: string;
   /** tabStop is the header the list's one tab stop sits on. */
   tabStop: boolean;
-  onFocus: () => void;
+  /** setSize and posInSet say which day this is among the loaded days: a windowed list, whose DOM does not, gives them. */
+  setSize?: number;
+  posInSet?: number;
+  /** index is the position in a windowed list (data-index), and ref its measure. */
+  index?: number;
+  ref?: Ref<HTMLDivElement>;
+  /** spaced puts the room between days over the header: every one but the first. */
+  spaced?: boolean;
+  /** onFocus gets the id of the day, so one function serves every header and a memo holds. */
+  onFocus: (id: string) => void;
 }
 
-/** DaySectionHeader is the header of a day of the History, a treeitem of level 1 that is always open: no chevron, no action. */
-export function DaySectionHeader({
+/** DaySectionHeader is the header of a day of the History, a treeitem of level 1 that is always open: no chevron, no action. A memo, so a key that moves the focus draws only the headers it touches. */
+export const DaySectionHeader = memo(function DaySectionHeader({
   id,
   name,
   count,
   label,
   tabStop,
+  setSize,
+  posInSet,
+  index,
+  ref,
+  spaced = false,
   onFocus,
 }: DaySectionHeaderProps) {
   return (
     <Tooltip content={label}>
       <div
+        ref={ref}
+        data-index={index}
         role="treeitem"
         aria-level={1}
+        aria-setsize={setSize}
+        aria-posinset={posInSet}
         aria-expanded="true"
         aria-label={label}
         data-section-id={id}
         tabIndex={tabStop ? 0 : -1}
-        onFocus={onFocus}
-        className="flex min-h-(--size-node) cursor-default items-center rounded-sm px-(--space-2) text-ink-2 outline-none hover:bg-veil-hover focus-visible:focus-ring"
+        onFocus={() => onFocus(id)}
+        className={cn(
+          "flex min-h-(--size-node) cursor-default items-center rounded-sm px-(--space-2) text-ink-2 outline-none hover:bg-veil-hover focus-visible:focus-ring",
+          spaced && "mt-(--space-4)",
+        )}
       >
         <span className="inline-flex min-w-0 items-baseline gap-(--space-2) text-(length:--text-meta) leading-(--leading-meta) font-semibold">
           {name}
@@ -131,4 +152,4 @@ export function DaySectionHeader({
       </div>
     </Tooltip>
   );
-}
+});

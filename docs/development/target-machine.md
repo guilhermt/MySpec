@@ -69,22 +69,38 @@ Verificado com o build de produção (`task build`) e `XDG_DATA_HOME` e `XDG_STA
 
 ## A lista do History
 
-O History mostra os arquivados dos últimos 90 dias sem virtualização: umas 360 linhas no ritmo medido, e 400 é o tamanho a que a lista é medida. O teste `frontend/src/features/history/HistoryView.measure.painted.test.tsx` monta `HistoryView` com 400 itens na janela (240 tasks, 100 reviews e 60 discussões, em 90 dias, numa área principal de 2180 px) e mede a primeira pintura, do render ao quadro seguinte ao commit com o layout feito, e `↓` a partir do primeiro dia, do `keydown` ao quadro seguinte, uma vez frio e cinco vezes quente, como a lista do board. As metas são as do board: 300 ms e 16 ms. `pnpm vitest run --project painted src/features/history/HistoryView.measure.painted.test.tsx --reporter=verbose` imprime os números; o teste mede, na mesma execução e alternado com os 400, o History com 40 itens, e só falha quando a mediana quente de 400 passa de 30 vezes a de 40, nas duas medidas. Linear, a razão fica perto de 10 (entre 5 e 9 nas rodadas medidas); 30 pega uma lista que deixou de ser lista e não uma máquina lenta, que atrasa os dois tamanhos juntos.
+O History mostra os arquivados dos últimos 90 dias numa lista em janela (`useWindowedRows`, a mesma do board): umas 360 linhas no ritmo medido, e 400 é o tamanho a que a lista é medida. Só as linhas que aparecem, a da parada de Tab e a recém-arquivada ficam montadas, entre espaçadores, com 20 de `overscan` além de cada ponta; `HistoryRow` e `DaySectionHeader` são `memo`, e o modelo de cada linha só é feito quando ela monta.
 
-No Chromium do Playwright, com o React de desenvolvimento, em cinco rodadas:
+`frontend/src/dev/measure-history.tsx` mede a lista com 400 itens (240 tasks, 100 reviews e 60 discussões, em 90 dias, numa área de 1566 px por 900): a primeira pintura, do render ao quadro seguinte ao commit com o layout feito, e `↓` a partir do primeiro dia, do `keydown` ao quadro seguinte, uma vez fria e cinco vezes quente, em 37 linhas montadas. As metas são as do board, 300 ms e 16 ms, e passam pela mesma regra: o máximo das quentes em produção e a mediana das quentes em desenvolvimento dentro delas, com o piso de 16,7 ms de um quadro a 60 Hz. Para medir na máquina alvo, abra `?measure=history` no servidor de desenvolvimento (porta 9245) ou no build de medida (porta 9246, `pnpm measure:build` e `pnpm measure:serve`), como o [setup](./setup.md) descreve, e leia os números que a página escreve; o como-medir do Broadway está na seção seguinte.
 
-| | Fria | Quente, mediana | Quente, máximo | Meta |
+No WebKitGTK 2.52.6, pelo Broadway, em cinco rodadas no build de produção e quatro no de desenvolvimento:
+
+| React de produção (`pnpm measure:build`) | Fria | Quente, mediana | Quente, máximo | Meta |
 |---|---|---|---|---|
-| Primeira pintura | 674 a 704 ms | 404 a 501 ms | 512 a 526 ms | 300 ms |
-| `↓` na lista | 177 a 189 ms | 134 a 145 ms | 191 a 239 ms | 16 ms |
+| Primeira pintura | 42 a 49 ms | 33 a 43 ms | 56 a 78 ms | 300 ms |
+| `↓` na lista | 34 a 37 ms | 16 a 17 ms | 16 a 18 ms (16 em três das cinco) | 16 ms |
 
-As duas metas ficam fora, a primeira por pouco mais de uma vez e meia e a tecla por uma ordem de grandeza: cada `↓` muda o foco registrado de `useListTree` e refaz as 400 linhas montadas, e a primeira pintura monta todas. A virtualização da lista é decisão da task 12, que parte desta medida.
+| React de desenvolvimento (`task dev`) | Fria | Quente, mediana | Quente, máximo | Meta |
+|---|---|---|---|---|
+| Primeira pintura | 53 a 59 ms | 45 a 50 ms | 81 a 84 ms | 300 ms |
+| `↓` na lista | 29 a 31 ms | 16 ms (18 em uma) | 16 a 22 ms (16 em duas das quatro) | 16 ms |
 
-To measure on the target machine: com o build instalado e 400 itens arquivados nos últimos 90 dias, abrir o History e, no inspetor do WebKitGTK, gravar a linha do tempo da primeira pintura e de um `↓` no primeiro dia, e registrar aqui os dois tempos, frios e quentes, contra as metas de 300 ms e 16 ms.
+No Chromium 153 do Playwright, em três rodadas por build:
+
+| | Fria | Quente, mediana | Quente, máximo |
+|---|---|---|---|
+| Primeira pintura, produção | 27 a 34 ms | 24 a 25 ms | 46 ms |
+| `↓` na lista, produção | 14 ms | 16,2 a 16,4 ms | 16,9 a 17,1 ms |
+| Primeira pintura, desenvolvimento | 35 a 36 ms | 69 a 74 ms | 96 a 98 ms |
+| `↓` na lista, desenvolvimento | 19 a 21 ms | 16,2 a 16,4 ms | 16,9 a 17,2 ms |
+
+O `↓` fica no piso de um quadro, 16,7 ms: o trabalho da tecla é o foco, que só refaz as linhas que mudaram (`memo`), e um perfil no Chromium mostra o tempo do `↓` quase todo ocioso, à espera do quadro. O que passa de 16 ms numa rodada é a variação do Broadway, que desenha sem GPU: o board, medido na mesma sessão, deu máximo de `↓` de 16, 16 e 31 ms em três rodadas.
+
+O teste `frontend/src/features/history/HistoryView.measure.painted.test.tsx` continua no Chromium e compara, na mesma execução, 400 itens com 40: a razão das medianas quentes fica perto de 1, e o teste falha acima de 30, o que pega uma lista que deixou de ser janela.
 
 ## As listas virtualizadas
 
-O board monta só as linhas que aparecem, a da parada de Tab e a do card aberto, entre espaçadores (`useWindowedRows`). `frontend/src/dev/measure-board.tsx` o mede com 2.000 cards em dez status, todas as seções abertas: a primeira pintura, do render ao quadro seguinte ao commit, uma tecla na busca, do `input` ao quadro com a lista nova, e `↓`, do `keydown` ao quadro seguinte, uma vez fria e cinco vezes quente, em 44 linhas montadas. As metas são 300 ms, 50 ms e 16 ms, e passam quando o máximo das quentes em produção e a mediana das quentes em desenvolvimento ficam dentro delas. Um quadro a 60 Hz dura 16,7 ms, que é o piso de uma medida que termina no quadro seguinte; o `↓` mede esse piso.
+O board monta só as linhas que aparecem, a da parada de Tab e a do card aberto, entre espaçadores (`useWindowedRows`, que o History também usa, medido na seção anterior). `frontend/src/dev/measure-board.tsx` o mede com 2.000 cards em dez status, todas as seções abertas: a primeira pintura, do render ao quadro seguinte ao commit, uma tecla na busca, do `input` ao quadro com a lista nova, e `↓`, do `keydown` ao quadro seguinte, uma vez fria e cinco vezes quente, em 44 linhas montadas. As metas são 300 ms, 50 ms e 16 ms, e passam quando o máximo das quentes em produção e a mediana das quentes em desenvolvimento ficam dentro delas. Um quadro a 60 Hz dura 16,7 ms, que é o piso de uma medida que termina no quadro seguinte; o `↓` mede esse piso.
 
 No WebKitGTK 2.52.6 (WebKit 6.0 sobre GTK4 4.22.4), pelo Broadway:
 
