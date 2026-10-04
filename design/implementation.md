@@ -35,7 +35,7 @@ Tamanhos: **P** até 4 steps, **M** de 5 a 8, **G** de 9 a 14. Um step é um com
 | 8 | Publicação em cadeia | M | 5–7 | **M2**, P26 |
 | 9 | A discussão | G | 9–12 | P3 (discussão), P24, P25 |
 | 10 | Settings, boas-vindas, início e migração | G | 9–14 | P31, P32, P34, P34b, P35, P36 |
-| 11 | History, arquivados, diálogos da task, avisos, toasts e notificações | G | 10–13 | P27–P30, P33, P37 |
+| 11 | History, arquivados, diálogos da task, avisos, toasts e notificações | G | 10–14 | P27–P30, P33, P37 |
 | 12 | Consistência e remoção do design antigo | M a G | 5–14, pelo relatório | nenhum |
 
 Onde a ordem difere da sugestão e por quê: a fundação e a tela da task são duas tasks cada, porque cada metade já é G e cada metade deixa o app inteiro e usável (o shell novo com as telas antigas dentro; o topo novo da task sobre a conversa antiga). **M1** é a task 7, depois do centro de review, porque o apontamento e o cartão de decisão são um componente só, e ele nasce na task 6, onde o produto já tem apontamentos estruturados (`features/reviews/FindingCard.tsx`); fazer M1 dentro da tela da task a tornaria a maior task da frente e obrigaria a construir o componente antes do lugar dele. **M2** é a task 8, própria e antes da discussão, porque é uma regra de workflow testável só em Go, contra o GitHub real, e a tela da discussão (task 9) não se desenha sem ela; separada, a regra é validada numa discussão de verdade antes de a tela mudar, com uma adaptação mínima do painel atual que mantém o app usável.
@@ -169,7 +169,7 @@ Onde a ordem difere da sugestão e por quê: a fundação e a tela da task são 
 - **`backend.md`:** P27 (`CloseResult` no `ArchivedTask`), P28 (rascunho e relatórios da PR no arquivado), P29 (o que o apagamento deixou, ligado ao item), P30 (arquivos não commitados e commits fora da base), P33 (History por partes), P37 (os textos das notificações).
 - **Fora:** nada.
 - **Dependências:** tasks 4, 6, 9 e 10.
-- **Tamanho:** G, 10–13 steps (o material de entrada, `tasks/11-history-dialogs.md`, propõe 13: as peças do system num step próprio e as cenas em dois, 12a e 12b).
+- **Tamanho:** G, 10–14 steps (o material de entrada, `tasks/11-history-dialogs.md`, propõe 14: as peças do system num step próprio, o review e a discussão arquivados em dois, 6a e 6b, e as cenas em dois, 12a e 12b).
 - **Pronto:** as cenas de History, arquivados e diálogos; `text_test.go` cobre os 61 textos; a página da task apagada mostra o comando com **Copy**; `features.md` §Histórico, §Apagar uma task, §Voltar e descartar, §Descartar step, §Encerramento e arquivamento, §Depende de mim reescritos.
 
 ### 12. Consistência e remoção do design antigo
