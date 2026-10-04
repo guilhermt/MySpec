@@ -196,7 +196,7 @@ describe("PullRequestPanel", () => {
 
         const start = screen.getByRole("button", { name: /^Start review/ });
         expect(start).toHaveAttribute("aria-disabled", "true");
-        expect(start).toHaveAccessibleDescription("The clone at /home/dev/code/api is missing.");
+        expect(start).toHaveAccessibleDescription("The clone at ~/code/api is missing.");
         expect(screen.getByRole("button", { name: "Change path…" })).toBeInTheDocument();
       });
 

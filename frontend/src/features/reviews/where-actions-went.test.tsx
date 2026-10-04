@@ -673,7 +673,7 @@ const ROWS: Row[] = [
     where: "panel",
     name: /^Start review/,
     disabled: true,
-    description: "The clone at /home/dev/projects/web is missing.",
+    description: "The clone at ~/projects/web is missing.",
   },
   {
     origin: "PullRequestRow",
@@ -683,7 +683,7 @@ const ROWS: Row[] = [
     steps: openPanel,
     where: "panel",
     name: /^Change path…$/,
-    text: /The clone at \/home\/dev\/projects\/web is missing\./,
+    text: /The clone at ~\/projects\/web is missing\./,
   },
 
   // The dialog that starts a review.

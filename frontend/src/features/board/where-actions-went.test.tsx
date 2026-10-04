@@ -215,7 +215,7 @@ const ROWS: Row[] = [
     storage: EXPANDED,
     steps: (user) => clickCard(user, 409),
     role: "link",
-    name: "Archived task: 409-hash-api-keys-at-rest",
+    name: "409-hash-api-keys-at-rest",
   },
   {
     control: "the sibling that selects the card",

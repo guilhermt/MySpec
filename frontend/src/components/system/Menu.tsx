@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { Button } from "./Button";
+import { CutText } from "./CutText";
 import { Icon } from "./Icon";
 import { ICONS, type IconGlyph } from "./icons";
 import { StateGlyph } from "./StateGlyph";
@@ -169,12 +170,13 @@ function MenuSub({
   tone,
   blocked,
 }: {
-  children: ReactNode;
+  children: string;
   tone?: "error" | undefined;
   blocked?: boolean | undefined;
 }) {
   return (
-    <span
+    <CutText
+      text={children}
       className={cn(
         "text-(length:--text-meta) leading-(--leading-meta) text-ink-3",
         tone === "error" && "text-state-error",
@@ -182,7 +184,7 @@ function MenuSub({
     >
       {blocked === true && <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />}
       {children}
-    </span>
+    </CutText>
   );
 }
 
@@ -268,7 +270,8 @@ export interface MenuActionItemProps {
 }
 
 /**
- * MenuActionItem is an item that runs an action instead of being chosen: the label, the sub, and
+ * MenuActionItem is an item that runs an action instead of being chosen: an empty column where the
+ * choices have their check, so the labels line up, the label, the sub, and
  * the action as ghost text on the right. Disabled, it is a choice that can't be made, in the fourth
  * ink with aria-disabled; otherwise it is in the ink of any item. It stays on the path of the arrows
  * and keeps the menu open, so the action shows its own progress, unless the action closes it.
@@ -293,6 +296,7 @@ export function MenuActionItem({
         disabled && "text-ink-4 focus:text-ink-3",
       )}
     >
+      <span aria-hidden="true" className="size-(--icon) shrink-0" />
       <span>{label}</span>
       {sub !== undefined && (
         <MenuSub tone={subTone} blocked={subBlocked}>

@@ -191,8 +191,12 @@ export function Home() {
             </div>
           </Section>
 
-          <p className="flex flex-wrap gap-x-(--space-5) gap-y-(--space-1) text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
-            <span className="sr-only">Shortcuts: </span>
+          {/* biome-ignore lint/a11y/useSemanticElements: the group names a list of keys, not a set of fields, which is what a fieldset is for. */}
+          <div
+            role="group"
+            aria-label="Shortcuts"
+            className="flex flex-wrap gap-x-(--space-5) gap-y-(--space-1) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
+          >
             {SHORTCUTS.map(({ keys, text }) => (
               <span key={text} className="inline-flex items-center gap-(--space-1-5)">
                 <span className="inline-flex gap-(--space-0-5)">
@@ -203,7 +207,7 @@ export function Home() {
                 {text}
               </span>
             ))}
-          </p>
+          </div>
         </div>
       </ScrollArea>
     </section>

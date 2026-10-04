@@ -1,6 +1,7 @@
 import type { KeyNoticeText } from "@/components/system/KeyNotice";
 import { type RowTone, taskRow, waitSuffix } from "@/features/sidebar/sidebar-tree";
 import { referenceOf } from "@/features/task/card-panel";
+import { displayPath } from "@/lib/paths";
 import { findRepository } from "@/lib/repositories";
 import type { Board, BoardCard, CardDependency, DiscussionSummary, State } from "@/lib/wails";
 
@@ -138,11 +139,7 @@ export interface FilterChipModel {
 }
 
 /** filterChips are the chips of the chosen filters, in the order repository, assignee, status. */
-export function filterChips(
-  filters: BoardFilters,
-  board: Board,
-  _app: State | null,
-): FilterChipModel[] {
+export function filterChips(filters: BoardFilters, board: Board): FilterChipModel[] {
   const chips: FilterChipModel[] = [];
   const chip = (kind: FilterChipModel["kind"], label: string, orphan: string | null) =>
     chips.push({ kind, label, removeLabel: `Remove the filter ${label}`, orphan });
@@ -546,7 +543,11 @@ export function cardRowModel(card: BoardCard, ctx: RowContext): CardRowModel {
       ? [`task ${task.tooltip}`]
       : task?.kind === "discussion"
         ? [`in ${discussionsText(discussions)}`]
-        : []),
+        : task?.kind === "cloning"
+          ? [task.text]
+          : task?.kind === "clone-failed"
+            ? ["Clone failed"]
+            : []),
   ].join(". ");
   return {
     key: card.key,
@@ -594,7 +595,7 @@ export function startNotice(
       return { title, reason: `${card.repository} belongs to the board ${card.otherBoard}.` };
     case "clone_missing": {
       const path = findRepository(app, card.repositoryId)?.path ?? "";
-      return { title, reason: `The clone at ${path} is missing.` };
+      return { title, reason: `The clone at ${displayPath(path)} is missing.` };
     }
     default:
       return null;

@@ -1,3 +1,4 @@
+import { displayPath } from "@/lib/paths";
 import type { Repository, State } from "@/lib/wails";
 
 /** ALL_REPOSITORIES is the filter that shows the tasks of every repository. */
@@ -28,7 +29,7 @@ export function findRepository(app: State | null, id: string): Repository | null
 
 /** cloneMissingText is the warning of a repository whose clone is gone. */
 export function cloneMissingText(repository: Repository): string {
-  return `The clone at ${repository.path} is missing.`;
+  return `The clone at ${displayPath(repository.path)} is missing.`;
 }
 
 /** taskCount reads a number of tasks of a kind: "1 active task", "3 archived tasks". */
@@ -67,8 +68,8 @@ function usable(app: State, id: string): boolean {
 
 /**
  * defaultRepositoryId is the repository the creation dialog opens on: the one of
- * the filter, of the open task, of the last task created, or the first; the
- * first of those that is registered, cloned, and whose clone is there. "" when
+ * the filter, of the open task, of the last task created, or the first usable of
+ * the list; the first of those that is registered, cloned, and whose clone is there. "" when
  * none is.
  */
 export function defaultRepositoryId(
@@ -81,7 +82,7 @@ export function defaultRepositoryId(
     app.repositoryFilter,
     openTask?.repositoryId ?? "",
     lastRepositoryId ?? "",
-    repositoriesOf(app)[0]?.id ?? "",
+    repositoriesOf(app).find((repository) => usable(app, repository.id))?.id ?? "",
   ];
   return candidates.find((id) => id !== "" && usable(app, id)) ?? "";
 }

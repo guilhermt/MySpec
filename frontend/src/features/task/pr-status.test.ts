@@ -150,7 +150,7 @@ describe("closeHint", () => {
     const repository = makeRepository({ missing: true });
     const pr = makePullRequest({ status: "merged", cloneMissing: true });
 
-    expect(closeHint(pr, repository)).toBe("The clone at /home/dev/projects/web is missing.");
+    expect(closeHint(pr, repository)).toBe("The clone at ~/projects/web is missing.");
   });
 });
 

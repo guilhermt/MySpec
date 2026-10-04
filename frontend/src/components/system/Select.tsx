@@ -69,6 +69,10 @@ export function choiceName(choice: { label: string; unavailable?: boolean }): st
   return choice.unavailable ? `${choice.label} · unavailable` : choice.label;
 }
 
+// The menu of a Select is --size-menu-max wide at most, or as wide as its trigger when that is wider, and never past the window; MenuContent keeps it from being narrower than the trigger.
+const SELECT_MENU =
+  "max-w-[min(max(var(--size-menu-max),var(--anchor-width)),var(--available-width))]";
+
 /**
  * SELECT_TRIGGER is the look of a field that opens a list, shared with Listbox. Disabled rides on
  * aria-disabled, whose variant outweighs the plain classes; focused, it keeps the focus border and halo.
@@ -144,7 +148,7 @@ export function Select({
       ) : (
         trigger
       )}
-      <MenuContent>
+      <MenuContent className={SELECT_MENU}>
         {message !== undefined ? (
           <MenuMessage
             tone={message.tone ?? "neutral"}

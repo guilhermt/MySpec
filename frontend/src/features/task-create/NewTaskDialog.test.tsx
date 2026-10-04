@@ -78,7 +78,7 @@ describe("NewTaskDialog", () => {
 
     const item = await screen.findByRole("menuitemradio", { name: /dev\/api/ });
     expect(item).toHaveAttribute("aria-disabled", "true");
-    expect(item).toHaveTextContent("The clone at /home/dev/projects/api is missing.");
+    expect(item).toHaveTextContent("The clone at ~/projects/api is missing.");
   });
 
   it("changes the repository the task will belong to", async () => {

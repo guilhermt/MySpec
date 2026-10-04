@@ -1,4 +1,5 @@
 import type { ReactNode, Ref } from "react";
+import { cn } from "@/lib/utils";
 import { Chip } from "./Chip";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons";
@@ -16,10 +17,16 @@ import {
 import { StateGlyph } from "./StateGlyph";
 import { Tooltip } from "./Tooltip";
 
+/** STICKY_FADE is the fade under a bar stuck to the top of a list's scroll. */
+export const STICKY_FADE =
+  "after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-(--space-3) after:bg-linear-to-b after:from-surface-1 after:to-transparent after:content-['']";
+
 export interface FilterBarProps {
   /** label names the search landmark: "Filter the cards". */
   label: string;
   children: ReactNode;
+  /** nowrap keeps the bar on one line; its owner folds what does not fit. */
+  nowrap?: boolean;
   /** ref is the bar, which a windowed list reads to put a row it scrolls to below it. */
   ref?: Ref<HTMLDivElement> | undefined;
 }
@@ -29,14 +36,18 @@ export interface FilterBarProps {
  * Filter menu, stuck to the top of the scroll with a fade under it. It is the search landmark, so
  * the search box inside it declares none.
  */
-export function FilterBar({ label, children, ref }: FilterBarProps) {
+export function FilterBar({ label, children, nowrap = false, ref }: FilterBarProps) {
   return (
     // biome-ignore lint/a11y/useSemanticElements: jsdom gives the <search> element no role, so the landmark is declared.
     <div
       ref={ref}
       role="search"
       aria-label={label}
-      className="sticky top-0 z-(--z-sticky) flex flex-wrap items-center gap-(--space-2) bg-surface-1 pt-(--space-4) pb-(--space-3) after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-(--space-3) after:bg-linear-to-b after:from-surface-1 after:to-transparent after:content-['']"
+      className={cn(
+        "sticky top-0 z-(--z-sticky) flex items-center gap-(--space-2) bg-surface-1 pt-(--space-4) pb-(--space-3)",
+        nowrap ? "flex-nowrap" : "flex-wrap",
+        STICKY_FADE,
+      )}
     >
       {children}
     </div>
@@ -61,7 +72,12 @@ export interface FilterChipProps {
 /** FilterChip is an active filter with its ×; a filter that matches nothing anymore carries ◇ and says why. */
 export function FilterChip({ model, onRemove }: FilterChipProps) {
   const chip = (
-    <Chip kind="action" onRemove={onRemove} removeLabel={model.removeLabel}>
+    <Chip
+      kind="action"
+      onRemove={onRemove}
+      removeLabel={model.removeLabel}
+      {...(model.orphan === null ? {} : { "aria-label": `${model.label}, ${model.orphan}` })}
+    >
       {model.orphan !== null && (
         <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />
       )}
@@ -93,13 +109,22 @@ export interface FilterMenuProps {
   /** cycles are the groups of three-way filters, after the others. */
   cycles?: readonly FilterCycleGroup[];
   onCycle?: (group: string, value: string, next: FilterCycle) => void;
+  /** active is how many filters are chosen; a bar that folds its chips says it after Filter. */
+  active?: number;
 }
 
 /**
  * FilterMenu is the Filter chip and its menu: a group for each filter, one item checked at most in
  * each, then the groups of three-way filters.
  */
-export function FilterMenu({ tooltip, groups, onPick, cycles = [], onCycle }: FilterMenuProps) {
+export function FilterMenu({
+  tooltip,
+  groups,
+  onPick,
+  cycles = [],
+  onCycle,
+  active = 0,
+}: FilterMenuProps) {
   return (
     <Menu>
       <Tooltip content={tooltip}>
@@ -108,6 +133,9 @@ export function FilterMenu({ tooltip, groups, onPick, cycles = [], onCycle }: Fi
             <Chip kind="menu">
               <Icon icon={ICONS.filter} size="xs" />
               Filter
+              {active > 0 && (
+                <span className="hidden @max-[620px]/list:inline">{` · ${active}`}</span>
+              )}
             </Chip>
           }
         />

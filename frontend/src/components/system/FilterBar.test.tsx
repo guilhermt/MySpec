@@ -60,7 +60,9 @@ describe("FilterChip", () => {
         onRemove={() => {}}
       />,
     );
-    const chip = screen.getByRole("button", { name: "acme/old" });
+    const chip = screen.getByRole("button", {
+      name: "acme/old, acme/old isn't a repository of this board anymore.",
+    });
     expect(chip.querySelector('[data-state="blocked"]')).not.toBeNull();
     await user.hover(chip);
     expect(await screen.findByRole("tooltip")).toHaveTextContent(

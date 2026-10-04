@@ -381,7 +381,7 @@ describe("boardLines", () => {
     ]);
   });
 
-  it("lists the clones not made before the clones gone, whatever their names", () => {
+  it("lists the repositories that cannot start a task by name, whichever the case", () => {
     const state = [
       makeRepository({
         id: "a",
@@ -394,7 +394,7 @@ describe("boardLines", () => {
     ];
     const [line] = linesOf(board({ repositoryIds: ["a", "b"] }), state);
 
-    expect(line?.blockers.map((blocker) => blocker.kind)).toEqual(["not-cloned", "clone-missing"]);
+    expect(line?.blockers.map((blocker) => blocker.kind)).toEqual(["clone-missing", "not-cloned"]);
   });
 
   it("says the clone that runs, and the clone that failed", () => {

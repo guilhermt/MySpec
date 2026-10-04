@@ -58,4 +58,26 @@ describe.each(THEMES)("Continue in the %s theme", (theme) => {
     expect(Number.isInteger(button.getBoundingClientRect().height)).toBe(true);
     expect(getComputedStyle(screen.getByText("Add the audit log")).textOverflow).toBe("ellipsis");
   });
+
+  it("cuts a long second line inside the button, and says it whole in a tooltip", async () => {
+    setTheme(theme);
+    const long =
+      "Question · Reviewer · Step 3/7 · waiting for you since the refund tests failed twice";
+    render(
+      <div style={{ width: "var(--size-dialog)" }}>
+        <Continue
+          model={{ ...MODEL, row: { ...MODEL.row, line2: { long } }, crumbs: "" }}
+          onOpen={() => {}}
+        />
+      </div>,
+    );
+    const button = screen.getByRole("button");
+    const line = screen.getByText(long);
+    expect(line.scrollWidth).toBeGreaterThan(line.clientWidth);
+    expect(line.getBoundingClientRect().right).toBeLessThanOrEqual(
+      button.getBoundingClientRect().right,
+    );
+    await userEvent.hover(line);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(long);
+  });
 });

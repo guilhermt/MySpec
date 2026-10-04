@@ -330,7 +330,7 @@ describe("the keyboard of Reviews", () => {
       await user.keyboard("r");
 
       expect(await screen.findByRole("status")).toHaveTextContent("No review of web#12 · ");
-      expect(screen.getByRole("status")).toHaveTextContent("/home/dev/projects/web");
+      expect(screen.getByRole("status")).toHaveTextContent("~/projects/web");
       expect(useAppStore.getState().startReview).toBeNull();
     });
 

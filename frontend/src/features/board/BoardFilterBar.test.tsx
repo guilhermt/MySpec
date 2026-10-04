@@ -127,7 +127,7 @@ describe("BoardFilterBar", () => {
 
   it("offers a group for each filter, the status one only on a board with a Status field", async () => {
     const { user, unmount } = bar();
-    await user.click(screen.getByRole("button", { name: "Filter" }));
+    await user.click(screen.getByRole("button", { name: /^Filter/ }));
     const menu = await screen.findByRole("menu");
 
     expect(within(menu).getByRole("group", { name: "Repository" })).toBeInTheDocument();
@@ -139,7 +139,7 @@ describe("BoardFilterBar", () => {
     unmount();
 
     const other = bar({ hasStatus: false, statuses: [] });
-    await other.user.click(screen.getByRole("button", { name: "Filter" }));
+    await other.user.click(screen.getByRole("button", { name: /^Filter/ }));
     expect(
       within(await screen.findByRole("menu")).queryByRole("group", { name: "Status" }),
     ).not.toBeInTheDocument();
@@ -149,20 +149,20 @@ describe("BoardFilterBar", () => {
     const onFilters = vi.fn();
     const { user } = bar({}, undefined, onFilters);
 
-    await user.click(screen.getByRole("button", { name: "Filter" }));
+    await user.click(screen.getByRole("button", { name: /^Filter/ }));
     await user.click(await screen.findByRole("menuitemcheckbox", { name: "dev/web" }));
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(onFilters).toHaveBeenLastCalledWith(
       expect.objectContaining({ repository: "repo-1", repositoryName: "dev/web" }),
     );
 
-    await user.click(screen.getByRole("button", { name: "Filter" }));
+    await user.click(screen.getByRole("button", { name: /^Filter/ }));
     await user.click(await screen.findByRole("menuitemcheckbox", { name: "In progress" }));
     expect(onFilters).toHaveBeenLastCalledWith(
       expect.objectContaining({ status: "in-progress", statusName: "In progress" }),
     );
 
-    await user.click(screen.getByRole("button", { name: "Filter" }));
+    await user.click(screen.getByRole("button", { name: /^Filter/ }));
     await user.click(await screen.findByRole("menuitemcheckbox", { name: "tchen" }));
     expect(onFilters).toHaveBeenLastCalledWith(expect.objectContaining({ assignee: "tchen" }));
   });
@@ -199,7 +199,7 @@ describe("BoardFilterBar", () => {
   it("marks a chip that no longer matches the board with the raw id and ◇", () => {
     bar({}, { ...EMPTY_FILTERS, repository: "repo-9" });
 
-    expect(screen.getByRole("button", { name: "repo-9" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^repo-9, / })).toBeInTheDocument();
   });
 
   it("clears the five filters with Clear filters, which shows only while one is set", async () => {

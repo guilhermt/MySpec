@@ -316,7 +316,7 @@ describe("filterChips", () => {
   const board = makeBoard({ repositoryIds: ["repo-1"] });
 
   it("has none without filters, and never one for the search or Assigned to me", () => {
-    expect(filterChips({ ...EMPTY_FILTERS, query: "a", mine: true }, board, null)).toEqual([]);
+    expect(filterChips({ ...EMPTY_FILTERS, query: "a", mine: true }, board)).toEqual([]);
   });
 
   it("orders the chips repository, assignee, status", () => {
@@ -329,7 +329,7 @@ describe("filterChips", () => {
       statusName: "Todo",
     };
 
-    expect(filterChips(filters, board, null)).toEqual([
+    expect(filterChips(filters, board)).toEqual([
       {
         kind: "repository",
         label: "dev/web",
@@ -354,7 +354,7 @@ describe("filterChips", () => {
   it("names the status of the cards without one", () => {
     const filters = { ...EMPTY_FILTERS, status: NO_STATUS, statusName: "No status" };
 
-    expect(filterChips(filters, board, null)).toMatchObject([
+    expect(filterChips(filters, board)).toMatchObject([
       { label: "Status: No status", orphan: null },
     ]);
   });
@@ -362,7 +362,7 @@ describe("filterChips", () => {
   it("falls back on the id while the name is unknown", () => {
     const filters = { ...EMPTY_FILTERS, repository: "repo-1", status: "todo" };
 
-    expect(filterChips(filters, board, null).map((chip) => chip.label)).toEqual([
+    expect(filterChips(filters, board).map((chip) => chip.label)).toEqual([
       "repo-1",
       "Status: todo",
     ]);
@@ -371,7 +371,7 @@ describe("filterChips", () => {
   it("tells a repository the board no longer has", () => {
     const filters = { ...EMPTY_FILTERS, repository: "gone", repositoryName: "dev/gone" };
 
-    expect(filterChips(filters, board, null)[0]?.orphan).toBe(
+    expect(filterChips(filters, board)[0]?.orphan).toBe(
       "dev/gone isn't a repository of this board anymore.",
     );
   });
@@ -379,11 +379,11 @@ describe("filterChips", () => {
   it("tells a status the board no longer has, only on a board with statuses", () => {
     const filters = { ...EMPTY_FILTERS, status: "gone", statusName: "Archived" };
 
-    expect(filterChips(filters, board, null)[0]?.orphan).toBe(
+    expect(filterChips(filters, board)[0]?.orphan).toBe(
       "Archived isn't a status of this board anymore.",
     );
     expect(
-      filterChips(filters, makeBoard({ hasStatus: false, statuses: [] }), null)[0]?.orphan,
+      filterChips(filters, makeBoard({ hasStatus: false, statuses: [] }))[0]?.orphan,
     ).toBeNull();
   });
 });
@@ -913,6 +913,17 @@ describe("cardRowModel", () => {
       expect(
         cardRowModel(asked, context({ cloneFor: { key: asked.key, state: "failed" } })).task,
       ).toEqual({ kind: "clone-failed" });
+    });
+
+    it("puts the clone that runs and the clone that failed in the name of the row", () => {
+      const asked = card({ activeTaskId: "task-2", repository: "acme/billing" });
+
+      expect(
+        cardRowModel(asked, context({ cloneFor: { key: asked.key, state: "cloning" } })).label,
+      ).toMatch(/\. Cloning acme\/billing…$/);
+      expect(
+        cardRowModel(asked, context({ cloneFor: { key: asked.key, state: "failed" } })).label,
+      ).toMatch(/\. Clone failed$/);
     });
 
     it("leaves the clone of another card alone", () => {

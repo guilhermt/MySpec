@@ -24,7 +24,7 @@ describe("UnclonedRepository", () => {
   it("changes the path of a clone that is gone, saying where it was", async () => {
     const { user } = repository({ missing: true });
 
-    expect(screen.getByText("The clone at /home/dev/projects/web is missing.")).toBeInTheDocument();
+    expect(screen.getByText("The clone at ~/projects/web is missing.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Change path…" }));
 
     expect(api.changeRepositoryPath).toHaveBeenCalledWith("repo-1");

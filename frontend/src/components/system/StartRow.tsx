@@ -1,6 +1,7 @@
 import { type ReactNode, useId } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "./Button";
+import { CutText } from "./CutText";
 import { Icon } from "./Icon";
 import { ICONS, type IconGlyph } from "./icons";
 import { Kbd } from "./Kbd";
@@ -159,10 +160,15 @@ function BlockerLine({
           {...(blocker.kind === "not-cloned" && blocker.cloning ? { role: "status" } : {})}
           className={cn("min-w-0 flex-1", failed ? "text-state-error" : "text-ink-2")}
         >
-          {blocker.kind !== "read-failed" && blocker.blocked === true && (
-            <StateGlyph state="blocked" size="sm" className="mr-(--space-1-5) align-middle" />
-          )}
-          {blocker.kind === "read-failed" ? blocker.message : blocker.text}
+          <CutText
+            text={blocker.kind === "read-failed" ? blocker.message : blocker.text}
+            className="block"
+          >
+            {blocker.kind !== "read-failed" && blocker.blocked === true && (
+              <StateGlyph state="blocked" size="sm" className="mr-(--space-1-5) align-middle" />
+            )}
+            {blocker.kind === "read-failed" ? blocker.message : blocker.text}
+          </CutText>
         </span>
         {blocker.kind === "read-failed" &&
           onRetryRead !== undefined &&

@@ -170,7 +170,7 @@ describe("BoardCardPanel", () => {
         "aria-busy",
         "true",
       );
-      expect(screen.getByText("The clone is running.")).toBeInTheDocument();
+      expect(screen.queryByText("The clone is running.")).not.toBeInTheDocument();
     });
 
     it("promises the dialog only for the card that asked for the clone", () => {
@@ -410,7 +410,7 @@ describe("BoardCardPanel", () => {
       }),
     });
 
-    await user.click(await screen.findByRole("link", { name: "Archived task: Login screen" }));
+    await user.click(await screen.findByRole("link", { name: "Login screen" }));
     expect(useAppStore.getState().location).toEqual({ kind: "archived-task", id: "task-old" });
     await user.click(screen.getByRole("link", { name: "From the discussion Pricing" }));
     expect(useAppStore.getState().location).toEqual({ kind: "archived-discussion", id: "d-1" });

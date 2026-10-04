@@ -59,6 +59,37 @@ afterEach(() => {
   localStorage.clear();
 });
 
+/** statusText is what every status of the screen says: the panel's strip and the key notice. */
+function statusText(): string {
+  return screen
+    .getAllByRole("status")
+    .map((status) => status.textContent)
+    .join("\n");
+}
+
+/** openOutOfReading opens a card in the panel and takes it out of the reading, with the focus on the panel's Discuss. */
+async function openOutOfReading(number: number) {
+  const { user } = view();
+  await user.click(row(number));
+  act(() => {
+    const { app } = useAppStore.getState();
+    const board = app?.boards?.[0];
+    if (app === null || board === undefined) {
+      throw new Error("the state has no board");
+    }
+    useAppStore.setState({
+      app: {
+        ...app,
+        boards: [{ ...board, cards: (board.cards ?? []).filter((c) => c.number !== number) }],
+      },
+    });
+  });
+  within(screen.getByRole("complementary", { name: `Card #${number}` }))
+    .getByRole("button", { name: /^Discuss/ })
+    .focus();
+  return user;
+}
+
 describe("the keyboard of the board", () => {
   describe("the tree", () => {
     it("walks the headers and the rows with the arrows, Home and End", async () => {
@@ -263,7 +294,7 @@ describe("the keyboard of the board", () => {
         "a card whose clone is missing",
         card(12, { action: "clone_missing" }),
         "No task from #12",
-        "The clone at /home/dev/projects/web is missing.",
+        "The clone at ~/projects/web is missing.",
       ],
     ])("says why it does nothing for %s", async (_name, target, title, reason) => {
       const { user } = view({ cards: [target] }, { tasks: [makeTask()] });
@@ -298,6 +329,34 @@ describe("the keyboard of the board", () => {
       await user.keyboard("s");
 
       expect(useAppStore.getState().newTaskCard).toEqual({ boardId: "board-1", key: "dev/web#7" });
+    });
+  });
+
+  describe("a card of the panel that the reading no longer has", () => {
+    it("says why S does nothing", async () => {
+      const user = await openOutOfReading(7);
+
+      await user.keyboard("s");
+
+      await waitFor(() =>
+        expect(statusText()).toContain(
+          "No task from #7 · The card isn't in the last reading of the board.",
+        ),
+      );
+      expect(useAppStore.getState().newTaskOpen).toBe(false);
+    });
+
+    it("says why D does nothing", async () => {
+      const user = await openOutOfReading(7);
+
+      await user.keyboard("d");
+
+      await waitFor(() =>
+        expect(statusText()).toContain(
+          "#7 can't go into a discussion · The card isn't in the last reading of the board.",
+        ),
+      );
+      expect(useAppStore.getState().newDiscussion).toBeNull();
     });
   });
 

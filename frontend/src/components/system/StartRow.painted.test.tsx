@@ -125,4 +125,28 @@ describe.each(THEMES)("StartRow in the %s theme", (theme) => {
     expect(screen.queryByRole("button")).toBeNull();
     expect(getComputedStyle(screen.getByText("No board")).fontWeight).toBe("500");
   });
+
+  it("cuts the text of a line that blocks on one line, and says it whole in a tooltip", async () => {
+    setTheme(theme);
+    const text =
+      "The clone at ~/projects/some/deeply/nested/folder/of/a/very/long/path/to/the/repository/api/checkout is missing.";
+    render(
+      <div style={{ width: "var(--size-dialog)" }}>
+        <NoBoardRow
+          names="api"
+          blockers={[{ kind: "clone-missing", repositoryId: "repo-1", text, blocked: true }]}
+          onClone={() => {}}
+          onChangePath={() => {}}
+        />
+      </div>,
+    );
+    const line = screen.getByText(text);
+    expect(line.scrollWidth).toBeGreaterThan(line.clientWidth);
+    expect(getComputedStyle(line).textOverflow).toBe("ellipsis");
+    expect(line.getBoundingClientRect().height).toBe(
+      parseFloat(resolve("var(--leading-meta)", "height")),
+    );
+    await userEvent.hover(line);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(text);
+  });
 });

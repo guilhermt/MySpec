@@ -170,37 +170,40 @@ function repositoriesOf(app: State, ids: readonly string[]): Repository[] {
   return ids.flatMap((id) => findRepository(app, id) ?? []);
 }
 
-// cloneBlockers are the lines of the repositories without a clone, by name, then those whose clone is gone.
+// cloneBlockers are the lines of the repositories that cannot start a task, one per repository, by name.
 function cloneBlockers(repositories: readonly Repository[]): BlockerModel[] {
-  const sorted = [...repositories].sort((a, b) => a.fullName.localeCompare(b.fullName));
-  const notCloned = sorted
-    .filter((repository) => !repository.cloned)
-    .map((repository): BlockerModel => {
-      const failed = !repository.cloning && repository.cloneError !== "";
-      return {
-        kind: "not-cloned",
-        repositoryId: repository.id,
-        text: repository.cloning
-          ? `Cloning ${repository.fullName}…`
-          : failed
-            ? repository.cloneError
-            : `${repository.fullName} isn't cloned. Its cards can't start a task yet.`,
-        ...(!repository.cloning && !failed ? { blocked: true } : {}),
-        cloning: repository.cloning,
-        error: repository.cloneError,
-      };
+  return [...repositories]
+    .sort((a, b) => a.fullName.localeCompare(b.fullName))
+    .flatMap((repository): BlockerModel[] => {
+      if (!repository.cloned) {
+        const failed = !repository.cloning && repository.cloneError !== "";
+        return [
+          {
+            kind: "not-cloned",
+            repositoryId: repository.id,
+            text: repository.cloning
+              ? `Cloning ${repository.fullName}…`
+              : failed
+                ? repository.cloneError
+                : `${repository.fullName} isn't cloned. Its cards can't start a task yet.`,
+            ...(!repository.cloning && !failed ? { blocked: true } : {}),
+            cloning: repository.cloning,
+            error: repository.cloneError,
+          },
+        ];
+      }
+      if (repository.missing) {
+        return [
+          {
+            kind: "clone-missing",
+            repositoryId: repository.id,
+            text: cloneMissingText(repository),
+            blocked: true,
+          },
+        ];
+      }
+      return [];
     });
-  const missing = sorted
-    .filter((repository) => repository.cloned && repository.missing)
-    .map(
-      (repository): BlockerModel => ({
-        kind: "clone-missing",
-        repositoryId: repository.id,
-        text: cloneMissingText(repository),
-        blocked: true,
-      }),
-    );
-  return [...notCloned, ...missing];
 }
 
 // namesOf are the short names of repositories, alphabetically.

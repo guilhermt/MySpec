@@ -1,5 +1,6 @@
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PanelLayout } from "@/components/system/AuxPanel";
+import { STICKY_FADE } from "@/components/system/FilterBar";
 import { KeyNotice, useKeyNotice } from "@/components/system/KeyNotice";
 import { isTyping } from "@/components/system/keys";
 import { LIST_COLUMN } from "@/components/system/ListPanel";
@@ -38,6 +39,7 @@ import { CardTree, type CardTreeHandle } from "@/features/board/CardTree";
 import { useBoardViewMemory } from "@/features/board/useBoardViewMemory";
 import { useStartCard } from "@/features/board/useStartCard";
 import { FLASH_MS } from "@/lib/situations";
+import { cn } from "@/lib/utils";
 import type { Board, BoardCard } from "@/lib/wails";
 import { refreshBoard } from "@/store/actions";
 import { useAppStore, useBoard, useRepository } from "@/store/app-store";
@@ -78,6 +80,7 @@ function BoardScreen({ board }: { board: Board }) {
   const clearBoardCardRequest = useAppStore((state) => state.clearBoardCardRequest);
   const searchRef = useRef<HTMLInputElement>(null);
   const treeRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
   const treeHandle = useRef<CardTreeHandle>(null);
   // The list is windowed: the window reads the element that scrolls and the bar that sticks over it.
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -191,7 +194,7 @@ function BoardScreen({ board }: { board: Board }) {
   // closePanel closes the card; the focus goes back to its row only when it was in the panel, and a
   // focus on the list stays where it is.
   const closePanel = () => {
-    const inPanel = document.activeElement?.closest(".list-panel") != null;
+    const inPanel = panelRef.current?.contains(document.activeElement) === true;
     setOpenKey(null);
     setOpenCard(null);
     if (inPanel) {
@@ -440,7 +443,10 @@ function BoardScreen({ board }: { board: Board }) {
       selecting ? (
         <div
           ref={barRef}
-          className="sticky top-0 z-(--z-sticky) bg-surface-1 pt-(--space-4) pb-(--space-3)"
+          className={cn(
+            "sticky top-0 z-(--z-sticky) bg-surface-1 pt-(--space-4) pb-(--space-3)",
+            STICKY_FADE,
+          )}
         >
           <SelectionBar
             count={checked.length}
@@ -496,6 +502,7 @@ function BoardScreen({ board }: { board: Board }) {
               onClose={closePanel}
               onOpenCard={(key) => revealCard(key, false)}
               onDiscuss={() => discuss([openCard.key])}
+              panelRef={panelRef}
             />
           )
         }

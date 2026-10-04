@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, type Ref, useEffect, useRef } from "react";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
@@ -29,6 +29,8 @@ export interface ListPanelProps {
   scrollKey: string;
   /** openShortcut is the key of Open on GitHub, in its tooltip: "O". */
   openShortcut?: string;
+  /** panelRef is the panel, which its list reads to tell whether the focus is inside it. */
+  panelRef?: Ref<HTMLElement>;
   children: ReactNode;
 }
 
@@ -45,6 +47,7 @@ export function ListPanel({
   onClose,
   scrollKey,
   openShortcut,
+  panelRef,
   children,
 }: ListPanelProps) {
   const viewport = useRef<HTMLDivElement>(null);
@@ -54,7 +57,7 @@ export function ListPanel({
   }, [scrollKey]);
 
   return (
-    <aside aria-label={label} className="list-panel flex flex-col">
+    <aside ref={panelRef} aria-label={label} className="list-panel flex flex-col">
       {/* The line under the head is drawn inside it, as in AuxPanel, to keep it on whole pixels. */}
       <div className="flex h-(--size-head) shrink-0 items-center gap-(--space-2) pr-(--space-2) pl-(--space-4) shadow-[inset_0_calc(var(--border)*-1)_0_var(--line-1)]">
         <span className="min-w-0 flex-1 truncate text-(length:--text-meta) leading-(--leading-meta) text-ink-3">

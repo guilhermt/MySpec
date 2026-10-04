@@ -71,7 +71,7 @@ describe.each(THEMES)("Home, the scenes in the %s theme", (theme) => {
       ).toEqual([]);
 
       // The shortcuts stay inside the column.
-      const shortcuts = within(area).getByText("Shortcuts:").parentElement as HTMLElement;
+      const shortcuts = within(area).getByRole("group", { name: "Shortcuts", hidden: true });
       expect(shortcuts.getBoundingClientRect().right).toBeLessThanOrEqual(
         column.getBoundingClientRect().right,
       );
@@ -116,6 +116,20 @@ describe.each(THEMES)("Home, the scenes in the %s theme", (theme) => {
 
     const button = within(area).getByRole("button", { name: /^Continue: / });
     expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth);
+  });
+
+  it("writes the age of the reading of a board in the meta size, the failed one too", async () => {
+    setTheme(theme);
+    const area = await draw("home", WIDE_MAIN);
+
+    const boards = within(area).getByRole("region", { name: "Boards" });
+    const ages = within(boards).getAllByText(/^Read(?: failed)? .* ago$/);
+    expect(ages.some((age) => age.textContent?.startsWith("Read failed"))).toBe(true);
+    for (const age of ages) {
+      expect(getComputedStyle(age).fontSize, age.textContent ?? "").toBe(
+        resolve("var(--text-meta)", "font-size"),
+      );
+    }
   });
 
   it("starts the focus on Continue in the home scene", async () => {

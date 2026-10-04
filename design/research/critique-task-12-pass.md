@@ -359,56 +359,56 @@ Fontes: as capturas `home-*`, `board-*` e `create-*` (978 e 2180; `board-card` t
 - A 1100×600, depois de `End` e de dezenove `↑`, a linha em foco (#52) passou para baixo da barra, e o mesmo acontece com `Home`. `features/board/useListTree.ts:126–131` chama `scrollIntoView({ block: "nearest" })` sem `scroll-margin` para a barra (`components/system/FilterBar.tsx:35`, `sticky`).
 - Regra: `principles.md` 9; `screens/board.md` §7 (as setas percorrem as linhas visíveis). É o item 1 de `critique-task-11.md` ("vale também para o board"), que a task 11 resolveu só no History (`BELOW_THE_BAR`).
 
-**B2 · Deve. O que bloqueia na Home sai agrupado por tipo, não por repositório.**
+**B2 · Deve. O que bloqueia na Home sai agrupado por tipo, não por repositório.** · **Fechado no step 10**
 
 - No app, `guilhermt/zeta isn't cloned` vem antes de `The clone at …/aaa-tools is missing`. `features/home/home.ts:170–197` ordena os sem clone e depois os inexistentes (`return [...notCloned, ...missing]`, `:197`).
 - Regra: `screens/board.md` §2.2 ("uma linha por repositório do board, em ordem alfabética … e não agrupadas por caso"); `12:98` (§4.1); pauta `critique-task-05.md:204` (15).
 
-**B3 · Deve. O caminho do clone inexistente não abrevia o home.**
+**B3 · Deve. O caminho do clone inexistente não abrevia o home.** · **Fechado no step 10**
 
 - `lib/repositories.ts:31` (`cloneMissingText`), `features/board/card-panel.ts:149`, `features/board/board-view.ts:597` e `features/task-create/create-task.ts:100` escrevem `repository.path` cru; Settings usa `displayPath` (`features/repositories/repositories-page.ts:75`).
 - A captura `home-978` mostra `The clone at /home/dev/code/infra is missing.`, e o mesmo clone aparece em Settings como `~/code/infra`. No app, o caminho longo quebra em três linhas na Home (`components/system/StartRow.tsx:151–153`, sem corte).
 - Regra: `screens/board.md` §2.2 e §3.6 (`~/code/infra`, `~/code/api`); um caminho, uma forma. Lacuna L17.
 
-**B4 · Deve. O `listbox` de Repository do diálogo de criação sai da largura do campo e da janela.**
+**B4 · Deve. O `listbox` de Repository do diálogo de criação sai da largura do campo e da janela.** · **Fechado no step 10**
 
 - A 1100, um item desabilitado com um caminho longo esticou o menu de x 5 a x 1095. `components/system/Menu.tsx:40` usa `w-max max-w-(--available-width)`, e a razão do item não corta.
 - Os itens com ação (`Not cloned` com **Clone**) perdem a coluna do visto e ficam 24 px à esquerda dos outros, porque `components/system/Select.tsx:196–203` desenha um `MenuActionItem` sem o indicador do `MenuRadioItem`.
 - Regra: `components.md` Select, menu e listbox (Anatomia: itens alinhados; Item desabilitado com ação). Lacuna L15.
 
-**B5 · Deve. O nome acessível da linha do card não diz `Cloning acme/billing…` nem `Clone failed`.**
+**B5 · Deve. O nome acessível da linha do card não diz `Cloning acme/billing…` nem `Clone failed`.** · **Fechado no step 10**
 
 - `features/board/board-view.ts:530–549` monta o rótulo só com a task e a discussão (`task?.kind === "task"`), e `cloning` e `clone-failed` ficam de fora.
 - Regra: `components.md` Linha de lista (Acessibilidade: "o nome acessível é a frase inteira"); pauta `critique-task-05.md:231` (21).
 
-**B6 · Deve. A razão do chip de filtro órfão está só no tooltip.**
+**B6 · Deve. A razão do chip de filtro órfão está só no tooltip.** · **Fechado no step 10**
 
 - `components/system/FilterBar.tsx:58–65`: o chip tem `◇` e o `removeLabel`, e a razão fica fora do nome.
 - Regra: `components.md` Tooltip ("nunca é o único portador de uma informação: o nome acessível já a tem"); pauta `critique-task-05.md:233` (21).
 
-**B7 · Deve. A barra da seleção não tem o esmaecido da barra de filtros.**
+**B7 · Deve. A barra da seleção não tem o esmaecido da barra de filtros.** · **Fechado no step 10**
 
 - `features/board/BoardView.tsx:449` envolve a `SelectionBar` num `sticky` sem o `::after` que `FilterBar.tsx:35` tem.
 - Regra: `screens/board.md` §3.1 ("com um esmaecido de `--space-3` por baixo"); a consistência entre as duas barras do mesmo lugar; pauta `critique-task-05.md:219` (18).
 
-**B8 · Pode esperar. A linha 2 de Continue não corta.**
+**B8 · Pode esperar. A linha 2 de Continue não corta.** · **Fechado no step 10**
 
 - Em `components/system/Continue.tsx:61`, `row.line2.long` é `shrink-0 whitespace-nowrap`, e só o breadcrumb corta. Com uma situação longa e uma janela de 1100, a linha transborda do botão em vez de cortar com tooltip. No app, a linha coube nas cinco larguras.
 - Regra: `principles.md` 10 ("Um texto que corta tem tooltip"); pauta `critique-task-05.md:200` (13).
 
-**B9 · Pode esperar. `Shortcuts:` continua em `sr-only` dentro de um `<p>`.**
+**B9 · Pode esperar. `Shortcuts:` continua em `sr-only` dentro de um `<p>`.** · **Fechado no step 10**
 
 - `features/home/Home.tsx:194–195`, sem `role="group"`.
 - Regra: pauta `critique-task-05.md:213` (17).
 
-**B10 · Pode esperar. Miúdos do painel e da visão.** Pautas `critique-task-05.md:215–221` (18) e `:393`.
+**B10 · Pode esperar. Miúdos do painel e da visão.** Pautas `critique-task-05.md:215–221` (18) e `:393`. · **Fechado no step 10**
 
 - O link `Archived task: <nome>` cobre a frase inteira (`features/board/BoardCardPanel.tsx:160`).
 - `The clone is running.` (`features/board/card-panel.ts:128`) não está em `screens/board.md` §3.6.
 - `_app` sem uso (`features/board/board-view.ts:144`).
 - `closePanel` acha o painel pela classe (`features/board/BoardView.tsx:199`, `.closest(".list-panel")`).
 
-**B11 · Pode esperar. Provas e fixtures que faltam.** Pautas `critique-task-05.md:155` (1), `:160` (2), `:223–226` (19), `critique-task-06.md:344` e o FE16 de `critique-task-10.md`.
+**B11 · Pode esperar. Provas e fixtures que faltam.** Pautas `critique-task-05.md:155` (1), `:160` (2), `:223–226` (19), `critique-task-06.md:344` e o FE16 de `critique-task-10.md`. · **Fechado no step 10**
 
 - Nenhuma fixture tem um nome de 64 caracteres nem `◇ #N +1`: `test/board-scenes.ts:249` e `:263` têm uma dependência cada, e `features/task-create/NewTaskDialog.scenes.painted.test.tsx:54–59` mede a largura sem um nome que a preencha.
 - `slice(0, 8)` ainda corta a prova do texto cortado (`features/board/BoardView.scenes.painted.test.tsx:128`).
@@ -418,7 +418,7 @@ Fontes: as capturas `home-*`, `board-*` e `create-*` (978 e 2180; `board-card` t
 - O aviso de dependência sem contorno no diálogo (`NewTaskDialog.tsx:339`) segue §9, porque o diálogo não é afundado; falta só a prova.
 - A prova do tamanho `meta` da idade na linha de board da Home (`StartRow.tsx:225–233`; FE16 de `critique-task-10.md`).
 
-**B12 · Pode esperar. Passos numéricos onde existe `--space-*`.**
+**B12 · Pode esperar. Passos numéricos onde existe `--space-*`.** · **Fechado no step 10**
 
 - `features/task-create/NewTaskDialog.tsx:281` (`gap-1`), `:375` e `:378` (`gap-2`) e `:391` (`gap-4 px-3`); no system, `components/system/NoticeStrip.tsx:32` (`gap-2 py-1.5 pr-1.5 pl-4`).
 - Regra: `docs/architecture/design-system.md` (Utilitários); o item 13 de `critique-task-10.md`, o mesmo critério.
@@ -600,8 +600,8 @@ O que `design/` não decidia ou contradizia, com a decisão que o coordenador to
 - **L10 · Os ícones nos itens do `⋯`** (S18). `components.md` Menu do item não decide. **Decisão:** os itens do `⋯` só com texto; ícone apenas no `<>` (o editor) e na seta externa, igual nos três menus (task, review, discussão). **Registrar em:** `components.md` Menu do item. **Implementa:** S18.
 - **L11 · Onde a chegada põe o atual quando o pedido é um botão dele** (D1). `screens/discussion.md` §5.5 e a crítica 9 fixam o atual pelo topo; nada diz o que acontece quando a barra leva a um controle no pé de um rascunho alto (**Retry**, **Approve** do épico descartado), nem se a pílula `↓` pode cobrir o atual. **Decisão:** a chegada numa discussão (**Show** e `Ctrl+J`) rola até o controle que a barra pede ficar inteiro à vista, e a pílula `↓` não se desenha sobre o rascunho atual. **Registrar em:** `screens/discussion.md` (§5.5, §8). **Implementa:** D1.
 - **L12 · O repositório no card do diálogo de nova discussão** (D4). `tasks/09-discussion.md:106` diz "curto" e dá `acme/billing`. **Decisão:** `dono/nome` só quando dois repositórios do board têm o mesmo nome curto, como a Home e o History fazem; senão, o curto. **Registrar em:** `screens/discussion.md` §2, corrigindo `09:106`. **Implementa:** D4.
-- **L13 · O repositório padrão do diálogo livre de criação** (leitura do board). `screens/board.md` §4.2 diz "o primeiro utilizável entre o repositório do filtro da lateral, o da task aberta, o último usado e o primeiro da lista". `lib/repositories.ts:84` lê "o primeiro da lista" ao pé da letra: com `guilhermt/aaa-tools` (clone inexistente) primeiro na ordem alfabética, o campo abriu vazio, `Choose a repository`, com `guilhermt/MySpec` utilizável logo abaixo. **Decisão:** o padrão é o primeiro utilizável da lista. **Registrar em:** `screens/board.md` §4 (4.2). **Implementa:** código em `lib/repositories.ts`, sem item próprio.
-- **L14 · A barra de filtros numa lista de 452 px** (leitura do board). A 1100 com o painel, a barra quebra em duas linhas fixas, e a regra só encolhe a busca abaixo de 620 px (`screens/board.md` §3.3). A leitura recomendava encolher a busca até caber, ou as duas linhas decididas. **Decisão:** a barra fica numa linha: os chips dobram em `Filter · N`, e a busca mantém a largura mínima. **Registrar em:** `screens/board.md` §3.3. **Implementa:** código na barra de filtros, sem item próprio.
+- **L13 · O repositório padrão do diálogo livre de criação** · **Fechado no step 10** (leitura do board). `screens/board.md` §4.2 diz "o primeiro utilizável entre o repositório do filtro da lateral, o da task aberta, o último usado e o primeiro da lista". `lib/repositories.ts:84` lê "o primeiro da lista" ao pé da letra: com `guilhermt/aaa-tools` (clone inexistente) primeiro na ordem alfabética, o campo abriu vazio, `Choose a repository`, com `guilhermt/MySpec` utilizável logo abaixo. **Decisão:** o padrão é o primeiro utilizável da lista. **Registrar em:** `screens/board.md` §4 (4.2). **Implementa:** código em `lib/repositories.ts`, sem item próprio.
+- **L14 · A barra de filtros numa lista de 452 px** · **Fechado no step 10** (leitura do board). A 1100 com o painel, a barra quebra em duas linhas fixas, e a regra só encolhe a busca abaixo de 620 px (`screens/board.md` §3.3). A leitura recomendava encolher a busca até caber, ou as duas linhas decididas. **Decisão:** a barra fica numa linha: os chips dobram em `Filter · N`, e a busca mantém a largura mínima. **Registrar em:** `screens/board.md` §3.3. **Implementa:** código na barra de filtros, sem item próprio.
 - **L15 · A largura do menu de um `Select` e a razão longa de um item** (B4). `components.md` não fixa a largura máxima do menu nem o corte do subtítulo. **Decisão:** o menu de um `Select` tem largura máxima `--size-menu-max` (um token novo, 320 px, `calc(var(--space-16) * 5)`), ou a do gatilho se for maior, e o subtítulo de um item corta com tooltip. **Registrar em:** `components.md` Select, menu e listbox (o Seletor); `tokens.css`. O token é mudança do produto: entra em `design/system/tokens.css` pela pull request da task, no step que o usa (`implementation.md:20`), e `components.md` registra o valor antes. A coluna do visto nos itens com ação, que a leitura também recomendava, já é regra (Anatomia: itens alinhados) e é parte de B4. **Implementa:** B4.
 - **L16 · A régua se contradiz sobre o `role` da faixa** (S10; leitura do board). `screens/board.md` §8 diz "A faixa da falha é `role="alert"`", contra `components.md:448` e `12:350` (§4.3 #16). **Decisão:** a faixa da falha é `role="alert"` só na chegada; `screens/board.md` §8 passa a dizer o que §4.3 #16 e `components.md:448` dizem. **Registrar em:** `screens/board.md` §8. **Implementa:** S10.
 - **L17 · O texto longo de uma linha de bloqueio da Home** (B3; leitura do board). Um caminho longo quebra em três linhas, e `screens/board.md` §2.2 não diz se a linha quebra ou corta. **Decisão:** um caminho longo numa linha de bloqueio da Home corta com tooltip, nunca quebra. **Registrar em:** `screens/board.md` §2 (2.2). **Implementa:** B3.
@@ -683,21 +683,21 @@ Cada item da pauta de polimento (`lab/08-visual-final/critique.md` §7; `12:272�
 
 | Origem | Estado | Evidência | Item |
 |---|---|---|---|
-| `critique-task-05.md:155` (1), `--col-dep` e `--size-dialog-wide` sem conteúdo real | Vale | `test/board-scenes.ts:249`, `:263` | B11 |
-| `critique-task-05.md:160` (2), `S` e `D` fora da leitura sem teste na visão | Vale | `BoardView.tsx:368–380` | B11 |
-| `critique-task-05.md:200` (13), a linha 2 de **Continue** | Vale em parte | O breadcrumb corta com tooltip; a situação não corta | B8 |
-| `critique-task-05.md:202` (14), a falha na linha de board da Home sem tooltip | Feito; falta a prova | `StartRow.tsx:225–233` usa `ReadingAge` com `failure`. A prova do tamanho `meta` falta (FE16 de `critique-task-10.md`) | B11 |
-| `critique-task-05.md:204` (15), a Home ordena por tipo | Vale | Visto no app | B2 |
-| `critique-task-05.md:213` (17), `Shortcuts:` em `sr-only` | Vale | `Home.tsx:194–195` | B9 |
-| `critique-task-05.md:215–221` (18), a barra da seleção sem o esmaecido | Vale | `BoardView.tsx:449` | B7 |
-| `critique-task-05.md:215–221` (18), `The clone is running.`, o link `Archived task:`, `_app` | Vale | `card-panel.ts:128`, `BoardCardPanel.tsx:160`, `board-view.ts:144` | B10 |
+| `critique-task-05.md:155` (1), `--col-dep` e `--size-dialog-wide` sem conteúdo real | Vale | `test/board-scenes.ts:249`, `:263` | B11 · **Fechado no step 10** |
+| `critique-task-05.md:160` (2), `S` e `D` fora da leitura sem teste na visão | Vale | `BoardView.tsx:368–380` | B11 · **Fechado no step 10** |
+| `critique-task-05.md:200` (13), a linha 2 de **Continue** | Vale em parte | O breadcrumb corta com tooltip; a situação não corta | B8 · **Fechado no step 10** |
+| `critique-task-05.md:202` (14), a falha na linha de board da Home sem tooltip | Feito; falta a prova | `StartRow.tsx:225–233` usa `ReadingAge` com `failure`. A prova do tamanho `meta` falta (FE16 de `critique-task-10.md`) | B11 · **Fechado no step 10** |
+| `critique-task-05.md:204` (15), a Home ordena por tipo | Vale | Visto no app | B2 · **Fechado no step 10** |
+| `critique-task-05.md:213` (17), `Shortcuts:` em `sr-only` | Vale | `Home.tsx:194–195` | B9 · **Fechado no step 10** |
+| `critique-task-05.md:215–221` (18), a barra da seleção sem o esmaecido | Vale | `BoardView.tsx:449` | B7 · **Fechado no step 10** |
+| `critique-task-05.md:215–221` (18), `The clone is running.`, o link `Archived task:`, `_app` | Vale | `card-panel.ts:128`, `BoardCardPanel.tsx:160`, `board-view.ts:144` | B10 · **Fechado no step 10** |
 | `critique-task-05.md:215–221` (18), `no card to select` | Não vale mais | É o texto de `screens/board.md` §3.7 (`BoardView.tsx:410`) | — |
-| `critique-task-05.md:223–226` (19), as provas curtas | Vale | `slice(0, 8)`; o aviso de dependência segue §9 e falta a prova; `state.go:78–79` sem teste Go | B11 |
-| `critique-task-05.md:230–233` (21), o nome da linha sem `Clone failed` e `Cloning…` | Vale | `board-view.ts:530–549` | B5 |
-| `critique-task-05.md:230–233` (21), a razão do chip órfão só no tooltip | Vale | `FilterBar.tsx:58–65` | B6 |
-| `critique-task-05.md:393`, `closePanel` pela classe | Vale | `BoardView.tsx:199` | B10 |
-| `critique-task-06.md:344`, o fio entre as linhas de **Models** sem prova | Vale | `NewTaskDialog.tsx:389` | B11 |
-| `critique-task-10.md`, item 10, a idade da Home | Feito; a prova FE16 vale | Como `:202` acima | B11 |
+| `critique-task-05.md:223–226` (19), as provas curtas | Vale | `slice(0, 8)`; o aviso de dependência segue §9 e falta a prova; `state.go:78–79` sem teste Go | B11 · **Fechado no step 10** |
+| `critique-task-05.md:230–233` (21), o nome da linha sem `Clone failed` e `Cloning…` | Vale | `board-view.ts:530–549` | B5 · **Fechado no step 10** |
+| `critique-task-05.md:230–233` (21), a razão do chip órfão só no tooltip | Vale | `FilterBar.tsx:58–65` | B6 · **Fechado no step 10** |
+| `critique-task-05.md:393`, `closePanel` pela classe | Vale | `BoardView.tsx:199` | B10 · **Fechado no step 10** |
+| `critique-task-06.md:344`, o fio entre as linhas de **Models** sem prova | Vale | `NewTaskDialog.tsx:389` | B11 · **Fechado no step 10** |
+| `critique-task-10.md`, item 10, a idade da Home | Feito; a prova FE16 vale | Como `:202` acima | B11 · **Fechado no step 10** |
 | `critique-task-10.md`, miúdos, o `Textarea` com `rows` nos campos da task 5 | Feito | **Context** abre com quatro linhas no app (`NewTaskDialog.tsx:321`) | — |
 | `critique-task-11.md`, item 1, "vale também para o board" | Vale | Visto no app | B1 · **Fechado no step 3** |
 | `critique-task-11.md`, segunda leitura, o `↓` da busca do board | Feito | `components/system/SearchInput.tsx:76–77` previne a ação padrão | — |
