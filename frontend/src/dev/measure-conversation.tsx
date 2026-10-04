@@ -6,9 +6,13 @@
  * the work it takes, the commit and the layout, which must fit in a frame, and the time to the next
  * frame, which also waits for the display.
  *
+ * With ?measure=conversation&stretches=open the same 1,500 entries come in stretches too short to
+ * fold, so every row is mounted, and it also measures ↓ in the feed, from the keydown to the next
+ * frame, and Home, to the frame with the first entry focused.
+ *
  * A tool of the development build: main.tsx mounts it in place of the app only with
- * ?measure=conversation under the Vite dev server (task dev), and the production bundle never has
- * it. The numbers go to the console and to the page.
+ * ?measure=conversation under the Vite dev server (task dev) or in the measure build, and the
+ * production bundle never has it. The numbers go to the console and to the page.
  */
 
 import { flushSync } from "react-dom";
@@ -25,12 +29,18 @@ const ENTRIES = 1500;
 /** STRETCHES is how many stretches it has; all but the last fold. */
 const STRETCHES = 4;
 
+/** OPEN_STRETCHES is how many it has in the open scenario: fewer than 12 rows each, so none folds. */
+const OPEN_STRETCHES = 36;
+
 /** ACTIONS_PER_GROUP is how many actions the agent runs between two things it says. */
 const ACTIONS_PER_GROUP = 8;
 
 /** WARM_RUNS and UPDATES are how many times the paint and the update are measured again, warm. */
 const WARM_RUNS = 5;
 const UPDATES = 30;
+
+/** KEY_RUNS is how many times each key is pressed: once cold and the rest warm. */
+const KEY_RUNS = 6;
 
 const TASK_ID = "measure";
 const STAGE = "step:6";
@@ -86,7 +96,7 @@ const SPEECH = [
 // conversation is the measured conversation: each stretch opened by a report to the implementer
 // but the first, then speeches, each followed by a group of actions, to the last entry, a speech
 // still being written.
-function conversation(): Entry[] {
+function conversation(stretches: number): Entry[] {
   const start = Date.now() - ENTRIES * 5000;
   const entries: Entry[] = [];
   const add = (fields: Partial<Entry> & Pick<Entry, "kind">, turn: number) => {
@@ -100,7 +110,7 @@ function conversation(): Entry[] {
       ...fields,
     });
   };
-  const perStretch = ENTRIES / STRETCHES;
+  const perStretch = ENTRIES / stretches;
   let opened = 1;
   for (let turn = 0; entries.length < ENTRIES - 1; turn++) {
     if (entries.length >= opened * perStretch) {
@@ -113,7 +123,7 @@ function conversation(): Entry[] {
             appKind: "report",
             appPass: opened,
             appRound: opened,
-            appRounds: STRETCHES,
+            appRounds: stretches,
             appCount: 2,
             text: "#### Review · changes\n\n1. Evict idle buckets.\n2. Test the refill.",
           },
@@ -223,12 +233,30 @@ async function update(entryId: string, text: string): Promise<{ work: number; fr
   return { work, frame: (await nextFrame()) - started };
 }
 
+// feedItems are the stops of the feed, in the order of the page.
+function feedItems(): HTMLElement[] {
+  return [...document.querySelectorAll<HTMLElement>("[role=feed] [data-feed-item]")];
+}
+
+// press presses a key on the item in focus and returns the milliseconds to the frame after it, or,
+// given the item to wait for, to the frame in which that item holds the focus.
+async function press(key: string, item: HTMLElement, until?: HTMLElement): Promise<number> {
+  const started = performance.now();
+  item.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  let frame = await nextFrame();
+  while (until !== undefined && document.activeElement !== until && frame - started < 2000) {
+    frame = await nextFrame();
+  }
+  return frame - started;
+}
+
 // ms rounds milliseconds to a tenth.
 const ms = (value: number) => Number(value.toFixed(1));
 
 /** measureConversation mounts the measured conversation in the element and times it. */
 export async function measureConversation(container: HTMLElement): Promise<void> {
-  const entries = conversation();
+  const open = new URLSearchParams(window.location.search).get("stretches") === "open";
+  const entries = conversation(open ? OPEN_STRETCHES : STRETCHES);
   const last = entries.at(-1);
   const load = () =>
     useAppStore.setState({
@@ -265,7 +293,36 @@ export async function measureConversation(container: HTMLElement): Promise<void>
     frames.push(one.frame);
   }
 
+  const keys: Record<string, number> = {};
+  if (open) {
+    const items = feedItems();
+    const downs: number[] = [];
+    const homes: number[] = [];
+    for (let run = 0; run < KEY_RUNS; run++) {
+      const from = items[items.length - 2 - run];
+      from?.focus();
+      if (from !== undefined) {
+        downs.push(await press("ArrowDown", from, items[items.length - 1 - run]));
+      }
+    }
+    for (let run = 0; run < KEY_RUNS; run++) {
+      const from = feedItems().at(-1);
+      from?.focus();
+      if (from !== undefined) {
+        homes.push(await press("Home", from, feedItems()[0]));
+      }
+    }
+    keys.keyDownFirstMs = ms(downs[0] ?? 0);
+    keys.keyDownWarmMedianMs = ms(median(downs.slice(1)));
+    keys.keyDownWarmMaxMs = ms(Math.max(...downs.slice(1)));
+    keys.keyHomeFirstMs = ms(homes[0] ?? 0);
+    keys.keyHomeWarmMedianMs = ms(median(homes.slice(1)));
+    keys.keyHomeWarmMaxMs = ms(Math.max(...homes.slice(1)));
+  }
+
   const result = {
+    scenario: open ? "open stretches" : "folded stretches",
+    ...keys,
     entries: entries.length,
     mountedArticles: container.querySelectorAll("article").length,
     firstPaintMs: Math.round(first),
@@ -278,6 +335,8 @@ export async function measureConversation(container: HTMLElement): Promise<void>
   console.info("measure-conversation", result);
   const out = document.createElement("pre");
   out.id = "measure-conversation";
+  // Fixed, so that the focus the keys move down the feed does not scroll it out of the page.
+  out.style.cssText = "position:fixed;top:0;left:0;z-index:9999;margin:0;background:#fff";
   out.textContent = JSON.stringify(result, null, 2);
   document.body.prepend(out);
 }

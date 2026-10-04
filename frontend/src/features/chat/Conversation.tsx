@@ -1,8 +1,9 @@
-import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
 import { ConversationColumn } from "@/features/chat/ConversationColumn";
 import {
   buildConversation,
+  type ConversationModel,
   foldableStretches,
   lastMarkerOf,
   type Row,
@@ -84,6 +85,23 @@ function messageOf(text: string): UserEntry {
   };
 }
 
+// signature is a value as text, Maps and Sets by their entries.
+function signature(value: unknown): string {
+  return JSON.stringify(value, (_key, item: unknown) =>
+    item instanceof Map || item instanceof Set ? [...item] : item,
+  );
+}
+
+// useSteady is the last value that has the signature of the one given.
+function useSteady<T>(value: T, sign: (value: T) => string): T {
+  const steady = useRef({ value, sign: sign(value) });
+  const next = sign(value);
+  if (steady.current.sign !== next) {
+    steady.current = { value, sign: next };
+  }
+  return steady.current.value;
+}
+
 interface RowViewProps {
   taskId: string;
   stage: string;
@@ -103,7 +121,7 @@ interface RowViewProps {
   flash: "question" | "permission" | null;
 }
 
-function RowView({
+const RowView = memo(function RowView({
   taskId,
   stage,
   row,
@@ -218,7 +236,7 @@ function RowView({
         <ErrorBlock error={row.entry.error} createdAt={row.entry.createdAt} />
       );
   }
-}
+});
 
 // lastCompleteSpeech is the key of the last speech that is complete, "" without one.
 function lastCompleteSpeech(rows: readonly Row[]): string {
@@ -295,7 +313,9 @@ export function Conversation({
   const entries = transcript?.entries ?? NO_ENTRIES;
   const pending = transcript?.pending ?? NO_ENTRIES;
   const voice = voiceOf(stage);
-  const model = useMemo(() => buildConversation(entries, voice), [entries, voice]);
+  const built = useRef<ConversationModel | null>(null);
+  const model = useMemo(() => buildConversation(entries, voice, built.current), [entries, voice]);
+  built.current = model;
   const rows = useMemo(() => model.stretches.flatMap((stretch) => stretch.rows), [model]);
   const rowKeys = useMemo(() => rows.map((row) => row.key), [rows]);
   // The text of the last entry is what grows while the agent writes.
@@ -314,12 +334,17 @@ export function Conversation({
     (transcript.status === "loading" && entries.length === 0 && pending.length === 0);
   const railKey = replyWaiting ? lastCompleteSpeech(rows) : "";
   const waiting = useMemo(() => waitingToolUseId(entries), [entries]);
-  const latestReport = useMemo(() => reportMarkerIds(entries), [entries]);
-  const latestDecided = useMemo(() => decidedMarkerIds(entries), [entries]);
+  // What the lines of the conversation read of it keeps its identity while it holds the same,
+  // so the text that grows does not redraw them all.
+  const latestReport = useSteady(reportMarkerIds(entries), signature);
+  const latestDecided = useSteady(decidedMarkerIds(entries), signature);
+  const folds = useSteady(
+    discussion === null ? null : roundFolds(entries, discussion.drafts),
+    signature,
+  );
   const discussionCtx = useMemo(
-    () =>
-      discussion === null ? null : { ...discussion, folds: roundFolds(entries, discussion.drafts) },
-    [entries, discussion],
+    () => (discussion === null || folds === null ? null : { ...discussion, folds }),
+    [discussion, folds],
   );
   const ctx = useMemo<MarkerContext>(
     () => ({

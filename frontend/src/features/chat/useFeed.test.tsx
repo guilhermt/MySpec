@@ -265,4 +265,25 @@ describe("useFeed", () => {
 
     expect(entry("Speech")).toHaveFocus();
   });
+
+  it("syncs when a control arrives, not when the text of an entry grows", async () => {
+    renderWithStore(<Feed />);
+    const feed = screen.getByRole("feed");
+    const scan = vi.spyOn(feed, "querySelectorAll");
+    const speech = entry("Speech");
+
+    await act(async () => {
+      speech.append(document.createTextNode(" and more words"));
+      speech.append(document.createElement("span"));
+    });
+    expect(scan).not.toHaveBeenCalled();
+
+    await act(async () => {
+      const link = document.createElement("a");
+      link.href = "#y";
+      speech.append(link);
+    });
+    expect(scan).toHaveBeenCalled();
+    expect(speech.querySelector('a[href="#y"]')).toHaveAttribute("tabindex", "-1");
+  });
 });

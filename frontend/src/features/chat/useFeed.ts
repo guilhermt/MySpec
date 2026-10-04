@@ -15,6 +15,8 @@ const ENTRY = "[data-feed-entry]";
 const CONTROL =
   'a[href], button, input, select, textarea, summary, iframe, [tabindex], [contenteditable="true"], [contenteditable=""]';
 
+const STOPS = `${ITEM}, ${ENTRY}, ${CONTROL}`;
+
 /** WALK_KEYS are the keys that walk the entries of the feed beyond the arrows. */
 const WALK_KEYS: readonly string[] = ["Home", "End", "PageUp", "PageDown"];
 
@@ -210,6 +212,21 @@ export function leaveDecisionCard(by: -1 | 1): void {
   }
 }
 
+// holdsStop reports whether a node is, or holds, an item, an entry or a control.
+function holdsStop(node: Node): boolean {
+  return node instanceof Element && (node.matches(STOPS) || node.querySelector(STOPS) !== null);
+}
+
+// changesStops reports whether the records touch what the feed keeps in Tab: an attribute, or a
+// node that is or holds an item, an entry or a control. Text that grows touches none.
+function changesStops(records: readonly MutationRecord[]): boolean {
+  return records.some(
+    (record) =>
+      record.type === "attributes" ||
+      [...record.addedNodes, ...record.removedNodes].some(holdsStop),
+  );
+}
+
 /**
  * useFeed makes the feed one stop of Tab over its entries, the elements with data-feed-item in the
  * order of the page: arriving, the pending card or the last entry; Tab goes through the controls
@@ -278,7 +295,9 @@ export function useFeed(feedRef: RefObject<HTMLElement | null>): void {
     // entry that is not the current one leave Tab as they come.
     const observer = new MutationObserver((records) => {
       heldChanges(records);
-      sync();
+      if (changesStops(records)) {
+        sync();
+      }
     });
     observer.observe(feed, {
       childList: true,

@@ -127,6 +127,26 @@ No Chromium 153 do Playwright, para comparar:
 | Uma tecla na busca, desenvolvimento | 18 ms | 17 ms | 17 ms |
 | `↓` na lista, desenvolvimento | 16 ms | 17 ms | 17 ms |
 
+**A conversa, sem a janela.** A conversa monta hoje todas as linhas dos trechos abertos. `frontend/src/dev/measure-conversation.tsx` a mede com 1.500 entradas em dois cenários: `?measure=conversation`, em quatro trechos, três dobrados (89 artigos montados), e `?measure=conversation&stretches=open`, em 36 trechos curtos demais para dobrar (362 artigos montados). Cada um mede a primeira pintura, uma atualização do texto em streaming (o trabalho, até o commit com o layout, e o tempo até o quadro seguinte) e, no aberto, `↓` e `Home` no `feed`, uma vez frios e cinco vezes quentes. O modelo da conversa se refaz a partir do trecho da primeira entrada que mudou e `RowView` é um `memo`, de modo que uma atualização de texto renderiza uma linha só.
+
+No WebKitGTK 2.52.6, pelo Broadway:
+
+| Cenário | Build | Primeira pintura | Pintura quente, mediana | Atualização, trabalho (mediana · máximo) | `↓` (fria · quente, mediana) | `Home` (fria · quente, mediana · máximo) |
+|---|---|---|---|---|---|---|
+| Dobrado | produção | 197 ms | 103 ms | 3 ms · 6 ms | | |
+| Dobrado | desenvolvimento | 255 ms | 130 ms | 5 ms · 20 ms | | |
+| Aberto | produção | 458 ms | 390 ms | 3 ms · 53 ms | 18 ms · 15 ms | 62 ms · 15 ms · 66 ms |
+| Aberto | desenvolvimento | 554 ms | 449 ms | 6 ms · 56 ms | 20 ms · 18 ms | 66 ms · 18 ms · 72 ms |
+
+No Chromium 153 do Playwright:
+
+| Cenário | Build | Primeira pintura | Pintura quente, mediana | Atualização, trabalho (mediana · máximo) | `↓` (fria · quente, mediana) | `Home` (fria · quente, mediana · máximo) |
+|---|---|---|---|---|---|---|
+| Dobrado | produção | 109 ms | 44 ms | 2,6 ms · 3,8 ms | | |
+| Dobrado | desenvolvimento | 173 ms | 56 ms | 4,1 ms · 13,8 ms | | |
+| Aberto | produção | 241 ms | 146 ms | 2,6 ms · 6,2 ms | 12,8 ms · 14,9 ms | 15,6 ms · 14,7 ms · 15,5 ms |
+| Aberto | desenvolvimento | 431 ms | 190 ms | 4,7 ms · 17,7 ms | 14,3 ms · 15 ms | 15,5 ms · 14,7 ms · 15,6 ms |
+
 O app e o `MiniBrowser` rodam sem janela pelo backend Broadway do GTK, que desenha sem GPU: `gtk4-broadwayd :N`, com `N` numa porta acima de 8090 (nunca a 8090), e o programa com `GDK_BACKEND=broadway`, `BROADWAY_DISPLAY=:N` e `env -i` com `HOME` e `XDG_*` temporários (`XDG_RUNTIME_DIR` é o do usuário, onde o `broadwayd` põe o socket). O `MiniBrowser` abre a URL de medida, e um navegador qualquer aberto na porta `8080 + N` mostra a janela, onde a página da medida cobre a tela com os números. Os processos são encerrados pelo PID, e os diretórios temporários, apagados.
 
 ## Estado da janela
