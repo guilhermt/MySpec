@@ -81,10 +81,10 @@ function GonePasses({
 
 /**
  * GoneLeftover is what git couldn't remove when the item was deleted, then the commands that remove it
- * from the clone. The warning of --force comes before the commands: they delete what the worktree may
- * still hold.
+ * from the clone. The warning comes before the commands: they delete what the worktree may still hold.
  */
 function GoneLeftover({ leftover }: { leftover: Leftover }) {
+  const warning = forceWarning(leftover);
   return (
     <>
       <CloseResult
@@ -92,14 +92,12 @@ function GoneLeftover({ leftover }: { leftover: Leftover }) {
         label="What stayed on disk"
         lines={leftoverLines(leftover)}
       />
-      {forceWarning(leftover) && (
+      {warning !== null && (
         <p className="flex gap-(--space-2) text-(length:--text-meta) leading-(--leading-meta) text-ink-2">
           <span aria-hidden="true">◇</span>
           <span>
-            <span className="font-medium text-ink-1">
-              --force deletes the modified and untracked files in it too.
-            </span>{" "}
-            Copy out what you want to keep first.
+            <span className="font-medium text-ink-1">{warning}</span> Copy out what you want to keep
+            first.
           </span>
         </p>
       )}

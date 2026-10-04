@@ -10,18 +10,22 @@ import (
 	"time"
 )
 
-// HistoryWindow is how far back the state carries the History: the rest comes
-// page by page from HistoryService.
-const HistoryWindow = 90 * 24 * time.Hour
+// HistoryDays is how many days back the state carries the History: the rest
+// comes page by page from HistoryService.
+const HistoryDays = 90
 
 // HistoryPageSize is how many archived items a page of HistoryService holds.
 const HistoryPageSize = 50
 
 // WindowStart is the first moment the state carries archived items from: the
-// start of a UTC day, so it moves once a day and the pages the frontend holds
-// are not started over by every state, and whole seconds, so the RFC 3339
-// times of the DTOs compare with it exactly.
-func WindowStart(now time.Time) time.Time { return now.Add(-HistoryWindow).Truncate(24 * time.Hour) }
+// midnight HistoryDays days before now, in the location of now, the user's
+// own, so it moves once a day, when the user's day turns, and the pages the
+// frontend holds are not started over by every state; and whole seconds, so
+// the RFC 3339 times of the DTOs compare with it exactly.
+func WindowStart(now time.Time) time.Time {
+	year, month, day := now.Date()
+	return time.Date(year, month, day-HistoryDays, 0, 0, 0, 0, now.Location())
+}
 
 // errHistoryCursor is what a page asked for after a time that is not RFC 3339.
 var errHistoryCursor = errors.New("bindings: invalid history cursor")

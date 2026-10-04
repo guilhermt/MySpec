@@ -380,10 +380,17 @@ describe("GoneView", () => {
       path: "/home/dev/.local/share/myspec/worktrees/acme/api/add-login",
       kept: true,
       error: "contains modified files",
+      registered: true,
     };
+    const forgotten = { ...worktree, registered: false };
+    const removed = { ...worktree, kept: false, error: "" };
     const branch = { name: "add-login", kept: true, error: "checked out" };
+    const deleted = { ...branch, kept: false, error: "" };
     const WORKTREE_COMMAND =
       "git worktree remove --force ~/.local/share/myspec/worktrees/acme/api/add-login";
+    const FOLDER_COMMAND = "rm -rf ~/.local/share/myspec/worktrees/acme/api/add-login";
+    const WORKTREE_STAYED =
+      "The worktree stayed at ~/.local/share/myspec/worktrees/acme/api/add-login";
 
     function stayed(): HTMLElement {
       return screen.getByRole("group", { name: "What stayed on disk" });
@@ -395,50 +402,60 @@ describe("GoneView", () => {
       expect(screen.queryByRole("group", { name: "What stayed on disk" })).not.toBeInTheDocument();
     });
 
-    const WORKTREE_STAYED =
-      "The worktree stayed at ~/.local/share/myspec/worktrees/acme/api/add-login" +
-      "contains modified files";
-    const removed = { ...worktree, kept: false, error: "" };
-    const deleted = { ...branch, kept: false, error: "" };
+    const FORCE_WARNING = "--force deletes the modified and untracked files in it too.";
+    const FOLDER_WARNING = "rm -rf deletes the modified and untracked files in it too.";
 
-    // Each combination of what git removed and what it left, line by line in the order worktree, branch.
     it.each([
       [
-        "the worktree stayed and the branch was deleted",
-        { worktree, branch: deleted },
-        [WORKTREE_STAYED, "Branch add-login deleted"],
+        "the worktree git still lists",
+        { worktree, branch: null },
+        [`${WORKTREE_STAYED}contains modified files`],
         [WORKTREE_COMMAND],
-        true,
+        FORCE_WARNING,
       ],
       [
-        "the worktree was removed and the branch stayed",
+        "the folder of a worktree git forgot",
+        { worktree: forgotten, branch: null },
+        [`${WORKTREE_STAYED}contains modified files`],
+        [FOLDER_COMMAND],
+        FOLDER_WARNING,
+      ],
+      [
+        "the worktree that stayed and the branch deleted",
+        { worktree, branch: deleted },
+        [`${WORKTREE_STAYED}contains modified files`, "Branch add-login deleted"],
+        [WORKTREE_COMMAND],
+        FORCE_WARNING,
+      ],
+      [
+        "the worktree removed and the branch that stayed",
         { worktree: removed, branch },
         ["Worktree removed", "The branch add-login stayedchecked out"],
         ["git branch -D add-login"],
-        false,
+        null,
       ],
       [
-        "both stayed",
-        { worktree, branch },
-        [WORKTREE_STAYED, "The branch add-login stayedchecked out"],
-        [WORKTREE_COMMAND, "git branch -D add-login"],
-        true,
-      ],
-      [
-        "only the worktree, which stayed",
-        { worktree, branch: null },
-        [WORKTREE_STAYED],
-        [WORKTREE_COMMAND],
-        true,
-      ],
-      [
-        "only the branch, which stayed",
+        "only the branch, of an item without a worktree",
         { worktree: null, branch },
         ["The branch add-login stayedchecked out"],
         ["git branch -D add-login"],
-        false,
+        null,
       ],
-    ])("shows what stayed when %s", (_name, parts, lines, commands, warned) => {
+      [
+        "both",
+        { worktree, branch },
+        [`${WORKTREE_STAYED}contains modified files`, "The branch add-login stayedchecked out"],
+        [WORKTREE_COMMAND, "git branch -D add-login"],
+        FORCE_WARNING,
+      ],
+      [
+        "both, the worktree forgotten by git",
+        { worktree: forgotten, branch },
+        [`${WORKTREE_STAYED}contains modified files`, "The branch add-login stayedchecked out"],
+        [FOLDER_COMMAND, "git branch -D add-login"],
+        FOLDER_WARNING,
+      ],
+    ])("shows %s", (_name, parts, lines, commands, warning) => {
       const leftover = makeLeftover({ repoPath: "/home/dev/code/api", ...parts });
       renderWithStore(<GoneView location={gone("task", "task-1", "add-login")} />, {
         state: stateWith(),
@@ -446,22 +463,20 @@ describe("GoneView", () => {
       });
 
       expect(stayed()).toHaveTextContent("Git couldn't remove everything");
-      expect(
-        within(stayed())
-          .getAllByRole("listitem")
-          .map((li) => li.textContent),
-      ).toEqual(lines);
+      // Each line in order, with what git said in a span of its own after it.
+      const items = within(stayed()).getAllByRole("listitem");
+      expect(items.map((item) => item.textContent)).toEqual(lines);
       // The warning and the commands come after the block, outside it.
       expect(within(stayed()).queryByText("To remove it yourself, in ~/code/api")).toBeNull();
       const heading = screen.getByText("To remove it yourself, in ~/code/api");
       expect(stayed().compareDocumentPosition(heading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
       expect(heading.className).not.toContain("uppercase");
       expect(document.querySelector("pre")?.textContent).toBe(commands.join("\n"));
-      const warning = screen.queryByText(/--force deletes the modified and untracked files/);
-      expect(warning !== null).toBe(warned);
-      if (warning !== null) {
-        expect(stayed().contains(warning)).toBe(false);
-        expect(warning.compareDocumentPosition(heading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      const warned = screen.queryByText(/deletes the modified and untracked files in it too/);
+      expect(warned?.textContent ?? null).toBe(warning);
+      if (warned !== null) {
+        expect(stayed().contains(warned)).toBe(false);
+        expect(warned.compareDocumentPosition(heading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
       }
     });
 
@@ -493,6 +508,22 @@ describe("GoneView", () => {
 
       expect(screen.getByText("To remove it yourself, in ~/code/web")).toBeInTheDocument();
       expect(screen.getByText(WORKTREE_COMMAND, { selector: "pre" })).toBeInTheDocument();
+    });
+
+    it("removes the folder of a review that git forgot as a folder", () => {
+      const location = gone("review", "review-1", "web#12");
+      renderWithStore(<GoneView location={location} />, {
+        state: stateWith(),
+        ui: {
+          location,
+          leftovers: {
+            "review-1": makeLeftover({ repoPath: "/home/dev/code/web", worktree: forgotten }),
+          },
+        },
+      });
+
+      expect(screen.getByText(FOLDER_COMMAND, { selector: "pre" })).toBeInTheDocument();
+      expect(screen.getByText(FOLDER_WARNING)).toBeInTheDocument();
     });
 
     it("copies the command", async () => {

@@ -772,6 +772,7 @@ export function makeLeftover(overrides: Partial<Leftover> = {}): Leftover {
       path: "/home/dev/.local/share/myspec/worktrees/acme/api/add-login",
       kept: true,
       error: "permission denied",
+      registered: true,
     },
     branch: null,
     ...overrides,

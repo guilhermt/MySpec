@@ -3,6 +3,8 @@ package worktree
 import (
 	"context"
 	"os"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -245,6 +247,9 @@ func (s *Service) purge(ctx context.Context, wt Worktree) (Leftover, bool) {
 		}
 	}
 	s.prune(ctx, wt.RepoPath)
+	if left.PathKept {
+		left.PathRegistered = s.Registered(ctx, wt.RepoPath, wt.Path)
+	}
 
 	if err := s.deleteBranch(ctx, wt); err != nil {
 		left.BranchKept, left.BranchError = true, err.Error()
@@ -258,6 +263,24 @@ func (s *Service) purge(ctx context.Context, wt Worktree) (Leftover, bool) {
 	s.forget(wt)
 
 	return left, left.PathKept || left.BranchKept
+}
+
+// Registered says whether git still lists path as a worktree of the clone at
+// repoPath that it can remove, not one it would forget on the next prune. A
+// listing that fails counts as registered: git worktree remove is what the
+// user is told to run when nothing says otherwise.
+func (s *Service) Registered(ctx context.Context, repoPath, path string) bool {
+	listed, err := ask(ctx, CommandTimeout, func(ctx context.Context) ([]git.ListedWorktree, error) {
+		return s.git.Worktrees(ctx, repoPath)
+	})
+	if err != nil {
+		s.log.Warn("worktree list failed", "path", repoPath, "error", err)
+		return true
+	}
+	path = filepath.Clean(path)
+	return slices.ContainsFunc(listed, func(wt git.ListedWorktree) bool {
+		return !wt.Prunable && filepath.Clean(wt.Path) == path
+	})
 }
 
 // deleteBranch deletes the branch of a worktree when it is still there,

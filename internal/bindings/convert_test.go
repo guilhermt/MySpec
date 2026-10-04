@@ -721,6 +721,32 @@ func TestFromArchivedCarriesTheClosingThePullRequestAndTheCommits(t *testing.T) 
 			},
 		},
 		{
+			name:      "a task closed without a pull request",
+			artifacts: task.Artifacts{Plan: plan},
+			run:       task.PRRun{Close: closing},
+			hasRun:    true,
+			check: func(t *testing.T, got bindings.ArchivedTask) {
+				t.Helper()
+				if got.Close == nil || got.PR != nil {
+					t.Errorf("close = %+v, pull request = %+v, want the closing and no pull request", got.Close, got.PR)
+				}
+			},
+		},
+		{
+			name: "a pass asked for and never recorded is text",
+			artifacts: task.Artifacts{PR: task.PRArtifacts{
+				Reports: []task.ReviewReport{{Pass: 1, File: "review-1.md", Findings: -1}},
+			}},
+			passes: []task.PRPass{{Pass: 1, Findings: make([]prreport.Finding, 2)}},
+			check: func(t *testing.T, got bindings.ArchivedTask) {
+				t.Helper()
+				want := []bindings.ArchivedPRReport{{Pass: 1, File: "review-1.md", Findings: -1}}
+				if diff := cmp.Diff(want, got.PRReports); diff != "" {
+					t.Errorf("reports mismatch (-want +got):\n%s", diff)
+				}
+			},
+		},
+		{
 			name:      "a task archived before these were recorded",
 			artifacts: task.Artifacts{Plan: plan},
 			run:       task.PRRun{PR: task.PRDetails{Number: 7, State: task.PRStateMerged}},
@@ -983,6 +1009,17 @@ func TestFromDeletePreviewCarriesWhatWouldBeDestroyed(t *testing.T) {
 	}
 }
 
+func TestFromDeletePreviewCarriesTheCommitsOfTheBranchOutsideItsBase(t *testing.T) {
+	t.Parallel()
+
+	preview := flow.DeletePreview{Branch: &flow.BranchPreview{Name: "login-screen", Ahead: 9}}
+	want := &bindings.BranchPreview{Name: "login-screen", Ahead: 9}
+
+	if diff := cmp.Diff(want, bindings.FromDeletePreview(preview).Branch); diff != "" {
+		t.Errorf("branch mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestFromDeletePreviewAndResultKeepNilForWhatIsNotThere(t *testing.T) {
 	t.Parallel()
 
@@ -1034,12 +1071,12 @@ func TestFromDeleteResultCarriesWhatStayedOfEachPart(t *testing.T) {
 		{
 			name: "both stayed",
 			left: worktree.Leftover{
-				RepoPath: "/code/web", Path: "/w", PathKept: true, PathError: "a",
+				RepoPath: "/code/web", Path: "/w", PathKept: true, PathError: "a", PathRegistered: true,
 				Branch: "b", BranchKept: true, BranchError: "c",
 			},
 			want: bindings.Leftover{
 				RepoPath: "/code/web",
-				Worktree: &bindings.LeftoverWorktree{Path: "/w", Kept: true, Error: "a"},
+				Worktree: &bindings.LeftoverWorktree{Path: "/w", Kept: true, Error: "a", Registered: true},
 				Branch:   &bindings.LeftoverBranch{Name: "b", Kept: true, Error: "c"},
 			},
 		},
@@ -2864,11 +2901,13 @@ func TestFromReviewLeftoverKeepsTheWorktreeGitCouldNotRemove(t *testing.T) {
 	t.Parallel()
 
 	got := bindings.FromReviewLeftover(reviewflow.Leftover{
-		RepoPath: "/code/web", WorktreePath: "/data/worktrees/acme/web/pr_7", Error: "permission denied",
+		RepoPath: "/code/web", WorktreePath: "/data/worktrees/acme/web/pr_7", Error: "permission denied", Registered: true,
 	})
 	want := bindings.DeleteResult{Leftover: &bindings.Leftover{
 		RepoPath: "/code/web",
-		Worktree: &bindings.LeftoverWorktree{Path: "/data/worktrees/acme/web/pr_7", Kept: true, Error: "permission denied"},
+		Worktree: &bindings.LeftoverWorktree{
+			Path: "/data/worktrees/acme/web/pr_7", Kept: true, Error: "permission denied", Registered: true,
+		},
 	}}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("FromReviewLeftover() mismatch (-want +got):\n%s", diff)

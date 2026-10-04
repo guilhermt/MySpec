@@ -554,7 +554,9 @@ func FromDeleteResult(result flow.DeleteResult) DeleteResult {
 	left := result.Leftover
 	converted := &Leftover{RepoPath: left.RepoPath}
 	if left.Path != "" {
-		converted.Worktree = &LeftoverWorktree{Path: left.Path, Kept: left.PathKept, Error: left.PathError}
+		converted.Worktree = &LeftoverWorktree{
+			Path: left.Path, Kept: left.PathKept, Error: left.PathError, Registered: left.PathRegistered,
+		}
 	}
 	if left.Branch != "" {
 		converted.Branch = &LeftoverBranch{Name: left.Branch, Kept: left.BranchKept, Error: left.BranchError}
@@ -570,7 +572,7 @@ func FromReviewLeftover(left reviewflow.Leftover) DeleteResult {
 	}
 	return DeleteResult{Leftover: &Leftover{
 		RepoPath: left.RepoPath,
-		Worktree: &LeftoverWorktree{Path: left.WorktreePath, Kept: true, Error: left.Error},
+		Worktree: &LeftoverWorktree{Path: left.WorktreePath, Kept: true, Error: left.Error, Registered: left.Registered},
 	}}
 }
 

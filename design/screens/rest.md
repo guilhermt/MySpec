@@ -470,6 +470,8 @@ O cabeçalho tem `←` para o lugar anterior e o nome do item. A árvore já nã
 
 **O review apagado** com algo que o git não removeu mostra o mesmo bloco da task apagada, só com a worktree, o aviso e o comando.
 
+**O comando da worktree que ficou** depende de o git ainda a listar como worktree. Listada, como depois do prazo do produto, é `git worktree remove --force <caminho>`, com o aviso do `--force`. Fora do registro, como depois de uma permissão, em que o git tira a worktree do registro antes de falhar na pasta, é `rm -rf <caminho>`, com o mesmo aviso: `◇ rm -rf deletes the modified and untracked files in it too. Copy out what you want to keep first.` A branch que ficou tem `git branch -D <branch>`.
+
 **Quando nada mais espera o usuário,** **Next that needs you** fica tracejado, com `Nothing else needs you now.` ao lado, e **Open in History** passa a ser a primária, com o foco. O board removido com a visão aberta segue `screens/board.md` §3.8.
 
 ## 10. Os diálogos da task

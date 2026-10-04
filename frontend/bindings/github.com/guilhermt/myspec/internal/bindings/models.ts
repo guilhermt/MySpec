@@ -1454,6 +1454,13 @@ export interface LeftoverWorktree {
      * what git said; "" when it went
      */
     "error": string;
+
+    /**
+     * Registered says that git still lists the folder that stayed as a
+     * worktree, which git worktree remove --force takes down; a folder git
+     * forgot is removed as a folder.
+     */
+    "registered": boolean;
 }
 
 /**

@@ -161,6 +161,13 @@ func TestDeriveTheCurrentStep(t *testing.T) {
 			situation(attention.KindStepReview, attention.FormReview, 0, "Step 2 is ready for your review. 3 files changed."),
 		},
 		{
+			"awaiting review, the reading of its files failed",
+			stepInput(flow.StepState{
+				Status: flow.StepAwaitingReview, Review: &review.Snapshot{Total: 3, Err: "git status: exit status 128"},
+			}, waiting),
+			situation(attention.KindStepReview, attention.FormReview, 0, "Step 2 is ready for your review."),
+		},
+		{
 			"a step not started after the one awaiting review",
 			followed,
 			situation(attention.KindStepReview, attention.FormReview, 0, "Step 2 is ready for your review. 3 files changed."),

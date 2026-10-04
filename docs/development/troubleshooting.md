@@ -18,7 +18,7 @@ jq -c 'select(.task == "<id>")' ~/.local/state/myspec/myspec.log
 
 **Etapas.** `stage advanced`, `stage revisited` e `stage discarded` marcam cada movimento entre etapas, com a task e as etapas envolvidas.
 
-**Steps e worktrees.** `worktree created`, `worktree cleaned`, `worktree removed` e `worktree recreated`, com a task e o caminho. `step started`, `step retried`, `step cleaned and started`, `step discarded` e `steps torn down`, com a task e o número. `step blocked`, com a razão pela qual o step não pôde começar.
+**Steps e worktrees.** `worktree created`, `worktree cleaned`, `worktree removed` e `worktree recreated`, com a task e o caminho. `worktree list failed`, com o clone e o erro, marca a lista de worktrees que o git não deu ao ver se uma pasta que ficou num apagamento ainda é worktree; a página do item apagado dá então o comando do `git worktree remove`. `step started`, `step retried`, `step cleaned and started`, `step discarded` e `steps torn down`, com a task e o número. `step blocked`, com a razão pela qual o step não pôde começar.
 
 **Review e commit.** `step approved`, quando o usuário aprova e o prompt de commit é enviado. `step committed`, com o sha curto e o assunto. `commit did not happen`, quando o turno de commit terminou sem commit. `implementation complete`, quando o último step é commitado. `review read failed`, com o caminho da worktree e o que o git disse.
 

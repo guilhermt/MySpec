@@ -408,6 +408,9 @@ func TestThePreviewCountsTheCommitsOutsideTheBase(t *testing.T) {
 		merged bool
 		ahead  int
 		failed error
+		// unread is the failure of the reading of the merge, which leaves the
+		// count unread too.
+		unread error
 		want   int
 	}{
 		{name: "merged on GitHub", pr: mergedPR(), ahead: 3, want: 0},
@@ -415,6 +418,7 @@ func TestThePreviewCountsTheCommitsOutsideTheBase(t *testing.T) {
 		{name: "not merged with 3 commits", pr: openPR(), ahead: 3, want: 3},
 		{name: "no base", pr: openPR(), noBase: true, ahead: 3, want: -1},
 		{name: "the count fails", pr: openPR(), ahead: 3, failed: errors.New("git rev-list: bad revision"), want: -1},
+		{name: "the merge reading fails", pr: openPR(), ahead: 3, unread: errors.New("git merge-base: bad revision"), want: -1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -427,6 +431,7 @@ func TestThePreviewCountsTheCommitsOutsideTheBase(t *testing.T) {
 			awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: tt.pr})
 			f.worktrees.merged = tt.merged
 			f.worktrees.ahead, f.worktrees.aheadErr = tt.ahead, tt.failed
+			f.worktrees.mergedErr = tt.unread
 
 			preview, err := f.service.PreviewDelete(t.Context(), "task-1")
 			if err != nil {
@@ -437,6 +442,9 @@ func TestThePreviewCountsTheCommitsOutsideTheBase(t *testing.T) {
 			}
 			if tt.failed != nil && preview.Branch.Error != "" {
 				t.Errorf("branch error = %q, want the merge reading's alone", preview.Branch.Error)
+			}
+			if tt.unread != nil && preview.Branch.Error != tt.unread.Error() {
+				t.Errorf("branch error = %q, want %q", preview.Branch.Error, tt.unread.Error())
 			}
 		})
 	}

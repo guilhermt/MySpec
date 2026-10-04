@@ -264,11 +264,9 @@ func unreadableDraftsBody() string {
 
 // draftsPublishFailedBody is the notification of drafts of a discussion GitHub
 // did not take: the draft by its title, or how many of them, and why the first
-// failed.
+// failed. failed is never empty: a draft that failed is what makes the
+// discussion publish_failed.
 func draftsPublishFailedBody(failed []discussion.Draft) string {
-	if len(failed) == 0 {
-		return "The drafts couldn't be published."
-	}
 	if len(failed) == 1 {
 		return "Couldn't publish “" + failed[0].Title + "”" + reasonPart(failed[0].PublishError)
 	}
@@ -348,17 +346,24 @@ func homeTilde(text string) string {
 }
 
 // reasonPart closes the opening of a notification with why it happened: ": "
-// and the reason, or just the period when there is none.
+// and the reason, ended by a period unless it already ends in a mark, or just
+// the period when there is none.
 func reasonPart(message string) string {
-	if reason := reasonOf(message); reason != "" {
+	reason := reasonOf(message)
+	switch {
+	case reason == "":
+		return "."
+	case strings.ContainsAny(reason[len(reason)-1:], ".!?"):
+		return ": " + reason
+	default:
 		return ": " + reason + "."
 	}
-	return "."
 }
 
-// reasonOf is the reason of a failure inside a notification, without the final
-// period: the first sentence of a message of the product, its first letter in
-// lowercase, or a raw error whole, with its home paths as ~.
+// reasonOf is the reason of a failure inside a notification: the first
+// sentence of a message of the product, without its mark and with its first
+// letter in lowercase, or a raw error whole, its own final mark included, with
+// its home paths as ~.
 func reasonOf(message string) string {
 	message = strings.TrimSpace(message)
 	if message == "" {
@@ -374,7 +379,7 @@ func reasonOf(message string) string {
 	if !raw && strings.ContainsAny(message[len(message)-1:], ".!?") {
 		return lowerFirst(firstSentence(message))
 	}
-	return strings.TrimRight(homeTilde(message), ".!?")
+	return homeTilde(message)
 }
 
 // firstSentence is the text up to the first ".", "!" or "?" followed by a

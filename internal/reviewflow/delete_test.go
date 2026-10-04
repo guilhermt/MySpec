@@ -48,11 +48,30 @@ func TestAWorktreeGitKeepsNeverKeepsTheReview(t *testing.T) {
 		t.Fatalf("delete review: %v", err)
 	}
 
-	if left.WorktreePath != wt.Path || left.RepoPath != wt.RepoPath || left.Error != errGit.Error() {
-		t.Errorf("leftover = %+v, want the folder, its clone and what git said", left)
+	if left.WorktreePath != wt.Path || left.RepoPath != wt.RepoPath || left.Error != errGit.Error() || !left.Registered {
+		t.Errorf("leftover = %+v, want the folder git still lists, its clone and what git said", left)
 	}
 	if _, ok := f.reviews.Lookup(id); ok {
 		t.Error("the review is still there after it was deleted")
+	}
+}
+
+func TestAWorktreeGitForgotIsLeftAsAFolder(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := decided(t, f)
+	wt, _ := f.worktrees.Get(id)
+	f.worktrees.failRemove(errGit)
+	f.worktrees.forgetRegistration()
+
+	left, err := f.service.Delete(t.Context(), id)
+	if err != nil {
+		t.Fatalf("delete review: %v", err)
+	}
+
+	if left.WorktreePath != wt.Path || left.Registered {
+		t.Errorf("leftover = %+v, want the folder git no longer lists", left)
 	}
 }
 

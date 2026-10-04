@@ -120,6 +120,7 @@ const stayed = (path: string) => ({
   path,
   kept: true,
   error: `error: failed to delete '${path}': Permission denied`,
+  registered: true,
 });
 
 // The task deleted with the page open is the reference task, with its pull request still open.

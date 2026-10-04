@@ -8,11 +8,13 @@ import (
 )
 
 // Leftover is what deleting a review left on disk: a worktree git would not
-// remove, with what git said and the clone it belongs to.
+// remove, with what git said, whether git still lists it, and the clone it
+// belongs to.
 type Leftover struct {
 	RepoPath     string // the clone of the repository of the review
 	WorktreePath string // "" when everything went
 	Error        string // what git said
+	Registered   bool   // git still lists the folder as a worktree it can remove
 }
 
 // Delete removes a review for good, active or in the history: its
@@ -42,6 +44,7 @@ func (s *Service) Delete(ctx context.Context, id string) (Leftover, error) {
 			// is told where it is instead.
 			s.log.Warn("remove review worktree failed", "review", id, "path", wt.Path, "error", err)
 			left.RepoPath, left.WorktreePath, left.Error = wt.RepoPath, wt.Path, err.Error()
+			left.Registered = s.worktrees.Registered(ctx, wt.RepoPath, wt.Path)
 		}
 	}
 	if err := s.reviews.Delete(ctx, id); err != nil {

@@ -95,6 +95,7 @@ describe("what stayed on disk", () => {
     path: "/home/dev/.local/share/myspec/worktrees/acme/api/rate-limit",
     kept: true,
     error: "fatal: '/home/dev/x' contains modified files",
+    registered: true,
   };
   const both = makeLeftover({
     worktree,
@@ -131,6 +132,14 @@ describe("what stayed on disk", () => {
     expect(leftoverLines(leftover)).toEqual([{ outcome: "failed", text: "The branch b stayed" }]);
   });
 
+  it("removes a folder git forgot as a folder", () => {
+    const forgotten = makeLeftover({ ...both, worktree: { ...worktree, registered: false } });
+
+    expect(leftoverCommands(forgotten)).toBe(
+      "rm -rf ~/.local/share/myspec/worktrees/acme/api/rate-limit\ngit branch -D rate-limit",
+    );
+  });
+
   it("gives the commands of the parts that stayed, one per line", () => {
     expect(leftoverCommands(both)).toBe(
       "git worktree remove --force ~/.local/share/myspec/worktrees/acme/api/rate-limit\ngit branch -D rate-limit",
@@ -147,9 +156,12 @@ describe("what stayed on disk", () => {
     expect(leftoverHeading(makeLeftover({ repoPath: "" }))).toBe("To remove it yourself");
   });
 
-  it("warns of --force only for a worktree that stayed", () => {
-    expect(forceWarning(both)).toBe(true);
-    expect(forceWarning(makeLeftover({ worktree: null, branch: both.branch }))).toBe(false);
-    expect(forceWarning(makeLeftover({ worktree: { ...worktree, kept: false } }))).toBe(false);
+  it("warns of the command that deletes the worktree that stayed, and only then", () => {
+    expect(forceWarning(both)).toBe("--force deletes the modified and untracked files in it too.");
+    expect(forceWarning(makeLeftover({ worktree: { ...worktree, registered: false } }))).toBe(
+      "rm -rf deletes the modified and untracked files in it too.",
+    );
+    expect(forceWarning(makeLeftover({ worktree: null, branch: both.branch }))).toBeNull();
+    expect(forceWarning(makeLeftover({ worktree: { ...worktree, kept: false } }))).toBeNull();
   });
 });
