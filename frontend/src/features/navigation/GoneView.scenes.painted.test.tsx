@@ -4,7 +4,7 @@ import { GoneView } from "@/features/navigation/GoneView";
 import { AppNotices } from "@/features/notice/AppNotices";
 import { ShellToasts } from "@/features/notice/ShellToasts";
 import { TaskView } from "@/features/task/TaskView";
-import type { GoneLocation } from "@/lib/locations";
+import { type GoneLocation, HOME as HOME_PLACE } from "@/lib/locations";
 import type { State } from "@/lib/wails";
 import type { Toast } from "@/store/app-store";
 import { fixHistorySceneClock, historyScene } from "@/test/history-scenes";
@@ -23,7 +23,7 @@ import {
   withoutTooltip,
 } from "@/test/painted";
 import { renderWithStore } from "@/test/render";
-import { sceneTask, TASK_ID } from "@/test/task-scenes";
+import { REFERENCE_NAME, sceneTask, TASK_ID } from "@/test/task-scenes";
 import { makeLeftover, makeSituation, makeTask } from "@/test/wails-mock";
 
 // Only the boundary is replaced, as in the jsdom suite: no call reaches the runtime of Wails.
@@ -45,20 +45,43 @@ interface Case {
   variant: string;
   /** primary is the primary the scene asks of the page: null for none. */
   primary: string | null;
+  /** says are texts the scene writes, as the material words them. */
+  says?: string[];
 }
 
 const NEXT = "Next that needs you";
+// TURN_LINE is what the composer says of the turn of the scene of the task.
+const TURN_LINE = "Working · 3m 40s";
 const CASES: Case[] = [
-  { name: "gone", variant: "", primary: NEXT },
-  { name: "gone", variant: "deleted", primary: NEXT },
+  {
+    name: "gone",
+    variant: "",
+    primary: NEXT,
+    says: ["PR #1279 was merged into dev at 14:51. MySpec closed the task at 15:02"],
+  },
+  {
+    name: "gone",
+    variant: "deleted",
+    primary: NEXT,
+    says: [
+      "Rate limit per API key was deleted",
+      "PR #1284 stays open on GitHub.",
+      "error: failed to delete '~/.local/share/myspec/worktrees/acme/api/rate-limit-per-api-key': Permission denied",
+    ],
+  },
   { name: "gone", variant: "review", primary: NEXT },
   { name: "gone", variant: "discussion", primary: NEXT },
   { name: "gone", variant: "nothing", primary: "Open in History" },
   { name: "gone", variant: "deleted-clean", primary: NEXT },
-  { name: "gone", variant: "review-deleted", primary: NEXT },
-  { name: "notice", variant: "", primary: null },
-  { name: "notice", variant: "toast", primary: null },
-  { name: "notice", variant: "toast-three", primary: null },
+  {
+    name: "gone",
+    variant: "review-deleted",
+    primary: NEXT,
+    says: ["~/.local/share/myspec/worktrees/acme/web/pr_2291': Permission denied"],
+  },
+  { name: "notice", variant: "", primary: null, says: ["The implementer's session", TURN_LINE] },
+  { name: "notice", variant: "toast", primary: null, says: [TURN_LINE] },
+  { name: "notice", variant: "toast-three", primary: null, says: [TURN_LINE] },
 ];
 
 // The archived items of the History scenes, the ones the mock's page tells of.
@@ -90,12 +113,16 @@ const WAITING = makeTask({
   situations: [makeSituation({ taskId: "task-w" })],
 });
 
-const WORKTREE_STAYED = {
-  path: `${HOME}/.local/share/myspec/worktrees/acme/api/idempotency-keys`,
+// stayed is a worktree git couldn't remove, with the error it gives when a file in it is not the
+// user's to delete: the product removes with --force, so what is left is a permission.
+const stayed = (path: string) => ({
+  path,
   kept: true,
-  error:
-    "fatal: '…/idempotency-keys' contains modified or untracked files, use --force to delete it",
-};
+  error: `error: failed to delete '${path}': Permission denied`,
+});
+
+// The task deleted with the page open is the reference task, with its pull request still open.
+const DELETED = { name: REFERENCE_NAME, branch: "rate-limit-per-api-key", pr: 1284 };
 
 // pageOf is the page of an item that left, with the state it is read from and what the deletion left.
 function pageOf({ variant }: Case): {
@@ -115,9 +142,9 @@ function pageOf({ variant }: Case): {
           kind: "gone",
           item: "task",
           id,
-          name: TASK.name,
+          name: DELETED.name,
           boardId: board,
-          pr: { number: 1279, state: "open" },
+          pr: { number: DELETED.pr, state: "open" },
         },
         state,
         leftovers:
@@ -125,8 +152,10 @@ function pageOf({ variant }: Case): {
             ? {
                 [id]: makeLeftover({
                   repoPath: `${HOME}/code/api`,
-                  worktree: WORKTREE_STAYED,
-                  branch: { name: "idempotency-keys", kept: false, error: "" },
+                  worktree: stayed(
+                    `${HOME}/.local/share/myspec/worktrees/acme/api/${DELETED.branch}`,
+                  ),
+                  branch: { name: DELETED.branch, kept: false, error: "" },
                 }),
               }
             : {},
@@ -151,10 +180,7 @@ function pageOf({ variant }: Case): {
         leftovers: {
           "review-deleted": makeLeftover({
             repoPath: `${HOME}/code/web`,
-            worktree: {
-              ...WORKTREE_STAYED,
-              path: `${HOME}/.local/share/myspec/worktrees/acme/web/review-2291`,
-            },
+            worktree: stayed(`${HOME}/.local/share/myspec/worktrees/acme/web/pr_2291`),
           }),
         },
       };
@@ -193,11 +219,16 @@ const TOASTS: Record<string, Toast[]> = {
   ],
 };
 
+// FAILED is the pause that failed, of the implementer: the one working in the scene of the task.
 const FAILED = {
   label: "Couldn't pause Rate limit per API key",
   detail:
-    "The reviewer's session didn't stop in 10 seconds, so it keeps running. Try Pause again, or Stop its answer from the Reviewer tab.",
+    "The implementer's session didn't stop in 10 seconds, so it keeps running. Try Pause again, or Stop its answer from the Implementer tab.",
 };
+
+// TURN is how long the turn of the implementer has run at the moment of the scene: 3m 40s, as in the
+// scene of the task, on the clock of the History scenes.
+const TURN = 220_000;
 
 // draw draws a scene in a main area of a width: the page of the item that left, or the task screen
 // with the notice and the toasts the shell puts over it.
@@ -209,12 +240,20 @@ async function draw(one: Case, width: number) {
       <div style={{ ...box, display: "flex" }}>
         <GoneView location={location} />
       </div>,
-      { state, ui: { location, leftovers } },
+      { state, ui: { location, back: [HOME_PLACE], leftovers } },
     );
     await settle();
     return { area: container.firstElementChild as HTMLElement };
   }
-  const task = sceneTask("run");
+  const scene = sceneTask("run");
+  const turnStartedAt = new Date(Date.parse(archived.now) - TURN).toISOString();
+  const task = {
+    ...scene,
+    state: {
+      ...scene.state,
+      tasks: (scene.state.tasks ?? []).map((one) => ({ ...one, turnStartedAt })),
+    },
+  };
   const { container } = renderWithStore(
     <div className="main-area relative flex flex-col" style={box}>
       <AppNotices />
@@ -230,6 +269,7 @@ async function draw(one: Case, width: number) {
       },
       ui: {
         location: { kind: "task", id: TASK_ID },
+        back: [HOME_PLACE],
         transcripts: task.transcripts,
         openStepTab: task.openStepTab,
         ...(one.variant === "" ? { error: FAILED } : { toasts: TOASTS[one.variant] ?? [] }),
@@ -249,12 +289,20 @@ describe.each(THEMES)(
       it.each(WIDTHS)("draws it at the main area of %ipx", async (width) => {
         setTheme(theme);
         const { area } = await draw(one, width);
+        for (const text of one.says ?? []) {
+          expect(area).toHaveTextContent(text);
+        }
 
         if (one.name === "gone") {
           // The header keeps one line, and the page, its blocks and its actions stand on whole pixels.
           const band = within(area).getByRole("banner");
           expect(placeHeaderOneLine(band)).toBe(true);
           expect(overlaps(placeHeaderPieces(band))).toBe(false);
+          // ← has a place behind it, as it has in the app.
+          expect(within(band).getByRole("button", { name: /^Back to / })).not.toHaveAttribute(
+            "aria-disabled",
+            "true",
+          );
           expect(
             offWholePixels([
               ...area.querySelectorAll("section, h1, h2, ul, li, pre, button, [role='group']"),
