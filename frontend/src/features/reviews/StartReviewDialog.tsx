@@ -7,11 +7,11 @@ import { ICONS } from "@/components/system/icons";
 import { SegmentedControl } from "@/components/system/SegmentedControl";
 import { SunkenLine } from "@/components/system/SunkenLine";
 import { Textarea } from "@/components/system/Textarea";
-import { ModelPicker } from "@/features/models/ModelPicker";
+import { ModelChip } from "@/features/models/ModelChip";
 import { panelReason, prPanelModel } from "@/features/reviews/pr-panel";
 import { rowReference } from "@/features/reviews/review-list";
 import { messageOf } from "@/lib/errors";
-import { choiceOf, type ModelChoice } from "@/lib/models";
+import { choiceOf, type ModelChoice, sameChoice } from "@/lib/models";
 import { type ChecksReading, checkCounts, unfinishedChecks } from "@/lib/pull-requests";
 import { findRepository, shortName } from "@/lib/repositories";
 import type { PullRequestRow, PullReviewMode, StageModel } from "@/lib/wails";
@@ -195,7 +195,13 @@ function StartReviewFields({ pull, row, gone }: StartReviewFieldsProps) {
             Model
           </span>
           <div className="flex flex-wrap items-center gap-(--space-3)">
-            <ModelPicker label="Review" value={choice} onChange={setChoice} />
+            <ModelChip
+              label="Review"
+              value={choice}
+              own={!sameChoice(choice, choiceOf(defaults, "pr_review"))}
+              followNote=""
+              onChange={setChoice}
+            />
             <span className={HINT}>From Defaults. It can change in the conversation.</span>
           </div>
         </div>

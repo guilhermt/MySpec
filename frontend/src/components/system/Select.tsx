@@ -1,8 +1,8 @@
-import { ChevronDown } from "lucide-react";
 import { Fragment, useId } from "react";
 import { cn } from "@/lib/utils";
 import { CutText } from "./CutText";
 import { Icon } from "./Icon";
+import { ICONS } from "./icons";
 import {
   type ItemAction,
   Menu,
@@ -123,7 +123,7 @@ export function Select({
           <ChosenText choice={chosen} loading={loading === true} />
         )}
       </CutText>
-      <Icon icon={ChevronDown} size="sm" tone="muted" />
+      <Icon icon={ICONS.expanded} size="sm" tone="muted" />
     </MenuTrigger>
   );
 

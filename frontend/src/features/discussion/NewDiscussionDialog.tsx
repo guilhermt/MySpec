@@ -26,7 +26,7 @@ import {
 } from "@/features/discussion/new-discussion";
 import { UnclonedRepository } from "@/features/discussion/UnclonedRepository";
 import { useDiscussionContext } from "@/features/discussion/useDiscussionContext";
-import { ModelPicker } from "@/features/models/ModelPicker";
+import { ModelChip } from "@/features/models/ModelChip";
 import { issueLabel } from "@/lib/boards";
 import { messageOf } from "@/lib/errors";
 import { choiceOf, type ModelChoice } from "@/lib/models";
@@ -340,7 +340,15 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
 
         <div className="flex items-center gap-(--space-3)">
           <span className={SECTION_LABEL}>Model</span>
-          <ModelPicker label="Discussion" value={choice} disabled={starting} onChange={setChoice} />
+          <span inert={starting}>
+            <ModelChip
+              label="Discussion"
+              value={choice}
+              own={!byDefault}
+              followNote=""
+              onChange={setChoice}
+            />
+          </span>
           {byDefault && (
             <span className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
               From Defaults

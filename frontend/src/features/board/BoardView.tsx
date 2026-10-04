@@ -2,6 +2,7 @@ import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { PanelLayout } from "@/components/system/AuxPanel";
 import { KeyNotice, useKeyNotice } from "@/components/system/KeyNotice";
 import { isTyping } from "@/components/system/keys";
+import { LIST_COLUMN } from "@/components/system/ListPanel";
 import { ScrollArea } from "@/components/system/ScrollArea";
 import { SelectionBar } from "@/components/system/SelectionBar";
 import { useNow } from "@/features/attention/useNow";
@@ -36,19 +37,13 @@ import {
 import { CardTree } from "@/features/board/CardTree";
 import { useBoardViewMemory } from "@/features/board/useBoardViewMemory";
 import { useStartCard } from "@/features/board/useStartCard";
+import { FLASH_MS } from "@/lib/situations";
 import type { Board, BoardCard } from "@/lib/wails";
 import { refreshBoard } from "@/store/actions";
 import { useAppStore, useBoard, useRepository } from "@/store/app-store";
 
 /** READING_CLOCK_MS is how often the time since the last reading is told again: a minute. */
 const READING_CLOCK_MS = 60_000;
-
-/** FLASH_MS is how long a card a new reading brought stays flagged: its blink, twice (--duration-slow). */
-export const FLASH_MS = 2 * 280;
-
-/** LIST_COLUMN is the reading column of a list: --list-measure on whole pixels, with --space-6 at each side at least. */
-export const LIST_COLUMN =
-  "mx-auto w-[min(round(down,var(--list-measure),1px),100%-2*var(--space-6))] pb-(--space-12)";
 
 /** NO_CARDS stands for a board whose reading brought no cards, always the same array. */
 const NO_CARDS: BoardCard[] = [];

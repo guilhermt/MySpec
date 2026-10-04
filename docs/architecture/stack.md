@@ -95,6 +95,7 @@ O não perturbe não tem padrão freedesktop. O app pergunta a quem o expõe: o 
 - **Task** orquestra tudo: dev, build, geração de bindings, formatação, lint, typecheck, testes, vulnerabilidades e a checagem completa.
 - **Frontend**: pnpm, Biome para lint e formatação no lugar de ESLint e Prettier, Vitest com Testing Library em dois projetos: `unit`, no jsdom, para o comportamento, a acessibilidade e a cobertura, e `painted`, no modo navegador do Vitest, no Chromium do Playwright (`@vitest/browser-playwright`), para o que os componentes pintam com o CSS real. O Chromium e não o WebKit, porque o que a suíte prova é a cascata, que é do CSS, e o Chromium roda na máquina e no CI; a nitidez do WebKitGTK é conferida por captura.
 - **Go**: golangci-lint v2 com gofumpt e goimports, gotestsum, cobertura com limiares por arquivo, pacote e total.
+- **knip** acha o arquivo e a dependência que nada usa. O código sem uso é o que um design antigo deixa para trás, e o knip o pega em todo `task check`, em cerca de 1 s.
 - **lefthook** instala um hook de pre-commit que só formata os arquivos em stage.
 
 Ver [setup.md](../development/setup.md) e [ci.md](../development/ci.md).

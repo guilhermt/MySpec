@@ -80,6 +80,7 @@ tasks:
     cmds:
       - biome ci .
       - task: lint:design
+      - task: lint:knip
 
   lint:design:
     internal: true
@@ -87,6 +88,13 @@ tasks:
     dir: frontend
     cmds:
       - pnpm exec vitest run --project unit src/styles/design-rules.test.ts
+
+  lint:knip:
+    internal: true
+    summary: Fails on a file or a dependency nothing uses
+    dir: frontend
+    cmds:
+      - pnpm exec knip --include files,dependencies
 
   typecheck:
     dir: frontend

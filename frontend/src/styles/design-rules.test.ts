@@ -14,13 +14,6 @@ const TOKENS = readFileSync(join(SRC, "../../design/system/tokens.css"), "utf8")
 const TAILWIND_PALETTE =
   /(?:^|[\s"'`:])(?:bg|text|border(?:-[trblxyse])?|ring|ring-offset|outline|fill|stroke|from|via|to|decoration|divide|shadow|inset-shadow|accent|caret|placeholder)-(?:(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone|mauve|olive|mist|taupe)-\d{2,3}|black|white)(?:\/\d+)?(?=$|[\s"'`])/;
 
-/** Files that are still read by the old design, until the step that removes them. */
-// Removed in the next step, with ModelPicker and ReviewModePicker.
-const PENDING_REMOVAL = [
-  "features/models/ModelPicker.tsx",
-  "features/review-mode/ReviewModePicker.tsx",
-];
-
 type RuleId = "V3" | "V4" | "V5" | "V6" | "V7";
 
 interface Rule {
@@ -184,9 +177,7 @@ describe("design rules", () => {
     });
 
     it.each(RULES)("$id finds nothing", (current) => {
-      const found = FILES.filter(({ path }) => !PENDING_REMOVAL.includes(path)).flatMap(
-        ({ path, text }) => violations(current, path, text),
-      );
+      const found = FILES.flatMap(({ path, text }) => violations(current, path, text));
 
       expect(found).toEqual([]);
     });

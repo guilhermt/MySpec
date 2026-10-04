@@ -58,6 +58,20 @@
       },
       "style": {
         "noNonNullAssertion": "error",
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "lucide-react": "An icon comes from ICONS in components/system/icons.ts, one per meaning."
+            },
+            "patterns": [
+              {
+                "group": ["@/components/ui/*"],
+                "message": "A screen imports the design system, components/system; only it wraps components/ui."
+              }
+            ]
+          }
+        },
         "useImportType": "error"
       },
       "suspicious": {
@@ -65,6 +79,12 @@
       }
     }
   },
+  "overrides": [
+    {
+      "includes": ["frontend/src/components/system/**", "frontend/src/styles/globals.test.tsx"],
+      "linter": { "rules": { "style": { "noRestrictedImports": "off" } } }
+    }
+  ],
   "assist": {
     "actions": {
       "source": {

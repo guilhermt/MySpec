@@ -117,7 +117,7 @@ Um componente **embrulha** o primitivo de `components/ui/` quando os estados do 
 | Caixa de seleção | `Checkbox.tsx` | Próprio sobre `@base-ui/react/checkbox` | O alvo é a linha inteira; `CheckboxSign` é só a caixa, `aria-hidden`, para uma linha que já tem papel e `aria-checked` próprios, e seu estado vem de `data-checked` e `data-disabled` dela, sem hover; `describedBy` liga a linha a um texto fora dela, como a consequência de desmarcar um repositório |
 | Rádio | `Radio.tsx` | Próprio sobre `@base-ui/react/radio-group` | O ponto do ui não tem `className`, e o alvo é a linha. `RadioInput` é um rádio sozinho, o `input` nativo que se junta aos outros pelo `name`, nomeado por `label`, com a célula como alvo: para os rádios espalhados pelas linhas de uma tabela, onde nenhum elemento guarda só eles e um grupo tomaria as outras peças das linhas como itens dele (a tabela de status) |
 | Controle segmentado | `SegmentedControl.tsx` | Próprio sobre `@base-ui/react/radio-group` | O system pede `radiogroup` e `radio` com `aria-checked`, não botões com `aria-pressed` |
-| Etiqueta, tag, placeholder | `Badge.tsx`, `Tag.tsx`, `Placeholder.tsx` | Próprios | O `ui/badge` é uma pílula com variantes que o system não tem |
+| Etiqueta, tag, placeholder | `Badge.tsx`, `Tag.tsx`, `Placeholder.tsx` | Próprios | Não há primitivo |
 | Glifo, spinner, brilho, ícone, link, chip de tempo, busca | `StateGlyph.tsx`, `Spinner.tsx`, `Shimmer.tsx`, `Icon.tsx`, `Link.tsx`, `TimeChip.tsx`, `SearchInput.tsx` | Próprios | Não há primitivo |
 | Texto cortado | `CutText.tsx` | Próprio, sobre o tooltip e `observeSize` de `fits.ts` | Não há primitivo |
 | Estado vazio, estado vazio de um lugar, faixa de aviso, linha afundada, medidor de contexto | `EmptyState.tsx`, `PlaceEmpty.tsx`, `NoticeStrip.tsx`, `SunkenLine.tsx`, `ContextMeter.tsx` | Próprios | Não há primitivo |
@@ -125,7 +125,7 @@ Um componente **embrulha** o primitivo de `components/ui/` quando os estados do 
 | Abas | `Tabs.tsx` | Próprio | O system pede a forma mínima, texto sobre um fio, com uma parada de Tab e as setas |
 | Lista de checks, lista de relações | `ChecksList.tsx`, `RelationList.tsx` | Próprios, sobre o glifo, o ícone, o tooltip e o link | Não há primitivo |
 | Listas: linha do card, da pull request e do History, cabeçalho de seção e do dia, barra de filtros, barra da seleção | `ListRow.tsx` (com `fits.ts`), `ListSectionHeader.tsx`, `FilterBar.tsx`, `SelectionBar.tsx` | Próprios, sobre o glifo, o ícone, a tecla, o chip, o menu, o botão e o tooltip | Não há primitivo |
-| Painel da lista | `ListPanel.tsx` | Próprio, sobre o botão, o botão de ícone, o scroll area e o tooltip | Não há primitivo |
+| Painel da lista | `ListPanel.tsx` | Próprio, sobre o botão, o botão de ícone, o scroll area e o tooltip; também exporta `LIST_COLUMN`, a coluna de leitura das listas | Não há primitivo |
 | Apontamento, cartão de decisão, rascunho, rascunho dobrado, linha do gesto, diff do corpo, seletor de dependência | `Finding.tsx`, `DecisionCard.tsx`, `Draft.tsx`, `FoldedDraft.tsx`, `GestureLine.tsx`, `BodyDiff.tsx`, `DependencyPicker.tsx` | Próprios, sobre o botão, o botão de ícone, o link, o textarea, o spinner e o tooltip | Não há primitivo |
 | Grupo de opções | `OptionGroup.tsx` | Próprio | O `RadioGroup` do Base UI não dá "nenhum escolhido" sem um valor, e a opção leva a tecla, o título e a nota |
 | Seção e linha de painel | `PanelSection.tsx`, `PanelRow.tsx` | Próprios | Não há primitivo |

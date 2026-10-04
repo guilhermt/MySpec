@@ -2,9 +2,9 @@ import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import { PanelLayout } from "@/components/system/AuxPanel";
 import { KeyNotice, useKeyNotice } from "@/components/system/KeyNotice";
 import { isTyping } from "@/components/system/keys";
+import { LIST_COLUMN } from "@/components/system/ListPanel";
 import { ScrollArea } from "@/components/system/ScrollArea";
 import { useNow } from "@/features/attention/useNow";
-import { FLASH_MS, LIST_COLUMN } from "@/features/board/BoardView";
 import { PullRequestPanel } from "@/features/reviews/PullRequestPanel";
 import { PullRequestTree } from "@/features/reviews/PullRequestTree";
 import { ReviewsFilterBar } from "@/features/reviews/ReviewsFilterBar";
@@ -25,6 +25,7 @@ import {
   reviewsReadingView,
 } from "@/features/reviews/review-list";
 import { useReviewsSectionsMemory } from "@/features/reviews/useReviewsSectionsMemory";
+import { FLASH_MS } from "@/lib/situations";
 import { asPullRequestAction, type PullRequestRow } from "@/lib/wails";
 import { openExternal, refreshPullRequests, setReviewFilters } from "@/store/actions";
 import { useAppStore, useReviewCenter } from "@/store/app-store";

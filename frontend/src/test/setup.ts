@@ -59,8 +59,8 @@ vi.mock("streamdown", () => ({
 vi.mock("@streamdown/code", () => ({ code: {} }));
 vi.mock("@streamdown/mermaid", () => ({ createMermaidPlugin: () => ({}) }));
 
-// jsdom lays nothing out and ships no ResizeObserver, which the resizable
-// panels watch their group with.
+// jsdom lays nothing out and ships no ResizeObserver, which the conversation's end, the toast lift
+// and the windowed lists watch.
 class ResizeObserverStub implements ResizeObserver {
   observe(): void {}
   unobserve(): void {}

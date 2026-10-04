@@ -81,7 +81,7 @@ Visto no app real nas cinco janelas e nos dois temas, e nas capturas `gone-*`, `
 - Visto na conversa da task.
 - Regra: `components.md` Bloco de código e Marca e cópia; `decisions.md` 2026-10-02 (um **Copy** só); `12:168` (§4.2, O que sai); a pauta `critique-task-04.md:119–123` (9), o cabeçalho do código.
 
-**S5 · Deve. O `ModelPicker` antigo nos diálogos de início de review e de nova discussão.**
+**S5 · Deve. O `ModelPicker` antigo nos diálogos de início de review e de nova discussão.** · **Fechado no step 2**
 
 - Ocorrências:
   - **Início de review:** `features/reviews/StartReviewDialog.tsx:10`, `:198`. `Opus 5.5 (1M) · high` aparece com `⚠ unavailable` em âmbar e peso 500 e com o chevron duplo `⇕`; na mesma sessão, o diálogo de criação de task (`ModelChip`) mostrou `Opus 5.5 (1M) · high` sem marca nenhuma. O mesmo modelo é dito de dois jeitos.
@@ -221,7 +221,7 @@ Visto no app real nas cinco janelas e nos dois temas, e nas capturas `gone-*`, `
 - `ShellToasts.tsx:38–41` mostra o que sai junto com os três. Vale, sem defeito de código; a leitura recomendava fechar com uma decisão.
 - **Decisão do coordenador:** a quarta notificação que chega com três toasts à vista não espera; o mais antigo sai no mesmo instante, com a transição de saída de `--duration-fast`, e isso faz parte do "sai" de `components.md` (Aviso do app e toast). **Registrar em:** `components.md` Aviso do app e toast, pela task, no step do system. O step confere que a saída usa `--duration-fast` e escreve o commit aqui.
 
-**S28 · Pode esperar. O comentário de `REVIEW_MODES` meio verdadeiro.** Pauta `critique-task-05.md:392`.
+**S28 · Pode esperar. O comentário de `REVIEW_MODES` meio verdadeiro.** · **Fechado no step 2** Pauta `critique-task-05.md:392`.
 
 - `lib/review-modes.ts:3` ainda diz "in the order the pickers list them", e o `ReviewModePicker` continua no código. O comentário passa a dizer a ordem que vale quando o `ReviewModePicker` sai (`12:164`).
 
@@ -554,7 +554,7 @@ Visto no app real (a mesma sessão da área do system), nas cinco janelas e nos 
 - Onde: `features/history/ArchivedDocument.tsx:41–50` e `ArchivedDiscussion.tsx:248–257` passam `bg-state-error-veil` à `NoticeStrip`, com **Try again** secundário `xs`. A mesma falha de leitura no prompt (`features/settings/PromptPage.tsx:171–178`) é a faixa afundada, com **Try again** fantasma `sm`.
 - Regra: `components.md` Faixa de aviso ("Afundada…"; "Não pinte de vermelho o que não é erro de uma ação sua"). Ler um arquivo não é uma ação do usuário que falhou.
 
-**H3 · Deve. O History ainda importa o primitivo e a cor do shadcn.** São telas da task 11, já redesenhadas; V1 e V4 os pegam nos steps 2 e 1.
+**H3 · Deve. O History ainda importa o primitivo e a cor do shadcn.** · **Fechado no step 2** São telas da task 11, já redesenhadas; V1 e V4 os pegam nos steps 2 e 1.
 
 - `features/history/ArchivedFindings.tsx:3` e `ArchivedDiscussion.tsx:11` importam `@/components/ui/collapsible`, e o system tem `components/system/Collapsible.tsx`.
 - `bg-background` em `ArchivedTask.tsx:196`, `:230`, `ArchivedReview.tsx:98`, `:129` e `ArchivedDiscussion.tsx:154`, `:210`.
@@ -627,7 +627,7 @@ Cada item da pauta de polimento (`lab/08-visual-final/critique.md` §7; `12:272�
 | Polimento 9, o `…` do breadcrumb (162) | Feito na task 2 | `PlaceHeader.tsx:48–95` (`12:284`); o passe não o reabriu | — |
 | O **Copy** em todo bloco de código (`12:168`) | Vale (**Deve**) | `Markdown.tsx:16`, `:108–186` (`COPY_LABELS`, `:117`) | S4 |
 | `critique-task-04.md:119–123` (9), o cabeçalho do código sem caminho | Vale | O cabeçalho só com a linguagem | S4 |
-| `ModelPicker` nos dois diálogos (`12:92`; `09:73`, `:109`) | Vale | `StartReviewDialog.tsx:10`, `:198`; `NewDiscussionDialog.tsx:343` | S5 |
+| `ModelPicker` nos dois diálogos (`12:92`; `09:73`, `:109`) | Vale | `StartReviewDialog.tsx:10`, `:198`; `NewDiscussionDialog.tsx:343` | S5 · **Fechado no step 2** |
 | `critique-task-01.md:150` (12), o ícone fora de `icons.ts` em `Select.tsx:1` | Não vale mais | É o `ChevronDown`, que não é significado e que a regra do system permite (`components/system/Icon.test.tsx:57–75`, a V2) | — |
 | `critique-task-02-fixes.md:40` (M1), o laço e o teto do `Presence` | Vale | `Presence.painted.test.tsx:62` | S24 |
 | `critique-task-02-fixes.md:42` (M2), o trilho de erro da faixa | Vale | `SidebarRail.tsx:147`; sem teste da faixa | S25 |
@@ -637,7 +637,7 @@ Cada item da pauta de polimento (`lab/08-visual-final/critique.md` §7; `12:272�
 | `critique-task-05.md:188` (10); `critique-task-06.md:173` (4), as faixas sempre `role="alert"` | Vale | `BoardReadingStates.tsx:48`, `ReviewsReadingStates.tsx:46`, `CheckStrip.tsx:47` | S10 |
 | `critique-task-05.md:206` (16), `◇` como caractere solto | Vale | 15 lugares, do system e de fora | S23 |
 | `critique-task-05.md:230–233` (21), a região do `KeyNotice` | Vale | `KeyNotice.tsx:100`, `:96` | S10 |
-| `critique-task-05.md:392`, o comentário de `REVIEW_MODES` | Vale | `lib/review-modes.ts:3` | S28 |
+| `critique-task-05.md:392`, o comentário de `REVIEW_MODES` | Vale | `lib/review-modes.ts:3` | S28 · **Fechado no step 2** |
 | `critique-task-05.md:394`, o `role="status"` de `Cloning` | Vale | `StartRow.tsx:150` (a pauta dizia `:143`) e `:125` | S10 |
 | `critique-task-06.md:169` (3), o anel de foco no WebKitGTK | Vale (**Bloqueia**) | Visto no Broadway na árvore, nos diálogos, no board e em Reviews, também só com o teclado | S1 |
 | `critique-task-09.md`, segunda leitura: o `Cut` do dobrado com tooltip mesmo inteiro | Vale | `FoldedDraft.tsx:56–62`; `MarkerLine.tsx:173` | S22 |

@@ -1,4 +1,3 @@
-import { ChevronDown } from "lucide-react";
 import { type ComponentProps, type MouseEvent, type ReactNode, useId } from "react";
 import { Button as UIButton } from "@/components/ui/button";
 import { Toggle as UIToggle } from "@/components/ui/toggle";
@@ -132,7 +131,7 @@ export function Chip({
           <span className="font-normal text-ink-3">· unavailable</span>
         </>
       )}
-      {kind === "menu" && <Icon icon={ChevronDown} size="xs" />}
+      {kind === "menu" && <Icon icon={ICONS.expanded} size="xs" />}
     </>
   );
 

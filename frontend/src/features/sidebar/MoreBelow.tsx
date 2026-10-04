@@ -1,7 +1,7 @@
-import { ArrowDown } from "lucide-react";
 import { type RefObject, useEffect, useState } from "react";
 import { observeSize } from "@/components/system/fits";
 import { Icon } from "@/components/system/Icon";
+import { ICONS } from "@/components/system/icons";
 import { ENTRY_ATTRIBUTE } from "@/features/sidebar/useTreeKeyboard";
 
 export interface MoreBelowProps {
@@ -71,7 +71,7 @@ export function MoreBelow({ viewport }: MoreBelowProps) {
         }}
         className="pointer-events-auto inline-flex items-center gap-(--space-1) rounded-xs text-(length:--text-micro) leading-(--leading-micro) text-ink-3 transition-colors duration-(--duration-fast) ease-standard hover:text-ink-1"
       >
-        <Icon icon={ArrowDown} size="xs" />
+        <Icon icon={ICONS.toEnd} size="xs" />
         {count} more below
       </button>
     </div>

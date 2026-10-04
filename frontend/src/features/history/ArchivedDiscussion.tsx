@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/system/Collapsible";
 import { CutText } from "@/components/system/CutText";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
@@ -8,10 +13,8 @@ import { NoticeStrip } from "@/components/system/NoticeStrip";
 import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
 import { Tag } from "@/components/system/Tag";
 import { Tooltip } from "@/components/system/Tooltip";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Conversation } from "@/features/chat/Conversation";
 import type { DiscussionInput } from "@/features/chat/discussion-markers";
-import { Chevron } from "@/features/chat/entries/Chevron";
 import { LINE, MarkerLine } from "@/features/chat/entries/MarkerLine";
 import type { MarkerView } from "@/features/chat/markers";
 import { IDLE_SESSION } from "@/features/chat/session";
@@ -85,10 +88,11 @@ function PublishedLine({ row }: { row: PublishedRow }) {
 
 // ConversationLine is the line that opens the whole conversation, read only, under the lines of the
 // documents: a stop of the walk, with the state of the fold.
-function ConversationLine({ open, complement }: { open: boolean; complement: string }) {
+function ConversationLine({ complement }: { complement: string }) {
   return (
     <article data-feed-entry aria-label={`Conversation · ${complement}`} className="flex flex-col">
       <CollapsibleTrigger
+        chevronSize="xs"
         data-feed-item
         data-feed-toggle
         tabIndex={-1}
@@ -97,7 +101,6 @@ function ConversationLine({ open, complement }: { open: boolean; complement: str
           "outline-none transition-colors duration-(--duration-fast) ease-standard hover:bg-veil-hover active:bg-veil-press focus-visible:focus-ring",
         )}
       >
-        <Chevron open={open} />
         <Icon icon={ICONS.discussion} size="sm" className="text-ink-4" />
         <span className="shrink-0 font-medium whitespace-nowrap text-ink-2">Conversation</span>
         <CutText text={complement} className="text-ink-3" />
@@ -265,7 +268,7 @@ export function ArchivedDiscussion({ discussionId }: ArchivedDiscussionProps) {
                   discussion={{ id: discussion.id, documentRevision: 0, documents: false }}
                 />
               )}
-              <ConversationLine open={conversationOpen} complement={complement} />
+              <ConversationLine complement={complement} />
             </ArchivedMarkers>
             <CollapsibleContent>
               <div className="pt-(--space-2)">

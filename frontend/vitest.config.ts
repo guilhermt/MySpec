@@ -54,12 +54,10 @@ export default mergeConfig(
           optimizeDeps: {
             entries: [PAINTED],
             include: [
-              "@base-ui/react/toggle-group",
               "@streamdown/code",
               "@streamdown/mermaid",
               "diff",
               "react-dom/client",
-              "react-resizable-panels",
               "streamdown",
             ],
             force: true,

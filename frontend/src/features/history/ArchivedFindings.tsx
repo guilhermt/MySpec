@@ -1,7 +1,10 @@
 import { useState } from "react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/system/Collapsible";
 import { CutText } from "@/components/system/CutText";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Chevron } from "@/features/chat/entries/Chevron";
 import { LINE, SUNKEN } from "@/features/chat/entries/MarkerLine";
 import { Markdown } from "@/features/chat/Markdown";
 import type { OutFinding } from "@/features/history/archived";
@@ -15,6 +18,7 @@ function FindingLine({ finding }: { finding: OutFinding }) {
     <li>
       <Collapsible open={open} onOpenChange={setOpen}>
         <CollapsibleTrigger
+          chevronSize="xs"
           aria-label={[finding.title, finding.location, finding.went]
             .filter((part) => part !== "")
             .join(" · ")}
@@ -23,7 +27,6 @@ function FindingLine({ finding }: { finding: OutFinding }) {
             "w-[calc(100%+var(--space-4))] outline-none transition-colors duration-(--duration-fast) ease-standard hover:bg-veil-hover active:bg-veil-press focus-visible:focus-ring",
           )}
         >
-          <Chevron open={open} />
           <CutText text={finding.title} className="text-ink-1" />
           {finding.location !== "" && (
             <CutText

@@ -4,6 +4,7 @@ import { MarkerLine } from "@/features/chat/entries/MarkerLine";
 import { Markdown } from "@/features/chat/Markdown";
 import { derivedDecidedLineOf } from "@/features/chat/markers";
 import { leaveDecisionCard } from "@/features/chat/useFeed";
+import { passRevision } from "@/features/reviews/pass-revision";
 import {
   currentCardPass,
   derivedDecidedPasses,
@@ -11,7 +12,6 @@ import {
   findingViews,
   reportMarkerIds,
 } from "@/features/reviews/review-conversation";
-import { passRevision } from "@/features/reviews/useFindingText";
 import { type Entry, REVIEW_STAGE, type ReviewSummary } from "@/lib/wails";
 import { decideFindingInPlace, openFindingInEditor, saveFindingTextInPlace } from "@/store/actions";
 import { useTranscript } from "@/store/app-store";

@@ -330,7 +330,7 @@ describe("NewDiscussionDialog", () => {
     expect(screen.getByRole("button", { name: "Close" })).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByLabelText("Title")).toHaveAttribute("readonly");
     const model = screen.getByRole("button", { name: /^Discussion model:/ });
-    expect(model).toHaveAttribute("aria-disabled", "true");
+    expect(model.closest("[inert]")).not.toBeNull();
     await user.click(model);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 

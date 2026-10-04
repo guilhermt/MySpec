@@ -4,6 +4,7 @@ import { Chip } from "@/components/system/Chip";
 import { EmptyState } from "@/components/system/EmptyState";
 import { FilterBar } from "@/components/system/FilterBar";
 import { isTyping } from "@/components/system/keys";
+import { LIST_COLUMN } from "@/components/system/ListPanel";
 import { HistoryRow } from "@/components/system/ListRow";
 import { DaySectionHeader } from "@/components/system/ListSectionHeader";
 import { ScrollArea } from "@/components/system/ScrollArea";
@@ -11,7 +12,6 @@ import { SearchInput } from "@/components/system/SearchInput";
 import { Shimmer } from "@/components/system/Shimmer";
 import { Tooltip } from "@/components/system/Tooltip";
 import { useNow } from "@/features/attention/useNow";
-import { LIST_COLUMN } from "@/features/board/BoardView";
 import { entryId, type ListTreeEntry, useListTree } from "@/features/board/useListTree";
 import {
   type HistoryEntry,

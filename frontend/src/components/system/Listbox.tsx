@@ -1,5 +1,5 @@
 import { Combobox } from "@base-ui/react/combobox";
-import { ChevronDown, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { useId } from "react";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
@@ -69,7 +69,7 @@ export function Listbox({
           )}
         </Combobox.Value>
       </span>
-      <Icon icon={ChevronDown} size="sm" tone="muted" />
+      <Icon icon={ICONS.expanded} size="sm" tone="muted" />
     </Combobox.Trigger>
   );
 

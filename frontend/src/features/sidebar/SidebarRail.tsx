@@ -1,7 +1,7 @@
-import { ChevronsRight } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Icon } from "@/components/system/Icon";
 import { IconButton } from "@/components/system/IconButton";
+import { ICONS } from "@/components/system/icons";
 import { ITEM_ICONS, TONE_GLYPHS } from "@/components/system/item-parts";
 import { ScrollArea } from "@/components/system/ScrollArea";
 import { StateGlyph } from "@/components/system/StateGlyph";
@@ -233,7 +233,7 @@ export function SidebarRail() {
       <div className="flex shrink-0 flex-col items-center gap-(--space-1) py-(--space-2)">
         <IconButton
           label="Expand the sidebar"
-          icon={ChevronsRight}
+          icon={ICONS.expandPanel}
           size="sm"
           onClick={() => toggleSidebarRail()}
         />
