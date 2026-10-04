@@ -48,6 +48,8 @@ function scrollUp(container: HTMLElement) {
   Object.defineProperty(scroller, "scrollTop", { value: 0, configurable: true });
   Object.defineProperty(scroller, "scrollTo", { value: scrollTo, configurable: true });
   act(() => {
+    // The reader scrolls with the wheel: a scroll of the content growing is not theirs.
+    scroller.dispatchEvent(new Event("wheel"));
     scroller.dispatchEvent(new Event("scroll"));
   });
   return scrollTo;
@@ -635,7 +637,7 @@ describe("Conversation stretches and markers", () => {
     expect(screen.getByText("Speech 0.")).toBeInTheDocument();
   });
 
-  it("keeps a stretch open when a new round arrives on screen", () => {
+  it("keeps a stretch open when a new round arrives on screen", async () => {
     renderWithStore(<Conversation stage="plan" taskId="task-1" session={makeTask()} />, {
       state: withTask(),
       ui: { transcripts: plan(speeches(12, 0)) },
@@ -647,7 +649,11 @@ describe("Conversation stretches and markers", () => {
       });
     });
 
-    expect(screen.getByText("Speech 0.")).toBeInTheDocument();
+    // The conversation opens at its end: the start of the stretch is mounted once the reader is there.
+    const viewport = document.querySelector<HTMLElement>("[data-window-viewport]");
+    act(() => viewport?.scrollTo({ top: 0 }));
+
+    expect(await screen.findByText("Speech 0.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /12 speeches/ })).not.toBeInTheDocument();
   });
 

@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ArrivalFocus } from "@/components/ArrivalFocus";
 import type { RequestFocus } from "@/lib/focus";
@@ -45,6 +45,31 @@ describe("ArrivalFocus", () => {
     arrive("question");
 
     expect(screen.getByRole("heading", { name: "add-login" })).toHaveFocus();
+    expect(useAppStore.getState().pendingFocus).toBeNull();
+  });
+
+  it("waits for the window of the conversation to be ready, however many frames it takes", async () => {
+    renderWithStore(
+      <>
+        <h1 tabIndex={-1}>add-login</h1>
+        <div data-window-viewport="" data-testid="viewport" />
+        <div data-pending-card="permission">
+          <button type="button" data-default-focus>
+            Allow
+          </button>
+        </div>
+        <ArrivalFocus target="permission" ready />
+      </>,
+      { ui: { pendingFocus: "request" } },
+    );
+    await new Promise((done) => setTimeout(done, 150));
+
+    expect(screen.getByRole("button", { name: "Allow" })).not.toHaveFocus();
+    expect(useAppStore.getState().pendingFocus).toBe("request");
+
+    screen.getByTestId("viewport").setAttribute("data-window-ready", "");
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Allow" })).toHaveFocus());
     expect(useAppStore.getState().pendingFocus).toBeNull();
   });
 

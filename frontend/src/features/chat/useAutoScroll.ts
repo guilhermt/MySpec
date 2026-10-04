@@ -7,8 +7,10 @@ function atBottomOf(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight < BOTTOM_SLACK;
 }
 
-function toBottom(element: HTMLElement): void {
+// toBottom scrolls to the end and returns where that left the scroll.
+function toBottom(element: HTMLElement): number {
   element.scrollTo({ top: element.scrollHeight });
+  return element.scrollTop;
 }
 
 function same(left: readonly unknown[], right: readonly unknown[]): boolean {
@@ -22,6 +24,8 @@ export interface AutoScroll {
   /** newCount is how many rows were born since the user left the end; a row that grows counts once. */
   newCount: number;
   scrollToBottom: () => void;
+  /** followingEnd tells whether the user is at the end now, read when asked: it is what the list needs while it measures. */
+  followingEnd: () => boolean;
 }
 
 /**
@@ -46,6 +50,9 @@ export function useAutoScroll(
   const rowKeysRef = useRef(rowKeys);
   rowKeysRef.current = rowKeys;
   const previous = useRef(deps);
+  // followed is where the scroll was left by going to the end: a scroll event that reports that
+  // place is this hook's own, and the content that grew since says nothing of the reader.
+  const followed = useRef<number | null>(null);
 
   const markAtBottom = useCallback((value: boolean) => {
     if (value !== atBottomRef.current) {
@@ -60,10 +67,19 @@ export function useAutoScroll(
     if (element === null) {
       return;
     }
-    const onScroll = () => markAtBottom(atBottomOf(element));
+    const onScroll = () => {
+      if (follow && atBottomRef.current && followed.current === element.scrollTop) {
+        // The content grew after it went to the end, as the rows of a window are measured: it goes on.
+        if (!atBottomOf(element)) {
+          followed.current = toBottom(element);
+        }
+        return;
+      }
+      markAtBottom(atBottomOf(element));
+    };
     element.addEventListener("scroll", onScroll, { passive: true });
     return () => element.removeEventListener("scroll", onScroll);
-  }, [ref, markAtBottom]);
+  }, [ref, markAtBottom, follow]);
 
   // Growth that no dep captures, like Markdown rendering late or the viewport
   // shrinking under a taller composer, must still keep the reader at the end.
@@ -75,7 +91,7 @@ export function useAutoScroll(
     }
     const observer = new ResizeObserver(() => {
       if (atBottomRef.current) {
-        toBottom(element);
+        followed.current = toBottom(element);
       }
     });
     observer.observe(element);
@@ -88,7 +104,7 @@ export function useAutoScroll(
     if (element === null) {
       return;
     }
-    toBottom(element);
+    followed.current = toBottom(element);
     markAtBottom(true);
   }, [ref, markAtBottom]);
 
@@ -104,13 +120,14 @@ export function useAutoScroll(
       return;
     }
     if (atBottomRef.current) {
-      toBottom(element);
+      followed.current = toBottom(element);
     }
   });
 
+  const followingEnd = useCallback(() => atBottomRef.current, []);
   const newCount = seen === null ? 0 : rowKeys.filter((key) => !seen.has(key)).length;
   // Not following, the reader is never away from an end they are taken back to.
   return follow
-    ? { atBottom, newCount, scrollToBottom }
-    : { atBottom: true, newCount: 0, scrollToBottom };
+    ? { atBottom, newCount, scrollToBottom, followingEnd }
+    : { atBottom: true, newCount: 0, scrollToBottom, followingEnd };
 }

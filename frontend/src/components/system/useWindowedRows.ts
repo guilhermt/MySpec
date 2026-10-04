@@ -15,6 +15,12 @@ import {
  */
 export const WINDOW_VIEWPORT = "data-window-viewport";
 
+/**
+ * WINDOW_READY marks the element that scrolls once the window has mounted the rows that show: what
+ * looks for a row by the DOM, like the focus of an arrival, waits for it.
+ */
+export const WINDOW_READY = "data-window-ready";
+
 export interface WindowedRowsOptions {
   /** count is how many rows the list has. */
   count: number;
@@ -32,7 +38,12 @@ export interface WindowedRowsOptions {
   stickyRef?: RefObject<HTMLElement | null>;
   /** overscan is how many rows are mounted past each end of what shows. */
   overscan: number;
-  /** startAtEnd opens the list at its last row: the conversation. */
+  /**
+   * keepEnd tells that the caller keeps the list at its end by itself, as the conversation follows
+   * the end it is read at: while it holds, a row that changes height does not correct the scroll.
+   */
+  keepEnd?: (() => boolean) | undefined;
+  /** startAtEnd opens the list at the end of what scrolls: the conversation. */
   startAtEnd?: boolean;
 }
 
@@ -49,6 +60,8 @@ export interface WindowedRows {
   scrollToIndex: (index: number, align?: "auto" | "end" | "center") => void;
   /** mounted tells whether a row is in the DOM now. */
   mounted: (index: number) => boolean;
+  /** attached tells that the element that scrolls is known: the rows the window mounts are the ones that show. */
+  attached: boolean;
 }
 
 // pixels reads a computed length in pixels, 0 for a value that is not one ("normal", "auto").
@@ -88,22 +101,27 @@ export function useWindowedRows({
   listRef,
   stickyRef,
   overscan,
+  keepEnd,
   startAtEnd = false,
 }: WindowedRowsOptions): WindowedRows {
   // The element that scrolls is attached after the rows that sit inside it first commit, so the
-  // virtualizer learns it from the first effect.
+  // virtualizer learns it from the first layout effect.
   const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null);
   const [gap, setGap] = useState(0);
   const [scrollMargin, setScrollMargin] = useState(0);
   const [scrollPaddingStart, setScrollPaddingStart] = useState(0);
 
-  useEffect(() => {
+  // The ScrollArea attaches its viewport a little after the layout effects of the commit that
+  // mounts it: the layout effect takes it when it is there, the effect when it is not.
+  const learnScrollElement = useCallback(() => {
     const element = scrollRef.current;
     if (element !== null) {
       element.setAttribute(WINDOW_VIEWPORT, "");
     }
     setScrollElement(element);
   }, [scrollRef]);
+  useLayoutEffect(learnScrollElement, [learnScrollElement]);
+  useEffect(learnScrollElement, [learnScrollElement]);
 
   // What the list sits under moves it, and the sticky bar changes height with its wrapped lines.
   useLayoutEffect(() => {
@@ -153,14 +171,42 @@ export function useWindowedRows({
     scrollPaddingStart,
   });
 
+  // Where the list is read away from the end, the correction is the virtualizer's own: a row above
+  // the view that changes height moves the scroll by the difference, so what shows stays.
+  const keepEndRef = useRef(keepEnd);
+  keepEndRef.current = keepEnd;
+  if (keepEnd !== undefined) {
+    virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
+      // With every row mounted there is no estimate in the DOM to correct for: it is the truth.
+      if (
+        keepEndRef.current?.() === true ||
+        instance.getVirtualItems().length >= instance.options.count
+      ) {
+        return false;
+      }
+      const offset = (instance.scrollOffset ?? 0) + instance.scrollAdjustments;
+      return instance.itemSizeCache.has(item.key)
+        ? item.end <= offset && instance.scrollDirection !== "backward"
+        : item.start < offset;
+    };
+  }
+
   const started = useRef(false);
+  // The list opens at the end in the layout effect of the commit that first has rows and the
+  // element that scrolls, unless something already moved the scroll.
   useLayoutEffect(() => {
     if (!startAtEnd || started.current || count === 0 || scrollElement === null) {
       return;
     }
     started.current = true;
-    virtualizer.scrollToIndex(count - 1, { align: "end", behavior: "auto" });
-  }, [startAtEnd, count, scrollElement, virtualizer]);
+    if (scrollElement.scrollTop !== 0) {
+      return;
+    }
+    // To the end of what scrolls, which can hold more after the list (the tail of the
+    // conversation): scrollToIndex would stop at the end of the last row.
+    const end = Math.max(scrollElement.scrollHeight, virtualizer.getTotalSize() + scrollMargin);
+    scrollElement.scrollTo({ top: Math.max(0, end - scrollElement.clientHeight) });
+  }, [startAtEnd, count, scrollElement, virtualizer, scrollMargin]);
 
   const items = virtualizer.getVirtualItems();
   const parts = useMemo((): WindowPart[] => {
@@ -199,6 +245,15 @@ export function useWindowedRows({
     return out;
   }, [items, virtualizer, count, scrollMargin, gap]);
 
+  // The window is ready once it holds the rows of a list that has some: the first commit, before
+  // the element that scrolls is known, holds none.
+  const ready = scrollElement !== null && (count === 0 || items.length > 0);
+  useLayoutEffect(() => {
+    if (ready) {
+      scrollElement?.setAttribute(WINDOW_READY, "");
+    }
+  }, [ready, scrollElement]);
+
   const mountedIndexes = useMemo(() => new Set(items.map((item) => item.index)), [items]);
 
   const scrollToIndex = useCallback(
@@ -208,5 +263,11 @@ export function useWindowedRows({
   );
   const mounted = useCallback((index: number) => mountedIndexes.has(index), [mountedIndexes]);
 
-  return { parts, measureRef: virtualizer.measureElement, scrollToIndex, mounted };
+  return {
+    parts,
+    measureRef: virtualizer.measureElement,
+    scrollToIndex,
+    mounted,
+    attached: scrollElement !== null,
+  };
 }

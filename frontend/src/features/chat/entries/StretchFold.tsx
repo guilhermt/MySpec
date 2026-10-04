@@ -1,4 +1,4 @@
-import { type ReactNode, useId } from "react";
+import { useId } from "react";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import type { StretchFoldView } from "@/features/chat/conversation";
@@ -8,15 +8,13 @@ export interface StretchFoldProps {
   fold: StretchFoldView;
   open: boolean;
   onToggle: () => void;
-  /** children are the entries of the stretch, mounted only while it is open. */
-  children: ReactNode;
 }
 
 /**
  * StretchFold is a stretch of an earlier round folded into one line: its size and where it began.
- * Open, its entries follow the line as they were, in the same column.
+ * Open, its entries follow the line as units of their own, in the same column.
  */
-export function StretchFold({ fold, open, onToggle, children }: StretchFoldProps) {
+export function StretchFold({ fold, open, onToggle }: StretchFoldProps) {
   const id = useId();
   return (
     <>
@@ -45,7 +43,6 @@ export function StretchFold({ fold, open, onToggle, children }: StretchFoldProps
           )}
         </button>
       </article>
-      {open && children}
     </>
   );
 }

@@ -14,11 +14,7 @@ const FOLD: StretchFoldView = {
 
 function Fold({ fold = FOLD }: { fold?: StretchFoldView }) {
   const [open, setOpen] = useState(false);
-  return (
-    <StretchFold fold={fold} open={open} onToggle={() => setOpen(!open)}>
-      <p>Speech 1.</p>
-    </StretchFold>
-  );
+  return <StretchFold fold={fold} open={open} onToggle={() => setOpen(!open)} />;
 }
 
 describe("StretchFold", () => {
@@ -31,7 +27,7 @@ describe("StretchFold", () => {
     expect(screen.getByText("16:12–16:48")).toHaveClass("entry-time");
   });
 
-  it("doesn't mount the entries of a folded stretch, and shows them open", async () => {
+  it("is the stop of the walk, with the state of the fold, and toggles it", async () => {
     const user = userEvent.setup();
     render(<Fold />);
     // The line is the stop of the walk, with the state of the fold, and has the name of the stretch.
@@ -39,16 +35,14 @@ describe("StretchFold", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(toggle).toHaveAttribute("data-feed-toggle");
     expect(toggle).toHaveAttribute("data-feed-item");
-    expect(screen.queryByText("Speech 1.")).not.toBeInTheDocument();
 
     await user.click(toggle);
 
     expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("Speech 1.")).toBeInTheDocument();
 
     await user.click(toggle);
 
-    expect(screen.queryByText("Speech 1.")).not.toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
   });
 
   it("has no interval without the times", () => {

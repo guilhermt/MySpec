@@ -7,8 +7,8 @@
  * frame, which also waits for the display.
  *
  * With ?measure=conversation&stretches=open the same 1,500 entries come in stretches too short to
- * fold, so every row is mounted, and it also measures ↓ in the feed, from the keydown to the next
- * frame, and Home, to the frame with the first entry focused.
+ * fold, so the window has 362 units to mount from, and it also measures ↓ in the feed, from the
+ * keydown to the next frame, and Home, to the frame with an entry of the first unit focused.
  *
  * A tool of the development build: main.tsx mounts it in place of the app only with
  * ?measure=conversation under the Vite dev server (task dev) or in the measure build, and the
@@ -30,7 +30,7 @@ const ENTRIES = 1500;
 const STRETCHES = 4;
 
 /** OPEN_STRETCHES is how many it has in the open scenario: fewer than 12 rows each, so none folds. */
-const OPEN_STRETCHES = 36;
+export const OPEN_STRETCHES = 36;
 
 /** ACTIONS_PER_GROUP is how many actions the agent runs between two things it says. */
 const ACTIONS_PER_GROUP = 8;
@@ -42,11 +42,11 @@ const UPDATES = 30;
 /** KEY_RUNS is how many times each key is pressed: once cold and the rest warm. */
 const KEY_RUNS = 6;
 
-const TASK_ID = "measure";
-const STAGE = "step:6";
+export const TASK_ID = "measure";
+export const STAGE = "step:6";
 
 /** SESSION is the implementer at work, writing the last entry. */
-const SESSION: SessionState = {
+export const SESSION: SessionState = {
   sessionStatus: "working",
   sessionModel: "claude-opus-5-5[1m]",
   sessionEffort: "high",
@@ -93,10 +93,10 @@ const SPEECH = [
   "- a mutex per bucket, and the map behind a `sync.RWMutex`.",
 ].join("\n");
 
-// conversation is the measured conversation: each stretch opened by a report to the implementer
+// measuredConversation is the measured conversation: each stretch opened by a report to the implementer
 // but the first, then speeches, each followed by a group of actions, to the last entry, a speech
 // still being written.
-function conversation(stretches: number): Entry[] {
+export function measuredConversation(stretches: number): Entry[] {
   const start = Date.now() - ENTRIES * 5000;
   const entries: Entry[] = [];
   const add = (fields: Partial<Entry> & Pick<Entry, "kind">, turn: number) => {
@@ -239,16 +239,20 @@ function feedItems(): HTMLElement[] {
 }
 
 // press presses a key on the item in focus and returns the milliseconds to the frame after it, or,
-// given the item to wait for, to the frame in which that item holds the focus.
-async function press(key: string, item: HTMLElement, until?: HTMLElement): Promise<number> {
+// given what to wait for, to the frame in which it holds.
+async function press(key: string, item: HTMLElement, until?: () => boolean): Promise<number> {
   const started = performance.now();
   item.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
   let frame = await nextFrame();
-  while (until !== undefined && document.activeElement !== until && frame - started < 2000) {
+  while (until !== undefined && !until() && frame - started < 2000) {
     frame = await nextFrame();
   }
   return frame - started;
 }
+
+// inFirstUnit tells whether the focus is on an entry of the first unit of the conversation, which
+// the window mounts when Home brings it into view.
+const inFirstUnit = () => document.activeElement?.closest('[data-unit-index="0"]') != null;
 
 // ms rounds milliseconds to a tenth.
 const ms = (value: number) => Number(value.toFixed(1));
@@ -256,7 +260,7 @@ const ms = (value: number) => Number(value.toFixed(1));
 /** measureConversation mounts the measured conversation in the element and times it. */
 export async function measureConversation(container: HTMLElement): Promise<void> {
   const open = new URLSearchParams(window.location.search).get("stretches") === "open";
-  const entries = conversation(open ? OPEN_STRETCHES : STRETCHES);
+  const entries = measuredConversation(open ? OPEN_STRETCHES : STRETCHES);
   const last = entries.at(-1);
   const load = () =>
     useAppStore.setState({
@@ -302,14 +306,15 @@ export async function measureConversation(container: HTMLElement): Promise<void>
       const from = items[items.length - 2 - run];
       from?.focus();
       if (from !== undefined) {
-        downs.push(await press("ArrowDown", from, items[items.length - 1 - run]));
+        const next = items[items.length - 1 - run];
+        downs.push(await press("ArrowDown", from, () => document.activeElement === next));
       }
     }
     for (let run = 0; run < KEY_RUNS; run++) {
       const from = feedItems().at(-1);
       from?.focus();
       if (from !== undefined) {
-        homes.push(await press("Home", from, feedItems()[0]));
+        homes.push(await press("Home", from, inFirstUnit));
       }
     }
     keys.keyDownFirstMs = ms(downs[0] ?? 0);
@@ -327,9 +332,11 @@ export async function measureConversation(container: HTMLElement): Promise<void>
     mountedArticles: container.querySelectorAll("article").length,
     firstPaintMs: Math.round(first),
     warmPaintMedianMs: Math.round(median(warm)),
-    updateWorkMedianMs: ms(median(work)),
-    updateWorkMaxMs: ms(Math.max(...work)),
-    updateFrameMedianMs: ms(median(frames)),
+    // The first update is the cold one, the rest are warm.
+    updateWorkFirstMs: ms(work[0] ?? 0),
+    updateWorkWarmMedianMs: ms(median(work.slice(1))),
+    updateWorkWarmMaxMs: ms(Math.max(...work.slice(1))),
+    updateFrameWarmMedianMs: ms(median(frames.slice(1))),
     userAgent: navigator.userAgent,
   };
   console.info("measure-conversation", result);

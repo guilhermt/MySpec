@@ -1,5 +1,15 @@
-import { Fragment, memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  memo,
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
+import { useWindowedRows } from "@/components/system/useWindowedRows";
 import { ConversationColumn } from "@/features/chat/ConversationColumn";
 import {
   buildConversation,
@@ -10,6 +20,11 @@ import {
   stretchFoldOf,
   waitingToolUseId,
 } from "@/features/chat/conversation";
+import {
+  type ConversationUnit,
+  conversationUnits,
+  unitArticles,
+} from "@/features/chat/conversation-units";
 import { type DiscussionInput, roundFolds } from "@/features/chat/discussion-markers";
 import { Activity } from "@/features/chat/entries/Activity";
 import { BackToEnd } from "@/features/chat/entries/BackToEnd";
@@ -33,12 +48,19 @@ import {
 } from "@/features/chat/markers";
 import type { SessionState } from "@/features/chat/session";
 import { useAutoScroll } from "@/features/chat/useAutoScroll";
-import { useFeed } from "@/features/chat/useFeed";
+import { type FeedUnits, useFeed } from "@/features/chat/useFeed";
 import { decidedMarkerIds, reportMarkerIds } from "@/features/reviews/review-conversation";
-import { asSituationKind, asTaskMode, type Entry, type UserEntry } from "@/lib/wails";
+import {
+  asPermissionStatus,
+  asSituationKind,
+  asTaskMode,
+  type Entry,
+  type UserEntry,
+} from "@/lib/wails";
 import { useAppStore, useFlashing, useReview, useTask, useTranscript } from "@/store/app-store";
 
 const NO_ENTRIES: readonly Entry[] = [];
+const NO_FOLDS: ReadonlySet<string> = new Set();
 
 const LOADING_WIDTHS = ["w-3/4", "w-full", "w-1/2"];
 
@@ -238,6 +260,70 @@ const RowView = memo(function RowView({
   }
 });
 
+// The heights of a unit before it is measured, in whole pixels: a line of text is --leading-body
+// tall, a card or a block adds its padding, and a text breaks about every CHARS_PER_LINE characters
+// in the conversation column. The measure of the real one wins and is kept by the key of the unit.
+const FOLD_PX = 28;
+const LINE_PX = 22;
+const CHARS_PER_LINE = 110;
+const SPEECH_PAD_PX = 8;
+const SPEECH_MIN_PX = 30;
+const MESSAGE_PAD_PX = 24;
+const MARKER_PX = 28;
+const GROUP_PX = 28;
+const CARD_PX = 160;
+const ERROR_PX = 96;
+const AFTER_PX = 140;
+
+/** WINDOW_MIN_UNITS is how many units a conversation holds before it is windowed: a shorter one mounts them all. */
+const WINDOW_MIN_UNITS = 60;
+
+/** WINDOW_OVERSCAN is how many units are mounted past each end of what shows. */
+const WINDOW_OVERSCAN = 6;
+
+// estimateOf is the height of a unit before it is measured.
+function estimateOf(unit: ConversationUnit, hasAfter: boolean): number {
+  const extra = hasAfter ? AFTER_PX : 0;
+  if (unit.kind === "fold") {
+    return FOLD_PX;
+  }
+  const { row } = unit;
+  switch (row.kind) {
+    case "speech": {
+      const chars = row.entry.assistant?.text.length ?? 0;
+      return (
+        Math.max(SPEECH_MIN_PX, LINE_PX * Math.ceil(chars / CHARS_PER_LINE) + SPEECH_PAD_PX) + extra
+      );
+    }
+    case "user":
+    case "product": {
+      const chars = row.entry.user?.text.length ?? 0;
+      return LINE_PX * Math.ceil(chars / CHARS_PER_LINE) + MESSAGE_PAD_PX + extra;
+    }
+    case "marker":
+    case "start":
+      return MARKER_PX + extra;
+    case "group":
+      return GROUP_PX + extra;
+    case "question":
+    case "permission":
+      return CARD_PX + extra;
+    case "error":
+      return ERROR_PX + extra;
+  }
+}
+
+// isPending tells whether a row is a question or a permission still unanswered.
+function isPending(row: Row): boolean {
+  const card =
+    row.kind === "question"
+      ? row.entry.question
+      : row.kind === "permission"
+        ? row.entry.permission
+        : null;
+  return card != null && asPermissionStatus(card.status) === "pending";
+}
+
 // lastCompleteSpeech is the key of the last speech that is complete, "" without one.
 function lastCompleteSpeech(rows: readonly Row[]): string {
   const speech = [...rows]
@@ -308,7 +394,8 @@ export function Conversation({
   const contentRef = useRef<HTMLDivElement>(null);
   const feedRef = useRef<HTMLDivElement>(null);
   const [atTop, setAtTop] = useState(true);
-  useFeed(feedRef);
+  // currentUnit is the unit that holds the tab stop of the feed, -1 for the tail: it stays mounted.
+  const [currentUnit, setCurrentUnit] = useState(-1);
 
   const entries = transcript?.entries ?? NO_ENTRIES;
   const pending = transcript?.pending ?? NO_ENTRIES;
@@ -321,7 +408,7 @@ export function Conversation({
   // The text of the last entry is what grows while the agent writes.
   const last = entries.at(-1);
   const streaming = last?.assistant ? !last.assistant.complete : false;
-  const { atBottom, newCount, scrollToBottom } = useAutoScroll(
+  const { atBottom, newCount, scrollToBottom, followingEnd } = useAutoScroll(
     viewportRef,
     contentRef,
     [entries.length, pending.length, last?.assistant?.text ?? ""],
@@ -390,6 +477,103 @@ export function Conversation({
     setOpenFolds((folds) => (folds.has(askedStretch) ? folds : new Set(folds).add(askedStretch)));
   }, [asking, askedStretch, clearMarkerRequest]);
 
+  const units = useMemo(
+    () =>
+      conversationUnits(
+        model,
+        {
+          foldable: foldable ?? NO_FOLDS,
+          open: openFolds,
+          anchored: (stretch) =>
+            stretch.rows.some((row) => after?.has(row.key) || before?.has(row.key)),
+        },
+        ctx,
+      ),
+    [model, foldable, openFolds, ctx, after, before],
+  );
+  const pinned = useMemo(() => {
+    if (units.length <= WINDOW_MIN_UNITS) {
+      return units.map((_unit, index) => index);
+    }
+    const out = new Set<number>([units.length - 1, currentUnit]);
+    units.forEach((unit, index) => {
+      if (
+        unit.kind === "row" &&
+        (isPending(unit.row) ||
+          before?.has(unit.row.key) ||
+          after?.has(unit.row.key) ||
+          unit.row.key === asked?.row)
+      ) {
+        out.add(index);
+      }
+    });
+    return [...out].sort((a, b) => a - b);
+  }, [units, currentUnit, before, after, asked?.row]);
+  const { parts, measureRef, scrollToIndex, attached } = useWindowedRows({
+    count: units.length,
+    keyOf: (index) => units[index]?.key ?? String(index),
+    estimate: (index) => {
+      const unit = units[index];
+      return unit === undefined
+        ? 0
+        : estimateOf(unit, unit.kind === "row" && after?.has(unit.row.key) === true);
+    },
+    pinned,
+    scrollRef: viewportRef,
+    listRef: feedRef,
+    overscan: WINDOW_OVERSCAN,
+    keepEnd: readOnly ? undefined : followingEnd,
+    startAtEnd: !readOnly,
+  });
+  // It is new each time the window mounts other units: the feed syncs what came in.
+  const mountedKey = parts.map((part) => part.key).join("|");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mountedKey makes it new with the window
+  const feedUnits = useMemo<FeedUnits>(
+    () => ({
+      count: units.length,
+      reveal: (index) => scrollToIndex(index),
+      onCurrent: setCurrentUnit,
+    }),
+    [units.length, scrollToIndex, mountedKey],
+  );
+  useFeed(feedRef, feedUnits);
+
+  // The articles of the top level are numbered over the whole conversation: the units that are
+  // mounted by what comes before them, and the tail after the units.
+  const articleOffsets = useMemo(() => {
+    let total = 0;
+    const offsets = units.map((unit) => {
+      const offset = total;
+      total += unitArticles(unit, ctx, before, after);
+      return offset;
+    });
+    return { offsets, total };
+  }, [units, ctx, before, after]);
+  // It runs on every render: the window moves, and what it mounts is numbered.
+  useLayoutEffect(() => {
+    const feed = feedRef.current;
+    if (feed === null) {
+      return;
+    }
+    const tail = [...feed.querySelectorAll<HTMLElement>(":scope > article")];
+    const size = articleOffsets.total + tail.length;
+    const number = (article: HTMLElement, position: number) => {
+      article.setAttribute("aria-posinset", String(position));
+      article.setAttribute("aria-setsize", String(size));
+    };
+    for (const element of feed.querySelectorAll<HTMLElement>(":scope > [data-unit-index]")) {
+      const offset = articleOffsets.offsets[Number(element.dataset.unitIndex)] ?? 0;
+      for (const [at, article] of element
+        .querySelectorAll<HTMLElement>(":scope > article")
+        .entries()) {
+        number(article, offset + at + 1);
+      }
+    }
+    for (const [at, article] of tail.entries()) {
+      number(article, articleOffsets.total + at + 1);
+    }
+  });
+
   useEffect(() => {
     const viewport = viewportRef.current;
     if (viewport === null) {
@@ -415,45 +599,61 @@ export function Conversation({
           aria-busy={streaming}
           className="flex flex-col gap-(--space-3)"
         >
-          {loading ? (
+          {/* The rows and what follows them mount together, once the window knows its scroll. */}
+          {loading || !attached ? (
             <Loading />
           ) : (
             <>
-              {model.stretches.map((stretch) => {
-                const views = stretch.rows.map((row) => (
-                  <Fragment key={row.key}>
-                    {before?.get(row.key)}
-                    <RowView
-                      taskId={taskId}
-                      stage={stage}
-                      row={row}
-                      voice={voice}
-                      ctx={ctx}
-                      readOnly={readOnly}
-                      railLast={row.key === railKey}
-                      waitingToolUseId={waiting}
-                      requested={row.key === asked?.row}
-                      onRequested={clearMarkerRequest}
-                      flash={readOnly ? null : flash}
+              {parts.map((part) => {
+                if (part.kind === "spacer") {
+                  return (
+                    <div
+                      key={part.key}
+                      aria-hidden="true"
+                      role="none"
+                      style={{ height: part.height }}
                     />
-                    {after?.get(row.key)}
-                  </Fragment>
-                ));
-                // A stretch that holds a derived line stays open: it is drawn inside the stretch.
-                const folds =
-                  foldable?.has(stretch.key) === true &&
-                  !stretch.rows.some((row) => after?.has(row.key) || before?.has(row.key));
-                return folds ? (
-                  <StretchFold
-                    key={stretch.key}
-                    fold={stretchFoldOf(stretch, ctx, Date.now())}
-                    open={openFolds.has(stretch.key)}
-                    onToggle={() => toggleFold(stretch.key)}
+                  );
+                }
+                const unit = units[part.index];
+                if (unit === undefined) {
+                  return null;
+                }
+                return (
+                  <div
+                    key={part.key}
+                    role="none"
+                    ref={measureRef}
+                    data-index={part.index}
+                    data-unit-index={part.index}
+                    className="flex flex-col gap-(--space-3)"
                   >
-                    {views}
-                  </StretchFold>
-                ) : (
-                  <Fragment key={stretch.key}>{views}</Fragment>
+                    {unit.kind === "fold" ? (
+                      <StretchFold
+                        fold={stretchFoldOf(unit.stretch, ctx, Date.now())}
+                        open={unit.open}
+                        onToggle={() => toggleFold(unit.stretch.key)}
+                      />
+                    ) : (
+                      <>
+                        {before?.get(unit.row.key)}
+                        <RowView
+                          taskId={taskId}
+                          stage={stage}
+                          row={unit.row}
+                          voice={voice}
+                          ctx={ctx}
+                          readOnly={readOnly}
+                          railLast={unit.row.key === railKey}
+                          waitingToolUseId={waiting}
+                          requested={unit.row.key === asked?.row}
+                          onRequested={clearMarkerRequest}
+                          flash={readOnly ? null : flash}
+                        />
+                        {after?.get(unit.row.key)}
+                      </>
+                    )}
+                  </div>
                 );
               })}
               {endLine}
@@ -498,6 +698,8 @@ export function Conversation({
           newCount={newCount}
           voice={voice}
           work={streaming ? "writing" : session.turnRunning ? "working" : null}
+          // To the end of what scrolls, the tail included: the units that come into view measure
+          // themselves and the scroll follows the end as they do.
           onClick={scrollToBottom}
         />
       )}

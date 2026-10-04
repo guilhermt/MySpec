@@ -100,52 +100,62 @@ O teste `frontend/src/features/history/HistoryView.measure.painted.test.tsx` con
 
 ## As listas virtualizadas
 
-O board monta só as linhas que aparecem, a da parada de Tab e a do card aberto, entre espaçadores (`useWindowedRows`, que o History também usa, medido na seção anterior). `frontend/src/dev/measure-board.tsx` o mede com 2.000 cards em dez status, todas as seções abertas: a primeira pintura, do render ao quadro seguinte ao commit, uma tecla na busca, do `input` ao quadro com a lista nova, e `↓`, do `keydown` ao quadro seguinte, uma vez fria e cinco vezes quente, em 44 linhas montadas. As metas são 300 ms, 50 ms e 16 ms, e passam quando o máximo das quentes em produção e a mediana das quentes em desenvolvimento ficam dentro delas. Um quadro a 60 Hz dura 16,7 ms, que é o piso de uma medida que termina no quadro seguinte; o `↓` mede esse piso.
+O board, o History e a conversa montam só o que aparece, entre espaçadores (`useWindowedRows`, o único lugar que importa `@tanstack/react-virtual`). Cada um se mede com uma ferramenta de `frontend/src/dev/`, no motor do app, uma vez fria e cinco vezes quente, com o React de produção (`pnpm measure:build`) e o de desenvolvimento (`task dev`). As metas passam quando o máximo das quentes em produção e a mediana das quentes em desenvolvimento ficam dentro delas. Um quadro a 60 Hz dura 16,7 ms, que é o piso de uma medida que termina no quadro seguinte: o `↓` mede esse piso, e o que passa de 16 ms numa rodada é a variação do Broadway, que desenha sem GPU.
+
+### O board
+
+`measure-board.tsx` mede 2.000 cards em dez status, todas as seções abertas, com 44 linhas montadas: a primeira pintura, do render ao quadro seguinte ao commit, uma tecla na busca, do `input` ao quadro com a lista nova, e `↓`, do `keydown` ao quadro seguinte. As metas são 300 ms, 50 ms e 16 ms.
 
 No WebKitGTK 2.52.6 (WebKit 6.0 sobre GTK4 4.22.4), pelo Broadway:
 
-| React de produção (`pnpm measure:build`) | Fria | Quente, mediana | Quente, máximo | Meta |
+| React de produção | Fria | Quente, mediana | Quente, máximo | Meta |
 |---|---|---|---|---|
-| Primeira pintura | 65 ms | 36 ms | 60 ms | 300 ms |
+| Primeira pintura | 61 ms | 35 ms | 63 ms | 300 ms |
 | Uma tecla na busca | 15 ms | 16 ms | 16 ms | 50 ms |
 | `↓` na lista | 15 ms | 16 ms | 16 ms | 16 ms |
 
-| React de desenvolvimento (`task dev`) | Fria | Quente, mediana | Quente, máximo | Meta |
+| React de desenvolvimento | Fria | Quente, mediana | Quente, máximo | Meta |
 |---|---|---|---|---|
-| Primeira pintura | 83 ms | 51 ms | 79 ms | 300 ms |
-| Uma tecla na busca | 21 ms | 16 ms | 18 ms | 50 ms |
-| `↓` na lista | 14 ms | 16 ms | 16 ms | 16 ms |
+| Primeira pintura | 80 ms | 50 ms | 80 ms | 300 ms |
+| Uma tecla na busca | 21 ms | 16 ms | 16 ms | 50 ms |
+| `↓` na lista | 15 ms | 16 ms | 16 ms | 16 ms |
 
 No Chromium 153 do Playwright, para comparar:
 
 | | Fria | Quente, mediana | Quente, máximo |
 |---|---|---|---|
-| Primeira pintura, produção | 46 ms | 23 ms | 41 ms |
+| Primeira pintura, produção | 49 ms | 24 ms | 42 ms |
 | Uma tecla na busca, produção | 12 ms | 17 ms | 17 ms |
 | `↓` na lista, produção | 16 ms | 17 ms | 17 ms |
-| Primeira pintura, desenvolvimento | 61 ms | 67 ms | 91 ms |
+| Primeira pintura, desenvolvimento | 61 ms | 68 ms | 96 ms |
 | Uma tecla na busca, desenvolvimento | 18 ms | 17 ms | 17 ms |
 | `↓` na lista, desenvolvimento | 16 ms | 17 ms | 17 ms |
 
-**A conversa, sem a janela.** A conversa monta hoje todas as linhas dos trechos abertos. `frontend/src/dev/measure-conversation.tsx` a mede com 1.500 entradas em dois cenários: `?measure=conversation`, em quatro trechos, três dobrados (89 artigos montados), e `?measure=conversation&stretches=open`, em 36 trechos curtos demais para dobrar (362 artigos montados). Cada um mede a primeira pintura, uma atualização do texto em streaming (o trabalho, até o commit com o layout, e o tempo até o quadro seguinte) e, no aberto, `↓` e `Home` no `feed`, uma vez frios e cinco vezes quentes. O modelo da conversa se refaz a partir do trecho da primeira entrada que mudou e `RowView` é um `memo`, de modo que uma atualização de texto renderiza uma linha só.
+### A conversa
 
-No WebKitGTK 2.52.6, pelo Broadway:
+A conversa monta as unidades que aparecem, as fixadas (a última, a da parada de Tab do `feed`, a de cada cartão pendente, as que têm um nó `before` ou `after` e a do marco pedido) e 6 de `overscan`, e uma conversa de até 60 unidades monta todas. O modelo se refaz a partir do trecho da primeira entrada que mudou e `RowView` é um `memo`, de modo que uma atualização de texto renderiza uma linha só. `measure-conversation.tsx` mede 1.500 entradas em dois cenários: `?measure=conversation`, em quatro trechos, três dobrados (15 artigos montados), e `?measure=conversation&stretches=open`, em 36 trechos curtos demais para dobrar, 362 unidades de que a janela monta 16 artigos. Cada um mede a primeira pintura, o trabalho de uma atualização do texto em streaming no fim, do `text` ao commit com o layout, e o tempo até o quadro seguinte (a primeira atualização é a fria e as outras 29 são quentes), e o aberto mede também `↓` no `feed`, do `keydown` ao quadro seguinte, e `Home` no `feed`, até o quadro com uma entrada da primeira unidade focada, que a janela monta ao ser pedida. As metas são 300 ms a primeira pintura, 16 ms a atualização e `↓`, e 100 ms `Home`.
 
-| Cenário | Build | Primeira pintura | Pintura quente, mediana | Atualização, trabalho (mediana · máximo) | `↓` (fria · quente, mediana) | `Home` (fria · quente, mediana · máximo) |
-|---|---|---|---|---|---|---|
-| Dobrado | produção | 197 ms | 103 ms | 3 ms · 6 ms | | |
-| Dobrado | desenvolvimento | 255 ms | 130 ms | 5 ms · 20 ms | | |
-| Aberto | produção | 458 ms | 390 ms | 3 ms · 53 ms | 18 ms · 15 ms | 62 ms · 15 ms · 66 ms |
-| Aberto | desenvolvimento | 554 ms | 449 ms | 6 ms · 56 ms | 20 ms · 18 ms | 66 ms · 18 ms · 72 ms |
+No WebKitGTK 2.52.6, pelo Broadway (o aberto em duas rodadas na produção):
+
+| Cenário | Build | Primeira pintura (fria · quente, mediana) | Atualização, trabalho (fria · quente, mediana · máximo) | `↓` (fria · quente, mediana · máximo) | `Home` (fria · quente, mediana · máximo) |
+|---|---|---|---|---|---|
+| Dobrado | produção | 127 ms · 49 ms | 26 ms · 3 ms · 4 ms | | |
+| Dobrado | desenvolvimento | 154 ms · 58 ms | 29 ms · 4 ms · 5 ms | | |
+| Aberto | produção | 124 a 128 ms · 47 a 49 ms | 21 ms · 3 ms · 5 ms | 15 a 16 ms · 16 ms · 16 ms | 38 a 39 ms · 15 ms · 15 a 16 ms |
+| Aberto | desenvolvimento | 156 ms · 58 ms | 30 ms · 4 ms · 6 ms | 16 ms · 16 ms · 16 ms | 49 ms · 15 ms · 15 ms |
 
 No Chromium 153 do Playwright:
 
-| Cenário | Build | Primeira pintura | Pintura quente, mediana | Atualização, trabalho (mediana · máximo) | `↓` (fria · quente, mediana) | `Home` (fria · quente, mediana · máximo) |
-|---|---|---|---|---|---|---|
-| Dobrado | produção | 109 ms | 44 ms | 2,6 ms · 3,8 ms | | |
-| Dobrado | desenvolvimento | 173 ms | 56 ms | 4,1 ms · 13,8 ms | | |
-| Aberto | produção | 241 ms | 146 ms | 2,6 ms · 6,2 ms | 12,8 ms · 14,9 ms | 15,6 ms · 14,7 ms · 15,5 ms |
-| Aberto | desenvolvimento | 431 ms | 190 ms | 4,7 ms · 17,7 ms | 14,3 ms · 15 ms | 15,5 ms · 14,7 ms · 15,6 ms |
+| Cenário | Build | Primeira pintura (fria · quente, mediana) | Atualização, trabalho (fria · quente, mediana · máximo) | `↓` (fria · quente, mediana · máximo) | `Home` (fria · quente, mediana · máximo) |
+|---|---|---|---|---|---|
+| Dobrado | produção | 88 ms · 19 ms | 15,6 ms · 2,4 ms · 3,2 ms | | |
+| Dobrado | desenvolvimento | 114 ms · 36 ms | 26,1 ms · 4,3 ms · 6,4 ms | | |
+| Aberto | produção | 87 ms · 18 ms | 14,8 ms · 1,8 ms · 3,5 ms | 15,7 ms · 15,9 ms · 16 ms | 32,5 ms · 15,8 ms · 16,3 ms |
+| Aberto | desenvolvimento | 109 ms · 34 ms | 25,3 ms · 3,8 ms · 6 ms | 15,7 ms · 15,9 ms · 16,2 ms | 42,2 ms · 15,7 ms · 16 ms |
+
+Todas as metas passam nos dois motores e nas duas builds.
+
+### Como medir
 
 O app e o `MiniBrowser` rodam sem janela pelo backend Broadway do GTK, que desenha sem GPU: `gtk4-broadwayd :N`, com `N` numa porta acima de 8090 (nunca a 8090), e o programa com `GDK_BACKEND=broadway`, `BROADWAY_DISPLAY=:N` e `env -i` com `HOME` e `XDG_*` temporários (`XDG_RUNTIME_DIR` é o do usuário, onde o `broadwayd` põe o socket). O `MiniBrowser` abre a URL de medida, e um navegador qualquer aberto na porta `8080 + N` mostra a janela, onde a página da medida cobre a tela com os números. Os processos são encerrados pelo PID, e os diretórios temporários, apagados.
 

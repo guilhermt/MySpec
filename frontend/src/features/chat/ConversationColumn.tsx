@@ -36,7 +36,11 @@ export function ConversationColumn({
   return (
     <ScrollArea
       className="h-full"
-      viewportClassName={fadeTop ? "conversation-fade" : "conversation-fade-bottom"}
+      viewportClassName={cn(
+        // The list corrects the scroll when a row above the view changes height; the browser does not.
+        "[overflow-anchor:none]",
+        fadeTop ? "conversation-fade" : "conversation-fade-bottom",
+      )}
       {...(label !== undefined ? { label } : {})}
       {...(viewportRef !== undefined ? { viewportRef } : {})}
     >
