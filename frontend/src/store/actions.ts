@@ -1186,7 +1186,8 @@ export async function loadOlderHistory(query: string, repositoryId: string): Pro
 
 /**
  * findArchived asks the Go for an archived item outside the window, for a place that opens it. An
- * id no archived item has takes the place back to the History.
+ * id no archived item has takes the place back to the History; a failure of the Go does too, and
+ * the app notice says why.
  */
 export async function findArchived(id: string): Promise<void> {
   const mark = (lookup: "loading" | "missing" | null) =>
@@ -1204,8 +1205,11 @@ export async function findArchived(id: string): Promise<void> {
       discussions: item.discussion === null ? [] : [item.discussion],
     });
     found = item.task !== null || item.review !== null || item.discussion !== null;
-  } catch {
-    found = false;
+  } catch (error) {
+    useAppStore.getState().setError({
+      label: "Couldn't open the archived item",
+      detail: noticeDetail(messageOf(error), TRY),
+    });
   }
   mark(found ? null : "missing");
   const { location, go } = useAppStore.getState();

@@ -29,6 +29,7 @@ import {
   createTask,
   decideDraft,
   decideFindingInPlace,
+  deleteArchivedInPlace,
   deleteDiscussionInPlace,
   deleteReviewInPlace,
   deleteTaskInPlace,
@@ -1400,6 +1401,64 @@ describe("loadOlderHistory", () => {
   });
 });
 
+describe("deleteArchivedInPlace", () => {
+  it("takes the page of an item beyond the window back to the History, with the focus on its neighbor", async () => {
+    const old = makeArchivedReview({ id: "review-old" });
+    resetAppStore({
+      state: makeState(),
+      ui: {
+        location: { kind: "archived-review", id: old.id },
+        olderArchived: { tasks: {}, reviews: { [old.id]: old }, discussions: {} },
+        olderLists: {
+          [olderKey("", "")]: {
+            ids: [old.id, "task-older"],
+            next: null,
+            matched: 2,
+            status: "idle",
+            error: "",
+          },
+        },
+      },
+    });
+
+    expect(await deleteArchivedInPlace("review", old.id, "task-older")).toBeNull();
+
+    expect(api.deleteReview).toHaveBeenCalledWith(old.id);
+    expect(useAppStore.getState().location).toEqual({ kind: "history" });
+    expect(useAppStore.getState().historyFocus).toBe("task-older");
+    expect(useAppStore.getState().olderArchived.reviews).toEqual({});
+    expect(useAppStore.getState().olderLists[olderKey("", "")]?.ids).toEqual(["task-older"]);
+  });
+
+  it("leaves the page of an item of the window to the state that no longer has it", async () => {
+    const task = makeArchivedTask({ id: "task-window" });
+    resetAppStore({
+      state: makeState({ history: [task] }),
+      ui: { location: { kind: "archived-task", id: task.id } },
+    });
+
+    expect(await deleteArchivedInPlace("task", task.id, null)).toBeNull();
+
+    expect(useAppStore.getState().location).toEqual({ kind: "archived-task", id: task.id });
+    expect(useAppStore.getState().historyFocus).toBe("search");
+  });
+
+  it("answers the refusal and leaves everything where it was", async () => {
+    vi.mocked(api.deleteDiscussion).mockRejectedValueOnce(new Error("locked"));
+    resetAppStore({
+      state: makeState(),
+      ui: { location: { kind: "archived-discussion", id: "discussion-old" } },
+    });
+
+    expect(await deleteArchivedInPlace("discussion", "discussion-old", null)).toBe("locked");
+
+    expect(useAppStore.getState().location).toEqual({
+      kind: "archived-discussion",
+      id: "discussion-old",
+    });
+  });
+});
+
 describe("findArchived", () => {
   it("brings the item of any kind into the cache and clears the mark", async () => {
     const review = makeArchivedReview({ id: "review-old" });
@@ -1422,6 +1481,30 @@ describe("findArchived", () => {
 
     expect(useAppStore.getState().archivedLookups).toEqual({ "task-gone": "missing" });
     expect(useAppStore.getState().location).toEqual({ kind: "history" });
+  });
+
+  it("says in the app notice why the Go couldn't find it, and takes its page back to the History", async () => {
+    resetAppStore({
+      state: makeState(),
+      ui: { location: { kind: "archived-review", id: "review-old" } },
+    });
+    vi.mocked(api.getArchived).mockRejectedValueOnce(new Error("database is locked"));
+
+    await findArchived("review-old");
+
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't open the archived item",
+      detail: "database is locked. Try again.",
+    });
+    expect(useAppStore.getState().location).toEqual({ kind: "history" });
+  });
+
+  it("raises no notice for an id no item has", async () => {
+    resetAppStore({ state: makeState(), ui: { location: { kind: "history" } } });
+
+    await findArchived("task-gone");
+
+    expect(useAppStore.getState().error).toBeNull();
   });
 
   it("leaves the place alone when it is another one", async () => {
