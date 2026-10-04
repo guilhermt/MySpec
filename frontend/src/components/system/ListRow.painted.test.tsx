@@ -45,6 +45,10 @@ function draw(width: number, model: Partial<CardRowView> = {}, props: Partial<Ca
         selection={null}
         tabStop
         flash={false}
+        level={2}
+        setSize={1}
+        posInSet={1}
+        index={0}
         onActivate={() => {}}
         onFocus={() => {}}
         {...props}

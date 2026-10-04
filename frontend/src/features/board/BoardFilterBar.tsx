@@ -25,6 +25,8 @@ export interface BoardFilterBarProps {
   /** onSearchEscape and onSearchDown take the focus from the search to the list. */
   onSearchEscape: (event: KeyboardEvent<HTMLInputElement>) => void;
   onSearchDown: () => void;
+  /** barRef is the bar, which the windowed list scrolls its rows below. */
+  barRef?: Ref<HTMLDivElement>;
 }
 
 /** BoardFilterBar narrows the cards of a board view: the search, Assigned to me, the chosen filters and the Filter menu. */
@@ -35,6 +37,7 @@ export function BoardFilterBar({
   searchRef,
   onSearchEscape,
   onSearchDown,
+  barRef,
 }: BoardFilterBarProps) {
   const app = useAppStore((state) => state.app);
   const set = (change: Partial<BoardFilters>) => onChange({ ...filters, ...change });
@@ -110,7 +113,7 @@ export function BoardFilterBar({
   );
 
   return (
-    <FilterBar label="Filter the cards">
+    <FilterBar label="Filter the cards" ref={barRef}>
       <SearchInput
         landmark={false}
         inputRef={searchRef}

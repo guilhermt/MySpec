@@ -82,6 +82,37 @@ As duas metas ficam fora, a primeira por pouco mais de uma vez e meia e a tecla 
 
 To measure on the target machine: com o build instalado e 400 itens arquivados nos últimos 90 dias, abrir o History e, no inspetor do WebKitGTK, gravar a linha do tempo da primeira pintura e de um `↓` no primeiro dia, e registrar aqui os dois tempos, frios e quentes, contra as metas de 300 ms e 16 ms.
 
+## As listas virtualizadas
+
+O board monta só as linhas que aparecem, a da parada de Tab e a do card aberto, entre espaçadores (`useWindowedRows`). `frontend/src/dev/measure-board.tsx` o mede com 2.000 cards em dez status, todas as seções abertas: a primeira pintura, do render ao quadro seguinte ao commit, uma tecla na busca, do `input` ao quadro com a lista nova, e `↓`, do `keydown` ao quadro seguinte, uma vez fria e cinco vezes quente, em 44 linhas montadas. As metas são 300 ms, 50 ms e 16 ms, e passam quando o máximo das quentes em produção e a mediana das quentes em desenvolvimento ficam dentro delas. Um quadro a 60 Hz dura 16,7 ms, que é o piso de uma medida que termina no quadro seguinte; o `↓` mede esse piso.
+
+No WebKitGTK 2.52.6 (WebKit 6.0 sobre GTK4 4.22.4), pelo Broadway:
+
+| React de produção (`pnpm measure:build`) | Fria | Quente, mediana | Quente, máximo | Meta |
+|---|---|---|---|---|
+| Primeira pintura | 65 ms | 36 ms | 60 ms | 300 ms |
+| Uma tecla na busca | 15 ms | 16 ms | 16 ms | 50 ms |
+| `↓` na lista | 15 ms | 16 ms | 16 ms | 16 ms |
+
+| React de desenvolvimento (`task dev`) | Fria | Quente, mediana | Quente, máximo | Meta |
+|---|---|---|---|---|
+| Primeira pintura | 83 ms | 51 ms | 79 ms | 300 ms |
+| Uma tecla na busca | 21 ms | 16 ms | 18 ms | 50 ms |
+| `↓` na lista | 14 ms | 16 ms | 16 ms | 16 ms |
+
+No Chromium 153 do Playwright, para comparar:
+
+| | Fria | Quente, mediana | Quente, máximo |
+|---|---|---|---|
+| Primeira pintura, produção | 46 ms | 23 ms | 41 ms |
+| Uma tecla na busca, produção | 12 ms | 17 ms | 17 ms |
+| `↓` na lista, produção | 16 ms | 17 ms | 17 ms |
+| Primeira pintura, desenvolvimento | 61 ms | 67 ms | 91 ms |
+| Uma tecla na busca, desenvolvimento | 18 ms | 17 ms | 17 ms |
+| `↓` na lista, desenvolvimento | 16 ms | 17 ms | 17 ms |
+
+O app e o `MiniBrowser` rodam sem janela pelo backend Broadway do GTK, que desenha sem GPU: `gtk4-broadwayd :N`, com `N` numa porta acima de 8090 (nunca a 8090), e o programa com `GDK_BACKEND=broadway`, `BROADWAY_DISPLAY=:N` e `env -i` com `HOME` e `XDG_*` temporários (`XDG_RUNTIME_DIR` é o do usuário, onde o `broadwayd` põe o socket). O `MiniBrowser` abre a URL de medida, e um navegador qualquer aberto na porta `8080 + N` mostra a janela, onde a página da medida cobre a tela com os números. Os processos são encerrados pelo PID, e os diretórios temporários, apagados.
+
 ## Estado da janela
 
 `StartState: WindowStateMaximised` chega a um compositor de tiling como "preencha o tile que recebeu", que é o que acontece aqui. Nada da geometria da janela é persistido. Num desktop de janelas flutuantes a mesma opção produz uma janela maximizada de verdade.

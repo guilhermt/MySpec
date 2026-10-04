@@ -1,4 +1,12 @@
-import { type ReactElement, type RefObject, useLayoutEffect, useRef, useState } from "react";
+import {
+  memo,
+  type ReactElement,
+  type Ref,
+  type RefObject,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { cn } from "@/lib/utils";
 import { CheckboxSign } from "./Checkbox";
 import { CutText } from "./CutText";
@@ -89,8 +97,16 @@ export interface CardRowProps {
   tabStop: boolean;
   /** flash is a card a new reading brought: it blinks twice. */
   flash: boolean;
-  onActivate: () => void;
-  onFocus: () => void;
+  /** level, setSize and posInSet say where the row is among its siblings: the list is windowed, so the DOM does not. */
+  level: number;
+  setSize: number;
+  posInSet: number;
+  /** index is the position in the windowed list (data-index), and ref its measure. */
+  index: number;
+  ref?: Ref<HTMLDivElement>;
+  /** onActivate and onFocus are the same functions for every row, and say which one by its key. */
+  onActivate: (key: string) => void;
+  onFocus: (key: string) => void;
 }
 
 // The classes of the narrow form (@max-[1041px]/list:, which Tailwind reads as a container under
@@ -203,13 +219,18 @@ function KeysCell({
   );
 }
 
-/** CardRow is the row of a card in the list of a board: a treeitem of level 2 on a fixed grid of columns. */
-export function CardRow({
+/** CardRow is the row of a card in the list of a board: a treeitem on a fixed grid of columns. A memo, so a key that moves the focus draws only the rows it touches. */
+export const CardRow = memo(function CardRow({
   model,
   open,
   selection,
   tabStop,
   flash,
+  level,
+  setSize,
+  posInSet,
+  index,
+  ref,
   onActivate,
   onFocus,
 }: CardRowProps): ReactElement {
@@ -225,14 +246,18 @@ export function CardRow({
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the list owns the keyboard of its rows
     <div
+      ref={ref}
+      data-index={index}
       role="treeitem"
-      aria-level={2}
+      aria-level={level}
+      aria-setsize={setSize}
+      aria-posinset={posInSet}
       aria-label={model.label}
       {...selectionAria}
       tabIndex={tabStop ? 0 : -1}
       data-row-key={model.key}
-      onClick={onActivate}
-      onFocus={onFocus}
+      onClick={() => onActivate(model.key)}
+      onFocus={() => onFocus(model.key)}
       className={cn(
         ROW,
         "grid-cols-[var(--icon)_var(--col-num)_minmax(0,1fr)_var(--col-epic)_var(--col-dep)_var(--col-task)_var(--col-keys)]",
@@ -311,7 +336,7 @@ export function CardRow({
       <KeysCell model={model} selection={selection} />
     </div>
   );
-}
+});
 
 export interface PullRequestRowProps {
   model: PullRequestRowView;

@@ -1,3 +1,4 @@
+import type { Ref } from "react";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons";
@@ -16,6 +17,12 @@ export interface ListSectionHeaderProps {
   label: string;
   /** tabStop is the header the list's one tab stop sits on. */
   tabStop: boolean;
+  /** setSize and posInSet say which header this is among the headers: a windowed list, whose DOM does not, gives them. */
+  setSize?: number;
+  posInSet?: number;
+  /** index is the position in a windowed list (data-index), and ref its measure. */
+  index?: number;
+  ref?: Ref<HTMLDivElement>;
   onToggle: () => void;
   onFocus: () => void;
 }
@@ -30,14 +37,22 @@ export function ListSectionHeader({
   tooltip,
   label,
   tabStop,
+  setSize,
+  posInSet,
+  index,
+  ref,
   onToggle,
   onFocus,
 }: ListSectionHeaderProps) {
   const header = (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the list owns the keyboard of its rows
     <div
+      ref={ref}
+      data-index={index}
       role="treeitem"
       aria-level={1}
+      aria-setsize={setSize}
+      aria-posinset={posInSet}
       {...(empty ? {} : { "aria-expanded": !collapsed })}
       aria-label={label}
       data-section-id={id}

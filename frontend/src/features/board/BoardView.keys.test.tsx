@@ -1,5 +1,6 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BOARD_ID, measuredState } from "@/dev/measure-board";
 import { BoardView } from "@/features/board/BoardView";
 import { EMPTY_FILTERS } from "@/features/board/board-view";
 import { boardViewKey } from "@/lib/ui-storage";
@@ -589,5 +590,36 @@ describe("the keyboard of the board", () => {
 
       expect(seen).toHaveReturnedWith(false);
     });
+  });
+});
+
+describe("a board longer than its window", () => {
+  const tall = () => {
+    localStorage.setItem(
+      boardViewKey(BOARD_ID),
+      JSON.stringify({ filters: EMPTY_FILTERS, collapsed: [] }),
+    );
+    return renderWithStore(<BoardView boardId={BOARD_ID} />, {
+      state: measuredState(),
+      ui: { location: { kind: "board", id: BOARD_ID } },
+    });
+  };
+
+  it("mounts a window of the rows, and End reaches the last one by the keys", async () => {
+    const { user } = tall();
+    const rows = () => screen.getAllByRole("treeitem");
+    // 600px of 40px rows, the overscan of 20 past each end and the two pinned rows, at the most.
+    expect(rows().length).toBeLessThanOrEqual(15 + 2 * 20 + 2);
+    expect(rows()[0]).toHaveAttribute("aria-posinset", "1");
+
+    act(() => rows()[1]?.focus());
+    await user.keyboard("{End}");
+
+    await waitFor(() => {
+      const last = rows().at(-1);
+      expect(last).toHaveFocus();
+      expect(last).toHaveAttribute("aria-posinset", last?.getAttribute("aria-setsize") ?? "");
+    });
+    expect(rows().length).toBeLessThanOrEqual(15 + 2 * 20 + 2);
   });
 });

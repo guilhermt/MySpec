@@ -35,6 +35,9 @@ vi.mock("@/lib/wails", async (importOriginal) => ({
 const WIDE_MAIN = 2180;
 const HALF_MAIN = 978;
 
+/** ALL_ROWS_HEIGHT is the height of an area that shows every row of the board scene: 56 rows of 32px at the most. */
+const ALL_ROWS_HEIGHT = 2400;
+
 /** PANEL_MAIN are the main areas the panel is proved at: beside the list down to 800px. */
 const PANEL_MAIN = [950, NARROW_MAIN];
 
@@ -53,7 +56,7 @@ const CASES = SCENES.flatMap((name) =>
 fixBoardSceneClock();
 
 // draw draws the view of a scene in a main area of a width, and does what the scene has the user do.
-async function draw(name: BoardSceneName, width: number) {
+async function draw(name: BoardSceneName, width: number, height = 800) {
   const { state, location, back, storage, after } = boardScene(name);
   for (const [key, value] of Object.entries(storage)) {
     localStorage.setItem(key, value);
@@ -62,7 +65,7 @@ async function draw(name: BoardSceneName, width: number) {
     throw new Error("the scene is not a board");
   }
   const { container, user } = renderWithStore(
-    <div style={{ ...mainArea(width), height: "800px", display: "flex" }}>
+    <div style={{ ...mainArea(width), height: `${height}px`, display: "flex" }}>
       <BoardView boardId={location.id} />
     </div>,
     { state, ui: { location, back } },
@@ -135,7 +138,8 @@ describe.each(THEMES)("BoardView, the scenes in the %s theme", (theme) => {
 
   it("draws the list of the board as the mock counts it: 46 rows with the final sections folded", async () => {
     setTheme(theme);
-    const { area } = await draw("board", WIDE_MAIN);
+    // The list is windowed: an area tall enough for every row mounts them all.
+    const { area } = await draw("board", WIDE_MAIN, ALL_ROWS_HEIGHT);
 
     expect(area.querySelectorAll("[data-row-key]")).toHaveLength(46);
     expect(area.querySelectorAll("[data-section-id]")).toHaveLength(10);

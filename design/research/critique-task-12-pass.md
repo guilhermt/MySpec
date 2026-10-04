@@ -354,7 +354,7 @@ Fontes: as capturas `home-*`, `board-*` e `create-*` (978 e 2180; `board-card` t
 
 ### Problemas
 
-**B1 · Deve. A linha focada pelo teclado fica sob a barra de filtros fixa.**
+**B1 · Deve. A linha focada pelo teclado fica sob a barra de filtros fixa.** · **Fechado no step 3**
 
 - A 1100×600, depois de `End` e de dezenove `↑`, a linha em foco (#52) passou para baixo da barra, e o mesmo acontece com `Home`. `features/board/useListTree.ts:126–131` chama `scrollIntoView({ block: "nearest" })` sem `scroll-margin` para a barra (`components/system/FilterBar.tsx:35`, `sticky`).
 - Regra: `principles.md` 9; `screens/board.md` §7 (as setas percorrem as linhas visíveis). É o item 1 de `critique-task-11.md` ("vale também para o board"), que a task 11 resolveu só no History (`BELOW_THE_BAR`).
@@ -699,7 +699,7 @@ Cada item da pauta de polimento (`lab/08-visual-final/critique.md` §7; `12:272�
 | `critique-task-06.md:344`, o fio entre as linhas de **Models** sem prova | Vale | `NewTaskDialog.tsx:389` | B11 |
 | `critique-task-10.md`, item 10, a idade da Home | Feito; a prova FE16 vale | Como `:202` acima | B11 |
 | `critique-task-10.md`, miúdos, o `Textarea` com `rows` nos campos da task 5 | Feito | **Context** abre com quatro linhas no app (`NewTaskDialog.tsx:321`) | — |
-| `critique-task-11.md`, item 1, "vale também para o board" | Vale | Visto no app | B1 |
+| `critique-task-11.md`, item 1, "vale também para o board" | Vale | Visto no app | B1 · **Fechado no step 3** |
 | `critique-task-11.md`, segunda leitura, o `↓` da busca do board | Feito | `components/system/SearchInput.tsx:76–77` previne a ação padrão | — |
 
 ### Reviews e o review

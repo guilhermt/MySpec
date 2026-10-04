@@ -56,6 +56,7 @@ export default mergeConfig(
             include: [
               "@streamdown/code",
               "@streamdown/mermaid",
+              "@tanstack/react-virtual",
               "diff",
               "react-dom/client",
               "streamdown",

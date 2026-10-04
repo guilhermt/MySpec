@@ -34,6 +34,10 @@ function row(model: Partial<CardRowView> = {}, props: Partial<CardRowProps> = {}
       selection={null}
       tabStop={false}
       flash={false}
+      level={2}
+      setSize={12}
+      posInSet={3}
+      index={7}
       onActivate={onActivate}
       onFocus={onFocus}
       {...props}
@@ -45,10 +49,13 @@ function row(model: Partial<CardRowView> = {}, props: Partial<CardRowProps> = {}
 const item = () => screen.getByRole("treeitem");
 
 describe("CardRow", () => {
-  it("is a treeitem of level 2 named by the label of its model", () => {
+  it("is a treeitem named by the label of its model, placed among its siblings", () => {
     row();
     expect(item()).toHaveAccessibleName(PLAIN.label);
     expect(item()).toHaveAttribute("aria-level", "2");
+    expect(item()).toHaveAttribute("aria-setsize", "12");
+    expect(item()).toHaveAttribute("aria-posinset", "3");
+    expect(item()).toHaveAttribute("data-index", "7");
     expect(item()).toHaveAttribute("data-row-key", "acme/api#474");
   });
 
@@ -74,8 +81,8 @@ describe("CardRow", () => {
   it("activates on a click and reports the focus", async () => {
     const { user, onActivate, onFocus } = row();
     await user.click(item());
-    expect(onActivate).toHaveBeenCalledOnce();
-    expect(onFocus).toHaveBeenCalled();
+    expect(onActivate).toHaveBeenCalledExactlyOnceWith(PLAIN.key);
+    expect(onFocus).toHaveBeenCalledWith(PLAIN.key);
   });
 
   it("puts the epic icon on the row of an epic", () => {

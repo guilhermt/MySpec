@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { Chip } from "./Chip";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons";
@@ -19,6 +19,8 @@ export interface FilterBarProps {
   /** label names the search landmark: "Filter the cards". */
   label: string;
   children: ReactNode;
+  /** ref is the bar, which a windowed list reads to put a row it scrolls to below it. */
+  ref?: Ref<HTMLDivElement> | undefined;
 }
 
 /**
@@ -26,10 +28,11 @@ export interface FilterBarProps {
  * Filter menu, stuck to the top of the scroll with a fade under it. It is the search landmark, so
  * the search box inside it declares none.
  */
-export function FilterBar({ label, children }: FilterBarProps) {
+export function FilterBar({ label, children, ref }: FilterBarProps) {
   return (
     // biome-ignore lint/a11y/useSemanticElements: jsdom gives the <search> element no role, so the landmark is declared.
     <div
+      ref={ref}
       role="search"
       aria-label={label}
       className="sticky top-0 z-(--z-sticky) flex flex-wrap items-center gap-(--space-2) bg-surface-1 pt-(--space-4) pb-(--space-3) after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-(--space-3) after:bg-linear-to-b after:from-surface-1 after:to-transparent after:content-['']"

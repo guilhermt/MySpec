@@ -5,6 +5,7 @@ frontend/captures
 frontend/coverage
 frontend/.vitest
 frontend/dist
+frontend/dist-measure
 node_modules/
 .tools
 __pycache__

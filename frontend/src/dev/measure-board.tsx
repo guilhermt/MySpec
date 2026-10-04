@@ -34,7 +34,7 @@ const CARDS = 2000;
 /** WARM_RUNS is how many times each measure runs after the cold one. */
 const WARM_RUNS = 5;
 
-const BOARD_ID = "board-measure";
+export const BOARD_ID = "board-measure";
 
 // STATUSES are the ten statuses of Platform Roadmap, with the share of the cards each one has, in
 // percent; the three final ones hold most of the board, as they do there.
@@ -216,8 +216,8 @@ function repository(name: string): Repository {
   };
 }
 
-// The state the measured board lives in: the board, its repositories and the tasks of its cards.
-function measuredState(): State {
+// measuredState is the state the measured board lives in: the board, its repositories and the tasks of its cards.
+export function measuredState(): State {
   const readAt = new Date().toISOString();
   const cards = Array.from({ length: CARDS }, (_, index) => card(index + 1, readAt));
   const board: Board = {
@@ -391,6 +391,9 @@ export async function measureBoard(container: HTMLElement): Promise<void> {
   console.info("measure-board", result);
   const out = document.createElement("pre");
   out.id = "measure-board";
-  out.textContent = JSON.stringify(result, null, 2);
+  // The numbers cover the page, so a screenshot of a window of any size reads them.
+  out.style.cssText =
+    "position:fixed;inset:0;z-index:99999;margin:0;padding:8px;overflow:auto;background:#fff;color:#000;font:12px monospace;white-space:pre-wrap";
+  out.textContent = JSON.stringify(result);
   document.body.prepend(out);
 }

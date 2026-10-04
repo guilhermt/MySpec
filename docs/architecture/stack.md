@@ -11,6 +11,7 @@ A stack do produto e a razão de cada escolha.
 | Frontend | React 19 com TypeScript em modo strict, Vite |
 | Estilo e componentes | Tailwind CSS 4, shadcn/ui sobre Base UI e o design system do MySpec, fontes Fira Sans e Fira Code, ícones Lucide |
 | Markdown e diagramas | Streamdown, com `@streamdown/code` e `@streamdown/mermaid` |
+| Listas longas | `@tanstack/react-virtual`, só como cálculo da janela |
 | Diferenças de texto | jsdiff (`diff`) |
 | Estado da interface | Zustand |
 | Ponte Go e React | Bindings gerados e eventos tipados do Wails |
@@ -40,6 +41,8 @@ No Linux o Wails usa WebKitGTK. O padrão desde o v3 é GTK4 com WebKitGTK 6.0, 
 **Tailwind e shadcn/ui** para estilo. shadcn entrega primitivos acessíveis como código-fonte copiado para `frontend/src/components/ui`, não como dependência com aparência própria, o que permite refinar cada componente. Os primitivos são os do Base UI, o padrão do shadcn para projetos novos. Os tokens do design system pintam os primitivos por uma ponte de variáveis, sem editá-los, e os componentes do produto são os wrappers de `components/system/`.
 
 **Streamdown** porque o texto do agente chega em streaming e o renderizador precisa lidar com Markdown incompleto sem piscar. Ele já integra mermaid e realce de código. O mesmo renderizador serve o chat, os artefatos e os prompts.
+
+**`@tanstack/react-virtual`** porque uma lista de milhares de linhas, como o board, só pode ter montadas as que aparecem. Ele não tem cabeça: o DOM e o elemento que rola continuam os do app, ele mede depois de montar, rola até um índice, aceita linhas fixadas (`rangeExtractor`) e corrige a rolagem quando uma linha acima da vista muda de altura. Só o hook `useWindowedRows`, de `components/system/`, o importa. Ficaram de fora `react-virtuoso`, que traz o próprio elemento que rola, e `react-window`, que não tem linhas fixadas.
 
 **Zustand** porque os eventos do Go chegam continuamente de várias fontes e várias partes da tela mostram o mesmo dado. Um store único recebe os eventos num ponto só e cada componente assina a fatia que usa. Não há biblioteca de fetch, porque não há HTTP.
 

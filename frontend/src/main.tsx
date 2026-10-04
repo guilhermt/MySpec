@@ -9,11 +9,13 @@ if (container === null) {
   throw new Error("missing #root element");
 }
 
-// The measurements (src/dev) take the place of the app only under the dev server; the production
-// build drops these branches, and the modules with them.
-const measure = import.meta.env.DEV
-  ? new URLSearchParams(window.location.search).get("measure")
-  : null;
+// The measurements (src/dev) take the place of the app only under the dev server and in the
+// measure mode of the build (pnpm measure:build); the production build drops these branches, and
+// the modules with them.
+const measure =
+  import.meta.env.DEV || import.meta.env.MODE === "measure"
+    ? new URLSearchParams(window.location.search).get("measure")
+    : null;
 
 if (measure === "conversation") {
   void import("@/dev/measure-conversation").then(({ measureConversation }) =>
