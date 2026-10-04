@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   archivedOn,
   dayName,
@@ -133,6 +133,18 @@ describe("historyNeighbor", () => {
     expect(historyNeighbor(entries, "task-login")).toBe("task-header");
   });
 
+  it("is the next one, not the previous, for an entry between two", () => {
+    const three = historyEntries(APP, NO_OLDER, "", "", null);
+
+    expect(three.map((entry) => entry.id)).toEqual([
+      "task-login",
+      "discussion-1",
+      "review-31",
+      "task-header",
+    ]);
+    expect(historyNeighbor(three, "discussion-1")).toBe("review-31");
+  });
+
   it("is the previous one when the entry is the last", () => {
     expect(historyNeighbor(entries, "task-header")).toBe("task-login");
   });
@@ -212,10 +224,17 @@ describe("historyEntries order and fresh", () => {
     expect(result.map((entry) => entry.id)).toEqual(["b", "a"]);
   });
 
-  it("keeps the fresh item outside the filter and the search", () => {
-    const result = historyEntries(APP, NO_OLDER, "nothing like it", "repo-2", "task-login");
+  it("keeps the fresh item outside the filter", () => {
+    const result = historyEntries(APP, NO_OLDER, "", "repo-2", "task-login");
 
-    expect(result.map((entry) => entry.id)).toEqual(["task-login"]);
+    expect(result.map((entry) => entry.id)).toEqual(["task-login", "discussion-1", "task-header"]);
+  });
+
+  it("leaves the fresh item to the search, as every other one", () => {
+    expect(historyEntries(APP, NO_OLDER, "nothing like it", "repo-2", "task-login")).toEqual([]);
+    expect(
+      historyEntries(APP, NO_OLDER, "invoices", "", "task-login").map((entry) => entry.id),
+    ).toEqual(["discussion-1"]);
   });
 });
 
@@ -240,9 +259,42 @@ describe("dayName and historyDays", () => {
 
     const days = historyDays(historyEntries(state, NO_OLDER, "", "", null), NOW);
 
-    expect(days.map((day) => [day.id, day.name, day.label, day.entries.length])).toEqual([
+    expect(days.map((day) => [day.id, day.name, day.label, day.count])).toEqual([
       ["2026-09-24", "Today", "Archived today: 2", 2],
       ["2026-09-21", "Monday, Sep 21", "Archived on Monday, Sep 21: 1", 1],
+    ]);
+  });
+
+  it("parts the days at the local midnight, not at the one of UTC", () => {
+    // São Paulo is three hours behind UTC: 23:30 of the 23rd there is already the 24th in UTC.
+    vi.stubEnv("TZ", "America/Sao_Paulo");
+    try {
+      const at = (id: string, day: number, hour: number, minute: number) =>
+        makeArchivedTask({ id, archivedAt: new Date(2026, 8, day, hour, minute).toISOString() });
+      const state = makeState({ history: [at("late", 23, 23, 30), at("early", 24, 0, 30)] });
+
+      const days = historyDays(historyEntries(state, NO_OLDER, "", "", null), NOW);
+
+      expect(new Date(2026, 8, 23, 23, 30).getUTCDate()).toBe(24);
+      expect(days.map((day) => [day.id, day.entries.map((entry) => entry.id)])).toEqual([
+        ["2026-09-24", ["early"]],
+        ["2026-09-23", ["late"]],
+      ]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("keeps the uncounted entry on its day without counting it", () => {
+    const at = (id: string, day: number, hour: number) =>
+      makeArchivedTask({ id, archivedAt: new Date(2026, 8, day, hour).toISOString() });
+    const state = makeState({ history: [at("a", 24, 15), at("b", 24, 9), at("c", 21, 9)] });
+
+    const days = historyDays(historyEntries(state, NO_OLDER, "", "", null), NOW, "a");
+
+    expect(days.map((day) => [day.label, day.count, day.entries.length])).toEqual([
+      ["Archived today: 1", 1, 2],
+      ["Archived on Monday, Sep 21: 1", 1, 1],
     ]);
   });
 });

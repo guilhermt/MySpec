@@ -386,11 +386,52 @@ describe("HistoryView, the row just archived", () => {
     expect(row?.tabIndex).toBe(0);
   });
 
-  it("keeps it outside the search and the filter, and outside the count", () => {
-    view({}, "Idempotency", fresh("review-1", "review"));
+  it("keeps it outside the filter, without counting it in the bar nor in its day", () => {
+    view({ repositoryFilter: "repo-2" }, "", fresh("review-1", "review"));
 
-    expect(levelOf(2)).toHaveLength(2);
+    expect(levelOf(2).map((item) => item.getAttribute("aria-label"))).toEqual([
+      expect.stringMatching(/^Review Retry the export/),
+      expect.stringMatching(/^Discussion Webhook delivery/),
+    ]);
+    expect(levelOf(1).map((item) => item.getAttribute("aria-label"))).toEqual([
+      "Archived today: 0",
+      "Archived on Monday, Sep 21: 1",
+    ]);
     expect(screen.getByRole("search", { name: "Search History" })).toHaveTextContent(/1 of 3/);
+  });
+
+  it("counts it in its day when the filter would show it anyway", () => {
+    view({ repositoryFilter: "repo-1" }, "", fresh("review-1", "review"));
+
+    expect(levelOf(1).map((item) => item.getAttribute("aria-label"))).toEqual([
+      "Archived today: 2",
+    ]);
+  });
+
+  it("leaves it to a search typed after the arrival, which holds for every row", async () => {
+    const { user } = view({}, "", {
+      ...fresh("review-1", "review"),
+      ...answeredWith("zzz", "", 0),
+    });
+
+    await user.type(screen.getByRole("searchbox", { name: "Search History" }), "zzz");
+
+    expect(screen.queryAllByRole("treeitem")).toEqual([]);
+    expect(screen.getByText("Nothing matches “zzz”")).toBeInTheDocument();
+    expect(screen.getByRole("search", { name: "Search History" })).toHaveTextContent(/0 of 3/);
+  });
+
+  it("leaves it out of a search that matches other rows", async () => {
+    const { user } = view({}, "", fresh("review-1", "review"));
+
+    await user.type(screen.getByRole("searchbox", { name: "Search History" }), "Idempotency");
+
+    expect(levelOf(2).map((item) => item.getAttribute("aria-label"))).toEqual([
+      expect.stringMatching(/^Task Idempotency keys/),
+    ]);
+    expect(levelOf(1).map((item) => item.getAttribute("aria-label"))).toEqual([
+      "Archived today: 1",
+    ]);
   });
 
   it("scrolls it to the middle when it is out of view", () => {

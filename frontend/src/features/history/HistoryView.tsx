@@ -19,7 +19,6 @@ import {
   historyDays,
   historyEntries,
   inFilter,
-  matchesQuery,
   type OlderSource,
 } from "@/features/history/history-list";
 import { historyRow } from "@/features/history/history-rows";
@@ -77,8 +76,13 @@ export function HistoryView() {
     () => historyEntries(app, source, historyQuery, filter, fresh?.id ?? null),
     [app, source, historyQuery, filter, fresh?.id],
   );
-  const days = useMemo(() => historyDays(entries, now), [entries, now]);
   const byId = useMemo(() => new Map(entries.map((entry) => [entry.id, entry])), [entries]);
+  // The row just archived stays outside the filter, and outside what the filter counts; a search
+  // typed after the arrival is the user's, and holds for it too.
+  const freshEntry = fresh === undefined ? undefined : byId.get(fresh.id);
+  const outside = freshEntry !== undefined && !inFilter(freshEntry, filter);
+  const uncounted = outside ? freshEntry.id : null;
+  const days = useMemo(() => historyDays(entries, now, uncounted), [entries, now, uncounted]);
   const treeEntries = useMemo(
     () =>
       days.flatMap((day): ListTreeEntry[] => [
@@ -147,10 +151,6 @@ export function HistoryView() {
     repository === null
       ? 0
       : repository.archivedTasks + repository.archivedReviews + repository.archivedDiscussions;
-  // The row just archived stays outside the filter and the search, and outside what they count.
-  const freshEntry = fresh === undefined ? undefined : byId.get(fresh.id);
-  const outside =
-    freshEntry !== undefined && !(inFilter(freshEntry, filter) && matchesQuery(freshEntry, query));
   const shown = entries.length - (outside ? 1 : 0);
   const count = historyCount(
     summary,
@@ -337,7 +337,7 @@ export function HistoryView() {
                     <DaySectionHeader
                       id={day.id}
                       name={day.name}
-                      count={day.entries.length}
+                      count={day.count}
                       label={day.label}
                       tabStop={sectionId === tree.tabStop}
                       onFocus={() => onEntryFocus(sectionId)}

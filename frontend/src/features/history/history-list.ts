@@ -93,7 +93,7 @@ function entriesOf(app: State | null, older: OlderSource): HistoryEntry[] {
 /**
  * historyEntries are the window and the older items loaded for the query and the filter, newest first,
  * the last to be archived first and the id breaking a tie, as the Go orders them; the fresh item
- * stays even outside the filter.
+ * stays even outside the filter, never outside the search.
  */
 export function historyEntries(
   app: State | null,
@@ -105,7 +105,7 @@ export function historyEntries(
   // A date that does not parse ties, instead of making the order undefined.
   return entriesOf(app, older)
     .filter(
-      (entry) => entry.id === fresh || (inFilter(entry, filter) && matchesQuery(entry, query)),
+      (entry) => matchesQuery(entry, query) && (entry.id === fresh || inFilter(entry, filter)),
     )
     .sort(
       (a, b) =>
@@ -122,6 +122,8 @@ export interface HistoryDay {
   /** label is the name of the header for a screen reader and its tooltip: "Archived on Monday, Sep 22: 5". */
   label: string;
   entries: readonly HistoryEntry[];
+  /** count is how many entries the day counts: all of them but the fresh one shown outside the filter. */
+  count: number;
 }
 
 const WEEKDAY = new Intl.DateTimeFormat("en-US", {
@@ -170,8 +172,15 @@ export function archivedOn(iso: string, now: number): string {
   return name === "Today" ? "today" : name === "Yesterday" ? "yesterday" : `on ${name}`;
 }
 
-/** historyDays groups entries, newest first, by the local day they were archived. */
-export function historyDays(entries: readonly HistoryEntry[], now: number): readonly HistoryDay[] {
+/**
+ * historyDays groups entries, newest first, by the local day they were archived. The entry `uncounted`,
+ * the fresh one that the filter would hide, is on its day without counting in it.
+ */
+export function historyDays(
+  entries: readonly HistoryEntry[],
+  now: number,
+  uncounted: string | null = null,
+): readonly HistoryDay[] {
   const days: { id: string; entries: HistoryEntry[] }[] = [];
   for (const entry of entries) {
     const id = dayId(entry.archivedAt);
@@ -182,12 +191,16 @@ export function historyDays(entries: readonly HistoryEntry[], now: number): read
       days.push({ id, entries: [entry] });
     }
   }
-  return days.map(({ id, entries: ofDay }) => ({
-    id,
-    name: dayName(ofDay[0]?.archivedAt ?? "", now),
-    label: `Archived ${archivedOn(ofDay[0]?.archivedAt ?? "", now)}: ${ofDay.length}`,
-    entries: ofDay,
-  }));
+  return days.map(({ id, entries: ofDay }) => {
+    const count = ofDay.filter((entry) => entry.id !== uncounted).length;
+    return {
+      id,
+      name: dayName(ofDay[0]?.archivedAt ?? "", now),
+      label: `Archived ${archivedOn(ofDay[0]?.archivedAt ?? "", now)}: ${count}`,
+      entries: ofDay,
+      count,
+    };
+  });
 }
 
 /** HistoryShown is how much of the History the list shows, for the count of the bar. */
