@@ -358,7 +358,7 @@ describe("App", () => {
       screen.getByRole("heading", { level: 1, name: "Add the login screen" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Merged", { selector: "span" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Report · reviews/pass-1.md" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Report · review-1.md" })).toBeInTheDocument();
   });
 
   it("starts the review of a pull request from anywhere in the app", async () => {
