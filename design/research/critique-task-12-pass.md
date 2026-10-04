@@ -549,7 +549,7 @@ Visto no app real (a mesma sessão da área do system), nas cinco janelas e nos 
 - Onde: `docs/development/target-machine.md:78–79`. Com 400 itens, a primeira pintura tem mediana quente de 404 a 501 ms, contra a meta de 300; `↓` tem mediana de 134 a 145 ms, contra 16. A linha 81 diz que "a virtualização da lista é decisão da task 12". No app, com 80 itens, a lista andou sem atraso visível; a medida é do Chromium, não do WebKitGTK.
 - Regra: o material da task 12 na base do passe (§3, Fora: a virtualização do History "entra aqui só se a medida da 11 passar das metas da task 5; então o History ganha uma janela como a do board, com a medida dela"); com a condição cumprida, o material a põe no step 4 (§8). `structure.md` §7 ainda diz que o History "carrega os últimos 90 dias", sem janela.
 
-**H2 · Deve. A falha ao ler um documento do arquivado é pintada de erro, com outra ação.**
+**H2 · Deve. A falha ao ler um documento do arquivado é pintada de erro, com outra ação.** · **Fechado no step 13**
 
 - Onde: `features/history/ArchivedDocument.tsx:41–50` e `ArchivedDiscussion.tsx:248–257` passam `bg-state-error-veil` à `NoticeStrip`, com **Try again** secundário `xs`. A mesma falha de leitura no prompt (`features/settings/PromptPage.tsx:171–178`) é a faixa afundada, com **Try again** fantasma `sm`.
 - Regra: `components.md` Faixa de aviso ("Afundada…"; "Não pinte de vermelho o que não é erro de uma ação sua"). Ler um arquivo não é uma ação do usuário que falhou.
@@ -560,12 +560,12 @@ Visto no app real (a mesma sessão da área do system), nas cinco janelas e nos 
 - `bg-background` em `ArchivedTask.tsx:196`, `:230`, `ArchivedReview.tsx:98`, `:129` e `ArchivedDiscussion.tsx:154`, `:210`.
 - Regra: `implementation.md:19`; `12:136`, `:139` (V1, V4).
 
-**H4 · Pode esperar. Os fatos do arquivado escrevem o dia de hoje por extenso.**
+**H4 · Pode esperar. Os fatos do arquivado escrevem o dia de hoje por extenso.** · **Fechado no step 13**
 
 - Onde: `features/history/archived.ts:46` (`archivedDate` = `dateAt`). No app, a task arquivada às 06:42 de hoje diz `merged into dev by lnakamura · Oct 4 at 06:20`. A linha dela no History diz `06:42` sob `Today`, o bloco `CLOSING` diz `06:42`, e o toast e a página que saiu dizem ` at 15:02`, sem o dia (`atMoment`).
 - Regra: "uma hora por significado" (`12:113`). `screens/rest.md` §4 só dá o exemplo de outro dia (`Sep 24 at 14:51`). Lacuna L4.
 
-**H5 · Pode esperar. Valores de espaço soltos em Settings e no início.**
+**H5 · Pode esperar. Valores de espaço soltos em Settings e no início.** · **Fechado no step 13**
 
 - `features/repositories/ScanCloneRow.tsx:41`, `:48`, `:51`, `:61` e `:70` (`px-3 py-1.5`, `py-1`, `gap-2`, `pb-1`), que a correção da task 10 deixou de fora (ela tratou `BoardRepositoryRow`); `AddRepositoryDialog.tsx:191`, `:196`, `:220`, `:227` e `:230` (`gap-2`, `gap-3`); `features/startup/StartSidebar.tsx:20` (`h-4`, onde o Esqueleto pede barras de `--space-4`).
 - Regra: `tokens.css` (cabeçalho); `components.md` Esqueleto.
@@ -574,11 +574,11 @@ Visto no app real (a mesma sessão da área do system), nas cinco janelas e nos 
 
 - `docs/development/target-machine.md:83` começa com "To measure on the target machine:". A documentação é em português (`CLAUDE.md`, Convenções).
 
-**H7 · Pode esperar. A pauta de estabilidade: os testes intermitentes.**
+**H7 · Pode esperar. A pauta de estabilidade: os testes intermitentes.** · **Fechado no step 13**
 
 - `features/boards/BoardDialog.test.tsx:249` (`aria-describedby` logo depois de digitar; `12:496`); os testes de digitação longa que estouram o tempo sob carga (`critique-task-10.md`, deixado pelo coordenador); os testes Go intermitentes `internal/reviewflow/apply_test.go:679` e `internal/bindings/task_service_test.go:1372` (`critique-task-11.md`, 16), sem mudança nos dois arquivos. As suítes não foram rodadas no passe.
 
-**H8 · Pode esperar. `isMissingFile` frágil.** Opinião da crítica de origem.
+**H8 · Pode esperar. `isMissingFile` frágil.** Opinião da crítica de origem. · **Fechado no step 13**
 
 - `lib/errors.ts:34`, lido por `features/history/ArchivedDiscussion.tsx:171`; o teste continua com a mensagem escrita à mão (`critique-task-11.md`, segunda leitura).
 
@@ -609,7 +609,7 @@ O que `design/` não decidia ou contradizia, com a decisão que o coordenador to
 - **L19 · Um relógio só para o tempo de uma situação** (S17; leitura de Reviews). A régua pede uma idade por significado, mas não diz que a árvore, a barra e **Continue** dividem o mesmo tique. **Decisão:** um relógio só para os chips de espera, um `useNow` compartilhado no store, para a barra e a árvore nunca discordarem. **Registrar em:** `structure.md` §7. **Implementa:** S17.
 - **L20 · A faixa de falha numa lista estreita** (R1). `components.md` Faixa de aviso não diz como a faixa cede. **Decisão:** numa lista estreita, a faixa de aviso por repositório quebra a razão sob o título em linhas inteiras e põe **Try again** à direita numa linha própria; nunca uma palavra por linha. **Registrar em:** `components.md` Faixa de aviso. **Implementa:** R1.
 - **L21 · O prompt do produto pendente** (T1; decisão do coordenador sobre o bloqueio da task). **Decisão:** o prompt do produto ao começar um step nunca aparece como mensagem do usuário com **Remove**: enquanto pendente, é o marco em linha `Step 3 started` sem ação, e o Go não aceita apagá-lo (`RemovePending`). **Registrar em:** `screens/task.md` §6. **Implementa:** T1.
-- **L22 · O banco de uma versão mais nova** (leitura de Settings; `critique-task-10.md`, opinião, deixada ao usuário). Não decidida: é de produto. Fica em Para o usuário confirmar.
+- **L22 · O banco de uma versão mais nova** (leitura de Settings; `critique-task-10.md`, opinião, deixada ao usuário). Não decidida: é de produto. Fica em Para o usuário confirmar. · **Fechado no step 13**. Implementada como a recomendação de Para o usuário confirmar: `store.NewerError` antes de qualquer escrita, `Migration.Newer` e a página da migração recusada com **This data is from a newer MySpec**.
 
 ## Pautas
 
@@ -737,21 +737,21 @@ As faixas sempre `role="alert"` (`critique-task-06.md:173`), o anel de foco (`cr
 | Origem | Estado | Evidência | Item |
 |---|---|---|---|
 | `critique-task-10.md`, deixada pelo coordenador: o tema escuro na falha de permissão | Vale, fecha como nota | `features/theme/theme.ts` lê o tema guardado pelo `localStorage` do WebKit, que fica no diretório de dados; sem permissão nele, a tela de falha sai clara. É um caso de borda de `10:296` | — |
-| `critique-task-10.md`, deixada pelo coordenador: os testes de digitação longa estourando o tempo sob carga | Vale | Pauta de estabilidade, com `BoardDialog.test.tsx:249` (`12:496`). As suítes não foram rodadas | H7 |
-| `critique-task-10.md`, deixada pelo coordenador: `user_version` à frente | Vale | `internal/store/migrate.go:18` | L22 |
+| `critique-task-10.md`, deixada pelo coordenador: os testes de digitação longa estourando o tempo sob carga | Vale | Pauta de estabilidade, com `BoardDialog.test.tsx:249` (`12:496`). As suítes não foram rodadas | H7 · **Fechado no step 13** |
+| `critique-task-10.md`, deixada pelo coordenador: `user_version` à frente | Vale | `internal/store/migrate.go:18` | L22 · **Fechado no step 13** |
 | `critique-task-10.md`, deixada pelo coordenador: o cursor no começo da edição | Não vale mais | A mutação era equivalente (segunda leitura da 10) | — |
 | `critique-task-10.md`, deixada pelo coordenador: a sonda com `EFBIG` | Vale, fecha como nota | Sem mudança desde a 10; `ENOSPC` é o caso real | — |
 | `critique-task-10.md`, segunda leitura: o alvo do rádio da tabela | Feito | `components/system/Radio.tsx:115`: o `label` é a grade da célula, com o anel nela, como diz o comentário de `:112` | — |
 | `critique-task-10.md`, segunda leitura: `Select` `xs` e `MenuMessage` `notice` sem régua | Feito | `components.md:220` (Select compacto), `:222` (`notice`); `docs/architecture/design-system.md:156` | — |
 | `critique-task-10.md`, segunda leitura: o banco fora dos `closers` (A11) | Feito no código | `internal/app/attempt.go:88–92`; o passe não achou teste que o prove | — |
 | `critique-task-11.md` (15), commits acima de 1,5 mil linhas | Registrado, sem ação | `12:496` | — |
-| `critique-task-11.md` (16), os testes Go intermitentes | Vale | `reviewflow/apply_test.go:679`, `bindings/task_service_test.go:1372`, sem mudança. Não rodados | H7 |
+| `critique-task-11.md` (16), os testes Go intermitentes | Vale | `reviewflow/apply_test.go:679`, `bindings/task_service_test.go:1372`, sem mudança. Não rodados | H7 · **Fechado no step 13** |
 | `critique-task-11.md`, segunda leitura: o `↓` da busca põe o primeiro dia atrás da barra | Feito | `SearchInput.tsx:75–78` previne a ação padrão; `BELOW_THE_BAR` em `HistoryView.tsx:50–51`. No app, a lista andou pelo teclado com o anel à vista | — |
 | `critique-task-11.md`, segunda leitura: a janela dos reviews no estado sem prova | Feito | `internal/app/state_test.go:78–84` semeia `review-first` e `review-before` | — |
 | `critique-task-11.md`, segunda leitura: `HistoryView.measure` sob carga | Feito; as metas absolutas falham | O teto relativo de 30 vezes contra 40 itens (`target-machine.md:72`) | H1 · **Fechado no step 4** |
-| `critique-task-11.md`, segunda leitura: `isMissingFile` frágil | Vale (opinião) | `lib/errors.ts:34` | H8 |
+| `critique-task-11.md`, segunda leitura: `isMissingFile` frágil | Vale (opinião) | `lib/errors.ts:34` | H8 · **Fechado no step 13** |
 | `critique-task-11.md`, segunda leitura: `UNSTARTED` sem `preparing` | Feito | `features/task/stage-actions.ts:67` | — |
-| Estabilidade: `features/boards/BoardDialog.test.tsx:249` (`12:496`) | Vale | `aria-describedby` logo depois de digitar | H7 |
+| Estabilidade: `features/boards/BoardDialog.test.tsx:249` (`12:496`) | Vale | `aria-describedby` logo depois de digitar | H7 · **Fechado no step 13** |
 
 ## O que não foi visto
 

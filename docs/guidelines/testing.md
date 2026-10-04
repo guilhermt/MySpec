@@ -34,7 +34,7 @@ Go: 60% por arquivo, 70% por pacote, 80% no total, excluindo `internal/app`, `ma
 - O nome é uma frase que diz o comportamento: `TestAFinishedPlanStartsTheFirstStepInItsWorktree`, `TestClosingATaskIsRefusedUntilTheMergeIsConfirmed`. Um teste testa um comportamento.
 - Tabelas quando há casos paralelos da mesma regra, com `t.Run` e um nome por caso.
 - `cmp.Diff` do `go-cmp` para comparar estruturas: `if diff := cmp.Diff(want, got); diff != "" { t.Errorf("... (-want +got):\n%s", diff) }`. `t.Fatalf` quando o resto do teste não faz sentido sem aquilo; `t.Errorf` para acumular.
-- Espera ativa em vez de `time.Sleep`: um helper `waitX` que consulta o estado em intervalo curto com um timeout, chamando `t.Helper()`. Um `sleep` só no teste que prova a ausência de um evento.
+- Espera ativa em vez de `time.Sleep`: um helper `waitX` que consulta o estado em intervalo curto com um timeout, chamando `t.Helper()`. Um `sleep` só no teste que prova a ausência de um evento. O ponto de sincronização de um teste é o último efeito que o código sob teste escreve (um marcador na conversa, uma mensagem gravada), nunca um estado que ele grava antes dele.
 - `t.Context()` para os contextos, `t.TempDir()` para o disco.
 
 ### Fixtures e helpers
@@ -60,6 +60,7 @@ Os pacotes que rodam binários testam contra o binário real ou contra um fake q
 - Vitest com Testing Library, `user-event` e jsdom, no pool `vmForks`: cada worker monta o jsdom uma vez e dá a cada arquivo um contexto de VM novo sobre ele, isolado como antes, em vez de montar o jsdom de novo para cada arquivo. `describe` com o nome do componente ou módulo, `it` com uma frase: `it("places the step in the plan, with its title and repository")`.
 - Um arquivo de testes ao lado do que testa: `StepPane.test.tsx` ao lado de `StepPane.tsx`, `status.test.ts` ao lado de `status.ts`.
 - A lógica de apresentação em `.ts` é testada como função pura, sem renderizar. Os componentes são testados pelo que o usuário vê e faz: `getByRole`, `getByText`, `user.click`, `user.type`. Consultar classes só para o que não tem outra forma de ser observado, como o tom de um ponto de status ou a centralização alinhada ao pixel, que o jsdom não calcula.
+- Um texto longo entra por `user.paste`, depois de um `user.click` no campo; `user.type` fica para o que a tecla prova. Digitar centenas de caracteres um a um estoura o tempo sob carga. O que depende de um estado que React atualiza espera por `await waitFor` ou `findBy`, nunca logo depois do gesto.
 - Um comportamento por `it`. Sem snapshots.
 
 ### Regras do design

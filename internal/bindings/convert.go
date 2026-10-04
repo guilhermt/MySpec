@@ -24,6 +24,7 @@ import (
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/session"
+	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/theme"
 	"github.com/guilhermt/myspec/internal/upgrade"
@@ -107,8 +108,14 @@ func FromMigration(refused *upgrade.RefusedError) *Migration {
 // the cases to resolve and nothing of the product, which never opened.
 // systemDark is what the desktop asked for before the window opened.
 func RefusedState(refused *upgrade.RefusedError, systemDark bool) State {
+	return unopenedState(FromMigration(refused), systemDark)
+}
+
+// unopenedState is the state of an app that never opened its data, with the
+// migration page to show.
+func unopenedState(migration *Migration, systemDark bool) State {
 	return State{
-		Migration:     FromMigration(refused),
+		Migration:     migration,
 		Repositories:  []Repository{},
 		Boards:        []Board{},
 		Theme:         string(theme.System),
@@ -119,6 +126,15 @@ func RefusedState(refused *upgrade.RefusedError, systemDark bool) State {
 		Tasks:         []TaskSummary{},
 		History:       []ArchivedTask{},
 	}
+}
+
+// NewerState is the whole state of an app whose data is from a newer version:
+// nothing to resolve and nothing of the product, which never opened.
+func NewerState(newer *store.NewerError, systemDark bool) State {
+	return unopenedState(&Migration{
+		Cases: []MigrationCase{},
+		Newer: &NewerData{DataVersion: newer.Data, AppVersion: newer.Known},
+	}, systemDark)
 }
 
 // FromModelSet converts the choice of every stage, in the order the settings

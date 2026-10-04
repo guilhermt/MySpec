@@ -1394,6 +1394,17 @@ func (f *fixture) evaluated(t *testing.T, id string, cond func(reviewflow.State)
 	})
 }
 
+// committedMarked waits for the conversation to hold n markers of a commit that
+// went up. The service marks the commit after it records the pass and the
+// phase a test waits on, so the marker is the last thing an approval writes.
+func (f *fixture) committedMarked(t *testing.T, n int) {
+	t.Helper()
+
+	waitFor(t, "the commit to be marked in the conversation", func() bool {
+		return len(f.sessions.markersOf(session.MarkerCommitted)) >= n
+	})
+}
+
 // settleWait is how long a test that proves the flow did nothing gives an
 // evaluation to run.
 const settleWait = 100 * time.Millisecond

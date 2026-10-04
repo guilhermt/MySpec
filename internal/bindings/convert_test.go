@@ -28,6 +28,7 @@ import (
 	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
+	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/upgrade"
 	"github.com/guilhermt/myspec/internal/worktree"
@@ -1906,6 +1907,21 @@ func TestRefusedStateCarriesTheCasesAndNothingElse(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("RefusedState() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestNewerStateCarriesTheTwoVersionsAndNoCases(t *testing.T) {
+	t.Parallel()
+
+	got := bindings.NewerState(&store.NewerError{Data: 40, Known: 25}, true)
+
+	want := bindings.RefusedState(&upgrade.RefusedError{}, true)
+	want.Migration = &bindings.Migration{
+		Cases: []bindings.MigrationCase{},
+		Newer: &bindings.NewerData{DataVersion: 40, AppVersion: 25},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("NewerState() mismatch (-want +got):\n%s", diff)
 	}
 }
 

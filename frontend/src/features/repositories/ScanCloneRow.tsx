@@ -38,17 +38,17 @@ export function ScanCloneRow({
     .join(" ");
 
   return (
-    <li className="flex flex-col px-3 py-1.5">
+    <li className="flex flex-col px-(--space-3) py-(--space-1-5)">
       <Checkbox
         checked={checked}
         onCheckedChange={onCheckedChange}
         disabled={disabled || registered}
         loading={adding}
         {...(describedBy !== "" ? { describedBy } : {})}
-        className="h-auto py-1"
+        className="h-auto py-(--space-1)"
       >
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="flex items-center gap-2">
+          <span className="flex items-center gap-(--space-2)">
             <span className="font-medium">{candidate.fullName}</span>{" "}
             {registered && <span className="font-normal text-ink-3">Registered</span>}
           </span>{" "}
@@ -58,7 +58,7 @@ export function ScanCloneRow({
       {linksAClone && (
         <p
           id={linkId}
-          className="pb-1 pl-[calc(var(--space-2)+var(--icon)+var(--space-2))] text-(length:--text-meta) leading-(--leading-meta) text-ink-2"
+          className="pb-(--space-1) pl-[calc(var(--space-2)+var(--icon)+var(--space-2))] text-(length:--text-meta) leading-(--leading-meta) text-ink-2"
         >
           {LINKS_TEXT}
         </p>
@@ -67,7 +67,7 @@ export function ScanCloneRow({
         <p
           id={refusalId}
           role="alert"
-          className="pb-1 pl-[calc(var(--space-2)+var(--icon)+var(--space-2))] text-(length:--text-meta) leading-(--leading-meta) text-state-error"
+          className="pb-(--space-1) pl-[calc(var(--space-2)+var(--icon)+var(--space-2))] text-(length:--text-meta) leading-(--leading-meta) text-state-error"
         >
           {refusal}
         </p>

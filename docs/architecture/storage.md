@@ -65,6 +65,8 @@ O upgrade roda dentro do início do app (ver [overview.md](./overview.md#composi
 
 O upgrade é tudo ou nada. Ele recusa, sem escrever nada, quando encontra uma task ativa na raiz de uma área de trabalho, um clone que ele não consegue identificar no GitHub ou duas tasks com o mesmo nome num repositório. Uma recusa desfaz o que já tinha sido movido no disco, a transação não commita, o banco fica na versão anterior — que a versão anterior do app abre inteira — e o app abre a janela e termina o início `ready` só com o estado da migração recusada, que mostra os casos a resolver no lugar do produto. Com o commit feito, as pastas descartadas e a pasta `workspaces/` são apagadas.
 
+Um banco de uma versão mais nova é recusado antes de qualquer escrita: quando o `user_version` passa da última migration embutida, `migrate` devolve um `*store.NewerError` com as duas versões, `open` fecha o banco, e o início do app liga só o estado `bindings.NewerState` (`Migration.Newer` com `dataVersion` e `appVersion`, sem casos), que mostra a tela da migração recusada com o título da versão mais nova. O app nunca lê nem escreve num banco que uma versão que ele não conhece mudou.
+
 ### Artefatos
 
 Os artefatos de uma task ficam em `tasks/<dono>/<nome>/<task>/`, com `dono` e `nome` como o GitHub nomeia o repositório, para que duas tasks de repositórios diferentes com o mesmo nome não colidam. Dentro da pasta da task:

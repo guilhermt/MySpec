@@ -188,12 +188,12 @@ function AddRepositoryForm({ onOpenChange }: Pick<AddRepositoryDialogProps, "onO
     >
       <DialogBody className="overflow-hidden">
         {scan.status === "scanning" ? (
-          <p role="status" className="flex items-center gap-2">
+          <p role="status" className="flex items-center gap-(--space-2)">
             <Spinner tone="current" />
             {SCANNING_TEXT}
           </p>
         ) : scan.status === "failed" ? (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-(--space-2)">
             <p role="alert" className="min-w-0 text-state-error">
               {`Couldn't scan your home folder: ${scan.message}`}
             </p>
@@ -217,17 +217,17 @@ function AddRepositoryForm({ onOpenChange }: Pick<AddRepositoryDialogProps, "onO
             {available.length === 0 && registered.length === 0 ? (
               <p>No repositories match.</p>
             ) : (
-              <div className="relative flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+              <div className="relative flex min-h-0 flex-1 flex-col gap-(--space-3) overflow-y-auto">
                 {available.length > 0 && (
                   <ul className={LIST_STYLE}>
                     {available.map((candidate) => row(candidate, false))}
                   </ul>
                 )}
                 {registered.length > 0 && (
-                  <Collapsible className="flex flex-col gap-2">
+                  <Collapsible className="flex flex-col gap-(--space-2)">
                     <CollapsibleTrigger
                       chevronSize="xs"
-                      className="flex h-(--size-control) items-center gap-2 text-left text-(length:--text-body) leading-(--leading-body) outline-none focus-visible:focus-ring"
+                      className="flex h-(--size-control) items-center gap-(--space-2) text-left text-(length:--text-body) leading-(--leading-body) outline-none focus-visible:focus-ring"
                     >
                       <span className="font-medium text-ink-1">Already registered</span>{" "}
                       <span className="text-(length:--text-micro) text-ink-4">

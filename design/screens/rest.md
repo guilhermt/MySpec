@@ -327,6 +327,8 @@ Um arquivado abre como lugar, com `← History`. O cabeçalho tem:
 
 O corpo fica na medida `--measure`, centrado. Nada roda.
 
+**Os momentos e a falha de leitura.** Os fatos escrevem um momento de hoje só com a hora (`15:02`), como a linha do History e o toast, e o de outro dia com a data (`Sep 24 at 15:02`; com o ano, o de outro ano). Um documento que não pôde ser lido diz `Couldn't read <arquivo>` numa faixa afundada, sem o vermelho, porque ler um arquivo não é uma ação do usuário que falhou, com **Try again** fantasma `sm`, como a falha de leitura de um prompt (§2.9). Um documento que a discussão nunca escreveu não é uma falha: a linha `No document was written.`
+
 **A task.**
 
 1. **Os fatos,** numa lista de termos:
@@ -430,6 +432,14 @@ Depois do primeiro cadastro, a tela dá lugar à Home com `Nothing in progress` 
 3. **um bloco afundado por tipo de caso,** com os textos de `research/rest.md` §4. Cada bloco tem o título, o que fazer e, separados por fios, os lugares (repositório ou caminho em mono), o detalhe (`The origin remote is not on GitHub: git@gitlab.com:acme/legacy-portal.git`) e as tasks recuadas, em mono, com a área de trabalho ou o caminho (o que a migração sabe de cada task);
 4. `Once they're resolved, open this version again and the update runs again.`;
 5. **Copy the list**, secundário, que copia os casos como texto: o título, e por tipo o título, o que fazer, `- <lugar>` com o detalhe e `  - <task> · <área ou caminho>`. Copiado, diz `Copied` por 2 s; sem acesso à área de transferência, `Can't copy · select the text`.
+
+**O caso "dados de uma versão mais nova".** Um banco cuja versão do schema passa da última que esta versão conhece, porque uma versão mais nova do MySpec o abriu e o mudou, abre na mesma página, com a marca e o título trocado, e nada é lido nem escrito. De cima para baixo:
+
+1. a marca e o título **`This data is from a newer MySpec`**, em `--text-display`;
+2. o texto `A newer version of MySpec opened your data and changed it in ways this version doesn't know. To keep it safe, nothing was read or changed. Open the newer version, or a later one, to keep working.`;
+3. um bloco afundado com uma linha em mono, em `--text-meta`: `Data version 40 · this version reads up to 25`.
+
+Sem blocos por tipo de caso, sem **Copy the list** e sem a frase `Once they're resolved…`: não há o que resolver nesta versão.
 
 ## 8. O aviso do app e os toasts
 

@@ -232,7 +232,8 @@ describe("NewDiscussionDialog", () => {
     await user.type(screen.getByLabelText(/^What to discuss/), "Billing");
     expect(start).toHaveAccessibleDescription("Name the discussion to start it.");
 
-    await user.type(screen.getByLabelText("Title"), "a".repeat(121));
+    await user.click(screen.getByLabelText("Title"));
+    await user.paste("a".repeat(121));
     expect(start).toHaveAccessibleDescription("Use at most 120 characters.");
 
     await user.clear(screen.getByLabelText("Title"));
@@ -244,10 +245,11 @@ describe("NewDiscussionDialog", () => {
     const { user } = open([]);
     const title = screen.getByLabelText("Title");
 
-    await user.type(title, "a".repeat(104));
+    await user.click(title);
+    await user.paste("a".repeat(104));
     expect(screen.getByText("104 of 120")).toBeInTheDocument();
 
-    await user.type(title, "a".repeat(20));
+    await user.paste("a".repeat(20));
     expect(title).toHaveValue("a".repeat(124));
     expect(title).toBeInvalid();
     expect(

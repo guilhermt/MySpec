@@ -650,6 +650,7 @@ export function makeMigration(overrides: Partial<Migration> = {}): Migration {
         tasks: [{ name: "add-login", workspace: "/home/dev/projects", path: "" }],
       },
     ],
+    newer: null,
     ...overrides,
   };
 }

@@ -251,9 +251,8 @@ export function ArchivedDiscussion({ discussionId }: ArchivedDiscussionProps) {
             <NoticeStrip
               title={`Couldn't read ${DOCUMENT_FILE}`}
               reason={artifact.error}
-              className="bg-state-error-veil"
               action={
-                <Button size="xs" onClick={() => setAttempt((count) => count + 1)}>
+                <Button variant="ghost" size="sm" onClick={() => setAttempt((count) => count + 1)}>
                   Try again
                 </Button>
               }

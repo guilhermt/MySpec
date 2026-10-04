@@ -41,9 +41,8 @@ export function ArchivedDocument({
       <NoticeStrip
         title={`Couldn't read ${name}`}
         reason={artifact.error}
-        className="bg-state-error-veil"
         action={
-          <Button size="xs" onClick={() => setAttempt((count) => count + 1)}>
+          <Button variant="ghost" size="sm" onClick={() => setAttempt((count) => count + 1)}>
             Try again
           </Button>
         }

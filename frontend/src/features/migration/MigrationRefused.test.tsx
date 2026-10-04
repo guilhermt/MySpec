@@ -100,4 +100,34 @@ describe("MigrationRefused", () => {
 
     expect(await screen.findByText("Can't copy · select the text")).toBeInTheDocument();
   });
+
+  describe("data from a newer MySpec", () => {
+    const NEWER = makeMigration({ cases: [], newer: { dataVersion: 40, appVersion: 25 } });
+
+    it("says nothing was read or changed and which versions are at odds", () => {
+      refused(NEWER);
+
+      expect(
+        screen.getByRole("heading", { level: 1, name: "This data is from a newer MySpec" }),
+      ).toBeInTheDocument();
+      expect(screen.getByText("MySpec")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "A newer version of MySpec opened your data and changed it in ways this version doesn't know. To keep it safe, nothing was read or changed. Open the newer version, or a later one, to keep working.",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Data version 40 · this version reads up to 25")).toHaveClass(
+        "font-mono",
+      );
+    });
+
+    it("has no list to copy, no sentence about resolving and no sidebar", () => {
+      refused(NEWER);
+
+      expect(screen.queryByRole("button", { name: "Copy the list" })).not.toBeInTheDocument();
+      expect(screen.queryByText(/Once they're resolved/)).not.toBeInTheDocument();
+      expect(screen.queryByRole("heading", { level: 2 })).not.toBeInTheDocument();
+      expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+    });
+  });
 });

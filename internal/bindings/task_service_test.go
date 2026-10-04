@@ -1367,12 +1367,11 @@ func TestInvalidPlanIsCorrected(t *testing.T) {
 		t.Fatalf("CreateTask() = %v, want nil", err)
 	}
 	f.waitStage(t, id, "implementation")
+	f.waitCorrected(t, id, "1-first.md")
 
+	// The stage is past the plan, so no other correction can follow.
 	if got := f.correctionCount(id); got != 1 {
 		t.Errorf("corrections = %d, want 1", got)
-	}
-	if !hasAppMessage(f.entries(), "1-first.md") {
-		t.Error("the plan was not corrected by a message from the app")
 	}
 }
 

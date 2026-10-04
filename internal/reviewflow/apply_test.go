@@ -671,6 +671,7 @@ func TestACommitThatWentUpIsMarkedWithItsSubjectAndThePullRequest(t *testing.T) 
 			f.evaluated(t, id, func(s reviewflow.State) bool {
 				return s.Review.AskedPass == 2
 			}, "the second pass to be asked for")
+			f.committedMarked(t, 1)
 
 			want := []session.MarkerEntry{{
 				Type: session.MarkerCommitted, SHA: task.ShortSHA(commitHash), Subject: c.subject, Pushed: true, Number: 42,
@@ -711,6 +712,7 @@ func TestACommitIsMarkedOnlyOnceThePassAfterItIsRecorded(t *testing.T) {
 			f.evaluated(t, id, func(s reviewflow.State) bool {
 				return s.Review.Phase == prreview.PhaseWaitingChecks
 			}, "the second pass to wait for the checks")
+			f.committedMarked(t, 1)
 			if got := f.sessions.markersOf(session.MarkerCommitted); len(got) != 1 {
 				t.Errorf("committed markers = %+v, want one", got)
 			}

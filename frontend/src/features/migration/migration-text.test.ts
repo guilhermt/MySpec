@@ -52,7 +52,7 @@ describe("casesByKind", () => {
   });
 
   it("has no group without a case", () => {
-    expect(casesByKind({ cases: [] })).toEqual([]);
+    expect(casesByKind({ cases: [], newer: null })).toEqual([]);
   });
 });
 
@@ -132,6 +132,6 @@ describe("copyText", () => {
   });
 
   it("is only the title without a case", () => {
-    expect(copyText({ cases: [] })).toBe("MySpec couldn't be updated");
+    expect(copyText({ cases: [], newer: null })).toBe("MySpec couldn't be updated");
   });
 });

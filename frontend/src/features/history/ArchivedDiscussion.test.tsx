@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { ArchivedDiscussion } from "@/features/history/ArchivedDiscussion";
+import { ARTIFACT_MISSING } from "@/lib/errors";
 import { olderKey } from "@/lib/history";
 import { type ArchivedDiscussion as ArchivedDiscussionItem, api, type Entry } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
@@ -120,7 +121,7 @@ describe("ArchivedDiscussion", () => {
 
   it("says when no document was written, on a line that doesn't open", async () => {
     vi.mocked(api.readDiscussionArtifact).mockRejectedValueOnce(
-      new Error("open /data/discussion-1/discussion.md: no such file or directory"),
+      new Error(`${ARTIFACT_MISSING}: discussion.md`),
     );
     view();
 

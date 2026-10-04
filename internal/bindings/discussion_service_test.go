@@ -420,6 +420,24 @@ func TestReadingAnArtifactOfADiscussionReturnsWhatWasToBeDiscussed(t *testing.T)
 	}
 }
 
+func TestReadingAnArtifactADiscussionNeverWroteSaysItIsMissing(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+	f.registerBoard(t, true)
+	d := f.seedDiscussion(t)
+
+	_, err := f.discussionSvc.ReadDiscussionArtifact(d.ID, "discussion.md")
+
+	if !errors.Is(err, bindings.ErrArtifactMissing) {
+		t.Fatalf("ReadDiscussionArtifact(discussion.md) = %v, want ErrArtifactMissing", err)
+	}
+	if want := "artifact missing: discussion.md"; err.Error() != want {
+		t.Errorf("ReadDiscussionArtifact(discussion.md) = %q, want %q", err.Error(), want)
+	}
+}
+
 func TestTheConversationOfADiscussionThatHasNotOpenedYetIsEmpty(t *testing.T) {
 	t.Parallel()
 

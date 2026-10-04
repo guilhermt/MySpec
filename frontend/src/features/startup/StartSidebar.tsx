@@ -17,7 +17,7 @@ interface BarProps {
 /** Bar is one bar of the skeleton, shimmering while the start runs. */
 function Bar({ still, className }: BarProps) {
   return still ? (
-    <div className={cn("h-4 rounded-sm bg-surface-0", className)} />
+    <div className={cn("h-(--space-4) rounded-sm bg-surface-0", className)} />
   ) : (
     <SkeletonBar className={className} />
   );
