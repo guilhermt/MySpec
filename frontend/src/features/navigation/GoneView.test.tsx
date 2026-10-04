@@ -54,8 +54,15 @@ function page(location: GoneLocation, state: State, back: Location[] = []) {
   });
 }
 
+// buttons are the labels of the buttons, without what is hidden from the reader: the key written on one.
 function buttons(): string[] {
-  return screen.getAllByRole("button").map((button) => button.textContent ?? "");
+  return screen.getAllByRole("button").map((button) => {
+    const label = button.cloneNode(true) as HTMLElement;
+    for (const hidden of label.querySelectorAll('[aria-hidden="true"]')) {
+      hidden.remove();
+    }
+    return label.textContent ?? "";
+  });
 }
 
 function actions(): string[] {
@@ -388,11 +395,50 @@ describe("GoneView", () => {
       expect(screen.queryByRole("group", { name: "What stayed on disk" })).not.toBeInTheDocument();
     });
 
+    const WORKTREE_STAYED =
+      "The worktree stayed at ~/.local/share/myspec/worktrees/acme/api/add-login" +
+      "contains modified files";
+    const removed = { ...worktree, kept: false, error: "" };
+    const deleted = { ...branch, kept: false, error: "" };
+
+    // Each combination of what git removed and what it left, line by line in the order worktree, branch.
     it.each([
-      ["only the worktree", { worktree, branch: null }, [WORKTREE_COMMAND], true],
-      ["only the branch", { worktree: null, branch }, ["git branch -D add-login"], false],
-      ["both", { worktree, branch }, [WORKTREE_COMMAND, "git branch -D add-login"], true],
-    ])("shows %s", (_name, parts, commands, warned) => {
+      [
+        "the worktree stayed and the branch was deleted",
+        { worktree, branch: deleted },
+        [WORKTREE_STAYED, "Branch add-login deleted"],
+        [WORKTREE_COMMAND],
+        true,
+      ],
+      [
+        "the worktree was removed and the branch stayed",
+        { worktree: removed, branch },
+        ["Worktree removed", "The branch add-login stayedchecked out"],
+        ["git branch -D add-login"],
+        false,
+      ],
+      [
+        "both stayed",
+        { worktree, branch },
+        [WORKTREE_STAYED, "The branch add-login stayedchecked out"],
+        [WORKTREE_COMMAND, "git branch -D add-login"],
+        true,
+      ],
+      [
+        "only the worktree, which stayed",
+        { worktree, branch: null },
+        [WORKTREE_STAYED],
+        [WORKTREE_COMMAND],
+        true,
+      ],
+      [
+        "only the branch, which stayed",
+        { worktree: null, branch },
+        ["The branch add-login stayedchecked out"],
+        ["git branch -D add-login"],
+        false,
+      ],
+    ])("shows what stayed when %s", (_name, parts, lines, commands, warned) => {
       const leftover = makeLeftover({ repoPath: "/home/dev/code/api", ...parts });
       renderWithStore(<GoneView location={gone("task", "task-1", "add-login")} />, {
         state: stateWith(),
@@ -400,10 +446,23 @@ describe("GoneView", () => {
       });
 
       expect(stayed()).toHaveTextContent("Git couldn't remove everything");
-      expect(screen.getByText("To remove it yourself, in ~/code/api")).toBeInTheDocument();
+      expect(
+        within(stayed())
+          .getAllByRole("listitem")
+          .map((li) => li.textContent),
+      ).toEqual(lines);
+      // The warning and the commands come after the block, outside it.
+      expect(within(stayed()).queryByText("To remove it yourself, in ~/code/api")).toBeNull();
+      const heading = screen.getByText("To remove it yourself, in ~/code/api");
+      expect(stayed().compareDocumentPosition(heading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(heading.className).not.toContain("uppercase");
       expect(document.querySelector("pre")?.textContent).toBe(commands.join("\n"));
       const warning = screen.queryByText(/--force deletes the modified and untracked files/);
       expect(warning !== null).toBe(warned);
+      if (warning !== null) {
+        expect(stayed().contains(warning)).toBe(false);
+        expect(warning.compareDocumentPosition(heading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      }
     });
 
     it("comes in when the answer of the deletion arrives, without taking the focus", () => {

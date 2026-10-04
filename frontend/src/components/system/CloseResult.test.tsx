@@ -40,14 +40,8 @@ describe("CloseResult", () => {
     expect(container.querySelector('[data-state="error"]')).not.toBeNull();
   });
 
-  it("omits the time and draws the children after the lines", () => {
-    render(
-      <CloseResult legend="Closing" label="What the closing did" lines={LINES}>
-        <p>After the lines</p>
-      </CloseResult>,
-    );
+  it("omits the time it doesn't have", () => {
+    render(<CloseResult legend="Closing" label="What the closing did" lines={LINES} />);
     expect(screen.queryByText("15:02")).toBeNull();
-    const group = screen.getByRole("group");
-    expect(group.lastElementChild).toHaveTextContent("After the lines");
   });
 });

@@ -16,6 +16,7 @@ import {
   overlaps,
   placeHeaderOneLine,
   placeHeaderPieces,
+  resolve,
   setTheme,
   settle,
   THEMES,
@@ -298,3 +299,64 @@ describe.each(THEMES)(
     });
   },
 );
+
+// The page column is the reading measure less its gutters: the width each block of the page takes.
+function pageColumn(): number {
+  return (
+    Number.parseFloat(resolve("var(--measure-read)", "width")) -
+    2 * Number.parseFloat(resolve("var(--space-6)", "width"))
+  );
+}
+
+describe("The page of an item that left, its blocks and its key", () => {
+  const closed = CASES.find((one) => one.name === "gone" && one.variant === "") as Case;
+  const deleted = CASES.find((one) => one.name === "gone" && one.variant === "deleted") as Case;
+
+  it.each(WIDTHS)(
+    "writes Ctrl J on Next that needs you, and draws the closing on the whole measure at %ipx",
+    async (width) => {
+      setTheme("light");
+      const { area } = await draw(closed, width);
+
+      const next = within(area).getByRole("button", { name: "Next that needs you" });
+      const key = within(next).getByText("Ctrl J");
+      const keyBox = key.getBoundingClientRect();
+      const nextBox = next.getBoundingClientRect();
+      expect(keyBox.width).toBeGreaterThan(0);
+      expect(keyBox.left).toBeGreaterThanOrEqual(nextBox.left);
+      expect(keyBox.right).toBeLessThanOrEqual(nextBox.right);
+      expect(getComputedStyle(key).visibility).toBe("visible");
+
+      const closing = within(area).getByRole("group", { name: "What the closing did" });
+      expect(closing.getBoundingClientRect().width).toBe(pageColumn());
+    },
+  );
+
+  it.each(WIDTHS)(
+    "draws what stayed on disk on the whole measure, the warning and the commands under it at %ipx",
+    async (width) => {
+      setTheme("light");
+      const { area } = await draw(deleted, width);
+
+      const stayed = within(area).getByRole("group", { name: "What stayed on disk" });
+      const warning = within(area)
+        .getByText(/--force deletes the modified/)
+        .closest("p");
+      const commands = within(area).getByText(/^git worktree remove --force/).parentElement;
+      if (warning === null || commands === null) {
+        throw new Error("the warning or the commands are missing");
+      }
+      for (const block of [stayed, warning, commands]) {
+        expect(block.getBoundingClientRect().width).toBe(pageColumn());
+      }
+      expect(stayed.contains(warning)).toBe(false);
+      expect(stayed.contains(commands)).toBe(false);
+      expect(warning.getBoundingClientRect().top).toBeGreaterThan(
+        stayed.getBoundingClientRect().bottom,
+      );
+      expect(commands.getBoundingClientRect().top).toBeGreaterThan(
+        warning.getBoundingClientRect().bottom,
+      );
+    },
+  );
+});

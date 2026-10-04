@@ -80,36 +80,36 @@ function GonePasses({
 }
 
 /**
- * GoneLeftover is what git couldn't remove when the item was deleted, with the commands that remove it
- * from the clone. The warning of --force comes first: the commands delete what the worktree may still hold.
+ * GoneLeftover is what git couldn't remove when the item was deleted, then the commands that remove it
+ * from the clone. The warning of --force comes before the commands: they delete what the worktree may
+ * still hold.
  */
 function GoneLeftover({ leftover }: { leftover: Leftover }) {
   return (
-    <CloseResult
-      legend="Git couldn't remove everything"
-      label="What stayed on disk"
-      lines={leftoverLines(leftover)}
-    >
-      <div className="mt-(--space-2) flex flex-col gap-(--space-2)">
-        {forceWarning(leftover) && (
-          <p className="flex gap-(--space-1-5) text-(length:--text-meta) leading-(--leading-meta) text-ink-2">
-            <span aria-hidden="true">◇</span>
-            <span>
-              <span className="font-medium text-ink-1">
-                --force deletes the modified and untracked files in it too.
-              </span>{" "}
-              Copy out what you want to keep first.
-            </span>
-          </p>
-        )}
-        <CopyBlock
-          heading="sentence"
-          label={leftoverHeading(leftover)}
-          copyLabel="Copy the command"
-          text={leftoverCommands(leftover)}
-        />
-      </div>
-    </CloseResult>
+    <>
+      <CloseResult
+        legend="Git couldn't remove everything"
+        label="What stayed on disk"
+        lines={leftoverLines(leftover)}
+      />
+      {forceWarning(leftover) && (
+        <p className="flex gap-(--space-2) text-(length:--text-meta) leading-(--leading-meta) text-ink-2">
+          <span aria-hidden="true">◇</span>
+          <span>
+            <span className="font-medium text-ink-1">
+              --force deletes the modified and untracked files in it too.
+            </span>{" "}
+            Copy out what you want to keep first.
+          </span>
+        </p>
+      )}
+      <CopyBlock
+        heading="sentence"
+        label={leftoverHeading(leftover)}
+        copyLabel="Copy the command"
+        text={leftoverCommands(leftover)}
+      />
+    </>
   );
 }
 

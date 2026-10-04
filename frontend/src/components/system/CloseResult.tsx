@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons";
@@ -22,8 +21,6 @@ export interface CloseResultProps {
   /** label names the group for the reader. */
   label: string;
   lines: readonly CloseResultLine[];
-  /** children come after the lines: a notice and the block of what stayed on disk. */
-  children?: ReactNode;
 }
 
 function Mark({ outcome }: { outcome: CloseResultLine["outcome"] }) {
@@ -37,7 +34,7 @@ function Mark({ outcome }: { outcome: CloseResultLine["outcome"] }) {
 }
 
 /** CloseResult is what the closing of a task did, part by part, in a sunken block. */
-export function CloseResult({ legend, time, label, lines, children }: CloseResultProps) {
+export function CloseResult({ legend, time, label, lines }: CloseResultProps) {
   return (
     // biome-ignore lint/a11y/useSemanticElements: a fieldset is a form control group; this is a read-only block
     <div
@@ -94,7 +91,6 @@ export function CloseResult({ legend, time, label, lines, children }: CloseResul
           </li>
         ))}
       </ul>
-      {children}
     </div>
   );
 }
