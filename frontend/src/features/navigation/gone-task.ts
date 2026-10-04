@@ -73,11 +73,16 @@ function detailOf(error: string): Pick<CloseResultLine, "detail"> {
   return error === "" ? {} : { detail: displayPaths(error) };
 }
 
-/** leftoverCommands are the commands that remove what stayed, one per line, in the clone. */
+/**
+ * leftoverCommands are the commands that remove what stayed, one per line, in the clone: a worktree git
+ * still lists goes with git worktree remove, and a folder git forgot, with rm -rf.
+ */
 export function leftoverCommands(leftover: Leftover): string {
   const commands: string[] = [];
-  if (leftover.worktree?.kept === true) {
-    commands.push(`git worktree remove --force ${displayPath(leftover.worktree.path)}`);
+  const { worktree } = leftover;
+  if (worktree?.kept === true) {
+    const path = displayPath(worktree.path);
+    commands.push(worktree.registered ? `git worktree remove --force ${path}` : `rm -rf ${path}`);
   }
   if (leftover.branch?.kept === true) {
     commands.push(`git branch -D ${leftover.branch.name}`);
@@ -92,7 +97,14 @@ export function leftoverHeading(leftover: Leftover): string {
     : `To remove it yourself, in ${displayPath(leftover.repoPath)}`;
 }
 
-/** forceWarning says whether the commands carry --force over a worktree that may hold work: the worktree stayed. */
-export function forceWarning(leftover: Leftover): boolean {
-  return leftover.worktree?.kept === true;
+/**
+ * forceWarning is the warning over the command that deletes a worktree that stayed, with whatever work it
+ * still holds: --force, or rm -rf for a folder git forgot; null when no worktree stayed.
+ */
+export function forceWarning(leftover: Leftover): string | null {
+  const { worktree } = leftover;
+  if (worktree?.kept !== true) {
+    return null;
+  }
+  return `${worktree.registered ? "--force" : "rm -rf"} deletes the modified and untracked files in it too.`;
 }

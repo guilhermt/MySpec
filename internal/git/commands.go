@@ -90,6 +90,34 @@ func (r *Runner) PruneWorktrees(ctx context.Context, dir string) error {
 	return err
 }
 
+// ListedWorktree is a worktree as git worktree list reports it.
+type ListedWorktree struct {
+	Path string
+	// Prunable is a worktree git forgets on the next prune: its folder or the
+	// .git file in it is gone.
+	Prunable bool
+}
+
+// Worktrees lists the worktrees git keeps for the clone at dir, the main one
+// first.
+func (r *Runner) Worktrees(ctx context.Context, dir string) ([]ListedWorktree, error) {
+	out, err := r.Run(ctx, dir, "worktree", "list", "--porcelain", "-z")
+	if err != nil {
+		return nil, err
+	}
+	var listed []ListedWorktree
+	for field := range strings.SplitSeq(out, "\x00") {
+		if path, ok := strings.CutPrefix(field, "worktree "); ok {
+			listed = append(listed, ListedWorktree{Path: path})
+			continue
+		}
+		if (field == "prunable" || strings.HasPrefix(field, "prunable ")) && len(listed) > 0 {
+			listed[len(listed)-1].Prunable = true
+		}
+	}
+	return listed, nil
+}
+
 // DeleteBranch deletes the branch named name, merged or not.
 func (r *Runner) DeleteBranch(ctx context.Context, dir, name string) error {
 	_, err := r.Run(ctx, dir, "branch", "-D", name)

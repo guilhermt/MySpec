@@ -95,6 +95,7 @@ const WORKTREE_STAYED = {
   kept: true,
   error:
     "fatal: '…/idempotency-keys' contains modified or untracked files, use --force to delete it",
+  registered: true,
 };
 
 // pageOf is the page of an item that left, with the state it is read from and what the deletion left.

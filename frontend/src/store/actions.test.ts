@@ -1044,6 +1044,7 @@ describe("review actions reported in the app notice", () => {
         path: "/home/dev/worktrees/dev/web/pr_31",
         kept: true,
         error: "the worktree is busy",
+        registered: true,
       },
     });
     vi.mocked(api.deleteReview).mockResolvedValueOnce({ leftover });

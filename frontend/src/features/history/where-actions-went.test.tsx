@@ -735,6 +735,7 @@ const PAGES: Row[] = [
             path: "/home/dev/wt/add-login",
             kept: true,
             error: "contains modified files",
+            registered: true,
           },
           branch: { name: "add-login", kept: true, error: "checked out" },
         }),

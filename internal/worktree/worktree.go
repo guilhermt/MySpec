@@ -68,13 +68,17 @@ const (
 // Leftover is what git could not remove when a worktree was purged: each part
 // with whether it stayed and what git said, and the clone it belongs to.
 type Leftover struct {
-	RepoPath    string // the clone the worktree and the branch belong to
-	Path        string // the worktree folder
-	PathKept    bool   // git couldn't remove the folder
-	PathError   string // what git said; "" when it went
-	Branch      string
-	BranchKept  bool   // git couldn't delete the branch
-	BranchError string // what git said; "" when it went
+	RepoPath  string // the clone the worktree and the branch belong to
+	Path      string // the worktree folder
+	PathKept  bool   // git couldn't remove the folder
+	PathError string // what git said; "" when it went
+	// PathRegistered says that git still lists the folder that stayed as a
+	// worktree of the clone, which git worktree remove can take down; a
+	// folder git forgot is only a folder.
+	PathRegistered bool
+	Branch         string
+	BranchKept     bool   // git couldn't delete the branch
+	BranchError    string // what git said; "" when it went
 }
 
 // The reasons Ensure refuses to create a worktree. Each wraps the git error

@@ -673,6 +673,10 @@ type LeftoverWorktree struct {
 	Path  string `json:"path"`
 	Kept  bool   `json:"kept"`  // git couldn't remove it
 	Error string `json:"error"` // what git said; "" when it went
+	// Registered says that git still lists the folder that stayed as a
+	// worktree, which git worktree remove --force takes down; a folder git
+	// forgot is removed as a folder.
+	Registered bool `json:"registered"`
 }
 
 // LeftoverBranch is the branch of a deletion.

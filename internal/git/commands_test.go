@@ -471,6 +471,40 @@ func TestRemoveWorktreeAndDeleteBranchUndoAnAdd(t *testing.T) {
 	}
 }
 
+func TestWorktreesListsTheWorktreesOfTheCloneAndWhatGitWouldPrune(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+	kept := filepath.Join(t.TempDir(), "login-screen")
+	gone := filepath.Join(t.TempDir(), "sign-up")
+	for _, path := range []string{kept, gone} {
+		if err := runner.AddWorktree(t.Context(), dir, path, filepath.Base(path), "refs/remotes/origin/dev"); err != nil {
+			t.Fatalf("AddWorktree(%s) = %v, want nil", path, err)
+		}
+	}
+	if err := os.RemoveAll(gone); err != nil {
+		t.Fatalf("RemoveAll(%s) = %v, want nil", gone, err)
+	}
+
+	got, err := runner.Worktrees(t.Context(), dir)
+	if err != nil {
+		t.Fatalf("Worktrees() = %v, want nil", err)
+	}
+
+	want := []git.ListedWorktree{{Path: dir}, {Path: kept}, {Path: gone, Prunable: true}}
+	if !slices.Equal(got, want) {
+		t.Errorf("Worktrees() = %+v, want %+v", got, want)
+	}
+}
+
+func TestWorktreesFailsOutsideARepository(t *testing.T) {
+	t.Parallel()
+	runner, _ := repo(t)
+
+	if _, err := runner.Worktrees(t.Context(), t.TempDir()); err == nil {
+		t.Error("Worktrees() = nil, want the error outside a repository")
+	}
+}
+
 func TestCountCommitsCountsWhatABranchHasPastItsBase(t *testing.T) {
 	t.Parallel()
 	runner, dir := repo(t)

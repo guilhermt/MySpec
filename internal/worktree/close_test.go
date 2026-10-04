@@ -343,6 +343,10 @@ func TestPurgeReportsTheFolderGitCouldNotRemove(t *testing.T) {
 	if left.PathError == "" {
 		t.Error("PathError is empty, want what git said")
 	}
+	// Git forgets the worktree before it fails on the folder.
+	if left.PathRegistered {
+		t.Error("PathRegistered = true, want the folder git forgot")
+	}
 	if !f.gone(t, wt) {
 		t.Error("the worktree that stayed is still registered, want the record gone anyway")
 	}
@@ -358,6 +362,7 @@ func TestPurgeSaysWhatStayedOfEachPart(t *testing.T) {
 		name       string
 		hold       func(t *testing.T, f fixture, wt worktree.Worktree)
 		pathKept   bool
+		registered bool
 		branchKept bool
 	}{
 		{
@@ -373,6 +378,18 @@ func TestPurgeSaysWhatStayedOfEachPart(t *testing.T) {
 				lockDir(t, filepath.Dir(wt.Path))
 			},
 			pathKept:   true,
+			branchKept: true,
+		},
+		{
+			// A locked worktree is one git refuses to remove and keeps listed,
+			// with its branch checked out in it.
+			name: "the worktree stayed registered, with its branch",
+			hold: func(t *testing.T, f fixture, wt worktree.Worktree) {
+				t.Helper()
+				gittest.Run(t, f.repo.Path, "worktree", "lock", wt.Path)
+			},
+			pathKept:   true,
+			registered: true,
 			branchKept: true,
 		},
 		{
@@ -418,7 +435,37 @@ func TestPurgeSaysWhatStayedOfEachPart(t *testing.T) {
 			if left.BranchKept != tt.branchKept || (left.BranchError != "") != tt.branchKept {
 				t.Errorf("branch kept = %v with %q, want kept = %v with what git said", left.BranchKept, left.BranchError, tt.branchKept)
 			}
+			if left.PathRegistered != tt.registered {
+				t.Errorf("path registered = %v, want %v", left.PathRegistered, tt.registered)
+			}
+			if tt.pathKept && tt.branchKept &&
+				(strings.Contains(left.PathError, left.BranchError) || strings.Contains(left.BranchError, left.PathError)) {
+				t.Errorf("path error %q, branch error %q, want each part with only what git said of it", left.PathError, left.BranchError)
+			}
 		})
+	}
+}
+
+func TestRegisteredSaysWhetherGitCanStillRemoveAWorktree(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+	wt := f.ensure(t)
+
+	if !f.svc.Registered(t.Context(), wt.RepoPath, wt.Path+string(filepath.Separator)) {
+		t.Error("Registered() = false for the worktree git lists, want true")
+	}
+	if f.svc.Registered(t.Context(), wt.RepoPath, filepath.Join(filepath.Dir(wt.Path), "elsewhere")) {
+		t.Error("Registered() = true for a folder git never listed, want false")
+	}
+	// A listing that fails keeps the command of a worktree.
+	if !f.svc.Registered(t.Context(), t.TempDir(), wt.Path) {
+		t.Error("Registered() = false where git could not list, want true")
+	}
+	if err := os.RemoveAll(wt.Path); err != nil {
+		t.Fatalf("RemoveAll(%s) = %v, want nil", wt.Path, err)
+	}
+	if f.svc.Registered(t.Context(), wt.RepoPath, wt.Path) {
+		t.Error("Registered() = true for a worktree git would prune, want false")
 	}
 }
 
