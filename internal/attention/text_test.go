@@ -30,7 +30,9 @@ func TestNotificationBodies(t *testing.T) {
 		{"question in the review", sessionBody(KindQuestion, placeName(Place{Kind: PlaceReview}, false)), "The agent has a question in the review."},
 		{"question in the discussion", sessionBody(KindQuestion, placeName(Place{Kind: PlaceDiscussion}, false)), "The agent has a question in the discussion."},
 		{"permission in a step", sessionBody(KindPermission, "step 3"), "Permission requested in step 3."},
+		{"permission in the review of the PR stage", sessionBody(KindPermission, placeName(Place{Kind: PlacePR}, true)), "Permission requested in the review."},
 		{"reply in the PRD", sessionBody(KindReply, "the PRD"), "The agent is waiting for your reply in the PRD."},
+		{"session error in a step", sessionBody(KindSessionError, placeName(Place{Kind: PlaceStep, Step: 3}, false)), "The session stopped with an error in step 3."},
 		{"session error in the pull request", sessionBody(KindSessionError, "the pull request"), "The session stopped with an error in the pull request."},
 
 		// The reviewer of a step.
@@ -76,6 +78,8 @@ func TestNotificationBodies(t *testing.T) {
 		{"pr closed", prClosedBody(1284), "PR #1284 was closed without a merge."},
 
 		// The review of a pull request.
+		{"permission in the review", sessionBody(KindPermission, placeName(Place{Kind: PlaceReview}, false)), "Permission requested in the review."},
+		{"session error in the review", sessionBody(KindSessionError, placeName(Place{Kind: PlaceReview}, false)), "The session stopped with an error in the review."},
 		{"no readable report", reviewReplyBody(), "The reviewer stopped without a report the app can read."},
 		{"review findings", reviewReportBody(FormDecide, 5), "The review has 5 findings for you to decide."},
 		{"review one finding", reviewReportBody(FormDecide, 1), "The review has 1 finding for you to decide."},
@@ -87,14 +91,19 @@ func TestNotificationBodies(t *testing.T) {
 		{"publish failed", publishFailedBody("GitHub's rate limit was reached. It resets at 15:04."), "The review couldn't be published: GitHub's rate limit was reached."},
 		{"publish failed, gone", publishFailedBody("This pull request is no longer on GitHub."), "The review couldn't be published: this pull request is no longer on GitHub."},
 		{"publish failed, raw", publishFailedBody("Couldn't publish to GitHub: HTTP 502"), "The review couldn't be published: HTTP 502."},
+		{"publish failed, raw with its own period", publishFailedBody("Couldn't publish to GitHub: HTTP 502. Bad gateway."), "The review couldn't be published: HTTP 502. Bad gateway."},
 		{"publish failed, no reason", publishFailedBody(""), "The review couldn't be published."},
 		{"pass blocked", passBlockedBody("gh is not authenticated. Run gh auth login."), "The next pass of the review couldn't start: gh is not authenticated."},
 		{"pass blocked, raw", passBlockedBody("worktree: fetch failed: exit status 128"), "The next pass of the review couldn't start: fetch failed: exit status 128."},
+		{"pass blocked, raw with its own mark", passBlockedBody("worktree: is it a repository?"), "The next pass of the review couldn't start: is it a repository?"},
 		{"new commits", newCommitsBody(2), "2 commits arrived since your review."},
 		{"one new commit", newCommitsBody(1), "1 commit arrived since your review."},
 		{"new commits beyond the recent", newCommitsBody(-1), "New commits arrived since your review."},
 
 		// The discussion.
+		{"permission in the discussion", sessionBody(KindPermission, placeName(Place{Kind: PlaceDiscussion}, false)), "Permission requested in the discussion."},
+		{"reply in the discussion", sessionBody(KindReply, placeName(Place{Kind: PlaceDiscussion}, false)), "The agent is waiting for your reply in the discussion."},
+		{"session error in the discussion", sessionBody(KindSessionError, placeName(Place{Kind: PlaceDiscussion}, false)), "The session stopped with an error in the discussion."},
 		{"unreadable drafts", unreadableDraftsBody(), "The agent wrote drafts the app can't read in the discussion."},
 		{"drafts to decide", draftsBody(5), "There are 5 drafts to decide in the discussion."},
 		{"one draft to decide", draftsBody(1), "There is 1 draft to decide in the discussion."},
@@ -171,7 +180,10 @@ func TestReasonOf(t *testing.T) {
 		{"MySpec keeps its name", "MySpec couldn't read the pull request.", "MySpec couldn't read the pull request"},
 		{"exclamation", "Nothing to publish!", "nothing to publish"},
 		{"a prefix, the raw error", "Couldn't publish to GitHub: HTTP 502: bad gateway", "HTTP 502: bad gateway"},
-		{"a prefix ending in a period", "Couldn't write to GitHub: could not resolve host.", "could not resolve host"},
+		{"a prefix ending in a period", "Couldn't write to GitHub: could not resolve host.", "could not resolve host."},
+		{"a prefix, the raw error whole", "Couldn't publish to GitHub: HTTP 502. Bad gateway.", "HTTP 502. Bad gateway."},
+		{"a prefix ending in a question mark", "worktree: is it a repository?", "is it a repository?"},
+		{"a period inside a word ends no sentence", "Couldn't reach api.github.com. Check the network.", "couldn't reach api.github.com"},
 		{"a prefix, a capital stays", "Couldn't read from GitHub: Not Found", "Not Found"},
 		{"worktree prefix", "worktree: fetch failed: exit status 128", "fetch failed: exit status 128"},
 		{"a raw error without punctuation", "Exit status 128", "Exit status 128"},
