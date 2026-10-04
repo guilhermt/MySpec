@@ -132,6 +132,18 @@ describe.each(THEMES)("CardRow in the %s theme", (theme) => {
     expect(paintOf(row, want)).toEqual(want);
   });
 
+  it("shows the focus ring on a script focus that follows a click", async () => {
+    setTheme(theme);
+    const row = draw(1200);
+    await userEvent.click(row);
+    row.blur();
+    document.documentElement.dataset.input = "keyboard";
+    row.focus();
+    const want = focusRing();
+    expect(paintOf(row, want)).toEqual(want);
+    delete document.documentElement.dataset.input;
+  });
+
   it("paints the open row on the brand plane with its ring", () => {
     setTheme(theme);
     const row = draw(1200, {}, { open: true });

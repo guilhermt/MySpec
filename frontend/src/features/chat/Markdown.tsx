@@ -1,27 +1,31 @@
 import { code } from "@streamdown/code";
 import { createMermaidPlugin } from "@streamdown/mermaid";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { Streamdown } from "streamdown";
 import { Button } from "@/components/system/Button";
+import { CopyButton } from "@/components/system/CopyButton";
+import { CutText } from "@/components/system/CutText";
+import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
-import { CUT_SHOWN, codeMarkdown, cutParts, type MarkdownPart } from "@/features/chat/code-cut";
+import {
+  CUT_ABOVE,
+  CUT_SHOWN,
+  codeMarkdown,
+  codeParts,
+  type MarkdownPart,
+} from "@/features/chat/code-cut";
 import { CODE_THEMES } from "@/features/chat/code-theme";
 import { ExternalLink } from "@/features/chat/ExternalLink";
 import { useEffectiveMode } from "@/features/theme/useApplyTheme";
 import { cn } from "@/lib/utils";
 
-// Nothing here downloads a file: the webview has no download target.
+// Nothing here downloads a file: the webview has no download target. The Copy of a code block is the
+// CopyButton in the header of the CodeBlock, of the whole block.
 const CONTROLS = {
   table: false,
-  code: { copy: true, download: false },
+  code: { copy: false, download: false },
   mermaid: { copy: false, download: false, fullscreen: true, panZoom: true },
 } as const;
-
-// A cut block copies itself whole with its own Copy: Streamdown's would copy the lines shown.
-const CUT_CONTROLS = { ...CONTROLS, code: { copy: false, download: false } } as const;
-
-/** COPIED_MS is how long Copy of a cut block says what the copy did. */
-const COPIED_MS = 2000;
 
 // The safety modal warns before leaving the page; links never navigate here.
 const LINK_SAFETY = { enabled: false } as const;
@@ -49,17 +53,10 @@ interface BlockProps {
   streaming: boolean;
   className: string | undefined;
   renderInlineCode: MarkdownProps["renderInlineCode"];
-  controls?: typeof CONTROLS | typeof CUT_CONTROLS;
 }
 
 // Block is one Streamdown over a piece of the text.
-function Block({
-  children,
-  streaming,
-  className,
-  renderInlineCode,
-  controls = CONTROLS,
-}: BlockProps) {
+function Block({ children, streaming, className, renderInlineCode }: BlockProps) {
   const dark = useEffectiveMode() === "dark";
   const plugins = useMemo(
     () => ({
@@ -96,7 +93,7 @@ function Block({
       plugins={plugins}
       shikiTheme={[...CODE_THEMES]}
       lineNumbers={false}
-      controls={controls}
+      controls={CONTROLS}
       linkSafety={LINK_SAFETY}
       components={components}
     >
@@ -105,86 +102,77 @@ function Block({
   );
 }
 
-interface CutCodeProps {
+interface CodeBlockProps {
   part: Extract<MarkdownPart, { kind: "code" }>;
   streaming: boolean;
+  /** cut shows only the first lines of a long block, with the way to the rest. */
+  cutCode: boolean;
   className: string | undefined;
 }
 
-// Copied is what the last Copy did, said on the button for COPIED_MS.
-type Copied = "idle" | "copied" | "failed";
+// A second word of the info that names a file, with the lines of the excerpt when it has them.
+const SOURCE = /^([^\s:]+)(?::(\d+)-(\d+))?$/;
 
-const COPY_LABELS: Record<Copied, string> = {
-  idle: "Copy",
-  copied: "Copied",
-  failed: "Can't copy · select the text",
-};
+// headerOf reads the header of a block from its info: the language, then the file and its lines.
+function headerOf(info: string): { language: string; path: string; range: string } {
+  const [language = "", source = ""] = info.split(/\s+/);
+  const match = SOURCE.exec(source);
+  const [, path = "", from, to] = match ?? [];
+  return { language, path, range: from !== undefined && to !== undefined ? `${from}–${to}` : "" };
+}
 
-// CutCode is a long code block showing its first lines, with Copy of the whole block in its header
-// and the foot that shows the rest.
-function CutCode({ part, streaming, className }: CutCodeProps) {
+// CodeBlock is a fenced code block: the sunken frame, its header with the language, the file and the
+// Copy of the whole block, the code, and, for a long one in the conversation, the foot that shows the
+// rest.
+function CodeBlock({ part, streaming, cutCode, className }: CodeBlockProps) {
   const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState<Copied>("idle");
   const total = part.lines.length;
+  const cut = cutCode && total > CUT_ABOVE;
+  const { language, path, range } = headerOf(part.info);
 
-  useEffect(() => {
-    if (copied === "idle") {
-      return;
-    }
-    const timer = setTimeout(() => setCopied("idle"), COPIED_MS);
-    return () => clearTimeout(timer);
-  }, [copied]);
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(part.lines.join("\n"));
-      setCopied("copied");
-    } catch {
-      setCopied("failed");
-    }
-  };
-
-  // The frame is the sunken block: Streamdown's code block draws inside it without a frame of its
-  // own, and the foot is the last row of the block, under a rule.
+  // The frame is the sunken block: Streamdown's code block draws inside it without a frame or a
+  // header of its own, and the foot is the last row of the block, under a rule.
   return (
     <div
-      data-code-cut
+      data-code-block
       className="relative flex flex-col overflow-hidden rounded-md bg-surface-0 shadow-[inset_0_0_0_var(--border)_var(--line-1)]"
     >
+      <div className="flex h-8 items-center gap-(--space-2) px-(--space-3) text-(length:--text-micro) leading-(--leading-micro) text-ink-3 shadow-[inset_0_calc(var(--border)*-1)_0_var(--line-1)]">
+        <Icon icon={ICONS.openInEditor} size="sm" />
+        {language !== "" && <span>{language}</span>}
+        {path !== "" && <CutText text={path} className="font-mono text-ink-3" />}
+        {range !== "" && <span className="tabular-nums">{range}</span>}
+        <span className="ml-auto">
+          <CopyButton
+            text={part.lines.join("\n")}
+            label="Copy the code"
+            variant="icon"
+            note="before"
+          />
+        </span>
+      </div>
       <Block
         streaming={streaming && !part.closed}
         className={className}
         renderInlineCode={undefined}
-        controls={CUT_CONTROLS}
       >
-        {codeMarkdown(part, open ? total : CUT_SHOWN)}
+        {codeMarkdown(part, cut && !open ? CUT_SHOWN : total)}
       </Block>
-      {/* Copy stands at the end of the block's header, where Streamdown puts its own: the header
-          is the block's first row, of Streamdown's height (h-8). */}
-      <div className="absolute top-0 right-0 flex h-8 items-center pr-(--space-1)">
-        <Button
-          variant="ghost"
-          size="xs"
-          {...(copied === "copied" ? { icon: ICONS.done } : {})}
-          error={copied === "failed"}
-          onClick={() => void copy()}
-        >
-          {COPY_LABELS[copied]}
-        </Button>
-      </div>
-      <div className="flex items-center gap-(--space-2) px-(--space-1-5) py-(--space-1) text-(length:--text-meta) leading-(--leading-meta) text-ink-3 shadow-[inset_0_var(--border)_0_var(--line-1)]">
-        <Button variant="ghost" size="xs" aria-expanded={open} onClick={() => setOpen(!open)}>
-          {open ? "Show less" : `Show all ${total} lines`}
-        </Button>
-        {!open && <span className="tabular-nums">{total - CUT_SHOWN} more</span>}
-      </div>
+      {cut && (
+        <div className="flex items-center gap-(--space-2) px-(--space-1-5) py-(--space-1) text-(length:--text-meta) leading-(--leading-meta) text-ink-3 shadow-[inset_0_var(--border)_0_var(--line-1)]">
+          <Button variant="ghost" size="xs" aria-expanded={open} onClick={() => setOpen(!open)}>
+            {open ? "Show less" : `Show all ${total} lines`}
+          </Button>
+          {!open && <span className="tabular-nums">{total - CUT_SHOWN} more</span>}
+        </div>
+      )}
     </div>
   );
 }
 
 const RAIL = "markdown-rail-last";
 
-/** Markdown draws what the agent wrote; in the conversation, its long code blocks are cut. */
+/** Markdown draws what the agent wrote; every code block has its header, and in the conversation the long ones are cut. */
 export function Markdown({
   children,
   streaming = false,
@@ -193,9 +181,9 @@ export function Markdown({
   renderInlineCode,
   className,
 }: MarkdownProps) {
-  const parts = useMemo(() => (cutCode ? cutParts(children) : null), [cutCode, children]);
+  const parts = useMemo(() => codeParts(children), [children]);
 
-  if (parts === null || parts.every((part) => part.kind === "text")) {
+  if (parts.every((part) => part.kind === "text")) {
     return (
       <Block
         streaming={streaming}
@@ -222,8 +210,14 @@ export function Markdown({
             {part.text}
           </Block>
         ) : (
-          // biome-ignore lint/suspicious/noArrayIndexKey: the order of the parts never changes
-          <CutCode key={index} part={part} streaming={streaming && last} className={partClass} />
+          <CodeBlock
+            // biome-ignore lint/suspicious/noArrayIndexKey: the order of the parts never changes
+            key={index}
+            part={part}
+            streaming={streaming && last}
+            cutCode={cutCode}
+            className={partClass}
+          />
         );
       })}
     </div>

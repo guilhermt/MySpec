@@ -509,7 +509,7 @@ function TaskFacts({ task, facts, now }: TaskFactsProps) {
                 {" · "}
                 <Tooltip content={path}>
                   <span className="text-state-notice">
-                    <span aria-hidden="true">◇ </span>
+                    <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />
                     clone missing
                     <span className="sr-only">{` · ${path}`}</span>
                   </span>

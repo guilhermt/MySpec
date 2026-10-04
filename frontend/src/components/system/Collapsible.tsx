@@ -28,7 +28,7 @@ export function CollapsibleTrigger({
     <UICollapsibleTrigger
       {...props}
       className={cn(
-        "group/collapsible inline-flex items-center gap-1.5 rounded-sm text-ink-2 transition-colors duration-(--duration-fast) ease-standard hover:text-ink-1 focus-visible:focus-ring",
+        "group/collapsible inline-flex items-center gap-(--space-1-5) rounded-sm text-ink-2 transition-colors duration-(--duration-fast) ease-standard hover:text-ink-1 focus-visible:focus-ring",
         className,
       )}
     >

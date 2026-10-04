@@ -51,7 +51,7 @@ export function SegmentedControl<T extends string>({
       {...(disabled ? { readOnly: true, "aria-disabled": true } : {})}
       {...(withReason ? { "aria-describedby": reasonId } : {})}
       className={cn(
-        "inline-flex gap-0.5 rounded-sm bg-surface-0 p-0.5",
+        "inline-flex gap-(--space-0-5) rounded-sm bg-surface-0 p-(--space-0-5)",
         disabled && "dashed-disabled border border-dashed border-line-3 bg-transparent",
       )}
     >
@@ -60,7 +60,7 @@ export function SegmentedControl<T extends string>({
           key={option.value}
           value={option.value}
           className={cn(
-            "inline-flex h-(--size-control-xs) items-center gap-1.5 rounded-xs px-2.5 text-(length:--text-meta) leading-(--leading-meta) text-ink-2 transition-colors duration-(--duration-fast) ease-standard not-data-readonly:not-data-checked:hover:bg-veil-hover not-data-readonly:not-data-checked:hover:text-ink-1 focus-visible:focus-ring data-checked:bg-brand-tint data-checked:text-ink-1 data-checked:font-medium data-checked:shadow-[inset_0_0_0_var(--border)_var(--brand-ring)] data-readonly:text-ink-4 data-readonly:data-checked:bg-transparent data-readonly:data-checked:text-ink-4",
+            "inline-flex h-(--size-control-xs) items-center gap-(--space-1-5) rounded-xs px-(--space-2-5) text-(length:--text-meta) leading-(--leading-meta) text-ink-2 transition-colors duration-(--duration-fast) ease-standard not-data-readonly:not-data-checked:hover:bg-veil-hover not-data-readonly:not-data-checked:hover:text-ink-1 focus-visible:focus-ring data-checked:bg-brand-tint data-checked:text-ink-1 data-checked:font-medium data-checked:shadow-[inset_0_0_0_var(--border)_var(--brand-ring)] data-readonly:text-ink-4 data-readonly:data-checked:bg-transparent data-readonly:data-checked:text-ink-4",
             size === "sm" && "h-(--size-control-sm)",
           )}
         >
@@ -80,7 +80,7 @@ export function SegmentedControl<T extends string>({
 
   if (!withReason) return group;
   return (
-    <span className="inline-flex items-center gap-2">
+    <span className="inline-flex items-center gap-(--space-2)">
       {group}
       <span id={reasonId} className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
         {disabledReason}

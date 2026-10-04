@@ -50,7 +50,7 @@ Visto no app real nas cinco janelas e nos dois temas, e nas capturas `gone-*`, `
 
 ### Problemas
 
-**S1 · Bloqueia. O anel de foco some no WebKitGTK depois de um clique e no `focus()` por script.** A leitura do system o deu como **Deve**; as do board e de Reviews, como **Bloqueia**, porque o viram também só com o teclado.
+**S1 · Bloqueia. O anel de foco some no WebKitGTK depois de um clique e no `focus()` por script.** · **Fechado no step 7** A leitura do system o deu como **Deve**; as do board e de Reviews, como **Bloqueia**, porque o viram também só com o teclado.
 
 - Onde: as linhas usam só `focus-visible:focus-ring`, e o WebKitGTK não dá `:focus-visible` a um foco movido por tecla depois de um clique nem ao `focus()` de script que segue uma tecla. `components/system/ListRow.tsx:104` (`focus-visible:focus-ring`) e `:118` (`group-focus-visible/row:visible`, as teclas da linha), `features/sidebar/TreeRow.tsx:89`, `features/sidebar/TreeNodeRow.tsx:161`; o foco inicial dos diálogos (`components/system/Dialog.tsx`, em **Cancel** no de confirmação).
 - Ocorrências:
@@ -61,7 +61,7 @@ Visto no app real nas cinco janelas e nos dois temas, e nas capturas `gone-*`, `
   - **Diálogos da task:** o anel em **Cancel** de um diálogo aberto pelo teclado (`critique-task-11.md`, item 11), visto no Broadway como acima.
 - Regra: `principles.md` 9 ("O foco tem uma forma que a seleção não tem"); `components.md` Estados comuns (Focus), Diálogo (Teclado) e Linha de lista (Estados: "foco (anel por fora e as teclas)"); `screens/review.md` §9. É a pauta `critique-task-06.md:169` e o item 11 de `critique-task-11.md`, agora vistos no motor, com o teclado e não só depois de um clique. O conserto mora no system; o usuário confere no monitor (`12:31`, pronto 9).
 
-**S2 · Deve. A tecla sem caixa fora da primária.** Pauta de polimento 4.
+**S2 · Deve. A tecla sem caixa fora da primária.** · **Fechado no step 7** Pauta de polimento 4.
 
 - Onde: `components/system/Button.tsx:126–133` tira a caixa fora do sólido (`!keyOnSolid && "border-0 bg-transparent shadow-none"`).
 - Ocorrências:
@@ -70,12 +70,12 @@ Visto no app real nas cinco janelas e nos dois temas, e nas capturas `gone-*`, `
   - **Reviews:** `Alt ↓` solto em **Next to decide** e `A`/`D`/`E` soltos nos apontamentos, ao lado de `Ctrl ↵` em caixa na primária e de `R` em caixa em **Start review**.
 - Regra: `components.md` Etiqueta e tecla ("a mesma forma num grupo"); `12:341` (§4.3 #7): toda tecla em caixa, contorno `--line-2` no secundário e no fantasma, `--brand-key-ring` na primária, `--line-1` e `--ink-4` no desabilitado.
 
-**S3 · Deve. A barra de rolagem fora do `ScrollArea` é a do GTK.** Pauta de polimento 7.
+**S3 · Deve. A barra de rolagem fora do `ScrollArea` é a do GTK.** · **Fechado no step 7** Pauta de polimento 7.
 
 - Onde: nenhum `::-webkit-scrollbar` em `styles/globals.css`. As áreas do `ScrollArea` (History, Settings, a lateral, a lista do board) mostram a barra fina no app; o textarea do prompt e o corpo de um diálogo rolam nativos.
 - Regra: `components.md` Barra de rolagem; `12:342` (§4.3 #8): uma regra global com a mesma anatomia, sem trilho, para toda área que rola.
 
-**S4 · Deve. O bloco de código tem duas cópias e o cabeçalho sem caminho.**
+**S4 · Deve. O bloco de código tem duas cópias e o cabeçalho sem caminho.** · **Fechado no step 7**
 
 - Onde: `features/chat/Markdown.tsx:16` (`code: { copy: true }`) deixa a cópia do Streamdown nos blocos curtos, e `:108–186` (`CutCode`, com `COPY_LABELS` em `:117`) desenha uma cópia própria (`Copy`/`Copied`, `:129–176`) no bloco cortado. Nenhuma é o `CopyButton` nem tem o nome `Copy the code`. O cabeçalho mostra só a linguagem (`mermaid`, `go`), sem o ícone `<>`, o caminho e o intervalo do mock.
 - Visto na conversa da task.
@@ -137,29 +137,29 @@ Visto no app real nas cinco janelas e nos dois temas, e nas capturas `gone-*`, `
   - **Reviews:** nas cinco larguras e na captura `reviews-list-failed-978`, a primeira faixa começa no fio do cabeçalho, porque `features/reviews/ReviewsReadingStates.tsx:48` só dá `mb-(--space-4)`.
 - Regra: o mock decidido, em que `.readfail` tem `margin-top: var(--space-4)` (`lab/11-screen-board/src/board.css:43`); `screens/board.md` §3.8; `screens/review.md` §2.7 ("a faixa afundada no alto da lista"), que herda a faixa do board.
 
-**S12 · Deve. O tooltip do bloco da faixa recolhida quebra o nome do item.**
+**S12 · Deve. O tooltip do bloco da faixa recolhida quebra o nome do item.** · **Fechado no step 7**
 
 - Onde: `components/system/Tooltip.tsx:53` desenha o conteúdo e o `sub` lado a lado (`flex items-center gap-2`, `:64`), e os dois encolhem dentro de `--size-tooltip-max`. `features/sidebar/SidebarRail.tsx:129` passa o nome e a linha 2 longa.
 - Visto: `fix-typo-in-` / `footer` numa coluna e `Session error · Reviewer · Step` / `1/1` na outra, a 1100 e a 2560, no escuro. Um nome de 40 caracteres vira quatro linhas.
 - Regra: `components.md` Faixa recolhida ("o tooltip tem o nome do item e o que ele pede") e Tooltip (anatomia). O nome inteiro é o que o tooltip existe para dizer.
 
-**S13 · Deve. `↓ N more below` cai sobre o texto da última linha.**
+**S13 · Deve. `↓ N more below` cai sobre o texto da última linha.** · **Fechado no step 7**
 
 - Onde: `features/sidebar/MoreBelow.tsx:61`. O esmaecido vai do transparente ao fundo da lateral só em 70% dos 28 px, e o rótulo fica na parte de baixo, sobre a linha 2 ainda visível.
 - Visto: numa janela de 1100 × 460, no escuro, `↓ 2 more below` encosta em `Step 1/1` e no chip `!3h` meio apagados da linha de baixo, e as duas leituras se misturam.
 - Regra: `components.md` Indicador de rolagem da árvore (o esmaecido sobre as últimas linhas); `principles.md` 10.
 
-**S14 · Deve. O item desabilitado com ação, focado no escuro, fica abaixo de 4,5:1.** Pauta `critique-task-05.md:183` (9).
+**S14 · Deve. O item desabilitado com ação, focado no escuro, fica abaixo de 4,5:1.** · **Fechado no step 7** Pauta `critique-task-05.md:183` (9).
 
 - Onde: `components/system/Menu.tsx:271` (`focus:text-ink-4`). Medido: `--ink-4` sobre `--veil-hover` em `--surface-3` dá **4,44:1** no escuro (5,50 no claro).
 - Regra: `principles.md` 5 (4,5:1); a pauta pede `--ink-3` com o foco.
 
-**S15 · Pode esperar. Valores de espaço soltos no system.**
+**S15 · Pode esperar. Valores de espaço soltos no system.** · **Fechado no step 7**
 
 - Onde: 149 classes numéricas do Tailwind onde há `--space-*` em `components/system/`, as mais densas em `Menu.tsx` (7 linhas), `DependencyPicker.tsx` (7), `RequestBar.tsx` (6), `Radio.tsx` (6), `Listbox.tsx` (5) e `Dialog.tsx` (5). No shell: `Toast.tsx:72`, `:86`, `:96` (`gap-2.5 py-2.5 pr-2 pl-3`, `gap-0.5`, `-ml-2.5`); `Tooltip.tsx:53` e `KeyNotice.tsx:102` (`px-2 py-1`); `Button.tsx:150` (`gap-2` da razão).
 - Regra: `tokens.css` (cabeçalho: "no color, size or duration outside this file"). Os valores batem com a escala, e nenhuma cor nem duração está solta.
 
-**S16 · Pode esperar. A linha 2 da linha aberta da árvore, pressionada, cai abaixo de 4,5:1 no claro.**
+**S16 · Pode esperar. A linha 2 da linha aberta da árvore, pressionada, cai abaixo de 4,5:1 no claro.** · **Fechado no step 7**
 
 - Calculado dos tokens: `--ink-3` sobre `--veil-press` em `--brand-veil` dá **4,44:1** no claro e 4,86 no escuro. A linha 2 é `--ink-3` (`features/sidebar/TreeRow.tsx`), e o pressionado dura o clique.
 - Regra: `tokens.css:160–161` ("1 to 3 pass 4.5:1 on every surface and veil of the system"); `principles.md` 5. A exceção que o comentário já lista é só a do `--ink-4`.
@@ -188,35 +188,35 @@ Visto no app real nas cinco janelas e nos dois temas, e nas capturas `gone-*`, `
 - Onde: `features/navigation/gone-passes.ts:47` e `:82` usam `clockTime` (`Yesterday 09:00`) nas linhas das passadas, e `:16` usa `atMoment` (`on Sep 23 at 16:20`) no texto de cima da mesma página. `features/navigation/gone-rounds.ts:11` também usa `clockTime`.
 - Regra: "uma hora por significado"; `screens/review.md` §15. Origem: `critique-task-11.md`, O que as correções abriram.
 
-**S21 · Pode esperar. A razão cortada do rodapé de um diálogo não se lê pelo teclado.**
+**S21 · Pode esperar. A razão cortada do rodapé de um diálogo não se lê pelo teclado.** · **Fechado no step 7**
 
 - Onde: `components/system/Dialog.tsx:216` (`:213–220`) usa `CutText`, que não recebe foco e abre só com o ponteiro (`components/system/CutText.tsx:35–37`, `:40`, `hover={cut}`); o primário tracejado em foco não mostra a razão.
 - Ocorrências: **Group drafts into an epic** (`discussion-many-group-978`: `Name the epic to group the …` corta); o rodapé do diálogo de criação de task; o rodapé do diálogo de publicação (`Choose a verdict`, `Nothing GitHub takes yet`).
 - Origem: `critique-task-09.md`, novo.
 
-**S22 · Pode esperar. O tooltip com o texto inteiro abre mesmo quando nada corta.**
+**S22 · Pode esperar. O tooltip com o texto inteiro abre mesmo quando nada corta.** · **Fechado no step 7**
 
 - Ocorrências: `components/system/FoldedDraft.tsx:56–62` (o título do dobrado, `:59`); `features/chat/entries/MarkerLine.tsx:173–174` (o título da linha da lista do marco); `components/system/ListRow.tsx:121–135` (`Cell`, que sempre envolve o texto em `Tooltip`: hover em `Redesign · the experience of MySpec`, card #49, a 1100, mostrou o tooltip sem corte); `features/discussion/GroupEpicDialog.tsx:137` (o título de cada rascunho); `features/discussion/NewDiscussionDialog.tsx:214` (a linha do board). O `CutText` só abre quando corta (`CutText.tsx:40`; a leitura do board cita `:625`).
 - Regra: `components.md` Tooltip ("o texto inteiro do que corta"); `principles.md` 10; "um componente com a mesma forma em todo lugar". Origem: `critique-task-09.md`, segunda leitura e O que ficou aberto ("um comportamento só").
 
-**S23 · Pode esperar. `◇` como caractere solto.** Pauta `critique-task-05.md:206` (16).
+**S23 · Pode esperar. `◇` como caractere solto.** · **Fechado no step 7** Pauta `critique-task-05.md:206` (16).
 
 - No system: `components/system/DependencyNotice.tsx:27`, `RelationList.tsx:87`, `FilterBar.tsx:61` e `Menu.tsx:144` (`UNAVAILABLE`, que o `Chip` e o `Select` escrevem). Na página do item que saiu: `features/navigation/GoneView.tsx:97`. Fora destas áreas: `DetailsPanel.tsx:512`, `home.ts:183`, `:194`, `:216`, `NewTaskDialog.tsx:104`, `CardContextLine.tsx:123`, `NewDiscussionDialog.tsx:303`, `pr-panel.ts:183`, `new-discussion.ts:198`.
 - O que fazer: o `StateGlyph blocked`.
 
-**S24 · Pode esperar. O laço e o teto do `Presence` sem prova.** Pauta `critique-task-02-fixes.md:40` (M1).
+**S24 · Pode esperar. O laço e o teto do `Presence` sem prova.** · **Fechado no step 7** Pauta `critique-task-02-fixes.md:40` (M1).
 
 - `components/system/Presence.painted.test.tsx:62` prova só o laço dentro da subárvore. Nenhum caso cobre um laço no próprio elemento (`Presence.tsx:13–16`) nem uma saída que não avisa o fim (o teto, `:28–31`).
 
-**S25 · Pode esperar. O trilho de erro do bloco da faixa recolhida sem prova.** Pauta `critique-task-02-fixes.md:42` (M2).
+**S25 · Pode esperar. O trilho de erro do bloco da faixa recolhida sem prova.** · **Fechado no step 7** Pauta `critique-task-02-fixes.md:42` (M2).
 
 - `features/sidebar/SidebarRail.tsx:147` (`error-rail-bar`); nenhum teste da faixa o confere (só `TreeRow.test.tsx:347` e `ListRow.test.tsx:277`, para as linhas). No app, o trilho aparece nos dois blocos de erro.
 
-**S26 · Pode esperar. A saída do toast empurrado repete o `Presence` à mão.** Pauta `critique-task-02-fixes.md:46` (M4); opinião da crítica de origem.
+**S26 · Pode esperar. A saída do toast empurrado repete o `Presence` à mão.** · **Fechado no step 7** Pauta `critique-task-02-fixes.md:46` (M4); opinião da crítica de origem.
 
 - `features/notice/ShellToasts.tsx:21–36` guarda `pushedOut`, `shown` e `dismissed` à mão; só `whenExitEnds` vem de `Presence` (`components/system/Toast.tsx:6`). O que fazer, pela pauta: a saída do toast pelo `Presence`.
 
-**S27 · Pode esperar. Quatro toasts por 120 ms.** Pauta `critique-task-02-fixes.md:48` (M5).
+**S27 · Pode esperar. Quatro toasts por 120 ms.** · **Fechado no step 7** Pauta `critique-task-02-fixes.md:48` (M5).
 
 - `ShellToasts.tsx:38–41` mostra o que sai junto com os três. Vale, sem defeito de código; a leitura recomendava fechar com uma decisão.
 - **Decisão do coordenador:** a quarta notificação que chega com três toasts à vista não espera; o mais antigo sai no mesmo instante, com a transição de saída de `--duration-fast`, e isso faz parte do "sai" de `components.md` (Aviso do app e toast). **Registrar em:** `components.md` Aviso do app e toast, pela task, no step do system. O step confere que a saída usa `--duration-fast` e escreve o commit aqui.
@@ -621,30 +621,30 @@ Cada item da pauta de polimento (`lab/08-visual-final/critique.md` §7; `12:272�
 |---|---|---|---|
 | Polimento 2, a árvore marca a espera três vezes por linha (155) | Fecha pela decisão | `decisions.md` 2026-10-02; `12:340` (§4.3 #6). O passe não o reabriu | — |
 | Polimento 3, a barra quieta com três marcas âmbar (156) | Feito na task 2 | `components/system/RequestBar.tsx:107` (`12:278`); o passe não o reabriu | — |
-| Polimento 4, a tecla em caixa em todo botão (157) | Vale (**Deve**) | `Button.tsx:126–133`; teclas soltas em Settings, no compositor, no board e em Reviews | S2 |
+| Polimento 4, a tecla em caixa em todo botão (157) | Vale (**Deve**) | `Button.tsx:126–133`; teclas soltas em Settings, no compositor, no board e em Reviews | S2 · **Fechado no step 7** |
 | Polimento 6, a transição entre lugares (159) | Feito | `components.md` Troca de lugar (`12:281`); o passe não o reabriu | — |
-| Polimento 7, a barra de rolagem global (160) | Vale (**Deve**) | Nenhum `::-webkit-scrollbar` em `globals.css`; o textarea do prompt e o corpo de um diálogo rolam nativos. A lista do board usa a barra fina do system em todas as larguras | S3 |
+| Polimento 7, a barra de rolagem global (160) | Vale (**Deve**) | Nenhum `::-webkit-scrollbar` em `globals.css`; o textarea do prompt e o corpo de um diálogo rolam nativos. A lista do board usa a barra fina do system em todas as larguras | S3 · **Fechado no step 7** |
 | Polimento 9, o `…` do breadcrumb (162) | Feito na task 2 | `PlaceHeader.tsx:48–95` (`12:284`); o passe não o reabriu | — |
-| O **Copy** em todo bloco de código (`12:168`) | Vale (**Deve**) | `Markdown.tsx:16`, `:108–186` (`COPY_LABELS`, `:117`) | S4 |
-| `critique-task-04.md:119–123` (9), o cabeçalho do código sem caminho | Vale | O cabeçalho só com a linguagem | S4 |
+| O **Copy** em todo bloco de código (`12:168`) | Vale (**Deve**) | `Markdown.tsx:16`, `:108–186` (`COPY_LABELS`, `:117`) | S4 · **Fechado no step 7** |
+| `critique-task-04.md:119–123` (9), o cabeçalho do código sem caminho | Vale | O cabeçalho só com a linguagem | S4 · **Fechado no step 7** |
 | `ModelPicker` nos dois diálogos (`12:92`; `09:73`, `:109`) | Vale | `StartReviewDialog.tsx:10`, `:198`; `NewDiscussionDialog.tsx:343` | S5 · **Fechado no step 2** |
 | `critique-task-01.md:150` (12), o ícone fora de `icons.ts` em `Select.tsx:1` | Não vale mais | É o `ChevronDown`, que não é significado e que a regra do system permite (`components/system/Icon.test.tsx:57–75`, a V2) | — |
-| `critique-task-02-fixes.md:40` (M1), o laço e o teto do `Presence` | Vale | `Presence.painted.test.tsx:62` | S24 |
-| `critique-task-02-fixes.md:42` (M2), o trilho de erro da faixa | Vale | `SidebarRail.tsx:147`; sem teste da faixa | S25 |
-| `critique-task-02-fixes.md:46` (M4), a saída do toast empurrado | Vale (opinião da crítica) | `ShellToasts.tsx:21–36` | S26 |
-| `critique-task-02-fixes.md:48` (M5), quatro toasts por 120 ms | Vale, sem defeito; decidido | `ShellToasts.tsx:38–41`; o mais antigo sai no mesmo instante, em `--duration-fast` (registro em `components.md` Aviso do app e toast) | S27 |
-| `critique-task-05.md:183` (9), o item desabilitado com ação focado no escuro | Vale (**Deve**) | `Menu.tsx:271`, 4,44:1 no escuro | S14 |
+| `critique-task-02-fixes.md:40` (M1), o laço e o teto do `Presence` | Vale | `Presence.painted.test.tsx:62` | S24 · **Fechado no step 7** |
+| `critique-task-02-fixes.md:42` (M2), o trilho de erro da faixa | Vale | `SidebarRail.tsx:147`; sem teste da faixa | S25 · **Fechado no step 7** |
+| `critique-task-02-fixes.md:46` (M4), a saída do toast empurrado | Vale (opinião da crítica) | `ShellToasts.tsx:21–36` | S26 · **Fechado no step 7** |
+| `critique-task-02-fixes.md:48` (M5), quatro toasts por 120 ms | Vale, sem defeito; decidido | `ShellToasts.tsx:38–41`; o mais antigo sai no mesmo instante, em `--duration-fast` (registro em `components.md` Aviso do app e toast) | S27 · **Fechado no step 7** |
+| `critique-task-05.md:183` (9), o item desabilitado com ação focado no escuro | Vale (**Deve**) | `Menu.tsx:271`, 4,44:1 no escuro | S14 · **Fechado no step 7** |
 | `critique-task-05.md:188` (10); `critique-task-06.md:173` (4), as faixas sempre `role="alert"` | Vale | `BoardReadingStates.tsx:48`, `ReviewsReadingStates.tsx:46`, `CheckStrip.tsx:47` | S10 |
-| `critique-task-05.md:206` (16), `◇` como caractere solto | Vale | 15 lugares, do system e de fora | S23 |
+| `critique-task-05.md:206` (16), `◇` como caractere solto | Vale | 15 lugares, do system e de fora | S23 · **Fechado no step 7** |
 | `critique-task-05.md:230–233` (21), a região do `KeyNotice` | Vale | `KeyNotice.tsx:100`, `:96` | S10 |
 | `critique-task-05.md:392`, o comentário de `REVIEW_MODES` | Vale | `lib/review-modes.ts:3` | S28 · **Fechado no step 2** |
 | `critique-task-05.md:394`, o `role="status"` de `Cloning` | Vale | `StartRow.tsx:150` (a pauta dizia `:143`) e `:125` | S10 |
-| `critique-task-06.md:169` (3), o anel de foco no WebKitGTK | Vale (**Bloqueia**) | Visto no Broadway na árvore, nos diálogos, no board e em Reviews, também só com o teclado | S1 |
-| `critique-task-09.md`, segunda leitura: o `Cut` do dobrado com tooltip mesmo inteiro | Vale | `FoldedDraft.tsx:56–62`; `MarkerLine.tsx:173` | S22 |
-| `critique-task-09.md`, O que ficou aberto: o tooltip, "um comportamento só" | Vale | `ListRow.tsx:121–135` (`Cell`); `GroupEpicDialog.tsx:137`; `NewDiscussionDialog.tsx:214` | S22 |
-| `critique-task-09.md`, novo: a razão cortada do rodapé não abre pelo foco | Vale | `Dialog.tsx:216`; nos diálogos de criação, de publicação e de agrupar | S21 |
+| `critique-task-06.md:169` (3), o anel de foco no WebKitGTK | Vale (**Bloqueia**) | Visto no Broadway na árvore, nos diálogos, no board e em Reviews, também só com o teclado | S1 · **Fechado no step 7** |
+| `critique-task-09.md`, segunda leitura: o `Cut` do dobrado com tooltip mesmo inteiro | Vale | `FoldedDraft.tsx:56–62`; `MarkerLine.tsx:173` | S22 · **Fechado no step 7** |
+| `critique-task-09.md`, O que ficou aberto: o tooltip, "um comportamento só" | Vale | `ListRow.tsx:121–135` (`Cell`); `GroupEpicDialog.tsx:137`; `NewDiscussionDialog.tsx:214` | S22 · **Fechado no step 7** |
+| `critique-task-09.md`, novo: a razão cortada do rodapé não abre pelo foco | Vale | `Dialog.tsx:216`; nos diálogos de criação, de publicação e de agrupar | S21 · **Fechado no step 7** |
 | `critique-task-09.md` (13), miúdo: a idade da barra e da árvore | Vale | Na task, no review e na discussão | S17 |
-| `critique-task-11.md` (11), o anel em **Cancel** de um diálogo aberto pelo teclado | Vale (**Deve**) | Visto no Broadway | S1 |
+| `critique-task-11.md` (11), o anel em **Cancel** de um diálogo aberto pelo teclado | Vale (**Deve**) | Visto no Broadway | S1 · **Fechado no step 7** |
 | `critique-task-11.md` (16), o `Tag` em mono nas etiquetas | Vale, reaberto | A forma é a do `Tag`; o problema é a escolha do componente | S7 |
 | `critique-task-11.md`, O que as correções abriram: o toast sobre a barra do pedido | Vale | `toast-lift.ts:9–24`; só `Composer.tsx:121` chama | S19 |
 | `critique-task-11.md`, O que as correções abriram: as passadas da página do review com `clockTime` | Vale | `gone-passes.ts:47`, `:82`; `gone-rounds.ts:11` | S20 |
@@ -727,8 +727,8 @@ As faixas sempre `role="alert"` (`critique-task-06.md:173`), o anel de foco (`cr
 | `critique-task-09.md` (13), os miúdos | Feito, menos a idade | `· click again to undo` depois de **Retry** no app | S17 |
 | `critique-task-09.md`, segunda leitura: a pílula `↓` sobre o atual | Vale | `discussion-drafts-978`/`-812` | D1 |
 | `critique-task-09.md`, segunda leitura: **Edit** ao lado de **Done**, **Body** sem `Markdown` | Vale | `drafts-card.ts:498–505`; `DraftEditor.tsx:298` | D2 |
-| `critique-task-09.md`, segunda leitura: o tooltip sempre na lista e no dobrado | Vale | `MarkerLine.tsx:174`, `FoldedDraft.tsx:59` | S22 |
-| `critique-task-09.md`, novo: a razão cortada do rodapé pelo teclado | Vale | **Group drafts into an epic** | S21 |
+| `critique-task-09.md`, segunda leitura: o tooltip sempre na lista e no dobrado | Vale | `MarkerLine.tsx:174`, `FoldedDraft.tsx:59` | S22 · **Fechado no step 7** |
+| `critique-task-09.md`, novo: a razão cortada do rodapé pelo teclado | Vale | **Group drafts into an epic** | S21 · **Fechado no step 7** |
 | `critique-task-09.md`, novo: a decisão abaixo da dobra | Vale | `discussion-partial-fail-978`, `discussion-epic-off-978` | D1 |
 | `critique-task-10.md`, o `Textarea` com `rows` (`DraftEditor` 6) | Feito | Sem mudança visível em `discussion-drafts-edit-*` | — |
 

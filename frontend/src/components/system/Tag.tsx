@@ -11,7 +11,7 @@ export function Tag({ children, className }: TagProps) {
   return (
     <span
       className={cn(
-        "inline-flex h-(--size-time-chip) items-center rounded-xs bg-surface-0 px-1.5 font-mono text-(length:--text-micro) leading-(--leading-micro) text-ink-3 whitespace-nowrap",
+        "inline-flex h-(--size-time-chip) items-center rounded-xs bg-surface-0 px-(--space-1-5) font-mono text-(length:--text-micro) leading-(--leading-micro) text-ink-3 whitespace-nowrap",
         className,
       )}
     >

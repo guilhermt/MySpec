@@ -1,29 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { codeMarkdown, cutParts, fencedLines } from "@/features/chat/code-cut";
+import { codeMarkdown, codeParts, fencedLines } from "@/features/chat/code-cut";
 
 const lines = (count: number) => Array.from({ length: count }, (_, at) => `line ${at + 1}`);
 
-describe("cutParts", () => {
-  it("keeps text and short code blocks as text", () => {
-    const markdown = ["Some text", "```go", ...lines(24), "```", "More"].join("\n");
+describe("codeParts", () => {
+  it("keeps text as it was written", () => {
+    const markdown = ["Some text", "", "More"].join("\n");
 
-    expect(cutParts(markdown)).toEqual([{ kind: "text", text: markdown }]);
+    expect(codeParts(markdown)).toEqual([{ kind: "text", text: markdown }]);
+  });
+
+  it("splits out every code block, short or long", () => {
+    const markdown = ["Some text", "```go", ...lines(2), "```", "More"].join("\n");
+
+    expect(codeParts(markdown)).toEqual([
+      { kind: "text", text: "Some text" },
+      { kind: "code", fence: "```", info: "go", lines: lines(2), closed: true },
+      { kind: "text", text: "More" },
+    ]);
   });
 
   it("splits out a code block of more than 24 lines", () => {
     const markdown = ["Before", "```go", ...lines(46), "```", "After"].join("\n");
 
-    expect(cutParts(markdown)).toEqual([
+    expect(codeParts(markdown)).toEqual([
       { kind: "text", text: "Before" },
       { kind: "code", fence: "```", info: "go", lines: lines(46), closed: true },
       { kind: "text", text: "After" },
     ]);
   });
 
-  it("cuts a block still streaming, without its closing fence", () => {
+  it("splits out a block still streaming, without its closing fence", () => {
     const markdown = ["~~~~", ...lines(25)].join("\n");
 
-    expect(cutParts(markdown)).toEqual([
+    expect(codeParts(markdown)).toEqual([
       { kind: "code", fence: "~~~~", info: "", lines: lines(25), closed: false },
     ]);
   });
@@ -31,7 +41,7 @@ describe("cutParts", () => {
   it("closes a block only with a fence as long, of the same mark", () => {
     const markdown = ["````", ...lines(12), "```", "~~~", ...lines(12), "````"].join("\n");
 
-    expect(cutParts(markdown)).toEqual([
+    expect(codeParts(markdown)).toEqual([
       {
         kind: "code",
         fence: "````",

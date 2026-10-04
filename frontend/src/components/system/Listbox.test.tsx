@@ -138,7 +138,7 @@ describe("Listbox", () => {
       items: [...ITEMS, { value: "old", label: "old", unavailable: true }],
       onValueChange,
     });
-    const old = screen.getByRole("option", { name: "◇ old · unavailable" });
+    const old = screen.getByRole("option", { name: "old · unavailable" });
     expect(old).toHaveAttribute("aria-disabled", "true");
     await user.click(old);
     expect(onValueChange).not.toHaveBeenCalled();
@@ -150,6 +150,6 @@ describe("Listbox", () => {
     );
     expect(
       screen.getByRole("combobox", { name: "Base branch: old · unavailable" }),
-    ).toHaveTextContent("◇ old · unavailable");
+    ).toHaveTextContent("old · unavailable");
   });
 });

@@ -16,7 +16,7 @@ export function AppNotice({ label, detail, onDismiss }: AppNoticeProps) {
   return (
     <div
       role="alert"
-      className="flex min-h-(--size-ask) shrink-0 flex-wrap items-center gap-2 bg-state-error-veil py-1.5 pr-2 pl-5 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-[inset_var(--error-rail)_0_0_var(--state-error)]"
+      className="flex min-h-(--size-ask) shrink-0 flex-wrap items-center gap-(--space-2) bg-state-error-veil py-(--space-1-5) pr-(--space-2) pl-(--space-5) text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-[inset_var(--error-rail)_0_0_var(--state-error)]"
     >
       <span className="min-w-0 font-bold text-state-error">{label}</span>
       {/* The detail keeps a readable width, and goes under a long label instead of squeezing. */}

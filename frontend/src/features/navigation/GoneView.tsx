@@ -3,6 +3,7 @@ import { CopyBlock } from "@/components/system/CopyBlock";
 import type { GoneAction } from "@/components/system/GonePage";
 import { GonePage } from "@/components/system/GonePage";
 import { ICONS, type IconGlyph } from "@/components/system/icons";
+import { StateGlyph } from "@/components/system/StateGlyph";
 import { closeLegendTime, closeResultLines } from "@/features/history/close-result";
 import { gonePassLines, goneReviewText } from "@/features/navigation/gone-passes";
 import {
@@ -94,7 +95,7 @@ function GoneLeftover({ leftover }: { leftover: Leftover }) {
       />
       {warning !== null && (
         <p className="flex gap-(--space-2) text-(length:--text-meta) leading-(--leading-meta) text-ink-2">
-          <span aria-hidden="true">◇</span>
+          <StateGlyph state="blocked" />
           <span>
             <span className="font-medium text-ink-1">{warning}</span> Copy out what you want to keep
             first.

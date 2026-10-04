@@ -81,7 +81,7 @@ export function Checkbox({
           }
         : {})}
       className={cn(
-        "group/checkbox flex min-h-(--size-control-sm) items-center gap-2 rounded-sm px-2 text-(length:--text-meta) leading-(--leading-meta) text-ink-1 focus-visible:focus-ring cursor-default",
+        "group/checkbox flex min-h-(--size-control-sm) items-center gap-(--space-2) rounded-sm px-(--space-2) text-(length:--text-meta) leading-(--leading-meta) text-ink-1 focus-visible:focus-ring cursor-default",
         disabled && "text-ink-4",
         loading && "cursor-progress",
         className,
@@ -105,7 +105,7 @@ export function Checkbox({
 
   if (!withReason) return row;
   return (
-    <span className="inline-flex items-center gap-2">
+    <span className="inline-flex items-center gap-(--space-2)">
       {row}
       <span id={reasonId} className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
         {disabledReason}

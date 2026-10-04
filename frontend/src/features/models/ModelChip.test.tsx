@@ -157,7 +157,7 @@ describe("ModelChip", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent(reason);
     await user.click(chip);
     const kept = await screen.findByRole("menuitemradio", {
-      name: `◇ Opus 4 · unavailable ${reason}`,
+      name: `Opus 4 · unavailable ${reason}`,
     });
     expect(kept).toHaveAttribute("aria-checked", "true");
     expect(kept).toHaveAttribute("aria-disabled", "true");

@@ -119,7 +119,7 @@ describe("CardPanel", () => {
       "#13 Reset the passwordIn progress",
       "#14 Sign outClosed",
     ]);
-    expect(texts("Dependencies")).toEqual(["dev/api#7 Session tokensOpen◇ Not satisfied"]);
+    expect(texts("Dependencies")).toEqual(["dev/api#7 Session tokensOpenNot satisfied"]);
     expect(texts("Pull requests")).toEqual(["#21 Open", "dev/api#8 Merged"]);
   });
 

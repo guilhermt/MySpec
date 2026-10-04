@@ -15,7 +15,11 @@ export interface SkeletonBarProps {
 /** Skeleton stands in for content that is loading, named for the reader. */
 export function Skeleton({ label, children, className }: SkeletonProps) {
   return (
-    <div role="status" aria-label={label} className={cn("flex flex-col gap-2", className)}>
+    <div
+      role="status"
+      aria-label={label}
+      className={cn("flex flex-col gap-(--space-2)", className)}
+    >
       {children}
     </div>
   );

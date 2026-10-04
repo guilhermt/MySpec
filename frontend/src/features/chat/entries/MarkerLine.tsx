@@ -9,7 +9,6 @@ import { ICONS, type IconMeaning } from "@/components/system/icons";
 import { Link } from "@/components/system/Link";
 import { Shimmer } from "@/components/system/Shimmer";
 import { StateGlyph } from "@/components/system/StateGlyph";
-import { Tooltip } from "@/components/system/Tooltip";
 import type { DraftRowView } from "@/features/chat/discussion-markers";
 import { Chevron } from "@/features/chat/entries/Chevron";
 import { Markdown } from "@/features/chat/Markdown";
@@ -171,9 +170,7 @@ function DraftsBody({ rows }: { rows: readonly DraftRowView[] }) {
         >
           <DraftGlyph glyph={row.glyph} spacer />
           {row.prefix !== "" && <span className="shrink-0 text-ink-3">{row.prefix}</span>}
-          <Tooltip content={row.title}>
-            <span className="min-w-0 truncate">{row.title}</span>
-          </Tooltip>
+          <CutText text={row.title} />
           <CutText
             text={row.status}
             className={cn(

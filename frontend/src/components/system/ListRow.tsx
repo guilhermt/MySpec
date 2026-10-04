@@ -133,7 +133,7 @@ const ROW_DASHED =
 const KEYS =
   "row-start-1 invisible inline-flex items-center justify-end gap-(--space-2) whitespace-nowrap text-(length:--text-micro) leading-(--leading-micro) text-ink-3 group-focus-visible/row:visible";
 
-/** Cell is a truncated text of the row with its whole text in the tooltip. */
+/** Cell is a truncated text of the row with its whole text in the tooltip, once it is cut. */
 function Cell({
   text,
   tooltip,
@@ -144,9 +144,7 @@ function Cell({
   className?: string;
 }): ReactElement {
   return (
-    <Tooltip content={tooltip}>
-      <span className={cn("min-w-0 truncate", className)}>{text}</span>
-    </Tooltip>
+    <CutText text={text} tooltip={tooltip} {...(className !== undefined ? { className } : {})} />
   );
 }
 

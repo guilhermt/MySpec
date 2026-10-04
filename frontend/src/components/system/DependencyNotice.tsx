@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { StateGlyph } from "./StateGlyph";
 
 export interface DependencyNoticeProps {
   model: {
@@ -24,7 +25,7 @@ export function DependencyNotice({ model, outlined }: DependencyNoticeProps) {
       )}
     >
       <p className="text-ink-2">
-        <span aria-hidden="true">◇ </span>
+        <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />
         <span className="font-semibold text-ink-1">{model.title}</span> {model.issueTitle}
       </p>
       <p className="text-ink-2">{model.meta}</p>

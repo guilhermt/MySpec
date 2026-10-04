@@ -13,6 +13,10 @@
 /* The theme is the data-theme attribute on the document element. */
 @custom-variant dark (&:is([data-theme="dark"] *));
 
+/* WebKitGTK gives no :focus-visible to a focus moved by script after a key that follows a click;
+   the modality of the document (lib/input-modality.ts) gives the ring back. */
+@custom-variant focus-visible (&:is(:focus-visible, [data-input="keyboard"] *:focus));
+
 @theme inline {
   /* The colours the generated components read, through the bridge below. */
   --color-background: var(--background);
@@ -462,7 +466,8 @@
   .toast {
     animation: toast-enter var(--duration-base) var(--ease-enter);
   }
-  .toast[data-leaving] {
+  .toast[data-leaving],
+  [data-leaving] > .toast {
     animation: toast-exit var(--duration-fast) var(--ease-exit) forwards;
   }
 
@@ -591,8 +596,7 @@
 
 /* The chrome of Streamdown's code, drawn with the tokens. Unlayered, because
    Streamdown styles these elements with utilities, and a rule in
-   @layer components would lose to them. The header keeps Streamdown's height
-   (h-8): its actions are placed against it (-mt-10). */
+   @layer components would lose to them. */
 .markdown [data-streamdown="inline-code"] {
   padding: var(--code-pad-y) var(--code-pad-x);
   border-radius: var(--radius-xs);
@@ -601,48 +605,19 @@
   font-size: var(--text-code-read);
   line-height: inherit;
 }
-.markdown [data-streamdown="code-block"] {
+/* The code block of Streamdown draws inside the CodeBlock of the conversation, which has the frame and
+   the header: it keeps neither. */
+[data-code-block] .markdown [data-streamdown="code-block"] {
   gap: 0;
+  margin: 0;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-md);
-  background: var(--surface-0);
-  box-shadow: inset 0 0 0 var(--border) var(--line-1);
-  overflow: hidden;
-}
-/* A cut block draws its frame around the code and its foot: the code block inside it has none. */
-[data-code-cut] .markdown [data-streamdown="code-block"] {
-  margin: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
-.markdown [data-streamdown="code-block-header"] {
-  padding-inline: var(--space-3);
-  color: var(--ink-3);
-  font-size: var(--text-micro);
-  line-height: var(--leading-micro);
-  box-shadow: inset 0 calc(var(--border) * -1) 0 var(--line-1);
-}
-.markdown [data-streamdown="code-block-actions"] {
-  border: 0;
-  background: transparent;
-  backdrop-filter: none;
-}
-.markdown [data-streamdown="code-block-copy-button"] {
-  border-radius: var(--radius-sm);
-  color: var(--ink-3);
-  transition:
-    background-color var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard);
-}
-.markdown [data-streamdown="code-block-copy-button"]:hover {
-  background: var(--veil-hover);
-  color: var(--ink-1);
-}
-.markdown [data-streamdown="code-block-copy-button"]:focus-visible {
-  outline: var(--focus-width) solid var(--focus);
-  outline-offset: var(--focus-offset);
+[data-code-block] .markdown [data-streamdown="code-block-header"] {
+  display: none;
 }
 .markdown [data-streamdown="code-block-body"] {
   padding: var(--space-2) var(--space-3) var(--space-3);
@@ -657,4 +632,23 @@
 /* Every icon draws with the stroke of the system, on every screen. */
 svg.lucide {
   stroke-width: var(--icon-stroke);
+}
+
+/* Every area that scrolls natively draws the bar of the system: the thin thumb, no track (components.md, Barra de rolagem). */
+::-webkit-scrollbar {
+  width: calc(var(--space-2) + var(--space-0-5));
+  height: calc(var(--space-2) + var(--space-0-5));
+  background: transparent;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  border: var(--space-0-5) solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--line-2) padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--line-3);
 }

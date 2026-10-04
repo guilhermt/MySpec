@@ -13,6 +13,7 @@ import { ICONS } from "@/components/system/icons";
 import { Link } from "@/components/system/Link";
 import { SegmentedControl } from "@/components/system/SegmentedControl";
 import { Select } from "@/components/system/Select";
+import { StateGlyph } from "@/components/system/StateGlyph";
 import { SunkenLine } from "@/components/system/SunkenLine";
 import { Textarea } from "@/components/system/Textarea";
 import { unsatisfied } from "@/features/board/board-view";
@@ -101,7 +102,10 @@ function NewTaskForm() {
         title="New task"
       >
         <DialogBody>
-          <SunkenLine>◇ This card isn't in the last reading of the board.</SunkenLine>
+          <SunkenLine>
+            <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />
+            This card isn't in the last reading of the board.
+          </SunkenLine>
         </DialogBody>
         <DialogFooter>
           <DialogCancel />

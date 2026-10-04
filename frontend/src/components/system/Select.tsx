@@ -15,9 +15,9 @@ import {
   MenuRadioItem,
   MenuSeparator,
   MenuTrigger,
-  UNAVAILABLE,
 } from "./Menu";
 import { Shimmer } from "./Shimmer";
+import { StateGlyph } from "./StateGlyph";
 
 export interface SelectOption {
   value: string;
@@ -25,6 +25,8 @@ export interface SelectOption {
   sub?: string;
   /** subTone paints the sub as an error: the clone that failed. */
   subTone?: "error";
+  /** blocked puts the blocked glyph before the sub. */
+  blocked?: boolean;
   unavailable?: boolean;
   /** disabled is an option that can't be chosen, its reason in sub. */
   disabled?: boolean;
@@ -72,7 +74,7 @@ export function choiceName(choice: { label: string; unavailable?: boolean }): st
  * aria-disabled, whose variant outweighs the plain classes; focused, it keeps the focus border and halo.
  */
 export const SELECT_TRIGGER =
-  "flex h-(--size-control) w-full items-center justify-between gap-2 rounded-sm border border-line-3 bg-surface-input px-2.5 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard hover:border-ink-3 aria-expanded:border-focus focus-visible:field-focus aria-disabled:dashed-disabled aria-disabled:focus-visible:field-focus";
+  "flex h-(--size-control) w-full items-center justify-between gap-(--space-2) rounded-sm border border-line-3 bg-surface-input px-(--space-2-5) text-(length:--text-ui) leading-(--leading-ui) text-ink-1 transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard hover:border-ink-3 aria-expanded:border-focus focus-visible:field-focus aria-disabled:dashed-disabled aria-disabled:focus-visible:field-focus";
 
 /**
  * SIDEBAR_TRIGGER is the trigger in the tone of the sidebar: smaller, on the sidebar's own input
@@ -130,7 +132,7 @@ export function Select({
   return (
     <Menu {...(disabled ? { open: false } : {})}>
       {withReason ? (
-        <span className="inline-flex items-center gap-2">
+        <span className="inline-flex items-center gap-(--space-2)">
           {trigger}
           <span
             id={reasonId}
@@ -175,7 +177,7 @@ export function Select({
   );
 }
 
-/** ChosenText is the choice written on a trigger: ◇ and · unavailable when it is no longer offered, shimmering while the choices are read. */
+/** ChosenText is the choice written on a trigger: the blocked glyph and · unavailable when it is no longer offered, shimmering while the choices are read. */
 export function ChosenText({
   choice,
   loading,
@@ -183,8 +185,15 @@ export function ChosenText({
   choice: { label: string; unavailable?: boolean };
   loading: boolean;
 }) {
-  const text = `${choice.unavailable ? `${UNAVAILABLE} ` : ""}${choiceName(choice)}`;
-  return loading ? <Shimmer>{text}</Shimmer> : text;
+  const name = choiceName(choice);
+  return (
+    <>
+      {choice.unavailable === true && (
+        <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />
+      )}
+      {loading ? <Shimmer>{name}</Shimmer> : name}
+    </>
+  );
 }
 
 /** SelectItem is a choice of the menu of a Select: one with an action runs it instead of being chosen. */
@@ -192,6 +201,7 @@ function SelectItem({ option }: { option: SelectOption }) {
   const sub = {
     ...(option.sub !== undefined ? { sub: option.sub } : {}),
     ...(option.subTone !== undefined ? { subTone: option.subTone } : {}),
+    ...(option.blocked ? { subBlocked: true } : {}),
   };
   if (option.action !== undefined) {
     return (

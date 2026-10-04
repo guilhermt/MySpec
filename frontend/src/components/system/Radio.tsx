@@ -47,7 +47,9 @@ export function RadioGroup({
       {...(invalid ? { "aria-invalid": true } : {})}
       {...(withReason ? { "aria-describedby": reasonId } : {})}
       className={cn(
-        orientation === "vertical" ? "flex flex-col gap-1" : "flex flex-row gap-4",
+        orientation === "vertical"
+          ? "flex flex-col gap-(--space-1)"
+          : "flex flex-row gap-(--space-4)",
         disabled && "text-ink-4",
       )}
     >
@@ -57,7 +59,7 @@ export function RadioGroup({
 
   if (!withReason) return group;
   return (
-    <span className="inline-flex items-center gap-2">
+    <span className="inline-flex items-center gap-(--space-2)">
       {group}
       <span id={reasonId} className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
         {disabledReason}
@@ -75,7 +77,7 @@ export function Radio({ value, children }: RadioProps) {
       render={<div />}
       nativeButton={false}
       className={cn(
-        "group/radio flex min-h-(--size-control-sm) items-center gap-2 rounded-sm px-2 text-(length:--text-meta) leading-(--leading-meta) focus-visible:focus-ring",
+        "group/radio flex min-h-(--size-control-sm) items-center gap-(--space-2) rounded-sm px-(--space-2) text-(length:--text-meta) leading-(--leading-meta) focus-visible:focus-ring",
         disabled ? "text-ink-4" : "text-ink-1",
       )}
     >
@@ -113,7 +115,7 @@ export interface RadioInputProps {
  */
 export function RadioInput({ name, value, checked, onChoose, label }: RadioInputProps) {
   return (
-    <label className="group/radio grid min-h-(--size-control-sm) grid-cols-(--icon) place-items-center rounded-sm px-2 has-focus-visible:focus-ring">
+    <label className="group/radio grid min-h-(--size-control-sm) grid-cols-(--icon) place-items-center rounded-sm px-(--space-2) has-focus-visible:focus-ring">
       <input
         type="radio"
         name={name}

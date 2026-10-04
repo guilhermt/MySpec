@@ -40,7 +40,7 @@ const MICRO = "text-(length:--text-micro) leading-(--leading-micro)";
 interface RailGroup {
   id: string;
   rows: ItemRow[];
-  /** blocked is a failed reading or a missing clone in the node: the ◇ of its separator. */
+  /** blocked is a failed reading or a missing clone in the node: the blocked glyph of its separator. */
   blocked: boolean;
   /** pending is how many pull requests wait for a review, on the separator of Reviews. */
   pending: number;

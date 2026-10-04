@@ -13,6 +13,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "./Menu";
+import { StateGlyph } from "./StateGlyph";
 import { Tooltip } from "./Tooltip";
 
 export interface FilterBarProps {
@@ -61,7 +62,9 @@ export interface FilterChipProps {
 export function FilterChip({ model, onRemove }: FilterChipProps) {
   const chip = (
     <Chip kind="action" onRemove={onRemove} removeLabel={model.removeLabel}>
-      {model.orphan !== null && "◇ "}
+      {model.orphan !== null && (
+        <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />
+      )}
       {model.label}
     </Chip>
   );
@@ -111,7 +114,7 @@ export function FilterMenu({ tooltip, groups, onPick, cycles = [], onCycle }: Fi
       </Tooltip>
       <MenuContent align="start">
         {groups.map((group, index) => (
-          <div key={group.label} className="flex flex-col gap-0.5">
+          <div key={group.label} className="flex flex-col gap-(--space-0-5)">
             {index > 0 && <MenuSeparator />}
             <MenuGroup>
               <MenuGroupLabel>{group.label}</MenuGroupLabel>
@@ -128,7 +131,7 @@ export function FilterMenu({ tooltip, groups, onPick, cycles = [], onCycle }: Fi
           </div>
         ))}
         {cycles.map((group, index) => (
-          <div key={group.label} className="flex flex-col gap-0.5">
+          <div key={group.label} className="flex flex-col gap-(--space-0-5)">
             {(groups.length > 0 || index > 0) && <MenuSeparator />}
             <MenuGroup>
               <MenuGroupLabel note={group.note}>{group.label}</MenuGroupLabel>

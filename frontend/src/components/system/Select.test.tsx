@@ -56,7 +56,7 @@ describe("Select", () => {
     const { user } = renderWithStore(<Subject />);
     await user.click(screen.getByRole("button", { name: "Model: Opus" }));
     await screen.findByRole("menu");
-    expect(screen.getByRole("menuitemradio", { name: "◇ Legacy · unavailable" })).toHaveAttribute(
+    expect(screen.getByRole("menuitemradio", { name: "Legacy · unavailable" })).toHaveAttribute(
       "aria-disabled",
       "true",
     );
@@ -64,9 +64,9 @@ describe("Select", () => {
 
   it("marks an unavailable choice on the trigger", () => {
     renderWithStore(<Subject value="legacy" />);
-    expect(screen.getByRole("button", { name: "Model: Legacy · unavailable" })).toHaveTextContent(
-      "◇ Legacy · unavailable",
-    );
+    const trigger = screen.getByRole("button", { name: "Model: Legacy · unavailable" });
+    expect(trigger).toHaveTextContent("Legacy · unavailable");
+    expect(trigger.querySelector('[data-state="blocked"]')).not.toBeNull();
   });
 
   it("shows its choices in groups", async () => {

@@ -304,7 +304,7 @@ describe("NewDiscussionDialog", () => {
       });
 
       expect(await screen.findByRole("alert")).toHaveTextContent(
-        "◇ Couldn't refresh the cards: GitHub rate limit reached. The discussion will use the last reading.",
+        "Couldn't refresh the cards: GitHub rate limit reached. The discussion will use the last reading.",
       );
       expect(screen.getByText(/^From the card: #12/)).toBeInTheDocument();
     });

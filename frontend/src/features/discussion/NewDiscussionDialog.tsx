@@ -1,5 +1,6 @@
 import { useId, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
+import { CutText } from "@/components/system/CutText";
 import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
 import { Field } from "@/components/system/Field";
 import { IconButton } from "@/components/system/IconButton";
@@ -7,9 +8,9 @@ import { Input } from "@/components/system/Input";
 import { ICONS } from "@/components/system/icons";
 import { Select } from "@/components/system/Select";
 import { Shimmer } from "@/components/system/Shimmer";
+import { StateGlyph } from "@/components/system/StateGlyph";
 import { SunkenLine } from "@/components/system/SunkenLine";
 import { Textarea } from "@/components/system/Textarea";
-import { Tooltip } from "@/components/system/Tooltip";
 import { useNow } from "@/features/attention/useNow";
 import { Markdown } from "@/features/chat/Markdown";
 import {
@@ -211,11 +212,7 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
           <SunkenLine icon={ICONS.board}>
             <span className="flex min-w-0 gap-(--space-2)">
               <span className="shrink-0 font-medium text-ink-1">{board.title}</span>
-              <Tooltip content={boardLine(board, repositories)}>
-                <span className="min-w-0 truncate text-ink-3">
-                  {boardLine(board, repositories)}
-                </span>
-              </Tooltip>
+              <CutText text={boardLine(board, repositories)} className="text-ink-3" />
             </span>
           </SunkenLine>
         )}
@@ -258,9 +255,7 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
                   <span className="shrink-0 font-mono text-(length:--text-meta) text-ink-3">
                     {issueLabel(card)}
                   </span>
-                  <Tooltip content={card.title}>
-                    <span className="min-w-0 flex-1 truncate text-ink-1">{card.title}</span>
-                  </Tooltip>
+                  <CutText text={card.title} className="flex-1 text-ink-1" />
                   <span className="shrink-0 text-ink-3">{shortName(card.repository)}</span>
                   <IconButton
                     size="xs"
@@ -300,7 +295,8 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
               {context.failure !== null && (
                 <SunkenLine>
                   <span role="alert">
-                    {`◇ Couldn't refresh the cards: ${context.failure}. The discussion will use the last reading.`}
+                    <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />
+                    {`Couldn't refresh the cards: ${context.failure}. The discussion will use the last reading.`}
                   </span>
                 </SunkenLine>
               )}

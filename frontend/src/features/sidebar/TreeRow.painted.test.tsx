@@ -40,6 +40,31 @@ describe.each(THEMES)("TreeRow in the %s theme", (theme) => {
     expect(paintOf(screen.getByRole("treeitem"), want)).toEqual(want);
   });
 
+  it("writes line 2 of the open row in the second ink while it is pressed", () => {
+    setTheme(theme);
+    render(
+      <TreeRow
+        row={waiting}
+        level={2}
+        selected
+        isNext={false}
+        flash={null}
+        narrow={false}
+        tabIndex={0}
+      />,
+    );
+    const row = screen.getByRole("treeitem");
+    const line2 = [...row.querySelectorAll<HTMLElement>("span")].find((span) =>
+      span.className.includes("gap-(--space-1-5)"),
+    );
+    if (line2 === undefined) {
+      throw new Error("line 2 is not drawn");
+    }
+    expect(getComputedStyle(line2).color).toBe(token("--ink-3"));
+    // The browser of the tests can't hold a press; the variant is the one that paints it.
+    expect(line2.className).toContain("group-active/row:text-ink-2");
+  });
+
   it("draws the error rail on the left edge", () => {
     setTheme(theme);
     render(

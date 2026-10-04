@@ -470,7 +470,7 @@ describe("DetailsPanel, Task", () => {
   it("says the clone is missing, with its path in the tooltip", async () => {
     const { user } = details(makeTask(), makeRepository({ missing: true }));
 
-    expect(facts(group("Task")).Repository).toBe("dev/web · ◇ clone missing · ~/projects/web");
+    expect(facts(group("Task")).Repository).toBe("dev/web · clone missing · ~/projects/web");
     await user.hover(screen.getByText("clone missing"));
 
     expect(await screen.findByText("~/projects/web")).toBeInTheDocument();

@@ -342,7 +342,8 @@ describe("boardLines", () => {
     const [line] = linesOf(board({ failure }));
 
     expect(line?.reading).toEqual({
-      text: "◇ Read failed 18m ago",
+      text: "Read failed 18m ago",
+      blocked: true,
       tone: "failed",
       shimmer: false,
       failure: { failedAt: "2026-09-24T13:52:00Z", readAt: read },
@@ -360,14 +361,16 @@ describe("boardLines", () => {
       {
         kind: "not-cloned",
         repositoryId: "billing",
-        text: "◇ acme/billing isn't cloned. Its cards can't start a task yet.",
+        text: "acme/billing isn't cloned. Its cards can't start a task yet.",
+        blocked: true,
         cloning: false,
         error: "",
       },
       {
         kind: "clone-missing",
         repositoryId: "infra",
-        text: "◇ The clone at ~/code/infra is missing.",
+        text: "The clone at ~/code/infra is missing.",
+        blocked: true,
       },
     ]);
   });
@@ -449,7 +452,8 @@ describe("noBoardLine", () => {
         {
           kind: "not-cloned",
           repositoryId: "b",
-          text: "◇ acme/b isn't cloned. Its cards can't start a task yet.",
+          text: "acme/b isn't cloned. Its cards can't start a task yet.",
+          blocked: true,
           cloning: false,
           error: "",
         },

@@ -29,6 +29,10 @@ const MICRO = "text-(length:--text-micro) leading-(--leading-micro)";
 // FAINT is the fourth ink of the quiet texts, which steps up to the third on the open row and on the
 // pressed one: the fourth ink does not reach 4.5:1 over their veils.
 const FAINT = "text-ink-4 group-active/row:text-ink-3";
+
+// The third ink over the pressed veil of the open row (the brand veil) falls under 4.5:1 in the light
+// theme: the lines under the title take the second ink for the length of the press.
+const LINE_PRESSED = "group-active/row:text-ink-2";
 // The invisible copy a cell measures its long content with. The row clips it, so a long copy never
 // widens the tree into a sideways scroll.
 const MEASURE = "invisible absolute whitespace-nowrap";
@@ -150,7 +154,10 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
         </span>
         <span
           ref={line2}
-          className="relative flex min-w-0 items-center gap-(--space-1-5) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
+          className={cn(
+            "relative flex min-w-0 items-center gap-(--space-1-5) text-(length:--text-meta) leading-(--leading-meta) text-ink-3",
+            selected && LINE_PRESSED,
+          )}
         >
           <span className="min-w-0 truncate">
             {row.reading ? (
@@ -238,7 +245,10 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
             <span />
             <span
               ref={line3}
-              className="relative min-w-0 truncate text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
+              className={cn(
+                "relative min-w-0 truncate text-(length:--text-meta) leading-(--leading-meta) text-ink-3",
+                selected && LINE_PRESSED,
+              )}
             >
               {!narrow && line3Fits ? work.long : work.short}
               <span ref={line3Measure} aria-hidden="true" className={MEASURE}>

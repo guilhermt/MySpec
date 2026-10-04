@@ -443,7 +443,7 @@ describe("PullRequestPanel", () => {
         },
       });
 
-      expect(screen.getByText("◇ acme/api couldn't be read · 4m ago")).toBeInTheDocument();
+      expect(screen.getByText("acme/api couldn't be read · 4m ago")).toBeInTheDocument();
       expect(screen.queryByText("read 2m ago")).not.toBeInTheDocument();
     });
   });

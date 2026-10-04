@@ -7,6 +7,7 @@ import { Kbd } from "./Kbd";
 import { ReadingAge } from "./ReadingAge";
 import { Shimmer } from "./Shimmer";
 import { Spinner } from "./Spinner";
+import { StateGlyph } from "./StateGlyph";
 import { Tooltip } from "./Tooltip";
 
 const META = "text-(length:--text-meta) leading-(--leading-meta)";
@@ -86,8 +87,15 @@ export function StartRow({
 /** BlockerView is a line under a board or under the repositories without one: what keeps cards from starting a task. */
 export type BlockerView =
   | { kind: "read-failed"; message: string; reading: boolean }
-  | { kind: "not-cloned"; repositoryId: string; text: string; cloning: boolean; error: string }
-  | { kind: "clone-missing"; repositoryId: string; text: string };
+  | {
+      kind: "not-cloned";
+      repositoryId: string;
+      text: string;
+      blocked?: boolean;
+      cloning: boolean;
+      error: string;
+    }
+  | { kind: "clone-missing"; repositoryId: string; text: string; blocked?: boolean };
 
 /** BoardLineView is a board of the Boards section. */
 export interface BoardLineView {
@@ -96,6 +104,7 @@ export interface BoardLineView {
   /** reading is the age on the right edge; failure, when the last reading failed, makes it the ReadingAge of the product. */
   reading: {
     text: string;
+    blocked?: boolean;
     tone: "quiet" | "failed";
     shimmer: boolean;
     failure?: { failedAt: string; readAt: string };
@@ -150,6 +159,9 @@ function BlockerLine({
           {...(blocker.kind === "not-cloned" && blocker.cloning ? { role: "status" } : {})}
           className={cn("min-w-0 flex-1", failed ? "text-state-error" : "text-ink-2")}
         >
+          {blocker.kind !== "read-failed" && blocker.blocked === true && (
+            <StateGlyph state="blocked" size="sm" className="mr-(--space-1-5) align-middle" />
+          )}
           {blocker.kind === "read-failed" ? blocker.message : blocker.text}
         </span>
         {blocker.kind === "read-failed" &&
@@ -245,6 +257,9 @@ export function BoardStartRow({ line, now, onOpen, ...actions }: BoardStartRowPr
                 reading.tone === "failed" ? "text-ink-2" : "text-ink-3",
               )}
             >
+              {reading.blocked === true && (
+                <StateGlyph state="blocked" size="sm" className="mr-(--space-1-5) align-middle" />
+              )}
               {reading.shimmer ? <Shimmer>{reading.text}</Shimmer> : reading.text}
             </span>
           )

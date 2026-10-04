@@ -17,8 +17,6 @@ export interface ToastProps {
   onDismiss: () => void;
   /** duration is how long the toast stays, counted only while it has neither the pointer nor the focus. */
   duration?: number;
-  /** leaving is the toast pushed out by a newer one: it plays its exit, then tells onDismiss. */
-  leaving?: boolean;
 }
 
 /**
@@ -27,19 +25,10 @@ export interface ToastProps {
  * goes on with what was left when both are gone. It leaves by its exit, after its action, its ×
  * or its time, and tells onDismiss once the exit is over.
  */
-export function Toast({
-  icon,
-  text,
-  detail,
-  action,
-  onDismiss,
-  duration = TOAST_MS,
-  leaving: pushedOut = false,
-}: ToastProps) {
+export function Toast({ icon, text, detail, action, onDismiss, duration = TOAST_MS }: ToastProps) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
-  const [leftOnItsOwn, setLeaving] = useState(false);
-  const leaving = leftOnItsOwn || pushedOut;
+  const [leaving, setLeaving] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const left = useRef(duration);
   const dismiss = useRef(onDismiss);
@@ -69,7 +58,7 @@ export function Toast({
     <div
       ref={ref}
       {...(leaving ? { "data-leaving": "", inert: true } : {})}
-      className="toast flex max-w-(--size-toast) items-start gap-2.5 rounded-lg bg-surface-3 py-2.5 pr-2 pl-3 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-(--shadow-float)"
+      className="toast flex max-w-(--size-toast) items-start gap-(--space-2-5) rounded-lg bg-surface-3 py-(--space-2-5) pr-(--space-2) pl-(--space-3) text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-(--shadow-float)"
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
       onFocusCapture={() => setFocused(true)}
@@ -83,7 +72,7 @@ export function Toast({
       <span className="inline-grid h-(--leading-ui) place-items-center">
         <Icon icon={icon} tone="muted" />
       </span>
-      <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+      <div className="flex min-w-0 flex-1 flex-col items-start gap-(--space-0-5)">
         <p className="min-w-0 break-words">{text}</p>
         {detail !== undefined && (
           <p className="min-w-(--notice-detail-min) break-words text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
@@ -93,7 +82,7 @@ export function Toast({
         <Button
           variant="ghost"
           size="sm"
-          className="-ml-2.5"
+          className="-ml-(--space-2-5)"
           onClick={() => {
             action.onClick();
             setLeaving(true);

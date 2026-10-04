@@ -2,6 +2,7 @@ import type { KeyboardEvent, ReactElement } from "react";
 import type { DraftStateView } from "@/components/system/draft-views";
 import { cn } from "@/lib/utils";
 import { Badge } from "./Badge";
+import { CutText } from "./CutText";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons";
 import { Spinner } from "./Spinner";
@@ -49,15 +50,6 @@ export function RevisedBadge(): ReactElement {
       <Badge icon={ICONS.revised} className="shrink-0">
         Revised
       </Badge>
-    </Tooltip>
-  );
-}
-
-/** Cut is a text cut on one line with its whole text in the tooltip. */
-function Cut({ text, className }: { text: string; className?: string }): ReactElement {
-  return (
-    <Tooltip content={text}>
-      <span className={cn("min-w-0 truncate", className)}>{text}</span>
     </Tooltip>
   );
 }
@@ -135,7 +127,7 @@ export function FoldedDraft({
         <div className="flex min-w-0 items-center gap-(--space-2)">
           <Badge className="shrink-0">{kind}</Badge>
           {revised && <RevisedBadge />}
-          <Cut
+          <CutText
             text={title}
             className={cn("grow font-medium", muted ? "text-ink-3" : "text-ink-1")}
           />
@@ -152,10 +144,10 @@ export function FoldedDraft({
             )}
           >
             <DraftGlyph glyph={state.glyph} />
-            <Cut text={state.text} />
+            <CutText text={state.text} />
           </span>
         </div>
-        {line2 !== "" && <Cut text={line2} className={cn(META, "text-ink-3")} />}
+        {line2 !== "" && <CutText text={line2} className={cn(META, "text-ink-3")} />}
       </div>
     </div>
   );

@@ -131,10 +131,12 @@ export type BlockerModel =
       repositoryId: string;
       /** text is the sentence, or the message of gh for a clone that failed, or Cloning… while it runs. */
       text: string;
+      /** blocked puts the blocked glyph before the sentence: the repository is not cloned and nothing is cloning it. */
+      blocked?: boolean;
       cloning: boolean;
       error: string;
     }
-  | { kind: "clone-missing"; repositoryId: string; text: string };
+  | { kind: "clone-missing"; repositoryId: string; text: string; blocked: boolean };
 
 /** BoardLineModel is a board of the Boards section. */
 export interface BoardLineModel {
@@ -142,9 +144,11 @@ export interface BoardLineModel {
   title: string;
   /** summary is "46 open cards · api, billing", "Not read yet · api" or "No open cards · api". */
   summary: string;
-  /** reading is what the right edge says: "read 2m ago", "◇ Read failed 18m ago" or "reading…"; failure is the failed one's times, for its tooltip. */
+  /** reading is what the right edge says: "read 2m ago", "Read failed 18m ago" (blocked) or "reading…"; failure is the failed one's times, for its tooltip. */
   reading: {
     text: string;
+    /** blocked puts the blocked glyph before the text. */
+    blocked?: boolean;
     tone: "quiet" | "failed";
     shimmer: boolean;
     failure?: { failedAt: string; readAt: string };
@@ -180,7 +184,8 @@ function cloneBlockers(repositories: readonly Repository[]): BlockerModel[] {
           ? `Cloning ${repository.fullName}…`
           : failed
             ? repository.cloneError
-            : `◇ ${repository.fullName} isn't cloned. Its cards can't start a task yet.`,
+            : `${repository.fullName} isn't cloned. Its cards can't start a task yet.`,
+        ...(!repository.cloning && !failed ? { blocked: true } : {}),
         cloning: repository.cloning,
         error: repository.cloneError,
       };
@@ -191,7 +196,8 @@ function cloneBlockers(repositories: readonly Repository[]): BlockerModel[] {
       (repository): BlockerModel => ({
         kind: "clone-missing",
         repositoryId: repository.id,
-        text: `◇ ${cloneMissingText(repository)}`,
+        text: cloneMissingText(repository),
+        blocked: true,
       }),
     );
   return [...notCloned, ...missing];
@@ -213,7 +219,8 @@ function readingOf(board: Board, now: number): BoardLineModel["reading"] {
   }
   if (board.failure !== null) {
     return {
-      text: `◇ Read failed ${age(board.failure.failedAt, now)}`,
+      text: `Read failed ${age(board.failure.failedAt, now)}`,
+      blocked: true,
       tone: "failed",
       shimmer,
       failure: { failedAt: board.failure.failedAt, readAt: board.readAt },
@@ -243,7 +250,7 @@ export function boardLines(app: State, now: number): BoardLineModel[] {
       title: board.title,
       summary: names === "" ? cards : `${cards} · ${names}`,
       reading,
-      label: `${board.title}, ${cards}, ${reading.text.replace("◇ ", "")}`,
+      label: `${board.title}, ${cards}, ${reading.text}`,
       blockers: [
         ...(board.failure === null
           ? []

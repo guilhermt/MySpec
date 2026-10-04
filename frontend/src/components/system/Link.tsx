@@ -39,7 +39,10 @@ export function Link({
   if (unavailable) return <span className={cn("text-ink-4", className)}>{children}</span>;
   if (loading) {
     return (
-      <span aria-busy="true" className={cn("inline-flex items-center gap-1.5", className)}>
+      <span
+        aria-busy="true"
+        className={cn("inline-flex items-center gap-(--space-1-5)", className)}
+      >
         <Spinner tone="current" />
         {loadingLabel}
       </span>
@@ -52,7 +55,7 @@ export function Link({
         {external && <Icon icon={ICONS.external} size="xs" />}
       </a>
       {error !== undefined && (
-        <span className="ml-1.5 text-state-error">
+        <span className="ml-(--space-1-5) text-state-error">
           <span aria-hidden="true">✕</span> {error}
         </span>
       )}

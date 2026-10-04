@@ -67,7 +67,7 @@ describe.each(THEMES)("StartRow in the %s theme", (theme) => {
           title: "Platform Roadmap",
           summary: "46 open cards · api",
           reading: {
-            text: "◇ Read failed 18m ago",
+            text: "Read failed 18m ago",
             tone: "failed",
             shimmer: false,
             failure: { failedAt: "2026-09-24T13:52:00Z", readAt: "2026-09-24T11:30:00Z" },
@@ -104,7 +104,7 @@ describe.each(THEMES)("StartRow in the %s theme", (theme) => {
     render(
       <>
         {row("Platform Roadmap", {
-          text: "◇ Read failed 18m ago",
+          text: "Read failed 18m ago",
           tone: "failed",
           shimmer: false,
           failure: { failedAt: "2026-09-24T13:52:00Z", readAt: "2026-09-24T11:30:00Z" },

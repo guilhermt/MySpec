@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react";
 import { Link } from "./Link";
+import { StateGlyph } from "./StateGlyph";
 import { Tooltip } from "./Tooltip";
 
 /** RelationItem is one relation: a card, a dependency or a pull request on GitHub. */
@@ -84,7 +85,7 @@ export function RelationList({ groups, onOpen, onOpenCard }: RelationListProps) 
                     )}
                     {item.warning !== undefined && (
                       <span className="text-state-notice">
-                        <span aria-hidden="true">◇ </span>
+                        <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />
                         {item.warning}
                       </span>
                     )}

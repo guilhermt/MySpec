@@ -1,13 +1,13 @@
-/** CUT_ABOVE is the most lines a code block of the conversation shows whole. */
+/** CUT_ABOVE is the most lines a code block shows whole. */
 export const CUT_ABOVE = 24;
 
 /** CUT_SHOWN is the lines a longer code block shows until it is opened. */
 export const CUT_SHOWN = 20;
 
 /**
- * MarkdownPart is a piece of Markdown drawn on its own: text, or a code block long enough to be
- * cut. fence is the opening fence ("```", "~~~~") and info what follows it; closed is false while
- * the block still streams.
+ * MarkdownPart is a piece of Markdown drawn on its own: text, or a fenced code block. fence is the
+ * opening fence ("```", "~~~~") and info what follows it; closed is false while the block still
+ * streams.
  */
 export type MarkdownPart =
   | { kind: "text"; text: string }
@@ -51,11 +51,11 @@ export function fencedLines(lines: readonly string[]): boolean[] {
 }
 
 /**
- * cutParts splits Markdown around its code blocks of more than CUT_ABOVE lines, which the
- * conversation cuts; everything else stays text, as written. A block without its closing fence is
- * one still streaming, and is cut too.
+ * codeParts splits Markdown around its fenced code blocks, which the CodeBlock draws, cut when it
+ * has more than CUT_ABOVE lines; everything else stays text, as written. A block without its
+ * closing fence is one still streaming.
  */
-export function cutParts(markdown: string): MarkdownPart[] {
+export function codeParts(markdown: string): MarkdownPart[] {
   const parts: MarkdownPart[] = [];
   const text: string[] = [];
   const flush = () => {
@@ -79,12 +79,8 @@ export function cutParts(markdown: string): MarkdownPart[] {
     }
     const body = lines.slice(index + 1, end);
     const closed = end < lines.length;
-    if (body.length <= CUT_ABOVE) {
-      text.push(...lines.slice(index, end + 1));
-    } else {
-      flush();
-      parts.push({ kind: "code", fence, info: open.info.trim(), lines: body, closed });
-    }
+    flush();
+    parts.push({ kind: "code", fence, info: open.info.trim(), lines: body, closed });
     index = end;
   }
   flush();

@@ -12,7 +12,7 @@ export interface BadgeProps {
 }
 
 const badge = cva(
-  "inline-flex items-center gap-1 rounded-xs border border-line-2 px-1.5 text-(length:--text-micro) leading-(--leading-micro) text-ink-2 whitespace-nowrap",
+  "inline-flex items-center gap-(--space-1) rounded-xs border border-line-2 px-(--space-1-5) text-(length:--text-micro) leading-(--leading-micro) text-ink-2 whitespace-nowrap",
   {
     variants: {
       variant: {

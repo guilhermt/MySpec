@@ -77,7 +77,7 @@ export function Field({ label, complement, help, error, count, children, classNa
     note !== undefined || showCount || line.reason !== undefined || line.loadingLabel !== undefined;
 
   return (
-    <div className={cn("flex min-w-0 flex-col gap-1", className)}>
+    <div className={cn("flex min-w-0 flex-col gap-(--space-1)", className)}>
       <Label
         htmlFor={controlId}
         className="block text-(length:--text-meta) leading-(--leading-meta) font-medium text-ink-2"
@@ -88,7 +88,7 @@ export function Field({ label, complement, help, error, count, children, classNa
       </Label>
       <FieldContext.Provider value={control}>{children}</FieldContext.Provider>
       {shown && (
-        <div className={cn("flex flex-wrap gap-2", LINE)}>
+        <div className={cn("flex flex-wrap gap-(--space-2)", LINE)}>
           {line.loadingLabel !== undefined && <Loading id={loadingId} label={line.loadingLabel} />}
           {note !== undefined && (
             <span id={noteId} className={error !== undefined ? "text-state-error" : "text-ink-3"}>
@@ -114,7 +114,7 @@ export function Field({ label, complement, help, error, count, children, classNa
 /** Loading is the spinner and the gerund of a control that is working. */
 function Loading({ id, label }: { id: string; label: string }) {
   return (
-    <span id={id} className="inline-flex items-center gap-1.5 text-ink-3">
+    <span id={id} className="inline-flex items-center gap-(--space-1-5) text-ink-3">
       <Spinner tone="current" />
       {label}
     </span>
@@ -180,7 +180,7 @@ export function useControlState({
   const wrap = (control: ReactElement) => {
     if (field !== null) return control;
     return (
-      <span className={own ? "inline-flex items-center gap-2" : "contents"}>
+      <span className={own ? "inline-flex items-center gap-(--space-2)" : "contents"}>
         {control}
         {gerund !== undefined && (
           <span className={LINE}>

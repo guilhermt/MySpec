@@ -220,12 +220,13 @@ describe("MenuRadioItem", () => {
     expect(screen.getByRole("menuitemradio", { name: "Opus" })).not.toHaveTextContent("factory");
   });
 
-  it("keeps an unavailable choice with ◇, not to be chosen again", async () => {
+  it("keeps an unavailable choice with the blocked glyph, not to be chosen again", async () => {
     const onValueChange = vi.fn();
     const { user } = renderWithStore(<Choices onValueChange={onValueChange} />);
     await user.click(screen.getByRole("button", { name: "Model" }));
-    const item = await screen.findByRole("menuitemradio", { name: "◇ Fable · unavailable" });
+    const item = await screen.findByRole("menuitemradio", { name: "Fable · unavailable" });
     expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(item.querySelector('[data-state="blocked"]')).not.toBeNull();
     await user.click(item);
     expect(onValueChange).not.toHaveBeenCalled();
   });

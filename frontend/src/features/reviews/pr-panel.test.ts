@@ -162,7 +162,7 @@ describe("prPanelModel", () => {
     });
 
     expect(prPanelModel(row, { app, now: NOW }).checks.failed).toBe(
-      "◇ acme/ios couldn't be read · 4m ago",
+      "acme/ios couldn't be read · 4m ago",
     );
   });
 

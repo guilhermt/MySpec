@@ -33,7 +33,7 @@ export function TimeChip({ tone, time, longTime, raised }: TimeChipProps) {
       <span
         data-tone={tone}
         className={cn(
-          "inline-flex h-(--size-time-chip) items-center gap-0.5 px-1.5 text-(length:--text-micro) leading-(--leading-micro) font-semibold tabular-nums whitespace-nowrap",
+          "inline-flex h-(--size-time-chip) items-center gap-(--space-0-5) px-(--space-1-5) text-(length:--text-micro) leading-(--leading-micro) font-semibold tabular-nums whitespace-nowrap",
           TONES[tone],
           tone === "close" && raised && "bg-surface-2",
         )}

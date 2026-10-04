@@ -82,7 +82,7 @@ export function AuxPanel({ id, title, onClose, children }: AuxPanelProps) {
   return (
     <aside aria-label={title} className="aux-panel flex flex-col">
       {/* The line under the head is drawn inside it, as in the place header, to keep it on whole pixels. */}
-      <div className="flex h-(--size-head) shrink-0 items-center justify-between gap-2 pr-2 pl-4 shadow-[inset_0_calc(var(--border)*-1)_0_var(--line-1)]">
+      <div className="flex h-(--size-head) shrink-0 items-center justify-between gap-(--space-2) pr-(--space-2) pl-(--space-4) shadow-[inset_0_calc(var(--border)*-1)_0_var(--line-1)]">
         <h2 className="truncate text-(length:--text-ui) leading-(--leading-ui) font-semibold text-ink-1">
           {title}
         </h2>

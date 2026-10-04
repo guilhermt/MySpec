@@ -91,6 +91,22 @@ describe("globals.css", () => {
   const tokens = declarations(TOKENS);
   const bridge = declarations(GLOBALS.replace(themeInline(GLOBALS), ""));
 
+  it("draws the bar of native scrolling with the tokens of the ScrollArea", () => {
+    const bar = /::-webkit-scrollbar \{([^}]*)\}/.exec(GLOBALS)?.[1] ?? "";
+    const thumb = /::-webkit-scrollbar-thumb \{([^}]*)\}/.exec(GLOBALS)?.[1] ?? "";
+    const area = readFileSync(join(STYLES, "../components/system/ScrollArea.tsx"), "utf8");
+
+    expect(bar).toContain("width: calc(var(--space-2) + var(--space-0-5))");
+    expect(area).toContain("w-[calc(var(--space-2)+var(--space-0-5))]");
+    expect(thumb).toContain("border: var(--space-0-5) solid transparent");
+    expect(area).toContain("p-(--space-0-5)");
+    expect(thumb).toContain("border-radius: var(--radius-pill)");
+    expect(thumb).toContain("var(--line-2)");
+    expect(GLOBALS).toMatch(
+      /::-webkit-scrollbar-thumb:hover \{\s*background-color: var\(--line-3\)/,
+    );
+  });
+
   it("takes the tokens from the design system, their single source", () => {
     expect(GLOBALS).toContain('@import "../../../design/system/tokens.css";');
     expect(existsSync(TOKENS_PATH)).toBe(true);
@@ -220,7 +236,7 @@ describe("globals.css", () => {
       "[data-leaving] > .aux-panel {\n    animation: aux-panel-exit var(--duration-fast) var(--ease-exit) forwards;",
     );
     expect(GLOBALS).toContain(
-      ".toast[data-leaving] {\n    animation: toast-exit var(--duration-fast) var(--ease-exit) forwards;",
+      ".toast[data-leaving],\n  [data-leaving] > .toast {\n    animation: toast-exit var(--duration-fast) var(--ease-exit) forwards;",
     );
   });
 

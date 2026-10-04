@@ -50,7 +50,7 @@ export function SearchInput({
       {...landmarkRole}
       {...(disabled ? { "data-disabled": "" } : {})}
       className={cn(
-        "flex h-(--size-control-sm) items-center gap-1.5 rounded-sm border border-line-3 bg-surface-input pr-1 pl-2 transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard not-data-disabled:not-focus-within:hover:border-ink-3 focus-within:field-focus data-disabled:dashed-disabled data-disabled:focus-within:field-focus",
+        "flex h-(--size-control-sm) items-center gap-(--space-1-5) rounded-sm border border-line-3 bg-surface-input pr-(--space-1) pl-(--space-2) transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard not-data-disabled:not-focus-within:hover:border-ink-3 focus-within:field-focus data-disabled:dashed-disabled data-disabled:focus-within:field-focus",
         className,
       )}
     >

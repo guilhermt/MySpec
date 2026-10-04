@@ -129,7 +129,7 @@ describe.each(THEMES)("Menu in the %s theme", (theme) => {
   it("writes an unavailable choice in the faint ink", async () => {
     setTheme(theme);
     await open();
-    const item = screen.getByRole("menuitemradio", { name: "◇ Fable · unavailable" });
+    const item = screen.getByRole("menuitemradio", { name: "Fable · unavailable" });
     expect(paintOf(item, { color: "" })).toEqual({ color: token("--ink-4") });
   });
   it("writes a disabled choice and an item with an action in the faint ink, the failed reason in error", async () => {

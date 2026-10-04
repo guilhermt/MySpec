@@ -29,7 +29,7 @@ export function ContextMeter({ percent, paused, compact, detail }: ContextMeterP
         {...(valueText !== undefined ? { "aria-valuetext": valueText } : {})}
         // biome-ignore lint/a11y/noNoninteractiveTabindex: the meter takes focus to show its detail.
         tabIndex={0}
-        className="inline-flex items-center gap-1.5 rounded-xs text-(length:--text-micro) leading-(--leading-micro) text-ink-3 tabular-nums hover:text-ink-1 focus-visible:focus-ring"
+        className="inline-flex items-center gap-(--space-1-5) rounded-xs text-(length:--text-micro) leading-(--leading-micro) text-ink-3 tabular-nums hover:text-ink-1 focus-visible:focus-ring"
       >
         {compact !== true && (
           <span

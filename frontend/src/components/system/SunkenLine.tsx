@@ -19,7 +19,7 @@ export function SunkenLine({ icon, children, action, id, className }: SunkenLine
     <div
       id={id}
       className={cn(
-        "flex flex-wrap items-center gap-2 rounded-sm bg-surface-0 py-2 pr-2 pl-3 text-(length:--text-meta) leading-(--leading-meta) text-ink-2",
+        "flex flex-wrap items-center gap-(--space-2) rounded-sm bg-surface-0 py-(--space-2) pr-(--space-2) pl-(--space-3) text-(length:--text-meta) leading-(--leading-meta) text-ink-2",
         className,
       )}
     >

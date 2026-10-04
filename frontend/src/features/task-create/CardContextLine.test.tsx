@@ -111,7 +111,7 @@ describe("CardContextLine", () => {
     line(STALE());
 
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "◇ Couldn't refresh the card: GitHub rate limit reached. The task will use the last reading.",
+      "Couldn't refresh the card: GitHub rate limit reached. The task will use the last reading.",
     );
     expect(screen.getByRole("status")).toHaveTextContent("From the card: #12");
   });

@@ -29,7 +29,7 @@ export function NoticeStrip({
       id={id}
       role={role}
       className={cn(
-        "flex min-h-(--size-ask) flex-wrap items-center gap-2 rounded-sm bg-surface-0 py-1.5 pr-1.5 pl-4 text-(length:--text-meta) leading-(--leading-meta)",
+        "flex min-h-(--size-ask) flex-wrap items-center gap-(--space-2) rounded-sm bg-surface-0 py-(--space-1-5) pr-(--space-1-5) pl-(--space-4) text-(length:--text-meta) leading-(--leading-meta)",
         outlined && "border border-line-2",
         className,
       )}

@@ -190,6 +190,25 @@ function Opened() {
 }
 
 describe("Dialog in the browser", () => {
+  it("says the whole reason in a tooltip when the keyboard reaches the confirmation it holds back", async () => {
+    const reason = "Write what to discuss or select at least one card, and name the discussion.";
+    render(
+      <Dialog open onOpenChange={() => {}} title="Group drafts into an epic">
+        <DialogBody>Two drafts.</DialogBody>
+        <DialogFooter reason={{ id: "reason", text: reason }}>
+          <DialogCancel />
+          <Button variant="primary" shortcut="Ctrl ↵" disabled reasonId="reason">
+            Group 2 drafts
+          </Button>
+        </DialogFooter>
+      </Dialog>,
+    );
+    const confirm = screen.getByRole("button", { name: /^Group 2 drafts/ });
+    await expect.poll(() => document.activeElement).not.toBe(document.body);
+    while (document.activeElement !== confirm) await userEvent.tab();
+    await expect.poll(() => screen.queryByRole("tooltip")?.textContent).toBe(reason);
+  });
+
   it("opens an alert with the pointer on Cancel, with no tooltip", async () => {
     render(<Opened />);
     await userEvent.click(screen.getByRole("button", { name: "Delete…" }));

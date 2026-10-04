@@ -3,6 +3,7 @@ import { Button } from "@/components/system/Button";
 import { Field } from "@/components/system/Field";
 import { ICONS } from "@/components/system/icons";
 import { Shimmer } from "@/components/system/Shimmer";
+import { StateGlyph } from "@/components/system/StateGlyph";
 import { SunkenLine } from "@/components/system/SunkenLine";
 import { Textarea } from "@/components/system/Textarea";
 import { Markdown } from "@/features/chat/Markdown";
@@ -120,7 +121,10 @@ export function CardContextLine({
           </span>
         ) : refreshError !== null ? (
           <span role="status" className="flex flex-col">
-            <span>{`◇ Couldn't refresh the card: ${refreshError}. The task will use the last reading.`}</span>
+            <span>
+              <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />
+              {`Couldn't refresh the card: ${refreshError}. The task will use the last reading.`}
+            </span>
             <span>{summary}</span>
           </span>
         ) : (

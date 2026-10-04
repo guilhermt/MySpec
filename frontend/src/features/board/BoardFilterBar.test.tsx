@@ -199,7 +199,7 @@ describe("BoardFilterBar", () => {
   it("marks a chip that no longer matches the board with the raw id and ◇", () => {
     bar({}, { ...EMPTY_FILTERS, repository: "repo-9" });
 
-    expect(screen.getByRole("button", { name: "◇ repo-9" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "repo-9" })).toBeInTheDocument();
   });
 
   it("clears the five filters with Clear filters, which shows only while one is set", async () => {

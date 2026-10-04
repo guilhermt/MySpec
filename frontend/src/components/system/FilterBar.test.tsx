@@ -49,7 +49,7 @@ describe("FilterChip", () => {
     expect(onRemove).toHaveBeenCalledOnce();
   });
 
-  it("marks a filter that matches nothing anymore with ◇ and says why", async () => {
+  it("marks a filter that matches nothing anymore with the blocked glyph and says why", async () => {
     const { user } = renderWithStore(
       <FilterChip
         model={{
@@ -60,7 +60,8 @@ describe("FilterChip", () => {
         onRemove={() => {}}
       />,
     );
-    const chip = screen.getByRole("button", { name: "◇ acme/old" });
+    const chip = screen.getByRole("button", { name: "acme/old" });
+    expect(chip.querySelector('[data-state="blocked"]')).not.toBeNull();
     await user.hover(chip);
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       "acme/old isn't a repository of this board anymore.",

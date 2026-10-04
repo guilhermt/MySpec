@@ -1093,7 +1093,7 @@ O app guarda o histórico dos lugares por onde o usuário passou, até 50 atrás
 
 O `Esc` do lugar vale quando nada mais perto do usuário o usa: uma lista, um popover, o `⋯` ou um diálogo aberto o recebe primeiro, e a caixa de mensagem, a busca do board e a edição de um rascunho de uma discussão tratam o seu. Na task, a ordem é a lista, o popover, o `⋯`, o painel e a conversa anterior, um `Esc` para cada. Na discussão, é a lista de dependências, o campo de **Existing issue…**, o `⋯`, o diálogo, a edição do rascunho e o painel, e com o foco na conversa o `Esc` leva ao compositor.
 
-Na conversa, que é uma parada só de `Tab`: ao chegar, o foco vai ao cartão pendente, senão à última entrada, e `Tab` passa pelos controles da entrada atual (**Copy**, os links, **Show all**, os botões de um cartão) antes de sair da conversa; os controles das outras entradas ficam fora do `Tab` até a entrada delas ser a atual. Numa entrada que abre, o grupo, o comando com saída, o subagente, o marco com conteúdo e a dobra de trecho, a parada é a própria linha que abre, que diz se está aberta ou dobrada.
+Na conversa, que é uma parada só de `Tab`: ao chegar, o foco vai ao cartão pendente, senão à última entrada, e `Tab` passa pelos controles da entrada atual (**Copy the code**, os links, **Show all**, os botões de um cartão) antes de sair da conversa; os controles das outras entradas ficam fora do `Tab` até a entrada delas ser a atual. Numa entrada que abre, o grupo, o comando com saída, o subagente, o marco com conteúdo e a dobra de trecho, a parada é a própria linha que abre, que diz se está aberta ou dobrada.
 
 | Atalho | Ação |
 |---|---|

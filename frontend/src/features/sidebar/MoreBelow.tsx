@@ -58,7 +58,7 @@ export function MoreBelow({ viewport }: MoreBelowProps) {
   return (
     <div
       role="none"
-      className="pointer-events-none sticky bottom-0 -mt-(--size-more-below) flex h-(--size-more-below) items-end bg-linear-to-b from-transparent to-surface-sidebar to-70% pr-(--space-2) pb-(--space-1) pl-[calc(var(--space-2)+var(--tree-pad)+var(--icon)+var(--space-2-5))]"
+      className="pointer-events-none sticky bottom-0 -mt-(--size-more-below) flex h-(--size-more-below) items-end bg-linear-to-b from-transparent to-surface-sidebar to-50% pr-(--space-2) pb-(--space-1) pl-[calc(var(--space-2)+var(--tree-pad)+var(--icon)+var(--space-2-5))]"
     >
       <button
         type="button"

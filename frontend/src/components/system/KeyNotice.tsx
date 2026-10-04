@@ -100,7 +100,7 @@ export function KeyNotice({ notice, onHide }: KeyNoticeProps) {
               role="status"
               initialFocus={false}
               finalFocus={false}
-              className="max-w-(--size-tooltip-max) rounded-sm bg-tooltip-surface px-2 py-1 text-(length:--text-meta) leading-(--leading-meta) text-tooltip-ink shadow-float outline-none motion-safe:transition-opacity motion-safe:duration-(--duration-fast) motion-safe:ease-enter motion-safe:data-starting-style:opacity-0"
+              className="max-w-(--size-tooltip-max) rounded-sm bg-tooltip-surface px-(--space-2) py-(--space-1) text-(length:--text-meta) leading-(--leading-meta) text-tooltip-ink shadow-float outline-none motion-safe:transition-opacity motion-safe:duration-(--duration-fast) motion-safe:ease-enter motion-safe:data-starting-style:opacity-0"
             >
               <span className="font-semibold">{notice.text.title}</span>
               <span className="text-tooltip-ink-2">{` · ${notice.text.reason}`}</span>

@@ -40,6 +40,8 @@ export function whenExitEnds(element: Element | null, done: () => void): () => v
 export interface PresenceProps {
   /** children is what is on screen; null, undefined or false once it leaves. */
   children: ReactNode;
+  /** onGone is called once the exit is over and what it held is gone. */
+  onGone?: () => void;
 }
 
 /**
@@ -47,11 +49,13 @@ export interface PresenceProps {
  * wrapper carries `data-leaving`, which the exit animation of what it holds keys on, and is inert,
  * so nothing in it takes a click or the focus. The wrapper is `display: contents` and adds no box.
  */
-export function Presence({ children }: PresenceProps) {
+export function Presence({ children, onGone }: PresenceProps) {
   const present = children !== null && children !== undefined && children !== false;
   const kept = useRef<ReactNode>(null);
   const ref = useRef<HTMLDivElement>(null);
   const [, setGone] = useState(0);
+  const gone = useRef(onGone);
+  gone.current = onGone;
   if (present) {
     kept.current = children;
   }
@@ -65,6 +69,7 @@ export function Presence({ children }: PresenceProps) {
     return whenExitEnds(ref.current?.firstElementChild ?? null, () => {
       kept.current = null;
       setGone((count) => count + 1);
+      gone.current?.();
     });
   }, [leaving]);
 

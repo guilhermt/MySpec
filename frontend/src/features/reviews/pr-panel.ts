@@ -180,7 +180,7 @@ export function prPanelModel(row: PullRequestRow, ctx: { app: State; now: number
       failed:
         failure === undefined
           ? null
-          : `◇ ${failure.repository} couldn't be read${failedAge === "" ? "" : ` · ${failedAge}`}`,
+          : `${failure.repository} couldn't be read${failedAge === "" ? "" : ` · ${failedAge}`}`,
     },
     facts: {
       branch: `${row.headBranch} → ${row.baseBranch}`,

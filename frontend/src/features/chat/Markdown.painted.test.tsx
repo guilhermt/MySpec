@@ -20,7 +20,7 @@ describe.each(THEMES)("Markdown in %s", (theme) => {
     ]);
   });
 
-  it("puts Copy of a cut block at the end of the block's header, in the header's height", async () => {
+  it("puts Copy of a block at the end of its own header, in the header's height", async () => {
     setTheme(theme);
     const { container } = renderWithStore(
       <div style={{ width: 640 }}>
@@ -28,14 +28,17 @@ describe.each(THEMES)("Markdown in %s", (theme) => {
       </div>,
     );
 
-    const header = container.querySelector('[data-streamdown="code-block-header"]');
-    const block = container.querySelector('[data-streamdown="code-block"]');
-    if (header === null || block === null) {
-      throw new Error("the cut block has no header");
+    const frame = container.querySelector("[data-code-block]");
+    const copyButton = await screen.findByRole("button", { name: "Copy the code" });
+    const header = copyButton.closest("[data-code-block] > div");
+    if (frame === null || header === null) {
+      throw new Error("the block has no header");
     }
-    const copy = (await screen.findByRole("button", { name: "Copy" })).getBoundingClientRect();
+    const own = container.querySelector('[data-streamdown="code-block-header"]');
+    expect(own === null || getComputedStyle(own).display === "none").toBe(true);
+    const copy = copyButton.getBoundingClientRect();
     const band = header.getBoundingClientRect();
-    const box = block.getBoundingClientRect();
+    const box = frame.getBoundingClientRect();
 
     expect(copy.top).toBeGreaterThanOrEqual(band.top);
     expect(copy.bottom).toBeLessThanOrEqual(band.bottom);
@@ -55,7 +58,7 @@ describe.each(THEMES)("Markdown in %s", (theme) => {
     await expect
       .poll(() => container.querySelector('[data-streamdown="code-block-body"] code'))
       .not.toBeNull();
-    const frame = container.querySelector<HTMLElement>("[data-code-cut]");
+    const frame = container.querySelector<HTMLElement>("[data-code-block]");
     const code = container.querySelector('[data-streamdown="code-block"]');
     if (frame === null || code === null) {
       throw new Error("the cut block is not drawn");
@@ -63,7 +66,8 @@ describe.each(THEMES)("Markdown in %s", (theme) => {
     expect(paintOf(frame, { background: "" })).toEqual({ background: token("--surface-0") });
     const box = frame.getBoundingClientRect();
     const inner = code.getBoundingClientRect();
-    expect([inner.top, inner.left, inner.right]).toEqual([box.top, box.left, box.right]);
+    const header = frame.firstElementChild?.getBoundingClientRect();
+    expect([inner.top, inner.left, inner.right]).toEqual([header?.bottom, box.left, box.right]);
     const foot = show.parentElement;
     if (foot === null) {
       throw new Error("the foot is not drawn");

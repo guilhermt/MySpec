@@ -88,10 +88,10 @@ export interface OtherConversationBarProps {
  * least --size-ask high, and wrapping to two lines before an action would be hidden.
  */
 const BAR =
-  "relative flex min-h-(--size-ask) w-full max-w-(--measure-conversation) ml-[max(0px,round(down,calc((100%_-_var(--measure-conversation))/2),1px))] flex-wrap items-center gap-2 rounded-md py-1.5 pr-1.5 pl-4 text-(length:--text-ui) leading-(--leading-ui) text-ink-1";
+  "relative flex min-h-(--size-ask) w-full max-w-(--measure-conversation) ml-[max(0px,round(down,calc((100%_-_var(--measure-conversation))/2),1px))] flex-wrap items-center gap-(--space-2) rounded-md py-(--space-1-5) pr-(--space-1-5) pl-(--space-4) text-(length:--text-ui) leading-(--leading-ui) text-ink-1";
 
 /** RAIL is the error rail on the left edge of a bar that failed. */
-const RAIL = "pl-5 shadow-[inset_var(--error-rail)_0_0_var(--state-error)]";
+const RAIL = "pl-(--space-5) shadow-[inset_var(--error-rail)_0_0_var(--state-error)]";
 
 /** BACKGROUNDS are the ground of each form: quiet where the card holds the answer, tinted where the bar does. */
 const BACKGROUNDS: Record<RequestForm, string> = {
@@ -146,7 +146,7 @@ export function RequestBar({
       <span role="status" className="sr-only">
         {status}
       </span>
-      <span className="inline-flex items-center gap-2 whitespace-nowrap">
+      <span className="inline-flex items-center gap-(--space-2) whitespace-nowrap">
         <StateGlyph state={glyph} />
         <span className={cn("font-bold", LABELS[form])}>{label}</span>
         {place !== undefined && <span className="text-ink-2">· {place}</span>}
@@ -158,7 +158,7 @@ export function RequestBar({
         ) : (
           <Tooltip content={progressTooltip}>{middle}</Tooltip>
         ))}
-      <div className="ml-auto flex flex-wrap items-center gap-1.5">{actions}</div>
+      <div className="ml-auto flex flex-wrap items-center gap-(--space-1-5)">{actions}</div>
     </section>
   );
 }
@@ -193,14 +193,14 @@ export function OtherConversationBar({
       <span role="status" className="sr-only">
         {status}
       </span>
-      <span className="inline-flex items-center gap-2 whitespace-nowrap">
+      <span className="inline-flex items-center gap-(--space-2) whitespace-nowrap">
         <StateGlyph state={failed ? "error" : "wait"} />
         <span className={failed ? "font-bold text-state-error" : "text-ink-2"}>{label}</span>
         {time !== undefined && (
           <TimeChip tone={failed ? "error" : "wait"} time={time.short} longTime={time.long} />
         )}
       </span>
-      <div className="ml-auto flex items-center gap-1.5">
+      <div className="ml-auto flex items-center gap-(--space-1-5)">
         {goTooltip === undefined ? go : <Tooltip content={goTooltip}>{go}</Tooltip>}
       </div>
     </section>
