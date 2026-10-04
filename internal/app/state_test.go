@@ -14,6 +14,7 @@ import (
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/platform/xdg"
+	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
@@ -73,6 +74,17 @@ func TestTheStateCarriesTheHistoryFromTheStartOfTheWindowAndCountsTheWholeOfIt(t
 				t.Fatalf("insert %s: %v", id, err)
 			}
 		}
+		number := 7
+		for id, archivedAt := range map[string]time.Time{"review-first": start, "review-before": before} {
+			number++
+			archived := prreview.Review{
+				ID: id, RepositoryID: repo.ID, Number: number, Title: id, Mode: prreview.ModePublish,
+				PRState: prreview.PRMerged, ArchivedAt: archivedAt, CreatedAt: before.Add(-time.Hour), UpdatedAt: archivedAt,
+			}
+			if err := st.Reviews.Insert(t.Context(), archived); err != nil {
+				t.Fatalf("insert %s: %v", id, err)
+			}
+		}
 	})
 	a, published := newApp(t, app.AppOptions{DataDir: dataDir})
 
@@ -97,8 +109,15 @@ func TestTheStateCarriesTheHistoryFromTheStartOfTheWindowAndCountsTheWholeOfIt(t
 	if diff := cmp.Diff([]string{"discussion-first"}, discussions); diff != "" {
 		t.Errorf("DiscussionHistory mismatch (-want +got):\n%s", diff)
 	}
+	reviews := make([]string, 0, len(state.ReviewHistory))
+	for _, archived := range state.ReviewHistory {
+		reviews = append(reviews, archived.ID)
+	}
+	if diff := cmp.Diff([]string{"review-first"}, reviews); diff != "" {
+		t.Errorf("ReviewHistory mismatch (-want +got):\n%s", diff)
+	}
 	summary := bindings.HistorySummary{
-		Tasks: 3, Discussions: 2,
+		Tasks: 3, Reviews: 2, Discussions: 2,
 		Oldest: before.UTC().Format(time.RFC3339), WindowStart: start.UTC().Format(time.RFC3339),
 	}
 	if diff := cmp.Diff(summary, state.HistorySummary); diff != "" {
