@@ -1,13 +1,15 @@
 import { screen, within } from "@testing-library/react";
 import type { UserEvent } from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
-import { TaskView } from "@/features/task/TaskView";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
+import { AppShell } from "@/app/AppShell";
+import type { Location } from "@/lib/locations";
 import { api, type TaskSummary } from "@/lib/wails";
 import {
   capture,
+  centeredInWindow,
   cutTexts,
   footerPlaces,
-  mainArea,
   offWholePixels,
   overlaps,
   placeHeaderOneLine,
@@ -17,10 +19,18 @@ import {
   settle,
   THEMES,
   visiblePrimaries,
+  windowForMain,
   withoutTooltip,
 } from "@/test/painted";
 import { renderWithStore } from "@/test/render";
-import { fixSceneClock, type Scene, sceneTask, TASK_ID } from "@/test/task-scenes";
+import {
+  fixSceneClock,
+  type Scene,
+  type SceneName,
+  sceneTask,
+  stepReports,
+  TASK_ID,
+} from "@/test/task-scenes";
 import { makeDeletePreview } from "@/test/wails-mock";
 
 // Only the boundary is replaced, as in the jsdom suite: no call reaches the runtime of Wails.
@@ -59,6 +69,32 @@ interface Case {
   after?: (user: UserEvent) => Promise<void>;
   /** busy is a confirmation that waits for the call. */
   busy?: boolean;
+  /** says are texts the dialog of the case writes, as the material words them. */
+  says?: string[];
+}
+
+// BOARD is the place behind the task, where ← goes: the board it was opened from.
+const BOARD: Location = { kind: "board", id: "board-1" };
+
+// atStep3 is a moment of the reference task with step 3 at its second round: the implementer
+// addresses the second report of the agent review, so the step has the two reports the material
+// counts, and the steps before it one each.
+function atStep3(name: SceneName): Scene {
+  const scene = sceneTask(name);
+  return {
+    ...scene,
+    state: {
+      ...scene.state,
+      tasks: (scene.state.tasks ?? []).map((task) => ({
+        ...task,
+        steps: (task.steps ?? []).map((step) =>
+          step.number === 3 && step.status === "addressing_review"
+            ? { ...step, reviewRound: 2, reviewPass: 2, reports: stepReports(3, 2, false) }
+            : step,
+        ),
+      })),
+    },
+  };
 }
 
 // oneShot is the same moment as a task that has no PRD, tech spec nor plan.
@@ -117,7 +153,7 @@ const refuse =
 
 const DELETE = {
   name: "delete-task",
-  scene: () => sceneTask("run"),
+  scene: () => atStep3("run"),
   item: "Delete task…",
   confirm: /^Delete task$/,
   fail: refuse(vi.mocked(api.deleteTask), "the database is locked"),
@@ -125,7 +161,7 @@ const DELETE = {
 
 const DISCARD = {
   name: "discard-step",
-  scene: () => sceneTask("run"),
+  scene: () => atStep3("run"),
   item: "Discard step 3…",
   confirm: /^Discard step$/,
   fail: refuse(vi.mocked(api.discardStep), "the worktree is locked"),
@@ -133,7 +169,7 @@ const DISCARD = {
 
 const BACK = {
   name: "back-to-stage",
-  scene: () => sceneTask("run"),
+  scene: () => atStep3("run"),
   item: "Back to Tech spec…",
   confirm: /^Back to the Tech spec$/,
   fail: refuse(vi.mocked(api.backToStage), "the session didn't stop"),
@@ -167,7 +203,7 @@ const CASES: Case[] = [
     },
   },
   { ...DELETE, variant: "planning", scene: () => sceneTask("plan") },
-  { ...DISCARD, variant: "" },
+  { ...DISCARD, variant: "", says: ["with the 2 reports of the agent review"] },
   {
     ...DISCARD,
     variant: "keep",
@@ -177,17 +213,25 @@ const CASES: Case[] = [
   {
     ...DISCARD,
     variant: "oneshot",
-    scene: () => oneShot(sceneTask("run")),
+    scene: () => oneShot(atStep3("run")),
     item: "Discard the implementation…",
     confirm: /^Discard the implementation$/,
   },
-  { ...BACK, variant: "" },
+  {
+    ...BACK,
+    variant: "",
+    says: [
+      "the conversations of steps 1 to 3 and their 4 review reports",
+      "the worktree and the branch rate-limit-per-api-key, with 3 uncommitted files",
+    ],
+  },
   {
     ...BACK,
     variant: "pr",
     scene: () => sceneTask("findings-sent"),
     item: "Back to PRD…",
     confirm: /^Back to the PRD$/,
+    says: ["the pull request draft", "PR #1284 stays open on GitHub."],
   },
   {
     ...BACK,
@@ -199,19 +243,19 @@ const CASES: Case[] = [
   {
     ...BACK,
     variant: "oneshot",
-    scene: () => oneShot(sceneTask("run")),
+    scene: () => oneShot(atStep3("run")),
     item: "Back to planning…",
     confirm: /^Back to planning$/,
   },
   {
     name: "pause",
     variant: "",
-    scene: () => withTask(sceneTask("run"), PAUSED),
+    scene: () => withTask(atStep3("run"), PAUSED),
   },
   {
     name: "pause",
     variant: "pausing",
-    scene: () => sceneTask("run"),
+    scene: () => atStep3("run"),
     after: async (user) => {
       vi.mocked(api.pause).mockReturnValueOnce(never());
       await user.click(screen.getByRole("button", { name: "Pause" }));
@@ -258,24 +302,30 @@ function answerWith({ variant }: Case): void {
   });
 }
 
-// draw draws the task screen of a case in a main area of a width, and opens what the case opens.
+const VIEWPORT = { width: window.innerWidth, height: window.innerHeight };
+
+afterEach(async () => {
+  await page.viewport(VIEWPORT.width, VIEWPORT.height);
+});
+
+// draw draws the window of a case with the task screen in a main area of a width, the sidebar
+// beside it, so a dialog centers over the window as it does in the app; and opens what the case
+// opens.
 async function draw(one: Case, width: number) {
   answerWith(one);
   beforeFailure = null;
   const { state, transcripts, openStepTab } = one.scene();
-  const { container, user } = renderWithStore(
-    <div style={{ ...mainArea(width), height: "800px", display: "flex" }}>
-      <TaskView taskId={TASK_ID} />
-    </div>,
-    {
-      state,
-      ui: { location: { kind: "task", id: TASK_ID }, transcripts, openStepTab },
-    },
-  );
-  const area = container.firstElementChild;
-  if (!(area instanceof HTMLElement)) {
-    throw new Error("the main area is not drawn");
+  await page.viewport(windowForMain(width), VIEWPORT.height);
+  const { container, user } = renderWithStore(<AppShell />, {
+    state,
+    ui: { location: { kind: "task", id: TASK_ID }, back: [BOARD], transcripts, openStepTab },
+  });
+  const frame = container.firstElementChild;
+  if (!(frame instanceof HTMLElement)) {
+    throw new Error("the window is not drawn");
   }
+  const area = screen.getByRole("main", { hidden: true });
+  expect(area.getBoundingClientRect().width).toBe(width);
   if (one.item !== undefined) {
     await user.click(await screen.findByRole("button", { name: "More actions" }));
     await user.click(await screen.findByRole("menuitem", { name: one.item }));
@@ -287,7 +337,7 @@ async function draw(one: Case, width: number) {
   }
   await one.after?.(user);
   await settle();
-  return { area, band: screen.getByRole("banner", { hidden: true }), user };
+  return { area, frame, band: within(area).getByRole("banner", { hidden: true }), user };
 }
 
 fixSceneClock();
@@ -296,12 +346,16 @@ describe.each(THEMES)("The dialogs of the task, the scenes in the %s theme", (th
   describe.each(CASES)("the $name scene, variant “$variant”", (one) => {
     it.each(WIDTHS)("draws it at the main area of %ipx", async (width) => {
       setTheme(theme);
-      const { area, band, user } = await draw(one, width);
+      const { area, frame, band, user } = await draw(one, width);
       const open = dialog();
 
       // The header keeps one line, and nothing on it covers anything else.
       expect(placeHeaderOneLine(band)).toBe(true);
       expect(overlaps(placeHeaderPieces(band))).toBe(false);
+      // ← has a place behind it, as it has in the app.
+      expect(
+        within(band).getByRole("button", { name: /^Back to /, hidden: true }),
+      ).not.toHaveAttribute("aria-disabled", "true");
 
       // Every box of the screen and of the dialog stands on whole pixels.
       expect(
@@ -316,12 +370,16 @@ describe.each(THEMES)("The dialogs of the task, the scenes in the %s theme", (th
         ]),
       ).toEqual([]);
 
-      // A dialog opens 8vh from the top on a whole pixel.
+      // A dialog opens 8vh from the top on a whole pixel, centered over the window.
       expect(open !== null).toBe(one.item !== undefined);
       if (open !== null) {
         expect(open.getBoundingClientRect().top).toBe(
           parseFloat(resolve("round(8vh, 1px)", "top")),
         );
+        expect(centeredInWindow(open, area)).toBe(true);
+      }
+      for (const text of one.says ?? []) {
+        expect(open).toHaveTextContent(text);
       }
 
       // The focus leaves what a tooltip would cover in the capture, which comes before the pointer
@@ -336,7 +394,7 @@ describe.each(THEMES)("The dialogs of the task, the scenes in the %s theme", (th
       }
       await capture(
         `dialogs-${one.name}${one.variant === "" ? "" : `-${one.variant}`}-${width}-${theme}`,
-        area,
+        frame,
       );
 
       // What the top layer cuts says its whole text in a tooltip; behind a modal the screen can't

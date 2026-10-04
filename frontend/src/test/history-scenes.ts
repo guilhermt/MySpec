@@ -10,7 +10,7 @@
 import { act, screen, within } from "@testing-library/react";
 import type { UserEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, vi } from "vitest";
-import type { Location } from "@/lib/locations";
+import { HOME as HOME_PLACE, type Location } from "@/lib/locations";
 import type {
   ArchivedDiscussion,
   ArchivedReview,
@@ -79,6 +79,8 @@ export const HISTORY_VARIANTS: Record<HistorySceneName, readonly string[]> = {
 export interface HistoryScene {
   state: State;
   location: Location;
+  /** back is the place behind the scene, where ← goes: Home behind History, History behind an item. */
+  back: Location[];
   /** storage is what the screen remembers in localStorage, by key. */
   storage: Record<string, string>;
   /** now is the moment of the scene, local time as the mock writes it. */
@@ -340,6 +342,14 @@ function stepsOf(name: string, count: number, oneShot: boolean): ArchivedStep[] 
   });
 }
 
+// MERGE_TO_CLOSE is how long before the closing the pull request was merged: Sep 24 at 14:51 for the
+// task closed at 15:02, as the material writes them.
+const MERGE_TO_CLOSE = 11 * 60_000;
+
+// mergedBefore is the moment the pull request of a task closed at an instant was merged.
+const mergedBefore = (closed: string) =>
+  new Date(Date.parse(closed) - MERGE_TO_CLOSE).toISOString();
+
 function taskOf(row: Row, index: number): ArchivedTask {
   const [day, time, kind, name, where, result, more] = row;
   const { name: repository, number } = whereOf(where);
@@ -374,7 +384,7 @@ function taskOf(row: Row, index: number): ArchivedTask {
       state: "merged",
       base: "dev",
       mergedBy: "lnakamura",
-      mergedAt: at(day, time),
+      mergedAt: mergedBefore(at(day, time)),
     },
     createdAt: at(day - (oneShot ? 0 : 7), "10:03"),
     archivedAt: at(day, time),
@@ -816,12 +826,23 @@ function stateOf(options: { beyond?: number; filter?: string; empty?: boolean } 
   });
 }
 
-// scrollToEnd brings the end of the list into view, where the sentinel that asks for the next page is.
+// scrollToEnd brings the end of the list into view, where the sentinel that asks for the next page
+// is, and then the line the asking adds under it: loading, or the failure.
 async function scrollToEnd() {
   await act(async () => {
     document.querySelector("[data-older-sentinel]")?.scrollIntoView({ block: "end" });
   });
   await vi.waitFor(() => expect(vi.mocked(api.listArchived)).toHaveBeenCalled());
+  const line = await vi.waitFor(() => {
+    const found = document.querySelector("[data-older-sentinel] + p");
+    if (found === null) {
+      throw new Error("the line under the list is not drawn");
+    }
+    return found;
+  });
+  await act(async () => {
+    line.scrollIntoView({ block: "end" });
+  });
 }
 
 // openMenu opens the ⋯ of an archived item and chooses Delete…, which opens its dialog.
@@ -836,7 +857,7 @@ async function chooseTab(user: UserEvent, name: RegExp) {
 }
 
 function historyScreen(variant: string): HistoryScene {
-  const base = { storage: {}, now: SCENE_NOW, listing: "empty" as const };
+  const base = { back: [HOME_PLACE], storage: {}, now: SCENE_NOW, listing: "empty" as const };
   const location: Location = { kind: "history" };
   switch (variant) {
     case "fresh":
@@ -885,7 +906,12 @@ function historyScreen(variant: string): HistoryScene {
 }
 
 function archivedScreen(name: HistorySceneName, variant: string): HistoryScene {
-  const base = { storage: {}, now: SCENE_NOW, listing: "empty" as const };
+  const base = {
+    back: [{ kind: "history" } satisfies Location],
+    storage: {},
+    now: SCENE_NOW,
+    listing: "empty" as const,
+  };
   const withdraw = (
     history: ArchivedTask[],
     review: ArchivedReview[],

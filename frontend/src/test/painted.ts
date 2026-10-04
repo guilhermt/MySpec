@@ -512,3 +512,21 @@ export function footerPlaces(dialog: HTMLElement, primary: RegExp) {
   };
   return { cancel: placeOf("Cancel"), primary: placeOf(primary) };
 }
+
+/**
+ * centeredInWindow tells whether a dialog stands where the app puts it: over a window whose main area
+ * runs from the sidebar to the right edge, centered over the whole window to the pixel the rounding
+ * of the translate allows, and inside the main area.
+ */
+export function centeredInWindow(dialog: HTMLElement, area: HTMLElement): boolean {
+  const box = dialog.getBoundingClientRect();
+  const main = area.getBoundingClientRect();
+  const center = box.left + box.width / 2;
+  return (
+    main.left > 0 &&
+    main.right === window.innerWidth &&
+    Math.abs(center - window.innerWidth / 2) <= 1 &&
+    box.left >= main.left &&
+    box.right <= main.right
+  );
+}

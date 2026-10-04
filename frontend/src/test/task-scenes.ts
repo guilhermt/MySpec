@@ -14,6 +14,7 @@ import type {
   Situation,
   State,
   Step,
+  StepReport,
   TaskConversation,
   TaskSummary,
   Transcript,
@@ -122,8 +123,31 @@ const STEP_4_FILES = [
   { path: "CHANGELOG.md", kind: "modified", staged: false, partial: false },
 ];
 
+/** BRANCH is the branch of the reference task, the one its worktree and its pull request are on. */
+const BRANCH = "rate-limit-per-api-key";
+
 /** WORKTREE is the worktree of the reference task, where its steps and its pull request work. */
-const WORKTREE = "/home/dev/.local/share/myspec/worktrees/acme/api/rate-limit";
+const WORKTREE = `/home/dev/.local/share/myspec/worktrees/acme/api/${BRANCH}`;
+
+// STEP_REPORTS are how many reports the agent review of each step wrote by the time it was done: the
+// 9 of the 6 steps it reviewed, as the mock counts them; step 4 is Manual.
+const STEP_REPORTS: Record<number, number> = { 1: 1, 2: 1, 3: 2, 5: 2, 6: 1, 7: 2 };
+
+/**
+ * stepReports are the reports of the agent review of a step, one per pass: the ones before the last
+ * ask for changes, and the last is clean once the step is done. count is the reports the step has.
+ */
+export function stepReports(number: number, count: number, done: boolean): StepReport[] {
+  return Array.from({ length: count }, (_, index) => {
+    const clean = done && index === count - 1;
+    return {
+      pass: index + 1,
+      file: `${number}-review-${index + 1}.md`,
+      clean,
+      findings: clean ? 0 : 2,
+    };
+  });
+}
 
 const CARD = {
   key: "acme/api#412",
@@ -135,7 +159,8 @@ const CARD = {
 };
 
 // steps is the plan of the reference task with the current step at n, the ones before it
-// committed; n past the last is every step committed. Step 4 has its own mode, Manual.
+// committed with the reports of their agent review; n past the last is every step committed. Step 4
+// has its own mode, Manual.
 function steps(n: number, current: Partial<Step> = {}): Step[] {
   return TITLES.map((title, index) => {
     const number = index + 1;
@@ -148,7 +173,13 @@ function steps(n: number, current: Partial<Step> = {}): Step[] {
       reviewModeAdjusted: manual,
     });
     if (number < n) {
-      return { ...base, status: "done", commitSha: `c19f0${number}e`, reviewModeEditable: false };
+      return {
+        ...base,
+        status: "done",
+        commitSha: `c19f0${number}e`,
+        reviewModeEditable: false,
+        reports: stepReports(number, STEP_REPORTS[number] ?? 0, true),
+      };
     }
     return number === n ? { ...base, ...current } : base;
   });
@@ -256,7 +287,7 @@ export function inStep(
       currentStep: n,
       sessionModel: OPUS,
       steps: steps(n, { worktreePath: WORKTREE, ...step }),
-      branch: "rate-limit",
+      branch: BRANCH,
       baseBranch: "dev",
       worktreePath: WORKTREE,
       models: models(
@@ -276,6 +307,14 @@ export function inStep(
   );
 }
 
+/** DRAFT is the pull request draft the agent wrote, which the task keeps once the PR is open. */
+const DRAFT = {
+  title: "Rate limit per API key",
+  body: "Each API key gets its own limit, read from its plan.\n\nCloses acme/api#412.",
+  file: "pr.md",
+};
+
+// inPR is the reference task at the stage of its pull request, open on GitHub, every step committed.
 function inPR(
   pr: Partial<PullRequest>,
   task: Partial<TaskSummary>,
@@ -290,13 +329,15 @@ function inPR(
       pr: makePullRequest({
         prNumber: 1284,
         prUrl: "https://github.com/acme/api/pull/1284",
+        prState: "open",
         worktreePath: WORKTREE,
-        branch: "rate-limit",
+        branch: BRANCH,
         baseBranch: "origin/dev",
         checkedAt: CHECKED_AT,
+        draft: DRAFT,
         ...pr,
       }),
-      branch: "rate-limit",
+      branch: BRANCH,
       baseBranch: "dev",
       worktreePath: WORKTREE,
       models: models(
@@ -903,12 +944,9 @@ export function fixedCardScene(name: FixedCardName): Scene {
             status: "draft_ready",
             prNumber: 0,
             prUrl: "",
+            prState: "",
             sessionStage: "pr",
-            draft: {
-              title: "Rate limit per API key",
-              body: "Each API key gets its own limit, read from its plan.\n\nCloses acme/api#412.",
-              file: "pr.md",
-            },
+            draft: DRAFT,
           },
           { situations: [situation("draft", "waiting", prPlace, 3)] },
           false,
