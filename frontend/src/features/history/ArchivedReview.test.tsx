@@ -55,6 +55,14 @@ describe("ArchivedReview", () => {
     expect(api.openExternal).toHaveBeenCalledWith("https://github.com/dev/web/pull/31");
   });
 
+  it("says which pull request Open on GitHub opens in its tooltip", async () => {
+    const { user } = view();
+
+    await user.hover(screen.getByRole("button", { name: "Open on GitHub" }));
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Open web#31 on GitHub");
+  });
+
   it("puts the focus on the title on arrival", async () => {
     view({}, { pendingFocus: "title" });
 

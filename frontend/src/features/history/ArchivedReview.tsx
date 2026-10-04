@@ -4,12 +4,14 @@ import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
 import { Tag } from "@/components/system/Tag";
+import { Tooltip } from "@/components/system/Tooltip";
 import { FindingsBody, MarkerLine } from "@/features/chat/entries/MarkerLine";
 import type { MarkerView } from "@/features/chat/markers";
 import { ArchivedBody } from "@/features/history/ArchivedBody";
 import { ArchivedFacts } from "@/features/history/ArchivedFacts";
 import { ArchivedMarkers } from "@/features/history/ArchivedMarkers";
 import { ArchivedMenu } from "@/features/history/ArchivedMenu";
+import { ArchivedTags } from "@/features/history/ArchivedTags";
 import {
   archivedReviewFacts,
   outFindingViews,
@@ -22,6 +24,7 @@ import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { DeleteReviewDialog } from "@/features/reviews/DeleteReviewDialog";
 import { outcomeLabel } from "@/features/reviews/review-status";
 import { olderKey } from "@/lib/history";
+import { shortRef } from "@/lib/repositories";
 import type { ReviewPass } from "@/lib/wails";
 import { openExternal } from "@/store/actions";
 import { useAppStore } from "@/store/app-store";
@@ -129,13 +132,20 @@ export function ArchivedReview({ reviewId }: ArchivedReviewProps) {
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-      <LocationHeader>
-        <Icon icon={ICONS.review} className="text-ink-3" />
-        <Tag>{outcomeLabel(review.outcome)}</Tag>
-        <Button variant="ghost" size="sm" onClick={() => void openExternal(review.url)}>
-          Open on GitHub
-          <Icon icon={ICONS.external} size="sm" />
-        </Button>
+      <LocationHeader
+        lead={<Icon icon={ICONS.review} className="text-ink-3" />}
+        progress={
+          <ArchivedTags>
+            <Tag>{outcomeLabel(review.outcome)}</Tag>
+          </ArchivedTags>
+        }
+      >
+        <Tooltip content={`Open ${shortRef(`${review.repository}#${review.number}`)} on GitHub`}>
+          <Button variant="ghost" size="sm" onClick={() => void openExternal(review.url)}>
+            Open on GitHub
+            <Icon icon={ICONS.external} size="sm" />
+          </Button>
+        </Tooltip>
         <ArchivedMenu tooltip="Delete from History" onDelete={openDialog} triggerRef={moreRef} />
       </LocationHeader>
 

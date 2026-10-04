@@ -86,6 +86,24 @@ async function draw(name: HistorySceneName, variant: string, width: number) {
   return { area, band: within(area).getByRole("banner", { hidden: true }), user };
 }
 
+// TAG_TEXT is what the tags of an archived item can say.
+const TAG_TEXT = /^(Archived|One-Shot|Merged|Closed)+$/;
+
+/**
+ * headerLine is the header of an archived item from left to right, as boxes: the glyph of the kind,
+ * the title and the tags, then on the right the link and the ⋯.
+ */
+function headerLine(band: HTMLElement) {
+  const title = band.querySelector("h1");
+  const glyph = title?.previousElementSibling;
+  const tags = title?.nextElementSibling;
+  const right = band.lastElementChild;
+  if (!title || !glyph || !tags || !right || tags === right) {
+    throw new Error("the header lacks the glyph, the tags or the right side");
+  }
+  return { title, glyph, tags, right };
+}
+
 // dialog is the dialog open over the screen, null when none is.
 const dialog = () => document.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]');
 
@@ -115,6 +133,23 @@ describe.each(THEMES)("The archived items, the scenes in the %s theme", (theme) 
 
       // Every box of the screen stands on whole pixels.
       expect(offWholePixels(parts(area, band))).toEqual([]);
+
+      // The glyph of the kind, the title and the tags read together on the left; the link and the ⋯
+      // stand on the right.
+      const { title, glyph, tags, right } = headerLine(band);
+      expect(glyph.matches("nav, button") || glyph.querySelector("button") !== null).toBe(false);
+      expect(glyph.querySelector("svg")).not.toBeNull();
+      expect(tags.textContent).toMatch(TAG_TEXT);
+      expect(
+        within(right as HTMLElement).getByRole("button", { name: "More actions", hidden: true }),
+      ).toBeVisible();
+      const boxes = [glyph, title, tags, right].map((element) => element.getBoundingClientRect());
+      for (const [before, after] of boxes.slice(0, -1).map((box, i) => [box, boxes[i + 1]])) {
+        expect(after?.left).toBeGreaterThanOrEqual(before?.right ?? Number.POSITIVE_INFINITY);
+      }
+      expect(tags.getBoundingClientRect().left - title.getBoundingClientRect().right).toBe(
+        parseFloat(resolve("var(--space-2)", "width")),
+      );
 
       // The dialog opens 8vh from the top on a whole pixel, with Cancel and the confirmation on one
       // line, the confirmation at the right of it.

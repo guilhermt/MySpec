@@ -21,6 +21,7 @@ import { ArchivedFacts } from "@/features/history/ArchivedFacts";
 import { ArchivedMarkers } from "@/features/history/ArchivedMarkers";
 import { ArchivedMenu } from "@/features/history/ArchivedMenu";
 import { ArchivedSection } from "@/features/history/ArchivedSection";
+import { ArchivedTags } from "@/features/history/ArchivedTags";
 import {
   archivedDiscussionFacts,
   type PublishedRow,
@@ -202,9 +203,14 @@ export function ArchivedDiscussion({ discussionId }: ArchivedDiscussionProps) {
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-      <LocationHeader>
-        <Icon icon={ICONS.discussion} className="text-ink-3" />
-        <Tag>Archived</Tag>
+      <LocationHeader
+        lead={<Icon icon={ICONS.discussion} className="text-ink-3" />}
+        progress={
+          <ArchivedTags>
+            <Tag>Archived</Tag>
+          </ArchivedTags>
+        }
+      >
         {board !== null && (
           <Tooltip content="Open the board">
             <Button

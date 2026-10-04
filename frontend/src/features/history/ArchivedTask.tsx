@@ -15,6 +15,7 @@ import { ArchivedFacts } from "@/features/history/ArchivedFacts";
 import { ArchivedMarkers } from "@/features/history/ArchivedMarkers";
 import { ArchivedMenu } from "@/features/history/ArchivedMenu";
 import { ArchivedSection } from "@/features/history/ArchivedSection";
+import { ArchivedTags } from "@/features/history/ArchivedTags";
 import {
   type ArchivedTaskTab,
   archivedTaskFacts,
@@ -227,10 +228,15 @@ export function ArchivedTask({ taskId }: ArchivedTaskProps) {
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-      <LocationHeader>
-        <Icon icon={oneShot ? ICONS.oneShot : ICONS.task} className="text-ink-3" />
-        <Tag>Archived</Tag>
-        {oneShot && <Tag>One-Shot</Tag>}
+      <LocationHeader
+        lead={<Icon icon={oneShot ? ICONS.oneShot : ICONS.task} className="text-ink-3" />}
+        progress={
+          <ArchivedTags>
+            <Tag>Archived</Tag>
+            {oneShot && <Tag>One-Shot</Tag>}
+          </ArchivedTags>
+        }
+      >
         {pr !== null && (
           <Tooltip content={`Open #${pr.number} on GitHub`}>
             <Button variant="ghost" size="sm" onClick={() => void openExternal(pr.url)}>
