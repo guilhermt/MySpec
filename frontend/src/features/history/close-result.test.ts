@@ -141,6 +141,28 @@ describe("closeResultLines", () => {
     expect(worktree?.detail).toBe("fatal: '~/.local/share/wt' contains modified files");
     expect(branch).not.toHaveProperty("detail");
   });
+
+  it("carries what git said under the branch and the base that failed", () => {
+    const [, branch, base] = closeResultLines(
+      {
+        ...CLOSE,
+        branch: failed("error: cannot lock ref 'refs/heads/idempotency-keys'"),
+        base: failed("fatal: unable to access '/home/dev/code/api/.git'"),
+      },
+      null,
+    );
+
+    expect(branch).toEqual({
+      outcome: "failed",
+      text: "Branch idempotency-keys couldn't be deleted",
+      detail: "error: cannot lock ref 'refs/heads/idempotency-keys'",
+    });
+    expect(base).toEqual({
+      outcome: "failed",
+      text: "dev not updated",
+      detail: "fatal: unable to access '~/code/api/.git'",
+    });
+  });
 });
 
 describe("closeLegendTime", () => {
@@ -167,6 +189,12 @@ describe("closeAttention and baseNotUpdated", () => {
       "dev not updated",
     ],
     ["a base that failed", { base: failed("x") }, "dev not updated", "dev not updated"],
+    [
+      "a branch that failed and a base left behind",
+      { branch: failed("x"), base: skipped("dirty") },
+      "Branch idempotency-keys couldn't be deleted",
+      "dev not updated",
+    ],
     [
       "a branch git doesn't see merged",
       { branch: skipped("not_merged") },
