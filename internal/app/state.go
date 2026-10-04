@@ -11,6 +11,7 @@ import (
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prreview"
+	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
@@ -161,17 +162,26 @@ func reviewTitle(fullName string, stored prreview.Review) string {
 // reviewStates is what the app knows about every active review, with the
 // situations each one waits on the user for.
 func (a *App) reviewStates() ([]reviewflow.State, []attention.Found) {
-	list := a.prReviews.List()
+	return reviewStatesOf(a.prReviews.List(), a.reviewFlow.State, a.repositories.Get)
+}
+
+// reviewStatesOf are the states of the reviews of list the flow knows, with
+// their situations, each one titled by its pull request.
+func reviewStatesOf(
+	list []prreview.Review,
+	stateOf func(id string) (reviewflow.State, bool),
+	repositoryOf func(id string) (repository.Repository, bool),
+) ([]reviewflow.State, []attention.Found) {
 	states := make([]reviewflow.State, 0, len(list))
 	found := make([]attention.Found, 0, len(list)) // a review waits on one thing at a time
 	for _, stored := range list {
-		state, ok := a.reviewFlow.State(stored.ID)
+		state, ok := stateOf(stored.ID)
 		if !ok {
 			continue
 		}
 		states = append(states, state)
 		fullName := ""
-		if repo, registered := a.repositories.Get(stored.RepositoryID); registered {
+		if repo, registered := repositoryOf(stored.RepositoryID); registered {
 			fullName = repo.FullName()
 		}
 		found = append(found, attention.DeriveReview(attention.ReviewInput{

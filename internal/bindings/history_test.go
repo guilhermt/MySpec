@@ -118,6 +118,17 @@ func TestFromHistorySummaryCountsTheWholeHistoryAndFindsTheOldest(t *testing.T) 
 				WindowStart: start.Format(time.RFC3339),
 			},
 		},
+		{
+			name:        "the oldest is a discussion",
+			tasks:       []task.Task{{ArchivedAt: historyBase}},
+			reviews:     []prreview.Review{{ArchivedAt: historyBase.Add(-time.Hour)}},
+			discussions: []discussion.Discussion{{ArchivedAt: historyBase.Add(-72 * time.Hour)}},
+			want: bindings.HistorySummary{
+				Tasks: 1, Reviews: 1, Discussions: 1,
+				Oldest:      historyBase.Add(-72 * time.Hour).Format(time.RFC3339),
+				WindowStart: start.Format(time.RFC3339),
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -165,6 +176,25 @@ func TestListArchivedPagesTheHistoryByDate(t *testing.T) {
 	wantCursors := []string{historyTime(70) + "|t-070", historyTime(20) + "|t-020", "|"}
 	if diff := cmp.Diff(wantCursors, cursors); diff != "" {
 		t.Errorf("cursors mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestListArchivedEndsOnAPageOfExactlyAPageSize(t *testing.T) {
+	t.Parallel()
+	tasks := make([]bindings.ArchivedTask, 0, bindings.HistoryPageSize)
+	for i := range bindings.HistoryPageSize {
+		tasks = append(tasks, bindings.ArchivedTask{ID: fmt.Sprintf("t-%03d", 99-i), ArchivedAt: historyTime(99 - i)})
+	}
+	service := newHistoryService(tasks, nil, nil)
+
+	page, err := service.ListArchived(bindings.HistoryRequest{Before: historyTime(1000)})
+	if err != nil {
+		t.Fatalf("ListArchived() error = %v", err)
+	}
+
+	if len(page.Tasks) != bindings.HistoryPageSize || page.NextBefore != "" || page.NextBeforeID != "" {
+		t.Errorf("page = %d tasks, next %q %q, want all %d and no next page",
+			len(page.Tasks), page.NextBefore, page.NextBeforeID, bindings.HistoryPageSize)
 	}
 }
 

@@ -721,6 +721,32 @@ func TestFromArchivedCarriesTheClosingThePullRequestAndTheCommits(t *testing.T) 
 			},
 		},
 		{
+			name:      "a task closed without a pull request",
+			artifacts: task.Artifacts{Plan: plan},
+			run:       task.PRRun{Close: closing},
+			hasRun:    true,
+			check: func(t *testing.T, got bindings.ArchivedTask) {
+				t.Helper()
+				if got.Close == nil || got.PR != nil {
+					t.Errorf("close = %+v, pull request = %+v, want the closing and no pull request", got.Close, got.PR)
+				}
+			},
+		},
+		{
+			name: "a pass asked for and never recorded is text",
+			artifacts: task.Artifacts{PR: task.PRArtifacts{
+				Reports: []task.ReviewReport{{Pass: 1, File: "review-1.md", Findings: -1}},
+			}},
+			passes: []task.PRPass{{Pass: 1, Findings: make([]prreport.Finding, 2)}},
+			check: func(t *testing.T, got bindings.ArchivedTask) {
+				t.Helper()
+				want := []bindings.ArchivedPRReport{{Pass: 1, File: "review-1.md", Findings: -1}}
+				if diff := cmp.Diff(want, got.PRReports); diff != "" {
+					t.Errorf("reports mismatch (-want +got):\n%s", diff)
+				}
+			},
+		},
+		{
 			name:      "a task archived before these were recorded",
 			artifacts: task.Artifacts{Plan: plan},
 			run:       task.PRRun{PR: task.PRDetails{Number: 7, State: task.PRStateMerged}},
@@ -980,6 +1006,17 @@ func TestFromDeletePreviewCarriesWhatWouldBeDestroyed(t *testing.T) {
 
 	if diff := cmp.Diff(want, bindings.FromDeletePreview(preview)); diff != "" {
 		t.Errorf("preview mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromDeletePreviewCarriesTheCommitsOfTheBranchOutsideItsBase(t *testing.T) {
+	t.Parallel()
+
+	preview := flow.DeletePreview{Branch: &flow.BranchPreview{Name: "login-screen", Ahead: 9}}
+	want := &bindings.BranchPreview{Name: "login-screen", Ahead: 9}
+
+	if diff := cmp.Diff(want, bindings.FromDeletePreview(preview).Branch); diff != "" {
+		t.Errorf("branch mismatch (-want +got):\n%s", diff)
 	}
 }
 
