@@ -76,13 +76,21 @@ export function TaskMenu({ task }: TaskMenuProps) {
         void reviewAgain(task.id);
         break;
       default:
-        handsFocus.current = action.kind === "deleteTask";
+        handsFocus.current =
+          action.kind === "deleteTask" || action.kind === "discardStep" || action.kind === "stage";
         setOpened(action);
     }
   };
   const close = (open: boolean) => {
     if (!open) {
       setOpened(null);
+    }
+  };
+  // A dialog the item handed the focus to gives it back to the ⋯ when it closes.
+  const closeDialog = (open: boolean) => {
+    close(open);
+    if (!open) {
+      moreRef.current?.focus();
     }
   };
 
@@ -115,7 +123,7 @@ export function TaskMenu({ task }: TaskMenuProps) {
       </Menu>
 
       {opened?.kind === "discardStep" && step !== null && (
-        <DiscardStepDialog task={task} step={step} open onOpenChange={close} />
+        <DiscardStepDialog task={task} step={step} open onOpenChange={closeDialog} />
       )}
       {opened?.kind === "stage" && (
         <StageActionDialog
@@ -123,18 +131,13 @@ export function TaskMenu({ task }: TaskMenuProps) {
           action={opened.action}
           stage={opened.stage}
           open
-          onOpenChange={close}
+          onOpenChange={closeDialog}
         />
       )}
       <DeleteTaskDialog
         task={task}
         open={opened?.kind === "deleteTask"}
-        onOpenChange={(open) => {
-          close(open);
-          if (!open) {
-            moreRef.current?.focus();
-          }
-        }}
+        onOpenChange={closeDialog}
       />
       <ReviewModePopover
         task={task}

@@ -77,7 +77,7 @@ describe("TaskMenu", () => {
 
     const dialog = await screen.findByRole("alertdialog");
     expect(dialog).toHaveTextContent("Back to the Tech spec?");
-    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.click(screen.getByRole("button", { name: "Back to the Tech spec" }));
 
     expect(api.backToStage).toHaveBeenCalledWith("task-1", "tech_spec");
   });
@@ -91,7 +91,7 @@ describe("TaskMenu", () => {
     expect(await screen.findByRole("alertdialog")).toHaveTextContent(
       "Discard the Tech spec and start over?",
     );
-    await user.click(screen.getByRole("button", { name: "Discard" }));
+    await user.click(screen.getByRole("button", { name: "Discard the Tech spec" }));
 
     expect(api.discardStage).toHaveBeenCalledWith("task-1", "tech_spec");
   });

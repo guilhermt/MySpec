@@ -1,18 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { Button } from "@/components/system/Button";
+import { Checkbox } from "@/components/system/Checkbox";
+import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
+import { Shimmer } from "@/components/system/Shimmer";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import type { Step, TaskSummary } from "@/lib/wails";
-import { discardStep } from "@/store/actions";
+  discardStepTexts,
+  interruptedSentence,
+  interruptedSessions,
+} from "@/features/task/deletion";
+import { usePreviewReading } from "@/features/task/usePreviewReading";
+import { asTaskMode, type Step, type TaskSummary } from "@/lib/wails";
+import { discardStepInPlace, focusRequestAfterRestart } from "@/store/actions";
 
 export interface DiscardStepDialogProps {
   task: TaskSummary;
@@ -22,59 +20,103 @@ export interface DiscardStepDialogProps {
 }
 
 /**
- * DiscardStepDialog is the last stop before a step is run again from scratch.
- * Cleaning the worktree is the usual choice, so it comes checked.
+ * DiscardStepDialog is the last stop before a step is run again from scratch. Cleaning the worktree
+ * is the usual choice, so it comes checked, with the uncommitted files counted from git when the
+ * dialog opens. A refusal stays in its footer.
  */
 export function DiscardStepDialog({ task, step, open, onOpenChange }: DiscardStepDialogProps) {
   const [clean, setClean] = useState(true);
-  // The review goes with the step: the conversation of the reviewer and its reports.
-  const reviewed = step.reviewer !== null || (step.reports ?? []).length > 0;
+  const [discarding, setDiscarding] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const reading = usePreviewReading(task.id, open, task.worktreePath !== "");
+  const describedBy = useId();
+  const texts = discardStepTexts(task, step, reading, clean);
+  const subject =
+    asTaskMode(task.mode) === "one_shot" ? "the implementation" : `step ${step.number}`;
 
   // Every opening starts from the default, whatever the last one settled on.
   useEffect(() => {
     if (open) {
       setClean(true);
+      setRefusal(null);
     }
   }, [open]);
 
+  const discard = async () => {
+    if (discarding) {
+      return;
+    }
+    setDiscarding(true);
+    setRefusal(null);
+    const message = await discardStepInPlace(task.id, clean);
+    setDiscarding(false);
+    if (message === null) {
+      onOpenChange(false);
+      focusRequestAfterRestart();
+    } else {
+      setRefusal(`Couldn't discard ${subject}: ${message}`);
+    }
+  };
+
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{`Discard step ${step.number} and start over?`}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {reviewed
-              ? "This ends the sessions and deletes the conversations of the step and of its reviewer, with the reports of the agent review. The step starts again from scratch right away."
-              : "This ends the session and deletes the conversation of the step. The step starts again from scratch right away."}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="clean-worktree"
-              checked={clean}
-              onCheckedChange={(checked) => setClean(checked)}
-            />
-            <Label htmlFor="clean-worktree">Also clean the worktree</Label>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Discards every uncommitted change in the worktree. Without this, the step starts blocked
-            until the worktree is clean.
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        // While the call runs, the dialog stays: a refusal that comes back has its footer.
+        if (!next && discarding) {
+          return;
+        }
+        onOpenChange(next);
+      }}
+      closeDisabled={discarding}
+      title={texts.title}
+      alert
+    >
+      <DialogBody>
+        <p>{texts.body}</p>
+        <div className="flex flex-col gap-(--space-1) rounded-md border border-line-2 px-(--space-3) py-(--space-2-5)">
+          <Checkbox
+            checked={clean}
+            onCheckedChange={setClean}
+            disabled={discarding}
+            describedBy={describedBy}
+            className="px-0 font-medium"
+          >
+            Also clean the worktree
+          </Checkbox>
+          <p
+            id={describedBy}
+            className="pl-(--icon) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
+          >
+            {reading.kind === "reading" ? (
+              <Shimmer>{texts.checkboxDescription}</Shimmer>
+            ) : (
+              texts.checkboxDescription
+            )}
           </p>
         </div>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            variant="destructive"
-            onClick={() => {
-              onOpenChange(false);
-              void discardStep(task.id, clean);
-            }}
-          >
-            Discard
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+        {texts.readError !== null && (
+          <p className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
+            {texts.readError}
+          </p>
+        )}
+        {interruptedSessions(task).map((role) => (
+          <p key={role} className="text-ink-3">
+            {interruptedSentence(role)}
+          </p>
+        ))}
+      </DialogBody>
+      <DialogFooter {...(refusal === null ? {} : { refusal })}>
+        <DialogCancel disabled={discarding} />
+        <Button
+          variant="danger"
+          loading={discarding}
+          loadingLabel="Discarding…"
+          onClick={() => void discard()}
+        >
+          {texts.confirm}
+        </Button>
+      </DialogFooter>
+    </Dialog>
   );
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deletionLines,
+  discardStepTexts,
   interruptedSentence,
   interruptedSessions,
   type PreviewReading,
@@ -169,5 +170,105 @@ describe("deletionLines", () => {
         detail: "git is busy. Deleting still removes them.",
       },
     ]);
+  });
+});
+
+describe("discardStepTexts", () => {
+  const report = { pass: 1, file: "1-review-1.md", clean: false, findings: 1 };
+  const reviewer = { sessionStage: "step_review:3" } as never;
+  const task = makeTask({ stage: "implementation", currentStep: 3 });
+  const oneShot = makeTask({ mode: "one_shot", stage: "implementation", currentStep: 1 });
+  const texts = (
+    step = makeStep({ number: 3 }),
+    reading: PreviewReading = ready(),
+    clean = true,
+    of = task,
+  ) => discardStepTexts(of, step, reading, clean);
+
+  it.each([
+    [
+      "a reviewer and reports",
+      { reviewer, reports: [report, report] },
+      "This ends the sessions and deletes the conversations of step 3 and of its reviewer, with the 2 reports of the agent review. The step starts again from scratch right away.",
+    ],
+    [
+      "a reviewer and one report",
+      { reviewer, reports: [report] },
+      "This ends the sessions and deletes the conversations of step 3 and of its reviewer, with the report of the agent review. The step starts again from scratch right away.",
+    ],
+    [
+      "a reviewer and no report",
+      { reviewer, reports: [] },
+      "This ends the sessions and deletes the conversations of step 3 and of its reviewer. The step starts again from scratch right away.",
+    ],
+    [
+      "reports of a reviewer that is gone",
+      { reviewer: null, reports: [report] },
+      "This ends the sessions and deletes the conversations of step 3 and of its reviewer, with the report of the agent review. The step starts again from scratch right away.",
+    ],
+    [
+      "only the implementer",
+      { reviewer: null, reports: [] },
+      "This ends the session and deletes the conversation of step 3. The step starts again from scratch right away.",
+    ],
+  ])("tells the body of a step with %s", (_name, overrides, body) => {
+    const result = texts(makeStep({ number: 3, ...overrides }));
+
+    expect(result.title).toBe("Discard step 3 and start over?");
+    expect(result.confirm).toBe("Discard step");
+    expect(result.body).toBe(body);
+  });
+
+  it("says the implementation of a One-Shot task", () => {
+    const result = texts(makeStep({ number: 1, reviewer }), ready(), true, oneShot);
+
+    expect(result.title).toBe("Discard the implementation and start over?");
+    expect(result.confirm).toBe("Discard the implementation");
+    expect(result.body).toBe(
+      "This ends the sessions and deletes the conversations of the implementation and of its reviewer. The implementation starts again from scratch right away.",
+    );
+  });
+
+  it.each([
+    ["3 files, checked", 3, true, "Discards the 3 uncommitted files in the worktree."],
+    [
+      "3 files, unchecked",
+      3,
+      false,
+      "The 3 uncommitted files stay, and the step starts blocked until the worktree is clean.",
+    ],
+    ["1 file, checked", 1, true, "Discards the uncommitted file in the worktree."],
+    [
+      "1 file, unchecked",
+      1,
+      false,
+      "The uncommitted file stays, and the step starts blocked until the worktree is clean.",
+    ],
+    ["clean, checked", 0, true, "The worktree has no uncommitted changes."],
+    ["clean, unchecked", 0, false, "The worktree has no uncommitted changes."],
+  ])("describes the box with %s", (_name, files, clean, expected) => {
+    const reading = ready({ worktree: { ...WORKTREE, dirty: files > 0, files } });
+
+    expect(texts(undefined, reading, clean).checkboxDescription).toBe(expected);
+  });
+
+  it.each([
+    [{ kind: "reading" } as PreviewReading],
+    [{ kind: "failed", error: "git is busy" } as PreviewReading],
+  ])("describes the box without a count %#", (reading) => {
+    expect(texts(undefined, reading, true).checkboxDescription).toBe(
+      "Discards every uncommitted change in the worktree.",
+    );
+    expect(texts(undefined, reading, false).checkboxDescription).toBe(
+      "Uncommitted changes stay, and the step starts blocked until the worktree is clean.",
+    );
+  });
+
+  it("carries the error of the count only when it failed", () => {
+    expect(texts(undefined, { kind: "failed", error: "git is busy" }).readError).toBe(
+      "Couldn't count the uncommitted files: git is busy",
+    );
+    expect(texts(undefined, { kind: "reading" }).readError).toBeNull();
+    expect(texts(undefined, ready()).readError).toBeNull();
   });
 });

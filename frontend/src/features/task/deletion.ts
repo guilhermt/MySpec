@@ -3,7 +3,7 @@ import { ICONS } from "@/components/system/icons";
 import { taskSessions } from "@/features/sidebar/sessions";
 import { displayPath, displayPaths } from "@/lib/paths";
 import { counted, lowerFirst } from "@/lib/situations";
-import type { DeletePreview, TaskSummary } from "@/lib/wails";
+import { asTaskMode, type DeletePreview, type Step, type TaskSummary } from "@/lib/wails";
 
 /** PreviewReading is the reading of what a deletion destroys: under way, done or failed. */
 export type PreviewReading =
@@ -127,5 +127,65 @@ export function deletionLines(
       ...branchLine(reading.preview),
       ...pullRequestLine(reading.preview),
     ],
+  };
+}
+
+/** DiscardStepTexts are the words of the Discard step dialog, from what the step has and what the worktree holds. */
+export interface DiscardStepTexts {
+  title: string;
+  body: string;
+  confirm: string;
+  /** checkboxDescription says what the Also clean the worktree box does, checked or not. */
+  checkboxDescription: string;
+  /** readError is why the uncommitted files could not be counted, null when they could or are being read. */
+  readError: string | null;
+}
+
+function checkboxDescription(reading: PreviewReading, clean: boolean): string {
+  if (reading.kind === "ready") {
+    const worktree = reading.preview.worktree;
+    const files = worktree?.dirty ? worktree.files : 0;
+    if (files === 0) {
+      return "The worktree has no uncommitted changes.";
+    }
+    const which = files === 1 ? "uncommitted file" : `${files} uncommitted files`;
+    return clean
+      ? `Discards the ${which} in the worktree.`
+      : `The ${which} ${files === 1 ? "stays" : "stay"}, and the step starts blocked until the worktree is clean.`;
+  }
+  return clean
+    ? "Discards every uncommitted change in the worktree."
+    : "Uncommitted changes stay, and the step starts blocked until the worktree is clean.";
+}
+
+/** discardStepTexts are the title, the body, the confirmation and the worktree line of the Discard step dialog. */
+export function discardStepTexts(
+  task: TaskSummary,
+  step: Step,
+  reading: PreviewReading,
+  clean: boolean,
+): DiscardStepTexts {
+  const oneShot = asTaskMode(task.mode) === "one_shot";
+  const subject = oneShot ? "the implementation" : `step ${step.number}`;
+  const reports = (step.reports ?? []).length;
+  const reviewed = step.reviewer !== null || reports > 0;
+  const restart = `${oneShot ? "The implementation" : "The step"} starts again from scratch right away.`;
+  let body = `This ends the session and deletes the conversation of ${subject}. ${restart}`;
+  if (reviewed) {
+    const agentReview =
+      reports === 0
+        ? ""
+        : `, with the ${reports === 1 ? "report" : `${reports} reports`} of the agent review`;
+    body = `This ends the sessions and deletes the conversations of ${subject} and of its reviewer${agentReview}. ${restart}`;
+  }
+  return {
+    title: `Discard ${subject} and start over?`,
+    body,
+    confirm: oneShot ? "Discard the implementation" : "Discard step",
+    checkboxDescription: checkboxDescription(reading, clean),
+    readError:
+      reading.kind === "failed"
+        ? `Couldn't count the uncommitted files: ${displayPaths(reading.error)}`
+        : null,
   };
 }

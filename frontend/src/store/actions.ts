@@ -4,7 +4,6 @@ import { messageOf, noticeDetail, type Remedy } from "@/lib/errors";
 import { olderKey } from "@/lib/history";
 import { locationTitle } from "@/lib/locations";
 import type { ModelChoice } from "@/lib/models";
-import { stageName } from "@/lib/situations";
 import type {
   ActionOutput,
   ArchivedDiscussion,
@@ -543,18 +542,22 @@ export async function answerQuestionInPlace(
   return "";
 }
 
-/** backToStage reopens a stage that is already done. */
-export async function backToStage(taskId: string, stage: TaskStage): Promise<void> {
-  await run(fail(`Couldn't go back to the ${stageName(stage)} of ${theItem(taskId)}`, TRY), () =>
-    api.backToStage(taskId, stage),
-  );
+/**
+ * focusRequestAfterRestart asks the screen of the task for the focus once a dialog that started a
+ * conversation over is closed: what the situation asks first, the composer of the new session.
+ */
+export function focusRequestAfterRestart(): void {
+  useAppStore.setState({ pendingFocus: "request" });
 }
 
-/** discardStage throws a stage away and starts it over. */
-export async function discardStage(taskId: string, stage: TaskStage): Promise<void> {
-  await run(fail(`Couldn't discard the ${stageName(stage)} of ${theItem(taskId)}`, TRY), () =>
-    api.discardStage(taskId, stage),
-  );
+/** backToStageInPlace reopens a stage that is already done; it answers the refusal, or null. */
+export function backToStageInPlace(taskId: string, stage: TaskStage): Promise<string | null> {
+  return inPlace(() => api.backToStage(taskId, stage));
+}
+
+/** discardStageInPlace throws a stage away and starts it over; it answers the refusal, or null. */
+export function discardStageInPlace(taskId: string, stage: TaskStage): Promise<string | null> {
+  return inPlace(() => api.discardStage(taskId, stage));
 }
 
 /** continueStage moves a task revisiting a stage on to the next one. */
@@ -579,11 +582,12 @@ export function cleanAndStartStep(taskId: string): Promise<string | null> {
   return inPlace(() => api.cleanAndStartStep(taskId));
 }
 
-/** discardStep deletes the conversation of the step and runs it again from scratch. */
-export async function discardStep(taskId: string, cleanWorktree: boolean): Promise<void> {
-  await run(fail(`Couldn't discard the step of ${theItem(taskId)}`, cloneRemedy(taskId, TRY)), () =>
-    api.discardStep(taskId, cleanWorktree),
-  );
+/**
+ * discardStepInPlace deletes the conversation of the step and runs it again from scratch; it
+ * answers the refusal, or null.
+ */
+export function discardStepInPlace(taskId: string, cleanWorktree: boolean): Promise<string | null> {
+  return inPlace(() => api.discardStep(taskId, cleanWorktree));
 }
 
 /** approveStep sends the reviewed step to be committed by the agent that wrote it. */

@@ -14,7 +14,7 @@ import {
   approveStep,
   archiveDiscussionInPlace,
   askReviewAgain,
-  backToStage,
+  backToStageInPlace,
   browseRepository,
   cardContext,
   changeClonePath,
@@ -33,8 +33,8 @@ import {
   deleteReviewInPlace,
   deleteTaskInPlace,
   discardDraft,
-  discardStage,
-  discardStep,
+  discardStageInPlace,
+  discardStepInPlace,
   discussionContext,
   findArchived,
   followTaskReviewMode,
@@ -219,15 +219,23 @@ describe("the app notice of a failed action", () => {
     expect(useAppStore.getState().error?.label).toBe("Couldn't show every repository");
   });
 
-  it("names the stage a task goes back to", async () => {
+  it("answers the refusal of going back to a stage, without the app notice", async () => {
     withState();
     vi.mocked(api.backToStage).mockRejectedValueOnce(new Error("busy"));
 
-    await backToStage("task-1", "tech_spec");
+    expect(await backToStageInPlace("task-1", "tech_spec")).toBe("busy");
+    expect(useAppStore.getState().error).toBeNull();
+    expect(await backToStageInPlace("task-1", "tech_spec")).toBeNull();
+  });
 
-    expect(useAppStore.getState().error?.label).toBe(
-      "Couldn't go back to the tech spec of add-login",
-    );
+  it("answers the refusal of discarding a stage and of a step", async () => {
+    withState();
+    vi.mocked(api.discardStage).mockRejectedValueOnce(new Error("disk full"));
+    vi.mocked(api.discardStep).mockRejectedValueOnce(new Error("the clone is missing"));
+
+    expect(await discardStageInPlace("task-1", "prd")).toBe("disk full");
+    expect(await discardStepInPlace("task-1", true)).toBe("the clone is missing");
+    expect(useAppStore.getState().error).toBeNull();
   });
 
   it("says to change the path of a missing clone", async () => {
@@ -627,12 +635,12 @@ describe("task actions", () => {
     await resume("task-1", "prd");
     await retry("task-1", "prd");
     await openExternal("https://anthropic.com");
-    await backToStage("task-1", "prd");
-    await discardStage("task-1", "tech_spec");
+    await backToStageInPlace("task-1", "prd");
+    await discardStageInPlace("task-1", "tech_spec");
     await continueStage("task-1");
     await retryStep("task-1");
     await cleanAndStartStep("task-1");
-    await discardStep("task-1", true);
+    await discardStepInPlace("task-1", true);
     await openInEditor("task-1");
     await approveStep("task-1");
     await setReviewMode("task-1", "agent");
