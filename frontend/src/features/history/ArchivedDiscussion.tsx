@@ -151,7 +151,7 @@ export function ArchivedDiscussion({ discussionId }: ArchivedDiscussionProps) {
 
   if (discussion === null || input === null) {
     return (
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-1">
         <LocationHeader />
         <ArchivedBody>
           <Skeleton label="Reading the discussion">
@@ -207,7 +207,7 @@ export function ArchivedDiscussion({ discussionId }: ArchivedDiscussionProps) {
   };
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-1">
       <LocationHeader
         lead={<Icon icon={ICONS.discussion} className="text-ink-3" />}
         progress={

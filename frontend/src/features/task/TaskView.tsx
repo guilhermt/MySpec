@@ -141,7 +141,7 @@ export function TaskView({ taskId }: TaskViewProps) {
   // A new task is on screen before the snapshot that brings it: the header shows it loading.
   if (task === null) {
     return (
-      <section ref={rescue} className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+      <section ref={rescue} className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-1">
         <TaskHeader task={null} />
       </section>
     );
@@ -170,7 +170,7 @@ export function TaskView({ taskId }: TaskViewProps) {
       ref={rescue}
       aria-label={task.name}
       onKeyDown={onKeyDown}
-      className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
+      className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-1"
     >
       <TaskHeader task={task} />
       <TaskArrival task={task} tab={stepTab} ready={!hasConversation || conversationSettled} />

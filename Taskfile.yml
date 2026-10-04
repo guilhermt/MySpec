@@ -79,6 +79,14 @@ tasks:
   lint:web:
     cmds:
       - biome ci .
+      - task: lint:design
+
+  lint:design:
+    internal: true
+    summary: Runs the design rules (design-rules.test.ts) on every check, whatever changed
+    dir: frontend
+    cmds:
+      - pnpm exec vitest run --project unit src/styles/design-rules.test.ts
 
   typecheck:
     dir: frontend

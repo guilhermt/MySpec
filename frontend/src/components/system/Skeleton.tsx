@@ -23,7 +23,7 @@ export function Skeleton({ label, children, className }: SkeletonProps) {
 
 /**
  * SHIMMER_ANIMATION is the animation of shimmer-fill written as an animate- class, so cn replaces the
- * animate-pulse of the primitive with it; without motion it stops, as shimmer-fill does.
+ * pulse of the primitive with it; without motion it stops, as shimmer-fill does.
  */
 const SHIMMER_ANIMATION =
   "animate-[shimmer_var(--duration-shimmer)_linear_infinite] motion-reduce:animate-none";

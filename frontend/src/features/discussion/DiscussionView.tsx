@@ -94,7 +94,7 @@ export function DiscussionView({ discussionId }: DiscussionViewProps) {
   }, [discussionId]);
 
   if (discussion === null) {
-    return <section ref={rescue} className="min-h-0 flex-1 bg-background" />;
+    return <section ref={rescue} className="min-h-0 flex-1 bg-surface-1" />;
   }
 
   // Alt+↓ and Alt+↑ go to the next and the previous draft to decide from anywhere on the screen,
@@ -122,7 +122,7 @@ export function DiscussionView({ discussionId }: DiscussionViewProps) {
       ref={rescue}
       aria-label={discussion.title}
       onKeyDown={onKeyDown}
-      className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
+      className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-1"
     >
       <DiscussionHeader discussion={discussion} />
       <DiscussionArrival discussion={discussion} ready={transcriptSettled} />

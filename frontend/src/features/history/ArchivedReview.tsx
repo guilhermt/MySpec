@@ -95,7 +95,7 @@ export function ArchivedReview({ reviewId }: ArchivedReviewProps) {
 
   if (review === null) {
     return (
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-1">
         <LocationHeader />
         <ArchivedBody>
           <Skeleton label="Reading the review">
@@ -126,7 +126,7 @@ export function ArchivedReview({ reviewId }: ArchivedReviewProps) {
   };
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-1">
       <LocationHeader
         lead={<Icon icon={ICONS.review} className="text-ink-3" />}
         progress={

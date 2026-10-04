@@ -193,7 +193,7 @@ export function ArchivedTask({ taskId }: ArchivedTaskProps) {
 
   if (task === null) {
     return (
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-1">
         <LocationHeader />
         <ArchivedBody>
           <Skeleton label="Reading the task">
@@ -227,7 +227,7 @@ export function ArchivedTask({ taskId }: ArchivedTaskProps) {
   };
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-1">
       <LocationHeader
         lead={<Icon icon={oneShot ? ICONS.oneShot : ICONS.task} className="text-ink-3" />}
         progress={

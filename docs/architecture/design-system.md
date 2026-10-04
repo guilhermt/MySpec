@@ -37,7 +37,9 @@ Os primitivos de `components/ui/` leem as variáveis do shadcn (`--background`, 
 
 O `--border` do shadcn não é declarado: `--border` é a espessura de `1px` do system, e a cor das bordas é o utilitário `--color-border`, que aponta para `--line-2`.
 
-As cores de status de sessão (`--status-working`, `--status-attention`, `--status-success`, `--status-paused`) são aliases de `--state-work`, `--state-wait`, `--state-close` e `--state-paused`, para as telas que ainda as leem. A espera tem dois: `--status-attention` é o texto, em `--state-wait`, e `--status-attention-fill` é o preenchimento (o ponto de status, o véu de uma linha pendente, o trilho dos cartões de pergunta e de permissão, a piscada), em `--state-wait-glyph`, a regra Cor da espera de `components.md`.
+Não há aliases de cor de status de sessão: as telas leem os tokens de estado (`--state-work`, `--state-wait`, `--state-wait-glyph`, `--state-close`, `--state-paused`) direto, e a espera tem dois, o texto em `--state-wait` e o preenchimento em `--state-wait-glyph`, a regra Cor da espera de `components.md`.
+
+A ponte é o único lugar dos nomes do shadcn (`@theme inline` e o bloco `[data-theme]`); a camada base de `globals.css` usa os tokens (`var(--line-2)`, `var(--surface-1)`, `var(--ink-1)`) e a tabela do Markdown, o tamanho `--text-ui`. `styles/design-rules.test.ts` recusa um nome da ponte, um tamanho de texto do Tailwind e uma classe de movimento do Tailwind em todo arquivo fora de `components/ui/`.
 
 ## Utilitários
 

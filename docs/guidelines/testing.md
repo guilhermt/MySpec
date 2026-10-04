@@ -62,6 +62,10 @@ Os pacotes que rodam binários testam contra o binário real ou contra um fake q
 - A lógica de apresentação em `.ts` é testada como função pura, sem renderizar. Os componentes são testados pelo que o usuário vê e faz: `getByRole`, `getByText`, `user.click`, `user.type`. Consultar classes só para o que não tem outra forma de ser observado, como o tom de um ponto de status ou a centralização alinhada ao pixel, que o jsdom não calcula.
 - Um comportamento por `it`. Sem snapshots.
 
+### Regras do design
+
+`styles/design-rules.test.ts` lê como texto todo `.ts`, `.tsx` e `.css` de `src/`, fora de `components/ui/`, `test/` e dos testes, e falha com uma cor literal ou da paleta do Tailwind, uma classe de cor do shadcn fora da ponte, um alias `--status-*`, um tamanho de texto do Tailwind e uma classe de movimento do Tailwind. Roda em todo `task check`, pelo `lint:web`. Uma regra nova entra com um caso em `each rule bites` que a viola e o equivalente do system que ela deixa passar.
+
 ### Estilo computado
 
 O jsdom roda sem CSS, então um teste nele não vê a cascata: uma classe presente na lista pode perder para uma do primitivo de `components/ui/` ou para uma variante `dark:`. O que um componente pinta é provado por uma segunda suíte, os arquivos `*.painted.test.tsx`, que o Vitest roda no modo navegador, no Chromium do Playwright, com o CSS real (`styles/fonts.css` e `styles/globals.css`). O projeto `painted` de `vitest.config.ts` a define, e `src/test/painted-setup.ts` carrega o CSS, zera as transições (o teste lê o estado em que o controle assenta) e limpa o tema entre os testes. Os tipos dela são checados à parte, por `tsconfig.painted.json`, porque os matchers do modo navegador estreitariam os do jest-dom da suíte do jsdom.

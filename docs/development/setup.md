@@ -57,7 +57,7 @@ O hook, definido em `lefthook.yml`, é de pre-commit e só formata: Biome nos ar
 | `task bindings:check` | Falha quando `frontend/bindings` está desatualizado |
 | `task captures` | Roda a suíte de estilo computado com `MYSPEC_CAPTURES=1`, que grava em `frontend/captures/` as capturas da pull request, depois de apagar as anteriores |
 | `task captures:push` | Publica `frontend/captures/*.png` na branch órfã `captures/<branch atual>` do `origin`, reescrita a cada vez, e imprime o Markdown das imagens para o corpo da pull request |
-| `task check` | A verificação de todo dia, em segundos: tidy, lint, typecheck, `test`, vuln e bindings, com `nice` |
+| `task check` | A verificação de todo dia: tidy, lint, typecheck, `test`, vuln e bindings, com `nice`; uns 8 s numa branch sem mudança, das quais 1 s são as regras do design. O `test:web` só roda o que a mudança alcança: uma mudança em `styles/globals.css`, que todo teste alcança, o leva à suíte inteira, uns 90 s |
 | `task check:full` | A verificação completa, com `test:full` no lugar de `test`; só quando pedido |
 | `task install` | Instala o app para o usuário atual |
 | `task uninstall` | Remove o que `install` colocou; nunca toca os dados do app |

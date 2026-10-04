@@ -158,14 +158,6 @@
   --sidebar-accent-foreground: var(--ink-1);
   --sidebar-border: var(--sidebar-line);
   --sidebar-ring: var(--focus);
-
-  /* Session status, for the screens that still read it; each is a state of the system. The wait is
-     text in --state-wait and a fill in --state-wait-glyph (components.md, Cor da espera). */
-  --status-working: var(--state-work);
-  --status-attention: var(--state-wait);
-  --status-attention-fill: var(--state-wait-glyph);
-  --status-success: var(--state-close);
-  --status-paused: var(--state-paused);
 }
 
 /* Focus sits outside, with a gap (principles.md 9). */
@@ -262,7 +254,8 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    border-color: var(--line-2);
+    outline-color: color-mix(in srgb, var(--focus) 50%, transparent);
   }
   /* Every weight and the italic in use are loaded, so nothing is synthesised. */
   html {
@@ -271,7 +264,8 @@
   }
   /* The interface register on the browser's 16px root: sizes are rem. */
   body {
-    @apply bg-background text-foreground;
+    background: var(--surface-1);
+    color: var(--ink-1);
     font-size: var(--text-ui);
     line-height: var(--leading-ui);
     overscroll-behavior: none;
@@ -291,7 +285,8 @@
       @apply font-semibold tracking-tight;
     }
     & table {
-      @apply text-sm;
+      font-size: var(--text-ui);
+      line-height: var(--leading-ui);
     }
     & img {
       @apply max-w-full;
