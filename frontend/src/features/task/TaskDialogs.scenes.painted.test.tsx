@@ -381,3 +381,27 @@ describe.each(THEMES)("The dialogs of the task, the scenes in the %s theme", (th
     });
   });
 });
+
+describe("Discard step, its box", () => {
+  it.each(WIDTHS)(
+    "changes the words and never the height of the dialog at the main area of %ipx",
+    async (width) => {
+      setTheme("light");
+      const { user } = await draw({ ...DISCARD, variant: "" }, width);
+      const open = dialog() as HTMLElement;
+      const footer = () =>
+        open.querySelector("[data-dialog-footer]")?.getBoundingClientRect().top ?? Number.NaN;
+      const checked = footer();
+      const box = within(open).getByRole("checkbox", { name: /^Also clean/ });
+      expect(box).toHaveAccessibleDescription("Discards the 3 uncommitted files in the worktree.");
+
+      await user.click(box);
+      await settle();
+
+      expect(box).toHaveAccessibleDescription(
+        "The 3 uncommitted files stay, and the step starts blocked until the worktree is clean.",
+      );
+      expect(footer()).toBe(checked);
+    },
+  );
+});

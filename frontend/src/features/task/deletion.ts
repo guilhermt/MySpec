@@ -144,7 +144,8 @@ export interface DiscardStepTexts {
   readError: string | null;
 }
 
-function checkboxDescription(reading: PreviewReading, clean: boolean): string {
+/** checkboxDescription says what the Also clean the worktree box does, checked or not, from what the worktree holds. */
+export function checkboxDescription(reading: PreviewReading, clean: boolean): string {
   if (reading.kind === "ready") {
     const worktree = reading.preview.worktree;
     const files = worktree?.dirty ? worktree.files : 0;

@@ -4,6 +4,7 @@ import { Checkbox } from "@/components/system/Checkbox";
 import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
 import { Shimmer } from "@/components/system/Shimmer";
 import {
+  checkboxDescription,
   discardStepTexts,
   interruptedSentence,
   interruptedSessions,
@@ -31,6 +32,8 @@ export function DiscardStepDialog({ task, step, open, onOpenChange }: DiscardSte
   const reading = usePreviewReading(task.id, open, task.worktreePath !== "");
   const describedBy = useId();
   const texts = discardStepTexts(task, step, reading, clean);
+  // other is what the box would say the other way, which keeps its room.
+  const other = checkboxDescription(reading, !clean);
   const subject =
     asTaskMode(task.mode) === "one_shot" ? "the implementation" : `step ${step.number}`;
 
@@ -84,16 +87,22 @@ export function DiscardStepDialog({ task, step, open, onOpenChange }: DiscardSte
           >
             Also clean the worktree
           </Checkbox>
-          <p
-            id={describedBy}
-            className="pl-(--icon) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
-          >
-            {reading.kind === "reading" ? (
-              <Shimmer>{texts.checkboxDescription}</Shimmer>
-            ) : (
-              texts.checkboxDescription
+          {/* Both descriptions take the same cell, the other one unseen: the box changes the words,
+              never the height of the dialog, and the footer stays where it is. */}
+          <div className="grid pl-(--icon) text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
+            <p id={describedBy} className="col-start-1 row-start-1">
+              {reading.kind === "reading" ? (
+                <Shimmer>{texts.checkboxDescription}</Shimmer>
+              ) : (
+                texts.checkboxDescription
+              )}
+            </p>
+            {other !== texts.checkboxDescription && (
+              <p aria-hidden="true" className="invisible col-start-1 row-start-1">
+                {other}
+              </p>
             )}
-          </p>
+          </div>
         </div>
         {texts.readError !== null && (
           <p className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">

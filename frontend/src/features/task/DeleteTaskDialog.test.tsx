@@ -128,6 +128,7 @@ describe("DeleteTaskDialog", () => {
 
     const busy = await screen.findByRole("button", { name: "Deleting…" });
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Close" })).toHaveAttribute("aria-disabled", "true");
     await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: "Close" }));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
