@@ -72,6 +72,23 @@ func publishingWhileWaiting(waiting discussionflow.Status, sum session.Summary) 
 	return in
 }
 
+// toDecide are that many drafts the user has yet to decide.
+func toDecide(count int) []discussionflow.DraftState {
+	return make([]discussionflow.DraftState, count)
+}
+
+// decided is a draft with a decision.
+func decided(id string, decision discussion.Decision) discussionflow.DraftState {
+	return discussionflow.DraftState{Draft: discussion.Draft{ID: id, Decision: decision}}
+}
+
+// failedDraft is an approved draft GitHub did not take.
+func failedDraft(title, publishError string) discussionflow.DraftState {
+	return discussionflow.DraftState{Draft: discussion.Draft{
+		Title: title, Decision: discussion.DecisionApproved, PublishError: publishError,
+	}}
+}
+
 // discussionSituation is the one situation of the discussion.
 func discussionSituation(kind attention.Kind, body string) []attention.Found {
 	return []attention.Found{{
@@ -144,13 +161,19 @@ func TestDeriveTheSituationOfADiscussion(t *testing.T) {
 		},
 		{
 			"there are drafts to decide",
-			draftsRead(discussionInput(discussionflow.StatusDeciding, waiting)),
-			discussionSituation(attention.KindDrafts, "There are drafts to decide in the discussion."),
+			withDrafts(draftsRead(discussionInput(discussionflow.StatusDeciding, waiting)), toDecide(5)...),
+			discussionSituation(attention.KindDrafts, "There are 5 drafts to decide in the discussion."),
+		},
+		{
+			"one draft is left to decide",
+			withDrafts(draftsRead(discussionInput(discussionflow.StatusDeciding, waiting)),
+				append(toDecide(1), decided("approved", discussion.DecisionApproved))...),
+			discussionSituation(attention.KindDrafts, "There is 1 draft to decide in the discussion."),
 		},
 		{
 			"a run under way leaves the drafts to decide standing",
-			publishingWhileWaiting(discussionflow.StatusDeciding, waiting),
-			discussionSituation(attention.KindDrafts, "There are drafts to decide in the discussion."),
+			withDrafts(publishingWhileWaiting(discussionflow.StatusDeciding, waiting), toDecide(2)...),
+			discussionSituation(attention.KindDrafts, "There are 2 drafts to decide in the discussion."),
 		},
 		{
 			"an epic with one approved card of three can't publish",
@@ -201,8 +224,19 @@ func TestDeriveTheSituationOfADiscussion(t *testing.T) {
 		},
 		{
 			"the publication failed",
-			draftsRead(discussionInput(discussionflow.StatusPublishFailed, waiting)),
-			discussionSituation(attention.KindPublishFailed, "The drafts couldn't be published."),
+			withDrafts(draftsRead(discussionInput(discussionflow.StatusPublishFailed, waiting)),
+				failedDraft("Overage on the monthly invoice", "GitHub's rate limit was reached. It resets at 15:04.")),
+			discussionSituation(attention.KindPublishFailed,
+				"Couldn't publish “Overage on the monthly invoice”: GitHub's rate limit was reached."),
+		},
+		{
+			"two publications failed",
+			withDrafts(draftsRead(discussionInput(discussionflow.StatusPublishFailed, waiting)),
+				failedDraft("Overage", "gh can't write to this repository. Run gh auth refresh -s repo."),
+				decided("published", discussion.DecisionApproved),
+				failedDraft("Tiers", "GitHub's rate limit was reached.")),
+			discussionSituation(attention.KindPublishFailed,
+				"Couldn't publish 2 drafts: gh can't write to this repository."),
 		},
 	}
 

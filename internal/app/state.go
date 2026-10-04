@@ -9,6 +9,7 @@ import (
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
@@ -97,6 +98,16 @@ func (a *App) snapshot() bindings.State {
 	}
 }
 
+// reviewTitle is the title of the notification of a review: the pull request
+// as GitHub names it, and its title when the review has one.
+func reviewTitle(fullName string, stored prreview.Review) string {
+	title := stored.Reference(fullName)
+	if stored.Title != "" {
+		title += " · " + stored.Title
+	}
+	return title
+}
+
 // reviewStates is what the app knows about every active review, with the
 // situations each one waits on the user for.
 func (a *App) reviewStates() ([]reviewflow.State, []attention.Found) {
@@ -114,7 +125,7 @@ func (a *App) reviewStates() ([]reviewflow.State, []attention.Found) {
 			fullName = repo.FullName()
 		}
 		found = append(found, attention.DeriveReview(attention.ReviewInput{
-			State: state, Title: stored.Reference(fullName),
+			State: state, Title: reviewTitle(fullName, stored),
 		})...)
 	}
 	return states, found

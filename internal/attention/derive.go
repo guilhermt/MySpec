@@ -80,7 +80,7 @@ func stageSituation(in Input) (Found, bool) {
 		if kind == "" {
 			return Found{}, false
 		}
-		return newFound(t, place, kind, sessionBody(kind, placeName(place))), true
+		return newFound(t, place, kind, sessionBody(kind, placeName(place, false))), true
 	}
 	if !sum.Idle {
 		// The agent is working, or a message waits in the queue for it.
@@ -91,7 +91,7 @@ func stageSituation(in Input) (Found, bool) {
 			// The app sends the agent the next correction on its own.
 			return Found{}, false
 		}
-		return newFound(t, place, KindPlanInvalid, planInvalidBody()), true
+		return newFound(t, place, KindPlanInvalid, planInvalidBody(sum.Corrections)), true
 	}
 	if a.Done(t.Stage) {
 		if !t.Revisiting {
@@ -100,7 +100,7 @@ func stageSituation(in Input) (Found, bool) {
 		}
 		return newFound(t, place, KindReadyToContinue, readyToContinueBody(t.Stage)), true
 	}
-	return newFound(t, place, KindReply, sessionBody(KindReply, placeName(place))), true
+	return newFound(t, place, KindReply, sessionBody(KindReply, placeName(place, false))), true
 }
 
 // stepSituations are the situations of a task in implementation, the ones of
@@ -140,7 +140,7 @@ func stepSituation(t task.Task, step flow.StepState, sessions map[session.Key]se
 			if kind == "" {
 				return Found{}, false
 			}
-			return newFound(t, place, kind, sessionBody(kind, placeName(place))), true
+			return newFound(t, place, kind, sessionBody(kind, placeName(place, false))), true
 		}
 	}
 
@@ -159,7 +159,11 @@ func stepSituation(t task.Task, step flow.StepState, sessions map[session.Key]se
 	default:
 		return Found{}, false
 	}
-	found := newFound(t, place, KindStepReview, stepReviewBody(n, form, step.CommitFailed, step.Fallback))
+	files := -1
+	if step.Review != nil && step.Review.Err == "" {
+		files = step.Review.Total
+	}
+	found := newFound(t, place, KindStepReview, stepReviewBody(n, form, step.CommitFailed, step.Fallback, files))
 	found.Form = form
 	if form == FormStaged && step.Review != nil {
 		found.Percent = step.Review.Percent()
@@ -187,19 +191,10 @@ func reviewerSituation(t task.Task, step flow.StepState) (Found, bool) {
 	return Found{}, false
 }
 
-// discardedNumber is the number of the pull request when its review ended with
-// every finding of the current pass discarded, and 0 otherwise.
-func discardedNumber(pr flow.PullRequest) int {
-	if pr.Pass != nil && pr.Pass.AllDiscarded() {
-		return pr.PR.Number
-	}
-	return 0
-}
-
 // prSituation is the situation of the pull request of a task in the PR stage.
 func prSituation(t task.Task, pr flow.PullRequest) (Found, bool) {
 	place := Place{Kind: PlacePR}
-	name := placeName(place)
+	name := placeName(place, pr.SessionStage == session.PRReviewStage)
 	if pr.SessionStage != "" {
 		if kind, decided := sessionKind(pr.Session); decided {
 			if kind == "" {
@@ -217,7 +212,7 @@ func prSituation(t task.Task, pr flow.PullRequest) (Found, bool) {
 		}
 		return newFound(t, place, KindPRBlocked, prBlockedBody(reason)), true
 	case flow.PRClosedUnmerged:
-		return newFound(t, place, KindPRClosed, prClosedBody()), true
+		return newFound(t, place, KindPRClosed, prClosedBody(pr.PR.Number)), true
 	case flow.PRAwaitingReply:
 		return newFound(t, place, KindReply, sessionBody(KindReply, name)), true
 	case flow.PRDraftReady:
@@ -256,11 +251,11 @@ func prSituation(t task.Task, pr flow.PullRequest) (Found, bool) {
 			// The merge could not be confirmed, and the closing is offered.
 			form = FormClose
 		}
-		found := newFound(t, place, KindMerge, mergeBody(form, discardedNumber(pr)))
+		found := newFound(t, place, KindMerge, mergeBody(pr.PR.Number, form, false, pr.Pass != nil && pr.Pass.AllDiscarded()))
 		found.Form = form
 		return found, true
 	case flow.PRMerged:
-		found := newFound(t, place, KindMerge, mergeBody(FormClose, 0))
+		found := newFound(t, place, KindMerge, mergeBody(pr.PR.Number, FormClose, true, false))
 		found.Form = FormClose
 		return found, true
 	default:

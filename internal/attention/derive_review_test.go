@@ -7,6 +7,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewflow"
@@ -62,6 +63,29 @@ func TestDeriveTheSituationOfAReview(t *testing.T) {
 	noCommit := reviewInput(reviewflow.StatusReadyToApprove)
 	noCommit.State.CommitFailed = true
 
+	// deciding is a pass with three findings, one of them decided.
+	deciding := reviewInput(reviewflow.StatusAwaitingDecision, waiting)
+	deciding.State.Passes = []prreview.Pass{
+		{Number: 1, Findings: []prreview.Finding{{Finding: prreport.Finding{Decision: prreport.DecisionDiscarded}}}},
+		{Number: 2, Findings: []prreview.Finding{
+			{Finding: prreport.Finding{Decision: prreport.DecisionApproved}},
+			{},
+			{},
+		}},
+	}
+	oneToDecide := reviewInput(reviewflow.StatusAwaitingDecision, waiting)
+	oneToDecide.State.Passes = []prreview.Pass{{Number: 1, Findings: []prreview.Finding{{}}}}
+	publishFailed := reviewInput(reviewflow.StatusPublishFailed, waiting)
+	publishFailed.State.Review.PublishError = "GitHub's rate limit was reached. It resets at 15:04."
+	passBlocked := reviewInput(reviewflow.StatusPassBlocked, waiting)
+	passBlocked.State.PassBlocked = "gh is not authenticated. Run gh auth login."
+	newCommits := reviewInput(reviewflow.StatusNewCommits, waiting)
+	newCommits.State.NewCommits = 2
+	oneCommit := reviewInput(reviewflow.StatusNewCommits, waiting)
+	oneCommit.State.NewCommits = 1
+	farCommits := reviewInput(reviewflow.StatusNewCommits, waiting)
+	farCommits.State.NewCommits = -1
+
 	// troubled is a review in trouble in a mode, with a failed check and a
 	// conflict with its base.
 	troubled := func(mode prreview.Mode) attention.ReviewInput {
@@ -106,8 +130,13 @@ func TestDeriveTheSituationOfAReview(t *testing.T) {
 		},
 		{
 			"the findings await a decision",
-			reviewInput(reviewflow.StatusAwaitingDecision, waiting),
-			reviewSituation(attention.KindReviewReport, attention.FormDecide, "The review has findings for you to decide."),
+			deciding,
+			reviewSituation(attention.KindReviewReport, attention.FormDecide, "The review has 2 findings for you to decide."),
+		},
+		{
+			"one finding awaits a decision",
+			oneToDecide,
+			reviewSituation(attention.KindReviewReport, attention.FormDecide, "The review has 1 finding for you to decide."),
 		},
 		{
 			"the review is ready to publish",
@@ -121,30 +150,42 @@ func TestDeriveTheSituationOfAReview(t *testing.T) {
 		},
 		{
 			"the publication failed",
-			reviewInput(reviewflow.StatusPublishFailed, waiting),
-			reviewSituation(attention.KindPublishFailed, attention.FormNone, "The review couldn't be published."),
+			publishFailed,
+			reviewSituation(attention.KindPublishFailed, attention.FormNone,
+				"The review couldn't be published: GitHub's rate limit was reached."),
 		},
 		{
 			"the pass could not start",
-			reviewInput(reviewflow.StatusPassBlocked, waiting),
-			reviewSituation(attention.KindPassBlocked, attention.FormNone, "The next pass of the review couldn't start."),
+			passBlocked,
+			reviewSituation(attention.KindPassBlocked, attention.FormNone,
+				"The next pass of the review couldn't start: gh is not authenticated."),
 		},
 		{
 			"the pull request has new commits",
-			reviewInput(reviewflow.StatusNewCommits, waiting),
-			reviewSituation(attention.KindNewCommits, attention.FormNone, "The pull request has new commits since your review."),
+			newCommits,
+			reviewSituation(attention.KindNewCommits, attention.FormNone, "2 commits arrived since your review."),
+		},
+		{
+			"one commit arrived",
+			oneCommit,
+			reviewSituation(attention.KindNewCommits, attention.FormNone, "1 commit arrived since your review."),
+		},
+		{
+			"the commits are beyond the recent ones",
+			farCommits,
+			reviewSituation(attention.KindNewCommits, attention.FormNone, "New commits arrived since your review."),
 		},
 		{
 			"nothing of the changes is staged",
 			unstaged,
 			reviewSituation(attention.KindChangesReview, attention.FormReview,
-				"The changes from the review of the pull request are ready for review."),
+				"The changes from the review are ready for your review."),
 		},
 		{
 			"the changes await the rest of the review",
 			partly,
 			staged(reviewSituation(attention.KindChangesReview, attention.FormStaged,
-				"The changes from the review of the pull request are ready for review."), 25),
+				"The changes from the review are ready for your review."), 25),
 		},
 		{
 			"the changes are ready to approve after a commit that did not happen",
