@@ -1,9 +1,9 @@
 import { useRef, useState } from "react";
+import { Badge } from "@/components/system/Badge";
 import { Button } from "@/components/system/Button";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
-import { Tag } from "@/components/system/Tag";
 import { Tooltip } from "@/components/system/Tooltip";
 import { MarkerLine } from "@/features/chat/entries/MarkerLine";
 import type { MarkerView } from "@/features/chat/markers";
@@ -131,7 +131,7 @@ export function ArchivedReview({ reviewId }: ArchivedReviewProps) {
         lead={<Icon icon={ICONS.review} className="text-ink-3" />}
         progress={
           <ArchivedTags>
-            <Tag>{outcomeLabel(review.outcome)}</Tag>
+            <Badge>{outcomeLabel(review.outcome)}</Badge>
           </ArchivedTags>
         }
       >

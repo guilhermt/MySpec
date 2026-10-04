@@ -4,7 +4,7 @@ import {
   goneDiscussionText,
   goneRoundLines,
 } from "@/features/navigation/gone-rounds";
-import { clockTime, shortTime } from "@/lib/when";
+import { atMoment, shortTime } from "@/lib/when";
 import { makeArchivedDiscussion, makeDraft } from "@/test/wails-mock";
 
 const NOW = Date.parse("2026-09-30T18:00:00Z");
@@ -16,7 +16,7 @@ describe("goneDiscussionText", () => {
     const archived = makeArchivedDiscussion({ archivedAt: LATE });
 
     expect(goneDiscussionText(archived, NOW)).toBe(
-      `The conversation ended at ${clockTime(LATE, NOW)}. The document, the drafts and what was published are in History; a task started from one of these cards gets the document in its context.`,
+      `The conversation ended${atMoment(LATE, NOW)}. The document, the drafts and what was published are in History; a task started from one of these cards gets the document in its context.`,
     );
   });
 

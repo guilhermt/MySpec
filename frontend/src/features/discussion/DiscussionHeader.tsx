@@ -52,6 +52,7 @@ export function DiscussionHeader({ discussion }: DiscussionHeaderProps) {
 
   return (
     <LocationHeader
+      hasStepper
       progress={
         <Stepper
           steps={stepper.steps}

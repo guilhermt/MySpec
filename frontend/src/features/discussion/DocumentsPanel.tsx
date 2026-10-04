@@ -102,7 +102,7 @@ export function DocumentsPanel({ discussion }: DocumentsPanelProps) {
         )}
         {artifact.status === "ready" && (
           <div className="select-text">
-            <Markdown>{artifact.content}</Markdown>
+            <Markdown className="ui-headings">{artifact.content}</Markdown>
           </div>
         )}
       </div>

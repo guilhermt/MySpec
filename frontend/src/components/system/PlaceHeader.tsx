@@ -1,6 +1,7 @@
 import { ArrowRight } from "lucide-react";
-import type { ReactNode, Ref } from "react";
+import { type ReactNode, type Ref, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { observeSize } from "./fits";
 import { IconButton } from "./IconButton";
 import { ICONS } from "./icons";
 import { Menu, MenuContent, MenuItem, MenuText, MenuTrigger } from "./Menu";
@@ -30,6 +31,8 @@ export interface PlaceHeaderProps {
   lead?: ReactNode;
   /** progress is where the item stands, drawn after the title and never shrunk: the stepper of a task, the tags of an archived item. */
   progress?: ReactNode;
+  /** hasStepper tells that progress is a stepper: the levels fold below 1660px of main area to leave it room, where without one they fold only when the title doesn't fit. */
+  hasStepper?: boolean;
   /** children is what the place holds on the right, in its order. */
   children?: ReactNode;
 }
@@ -47,58 +50,160 @@ function Slash() {
 }
 
 /**
- * Breadcrumb is the levels above the place. Below 1660px of main area the levels fold into …,
- * whose menu holds them.
+ * Breadcrumb is the levels above the place. Folded, they are a …, whose menu holds them. With a
+ * stepper they fold below 1660px of main area; without, `folded` says when the title no longer fits.
  */
-function Breadcrumb({ crumbs }: { crumbs: readonly PlaceCrumb[] }) {
+function Breadcrumb({
+  crumbs,
+  folded,
+  probe,
+}: {
+  crumbs: readonly PlaceCrumb[];
+  folded: boolean | null;
+  probe: RefObject<HTMLOListElement | null>;
+}) {
   const hidden = crumbs.map((crumb) => crumb.label).join(" / ");
   return (
     <nav aria-label="Breadcrumb" className="flex shrink-0 items-center whitespace-nowrap">
-      <ol className="flex items-center gap-(--space-1-5) @max-[1660px]/main:hidden">
-        {crumbs.map((crumb) => (
-          <li key={crumb.label} className="flex items-center gap-(--space-1-5)">
-            {crumb.onOpen !== undefined ? (
-              <button
-                type="button"
-                onClick={crumb.onOpen}
-                className={cn(
-                  CRUMB_TEXT,
-                  "rounded-xs outline-none hover:underline focus-visible:focus-ring",
-                )}
-              >
-                {crumb.label}
-              </button>
-            ) : (
-              <span className={CRUMB_TEXT}>{crumb.label}</span>
-            )}
-            <Slash />
-          </li>
-        ))}
-      </ol>
-      <span className="flex items-center gap-(--space-1-5) @min-[1660px]/main:hidden">
-        <Menu>
-          <MenuTrigger
-            render={
-              <IconButton label={`Show the hidden levels: ${hidden}`} icon={ICONS.more} size="sm" />
-            }
-          />
-          <MenuContent align="start">
-            {/* A level that is not a place, like an epic, is text in the menu, not an item. */}
-            {crumbs.map((crumb) =>
-              crumb.onOpen !== undefined ? (
-                <MenuItem key={crumb.label} onClick={crumb.onOpen}>
+      {folded !== null && <LevelsProbe crumbs={crumbs} probe={probe} />}
+      {folded !== true && (
+        <ol
+          className={cn(
+            "flex items-center gap-(--space-1-5)",
+            folded === null && "@max-[1660px]/main:hidden",
+          )}
+        >
+          {crumbs.map((crumb) => (
+            <li key={crumb.label} className="flex items-center gap-(--space-1-5)">
+              {crumb.onOpen !== undefined ? (
+                <button
+                  type="button"
+                  onClick={crumb.onOpen}
+                  className={cn(
+                    CRUMB_TEXT,
+                    "rounded-xs outline-none hover:underline focus-visible:focus-ring",
+                  )}
+                >
                   {crumb.label}
-                </MenuItem>
+                </button>
               ) : (
-                <MenuText key={crumb.label}>{crumb.label}</MenuText>
-              ),
-            )}
-          </MenuContent>
-        </Menu>
-        <Slash />
-      </span>
+                <span className={CRUMB_TEXT}>{crumb.label}</span>
+              )}
+              <Slash />
+            </li>
+          ))}
+        </ol>
+      )}
+      {folded !== false && (
+        <span
+          className={cn(
+            "flex items-center gap-(--space-1-5)",
+            folded === null && "@min-[1660px]/main:hidden",
+          )}
+        >
+          <Menu>
+            <MenuTrigger
+              render={
+                <IconButton
+                  label={`Show the hidden levels: ${hidden}`}
+                  icon={ICONS.more}
+                  size="sm"
+                />
+              }
+            />
+            <MenuContent align="start">
+              {/* A level that is not a place, like an epic, is text in the menu, not an item. */}
+              {crumbs.map((crumb) =>
+                crumb.onOpen !== undefined ? (
+                  <MenuItem key={crumb.label} onClick={crumb.onOpen}>
+                    {crumb.label}
+                  </MenuItem>
+                ) : (
+                  <MenuText key={crumb.label}>{crumb.label}</MenuText>
+                ),
+              )}
+            </MenuContent>
+          </Menu>
+          <Slash />
+        </span>
+      )}
     </nav>
   );
+}
+
+/** LevelsProbe is the whole breadcrumb, invisible and out of the flow, for its natural width. */
+function LevelsProbe({
+  crumbs,
+  probe,
+}: {
+  crumbs: readonly PlaceCrumb[];
+  probe: RefObject<HTMLOListElement | null>;
+}) {
+  return (
+    <ol
+      ref={probe}
+      aria-hidden="true"
+      className="pointer-events-none invisible fixed top-0 left-0 flex items-center gap-(--space-1-5) whitespace-nowrap"
+    >
+      {crumbs.map((crumb) => (
+        <li key={crumb.label} className="flex items-center gap-(--space-1-5)">
+          <span
+            data-label={crumb.label}
+            className={cn(CRUMB_TEXT, "after:content-[attr(data-label)]")}
+          />
+          <Slash />
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** pixels reads a computed length, 0 where there is none. */
+function pixels(value: string): number {
+  return Number.parseFloat(value) || 0;
+}
+
+/**
+ * useCrumbsFold tells whether the levels fold for a header without a stepper: when the title and the
+ * whole breadcrumb no longer fit side by side. The room is the width of the header less what the
+ * other pieces take, which doesn't depend on whether the levels are folded, so the answer never flips
+ * back and forth. `levels` is an invisible copy of the whole breadcrumb that gives its natural width.
+ */
+function useCrumbsFold(
+  header: RefObject<HTMLElement | null>,
+  levels: RefObject<HTMLOListElement | null>,
+  enabled: boolean,
+  content: string,
+): boolean {
+  const [folded, setFolded] = useState(false);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new title or new levels are new widths to measure
+  useLayoutEffect(() => {
+    const element = header.current;
+    if (!enabled || element === null) {
+      return;
+    }
+    const check = () => {
+      const style = getComputedStyle(element);
+      let room = element.clientWidth - pixels(style.paddingLeft) - pixels(style.paddingRight);
+      let pieces = 0;
+      let title = 0;
+      for (const child of element.children) {
+        pieces += 1;
+        if (child.tagName === "H1") {
+          title = child.scrollWidth;
+        } else if (child.tagName !== "NAV") {
+          room -= (child as HTMLElement).offsetWidth;
+        }
+      }
+      room -= (pieces - 1) * pixels(style.columnGap);
+      setFolded(room < (levels.current?.scrollWidth ?? 0) + title);
+    };
+    check();
+    return observeSize(element, check);
+  }, [header, levels, enabled, content]);
+
+  return enabled && folded;
 }
 
 /**
@@ -117,12 +222,24 @@ export function PlaceHeader({
   forwardRef,
   lead,
   progress,
+  hasStepper = false,
   children,
 }: PlaceHeaderProps) {
+  const band = useRef<HTMLElement>(null);
+  const levels = useRef<HTMLOListElement>(null);
+  const folded = useCrumbsFold(
+    band,
+    levels,
+    !hasStepper && crumbs.length > 0,
+    `${title}\n${crumbs.map((crumb) => crumb.label).join("/")}`,
+  );
   // The line under the band is an inset shadow rather than a border, so it is drawn inside the
   // band and what the band centers stays on whole pixels.
   return (
-    <header className="flex h-(--size-head) min-w-0 shrink-0 flex-nowrap items-center gap-(--space-2) px-(--space-3) shadow-[inset_0_calc(var(--border)*-1)_0_var(--line-1)]">
+    <header
+      ref={band}
+      className="flex h-(--size-head) min-w-0 shrink-0 flex-nowrap items-center gap-(--space-2) px-(--space-3) shadow-[inset_0_calc(var(--border)*-1)_0_var(--line-1)]"
+    >
       {back !== null ? (
         <IconButton
           ref={backRef}
@@ -152,7 +269,9 @@ export function PlaceHeader({
           onClick={forward.onClick}
         />
       )}
-      {crumbs.length > 0 && <Breadcrumb crumbs={crumbs} />}
+      {crumbs.length > 0 && (
+        <Breadcrumb crumbs={crumbs} folded={hasStepper ? null : folded} probe={levels} />
+      )}
       {lead !== undefined && <div className="flex shrink-0 items-center">{lead}</div>}
       <Tooltip content={title}>
         <h1

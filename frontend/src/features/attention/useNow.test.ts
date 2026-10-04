@@ -57,4 +57,17 @@ describe("useNow", () => {
     advance(3 * INTERVAL_MS);
     expect(result.current).toBe(START + 5 * INTERVAL_MS);
   });
+
+  it("gives two subscribers of the same interval the same time, whenever they mounted", () => {
+    const first = renderHook(() => useNow(INTERVAL_MS, true));
+    advance(INTERVAL_MS * 3 + 400);
+    const second = renderHook(() => useNow(INTERVAL_MS, true));
+
+    expect(second.result.current).toBe(first.result.current);
+    expect(vi.getTimerCount()).toBe(1);
+
+    advance(INTERVAL_MS);
+    expect(second.result.current).toBe(first.result.current);
+    expect(first.result.current).toBe(START + 4 * INTERVAL_MS);
+  });
 });

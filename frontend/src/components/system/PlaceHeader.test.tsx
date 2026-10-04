@@ -10,6 +10,7 @@ function header(
     forward?: PlaceNav | null;
     crumbs?: readonly PlaceCrumb[];
     title?: string;
+    hasStepper?: boolean;
   } = {},
 ) {
   return renderWithStore(
@@ -21,6 +22,7 @@ function header(
       titleRef={createRef()}
       backRef={createRef()}
       forwardRef={createRef()}
+      hasStepper={options.hasStepper ?? false}
     >
       <button type="button">Pause</button>
     </PlaceHeader>,
@@ -109,6 +111,7 @@ describe("PlaceHeader", () => {
   it("folds the levels into … with a menu of them", async () => {
     const onOpen = vi.fn();
     const { user } = header({
+      hasStepper: true,
       crumbs: [{ label: "Platform Roadmap", onOpen }, { label: "API hardening" }],
     });
 

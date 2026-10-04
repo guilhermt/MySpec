@@ -20,6 +20,16 @@ describe.each(THEMES)("Markdown in %s", (theme) => {
     ]);
   });
 
+  it("keeps the headings of a card body at the size of the UI, under the reading size of its text", async () => {
+    setTheme(theme);
+    renderWithStore(
+      <Markdown className="card-body ui-headings">{"# Context\n\nThe invoice."}</Markdown>,
+    );
+
+    const heading = await screen.findByRole("heading", { name: "Context" });
+    expect(getComputedStyle(heading).fontSize).toBe(resolve("var(--text-ui)", "font-size"));
+  });
+
   it("puts Copy of a block at the end of its own header, in the header's height", async () => {
     setTheme(theme);
     const { container } = renderWithStore(

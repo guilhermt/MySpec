@@ -88,7 +88,7 @@ Visto no app real nas cinco janelas e nos dois temas, e nas capturas `gone-*`, `
   - **Nova discussão:** `features/discussion/NewDiscussionDialog.tsx:343` desenha o seletor antigo (`Opus 5.5 (1M) · high ⇕`), nas capturas `discussion-start-978` e `discussion-start-home-978`.
 - Regra: `components.md` Chip ("Indisponível: `◇`, `· unavailable` em `--ink-3` 400"); `principles.md` 1 (âmbar é espera); `screens/discussion.md` §2 item 7; `12:92` (§4.1: o `ModelPicker` sai, e os dois diálogos usam o chip de modelo e esforço). É do step 2 (§8 do material).
 
-**S6 · Deve. Os títulos de um Markdown aberto sob um título próprio saem maiores que o título do lugar.** A leitura da discussão o deu como **Pode esperar**; as da task, do board e de Reviews, como **Deve**.
+**S6 · Deve. Os títulos de um Markdown aberto sob um título próprio saem maiores que o título do lugar.** · **Fechado no step 8** A leitura da discussão o deu como **Pode esperar**; as da task, do board e de Reviews, como **Deve**.
 
 - Causa: a regra `.card-body :is(h1…h6)` (`styles/globals.css:447–451`) está dentro de `@layer components` e perde para as classes utilitárias que o Streamdown põe nos títulos; os lugares sem classe ficam no tamanho do Streamdown. `.ui-headings` (`globals.css:566`, fora da camada) já resolve o rascunho (`features/discussion/CardDraft.tsx:158`), o prompt e os arquivados.
 - Ocorrências:
@@ -98,20 +98,20 @@ Visto no app real nas cinco janelas e nos dois temas, e nas capturas `gone-*`, `
   - **Discussão:** `features/discussion/DocumentsPanel.tsx:105` e `features/chat/entries/MarkerLine.tsx:476` desenham `discussion.md` e o contexto sem `ui-headings`, ao contrário do corpo do rascunho.
 - Regra: `principles.md` 4 e 3. É a quarta vez do mesmo desvio (item 3 das críticas 9 e 10, item 9 da 11). Lacuna L8.
 
-**S7 · Deve. A tag de código no lugar da etiqueta.**
+**S7 · Deve. A tag de código no lugar da etiqueta.** · **Fechado no step 8**
 
 - Onde: `features/history/ArchivedTask.tsx:235–236` (`Archived`, `One-Shot`), `ArchivedReview.tsx:134` (`Merged`, `Closed`), `ArchivedDiscussion.tsx:215` (`Archived`) e `:55` (`Epic`, `New card`, `Update` em What it published). Também `components/system/DeletionPreview.tsx:88` (`3 uncommitted files`, `not merged · 9 commits`, um `Tag` com borda) no **Delete task**.
 - Visto: o `Tag` (`components/system/Tag.tsx:9`) é mono e cheio de `--surface-0`. No app e nas capturas `history-archived-*`, `Archived` e `New card` saem em Fira Code sobre fundo afundado.
 - O mesmo tipo de rascunho sai como `Badge` na discussão (`components/system/FoldedDraft.tsx:136`) e como `Tag` no arquivado: o mesmo significado em duas formas.
 - Regra: `components.md` Etiqueta, tag, placeholder e tecla. A etiqueta é contornada por `--line-2`, em sans (`Draft`, o tipo do rascunho `New card`, `Epic`, `Update gateway#461`); a tag é "a ferramenta de uma permissão (`Bash`)". `screens/rest.md` §4 e §10 dizem "a etiqueta". O mock usa `.dtag`: contornada, sans e `--ink-3`, e `--ink-1` com `--line-3` na prévia (`lab/14-screen-rest/src/rest.css:130`, `:213`). É `critique-task-11.md` (16), reaberto: a forma é a do `Tag`, o problema é a escolha do componente.
 
-**S8 · Deve. O ícone de ir e o de abrir fora do app são o mesmo desenho.**
+**S8 · Deve. O ícone de ir e o de abrir fora do app são o mesmo desenho.** · **Fechado no step 8**
 
 - Onde: `components/system/type-icons.tsx:69` (`GoIcon`, `M5.5 10.5l5-5M6.5 5.5h4v4`) e `components/system/icons.ts:65` (`external: ArrowUpRight`): a mesma seta diagonal. `go` é a seta do nó de board e de Reviews; `external` é o link que sai para o GitHub.
 - Ocorrência em Settings: `features/settings/PromptsPage.tsx:107` (`ICONS.go`). No app, a 2560 px no escuro, as nove linhas de Prompts terminam em `↗`, a mesma forma de `acme/projects/3 ↗` em Boards, que sai para o GitHub. A linha abre uma página do app e se lê como um link externo. `components.md` Linha de Settings diz "e o chevron; abre o prompt", e o mock usa o chevron (`lab/14-screen-rest/src/settings.js:189`, `I("right", "i chev")`).
 - Regra: `components.md` Ícones ("Não use dois ícones para a mesma coisa nem o mesmo ícone para duas"; "Seta externa: abre fora do app") e Linha de Settings. O desenho de `go` vem dos mocks (`lab/05-visual-b-variations/a.html:652`). Lacuna L1.
 
-**S9 · Deve. A mesma leitura de board tem três idades ao mesmo tempo.** É da Home, apontado na área do system pela consistência com o nó da árvore e com o `ReadingAge`.
+**S9 · Deve. A mesma leitura de board tem três idades ao mesmo tempo.** · **Fechado no step 8** É da Home, apontado na área do system pela consistência com o nó da árvore e com o `ReadingAge`.
 
 - Com o board nunca lido e nenhuma leitura rodando: a Home diz `reading…` (`features/home/home.ts:225`, o caso que sobra de `readingOf`), Settings › Boards diz `Not read yet` (`components/system/ReadingAge.tsx:61`) e o nó `Platform Roadmap` da árvore não diz nada (`features/sidebar/TreeNodeRow.tsx:86–92`, certo, porque nada lê). Visto nas cinco janelas, nos dois temas, durante toda a sessão.
 - Regra: `components.md` Idade da leitura (nunca lida é `Not read yet`); "uma idade por significado"; `structure.md` §7 (Primeira leitura do GitHub).
@@ -130,7 +130,7 @@ Visto no app real nas cinco janelas e nos dois temas, e nas capturas `gone-*`, `
   - `NewDiscussionDialog.tsx:294` (`Refreshing the cards…`), `features/discussion/UnclonedRepository.tsx:36`, `:78` (`Cloning…`) e `:106` (a falha do clone).
 - Regra: `components.md:448` (Faixa de aviso: "`role="alert"` para uma falha que chega"); `12:350` (§4.3 #16); `12:270` (§4.2, Os nomes acessíveis: "nenhum `role="status"` nasce junto com o texto"). As pautas `critique-task-05.md:188` (10), `critique-task-06.md:173` (4), `critique-task-05.md:230–233` (21) e `:394`. `screens/board.md` §8 diz o contrário (lacuna L16). V11 os pega no step da varredura.
 
-**S11 · Deve. A faixa da falha de leitura cola no cabeçalho, sem folga em cima.**
+**S11 · Deve. A faixa da falha de leitura cola no cabeçalho, sem folga em cima.** · **Fechado no step 8**
 
 - Ocorrências:
   - **Board:** na captura `board-failed-978`, a faixa começa no fio do cabeçalho (y 48), e a barra de filtros fica 32 px abaixo dela. `features/board/BoardReadingStates.tsx:50` só dá `mb-(--space-4)`.
@@ -164,7 +164,7 @@ Visto no app real nas cinco janelas e nos dois temas, e nas capturas `gone-*`, `
 - Calculado dos tokens: `--ink-3` sobre `--veil-press` em `--brand-veil` dá **4,44:1** no claro e 4,86 no escuro. A linha 2 é `--ink-3` (`features/sidebar/TreeRow.tsx`), e o pressionado dura o clique.
 - Regra: `tokens.css:160–161` ("1 to 3 pass 4.5:1 on every surface and veil of the system"); `principles.md` 5. A exceção que o comentário já lista é só a do `--ink-4`.
 
-**S17 · Pode esperar. O chip de espera da árvore e o da barra discordam por um minuto.**
+**S17 · Pode esperar. O chip de espera da árvore e o da barra discordam por um minuto.** · **Fechado no step 8**
 
 - Ocorrências:
   - **Task:** `!8m` na linha da árvore e `!7m` na barra da mesma task (1100), `!14m`/`!13m` no escuro.
@@ -173,17 +173,17 @@ Visto no app real nas cinco janelas e nos dois temas, e nas capturas `gone-*`, `
 - Causa: cada `useNow` conta o minuto desde a própria montagem (`features/attention/useNow.ts:7–19`), e `features/reviews/useReviewRequest.ts:15` tem o seu próprio `useNow(MINUTE)`, fora de fase com o relógio da árvore.
 - Regra: "uma idade por significado" (`12:113`); `components.md` Chip de tempo. Miúdo da crítica 9. Lacuna L19.
 
-**S18 · Pode esperar. Os ícones do `⋯` da task e da discussão diferem.**
+**S18 · Pode esperar. Os ícones do `⋯` da task e da discussão diferem.** · **Fechado no step 8**
 
 - O da task tem ícone só em **Open in VS Code** e **Open PR** (`features/task/task-menu.ts:98`, `:151`), sem lixeira em **Delete task…**; o da discussão tem ícone em todo item (`features/discussion/discussion-header.ts:141–169`).
 - Regra: "um componente com a mesma forma em todo lugar" (`12:113`); `components.md` Menu do item. Lacuna L10.
 
-**S19 · Pode esperar. O toast sobe acima do compositor, mas não da barra do pedido.**
+**S19 · Pode esperar. O toast sobe acima do compositor, mas não da barra do pedido.** · **Fechado no step 8**
 
 - Onde: `components/system/toast-lift.ts:9–24` mede só o elemento que o chama (`:16–18`), e só `features/chat/Composer.tsx:121` chama. Sem compositor (step bloqueado, PR bloqueada), `--toast-lift` não existe, e os toasts cobrem a barra.
 - Origem: `critique-task-11.md`, O que as correções abriram.
 
-**S20 · Pode esperar. A página do review que saiu tem duas formas de data.**
+**S20 · Pode esperar. A página do review que saiu tem duas formas de data.** · **Fechado no step 8**
 
 - Onde: `features/navigation/gone-passes.ts:47` e `:82` usam `clockTime` (`Yesterday 09:00`) nas linhas das passadas, e `:16` usa `atMoment` (`on Sep 23 at 16:20`) no texto de cima da mesma página. `features/navigation/gone-rounds.ts:11` também usa `clockTime`.
 - Regra: "uma hora por significado"; `screens/review.md` §15. Origem: `critique-task-11.md`, O que as correções abriram.
@@ -589,7 +589,7 @@ Visto no app real (a mesma sessão da área do system), nas cinco janelas e nos 
 O que `design/` não decidia ou contradizia, com a decisão que o coordenador tomou em 2026-10-04. Cada decisão é registrada no documento da coluna **Registrar em**, com uma entrada em `decisions.md`, antes de `Ready`; as que mudam comportamento (L5, L11, L13, L21) entram também em `changes.md`. As que pedem código sem item próprio (L2, L13, L14, L18) são trabalho do step da área, que escreve o commit aqui como num item.
 
 - **L1 · A seta `go` e a seta externa** (S8; leitura do system). `design/` fixa os dois significados, mas o desenho de `go` vem dos mocks igual ao externo. **Decisão:** a seta `go` é um chevron para a direita; a seta diagonal fica só para links que saem do app. **Registrar em:** `components.md` Ícones. **Implementa:** S8.
-- **L2 · O breadcrumb dobrado fora do item** (leitura do system; visto também em Settings e History). `components/system/PlaceHeader.tsx:57` e `:78` dobram os níveis abaixo de 1660 px de área principal em todo lugar, também no arquivado, que não tem stepper: a 1134 px, `← … / idempotency-keys… Archived` com a faixa vazia no meio. `components.md` (Cabeçalho do lugar, Largura) fala dos limites do item, e `screens/rest.md` §4 diz "com `← History`". **Decisão:** o breadcrumb do arquivado só dobra quando o título não cabe. **Registrar em:** `structure.md`. **Implementa:** código em `PlaceHeader.tsx`, sem item próprio.
+- **L2 · O breadcrumb dobrado fora do item** · **Fechado no step 8** (leitura do system; visto também em Settings e History). `components/system/PlaceHeader.tsx:57` e `:78` dobram os níveis abaixo de 1660 px de área principal em todo lugar, também no arquivado, que não tem stepper: a 1134 px, `← … / idempotency-keys… Archived` com a faixa vazia no meio. `components.md` (Cabeçalho do lugar, Largura) fala dos limites do item, e `screens/rest.md` §4 diz "com `← History`". **Decisão:** o breadcrumb do arquivado só dobra quando o título não cabe. **Registrar em:** `structure.md`. **Implementa:** código em `PlaceHeader.tsx`, sem item próprio.
 - **L3 · O diálogo centrado na janela ou na área principal** (leitura do system). No app ele centra na janela inteira (**Delete task** a 2000: de 760 a 1240 px, o centro da janela, não o da área, 1180); `components.md` (Diálogo) fixa só os `8vh` do topo, e as cenas da task 11 já pintam assim (`centeredInWindow`). **Decisão:** os diálogos centram sobre a janela inteira, como o `--scrim` a cobre. **Registrar em:** `components.md` Diálogo. **Implementa:** nada; o app já é assim.
 - **L4 · A hora de hoje nos fatos de um arquivado** (H4). `screens/rest.md` §4 não diz se um fato de hoje leva o dia. **Decisão:** os fatos do arquivado usam `clockOrDateAt` (`15:02` hoje, `Sep 24 at 15:02` em outro dia), como a linha do History e o toast. **Registrar em:** `screens/rest.md` §4. **Implementa:** H4.
 - **L5 · A PR bloqueada depois de o review começar** (T2). `screens/task.md` §11–§12 só têm `pr_blocked` como barra e o vazio do PR review antes da primeira passada. **Decisão:** a PR bloqueada depois de o review começar mantém a conversa, com o cartão de decisão desabilitado e a barra de erro; antes da primeira passada, o vazio com título continua. **Registrar em:** `screens/task.md` (§11, §12). **Implementa:** T2.
@@ -643,11 +643,11 @@ Cada item da pauta de polimento (`lab/08-visual-final/critique.md` §7; `12:272�
 | `critique-task-09.md`, segunda leitura: o `Cut` do dobrado com tooltip mesmo inteiro | Vale | `FoldedDraft.tsx:56–62`; `MarkerLine.tsx:173` | S22 · **Fechado no step 7** |
 | `critique-task-09.md`, O que ficou aberto: o tooltip, "um comportamento só" | Vale | `ListRow.tsx:121–135` (`Cell`); `GroupEpicDialog.tsx:137`; `NewDiscussionDialog.tsx:214` | S22 · **Fechado no step 7** |
 | `critique-task-09.md`, novo: a razão cortada do rodapé não abre pelo foco | Vale | `Dialog.tsx:216`; nos diálogos de criação, de publicação e de agrupar | S21 · **Fechado no step 7** |
-| `critique-task-09.md` (13), miúdo: a idade da barra e da árvore | Vale | Na task, no review e na discussão | S17 |
+| `critique-task-09.md` (13), miúdo: a idade da barra e da árvore | Vale | Na task, no review e na discussão | S17 · **Fechado no step 8** |
 | `critique-task-11.md` (11), o anel em **Cancel** de um diálogo aberto pelo teclado | Vale (**Deve**) | Visto no Broadway | S1 · **Fechado no step 7** |
-| `critique-task-11.md` (16), o `Tag` em mono nas etiquetas | Vale, reaberto | A forma é a do `Tag`; o problema é a escolha do componente | S7 |
-| `critique-task-11.md`, O que as correções abriram: o toast sobre a barra do pedido | Vale | `toast-lift.ts:9–24`; só `Composer.tsx:121` chama | S19 |
-| `critique-task-11.md`, O que as correções abriram: as passadas da página do review com `clockTime` | Vale | `gone-passes.ts:47`, `:82`; `gone-rounds.ts:11` | S20 |
+| `critique-task-11.md` (16), o `Tag` em mono nas etiquetas | Vale, reaberto | A forma é a do `Tag`; o problema é a escolha do componente | S7 · **Fechado no step 8** |
+| `critique-task-11.md`, O que as correções abriram: o toast sobre a barra do pedido | Vale | `toast-lift.ts:9–24`; só `Composer.tsx:121` chama | S19 · **Fechado no step 8** |
+| `critique-task-11.md`, O que as correções abriram: as passadas da página do review com `clockTime` | Vale | `gone-passes.ts:47`, `:82`; `gone-rounds.ts:11` | S20 · **Fechado no step 8** |
 | `critique-task-11.md`, segunda leitura: a fixture `stayed` com `--force` diante de uma permissão | Feito | `GoneView.scenes.painted.test.tsx:146` (`registered: false`); a captura `gone-gone-deleted` mostra `rm -rf` e o aviso dele | — |
 
 ### A task
@@ -719,12 +719,12 @@ As faixas sempre `role="alert"` (`critique-task-06.md:173`), o anel de foco (`cr
 |---|---|---|---|
 | `critique-task-09.md` (1), o épico descartado a 60% | Feito | Sem `opacity` no `Draft.tsx`; `discussion-epic-off-*` com o título em `--ink-2` e o corpo em tinta cheia | — |
 | `critique-task-09.md` (2), a pastilha onde não há | Feito | `discussion-request.ts:345–369` | — |
-| `critique-task-09.md` (3), os títulos do corpo | Feito no rascunho | `CardDraft.tsx:158` (`ui-headings`); não no `Documents` nem no corpo do marco | S6 |
+| `critique-task-09.md` (3), os títulos do corpo | Feito no rascunho | `CardDraft.tsx:158` (`ui-headings`); não no `Documents` nem no corpo do marco | S6 · **Fechado no step 8** |
 | `critique-task-09.md` (4), o que fica sob a barra | Vale em parte | A edição rola e o `listbox` sobe; a pílula `↓` cobre o atual | D1 |
 | `critique-task-09.md` (5, 6, 8, 9, 10, 11) | Feito | Segunda leitura da crítica 9; o 8 conferido no app (`✓ Created api#479 · 13:58`) | — |
 | `critique-task-09.md` (7), as áreas de texto | Feito | `DraftEditor.tsx:307`, `NewDiscussionDialog.tsx:241–242`; três linhas em `discussion-start-*` | — |
 | `critique-task-09.md` (12), os valores soltos | Vale em parte | Os diálogos com `--space-*`; sobram `UnclonedRepository.tsx:37` e `DraftEditor.tsx:316` | D3 |
-| `critique-task-09.md` (13), os miúdos | Feito, menos a idade | `· click again to undo` depois de **Retry** no app | S17 |
+| `critique-task-09.md` (13), os miúdos | Feito, menos a idade | `· click again to undo` depois de **Retry** no app | S17 · **Fechado no step 8** |
 | `critique-task-09.md`, segunda leitura: a pílula `↓` sobre o atual | Vale | `discussion-drafts-978`/`-812` | D1 |
 | `critique-task-09.md`, segunda leitura: **Edit** ao lado de **Done**, **Body** sem `Markdown` | Vale | `drafts-card.ts:498–505`; `DraftEditor.tsx:298` | D2 |
 | `critique-task-09.md`, segunda leitura: o tooltip sempre na lista e no dobrado | Vale | `MarkerLine.tsx:174`, `FoldedDraft.tsx:59` | S22 · **Fechado no step 7** |

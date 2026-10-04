@@ -47,7 +47,7 @@ export function FailureStrip({ board, now }: FailureStripProps) {
       reason={board.failure.message}
       role="alert"
       action={<TryAgain board={board} />}
-      className="mb-(--space-4)"
+      className="mt-(--space-4) mb-(--space-4)"
     />
   );
 }

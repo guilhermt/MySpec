@@ -47,6 +47,7 @@ export function ReviewHeader({ review }: ReviewHeaderProps) {
 
   return (
     <LocationHeader
+      hasStepper
       progress={
         <Stepper
           steps={stepper.steps}

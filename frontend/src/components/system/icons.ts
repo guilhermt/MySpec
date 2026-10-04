@@ -51,7 +51,7 @@ import {
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { CardIcon } from "./CardIcon";
-import { DiscussionIcon, GoIcon, MarkIcon, OneShotIcon, ReviewIcon, TaskIcon } from "./type-icons";
+import { DiscussionIcon, MarkIcon, OneShotIcon, ReviewIcon, TaskIcon } from "./type-icons";
 
 /** IconGlyph is a lucide icon or one of the system's own SVG icons: both take a class and hide from the reader. */
 export type IconGlyph = ComponentType<{ className?: string; "aria-hidden"?: boolean | "true" }>;
@@ -59,7 +59,7 @@ export type IconGlyph = ComponentType<{ className?: string; "aria-hidden"?: bool
 /**
  * ICONS is the one icon of each meaning, the same across the product (components.md, Ícones). A
  * meaning that shares a drawing reuses the key: the product's message is `mark`, the action that
- * waits for a permission is `waiting`, and the ✕ of a failed command is `close`.
+ * waits for a permission is `waiting`, the ✕ of a failed command is `close`, and the arrow that goes to a place is the chevron that opens a row.
  */
 export const ICONS = {
   agentMode: Bot,
@@ -74,7 +74,7 @@ export const ICONS = {
   oneShot: OneShotIcon,
   review: ReviewIcon,
   discussion: DiscussionIcon,
-  go: GoIcon,
+  go: ChevronRight,
   mark: MarkIcon,
   board: Kanban,
   file: FileText,

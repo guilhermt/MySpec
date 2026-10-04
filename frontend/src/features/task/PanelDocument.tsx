@@ -98,7 +98,7 @@ function DocumentBody({ taskId, file, artifactVersion, title, step, onRetry }: D
       <StepDocument content={artifact.content} />
     ) : (
       <div className="select-text">
-        <Markdown>{artifact.content}</Markdown>
+        <Markdown className="ui-headings">{artifact.content}</Markdown>
       </div>
     );
   }

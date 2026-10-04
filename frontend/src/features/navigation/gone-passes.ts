@@ -1,7 +1,7 @@
 import { verdictLabel } from "@/features/reviews/review-status";
 import { counted } from "@/lib/situations";
 import type { ArchivedReview, ReviewPass } from "@/lib/wails";
-import { atMoment, clockTime } from "@/lib/when";
+import { atMoment } from "@/lib/when";
 
 // GONE_TAIL is what every text of a review that left says after what became of its pull request.
 const GONE_TAIL =
@@ -44,7 +44,7 @@ function publishedLine(pass: ReviewPass, now: number): { text: string; time: str
   const parts = [`Pass ${pass.pass}`, verdictLabel(pass.verdict), publishedWhat(pass)];
   return {
     text: parts.filter((part) => part !== "").join(" · "),
-    time: clockTime(pass.publishedAt, now),
+    time: atMoment(pass.publishedAt, now).trim(),
   };
 }
 
@@ -79,7 +79,7 @@ function appliedLine(pass: ReviewPass, now: number): { text: string; time: strin
   if (pass.sent && approved > 0) {
     return {
       text: `Pass ${pass.pass} · ${counted(approved, "finding")} sent to the agent`,
-      time: clockTime(pass.sentAt, now),
+      time: atMoment(pass.sentAt, now).trim(),
     };
   }
   if (approved === 0) {

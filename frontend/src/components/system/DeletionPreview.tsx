@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Badge } from "./Badge";
 import { Icon } from "./Icon";
 import type { IconGlyph } from "./icons";
 import { Link } from "./Link";
@@ -6,7 +7,6 @@ import { Shimmer } from "./Shimmer";
 import { SkeletonBar } from "./Skeleton";
 import { Spinner } from "./Spinner";
 import { StateGlyph } from "./StateGlyph";
-import { Tag } from "./Tag";
 
 /** DeletionLine is one thing an erasure destroys or leaves, with what git said about it. */
 export interface DeletionLine {
@@ -84,9 +84,7 @@ export function DeletionPreview({ state }: DeletionPreviewProps) {
                 </>
               )}
             </span>
-            {line.tag !== undefined && (
-              <Tag className="border border-line-3 text-ink-1">{line.tag}</Tag>
-            )}
+            {line.tag !== undefined && <Badge variant="edited">{line.tag}</Badge>}
           </span>
           {(line.detail !== undefined || line.link !== undefined) && (
             <span

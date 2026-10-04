@@ -470,7 +470,9 @@ export function MarkerLine({
         ) : artifact.status === "ready" ? (
           <div data-slot="marker-body" className={SUNKEN}>
             <div className="select-text">
-              <Markdown cutCode>{documentText(body.name, artifact.content)}</Markdown>
+              <Markdown cutCode className="ui-headings">
+                {documentText(body.name, artifact.content)}
+              </Markdown>
             </div>
             {archived === null && (
               <div className="mt-(--space-2)">

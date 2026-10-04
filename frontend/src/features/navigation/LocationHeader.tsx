@@ -8,6 +8,8 @@ export interface LocationHeaderProps {
   lead?: ReactNode;
   /** progress is where the item stands, after the title: the stepper of a task, the tags of an archived item. */
   progress?: ReactNode;
+  /** hasStepper tells that progress is a stepper, which the levels of the breadcrumb leave room for. */
+  hasStepper?: boolean;
   /** children is what the place holds on the right, in its order. */
   children?: ReactNode;
 }
@@ -17,7 +19,12 @@ export interface LocationHeaderProps {
  * breadcrumb and the title, read from the store. It takes the focus a navigation asked for once
  * the new place is on screen.
  */
-export function LocationHeader({ lead, progress, children }: LocationHeaderProps) {
+export function LocationHeader({
+  lead,
+  progress,
+  hasStepper = false,
+  children,
+}: LocationHeaderProps) {
   const app = useAppStore((state) => state.app);
   const location = useLocation();
   const backTarget = useBackTarget();
@@ -83,6 +90,7 @@ export function LocationHeader({ lead, progress, children }: LocationHeaderProps
       forwardRef={forwardRef}
       lead={lead}
       progress={progress}
+      hasStepper={hasStepper}
     >
       {children}
     </PlaceHeader>

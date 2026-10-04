@@ -229,7 +229,7 @@ function readingOf(board: Board, now: number): BoardLineModel["reading"] {
   if (board.readAt !== "") {
     return { text: `read ${age(board.readAt, now)}`, tone: "quiet", shimmer };
   }
-  return { text: "reading…", tone: "quiet", shimmer };
+  return { text: "Not read yet", tone: "quiet", shimmer: false };
 }
 
 /** boardLines are the boards of the Boards section, in the order of the state. */

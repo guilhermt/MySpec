@@ -233,11 +233,9 @@ describe("discussionMenu", () => {
       ["Discussion", ["Open Platform Roadmap", "Group drafts into an epic…", "Archive…"]],
       [null, ["Delete discussion…"]],
     ]);
-    expect(groups[0]?.items.map((item) => [item.action, item.icon])).toEqual([
-      ["openBoard", "board"],
-      ["group", "epic"],
-      ["archive", "archive"],
-    ]);
+    expect(groups.flatMap((group) => group.items).every((item) => item.icon === undefined)).toBe(
+      true,
+    );
     expect(groups[1]?.items[0]).toMatchObject({ action: "delete", destructive: true });
   });
 

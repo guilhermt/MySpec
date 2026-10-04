@@ -90,6 +90,7 @@ export function TaskHeader({ task }: TaskHeaderProps) {
   if (task === null) {
     return (
       <LocationHeader
+        hasStepper
         progress={
           <Stepper
             steps={LOADING_STEPS}
@@ -105,6 +106,7 @@ export function TaskHeader({ task }: TaskHeaderProps) {
   const stepper = stepperOf(task, now);
   return (
     <LocationHeader
+      hasStepper
       progress={
         <Stepper
           steps={stepper.steps}

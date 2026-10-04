@@ -62,7 +62,7 @@ export function CardPanel({ task }: CardPanelProps) {
         </div>
         {card.body !== "" && (
           <div className="select-text">
-            <Markdown>{card.body}</Markdown>
+            <Markdown className="ui-headings">{card.body}</Markdown>
           </div>
         )}
         <RelationList

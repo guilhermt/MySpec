@@ -138,7 +138,6 @@ export function discussionMenu(
       id: "board.open",
       label: `Open ${boardTitle}`,
       action: "openBoard",
-      icon: "board",
     });
   }
   const refusal =
@@ -147,14 +146,12 @@ export function discussionMenu(
     id: "discussion.group",
     label: "Group drafts into an epic…",
     action: "group",
-    icon: "epic",
     ...(refusal === null ? {} : { disabledReason: refusal }),
   });
   items.push({
     id: "discussion.archive",
     label: "Archive…",
     action: "archive",
-    icon: "archive",
     ...(discussion.canArchive ? {} : { disabledReason: archiveRefusal(discussion) }),
   });
   return [
@@ -166,7 +163,6 @@ export function discussionMenu(
           id: "discussion.delete",
           label: "Delete discussion…",
           action: "delete",
-          icon: "trash",
           destructive: true,
           ...(running === null ? {} : { disabledReason: running }),
         },

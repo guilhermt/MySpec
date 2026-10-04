@@ -197,7 +197,7 @@ describe("GoneView", () => {
       within(passes)
         .getAllByRole("listitem")
         .map((item) => item.textContent),
-    ).toEqual(["Pass 1 · Request changes · 2 inline comments13:41", "Pass 2 · not published"]);
+    ).toEqual(["Pass 1 · Request changes · 2 inline commentsat 13:41", "Pass 2 · not published"]);
   });
 
   it("tells when a pull request was closed without a merge", () => {

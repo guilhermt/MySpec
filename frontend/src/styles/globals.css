@@ -437,16 +437,11 @@
     }
   }
 
-  /* The description of a card in its panel: read at the reading size, its headings no bigger than the text. */
+  /* The description of a card in its panel: read at the reading size. */
   .card-body {
     font-size: var(--text-read);
     line-height: var(--leading-read);
     user-select: text;
-  }
-  .card-body :is(h1, h2, h3, h4, h5, h6) {
-    font-size: var(--text-body);
-    line-height: var(--leading-body);
-    font-weight: 600;
   }
 
   /* The live region of the app: toasts and announcements, bottom left of the

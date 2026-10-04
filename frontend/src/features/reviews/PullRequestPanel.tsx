@@ -143,7 +143,7 @@ export function PullRequestPanel({
               No description.
             </p>
           ) : (
-            <Markdown className="card-body">{model.body}</Markdown>
+            <Markdown className="card-body ui-headings">{model.body}</Markdown>
           )}
         </div>
       </div>

@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "./Button";
 import { type GlyphState, StateGlyph } from "./StateGlyph";
 import { TimeChip } from "./TimeChip";
 import { Tooltip } from "./Tooltip";
+import { useToastLift } from "./toast-lift";
 
 /** RequestForm is each form of the request bar (components.md, Barra do pedido). */
 export type RequestForm = "quiet" | "tinted" | "decision" | "error" | "closing";
@@ -127,6 +128,8 @@ export function RequestBar({
   status,
   actions,
 }: RequestBarProps) {
+  const bar = useRef<HTMLElement>(null);
+  useToastLift(bar);
   const middle = progress !== undefined && (
     <span
       className="text-(length:--text-meta) leading-(--leading-meta) text-ink-2"
@@ -137,6 +140,7 @@ export function RequestBar({
   );
   return (
     <section
+      ref={bar}
       aria-label="Request"
       data-form={form}
       tabIndex={-1}
@@ -177,6 +181,8 @@ export function OtherConversationBar({
   flash,
   status = label,
 }: OtherConversationBarProps) {
+  const bar = useRef<HTMLElement>(null);
+  useToastLift(bar);
   const go = (
     <Button size="sm" onClick={onGo}>
       {goLabel}
@@ -184,6 +190,7 @@ export function OtherConversationBar({
   );
   return (
     <section
+      ref={bar}
       aria-label="Request"
       data-form={failed ? "other-failed" : "other-waits"}
       tabIndex={-1}

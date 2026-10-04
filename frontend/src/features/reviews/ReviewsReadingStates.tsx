@@ -45,7 +45,7 @@ export function ReviewsFailureStrips({ center, now }: ReviewsFailureStripsProps)
       reason={strip.message}
       role="alert"
       action={<TryAgain reading={center.reading} />}
-      className="mb-(--space-4)"
+      className="mt-(--space-4) mb-(--space-4)"
     />
   ));
 }

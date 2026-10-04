@@ -542,7 +542,7 @@ describe("PullRequestPanel", () => {
 
       const description = screen.getByTestId("markdown");
       expect(description).toHaveTextContent("Adds a key per charge.");
-      expect(description).toHaveClass("card-body");
+      expect(description).toHaveClass("card-body", "ui-headings");
       expect(screen.queryByText("No description.")).not.toBeInTheDocument();
     });
 

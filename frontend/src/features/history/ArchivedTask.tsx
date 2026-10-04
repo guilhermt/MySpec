@@ -1,11 +1,11 @@
 import { type ReactNode, useId, useRef, useState } from "react";
+import { Badge } from "@/components/system/Badge";
 import { Button } from "@/components/system/Button";
 import { CloseResult } from "@/components/system/CloseResult";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
 import { Tabs, tabId } from "@/components/system/Tabs";
-import { Tag } from "@/components/system/Tag";
 import { Tooltip } from "@/components/system/Tooltip";
 import { MarkerLine } from "@/features/chat/entries/MarkerLine";
 import { Markdown } from "@/features/chat/Markdown";
@@ -232,8 +232,8 @@ export function ArchivedTask({ taskId }: ArchivedTaskProps) {
         lead={<Icon icon={oneShot ? ICONS.oneShot : ICONS.task} className="text-ink-3" />}
         progress={
           <ArchivedTags>
-            <Tag>Archived</Tag>
-            {oneShot && <Tag>One-Shot</Tag>}
+            <Badge>Archived</Badge>
+            {oneShot && <Badge>One-Shot</Badge>}
           </ArchivedTags>
         }
       >

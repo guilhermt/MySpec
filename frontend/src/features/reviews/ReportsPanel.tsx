@@ -168,7 +168,7 @@ export function ReportsPanel({ review }: ReportsPanelProps) {
             {artifact.status === "ready" && (
               <div className="select-text">
                 {open?.published === true && <Published pass={open} />}
-                <Markdown>{artifact.content}</Markdown>
+                <Markdown className="ui-headings">{artifact.content}</Markdown>
               </div>
             )}
           </>

@@ -65,9 +65,6 @@ export const DiscussionIcon = glyph(
   <path d="M3 4.4A1.4 1.4 0 0 1 4.4 3h7.2A1.4 1.4 0 0 1 13 4.4v5.2A1.4 1.4 0 0 1 11.6 11H7.2L4.2 13.3V11A1.4 1.4 0 0 1 3 9.6z" />,
 );
 
-/** GoIcon is the arrow that goes to the place of a node. */
-export const GoIcon = glyph("GoIcon", <path d="M5.5 10.5l5-5M6.5 5.5h4v4" />);
-
 /** MarkIcon is the mark of MySpec. */
 export const MarkIcon = glyph(
   "MarkIcon",

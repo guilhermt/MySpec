@@ -1,6 +1,6 @@
 import { publishedOutcome } from "@/lib/drafts";
 import type { ArchivedDiscussion } from "@/lib/wails";
-import { clockTime, shortTime } from "@/lib/when";
+import { atMoment, shortTime } from "@/lib/when";
 
 /** DELETED_DISCUSSION_TEXT is the text of the page of a discussion that was deleted. */
 export const DELETED_DISCUSSION_TEXT =
@@ -8,8 +8,7 @@ export const DELETED_DISCUSSION_TEXT =
 
 /** goneDiscussionText is the text of the page of a discussion that was archived. */
 export function goneDiscussionText(archived: ArchivedDiscussion, now: number): string {
-  const time = clockTime(archived.archivedAt, now);
-  return `The conversation ended${time === "" ? "" : ` at ${time}`}. The document, the drafts and what was published are in History; a task started from one of these cards gets the document in its context.`;
+  return `The conversation ended${atMoment(archived.archivedAt, now)}. The document, the drafts and what was published are in History; a task started from one of these cards gets the document in its context.`;
 }
 
 /**

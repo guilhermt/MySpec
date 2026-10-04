@@ -325,6 +325,12 @@ describe("boardLines", () => {
     });
   });
 
+  it("says Not read yet for a board never read with nothing reading it", () => {
+    const [line] = linesOf(board({ readAt: "", reading: false, cards: [] }));
+
+    expect(line?.reading).toEqual({ text: "Not read yet", tone: "quiet", shimmer: false });
+  });
+
   it("shimmers the reading age while a read board is read again", () => {
     expect(linesOf(board({ reading: true }))[0]?.reading).toEqual({
       text: "read 2m ago",

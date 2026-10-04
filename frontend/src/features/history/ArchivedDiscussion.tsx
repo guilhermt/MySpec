@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Badge } from "@/components/system/Badge";
 import { Button } from "@/components/system/Button";
 import {
   Collapsible,
@@ -11,7 +12,6 @@ import { ICONS } from "@/components/system/icons";
 import { Link } from "@/components/system/Link";
 import { NoticeStrip } from "@/components/system/NoticeStrip";
 import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
-import { Tag } from "@/components/system/Tag";
 import { Tooltip } from "@/components/system/Tooltip";
 import { Conversation } from "@/features/chat/Conversation";
 import type { DiscussionInput } from "@/features/chat/discussion-markers";
@@ -55,7 +55,7 @@ function PublishedLine({ row }: { row: PublishedRow }) {
         row.indented && "pl-[calc(var(--space-3)+var(--epic-indent))]",
       )}
     >
-      <Tag className="shrink-0">{row.label}</Tag>
+      <Badge className="shrink-0">{row.label}</Badge>
       <CutText
         text={row.title}
         className={cn(
@@ -215,7 +215,7 @@ export function ArchivedDiscussion({ discussionId }: ArchivedDiscussionProps) {
         lead={<Icon icon={ICONS.discussion} className="text-ink-3" />}
         progress={
           <ArchivedTags>
-            <Tag>Archived</Tag>
+            <Badge>Archived</Badge>
           </ArchivedTags>
         }
       >
