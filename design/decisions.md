@@ -2,6 +2,14 @@
 
 Uma entrada por decisão, da mais recente para a mais antiga. Cada uma diz a data, o que foi decidido, o que foi descartado e a razão em uma ou duas frases. Uma decisão revista ganha uma entrada nova que aponta a antiga; a antiga não é apagada.
 
+## 2026-10-03 · Bloco copiável: o rótulo que é uma frase fica sem caixa alta
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 11 (`tasks/11-history-dialogs.md` §4.3 #35). O `CopyBlock` mantém em caixa alta o rótulo de uma palavra (`error`) e escreve como é o rótulo que é uma frase com um caminho, em `--text-micro` `--ink-3`, como o cabeçalho do bloco de código do mock (`lab/14-screen-rest/src/other.js:70`): `To remove it yourself, in ~/code/api`, na página da task apagada. Descartado: a caixa alta em todo rótulo, como a task 10 fez. Razão: a caixa alta trocaria a caixa do caminho (`~/CODE/API`), e o bloco apontaria para uma pasta que não existe.
+
+## 2026-10-03 · Os fatos de um arquivado usam o `Fact` que já existe
+
+Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 11 (`tasks/11-history-dialogs.md` §4.3 #34). A lista de termos da task, do review e da discussão arquivados é o `Fact` de `components/Facts.tsx`, o mesmo dos `Details` e do painel da PR, com a grade do mock (`max-content`, `--space-1` × `--space-5`, `lab/14-screen-rest/src/rest.css:255`) numa segunda constante ao lado de `FACTS`. Descartado: um `FactList` novo em `components/system/`. Razão: um componente por significado; muda só a grade.
+
 ## 2026-10-02 · Consistência: o passe do crítico antes da task, e a task 12 de M a G
 
 Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 12 (`tasks/12-consistency.md` §4.3 #1). O coordenador roda o passe do `design-critic` sobre o app inteiro depois do merge da task 11 e antes de o card da task 12 ir para `Ready`; o relatório (`research/critique-task-12-pass.md`) é o PRD, e as lacunas que ele achar são fechadas em `design/` antes. O plano tem um step por área de tela com itens no relatório, e a task é M a G, de 5 a 14 steps; passar de 14 vai ao usuário. Descartado: o passe como primeiro step da task, que deixaria lacunas de design para depois do PRD e um step de tamanho desconhecido no plano. Razão: `implementation.md:178` e a fase 5 já punham o passe antes, e o tamanho de uma task é estimativa do plano.
