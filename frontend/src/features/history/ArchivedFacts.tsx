@@ -1,20 +1,22 @@
+import type { ReactNode } from "react";
 import { ARCHIVED_FACTS, Fact } from "@/components/Facts";
 import { Link } from "@/components/system/Link";
 import { Tooltip } from "@/components/system/Tooltip";
 import type { ArchivedFact } from "@/features/history/archived";
 import { openExternal } from "@/store/actions";
 
-// FactValue is the value of a fact, with the reference inside it as the link that opens on GitHub.
+// FactValue is the value of a fact, with the references inside it as the links that open on GitHub.
 function FactValue({ fact }: { fact: ArchivedFact }) {
-  const { link } = fact;
-  const at = link === undefined ? -1 : fact.value.indexOf(link.text);
-  if (link === undefined || at === -1) {
-    return fact.value;
-  }
-  return (
-    <>
-      {fact.value.slice(0, at)}
-      <Tooltip content={link.tooltip}>
+  const parts: ReactNode[] = [];
+  let from = 0;
+  for (const link of fact.links ?? []) {
+    const at = fact.value.indexOf(link.text, from);
+    if (at === -1) {
+      continue;
+    }
+    parts.push(
+      fact.value.slice(from, at),
+      <Tooltip key={`${at}:${link.text}`} content={link.tooltip}>
         <Link
           href={link.href}
           external
@@ -25,10 +27,12 @@ function FactValue({ fact }: { fact: ArchivedFact }) {
         >
           {link.text}
         </Link>
-      </Tooltip>
-      {fact.value.slice(at + link.text.length)}
-    </>
-  );
+      </Tooltip>,
+    );
+    from = at + link.text.length;
+  }
+  parts.push(fact.value.slice(from));
+  return <>{parts}</>;
 }
 
 export interface ArchivedFactsProps {

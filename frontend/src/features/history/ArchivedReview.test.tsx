@@ -100,7 +100,7 @@ describe("ArchivedReview", () => {
     expect(within(second).queryByText("Rename the hook")).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Pass 3" })).not.toBeInTheDocument();
 
-    await user.click(within(second).getByRole("button", { name: "Report · reviews/pass-2.md" }));
+    await user.click(within(second).getByRole("button", { name: "Report · review-2.md" }));
 
     await waitFor(() =>
       expect(within(second).getAllByTestId("markdown").at(-1)).toHaveTextContent(
@@ -109,6 +109,25 @@ describe("ArchivedReview", () => {
     );
     expect(api.readReviewArtifact).toHaveBeenCalledWith("review-1", "review-2.md");
     expect(screen.queryByRole("button", { name: /^Open in/ })).not.toBeInTheDocument();
+  });
+
+  it("lists the findings that left a pass closed, each opening the text that went", async () => {
+    const { user } = view({ passes: [PUBLISHED] });
+
+    const findings = screen.getByRole("list", { name: "Findings of pass 2" });
+    expect(
+      within(findings)
+        .getAllByRole("button")
+        .map((line) => line.textContent),
+    ).toEqual([
+      "Missing guardsrc/login.ts:12Inline comment",
+      "Split the migrationGeneral · not on a line of the diffIn the review body",
+    ]);
+    expect(within(findings).queryByText("Split the migration.")).not.toBeInTheDocument();
+
+    await user.click(within(findings).getByRole("button", { name: /^Split the migration/ }));
+
+    expect(within(findings).getByText("Split the migration.")).toBeInTheDocument();
   });
 
   it("says no report was written, and that the conversation isn't kept", () => {

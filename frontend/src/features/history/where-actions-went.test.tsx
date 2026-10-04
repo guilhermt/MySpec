@@ -468,7 +468,7 @@ const ARCHIVED_REVIEW: Row[] = [
       expect(within(pass).getByText(/^published Sep 17/)).toBeInTheDocument();
       expect(within(pass).getByText("Missing guard")).toBeInTheDocument();
       expect(
-        within(pass).getByRole("button", { name: "Report · reviews/pass-2.md" }),
+        within(pass).getByRole("button", { name: "Report · review-2.md" }),
       ).toBeInTheDocument();
     },
   },
@@ -534,7 +534,9 @@ const ARCHIVED_DISCUSSION: Row[] = [
     control: "No document was written.",
     state: "no document",
     draw: async () => {
-      vi.mocked(api.readDiscussionArtifact).mockRejectedValue(new Error("no such file"));
+      vi.mocked(api.readDiscussionArtifact).mockRejectedValue(
+        new Error("open /d/discussion-1/discussion.md: no such file or directory"),
+      );
       archivedDiscussion();
       expect(await screen.findByText("No document was written.")).toBeInTheDocument();
     },

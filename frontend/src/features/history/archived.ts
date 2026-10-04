@@ -1,9 +1,8 @@
-import type { FindingView } from "@/components/system/Finding";
 import type { MarkerView } from "@/features/chat/markers";
 import { epicGroups, kindLabel, looseDrafts } from "@/features/discussion/discussion-status";
-import { passFindingViews } from "@/features/reviews/review-conversation";
 import { verdictLabel } from "@/features/reviews/review-status";
 import { draftTitle, publishedOutcome } from "@/lib/drafts";
+import { findingViewsOf } from "@/lib/findings";
 import { shortRef } from "@/lib/repositories";
 import { counted, listed } from "@/lib/situations";
 import { isOneShot } from "@/lib/task-modes";
@@ -14,6 +13,7 @@ import type {
   ArchivedStep,
   ArchivedTask,
   Draft,
+  ReviewFinding,
   ReviewPass,
   StepReport,
 } from "@/lib/wails";
@@ -46,12 +46,23 @@ export function archivedDate(iso: string, now: number): string {
   return dateAt(iso, now);
 }
 
-/** ArchivedFact is one term of the facts of an archived item, with the reference inside its value that opens on GitHub. */
+/** FactLink is a part of the value of a fact that is a link: its text, where it goes and what the tooltip says. */
+export interface FactLink {
+  text: string;
+  href: string;
+  tooltip: string;
+}
+
+/** ArchivedFact is one term of the facts of an archived item, with the references inside its value that open on GitHub, in their order. */
 export interface ArchivedFact {
   label: string;
   value: string;
-  /** link is the part of the value that is a link: its text, where it goes and what the tooltip says. */
-  link?: { text: string; href: string; tooltip: string };
+  links?: FactLink[];
+}
+
+// githubLink is the link of a reference that opens on GitHub: "Open api#398 on GitHub".
+function githubLink(text: string, href: string): FactLink {
+  return { text, href, tooltip: `Open ${text} on GitHub` };
 }
 
 // pullRequestValue is what the Pull request fact says of the pull request of a task.
@@ -80,14 +91,14 @@ export function archivedTaskFacts(task: ArchivedTask, now: number): ArchivedFact
     facts.push({
       label: "Repository",
       value: `${task.repository} · card ${ref}${status}`,
-      link: { text: ref, href: card.url, tooltip: `Open ${ref} on GitHub` },
+      links: [githubLink(ref, card.url)],
     });
   }
   if (pr !== null) {
     facts.push({
       label: "Pull request",
       value: pullRequestValue(pr, now),
-      link: { text: `#${pr.number}`, href: pr.url, tooltip: `Open #${pr.number} on GitHub` },
+      links: [githubLink(`#${pr.number}`, pr.url)],
     });
   }
   facts.push({ label: "Started", value: archivedDate(task.createdAt, now) });
@@ -238,7 +249,7 @@ export function archivedReviewFacts(review: ArchivedReview, now: number): Archiv
     {
       label: "Pull request",
       value: reviewPullRequestValue(review, ref, now),
-      link: { text: ref, href: review.url, tooltip: `Open ${ref} on GitHub` },
+      links: [githubLink(ref, review.url)],
     },
   ];
   const { card } = review;
@@ -247,7 +258,7 @@ export function archivedReviewFacts(review: ArchivedReview, now: number): Archiv
     facts.push({
       label: "Card",
       value: `${cardRef} · ${card.title}`,
-      link: { text: cardRef, href: card.url, tooltip: `Open ${cardRef} on GitHub` },
+      links: [githubLink(cardRef, card.url)],
     });
   }
   facts.push({ label: "Started", value: archivedDate(review.createdAt, now) });
@@ -291,9 +302,47 @@ export function passHeading(pass: ReviewPass, now: number): PassHeading {
   return { title, outcome: "not published", time: "" };
 }
 
-/** outFindingViews are the findings of a pass that left it, published or sent, as the system draws them. */
-export function outFindingViews(pass: ReviewPass, mode: string, now: number): FindingView[] {
-  return passFindingViews(pass, mode, now).filter((view) => view.decision === "approved");
+/** OutFinding is a finding that left a pass, as an archived review lists it: one closed line that opens its text. */
+export interface OutFinding {
+  id: string;
+  /** title is what the finding says is wrong; for one without a title, where it points. */
+  title: string;
+  /** location is where it points, "src/api.ts:31", or "" when the title already says it. */
+  location: string;
+  /** anchored is a location on a line of the diff, written in mono, rather than the general one. */
+  anchored: boolean;
+  /** went is where it went, without the hour the pass already says: "Inline comment", "In the review body", "Sent to the agent". */
+  went: string;
+  /** text is what went, Markdown. */
+  text: string;
+}
+
+// wentOf is where a finding that left a pass went.
+function wentOf(mode: string, finding: ReviewFinding): string {
+  if (mode === "apply") {
+    return "Sent to the agent";
+  }
+  switch (finding.placement) {
+    case "inline":
+      return "Inline comment";
+    case "body":
+      return "In the review body";
+    default:
+      return "Not published";
+  }
+}
+
+/** outFindings are the findings of a pass that left it, published or sent, in the order of the report. */
+export function outFindings(pass: ReviewPass, mode: string): OutFinding[] {
+  const out = (pass.findings ?? []).filter((finding) => finding.decision === "approved");
+  return findingViewsOf(out, (finding) => wentOf(mode, finding)).map((view) => ({
+    id: view.id,
+    title: view.title,
+    location: view.locationAsTitle ? "" : view.location.text,
+    anchored: view.location.kind === "anchored",
+    went: view.disabled ?? "",
+    text: view.text,
+  }));
 }
 
 /**
@@ -313,15 +362,16 @@ export function publishedSentence(drafts: readonly Draft[]): string {
   return `${published} of ${total}${outcome === "" ? "" : `: ${outcome}`}`;
 }
 
-// roundsSentence is how many rounds published, "1 round"; "" when none did.
+// roundsSentence is how many rounds of drafts the discussion took, published or not, "1 round", as
+// the page it leaves lists them; "" when it wrote no draft.
 function roundsSentence(drafts: readonly Draft[]): string {
-  const rounds = new Set(drafts.filter((draft) => draft.published).map((draft) => draft.round));
+  const rounds = new Set(drafts.map((draft) => draft.round));
   return rounds.size === 0 ? "" : counted(rounds.size, "round");
 }
 
 /**
  * archivedDiscussionFacts are the facts of an archived discussion: its board with the cards it started
- * from, when it started, when it was archived with the rounds it took, and what it published.
+ * from as links, when it started, when it was archived with the rounds it took, and what it published.
  */
 export function archivedDiscussionFacts(
   discussion: ArchivedDiscussion,
@@ -329,13 +379,18 @@ export function archivedDiscussionFacts(
 ): ArchivedFact[] {
   const drafts = discussion.drafts ?? [];
   const cards = (discussion.cards ?? []).map((card) =>
-    shortRef(`${card.repository}#${card.number}`),
+    githubLink(shortRef(`${card.repository}#${card.number}`), card.url),
   );
+  const board: ArchivedFact =
+    cards.length === 0
+      ? { label: "Board", value: discussion.board }
+      : {
+          label: "Board",
+          value: `${discussion.board} · from ${listed(cards.map((card) => card.text))}`,
+          links: cards,
+        };
   const facts: ArchivedFact[] = [
-    {
-      label: "Board",
-      value: cards.length === 0 ? discussion.board : `${discussion.board} · from ${listed(cards)}`,
-    },
+    board,
     { label: "Started", value: archivedDate(discussion.createdAt, now) },
   ];
   const archived = archivedDate(discussion.archivedAt, now);
@@ -362,7 +417,8 @@ export interface PublishedRow {
     | { kind: "text"; text: string };
 }
 
-// outcomeOf is what became of a draft: the issue it made or changed, or why nothing went.
+// outcomeOf is what became of a draft: the issue it made or changed, or why nothing went. A draft
+// approved that never reached GitHub, with or without the error of the write, failed to publish.
 function outcomeOf(draft: Draft): PublishedRow["outcome"] {
   if (draft.published) {
     const ref = shortRef(`${draft.repository}#${draft.number}`);
@@ -377,12 +433,12 @@ function outcomeOf(draft: Draft): PublishedRow["outcome"] {
   if (draft.decision === "discarded") {
     return { kind: "text", text: "Not published · discarded" };
   }
-  if (draft.publishError !== "") {
-    return { kind: "text", text: "Not published · failed" };
-  }
   return {
     kind: "text",
-    text: draft.decision === "" ? "Not published · not decided" : "Not published",
+    text:
+      draft.decision === "" && draft.publishError === ""
+        ? "Not published · not decided"
+        : "Not published · failed",
   };
 }
 

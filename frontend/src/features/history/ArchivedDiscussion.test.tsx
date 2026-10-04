@@ -119,11 +119,37 @@ describe("ArchivedDiscussion", () => {
   });
 
   it("says when no document was written, on a line that doesn't open", async () => {
-    vi.mocked(api.readDiscussionArtifact).mockRejectedValueOnce(new Error("no such file"));
+    vi.mocked(api.readDiscussionArtifact).mockRejectedValueOnce(
+      new Error("open /data/discussion-1/discussion.md: no such file or directory"),
+    );
     view();
 
     expect(await screen.findByText("No document was written.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^No document/ })).not.toBeInTheDocument();
+  });
+
+  it("says a document it couldn't read, and reads it again on Try again", async () => {
+    vi.mocked(api.readDiscussionArtifact).mockRejectedValueOnce(
+      new Error("open /data/discussion-1/discussion.md: permission denied"),
+    );
+    const { user } = view();
+
+    expect(await screen.findByText("Couldn't read discussion.md")).toBeInTheDocument();
+    expect(screen.getByText(/permission denied/)).toBeInTheDocument();
+    expect(screen.queryByText("No document was written.")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByRole("button", { name: /^discussion\.md/ })).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't read discussion.md")).not.toBeInTheDocument();
+  });
+
+  it("links the cards it started from to GitHub", async () => {
+    const { user } = view();
+
+    await user.click(screen.getByRole("link", { name: "web#12" }));
+
+    expect(api.openExternal).toHaveBeenCalledWith("https://github.com/dev/web/issues/12");
   });
 
   it("opens the whole conversation, read only, from its line", async () => {

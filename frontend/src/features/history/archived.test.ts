@@ -6,7 +6,7 @@ import {
   archivedTaskFacts,
   archivedTaskTabs,
   deleteTaskStays,
-  outFindingViews,
+  outFindings,
   passHeading,
   publishedRows,
   publishedSentence,
@@ -14,6 +14,7 @@ import {
   reviewedSentence,
   stepMarkers,
 } from "@/features/history/archived";
+import { goneRoundLines } from "@/features/navigation/gone-rounds";
 import {
   makeArchivedDiscussion,
   makeArchivedReview,
@@ -60,19 +61,19 @@ describe("archivedDate", () => {
 
 describe("archivedTaskFacts", () => {
   const linkOf = (task: typeof TASK, label: string) =>
-    archivedTaskFacts(task, NOW).find((fact) => fact.label === label)?.link;
+    archivedTaskFacts(task, NOW).find((fact) => fact.label === label)?.links;
 
   it("says the repository with its card and status, the pull request, and when it started", () => {
     expect(archivedTaskFacts(TASK, NOW)).toEqual([
       {
         label: "Repository",
         value: "acme/api · card api#398 · Done",
-        link: { text: "api#398", href: CARD.url, tooltip: "Open api#398 on GitHub" },
+        links: [{ text: "api#398", href: CARD.url, tooltip: "Open api#398 on GitHub" }],
       },
       {
         label: "Pull request",
         value: "#1279 merged into dev by lnakamura · Sep 24 at 14:51",
-        link: { text: "#1279", href: PR.url, tooltip: "Open #1279 on GitHub" },
+        links: [{ text: "#1279", href: PR.url, tooltip: "Open #1279 on GitHub" }],
       },
       { label: "Started", value: "Sep 17 at 10:03" },
       { label: "Archived", value: "Sep 24 at 15:02" },
@@ -289,11 +290,13 @@ describe("archivedReviewFacts", () => {
       {
         label: "Pull request",
         value: "web#2291 by tchen · merged into dev by rsouza · Sep 23 at 16:20",
-        link: {
-          text: "web#2291",
-          href: "https://github.com/dev/web/pull/31",
-          tooltip: "Open web#2291 on GitHub",
-        },
+        links: [
+          {
+            text: "web#2291",
+            href: "https://github.com/dev/web/pull/31",
+            tooltip: "Open web#2291 on GitHub",
+          },
+        ],
       },
       { label: "Started", value: "Sep 22 at 09:14" },
       { label: "Reviewed", value: "2 passes, both published" },
@@ -334,6 +337,19 @@ describe("archivedReviewFacts", () => {
     expect(facts[0]?.value).toBe("web#2291 by tchen · merged into dev");
     expect(facts.at(-1)).toEqual({ label: "Archived", value: "Sep 23 at 16:21" });
   });
+
+  it("reads the hour of a closed pull request from its closing, not from a merge", () => {
+    const closed = { ...REVIEW, outcome: "closed", archivedAt: local(2026, 8, 23, 16, 21) };
+
+    const withClosing = archivedReviewFacts(
+      { ...closed, mergedAt: "", closedAt: local(2026, 8, 23, 16, 20) },
+      NOW,
+    );
+    const withoutClosing = archivedReviewFacts({ ...closed, closedAt: "" }, NOW);
+
+    expect(withClosing.map((fact) => fact.label)).not.toContain("Archived");
+    expect(withoutClosing.at(-1)).toEqual({ label: "Archived", value: "Sep 23 at 16:21" });
+  });
 });
 
 describe("passHeading", () => {
@@ -371,22 +387,55 @@ describe("passHeading", () => {
   });
 });
 
-describe("outFindingViews", () => {
-  it("keeps the findings that left, with where each went", () => {
-    const published = pass({
-      published: true,
-      publishedAt: local(2026, 8, 23, 13, 41),
-      findings: [
-        makeReviewFinding({ decision: "approved", placement: "inline" }),
-        makeReviewFinding({ number: 2, decision: "approved", placement: "body" }),
-        makeReviewFinding({ number: 3, decision: "discarded" }),
-        makeReviewFinding({ number: 4, decision: "" }),
-      ],
-    });
+describe("outFindings", () => {
+  const findings = [
+    makeReviewFinding({
+      title: "Missing guard",
+      path: "src/api.ts",
+      line: 31,
+      text: "Guard the empty list.",
+      decision: "approved",
+      placement: "inline",
+    }),
+    makeReviewFinding({
+      number: 2,
+      title: "Split the migration",
+      path: "",
+      line: 0,
+      decision: "approved",
+      placement: "body",
+    }),
+    makeReviewFinding({ number: 3, decision: "discarded" }),
+    makeReviewFinding({ number: 4, decision: "" }),
+  ];
 
-    expect(outFindingViews(published, "publish", NOW).map((view) => view.disabled)).toEqual([
-      "Inline comment · published Sep 23, 13:41",
-      "In the review body · published Sep 23, 13:41",
+  it("keeps the findings that left, with where each went and no hour, which the pass says", () => {
+    const published = pass({ published: true, publishedAt: local(2026, 8, 23, 13, 41), findings });
+
+    expect(outFindings(published, "publish")).toEqual([
+      {
+        id: "1",
+        title: "Missing guard",
+        location: "src/api.ts:31",
+        anchored: true,
+        went: "Inline comment",
+        text: "Guard the empty list.",
+      },
+      expect.objectContaining({
+        id: "2",
+        title: "Split the migration",
+        anchored: false,
+        went: "In the review body",
+      }),
+    ]);
+  });
+
+  it("says the findings of a pass in Apply mode went to the agent", () => {
+    const sent = pass({ sent: true, sentAt: local(2026, 8, 23, 13, 41), findings });
+
+    expect(outFindings(sent, "apply").map((finding) => finding.went)).toEqual([
+      "Sent to the agent",
+      "Sent to the agent",
     ]);
   });
 });
@@ -432,18 +481,47 @@ describe("archivedDiscussionFacts", () => {
       makeDiscussionCard({ repository: "acme/api", number: 447 }),
       makeDiscussionCard({ repository: "acme/api", number: 449 }),
     ],
-    drafts: [created("d1", 452, { round: 1 }), created("d2", 453, { round: 2 }), made("d3")],
+    drafts: [
+      created("d1", 452, { round: 1 }),
+      created("d2", 453, { round: 2 }),
+      made("d3", { round: 3 }),
+    ],
     createdAt: local(2026, 8, 24, 10, 2),
     archivedAt: local(2026, 8, 24, 11, 47),
   });
 
-  it("says the board with its cards, the dates with the rounds, and what it published", () => {
+  it("says the board with its cards as links, the dates with the rounds, and what it published", () => {
     expect(archivedDiscussionFacts(discussion, NOW)).toEqual([
-      { label: "Board", value: "Platform Roadmap · from api#447 and api#449" },
+      {
+        label: "Board",
+        value: "Platform Roadmap · from api#447 and api#449",
+        links: [
+          {
+            text: "api#447",
+            href: "https://github.com/dev/web/issues/12",
+            tooltip: "Open api#447 on GitHub",
+          },
+          {
+            text: "api#449",
+            href: "https://github.com/dev/web/issues/12",
+            tooltip: "Open api#449 on GitHub",
+          },
+        ],
+      },
       { label: "Started", value: "Sep 24 at 10:02" },
-      { label: "Archived", value: "Sep 24 at 11:47 · 2 rounds" },
+      { label: "Archived", value: "Sep 24 at 11:47 · 3 rounds" },
       { label: "Published", value: "2 of 3 drafts: 2 created" },
     ]);
+  });
+
+  it("counts the rounds that published nothing, as the page the discussion leaves lists them", () => {
+    const quiet = { ...discussion, drafts: [made("d1", { round: 1 }), made("d2", { round: 2 })] };
+
+    expect(archivedDiscussionFacts(quiet, NOW)[2]).toEqual({
+      label: "Archived",
+      value: "Sep 24 at 11:47 · 2 rounds",
+    });
+    expect(goneRoundLines(quiet, NOW)).toHaveLength(2);
   });
 
   it("leaves out the cards, the rounds and the publication that it doesn't have", () => {
@@ -505,6 +583,7 @@ describe("publishedRows", () => {
     ["discarded", { decision: "discarded" }, "Not published · discarded"],
     ["not decided", { decision: "" }, "Not published · not decided"],
     ["failed", { decision: "approved", publishError: "rate limited" }, "Not published · failed"],
+    ["approved and never written", { decision: "approved" }, "Not published · failed"],
   ])("says why a draft that is %s didn't publish", (_, overrides, text) => {
     const [row] = publishedRows(makeArchivedDiscussion({ drafts: [made("d1", overrides)] }));
 
