@@ -23,6 +23,8 @@ async function draw() {
     </div>,
     { state: scene.state, ui: { location: scene.location } },
   );
+  // The rows take their height from the fonts, which a loaded runner may still be loading.
+  await document.fonts.ready;
   await settle();
   const bar = container.querySelector<HTMLElement>('[role="search"]');
   let viewport = bar?.parentElement ?? null;
@@ -67,14 +69,16 @@ describe.each(THEMES)("HistoryView, the entry the keys reach, in the %s theme", 
   it("keeps the first day below the bar when ↓ leaves the search with the list scrolled", async () => {
     setTheme(theme);
     const { bar, viewport } = await draw();
-    viewport.scrollTop = viewport.scrollHeight;
+    // Halfway down, the first day far above, and the end of the list, which asks for the older
+    // items, out of view.
+    viewport.scrollTop = viewport.scrollHeight / 2;
     (bar.querySelector("input") as HTMLInputElement).focus();
 
     await userEvent.keyboard("{ArrowDown}");
     await settle();
 
     expect(document.activeElement?.getAttribute("data-section-id")).not.toBeNull();
-    expect(whollyBelow(bar, viewport)).toBe(true);
+    await vi.waitFor(() => expect(whollyBelow(bar, viewport)).toBe(true));
   });
 
   it("keeps the first day below the bar when Home goes back from the end", async () => {
@@ -88,7 +92,7 @@ describe.each(THEMES)("HistoryView, the entry the keys reach, in the %s theme", 
     await settle();
 
     expect(viewport.scrollTop).toBe(0);
-    expect(whollyBelow(bar, viewport)).toBe(true);
+    await vi.waitFor(() => expect(whollyBelow(bar, viewport)).toBe(true));
   });
 
   it("keeps a row below the bar when ↑ moves to one scrolled behind it", async () => {
@@ -105,6 +109,6 @@ describe.each(THEMES)("HistoryView, the entry the keys reach, in the %s theme", 
     await settle();
 
     expect(document.activeElement).toBe(rows[19]);
-    expect(whollyBelow(bar, viewport)).toBe(true);
+    await vi.waitFor(() => expect(whollyBelow(bar, viewport)).toBe(true));
   });
 });
