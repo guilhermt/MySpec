@@ -53,6 +53,7 @@ export interface StoreOptions {
       | "olderLists"
       | "olderArchived"
       | "archivedLookups"
+      | "historyFocus"
     >
   >;
 }
@@ -108,6 +109,7 @@ export function resetAppStore(options: StoreOptions = {}): void {
     olderLists: options.ui?.olderLists ?? {},
     olderArchived: options.ui?.olderArchived ?? { tasks: {}, reviews: {}, discussions: {} },
     archivedLookups: options.ui?.archivedLookups ?? {},
+    historyFocus: options.ui?.historyFocus ?? null,
   });
 }
 

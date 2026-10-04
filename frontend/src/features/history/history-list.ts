@@ -88,3 +88,15 @@ export function historyEntries(
     (a, b) => Date.parse(b.archivedAt) - Date.parse(a.archivedAt) || 0,
   );
 }
+
+/**
+ * historyNeighbor is the entry that takes the place of the one with the id once it is deleted: the
+ * next, which is older; without one, the previous; null when it was the only one.
+ */
+export function historyNeighbor(entries: readonly HistoryEntry[], id: string): string | null {
+  const at = entries.findIndex((entry) => entry.id === id);
+  if (at === -1) {
+    return null;
+  }
+  return (entries[at + 1] ?? entries[at - 1])?.id ?? null;
+}

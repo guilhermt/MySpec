@@ -4,7 +4,7 @@ import { usePendingStart } from "@/features/board/usePendingStart";
 import { ArchivedDiscussionView } from "@/features/discussion/ArchivedDiscussionView";
 import { DiscussionView } from "@/features/discussion/DiscussionView";
 import { NewDiscussionDialog } from "@/features/discussion/NewDiscussionDialog";
-import { ArchivedTaskView } from "@/features/history/ArchivedTaskView";
+import { ArchivedTask } from "@/features/history/ArchivedTask";
 import { HistoryPanel } from "@/features/history/HistoryPanel";
 import { Home } from "@/features/home/Home";
 import { GoneView } from "@/features/navigation/GoneView";
@@ -45,7 +45,7 @@ function LocationView() {
     case "discussion":
       return <DiscussionView key={location.id} discussionId={location.id} />;
     case "archived-task":
-      return <ArchivedTaskView key={location.id} taskId={location.id} />;
+      return <ArchivedTask key={location.id} taskId={location.id} />;
     case "archived-review":
       return <ArchivedReviewView key={location.id} reviewId={location.id} />;
     case "archived-discussion":

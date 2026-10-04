@@ -1019,6 +1019,70 @@ export function deleteDiscussionInPlace(id: string): Promise<string | null> {
   return removalInPlace(id, () => api.deleteDiscussion(id));
 }
 
+// without is a record with no entry for the id.
+function without<T>(record: Readonly<Record<string, T>>, id: string): Record<string, T> {
+  const { [id]: _removed, ...rest } = record;
+  return rest;
+}
+
+/**
+ * deleteArchivedInPlace removes an archived item for good; on success History opens with the focus on
+ * the row that took its place. It answers the refusal, or null.
+ */
+export async function deleteArchivedInPlace(
+  kind: "task" | "review" | "discussion",
+  id: string,
+  neighbor: string | null,
+): Promise<string | null> {
+  const error = await removalInPlace(id, async () => {
+    switch (kind) {
+      case "task":
+        await api.deleteTask(id);
+        break;
+      case "review":
+        await api.deleteReview(id);
+        break;
+      case "discussion":
+        await api.deleteDiscussion(id);
+        break;
+    }
+  });
+  if (error !== null) {
+    return error;
+  }
+  useAppStore.setState((state) => ({
+    olderArchived: {
+      tasks: without(state.olderArchived.tasks, id),
+      reviews: without(state.olderArchived.reviews, id),
+      discussions: without(state.olderArchived.discussions, id),
+    },
+    olderLists: Object.fromEntries(
+      Object.entries(state.olderLists).map(([key, list]) => [
+        key,
+        { ...list, ids: list.ids.filter((listed) => listed !== id) },
+      ]),
+    ),
+    historyFocus: neighbor ?? "search",
+  }));
+  // An item of the window leaves with the state that no longer has it; one beyond the window leaves
+  // with nothing to say so, and its page goes back to History here.
+  const { app, location, go } = useAppStore.getState();
+  const opened =
+    (location.kind === "archived-task" ||
+      location.kind === "archived-review" ||
+      location.kind === "archived-discussion") &&
+    location.id === id;
+  const inWindow =
+    (app?.history ?? []).some((task) => task.id === id) ||
+    (app?.reviewHistory ?? []).some((review) => review.id === id) ||
+    (app?.discussionHistory ?? []).some((discussion) => discussion.id === id);
+  if (opened && !inWindow) {
+    useAppStore.setState({ expectGone: null });
+    go({ kind: "history" });
+  }
+  return null;
+}
+
 const NEW_OLDER_LIST: OlderList = { ids: [], next: null, matched: null, status: "idle", error: "" };
 
 // withOlderList puts the change of a list of the History beyond the window in the store.

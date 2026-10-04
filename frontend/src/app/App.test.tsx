@@ -213,11 +213,11 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: /^History/ }));
     await user.click(screen.getByRole("button", { name: /fix-header/ }));
 
-    expect(screen.getByText("Archived")).toBeInTheDocument();
+    expect(screen.getByText("Archived", { selector: "span" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("treeitem", { name: /^task add-login\./ }));
 
-    expect(screen.queryByText("Archived")).not.toBeInTheDocument();
+    expect(screen.queryByText("Archived", { selector: "span" })).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Artifacts" })).toBeInTheDocument();
   });
 

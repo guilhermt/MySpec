@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { historyEntries } from "@/features/history/history-list";
+import { historyEntries, historyNeighbor } from "@/features/history/history-list";
 import {
   makeArchivedDiscussion,
   makeArchivedReview,
@@ -109,5 +109,22 @@ describe("historyEntries", () => {
     const entries = historyEntries(APP, older, [old.id, "gone"], "", "").map((entry) => entry.id);
 
     expect(entries).toEqual(["task-login", "discussion-1", "review-31", "task-header", "task-old"]);
+  });
+});
+
+describe("historyNeighbor", () => {
+  const entries = historyEntries(makeState({ history: [LOGIN, HEADER] }), NO_OLDER, [], "", "");
+
+  it("is the next entry, the older one", () => {
+    expect(historyNeighbor(entries, "task-login")).toBe("task-header");
+  });
+
+  it("is the previous one when the entry is the last", () => {
+    expect(historyNeighbor(entries, "task-header")).toBe("task-login");
+  });
+
+  it("is null for the only entry, and for one that isn't listed", () => {
+    expect(historyNeighbor(entries.slice(0, 1), "task-login")).toBeNull();
+    expect(historyNeighbor(entries, "missing")).toBeNull();
   });
 });

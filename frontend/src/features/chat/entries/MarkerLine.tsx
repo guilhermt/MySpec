@@ -226,6 +226,8 @@ export interface MarkerLineProps {
   review?: ReviewSummary | null;
   /** discussion is the discussion whose documents a body of it reads; null outside one. */
   discussion?: { id: string; documentRevision: number; documents: boolean } | null;
+  /** archived is the archived task or review whose documents an artifact body reads, with no way on to a panel: History has none. */
+  archived?: { kind: "task" | "review"; id: string } | null;
   /** requested opens the line and gives it the focus, once: the request bar asked for it. */
   requested?: boolean;
   /** onRequested says the request was settled. */
@@ -243,6 +245,7 @@ export function MarkerLine({
   task = null,
   review = null,
   discussion = null,
+  archived = null,
   requested = false,
   onRequested,
 }: MarkerLineProps) {
@@ -256,9 +259,11 @@ export function MarkerLine({
   const openPanelAt = useAppStore((state) => state.openPanelAt);
   const { body } = view;
   const opens = body.kind !== "none";
+  // An archived task keeps its documents as they are: the version stays 0 and only a new attempt reads again.
+  const taskId = task?.id ?? (archived?.kind === "task" ? archived.id : null);
   const taskArtifact = useArtifact(
-    task?.id ?? "",
-    open && body.kind === "artifact" && task !== null ? body.name : null,
+    taskId ?? "",
+    open && body.kind === "artifact" && taskId !== null ? body.name : null,
     (task?.artifactVersion ?? 0) + attempt,
   );
   // The report of a pass is read again when the agent writes it again, which is its revision.
@@ -266,9 +271,10 @@ export function MarkerLine({
     body.kind === "artifact"
       ? ((review?.passes ?? []).find((pass) => pass.file === body.name)?.revision ?? 0)
       : 0;
+  const reviewId = review?.id ?? (archived?.kind === "review" ? archived.id : null);
   const reviewArtifact = useReviewArtifact(
-    review?.id ?? "",
-    open && body.kind === "artifact" && review !== null ? body.name : null,
+    reviewId ?? "",
+    open && body.kind === "artifact" && reviewId !== null ? body.name : null,
     passRevision + attempt,
   );
   const discussionDocument = body.kind === "discussionDocument" ? body : null;
@@ -280,10 +286,12 @@ export function MarkerLine({
     discussion?.documentRevision ?? 0,
     attempt,
   );
-  const artifact = review === null ? taskArtifact : reviewArtifact;
+  const artifact = reviewId === null ? taskArtifact : reviewArtifact;
   const time = view.timeText ?? clockTime(createdAt, Date.now());
-  const said = view.complement === "" ? view.text : `${view.text} · ${view.complement}`;
-  const name = time === "" ? said : `${said}, ${time}`;
+  const lead = view.lead === undefined ? view.text : `${view.lead} ${view.text}`;
+  const said = view.complement === "" ? lead : `${lead} · ${view.complement}`;
+  const named = view.aside === undefined ? said : `${said}, ${view.aside}`;
+  const name = time === "" ? named : `${named}, ${time}`;
 
   useEffect(() => {
     if (!requested) {
@@ -305,7 +313,14 @@ export function MarkerLine({
   const cells = (
     <>
       {opens ? <Chevron open={open} /> : <span aria-hidden="true" className="w-(--icon-xs)" />}
-      {view.tone === "error" ? (
+      {view.lead !== undefined ? (
+        <span
+          aria-hidden="true"
+          className="w-(--key-size) shrink-0 text-right font-mono text-(length:--text-micro) leading-(--leading-micro) text-ink-3 tabular-nums"
+        >
+          {view.lead}
+        </span>
+      ) : view.tone === "error" ? (
         <StateGlyph state="error" size="sm" />
       ) : (
         <Icon
@@ -335,11 +350,19 @@ export function MarkerLine({
           {view.link.label}
         </Button>
       )}
+      {view.aside !== undefined && (
+        <span
+          aria-hidden="true"
+          className="ml-auto shrink-0 font-mono text-(length:--text-micro) leading-(--leading-micro) text-ink-3 [font-variant-ligatures:none]"
+        >
+          {view.aside}
+        </span>
+      )}
       {!view.timeHidden && (
         <span
           className={cn(
             "entry-time shrink-0 text-(length:--text-micro) leading-(--leading-micro) text-ink-4 tabular-nums",
-            view.link === undefined || opens ? "ml-auto" : "",
+            (view.link === undefined || opens) && view.aside === undefined ? "ml-auto" : "",
           )}
         >
           {time}
@@ -451,16 +474,18 @@ export function MarkerLine({
             <div className="select-text">
               <Markdown cutCode>{documentText(body.name, artifact.content)}</Markdown>
             </div>
-            <div className="mt-(--space-2)">
-              <Button
-                variant="ghost"
-                size="xs"
-                icon={ICONS.file}
-                onClick={() => openPanelAt(foot.panel, body.name)}
-              >
-                {foot.label}
-              </Button>
-            </div>
+            {archived === null && (
+              <div className="mt-(--space-2)">
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  icon={ICONS.file}
+                  onClick={() => openPanelAt(foot.panel, body.name)}
+                >
+                  {foot.label}
+                </Button>
+              </div>
+            )}
           </div>
         ) : null;
       break;

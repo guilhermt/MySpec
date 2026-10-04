@@ -1603,6 +1603,7 @@ export function resetWailsMock(): void {
   api.getArchived.mockImplementation(() =>
     Promise.resolve({ task: null, review: null, discussion: null }),
   );
+  api.deleteTask.mockImplementation(() => Promise.resolve({ leftover: null }));
   api.deleteReview.mockImplementation(() => Promise.resolve({ leftover: null }));
   api.readReviewArtifact.mockImplementation(() => Promise.resolve("## Findings\n"));
   api.getTranscript.mockImplementation((taskId, stage) =>

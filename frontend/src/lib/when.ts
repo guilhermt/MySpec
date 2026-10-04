@@ -51,6 +51,28 @@ export function clockTime(iso: string, now: number): string {
   }
 }
 
+/** dateAt is a day and its time as the History writes them: Sep 24 at 14:51, Sep 24, 2025 at 14:51 before this year; "" for none. */
+export function dateAt(iso: string, now: number): string {
+  const date = parse(iso);
+  if (date === null) {
+    return "";
+  }
+  const day =
+    date.getFullYear() === new Date(now).getFullYear()
+      ? DAY.format(date)
+      : DAY_OF_YEAR.format(date);
+  return `${day} at ${CLOCK.format(date)}`;
+}
+
+/** clockOrDateAt is the clock of a time today, dateAt of another day: 15:02, Sep 24 at 15:02; "" for none. */
+export function clockOrDateAt(iso: string, now: number): string {
+  const date = parse(iso);
+  if (date === null) {
+    return "";
+  }
+  return daysBefore(date, now) === 0 ? CLOCK.format(date) : dateAt(iso, now);
+}
+
 /** startedTime is the time of a Started field: Today 09:14, then as clockTime. */
 export function startedTime(iso: string, now: number): string {
   const date = parse(iso);

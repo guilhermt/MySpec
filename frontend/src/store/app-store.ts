@@ -318,6 +318,8 @@ export interface AppStore {
   olderArchived: OlderArchived;
   /** archivedLookups are the archived items asked for by id: loading while the Go answers, missing when no item has the id. */
   archivedLookups: Readonly<Record<string, "loading" | "missing">>;
+  /** historyFocus is where History puts the focus when it opens next: an entry id, or "search". */
+  historyFocus: string | null;
 
   applyStartup: (next: Startup) => void;
   chooseStartupTheme: (preference: ThemePreference) => void;
@@ -405,6 +407,8 @@ export interface AppStore {
   openHistory: () => void;
   openArchived: (id: string) => void;
   setHistoryQuery: (query: string) => void;
+  /** clearHistoryFocus says History took the focus it was asked to put. */
+  clearHistoryFocus: () => void;
   /** dismissToast takes a toast off the screen. */
   dismissToast: (id: string) => void;
   setLeftover: (leftover: Leftover | null) => void;
@@ -700,6 +704,7 @@ function initialTaskUi(): Pick<
   | "textDrafts"
   | "lastRepositoryId"
   | "historyQuery"
+  | "historyFocus"
   | "leftover"
   | "flashing"
 > {
@@ -725,6 +730,7 @@ function initialTaskUi(): Pick<
     textDrafts: {},
     lastRepositoryId: null,
     historyQuery: "",
+    historyFocus: null,
     leftover: null,
     flashing: new Set<string>(),
   };
@@ -1304,6 +1310,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
     openArchived: (id) => go({ kind: "archived-task", id }),
 
     setHistoryQuery: (query) => set({ historyQuery: query }),
+
+    clearHistoryFocus: () => set({ historyFocus: null }),
 
     dismissToast: (id) =>
       set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),

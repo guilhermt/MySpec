@@ -157,6 +157,10 @@ export function HistoryPanel() {
   const older = useAppStore((state) => state.olderLists[olderKey("", "")]);
   const olderIds = older?.ids ?? NO_IDS;
   const summary = useHistorySummary();
+  const clearHistoryFocus = useAppStore((state) => state.clearHistoryFocus);
+
+  // The search takes the focus whatever asked for another place.
+  useEffect(() => clearHistoryFocus(), [clearHistoryFocus]);
 
   // The list shows everything the History holds, so the pages beyond the window are asked one
   // after the other until none is left; a failed page stops the loop.
