@@ -6,6 +6,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
+	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/models"
@@ -42,9 +43,9 @@ func (a *App) snapshot() bindings.State {
 	found = append(found, discussionFound...)
 	situations := a.attention.Update(found)
 
-	repositories := bindings.FromRepositories(
-		a.repositories.List(), a.repositories.Missing, a.tasks.Counts, a.prReviews.Counts, a.repositories.Cloning,
-	)
+	repositories := a.repositoryStates()
+	archivedTasks, archivedReviews, archivedDiscussions := a.tasks.ListArchived(), a.prReviews.ListArchived(), a.discussions.ListArchived()
+	start := bindings.WindowStart(time.Now())
 	return bindings.State{
 		Repositories:     repositories,
 		RepositoryFilter: a.repositories.Filter(),
@@ -68,13 +69,9 @@ func (a *App) snapshot() bindings.State {
 			a.repositories.Get,
 			summaries, situations,
 		),
-		History: bindings.FromArchived(a.tasks.ListArchived(), bindings.ArchivedSources{
-			Artifacts:    a.taskArtifacts,
-			PRRun:        a.tasks.PRRun,
-			PRPasses:     a.tasks.PRPasses,
-			StepRuns:     a.tasks.StepRuns,
-			Repositories: a.repositories.Get,
-		}),
+		History: bindings.FromArchived(
+			since(archivedTasks, start, func(t task.Task) time.Time { return t.ArchivedAt }), a.archivedSources(),
+		),
 		Boards: bindings.FromBoards(
 			a.boards.List(), a.boards.Stored, a.boards.Reading,
 			a.repositories.List(), a.repositories.Missing, a.tasks.CardTasks(),
@@ -86,16 +83,69 @@ func (a *App) snapshot() bindings.State {
 		),
 		Reviews: bindings.FromReviews(reviews, situations, repositories),
 		ReviewHistory: bindings.FromArchivedReviews(
-			a.prReviews.ListArchived(), a.prReviews.Passes, repositories,
+			since(archivedReviews, start, func(r prreview.Review) time.Time { return r.ArchivedAt }),
+			a.prReviews.Passes, repositories,
 		),
 		Discussions: bindings.FromDiscussions(
 			discussions, situations, a.boards.Get, a.boards.Stored, repositories, a.repositories.Missing,
 		),
 		DiscussionHistory: bindings.FromArchivedDiscussions(
-			a.discussions.ListArchived(), a.discussions.Drafts, repositories,
+			since(archivedDiscussions, start, func(d discussion.Discussion) time.Time { return d.ArchivedAt }),
+			a.discussions.Drafts, repositories,
 		),
-		CloneFolder: a.repositories.CloneFolder(),
+		HistorySummary: bindings.FromHistorySummary(archivedTasks, archivedReviews, archivedDiscussions, start),
+		CloneFolder:    a.repositories.CloneFolder(),
 	}
+}
+
+// repositoryStates are the registered repositories as the interface sees them,
+// with the archived discussions each one touched.
+func (a *App) repositoryStates() []bindings.Repository {
+	repositories := bindings.FromRepositories(
+		a.repositories.List(), a.repositories.Missing, a.tasks.Counts, a.prReviews.Counts, a.repositories.Cloning,
+	)
+	counts := bindings.ArchivedDiscussionRepositories(a.discussions.ListArchived(), a.discussions.Drafts, repositories)
+	for i := range repositories {
+		repositories[i].ArchivedDiscussions = counts[repositories[i].ID]
+	}
+	return repositories
+}
+
+// archivedSources are what the conversion of an archived task reads.
+func (a *App) archivedSources() bindings.ArchivedSources {
+	return bindings.ArchivedSources{
+		Artifacts:    a.taskArtifacts,
+		PRRun:        a.tasks.PRRun,
+		PRPasses:     a.tasks.PRPasses,
+		StepRuns:     a.tasks.StepRuns,
+		Repositories: a.repositories.Get,
+	}
+}
+
+// historySources read the whole History, converted, for the pages of the
+// HistoryService.
+func (a *App) historySources() bindings.HistorySources {
+	return bindings.HistorySources{
+		Tasks: func() []bindings.ArchivedTask {
+			return bindings.FromArchived(a.tasks.ListArchived(), a.archivedSources())
+		},
+		Reviews: func() []bindings.ArchivedReview {
+			return bindings.FromArchivedReviews(a.prReviews.ListArchived(), a.prReviews.Passes, a.repositoryStates())
+		},
+		Discussions: func() []bindings.ArchivedDiscussion {
+			return bindings.FromArchivedDiscussions(a.discussions.ListArchived(), a.discussions.Drafts, a.repositoryStates())
+		},
+	}
+}
+
+// since keeps the archived items of a list, newest first, archived at start or after.
+func since[T any](list []T, start time.Time, archivedAt func(T) time.Time) []T {
+	for i, item := range list {
+		if archivedAt(item).Before(start) {
+			return list[:i]
+		}
+	}
+	return list
 }
 
 // reviewTitle is the title of the notification of a review: the pull request

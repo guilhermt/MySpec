@@ -8,7 +8,6 @@ import { api, type Board, type BoardCard, type Repository } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import {
-  makeArchivedTask,
   makeBoard,
   makeBoardCard,
   makeBoardRepositoryOption,
@@ -402,12 +401,12 @@ describe("BoardCardPanel", () => {
   it("opens the task, and the discussions the card is in and came from", async () => {
     const card = makeBoardCard({
       archivedTaskId: "task-old",
+      archivedTaskName: "Login screen",
       writtenBy: { id: "d-1", title: "Pricing", archived: true },
     });
     const { user } = renderWithStore(<Harness card={card} />, {
       state: makeState({
         boards: [BOARD],
-        history: [makeArchivedTask({ id: "task-old", name: "Login screen" })],
       }),
     });
 

@@ -68,6 +68,7 @@ import {
   makeDiscussion,
   makeDraft,
   makeEntry,
+  makeHistorySummary,
   makeLeftover,
   makeMigration,
   makeModelCatalog,
@@ -249,7 +250,9 @@ describe("applyState", () => {
 
     useAppStore.getState().applyState(withTasks());
     useAppStore.getState().openHistory();
-    useAppStore.getState().applyState({ ...WELCOME, history: [makeArchivedTask()] });
+    useAppStore
+      .getState()
+      .applyState({ ...WELCOME, historySummary: makeHistorySummary({ tasks: 1 }) });
     expect(location()).toEqual({ kind: "history" });
   });
 
@@ -3078,5 +3081,103 @@ describe("the dialogs of a review", () => {
     act(() => useAppStore.getState().applyState(withReviews({})));
 
     expect(useAppStore.getState().reviewDialog).toEqual({ reviewId: REVIEW.id, kind: "again" });
+  });
+});
+
+describe("the History beyond the window", () => {
+  const OLD = makeArchivedTask({ id: "task-beyond", name: "beyond" });
+  const CACHED = { tasks: { [OLD.id]: OLD }, reviews: {}, discussions: {} };
+
+  it("keeps the page of an archived item that is in the cache", () => {
+    resetAppStore({
+      ui: { olderArchived: CACHED, location: { kind: "archived-task", id: OLD.id } },
+    });
+    useAppStore.getState().applyState(withTasks());
+
+    useAppStore.getState().applyState(withTasks());
+
+    expect(location()).toEqual({ kind: "archived-task", id: OLD.id });
+  });
+
+  it("keeps the page of an archived item the Go is looking for", () => {
+    resetAppStore({
+      ui: {
+        archivedLookups: { [OLD.id]: "loading" },
+        location: { kind: "archived-task", id: OLD.id },
+      },
+    });
+    useAppStore.getState().applyState(withTasks());
+
+    useAppStore.getState().applyState(withTasks());
+
+    expect(location()).toEqual({ kind: "archived-task", id: OLD.id });
+  });
+
+  it("keeps the page of an archived item in the first state, where it may be beyond the window", () => {
+    resetAppStore({ ui: { location: { kind: "archived-review", id: "review-beyond" } } });
+
+    useAppStore.getState().applyState(withTasks());
+
+    expect(location()).toEqual({ kind: "archived-review", id: "review-beyond" });
+  });
+
+  it("sends the page of an archived item that is nowhere to the History", () => {
+    resetAppStore({ ui: { location: { kind: "archived-discussion", id: "discussion-gone" } } });
+    useAppStore.getState().applyState(withTasks());
+
+    useAppStore.getState().applyState(withTasks());
+
+    expect(location()).toEqual({ kind: "history" });
+  });
+
+  it("finds the archived items of the cache after the ones of the window", () => {
+    resetAppStore({ state: withTasks({ history: [ARCHIVED] }), ui: { olderArchived: CACHED } });
+
+    const { result } = renderHook(() => ({
+      window: useArchivedTask(ARCHIVED.id),
+      beyond: useArchivedTask(OLD.id),
+      none: useArchivedTask("nope"),
+    }));
+
+    expect(result.current).toEqual({ window: ARCHIVED, beyond: OLD, none: null });
+  });
+
+  it("keeps the pages across states of the same window", () => {
+    const summary = makeHistorySummary({ windowStart: "2026-06-24T00:00:00Z" });
+    const list = { ids: [OLD.id], next: null, matched: 1, status: "idle" as const, error: "" };
+    resetAppStore({
+      state: withTasks({ historySummary: summary }),
+      ui: { olderLists: { k: list } },
+    });
+
+    useAppStore.getState().applyState(withTasks({ historySummary: { ...summary } }));
+
+    expect(useAppStore.getState().olderLists).toEqual({ k: list });
+  });
+
+  it("starts the pages over when the window moves, and keeps the items", () => {
+    const list = { ids: [OLD.id], next: null, matched: 1, status: "idle" as const, error: "" };
+    resetAppStore({
+      state: withTasks({
+        historySummary: makeHistorySummary({ windowStart: "2026-06-24T12:00:00Z" }),
+      }),
+      ui: { olderArchived: CACHED, olderLists: { k: list } },
+    });
+
+    useAppStore
+      .getState()
+      .applyState(
+        withTasks({ historySummary: makeHistorySummary({ windowStart: "2026-06-24T12:00:00Z" }) }),
+      );
+    expect(useAppStore.getState().olderLists).toEqual({ k: list });
+
+    useAppStore
+      .getState()
+      .applyState(
+        withTasks({ historySummary: makeHistorySummary({ windowStart: "2026-06-25T12:00:00Z" }) }),
+      );
+
+    expect(useAppStore.getState().olderLists).toEqual({});
+    expect(useAppStore.getState().olderArchived).toEqual(CACHED);
   });
 });

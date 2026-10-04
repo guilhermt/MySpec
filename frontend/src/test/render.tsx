@@ -50,6 +50,9 @@ export interface StoreOptions {
       | "promptEdit"
       | "pendingLeave"
       | "promptReturn"
+      | "olderLists"
+      | "olderArchived"
+      | "archivedLookups"
     >
   >;
 }
@@ -102,6 +105,9 @@ export function resetAppStore(options: StoreOptions = {}): void {
     promptEdit: options.ui?.promptEdit ?? null,
     pendingLeave: options.ui?.pendingLeave ?? null,
     promptReturn: options.ui?.promptReturn ?? null,
+    olderLists: options.ui?.olderLists ?? {},
+    olderArchived: options.ui?.olderArchived ?? { tasks: {}, reviews: {}, discussions: {} },
+    archivedLookups: options.ui?.archivedLookups ?? {},
   });
 }
 

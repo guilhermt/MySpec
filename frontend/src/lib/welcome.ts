@@ -16,11 +16,8 @@ export function welcomeMode(app: State | null): boolean {
 
 /** archivedAnything says History has something to open. */
 export function archivedAnything(app: State): boolean {
-  return (
-    (app.history ?? []).length > 0 ||
-    (app.reviewHistory ?? []).length > 0 ||
-    (app.discussionHistory ?? []).length > 0
-  );
+  const { tasks, reviews, discussions } = app.historySummary;
+  return tasks + reviews + discussions > 0;
 }
 
 /** allowedInWelcome is a place the welcome mode keeps: Home, Settings and, with something archived, History and the archived items. */

@@ -10,7 +10,6 @@ import {
 } from "@/features/board/card-panel";
 import type { BoardCard } from "@/lib/wails";
 import {
-  makeArchivedTask,
   makeBoard,
   makeBoardCard,
   makeDiscussion,
@@ -31,7 +30,6 @@ const REPOSITORY = makeRepository({
 const APP = makeState({
   repositories: [REPOSITORY],
   tasks: [makeTask({ id: "task-1", name: "412-rate-limit" })],
-  history: [makeArchivedTask({ id: "old-task", name: "400-old" })],
 });
 
 const IDLE: CloneState = { cloning: false, error: null, opensDialog: false };
@@ -348,7 +346,7 @@ describe("the task and the discussions", () => {
   });
 
   it("shows the archived task by its name when there is no active one", () => {
-    const card = cardOf({ archivedTaskId: "old-task" });
+    const card = cardOf({ archivedTaskId: "old-task", archivedTaskName: "400-old" });
 
     expect(cardPanelModel(card, context(card)).task).toEqual({
       kind: "archived",

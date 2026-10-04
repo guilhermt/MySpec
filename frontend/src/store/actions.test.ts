@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { olderKey } from "@/lib/history";
 import { api } from "@/lib/wails";
 import {
   addBoard,
@@ -35,10 +36,12 @@ import {
   discardStage,
   discardStep,
   discussionContext,
+  findArchived,
   followTaskReviewMode,
   groupIntoEpicInPlace,
   interrupt,
   listPrompts,
+  loadOlderHistory,
   loadTranscript,
   openExternal,
   openFileInEditor,
@@ -97,6 +100,8 @@ import {
 import { useAppStore } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
 import {
+  makeArchivedDiscussion,
+  makeArchivedReview,
   makeArchivedTask,
   makeBoard,
   makeBoardCard,
@@ -106,6 +111,8 @@ import {
   makeDiscussion,
   makeDraft,
   makeEntry,
+  makeHistoryPage,
+  makeHistorySummary,
   makeLeftover,
   makeRepository,
   makeReviewFilters,
@@ -1230,5 +1237,172 @@ describe("the actions of a finding, which answer on the finding", () => {
       "pass is over",
     );
     expect(useAppStore.getState().error).toBeNull();
+  });
+});
+
+describe("loadOlderHistory", () => {
+  const WINDOW_START = "2026-06-24T12:00:00Z";
+  const KEY = olderKey("", "");
+
+  function list() {
+    return useAppStore.getState().olderLists[KEY];
+  }
+
+  beforeEach(() => {
+    resetAppStore({
+      state: makeState({
+        historySummary: makeHistorySummary({ tasks: 3, windowStart: WINDOW_START }),
+      }),
+    });
+  });
+
+  it("asks for the first page from the start of the window and keeps what comes", async () => {
+    const task = makeArchivedTask({ id: "task-old", archivedAt: "2026-06-20T10:00:00Z" });
+    const review = makeArchivedReview({ id: "review-old", archivedAt: "2026-06-19T10:00:00Z" });
+    vi.mocked(api.listArchived).mockResolvedValueOnce(
+      makeHistoryPage({
+        tasks: [task],
+        reviews: [review],
+        nextBefore: "2026-06-19T10:00:00Z",
+        nextBeforeId: "review-old",
+        matched: 5,
+      }),
+    );
+
+    await loadOlderHistory("", "");
+
+    expect(api.listArchived).toHaveBeenCalledWith({
+      before: WINDOW_START,
+      beforeId: "",
+      query: "",
+      repositoryId: "",
+    });
+    expect(list()).toEqual({
+      ids: ["task-old", "review-old"],
+      next: { before: "2026-06-19T10:00:00Z", beforeId: "review-old" },
+      matched: 5,
+      status: "idle",
+      error: "",
+    });
+    expect(useAppStore.getState().olderArchived.tasks["task-old"]).toEqual(task);
+    expect(useAppStore.getState().olderArchived.reviews["review-old"]).toEqual(review);
+  });
+
+  it("asks for the next page with the cursor and ends when there is none", async () => {
+    vi.mocked(api.listArchived)
+      .mockResolvedValueOnce(
+        makeHistoryPage({
+          tasks: [makeArchivedTask({ id: "task-1" })],
+          nextBefore: "2026-06-01T10:00:00Z",
+          nextBeforeId: "task-1",
+          matched: 2,
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeHistoryPage({
+          discussions: [makeArchivedDiscussion({ id: "discussion-1" })],
+          matched: 2,
+        }),
+      );
+
+    await loadOlderHistory("", "");
+    await loadOlderHistory("", "");
+    await loadOlderHistory("", "");
+
+    expect(api.listArchived).toHaveBeenCalledTimes(2);
+    expect(api.listArchived).toHaveBeenLastCalledWith({
+      before: "2026-06-01T10:00:00Z",
+      beforeId: "task-1",
+      query: "",
+      repositoryId: "",
+    });
+    expect(list()).toMatchObject({ ids: ["task-1", "discussion-1"], next: null, matched: 2 });
+  });
+
+  it("keeps a failure on the list, not in the app notice", async () => {
+    vi.mocked(api.listArchived).mockRejectedValueOnce(new Error("cursor refused"));
+
+    await loadOlderHistory("", "");
+
+    expect(list()).toMatchObject({ status: "error", error: "cursor refused", matched: null });
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("does not ask twice while a page is on its way", async () => {
+    let answer: (page: ReturnType<typeof makeHistoryPage>) => void = () => {};
+    vi.mocked(api.listArchived).mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      }) as ReturnType<typeof api.listArchived>,
+    );
+
+    const first = loadOlderHistory("", "");
+    await loadOlderHistory("", "");
+    answer(makeHistoryPage());
+    await first;
+
+    expect(api.listArchived).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops the page that answers after the lists were started over", async () => {
+    let answer: (page: ReturnType<typeof makeHistoryPage>) => void = () => {};
+    vi.mocked(api.listArchived).mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      }) as ReturnType<typeof api.listArchived>,
+    );
+
+    const asking = loadOlderHistory("", "");
+    useAppStore.setState({ olderLists: {} });
+    answer(makeHistoryPage({ tasks: [makeArchivedTask({ id: "task-stale" })], matched: 9 }));
+    await asking;
+
+    expect(list()).toBeUndefined();
+  });
+
+  it("keeps a list for each query and repository", async () => {
+    await loadOlderHistory("Cache", "repo-1");
+
+    expect(api.listArchived).toHaveBeenCalledWith(
+      expect.objectContaining({ query: "Cache", repositoryId: "repo-1" }),
+    );
+    expect(useAppStore.getState().olderLists[olderKey("cache", "repo-1")]).toBeDefined();
+    expect(list()).toBeUndefined();
+  });
+});
+
+describe("findArchived", () => {
+  it("brings the item of any kind into the cache and clears the mark", async () => {
+    const review = makeArchivedReview({ id: "review-old" });
+    vi.mocked(api.getArchived).mockResolvedValueOnce({ task: null, review, discussion: null });
+
+    await findArchived("review-old");
+
+    expect(api.getArchived).toHaveBeenCalledWith("review-old");
+    expect(useAppStore.getState().olderArchived.reviews["review-old"]).toEqual(review);
+    expect(useAppStore.getState().archivedLookups).toEqual({});
+  });
+
+  it("marks an id no item has as missing and takes its page back to the History", async () => {
+    resetAppStore({
+      state: makeState(),
+      ui: { location: { kind: "archived-task", id: "task-gone" } },
+    });
+
+    await findArchived("task-gone");
+
+    expect(useAppStore.getState().archivedLookups).toEqual({ "task-gone": "missing" });
+    expect(useAppStore.getState().location).toEqual({ kind: "history" });
+  });
+
+  it("leaves the place alone when it is another one", async () => {
+    resetAppStore({
+      state: makeState(),
+      ui: { location: { kind: "settings", section: "boards" } },
+    });
+
+    await findArchived("task-gone");
+
+    expect(useAppStore.getState().location).toEqual({ kind: "settings", section: "boards" });
   });
 });

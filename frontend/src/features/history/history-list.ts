@@ -1,5 +1,6 @@
 import { ALL_REPOSITORIES, tasksInFilter } from "@/lib/repositories";
 import type { ArchivedDiscussion, ArchivedReview, ArchivedTask, State } from "@/lib/wails";
+import type { OlderArchived } from "@/store/app-store";
 
 /** HistoryEntry is one line of the history: an archived task, review or discussion. */
 export type HistoryEntry =
@@ -33,23 +34,33 @@ function discussionsInFilter(
   return discussions.filter((discussion) => (discussion.repositoryIds ?? []).includes(filter));
 }
 
+// What the History brought from beyond the window, by the ids of a list, in the order they came.
+function olderOf<T>(items: Readonly<Record<string, T>>, ids: readonly string[]): T[] {
+  return ids.flatMap((id) => (items[id] === undefined ? [] : [items[id]]));
+}
+
 /**
  * historyEntries is what the history lists: the archived tasks, reviews and
- * discussions of the repository of the filter that carry what was typed, the
- * last to end first.
+ * discussions of the window and of the older list that were brought, of the
+ * repository of the filter that carry what was typed, the last to end first.
  */
 export function historyEntries(
   app: State | null,
+  older: OlderArchived,
+  olderIds: readonly string[],
   query: string,
   filter: string,
 ): readonly HistoryEntry[] {
   const term = query.trim().toLowerCase();
-  const tasks = tasksInFilter(app?.history ?? [], filter)
+  const tasks = tasksInFilter([...(app?.history ?? []), ...olderOf(older.tasks, olderIds)], filter)
     .filter((task) => taskMatches(task, term))
     .map(
       (task): HistoryEntry => ({ kind: "task", id: task.id, archivedAt: task.archivedAt, task }),
     );
-  const reviews = tasksInFilter(app?.reviewHistory ?? [], filter)
+  const reviews = tasksInFilter(
+    [...(app?.reviewHistory ?? []), ...olderOf(older.reviews, olderIds)],
+    filter,
+  )
     .filter((review) => reviewMatches(review, term))
     .map(
       (review): HistoryEntry => ({
@@ -59,7 +70,10 @@ export function historyEntries(
         review,
       }),
     );
-  const discussions = discussionsInFilter(app?.discussionHistory ?? [], filter)
+  const discussions = discussionsInFilter(
+    [...(app?.discussionHistory ?? []), ...olderOf(older.discussions, olderIds)],
+    filter,
+  )
     .filter((discussion) => discussionMatches(discussion, term))
     .map(
       (discussion): HistoryEntry => ({

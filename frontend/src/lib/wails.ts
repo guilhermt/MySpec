@@ -1,10 +1,12 @@
 import * as AttentionService from "@bindings/attentionservice";
 import * as BoardService from "@bindings/boardservice";
 import * as DiscussionService from "@bindings/discussionservice";
+import * as HistoryService from "@bindings/historyservice";
 import type {
   ActionEntry,
   ActionOutput,
   ArchivedDiscussion,
+  ArchivedItem,
   ArchivedPR,
   ArchivedPRReport,
   ArchivedReview,
@@ -45,6 +47,9 @@ import type {
   DraftRef,
   Entry,
   ErrorEntry,
+  HistoryPage,
+  HistoryRequest,
+  HistorySummary,
   Leftover,
   LeftoverBranch,
   LeftoverWorktree,
@@ -121,6 +126,7 @@ export type {
   ActionEntry,
   ActionOutput,
   ArchivedDiscussion,
+  ArchivedItem,
   ArchivedPR,
   ArchivedPRReport,
   ArchivedReview,
@@ -161,6 +167,9 @@ export type {
   DraftRef,
   Entry,
   ErrorEntry,
+  HistoryPage,
+  HistoryRequest,
+  HistorySummary,
   Leftover,
   LeftoverBranch,
   LeftoverWorktree,
@@ -1609,6 +1618,17 @@ export const api = {
     DiscussionService.ReadDiscussionArtifact(id, name),
 
   viewSituation: (id: string): Promise<void> => AttentionService.ViewSituation(id),
+
+  listArchived: async (request: HistoryRequest): Promise<HistoryPage> => {
+    const page = await HistoryService.ListArchived(request);
+    return {
+      ...page,
+      tasks: page.tasks ?? [],
+      reviews: page.reviews ?? [],
+      discussions: page.discussions ?? [],
+    };
+  },
+  getArchived: (id: string): Promise<ArchivedItem> => HistoryService.GetArchived(id),
 };
 
 export function onStartupChanged(handler: (startup: Startup) => void): () => void {

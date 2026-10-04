@@ -215,8 +215,7 @@ function taskOf(card: BoardCard, app: State): CardPanelModel["task"] {
   if (card.archivedTaskId === "") {
     return null;
   }
-  const archived = (app.history ?? []).find((task) => task.id === card.archivedTaskId);
-  return { kind: "archived", taskId: card.archivedTaskId, name: archived?.name ?? "" };
+  return { kind: "archived", taskId: card.archivedTaskId, name: card.archivedTaskName };
 }
 
 function discussionsOf(card: BoardCard, app: State): CardPanelModel["discussions"] {

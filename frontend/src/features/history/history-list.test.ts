@@ -7,6 +7,8 @@ import {
   makeState,
 } from "@/test/wails-mock";
 
+const NO_OLDER = { tasks: {}, reviews: {}, discussions: {} };
+
 const LOGIN = makeArchivedTask({
   id: "task-login",
   name: "add-login",
@@ -38,7 +40,7 @@ const APP = makeState({
 });
 
 function ids(query: string, filter: string): string[] {
-  return historyEntries(APP, query, filter).map((entry) => entry.id);
+  return historyEntries(APP, NO_OLDER, [], query, filter).map((entry) => entry.id);
 }
 
 describe("historyEntries", () => {
@@ -48,7 +50,7 @@ describe("historyEntries", () => {
   });
 
   it("tells a task from a review and from a discussion", () => {
-    const [task, discussion, review] = historyEntries(APP, "", "");
+    const [task, discussion, review] = historyEntries(APP, NO_OLDER, [], "", "");
 
     expect(task).toEqual({ kind: "task", id: LOGIN.id, archivedAt: LOGIN.archivedAt, task: LOGIN });
     expect(review).toEqual({
@@ -88,6 +90,24 @@ describe("historyEntries", () => {
 
   it("answers with nothing when nothing matches, or before the first snapshot", () => {
     expect(ids("payments", "")).toEqual([]);
-    expect(historyEntries(null, "", "")).toEqual([]);
+    expect(historyEntries(null, NO_OLDER, [], "", "")).toEqual([]);
+  });
+
+  it("joins what the History brought from beyond the window, by the ids of the list", () => {
+    const old = makeArchivedTask({
+      id: "task-old",
+      name: "old-work",
+      archivedAt: "2026-05-01T10:00:00Z",
+    });
+    const unlisted = makeArchivedTask({ id: "task-unlisted", name: "unlisted" });
+    const older = {
+      tasks: { [old.id]: old, [unlisted.id]: unlisted },
+      reviews: {},
+      discussions: {},
+    };
+
+    const entries = historyEntries(APP, older, [old.id, "gone"], "", "").map((entry) => entry.id);
+
+    expect(entries).toEqual(["task-login", "discussion-1", "review-31", "task-header", "task-old"]);
   });
 });

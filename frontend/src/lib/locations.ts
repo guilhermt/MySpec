@@ -1,5 +1,6 @@
 import { boardOfRepository, findBoard } from "@/lib/boards";
 import type { PromptStage, State } from "@/lib/wails";
+import type { OlderArchived } from "@/store/app-store";
 
 /** SettingsSection is what the settings screen shows: the defaults of a new task, the boards, the repositories, the list of prompts or one prompt. */
 export type SettingsSection = "defaults" | "boards" | "repositories" | "prompts" | PromptStage;
@@ -94,20 +95,31 @@ function findDiscussion(app: State | null, id: string) {
   return (app?.discussions ?? []).find((discussion) => discussion.id === id) ?? null;
 }
 
-function findArchivedTask(app: State | null, id: string) {
-  return (app?.history ?? []).find((task) => task.id === id) ?? null;
+// An archived item is in the window the state carries or in what the History brought from beyond it.
+function findArchivedTask(app: State | null, id: string, older?: OlderArchived) {
+  return (app?.history ?? []).find((task) => task.id === id) ?? older?.tasks[id] ?? null;
 }
 
-function findArchivedReview(app: State | null, id: string) {
-  return (app?.reviewHistory ?? []).find((review) => review.id === id) ?? null;
+function findArchivedReview(app: State | null, id: string, older?: OlderArchived) {
+  return (
+    (app?.reviewHistory ?? []).find((review) => review.id === id) ?? older?.reviews[id] ?? null
+  );
 }
 
-function findArchivedDiscussion(app: State | null, id: string) {
-  return (app?.discussionHistory ?? []).find((discussion) => discussion.id === id) ?? null;
+function findArchivedDiscussion(app: State | null, id: string, older?: OlderArchived) {
+  return (
+    (app?.discussionHistory ?? []).find((discussion) => discussion.id === id) ??
+    older?.discussions[id] ??
+    null
+  );
 }
 
 /** locationExists tells whether a place can still be opened; the page of an item that left never is again. */
-export function locationExists(app: State | null, location: Location): boolean {
+export function locationExists(
+  app: State | null,
+  location: Location,
+  older?: OlderArchived,
+): boolean {
   switch (location.kind) {
     case "home":
     case "reviews":
@@ -123,18 +135,22 @@ export function locationExists(app: State | null, location: Location): boolean {
     case "discussion":
       return findDiscussion(app, location.id) !== null;
     case "archived-task":
-      return findArchivedTask(app, location.id) !== null;
+      return findArchivedTask(app, location.id, older) !== null;
     case "archived-review":
-      return findArchivedReview(app, location.id) !== null;
+      return findArchivedReview(app, location.id, older) !== null;
     case "archived-discussion":
-      return findArchivedDiscussion(app, location.id) !== null;
+      return findArchivedDiscussion(app, location.id, older) !== null;
     case "gone":
       return false;
   }
 }
 
 /** locationTitle is the name of a place, "" for one that no longer exists. */
-export function locationTitle(app: State | null, location: Location): string {
+export function locationTitle(
+  app: State | null,
+  location: Location,
+  older?: OlderArchived,
+): string {
   switch (location.kind) {
     case "home":
       return "Home";
@@ -153,11 +169,11 @@ export function locationTitle(app: State | null, location: Location): string {
     case "discussion":
       return findDiscussion(app, location.id)?.title ?? "";
     case "archived-task":
-      return findArchivedTask(app, location.id)?.name ?? "";
+      return findArchivedTask(app, location.id, older)?.name ?? "";
     case "archived-review":
-      return findArchivedReview(app, location.id)?.title ?? "";
+      return findArchivedReview(app, location.id, older)?.title ?? "";
     case "archived-discussion":
-      return findArchivedDiscussion(app, location.id)?.title ?? "";
+      return findArchivedDiscussion(app, location.id, older)?.title ?? "";
     case "gone":
       return location.name;
   }

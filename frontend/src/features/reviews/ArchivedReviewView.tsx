@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/features/chat/Markdown";
 import { formatDates } from "@/features/history/history-format";
+import { useArchivedItem } from "@/features/history/useArchivedItem";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { Banner } from "@/features/notice/Notice";
 import { DeleteReviewDialog } from "@/features/reviews/DeleteReviewDialog";
@@ -19,7 +20,6 @@ import {
 import { useReviewArtifact } from "@/features/reviews/useReviewArtifact";
 import type { ReviewPass } from "@/lib/wails";
 import { openExternal } from "@/store/actions";
-import { useArchivedReview } from "@/store/app-store";
 
 const LOADING_WIDTHS = ["w-1/2", "w-full", "w-3/4"];
 
@@ -94,7 +94,7 @@ export interface ArchivedReviewViewProps {
  * Only going back and deleting are left.
  */
 export function ArchivedReviewView({ reviewId }: ArchivedReviewViewProps) {
-  const review = useArchivedReview(reviewId);
+  const review = useArchivedItem("review", reviewId);
   const [deleting, setDeleting] = useState(false);
 
   if (review === null) {

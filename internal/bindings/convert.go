@@ -1156,20 +1156,21 @@ func fromBoardCard(
 	ids := cardTasks[card.Key()]
 	repo, registered := repositoriesByKey[strings.ToLower(card.FullName())]
 	converted := BoardCard{
-		CardIssue:      fromCardIssue(card.Issue),
-		Body:           card.Body,
-		StatusID:       card.StatusID,
-		Status:         card.Status,
-		Final:          card.State == task.IssueClosed || slices.Contains(b.FinalStatuses, card.StatusID),
-		Assignees:      fromAssignees(card.Assignees),
-		Fields:         fromFields(card.Fields),
-		PullRequests:   fromCardPullRequests(card.PullRequests),
-		Siblings:       fromRelated(card.Siblings),
-		Dependencies:   fromDependencies(card.Dependencies),
-		ReadAt:         card.ReadAt.Format(time.RFC3339),
-		SuggestedName:  board.SuggestName(card.Number, card.Title),
-		ActiveTaskID:   ids.Active,
-		ArchivedTaskID: ids.Archived,
+		CardIssue:        fromCardIssue(card.Issue),
+		Body:             card.Body,
+		StatusID:         card.StatusID,
+		Status:           card.Status,
+		Final:            card.State == task.IssueClosed || slices.Contains(b.FinalStatuses, card.StatusID),
+		Assignees:        fromAssignees(card.Assignees),
+		Fields:           fromFields(card.Fields),
+		PullRequests:     fromCardPullRequests(card.PullRequests),
+		Siblings:         fromRelated(card.Siblings),
+		Dependencies:     fromDependencies(card.Dependencies),
+		ReadAt:           card.ReadAt.Format(time.RFC3339),
+		SuggestedName:    board.SuggestName(card.Number, card.Title),
+		ActiveTaskID:     ids.Active,
+		ArchivedTaskID:   ids.Archived,
+		ArchivedTaskName: ids.ArchivedName,
 	}
 	if card.Epic != nil {
 		epic := fromCardIssue(card.Epic.Issue)
@@ -2391,4 +2392,47 @@ func fromMarkerProblems(problems []session.PlanProblem) []PlanProblem {
 		out = append(out, PlanProblem{File: p.File, Message: p.Message})
 	}
 	return out
+}
+
+// FromHistorySummary counts the whole History and finds its oldest item.
+func FromHistorySummary(
+	tasks []task.Task, reviews []prreview.Review, discussions []discussion.Discussion, start time.Time,
+) HistorySummary {
+	summary := HistorySummary{
+		Tasks: len(tasks), Reviews: len(reviews), Discussions: len(discussions),
+		WindowStart: start.UTC().Format(time.RFC3339),
+	}
+	var oldest time.Time
+	note := func(at time.Time) {
+		if oldest.IsZero() || at.Before(oldest) {
+			oldest = at
+		}
+	}
+	for _, t := range tasks {
+		note(t.ArchivedAt)
+	}
+	for _, r := range reviews {
+		note(r.ArchivedAt)
+	}
+	for _, d := range discussions {
+		note(d.ArchivedAt)
+	}
+	summary.Oldest = timeOrEmpty(oldest)
+	return summary
+}
+
+// ArchivedDiscussionRepositories counts, for each repository, the archived
+// discussions that touched it, by the same rules as the repositories of an
+// archived discussion.
+func ArchivedDiscussionRepositories(
+	list []discussion.Discussion, drafts func(id string) []discussion.Draft, repos []Repository,
+) map[string]int {
+	counts := map[string]int{}
+	byKey := repositoriesByFullName(repos)
+	for _, d := range list {
+		for _, id := range repositoryIDsOf(d, drafts(d.ID), byKey) {
+			counts[id]++
+		}
+	}
+	return counts
 }

@@ -2064,7 +2064,7 @@ func TestFromBoardsCarriesTheCardWithItsRelationsAndTasks(t *testing.T) {
 
 	got := convertBoard(
 		[]board.Card{card}, repositories, nil,
-		map[string]task.CardTaskIDs{"acme/web#12": {Archived: "task-0"}},
+		map[string]task.CardTaskIDs{"acme/web#12": {Archived: "task-0", ArchivedName: "Add the login screen"}},
 	)
 
 	want := bindings.Board{
@@ -2105,11 +2105,12 @@ func TestFromBoardsCarriesTheCardWithItsRelationsAndTasks(t *testing.T) {
 				PullRequests: []bindings.CardPullRequest{},
 				Satisfied:    true,
 			}},
-			ReadAt:         "2026-09-16T12:00:00Z",
-			SuggestedName:  "12-add-the-login-screen",
-			RepositoryID:   "r-web",
-			ArchivedTaskID: "task-0",
-			Action:         "start",
+			ReadAt:           "2026-09-16T12:00:00Z",
+			SuggestedName:    "12-add-the-login-screen",
+			RepositoryID:     "r-web",
+			ArchivedTaskID:   "task-0",
+			ArchivedTaskName: "Add the login screen",
+			Action:           "start",
 		}},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {

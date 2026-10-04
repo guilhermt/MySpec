@@ -17,11 +17,11 @@ import {
 } from "@/features/discussion/discussion-status";
 import { useDiscussionArtifact } from "@/features/discussion/useDiscussionArtifact";
 import { formatDates } from "@/features/history/history-format";
+import { useArchivedItem } from "@/features/history/useArchivedItem";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { cn } from "@/lib/utils";
 import { DISCUSSION_STAGE, type Draft } from "@/lib/wails";
 import { loadTranscript, openExternal } from "@/store/actions";
-import { useArchivedDiscussion } from "@/store/app-store";
 
 const LOADING_WIDTHS = ["w-1/2", "w-full", "w-3/4"];
 
@@ -91,7 +91,7 @@ export interface ArchivedDiscussionViewProps {
  * there. Only going back and deleting are left.
  */
 export function ArchivedDiscussionView({ discussionId }: ArchivedDiscussionViewProps) {
-  const discussion = useArchivedDiscussion(discussionId);
+  const discussion = useArchivedItem("discussion", discussionId);
   const [deleting, setDeleting] = useState(false);
   // The document never changes again, so it is read once, at revision zero.
   const artifact = useDiscussionArtifact(discussionId, DOCUMENT_FILE, 0, 0);

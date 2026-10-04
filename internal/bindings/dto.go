@@ -60,6 +60,9 @@ type Repository struct {
 	ReviewInstructions string `json:"reviewInstructions"`
 	ActiveReviews      int    `json:"activeReviews"`
 	ArchivedReviews    int    `json:"archivedReviews"`
+	// ArchivedDiscussions are the archived discussions with a card or a
+	// published draft of the repository.
+	ArchivedDiscussions int `json:"archivedDiscussions"`
 }
 
 // RepositoryCandidate is a clone of a GitHub repository the scan found under
@@ -126,8 +129,8 @@ type State struct {
 	// Tasks are the active tasks of every repository, in creation order; never
 	// nil.
 	Tasks []TaskSummary `json:"tasks"`
-	// History are the archived tasks of every repository, newest first; never
-	// nil.
+	// History are the archived tasks of every repository since
+	// HistorySummary.WindowStart, newest first; never nil.
 	History []ArchivedTask `json:"history"`
 	// Boards are the registered boards, by title ignoring case; never nil.
 	Boards []Board `json:"boards"`
@@ -138,13 +141,16 @@ type State struct {
 	// never nil.
 	Reviews []ReviewSummary `json:"reviews"`
 	// ReviewHistory are the reviews whose pull request was merged or closed,
-	// newest first; never nil.
+	// archived since HistorySummary.WindowStart, newest first; never nil.
 	ReviewHistory []ArchivedReview `json:"reviewHistory"`
 	// Discussions are the active discussions of every board, in creation
 	// order; never nil.
 	Discussions []DiscussionSummary `json:"discussions"`
-	// DiscussionHistory are the archived discussions, newest first; never nil.
+	// DiscussionHistory are the discussions archived since
+	// HistorySummary.WindowStart, newest first; never nil.
 	DiscussionHistory []ArchivedDiscussion `json:"discussionHistory"`
+	// HistorySummary is the whole History in numbers.
+	HistorySummary HistorySummary `json:"historySummary"`
 	// CloneFolder is where new clones go; "" until chosen.
 	CloneFolder string `json:"cloneFolder"`
 }
@@ -1153,6 +1159,8 @@ type BoardCard struct {
 	RepositoryID   string            `json:"repositoryId"`   // the registered repository of the card; "" when not registered
 	ActiveTaskID   string            `json:"activeTaskId"`   // "" without one
 	ArchivedTaskID string            `json:"archivedTaskId"` // the most recently archived; "" without one
+	// ArchivedTaskName is the name of the task ArchivedTaskID names; "" without one.
+	ArchivedTaskName string `json:"archivedTaskName"`
 	// Action is start, clone, clone_missing, add_to_board, other_board,
 	// has_task or closed: what Start task does for the card, a string for the
 	// same reason as State.Theme.
@@ -1762,4 +1770,44 @@ type DiscussionContextRequest struct {
 	BoardID string   `json:"boardId"`
 	Text    string   `json:"text"`
 	Cards   []string `json:"cards"`
+}
+
+// HistorySummary is the whole History in numbers, beyond the window the state
+// carries.
+type HistorySummary struct {
+	Tasks       int    `json:"tasks"`
+	Reviews     int    `json:"reviews"`
+	Discussions int    `json:"discussions"`
+	Oldest      string `json:"oldest"`      // RFC 3339, the archiving of the oldest item; "" with none
+	WindowStart string `json:"windowStart"` // RFC 3339; History, ReviewHistory and DiscussionHistory hold what was archived from it on
+}
+
+// HistoryRequest asks for a page of the History.
+type HistoryRequest struct {
+	// Before and BeforeID are the cursor: the page holds items archived before
+	// Before (RFC 3339), or at Before with an id below BeforeID. The first page
+	// asks for HistorySummary.WindowStart and "".
+	Before       string `json:"before"`
+	BeforeID     string `json:"beforeId"`
+	Query        string `json:"query"`        // "" matches every item
+	RepositoryID string `json:"repositoryId"` // "" for every repository
+}
+
+// HistoryPage is a page of the History, newest first.
+type HistoryPage struct {
+	Tasks        []ArchivedTask       `json:"tasks"`       // never nil
+	Reviews      []ArchivedReview     `json:"reviews"`     // never nil
+	Discussions  []ArchivedDiscussion `json:"discussions"` // never nil
+	NextBefore   string               `json:"nextBefore"`  // the cursor of the next page; "" when there is none
+	NextBeforeID string               `json:"nextBeforeId"`
+	// Matched is how many items of the whole History, the window included,
+	// match the query and the repository.
+	Matched int `json:"matched"`
+}
+
+// ArchivedItem is one archived item; only the field of its kind is set.
+type ArchivedItem struct {
+	Task       *ArchivedTask       `json:"task"`
+	Review     *ArchivedReview     `json:"review"`
+	Discussion *ArchivedDiscussion `json:"discussion"`
 }

@@ -1,4 +1,5 @@
 import { ExternalLink } from "lucide-react";
+import { useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { pluralize } from "@/features/boards/board-dialog";
@@ -7,11 +8,20 @@ import { historyEntries } from "@/features/history/history-list";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { outcomeLabel } from "@/features/reviews/review-status";
 import { RepositoryFilter } from "@/features/sidebar/RepositoryFilter";
+import { olderKey } from "@/lib/history";
 import { shortName } from "@/lib/repositories";
 import { isOneShot } from "@/lib/task-modes";
 import type { ArchivedDiscussion, ArchivedPR, ArchivedReview, ArchivedTask } from "@/lib/wails";
-import { openExternal } from "@/store/actions";
-import { useAppStore, useHistoryUi, useRepository, useRepositoryFilter } from "@/store/app-store";
+import { loadOlderHistory, openExternal } from "@/store/actions";
+import {
+  useAppStore,
+  useHistorySummary,
+  useHistoryUi,
+  useRepository,
+  useRepositoryFilter,
+} from "@/store/app-store";
+
+const NO_IDS: readonly string[] = [];
 
 const ROW =
   "flex h-10 w-full items-center gap-2 rounded-md px-2 text-left outline-none transition-colors duration-[var(--duration-fast)] hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
@@ -143,8 +153,25 @@ export function HistoryPanel() {
   const filter = useRepositoryFilter();
   const filtered = useRepository(filter);
 
-  const shown = historyEntries(app, historyQuery, filter);
-  const empty = historyEntries(app, "", "").length === 0;
+  const olderArchived = useAppStore((state) => state.olderArchived);
+  const older = useAppStore((state) => state.olderLists[olderKey("", "")]);
+  const olderIds = older?.ids ?? NO_IDS;
+  const summary = useHistorySummary();
+
+  // The list shows everything the History holds, so the pages beyond the window are asked one
+  // after the other until none is left; a failed page stops the loop.
+  useEffect(() => {
+    const asking = older === undefined || older.status === "idle";
+    const more = older === undefined || older.matched === null || older.next !== null;
+    if (asking && more) {
+      void loadOlderHistory("", "");
+    }
+  }, [older]);
+
+  const shown = historyEntries(app, olderArchived, olderIds, historyQuery, filter);
+  const empty =
+    historyEntries(app, olderArchived, olderIds, "", "").length === 0 &&
+    summary.tasks + summary.reviews + summary.discussions === 0;
   const query = historyQuery.trim();
 
   return (

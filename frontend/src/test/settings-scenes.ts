@@ -31,6 +31,7 @@ import {
   makeBoardPreview,
   makeBoardRemoval,
   makeBoardRepositoryOption,
+  makeHistorySummary,
   makeMachine,
   makeMigration,
   makeModelCatalog,
@@ -1050,6 +1051,7 @@ export function welcomeScene(variation: (typeof WELCOME_VARIATIONS)[number]): Se
       return {
         ...base,
         state: empty({
+          historySummary: makeHistorySummary({ tasks: 1 }),
           history: [
             makeArchivedTask({
               id: "archived-1",

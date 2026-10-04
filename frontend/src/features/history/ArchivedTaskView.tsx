@@ -8,6 +8,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Markdown } from "@/features/chat/Markdown";
 import { HistoryPR } from "@/features/history/HistoryPanel";
 import { formatDates, stepCount } from "@/features/history/history-format";
+import { useArchivedItem } from "@/features/history/useArchivedItem";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { Banner } from "@/features/notice/Notice";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
@@ -18,7 +19,6 @@ import { useArtifact } from "@/features/task/useArtifact";
 import { findStepReport, stepReportLabel } from "@/lib/review-modes";
 import { isOneShot } from "@/lib/task-modes";
 import type { ArchivedTask } from "@/lib/wails";
-import { useArchivedTask } from "@/store/app-store";
 
 const LOADING_WIDTHS = ["w-1/2", "w-full", "w-3/4"];
 
@@ -75,7 +75,7 @@ export interface ArchivedTaskViewProps {
  * produced, and nothing that runs. Only going back and deleting are left.
  */
 export function ArchivedTaskView({ taskId }: ArchivedTaskViewProps) {
-  const task = useArchivedTask(taskId);
+  const task = useArchivedItem("task", taskId);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [dismissed, setDismissed] = useState("");

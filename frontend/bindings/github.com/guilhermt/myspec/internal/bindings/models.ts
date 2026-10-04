@@ -118,6 +118,15 @@ export interface ArchivedDiscussion {
 }
 
 /**
+ * ArchivedItem is one archived item; only the field of its kind is set.
+ */
+export interface ArchivedItem {
+    "task": ArchivedTask | null;
+    "review": ArchivedReview | null;
+    "discussion": ArchivedDiscussion | null;
+}
+
+/**
  * ArchivedPR is the pull request an archived task opened.
  */
 export interface ArchivedPR {
@@ -434,6 +443,11 @@ export interface BoardCard {
      * the most recently archived; "" without one
      */
     "archivedTaskId": string;
+
+    /**
+     * ArchivedTaskName is the name of the task ArchivedTaskID names; "" without one.
+     */
+    "archivedTaskName": string;
 
     /**
      * Action is start, clone, clone_missing, add_to_board, other_board,
@@ -1323,6 +1337,81 @@ export interface ErrorEntry {
     "kind": string;
     "message": string;
     "retryable": boolean;
+}
+
+/**
+ * HistoryPage is a page of the History, newest first.
+ */
+export interface HistoryPage {
+    /**
+     * never nil
+     */
+    "tasks": ArchivedTask[] | null;
+
+    /**
+     * never nil
+     */
+    "reviews": ArchivedReview[] | null;
+
+    /**
+     * never nil
+     */
+    "discussions": ArchivedDiscussion[] | null;
+
+    /**
+     * the cursor of the next page; "" when there is none
+     */
+    "nextBefore": string;
+    "nextBeforeId": string;
+
+    /**
+     * Matched is how many items of the whole History, the window included,
+     * match the query and the repository.
+     */
+    "matched": number;
+}
+
+/**
+ * HistoryRequest asks for a page of the History.
+ */
+export interface HistoryRequest {
+    /**
+     * Before and BeforeID are the cursor: the page holds items archived before
+     * Before (RFC 3339), or at Before with an id below BeforeID. The first page
+     * asks for HistorySummary.WindowStart and "".
+     */
+    "before": string;
+    "beforeId": string;
+
+    /**
+     * "" matches every item
+     */
+    "query": string;
+
+    /**
+     * "" for every repository
+     */
+    "repositoryId": string;
+}
+
+/**
+ * HistorySummary is the whole History in numbers, beyond the window the state
+ * carries.
+ */
+export interface HistorySummary {
+    "tasks": number;
+    "reviews": number;
+    "discussions": number;
+
+    /**
+     * RFC 3339, the archiving of the oldest item; "" with none
+     */
+    "oldest": string;
+
+    /**
+     * RFC 3339; History, ReviewHistory and DiscussionHistory hold what was archived from it on
+     */
+    "windowStart": string;
 }
 
 /**
@@ -2283,6 +2372,12 @@ export interface Repository {
     "reviewInstructions": string;
     "activeReviews": number;
     "archivedReviews": number;
+
+    /**
+     * ArchivedDiscussions are the archived discussions with a card or a
+     * published draft of the repository.
+     */
+    "archivedDiscussions": number;
 }
 
 /**
@@ -3014,8 +3109,8 @@ export interface State {
     "tasks": TaskSummary[] | null;
 
     /**
-     * History are the archived tasks of every repository, newest first; never
-     * nil.
+     * History are the archived tasks of every repository since
+     * HistorySummary.WindowStart, newest first; never nil.
      */
     "history": ArchivedTask[] | null;
 
@@ -3038,7 +3133,7 @@ export interface State {
 
     /**
      * ReviewHistory are the reviews whose pull request was merged or closed,
-     * newest first; never nil.
+     * archived since HistorySummary.WindowStart, newest first; never nil.
      */
     "reviewHistory": ArchivedReview[] | null;
 
@@ -3049,9 +3144,15 @@ export interface State {
     "discussions": DiscussionSummary[] | null;
 
     /**
-     * DiscussionHistory are the archived discussions, newest first; never nil.
+     * DiscussionHistory are the discussions archived since
+     * HistorySummary.WindowStart, newest first; never nil.
      */
     "discussionHistory": ArchivedDiscussion[] | null;
+
+    /**
+     * HistorySummary is the whole History in numbers.
+     */
+    "historySummary": HistorySummary;
 
     /**
      * CloneFolder is where new clones go; "" until chosen.

@@ -4,6 +4,7 @@
 import * as AttentionService from "./attentionservice.js";
 import * as BoardService from "./boardservice.js";
 import * as DiscussionService from "./discussionservice.js";
+import * as HistoryService from "./historyservice.js";
 import * as RepositoryService from "./repositoryservice.js";
 import * as ReviewService from "./reviewservice.js";
 import * as SettingsService from "./settingsservice.js";
@@ -14,6 +15,7 @@ export {
     AttentionService,
     BoardService,
     DiscussionService,
+    HistoryService,
     RepositoryService,
     ReviewService,
     SettingsService,
@@ -26,6 +28,7 @@ export type {
     ActionEntry,
     ActionOutput,
     ArchivedDiscussion,
+    ArchivedItem,
     ArchivedPR,
     ArchivedPRReport,
     ArchivedReview,
@@ -66,6 +69,9 @@ export type {
     DraftRef,
     Entry,
     ErrorEntry,
+    HistoryPage,
+    HistoryRequest,
+    HistorySummary,
     Leftover,
     LeftoverBranch,
     LeftoverWorktree,
