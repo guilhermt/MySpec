@@ -360,3 +360,24 @@ describe("The page of an item that left, its blocks and its key", () => {
     },
   );
 });
+
+describe("The toasts over the task screen", () => {
+  const three = CASES.find((one) => one.name === "notice" && one.variant === "toast-three") as Case;
+
+  it.each(WIDTHS)("stand above the composer at the main area of %ipx", async (width) => {
+    setTheme("light");
+    const { area } = await draw(three, width);
+
+    const composer = area.querySelector('[data-slot="composer"]');
+    if (composer === null) {
+      throw new Error("the task screen has no composer");
+    }
+    const top = composer.getBoundingClientRect().top;
+    const toasts = [...area.querySelectorAll(".toast")];
+    expect(toasts).toHaveLength(3);
+    for (const toast of toasts) {
+      expect(toast.getBoundingClientRect().bottom).toBeLessThanOrEqual(top);
+    }
+    expect(offWholePixels(area.querySelectorAll(".toasts"))).toEqual([]);
+  });
+});

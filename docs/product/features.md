@@ -688,7 +688,7 @@ A página de uma discussão arquivada diz `The conversation ended at 15:15. The 
 
 Sem board, ou com ele removido, a volta da task e da discussão é **Back to Home**; o board removido sem lugar anterior também. **Next that needs you** `Ctrl J` abre o próximo item que espera pelo usuário, o mesmo do `Ctrl+J`, com `Next: <nome>` no tooltip; sem nenhum, fica desabilitado com `Nothing else needs you now.` A primeira ação habilitada é a principal e recebe o foco. **Open in History** abre o [History](#histórico) na linha do item arquivado, no dia dela. A página não entra no histórico de lugares: sair dela a descarta, e voltar não a reencontra. Quando o item sai sem o usuário ter pedido, a região ao vivo anuncia o título da página; quando foi ele quem apagou, arquivou ou encerrou, não.
 
-Uma task, um review ou uma discussão arquivados sem estar abertos aparecem num toast no canto inferior esquerdo da área principal, com o resultado sob o texto e **Open in History**, que abre o History na linha do item, e o `×`. Aberto, o item tem a página, nunca o toast.
+Uma task, um review ou uma discussão arquivados sem estar abertos aparecem num toast no canto inferior esquerdo da área principal, acima do compositor quando a tela aberta tem um, com o resultado sob o texto e **Open in History**, que abre o History na linha do item, e o `×`. Aberto, o item tem a página, nunca o toast.
 
 | Item | Texto | Detalhe |
 |---|---|---|

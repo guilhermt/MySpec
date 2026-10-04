@@ -5,6 +5,7 @@ import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import { Spinner } from "@/components/system/Spinner";
 import { Tooltip } from "@/components/system/Tooltip";
+import { useToastLift } from "@/components/system/toast-lift";
 import { useNow } from "@/features/attention/useNow";
 import { formatDuration } from "@/features/chat/actions";
 import { COLUMN_CLASS } from "@/features/chat/ConversationColumn";
@@ -115,6 +116,9 @@ export function Composer({
   // the focus goes to its first question without a choice.
   const [backToCard, setBackToCard] = useState(0);
   const field = useRef<HTMLTextAreaElement>(null);
+  // The box is docked at the foot of the main area: the toasts rise above it.
+  const box = useRef<HTMLDivElement>(null);
+  useToastLift(box);
   // atEnd counts the starters put in the box: after each one is drawn, the cursor goes to the end.
   const [atEnd, setAtEnd] = useState(0);
   const requestId = question?.requestId;
@@ -287,6 +291,7 @@ export function Composer({
   return (
     <div className="shrink-0 px-(--space-6) pt-(--space-2) pb-(--space-4)">
       <div
+        ref={box}
         data-slot="composer"
         className={cn(
           COLUMN_CLASS,
