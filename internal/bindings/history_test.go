@@ -45,15 +45,50 @@ func ids(page bindings.HistoryPage) []string {
 	return out
 }
 
-func TestWindowStartIsTheStartOfTheUTCDayNinetyDaysBack(t *testing.T) {
+func TestWindowStartIsTheLocalMidnightNinetyDaysBack(t *testing.T) {
 	t.Parallel()
-	now := time.Date(2026, time.October, 3, 10, 30, 15, 750_000_000, time.UTC)
+	saoPaulo := time.FixedZone("BRT", -3*60*60)
+	tokyo := time.FixedZone("JST", 9*60*60)
 
-	got := bindings.WindowStart(now)
+	tests := []struct {
+		name string
+		now  time.Time
+		want time.Time
+	}{
+		{
+			"in UTC",
+			time.Date(2026, time.October, 3, 10, 30, 15, 750_000_000, time.UTC),
+			time.Date(2026, time.July, 5, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			"behind UTC, early in the local day",
+			time.Date(2026, time.October, 3, 1, 30, 0, 0, saoPaulo),
+			time.Date(2026, time.July, 5, 0, 0, 0, 0, saoPaulo),
+		},
+		{
+			"behind UTC, late in the local day, when UTC is already on the next",
+			time.Date(2026, time.October, 3, 22, 30, 0, 0, saoPaulo),
+			time.Date(2026, time.July, 5, 0, 0, 0, 0, saoPaulo),
+		},
+		{
+			"ahead of UTC, early in the local day, when UTC is still on the day before",
+			time.Date(2026, time.October, 3, 2, 0, 0, 0, tokyo),
+			time.Date(2026, time.July, 5, 0, 0, 0, 0, tokyo),
+		},
+		{
+			"across the start of the year",
+			time.Date(2026, time.February, 15, 12, 0, 0, 0, saoPaulo),
+			time.Date(2025, time.November, 17, 0, 0, 0, 0, saoPaulo),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 
-	want := time.Date(2026, time.July, 5, 0, 0, 0, 0, time.UTC)
-	if !got.Equal(want) {
-		t.Errorf("WindowStart() = %s, want %s", got, want)
+			if got := bindings.WindowStart(test.now); !got.Equal(test.want) {
+				t.Errorf("WindowStart(%s) = %s, want %s", test.now, got, test.want)
+			}
+		})
 	}
 }
 
