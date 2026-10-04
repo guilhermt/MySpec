@@ -25,6 +25,7 @@ import { historyRow } from "@/features/history/history-rows";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { olderKey } from "@/lib/history";
 import { filterLabel } from "@/lib/repositories";
+import { cn } from "@/lib/utils";
 import { loadOlderHistory, setRepositoryFilter } from "@/store/actions";
 import {
   useAppStore,
@@ -41,6 +42,13 @@ const NO_IDS: readonly string[] = [];
 
 /** SEARCH_OLDER_DELAY_MS is how long the search waits, once the text stops changing, before it asks the Go for the older items that match. */
 export const SEARCH_OLDER_DELAY_MS = 300;
+
+/**
+ * BELOW_THE_BAR keeps a day or a row the keys move to below the bar of the search, which sticks to
+ * the top of the list, and its fade: the room it scrolls to is under them, not behind.
+ */
+const BELOW_THE_BAR =
+  "[&_[data-row-key]]:scroll-mt-[calc(var(--space-4)+var(--size-control-sm)+var(--space-3)*2)] [&_[data-section-id]]:scroll-mt-[calc(var(--space-4)+var(--size-control-sm)+var(--space-3)*2)]";
 
 /** SEARCH_ID names the search in the focus the store asks for. */
 const SEARCH_ID = "search";
@@ -290,9 +298,12 @@ export function HistoryView() {
               shortcut="/"
               value={historyQuery}
               onValueChange={setHistoryQuery}
-              onArrowDown={() =>
-                treeRef.current?.querySelector<HTMLElement>("[data-section-id]")?.focus()
-              }
+              onArrowDown={() => {
+                // The first day comes into view as the keys of the list bring an entry, below the bar.
+                const first = treeRef.current?.querySelector<HTMLElement>("[data-section-id]");
+                first?.focus();
+                first?.scrollIntoView?.({ block: "nearest" });
+              }}
               className="w-[calc(var(--space-16)*4)] @max-[620px]/list:w-[calc(var(--space-16)*3)]"
             />
             {filter !== "" && (
@@ -323,7 +334,7 @@ export function HistoryView() {
               role="tree"
               aria-label="History"
               onKeyDown={tree.onKeyDown}
-              className="flex flex-col"
+              className={cn("flex flex-col", BELOW_THE_BAR)}
             >
               {days.map((day) => {
                 const sectionId = entryId({
