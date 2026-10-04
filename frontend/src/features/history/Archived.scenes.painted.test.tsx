@@ -151,6 +151,21 @@ describe.each(THEMES)("The archived items, the scenes in the %s theme", (theme) 
         parseFloat(resolve("var(--space-2)", "width")),
       );
 
+      // A document read in a tab has its headings at the size of the UI, under the title of the place.
+      const headings = area.querySelectorAll<HTMLElement>(
+        '[role="tabpanel"] [data-streamdown^="heading-"]',
+      );
+      if (name === "archived-task" && (variant === "" || variant === "oneshot")) {
+        expect(headings.length).toBeGreaterThan(0);
+      }
+      for (const heading of headings) {
+        const style = getComputedStyle(heading);
+        expect([style.fontSize, style.fontWeight]).toEqual([
+          resolve("var(--text-ui)", "font-size"),
+          "600",
+        ]);
+      }
+
       // The dialog opens 8vh from the top on a whole pixel, with Cancel and the confirmation on one
       // line, the confirmation at the right of it.
       const open = dialog();

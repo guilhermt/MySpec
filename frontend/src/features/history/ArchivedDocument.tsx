@@ -15,7 +15,7 @@ export interface ArchivedDocumentProps {
   artifactVersion: number;
   /** empty is what the place of a document the task doesn't have says. */
   empty: string;
-  /** render draws the text read; Markdown by default. */
+  /** render draws the text read; by default Markdown with its headings at the size of the UI, under the title of the place. */
   render?: (content: string) => ReactNode;
 }
 
@@ -61,7 +61,11 @@ export function ArchivedDocument({
   }
   return (
     <div className="select-text">
-      {render === undefined ? <Markdown>{artifact.content}</Markdown> : render(artifact.content)}
+      {render === undefined ? (
+        <Markdown className="ui-headings">{artifact.content}</Markdown>
+      ) : (
+        render(artifact.content)
+      )}
     </div>
   );
 }
