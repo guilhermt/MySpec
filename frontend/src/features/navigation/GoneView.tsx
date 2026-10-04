@@ -1,12 +1,23 @@
+import { CloseResult } from "@/components/system/CloseResult";
+import { CopyBlock } from "@/components/system/CopyBlock";
 import type { GoneAction } from "@/components/system/GonePage";
 import { GonePage } from "@/components/system/GonePage";
 import { ICONS, type IconGlyph } from "@/components/system/icons";
+import { closeLegendTime, closeResultLines } from "@/features/history/close-result";
 import { gonePassLines, goneReviewText } from "@/features/navigation/gone-passes";
 import {
   DELETED_DISCUSSION_TEXT,
   goneDiscussionText,
   goneRoundLines,
 } from "@/features/navigation/gone-rounds";
+import {
+  closedTaskText,
+  deletedTaskText,
+  forceWarning,
+  leftoverCommands,
+  leftoverHeading,
+  leftoverLines,
+} from "@/features/navigation/gone-task";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { findBoard } from "@/lib/boards";
 import {
@@ -18,11 +29,15 @@ import {
   locationTitle,
 } from "@/lib/locations";
 import { nextWaiting } from "@/lib/situations";
+import type { Leftover } from "@/lib/wails";
 import {
   useAppStore,
   useArchivedDiscussion,
   useArchivedReview,
+  useArchivedTask,
   useBackTarget,
+  useLeftoverOf,
+  useRepository,
 } from "@/store/app-store";
 
 export interface GoneViewProps {
@@ -65,6 +80,40 @@ function GonePasses({
 }
 
 /**
+ * GoneLeftover is what git couldn't remove when the item was deleted, with the commands that remove it
+ * from the clone. The warning of --force comes first: the commands delete what the worktree may still hold.
+ */
+function GoneLeftover({ leftover }: { leftover: Leftover }) {
+  return (
+    <CloseResult
+      legend="Git couldn't remove everything"
+      label="What stayed on disk"
+      lines={leftoverLines(leftover)}
+    >
+      <div className="mt-(--space-2) flex flex-col gap-(--space-2)">
+        {forceWarning(leftover) && (
+          <p className="flex gap-(--space-1-5) text-(length:--text-meta) leading-(--leading-meta) text-ink-2">
+            <span aria-hidden="true">◇</span>
+            <span>
+              <span className="font-medium text-ink-1">
+                --force deletes the modified and untracked files in it too.
+              </span>{" "}
+              Copy out what you want to keep first.
+            </span>
+          </p>
+        )}
+        <CopyBlock
+          heading="sentence"
+          label={leftoverHeading(leftover)}
+          copyLabel="Copy the command"
+          text={leftoverCommands(leftover)}
+        />
+      </div>
+    </CloseResult>
+  );
+}
+
+/**
  * GoneView is the place of an item that left while open: what became of it, read from the state,
  * and the ways on from there.
  */
@@ -78,6 +127,10 @@ export function GoneView({ location }: GoneViewProps) {
   const outcome = goneOutcome(app, location);
   // A review that ended says how, from the archive; a deleted one has nothing to say.
   const archived = useArchivedReview(location.item === "review" ? location.id : null);
+  const archivedTask = useArchivedTask(location.item === "task" ? location.id : null);
+  const close = archivedTask?.close ?? null;
+  const repository = useRepository(archivedTask?.repositoryId ?? "");
+  const leftover = useLeftoverOf(location.id);
   const archivedDiscussion = useArchivedDiscussion(
     location.item === "discussion" ? location.id : null,
   );
@@ -125,6 +178,14 @@ export function GoneView({ location }: GoneViewProps) {
         icon={ICON[outcome]}
         title={goneTitle(location, outcome)}
         {...(archived !== null ? { description: goneReviewText(archived, now) } : {})}
+        {...(location.item === "task"
+          ? {
+              description:
+                archivedTask === null
+                  ? deletedTaskText(location.pr)
+                  : closedTaskText(archivedTask, now),
+            }
+          : {})}
         {...(location.item === "discussion"
           ? {
               description:
@@ -135,6 +196,15 @@ export function GoneView({ location }: GoneViewProps) {
           : {})}
         actions={actions}
       >
+        {close !== null && (
+          <CloseResult
+            legend="Closing"
+            time={closeLegendTime(close, now)}
+            label="What the closing did"
+            lines={closeResultLines(close, repository?.path ?? null)}
+          />
+        )}
+        {leftover !== null && <GoneLeftover leftover={leftover} />}
         {passes.length > 0 && <GonePasses label="Passes" lines={passes} />}
         {rounds.length > 0 && <GonePasses label="Rounds" lines={rounds} />}
       </GonePage>

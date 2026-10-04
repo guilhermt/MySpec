@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { AppNotices } from "@/features/notice/AppNotices";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeLeftover } from "@/test/wails-mock";
 
 const ERROR = { label: "Couldn't pause add-login", detail: "no session. Try again." };
 
@@ -23,18 +22,6 @@ describe("AppNotices", () => {
 
     expect(useAppStore.getState().error).toBeNull();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  });
-
-  it("shows what a deletion left on disk", () => {
-    renderWithStore(<AppNotices />, {
-      ui: {
-        leftover: makeLeftover({
-          worktree: { path: "/worktrees/add-login", kept: true, error: "permission denied" },
-        }),
-      },
-    });
-
-    expect(screen.getByRole("status")).toHaveTextContent("Some files stayed on disk");
   });
 
   it("says nothing when nothing failed", () => {

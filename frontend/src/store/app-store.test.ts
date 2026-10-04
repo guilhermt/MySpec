@@ -32,7 +32,7 @@ import {
   useForwardTarget,
   useHistory,
   useHistoryUi,
-  useLeftover,
+  useLeftoverOf,
   useMigration,
   useModelCatalog,
   useNewDiscussion,
@@ -969,8 +969,47 @@ describe("toasts", () => {
     useAppStore.getState().applyState(withTasks({ tasks: [API_TASK], history: [ARCHIVED] }));
 
     expect(useAppStore.getState().toasts).toEqual([
-      { id: ARCHIVED.id, taskId: ARCHIVED.id, name: ARCHIVED.name },
+      { id: ARCHIVED.id, kind: "task", task: ARCHIVED },
     ]);
+  });
+
+  it("shows a toast for a review and for a discussion archived while not open", () => {
+    useAppStore.getState().applyState(withTasks());
+
+    useAppStore
+      .getState()
+      .applyState(
+        withTasks({ reviewHistory: [ARCHIVED_REVIEW], discussionHistory: [ARCHIVED_DISCUSSION] }),
+      );
+
+    expect(useAppStore.getState().toasts).toEqual([
+      { id: ARCHIVED_REVIEW.id, kind: "review", review: ARCHIVED_REVIEW },
+      { id: ARCHIVED_DISCUSSION.id, kind: "discussion", discussion: ARCHIVED_DISCUSSION },
+    ]);
+  });
+
+  it("shows no toast for the review or the discussion archived while open", () => {
+    const review = makeReviewSummary({ id: ARCHIVED_REVIEW.id });
+    const discussion = makeDiscussion({ id: ARCHIVED_DISCUSSION.id });
+    useAppStore.getState().applyState(withTasks({ reviews: [review], discussions: [discussion] }));
+
+    useAppStore.getState().openReview(review.id);
+    useAppStore
+      .getState()
+      .applyState(
+        withTasks({ reviews: [], discussions: [discussion], reviewHistory: [ARCHIVED_REVIEW] }),
+      );
+    useAppStore.getState().openDiscussion(discussion.id);
+    useAppStore.getState().applyState(
+      withTasks({
+        reviews: [],
+        discussions: [],
+        reviewHistory: [ARCHIVED_REVIEW],
+        discussionHistory: [ARCHIVED_DISCUSSION],
+      }),
+    );
+
+    expect(useAppStore.getState().toasts).toEqual([]);
   });
 
   it("shows no toast for the task archived while open", () => {
@@ -989,8 +1028,8 @@ describe("toasts", () => {
     useAppStore.getState().applyState(withTasks({ tasks: [], history: [ARCHIVED, OLDER] }));
 
     expect(useAppStore.getState().toasts).toEqual([
-      { id: ARCHIVED.id, taskId: ARCHIVED.id, name: ARCHIVED.name },
-      { id: OLDER.id, taskId: OLDER.id, name: OLDER.name },
+      { id: ARCHIVED.id, kind: "task", task: ARCHIVED },
+      { id: OLDER.id, kind: "task", task: OLDER },
     ]);
   });
 
@@ -1001,9 +1040,7 @@ describe("toasts", () => {
 
     useAppStore.getState().applyState(withTasks({ tasks: [], history: [ARCHIVED, OLDER] }));
 
-    expect(useAppStore.getState().toasts).toEqual([
-      { id: OLDER.id, taskId: OLDER.id, name: OLDER.name },
-    ]);
+    expect(useAppStore.getState().toasts).toEqual([{ id: OLDER.id, kind: "task", task: OLDER }]);
   });
 
   // The first snapshot brings the whole history; none of it was archived now.
@@ -1039,21 +1076,16 @@ describe("toasts", () => {
 });
 
 describe("notices", () => {
-  it("holds what the last deletion left on disk", () => {
-    const { result } = renderHook(() => useLeftover());
+  it("holds what the deletion of an item left on disk, by its id", () => {
+    const { result } = renderHook(() => useLeftoverOf("task-1"));
     const leftover = makeLeftover();
 
     expect(result.current).toBeNull();
 
     act(() => {
-      useAppStore.getState().setLeftover(leftover);
+      useAppStore.setState({ leftovers: { "task-1": leftover } });
     });
     expect(result.current).toEqual(leftover);
-
-    act(() => {
-      useAppStore.getState().setLeftover(null);
-    });
-    expect(result.current).toBeNull();
   });
 });
 

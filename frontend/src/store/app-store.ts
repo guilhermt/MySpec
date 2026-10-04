@@ -83,12 +83,11 @@ const MAX_TOASTS = 3;
 /** PanelId is an auxiliary panel of an item: its artifacts, its reports, its documents, its details or its card. */
 export type PanelId = "artifacts" | "reports" | "documents" | "details" | "card";
 
-/** Toast is the notice of an item that left without being open; its id is the id of the task. */
-export interface Toast {
-  id: string;
-  taskId: string;
-  name: string;
-}
+/** Toast is the notice of an item that left without being open, with the item as it was archived. */
+export type Toast =
+  | { id: string; kind: "task"; task: ArchivedTask }
+  | { id: string; kind: "review"; review: ArchivedReview }
+  | { id: string; kind: "discussion"; discussion: ArchivedDiscussion };
 
 /** StepTab is the conversation of a step on screen: the agent that implements it, or the one that reviews it. */
 export type StepTab = "implementer" | "reviewer";
@@ -298,8 +297,6 @@ export interface AppStore {
    */
   lastRepositoryId: string | null;
   historyQuery: string;
-  /** leftover is what the last deletion could not remove from disk, until dismissed. */
-  leftover: Leftover | null;
   /** leftovers are what git couldn't remove when an item was deleted, by its id, while the app runs. */
   leftovers: Readonly<Record<string, Leftover>>;
   /**
@@ -417,7 +414,6 @@ export interface AppStore {
   clearHistoryFocus: () => void;
   /** dismissToast takes a toast off the screen. */
   dismissToast: (id: string) => void;
-  setLeftover: (leftover: Leftover | null) => void;
 
   flashSituation: (id: string) => void;
   unflashSituation: (id: string) => void;
@@ -553,14 +549,29 @@ export function findArchivedDiscussion(
   );
 }
 
-// The tasks that show up in the history between two snapshots were archived
-// while the user was watching, which is what a toast says.
-function newlyArchived(
-  previous: readonly ArchivedTask[],
-  next: readonly ArchivedTask[],
-): ArchivedTask[] {
+// The items that show up in a history between two snapshots were archived while the user was
+// watching, which is what a toast says.
+function newlyArchived<T extends { id: string }>(previous: readonly T[], next: readonly T[]): T[] {
   const known = new Set(previous.map((entry) => entry.id));
   return next.filter((entry) => !known.has(entry.id));
+}
+
+const NO_ARCHIVED: Toast[] = [];
+
+// newlyArchivedOf are the toasts of what the new state archived since the last: tasks, then
+// reviews, then discussions.
+function newlyArchivedOf(previous: State, next: State): Toast[] {
+  return [
+    ...newlyArchived(historyOf(previous), historyOf(next)).map(
+      (task): Toast => ({ id: task.id, kind: "task", task }),
+    ),
+    ...newlyArchived(reviewHistoryOf(previous), reviewHistoryOf(next)).map(
+      (review): Toast => ({ id: review.id, kind: "review", review }),
+    ),
+    ...newlyArchived(discussionHistoryOf(previous), discussionHistoryOf(next)).map(
+      (discussion): Toast => ({ id: discussion.id, kind: "discussion", discussion }),
+    ),
+  ];
 }
 
 function withoutTranscript(
@@ -711,7 +722,6 @@ function initialTaskUi(): Pick<
   | "lastRepositoryId"
   | "historyQuery"
   | "historyFocus"
-  | "leftover"
   | "leftovers"
   | "flashing"
 > {
@@ -738,7 +748,6 @@ function initialTaskUi(): Pick<
     lastRepositoryId: null,
     historyQuery: "",
     historyFocus: null,
-    leftover: null,
     leftovers: {},
     flashing: new Set<string>(),
   };
@@ -1024,10 +1033,9 @@ export const useAppStore = create<AppStore>()((set, get) => {
             ...(location.kind === "settings" ? {} : { promptEdit: null, pendingLeave: null }),
           };
         }
-        const history = historyOf(next);
         // The first snapshot brings the whole history at once; nothing in it was
         // archived under the eyes of the user.
-        const archived = state.app === null ? [] : newlyArchived(historyOf(state.app), history);
+        const archived = state.app === null ? NO_ARCHIVED : newlyArchivedOf(state.app, next);
         // A repository that is gone stops preselecting the creation dialog.
         const lastRepositoryId =
           state.lastRepositoryId !== null &&
@@ -1041,15 +1049,11 @@ export const useAppStore = create<AppStore>()((set, get) => {
         const registered = welcomeMode(state.app) && location.kind === "home";
         // An item that left takes every conversation it had with it.
         const left = moved ? openItemId(state.location) : null;
-        // The task archived while open has its page; every other one, a toast.
-        const toasted = archived.filter((entry) => entry.id !== openItemId(state.location));
+        // The item archived while open has its page; every other one, a toast.
+        const open = openItemId(state.location);
+        const toasted = archived.filter((toast) => toast.id !== open);
         const toasts =
-          toasted.length === 0
-            ? state.toasts
-            : [
-                ...state.toasts,
-                ...toasted.map((entry) => ({ id: entry.id, taskId: entry.id, name: entry.name })),
-              ].slice(-MAX_TOASTS);
+          toasted.length === 0 ? state.toasts : [...state.toasts, ...toasted].slice(-MAX_TOASTS);
         // The page of an item that left on its own is announced; the one the
         // user just asked to remove is not.
         const arrived = moved && location.kind === "gone" ? location : null;
@@ -1344,8 +1348,6 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     dismissToast: (id) =>
       set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
-
-    setLeftover: (leftover) => set({ leftover }),
 
     // A new set every time: the selectors hand the set itself to the components,
     // which only see a change through a new reference.
@@ -1855,8 +1857,9 @@ export function useAnnouncement(): { id: number; text: string } | null {
   return useAppStore((state) => state.announcement);
 }
 
-export function useLeftover(): Leftover | null {
-  return useAppStore((state) => state.leftover);
+/** useLeftoverOf is what git couldn't remove when an item was deleted, null when it removed everything. */
+export function useLeftoverOf(id: string): Leftover | null {
+  return useAppStore((state) => state.leftovers[id] ?? null);
 }
 
 // The history of places is kept whenever it changes, whatever changed it.

@@ -1,11 +1,31 @@
 import { act, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ShellToasts } from "@/features/notice/ShellToasts";
-import { useAppStore } from "@/store/app-store";
+import { type Toast, useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeArchivedTask, makeRepository, makeState } from "@/test/wails-mock";
+import {
+  makeArchivedDiscussion,
+  makeArchivedReview,
+  makeArchivedTask,
+  makeCloseResult,
+  makeRepository,
+  makeReviewPass,
+  makeState,
+} from "@/test/wails-mock";
 
-const TOAST = { id: "task-1", taskId: "task-1", name: "add-login" };
+const TOAST: Toast = {
+  id: "task-1",
+  kind: "task",
+  task: makeArchivedTask({ id: "task-1", name: "add-login" }),
+};
+
+function taskToast(n: string): Toast {
+  return {
+    id: `task-${n}`,
+    kind: "task",
+    task: makeArchivedTask({ id: `task-${n}`, name: n }),
+  };
+}
 
 describe("ShellToasts", () => {
   it("says what the store announces", () => {
@@ -22,39 +42,80 @@ describe("ShellToasts", () => {
     expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
-  it("shows the toast of a task that was archived", () => {
-    renderWithStore(<ShellToasts />, { ui: { toasts: [TOAST] } });
+  it("shows the toast of a task that was archived, with how its closing went", () => {
+    const close = makeCloseResult({ closedAt: new Date().toISOString() });
+    const task = makeArchivedTask({ id: "task-1", name: "add-login", close });
+    renderWithStore(<ShellToasts />, { ui: { toasts: [{ id: "task-1", kind: "task", task }] } });
 
-    expect(screen.getByRole("status")).toHaveTextContent("“add-login” was archived");
+    const region = screen.getByRole("status");
+    expect(region).toHaveTextContent("“add-login” was archived");
+    expect(region).toHaveTextContent(/Closed at \d\d:\d\d/);
   });
 
-  it("opens the History on the archived task from the toast, which leaves", async () => {
+  it("shows the toast of a task archived without a result of its closing, with no detail", () => {
+    renderWithStore(<ShellToasts />, { ui: { toasts: [TOAST] } });
+
+    expect(screen.getByRole("status")).not.toHaveTextContent("Closed");
+  });
+
+  it("shows the toast of a review that was merged, with its last pass", () => {
+    const publishedAt = new Date().toISOString();
+    const review = makeArchivedReview({
+      id: "review-1",
+      outcome: "merged",
+      passes: [makeReviewPass({ pass: 2, published: true, publishedAt })],
+    });
+    renderWithStore(<ShellToasts />, {
+      ui: { toasts: [{ id: "review-1", kind: "review", review }] },
+    });
+
+    const region = screen.getByRole("status");
+    expect(region).toHaveTextContent("web#31 was merged, and its review ended");
+    expect(region).toHaveTextContent(/Pass 2 was published at \d\d:\d\d/);
+  });
+
+  it("shows the toast of a discussion that was archived, with what it published", () => {
+    const discussion = makeArchivedDiscussion({ id: "discussion-1", publishedCount: 3 });
+    renderWithStore(<ShellToasts />, {
+      ui: { toasts: [{ id: "discussion-1", kind: "discussion", discussion }] },
+    });
+
+    const region = screen.getByRole("status");
+    expect(region).toHaveTextContent("“Invoices” was archived");
+    expect(region).toHaveTextContent("3 cards published");
+  });
+
+  it.each<[Toast["kind"], Toast]>([
+    ["task", TOAST],
+    ["review", { id: "review-1", kind: "review", review: makeArchivedReview({ id: "review-1" }) }],
+    [
+      "discussion",
+      {
+        id: "discussion-1",
+        kind: "discussion",
+        discussion: makeArchivedDiscussion({ id: "discussion-1" }),
+      },
+    ],
+  ])("opens the History on the %s from its toast, which leaves", async (kind, toast) => {
     const { user } = renderWithStore(<ShellToasts />, {
-      state: makeState({
-        repositories: [makeRepository()],
-        history: [makeArchivedTask({ id: "task-1" })],
-      }),
-      ui: { toasts: [TOAST] },
+      state: makeState({ repositories: [makeRepository()] }),
+      ui: { toasts: [toast] },
     });
 
     await user.click(screen.getByRole("button", { name: "Open in History" }));
 
     expect(useAppStore.getState().location).toEqual({
       kind: "history",
-      fresh: { kind: "task", id: "task-1" },
+      fresh: { kind, id: toast.id },
     });
     expect(useAppStore.getState().toasts).toEqual([]);
   });
 
-  it("lets a toast a newer one pushes out go, keeping three", () => {
-    const toasts = ["1", "2", "3"].map((n) => ({ id: `task-${n}`, taskId: `task-${n}`, name: n }));
+  it("shows three toasts at most, letting the oldest go", () => {
+    const toasts = ["1", "2", "3"].map(taskToast);
     renderWithStore(<ShellToasts />, { ui: { toasts } });
 
-    act(() =>
-      useAppStore.setState({
-        toasts: [...toasts.slice(1), { id: "task-4", taskId: "task-4", name: "4" }],
-      }),
-    );
+    act(() => useAppStore.setState({ toasts: [...toasts.slice(1), taskToast("4")] }));
 
     expect(screen.queryByText("“1” was archived")).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Dismiss" })).toHaveLength(3);

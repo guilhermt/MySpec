@@ -90,6 +90,15 @@ export function clockOrDateAt(iso: string, now: number): string {
   return daysBefore(date, now) === 0 ? CLOCK.format(date) : dateAt(iso, now);
 }
 
+/** atMoment is a time as a sentence takes it: " at 15:02" today, " on Sep 23 at 14:51" on another day, "" for none. */
+export function atMoment(iso: string, now: number): string {
+  const date = parse(iso);
+  if (date === null) {
+    return "";
+  }
+  return daysBefore(date, now) === 0 ? ` at ${CLOCK.format(date)}` : ` on ${dateAt(iso, now)}`;
+}
+
 /** startedTime is the time of a Started field: Today 09:14, then as clockTime. */
 export function startedTime(iso: string, now: number): string {
   const date = parse(iso);

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   age,
   ageLong,
+  atMoment,
   clockOf,
   clockOrDateAt,
   clockTime,
@@ -50,6 +51,16 @@ describe("clockOrDateAt", () => {
     ["no time", "", ""],
   ])("writes a moment of %s", (_, iso, text) => {
     expect(clockOrDateAt(iso, NOW)).toBe(text);
+  });
+});
+
+describe("atMoment", () => {
+  it.each([
+    ["today", local(2026, 8, 27, 15, 2), " at 15:02"],
+    ["another day", local(2026, 8, 24, 15, 2), " on Sep 24 at 15:02"],
+    ["no time", "", ""],
+  ])("writes a moment of %s for a sentence", (_, iso, text) => {
+    expect(atMoment(iso, NOW)).toBe(text);
   });
 });
 

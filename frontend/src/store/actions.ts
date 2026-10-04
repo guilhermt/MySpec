@@ -1003,7 +1003,6 @@ export async function deleteReviewInPlace(id: string): Promise<string | null> {
     const result = await api.deleteReview(id);
     if (result.leftover !== null) {
       const { leftover } = result;
-      useAppStore.getState().setLeftover(leftover);
       useAppStore.setState((state) => ({ leftovers: { ...state.leftovers, [id]: leftover } }));
     }
   });
@@ -1018,7 +1017,6 @@ export async function deleteTaskInPlace(taskId: string): Promise<string | null> 
     const result = await api.deleteTask(taskId);
     if (result.leftover !== null) {
       const { leftover } = result;
-      useAppStore.getState().setLeftover(leftover);
       useAppStore.setState((state) => ({ leftovers: { ...state.leftovers, [taskId]: leftover } }));
     }
   });

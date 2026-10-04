@@ -719,7 +719,6 @@ describe("task actions", () => {
 
     expect(await deleteTaskInPlace("task-1")).toBeNull();
 
-    expect(useAppStore.getState().leftover).toEqual(leftover);
     expect(useAppStore.getState().leftovers).toEqual({ "task-1": leftover });
   });
 
@@ -746,7 +745,7 @@ describe("task actions", () => {
 
     await deleteTaskInPlace("task-1");
 
-    expect(useAppStore.getState().leftover).toBeNull();
+    expect(useAppStore.getState().leftovers).toEqual({});
   });
 
   it("makes a step follow the review mode of the task again", async () => {
@@ -1052,14 +1051,13 @@ describe("review actions reported in the app notice", () => {
     expect(await deleteReviewInPlace("review-1")).toBeNull();
 
     expect(api.deleteReview).toHaveBeenCalledWith("review-1");
-    expect(useAppStore.getState().leftover).toEqual(leftover);
     expect(useAppStore.getState().leftovers).toEqual({ "review-1": leftover });
   });
 
   it("say nothing when the deletion of a review left nothing behind", async () => {
     await deleteReviewInPlace("review-1");
 
-    expect(useAppStore.getState().leftover).toBeNull();
+    expect(useAppStore.getState().leftovers).toEqual({});
     expect(useAppStore.getState().leftovers).toEqual({});
   });
 });
