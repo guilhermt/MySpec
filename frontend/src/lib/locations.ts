@@ -8,12 +8,19 @@ export type SettingsSection = "defaults" | "boards" | "repositories" | "prompts"
 /** GoneItem is what left the state while its place was open. */
 export type GoneItem = "task" | "review" | "discussion" | "board";
 
+/** FreshItem is the archived item the History opens on: the one a page of an item that left or a toast brought there. */
+export interface FreshItem {
+  kind: "task" | "review" | "discussion";
+  id: string;
+}
+
 /** Location is the one place the main area shows. */
 export type Location =
   | { kind: "home" }
   | { kind: "board"; id: string }
   | { kind: "reviews" }
-  | { kind: "history" }
+  /** history may name the item that was just archived: its row is drawn selected, and not kept in the places behind. */
+  | { kind: "history"; fresh?: FreshItem }
   | { kind: "settings"; section: SettingsSection }
   | { kind: "task"; id: string }
   | { kind: "review"; id: string }
@@ -58,6 +65,8 @@ const GONE_ITEMS: readonly string[] = [
   "discussion",
   "board",
 ] satisfies readonly GoneItem[];
+
+const FRESH_KINDS: readonly string[] = ["task", "review", "discussion"];
 
 const REVIEWS: Location = { kind: "reviews" };
 const HISTORY: Location = { kind: "history" };
@@ -237,6 +246,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function isFresh(value: unknown): value is FreshItem {
+  return (
+    isRecord(value) &&
+    typeof value.kind === "string" &&
+    FRESH_KINDS.includes(value.kind) &&
+    typeof value.id === "string"
+  );
+}
+
+/** withoutFresh is the place as the places behind keep it: the History without the row it opened on. */
+export function withoutFresh(location: Location): Location {
+  return location.kind === "history" && location.fresh !== undefined ? HISTORY : location;
+}
+
 /** isLocation tells whether a value read back from storage is a place. */
 export function isLocation(value: unknown): value is Location {
   if (!isRecord(value)) {
@@ -245,8 +268,9 @@ export function isLocation(value: unknown): value is Location {
   switch (value.kind) {
     case "home":
     case "reviews":
-    case "history":
       return true;
+    case "history":
+      return value.fresh === undefined || isFresh(value.fresh);
     case "settings":
       return typeof value.section === "string" && SETTINGS_SECTIONS.includes(value.section);
     case "board":

@@ -28,7 +28,7 @@ describe("ShellToasts", () => {
     expect(screen.getByRole("status")).toHaveTextContent("“add-login” was archived");
   });
 
-  it("opens the archived task from the toast, which leaves", async () => {
+  it("opens the History on the archived task from the toast, which leaves", async () => {
     const { user } = renderWithStore(<ShellToasts />, {
       state: makeState({
         repositories: [makeRepository()],
@@ -39,7 +39,10 @@ describe("ShellToasts", () => {
 
     await user.click(screen.getByRole("button", { name: "Open in History" }));
 
-    expect(useAppStore.getState().location).toEqual({ kind: "archived-task", id: "task-1" });
+    expect(useAppStore.getState().location).toEqual({
+      kind: "history",
+      fresh: { kind: "task", id: "task-1" },
+    });
     expect(useAppStore.getState().toasts).toEqual([]);
   });
 

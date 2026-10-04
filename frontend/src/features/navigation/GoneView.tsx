@@ -37,18 +37,6 @@ const ICON: Record<GoneOutcome, IconGlyph> = {
   removed: ICONS.board,
 };
 
-// The archived item the page of an item that left opens in the History.
-function archivedOf(item: Exclude<GoneLocation["item"], "board">, id: string): Location {
-  switch (item) {
-    case "task":
-      return { kind: "archived-task", id };
-    case "review":
-      return { kind: "archived-review", id };
-    case "discussion":
-      return { kind: "archived-discussion", id };
-  }
-}
-
 /** GonePasses is the result of each pass of a review that ended, or of each round of a discussion: what went to GitHub or to the agent, and when. */
 function GonePasses({
   label,
@@ -83,6 +71,7 @@ function GonePasses({
 export function GoneView({ location }: GoneViewProps) {
   const app = useAppStore((state) => state.app);
   const go = useAppStore((state) => state.go);
+  const openInHistory = useAppStore((state) => state.openInHistory);
   const goBack = useAppStore((state) => state.goBack);
   const openSituation = useAppStore((state) => state.openSituation);
   const backTarget = useBackTarget();
@@ -123,11 +112,8 @@ export function GoneView({ location }: GoneViewProps) {
           },
     );
     if (outcome !== "deleted") {
-      const archived = archivedOf(location.item, location.id);
-      actions.push({
-        label: "Open in History",
-        onClick: () => go(archived, { focus: "title" }),
-      });
+      const { item, id } = location;
+      actions.push({ label: "Open in History", onClick: () => openInHistory(item, id) });
     }
     actions.push(returnAction(location, findBoard(app, location.boardId)?.title ?? null, go));
   }

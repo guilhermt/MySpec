@@ -2545,6 +2545,58 @@ describe("history of places", () => {
   });
 });
 
+describe("the row just archived", () => {
+  const FRESH: Location = { kind: "history", fresh: { kind: "review", id: "review-1" } };
+  const TASK: Location = { kind: "task", id: WEB_TASK.id };
+
+  beforeEach(() => {
+    localStorage.clear();
+    useAppStore.getState().applyState(withTasks({ boards: [BOARD], history: [ARCHIVED] }));
+  });
+
+  it("opens the History on the row, with the search cleared", () => {
+    useAppStore.setState({ historyQuery: "refund" });
+
+    useAppStore.getState().openInHistory("review", "review-1");
+
+    expect(useAppStore.getState()).toMatchObject({ location: FRESH, historyQuery: "" });
+  });
+
+  it("does not stack the row behind the place it leaves", () => {
+    useAppStore.getState().go(FRESH);
+    useAppStore.getState().go(TASK);
+
+    expect(useAppStore.getState().back.at(-1)).toEqual({ kind: "history" });
+    expect(useAppStore.getState().back.at(-1)).not.toHaveProperty("fresh");
+  });
+
+  it("does not put the row ahead when going back from it", () => {
+    useAppStore.setState({ location: FRESH, back: [TASK], forward: [] });
+
+    useAppStore.getState().goBack();
+
+    expect(useAppStore.getState().forward).toEqual([{ kind: "history" }]);
+  });
+
+  it("does not keep the row between runs", () => {
+    useAppStore.getState().go(FRESH);
+
+    expect(localStorage.getItem(NAV_STACK_KEY) ?? "").not.toContain("fresh");
+  });
+
+  it("only takes the row when the History is already open", () => {
+    useAppStore.getState().go({ kind: "history" });
+
+    useAppStore.getState().openInHistory("task", "task-1");
+
+    expect(useAppStore.getState().location).toEqual({
+      kind: "history",
+      fresh: { kind: "task", id: "task-1" },
+    });
+    expect(useAppStore.getState().back.filter((place) => place.kind === "history")).toEqual([]);
+  });
+});
+
 describe("kept places", () => {
   const TASK: Location = { kind: "task", id: WEB_TASK.id };
   const HISTORY: Location = { kind: "history" };

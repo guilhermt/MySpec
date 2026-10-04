@@ -16,7 +16,7 @@ import {
 export function ShellToasts() {
   const announcement = useAnnouncement();
   const toasts = useToasts();
-  const openArchived = useAppStore((state) => state.openArchived);
+  const openInHistory = useAppStore((state) => state.openInHistory);
   const dismissToast = useAppStore((state) => state.dismissToast);
   const [pushedOut, setPushedOut] = useState<readonly ToastEntry[]>([]);
   const shown = useRef(toasts);
@@ -46,7 +46,7 @@ export function ShellToasts() {
           icon={ICONS.archive}
           text={`“${toast.name}” was archived`}
           leaving={leaving}
-          action={{ label: "Open in History", onClick: () => openArchived(toast.taskId) }}
+          action={{ label: "Open in History", onClick: () => openInHistory("task", toast.taskId) }}
           onDismiss={() => {
             if (leaving) {
               setPushedOut((left) => left.filter((entry) => entry.id !== toast.id));

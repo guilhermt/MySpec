@@ -1,6 +1,7 @@
 import { screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HistoryView } from "@/features/history/HistoryView";
+import { api } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makeArchivedTask, makeHistorySummary, makeState } from "@/test/wails-mock";
@@ -10,11 +11,11 @@ const A = makeArchivedTask({ id: "a", name: "alpha", archivedAt: at(24, 15) });
 const B = makeArchivedTask({ id: "b", name: "bravo", archivedAt: at(24, 11) });
 const C = makeArchivedTask({ id: "c", name: "charlie", archivedAt: at(21, 9) });
 
-function view() {
+function view(tasks = 3) {
   return renderWithStore(<HistoryView />, {
     state: makeState({
       history: [A, B, C],
-      historySummary: makeHistorySummary({ tasks: 3, oldest: at(21, 9) }),
+      historySummary: makeHistorySummary({ tasks, oldest: at(21, 9) }),
     }),
     ui: { location: { kind: "history" } },
   });
@@ -109,5 +110,52 @@ describe("HistoryView keys", () => {
     expect(screen.getByRole("searchbox", { name: "Search History" })).toHaveFocus();
     await user.keyboard("a/b");
     expect(screen.getByRole("searchbox", { name: "Search History" })).toHaveValue("a/b");
+  });
+
+  it("asks for the older items when the down arrow reaches the last row", async () => {
+    const { user } = view(9);
+    row(/^Task bravo/).focus();
+
+    await user.keyboard("{ArrowDown}");
+    expect(api.listArchived).not.toHaveBeenCalled();
+    await user.keyboard("{ArrowDown}");
+
+    expect(row(/^Task charlie/)).toHaveFocus();
+    expect(api.listArchived).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks for the older items when End reaches the last row", async () => {
+    const { user } = view(9);
+    row(/^Task alpha/).focus();
+    expect(api.listArchived).not.toHaveBeenCalled();
+
+    await user.keyboard("{End}");
+
+    expect(row(/^Task charlie/)).toHaveFocus();
+    expect(api.listArchived).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not ask when the last row is the end of the History", async () => {
+    const { user } = view();
+    row(/^Task alpha/).focus();
+
+    await user.keyboard("{End}");
+
+    expect(api.listArchived).not.toHaveBeenCalled();
+  });
+
+  it("arrives on the row just archived, which is the one tab stop", () => {
+    renderWithStore(<HistoryView />, {
+      state: makeState({
+        history: [A, B, C],
+        historySummary: makeHistorySummary({ tasks: 3, oldest: at(21, 9) }),
+      }),
+      ui: { location: { kind: "history", fresh: { kind: "task", id: "b" } } },
+    });
+
+    expect(row(/^Task bravo/)).toHaveFocus();
+    expect(screen.getAllByRole("treeitem").filter((item) => item.tabIndex === 0)).toEqual([
+      row(/^Task bravo/),
+    ]);
   });
 });

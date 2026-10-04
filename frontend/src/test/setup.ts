@@ -2,6 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { type ComponentType, createElement, type ReactNode } from "react";
 import { afterEach, vi } from "vitest";
+import { installIntersectionObserver } from "./intersection";
 import * as wailsMock from "./wails-mock";
 
 // The runtime talks to a native host that does not exist under jsdom, and it
@@ -134,3 +135,6 @@ Object.defineProperty(Element.prototype, "scrollIntoView", {
   writable: true,
   configurable: true,
 });
+
+// Nor does it observe what comes into view: the double only says what a test tells it.
+installIntersectionObserver();

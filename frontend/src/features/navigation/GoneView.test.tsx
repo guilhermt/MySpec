@@ -273,7 +273,7 @@ describe("GoneView", () => {
     expect(useAppStore.getState().location).toEqual({ kind: "task", id: WAITING.id });
   });
 
-  it("opens the archived item in the History", async () => {
+  it("opens the History on the row of the archived item", async () => {
     const { user } = page(
       gone("task", "task-1", "add-login"),
       stateWith({ history: [makeArchivedTask({ id: "task-1" })] }),
@@ -281,6 +281,23 @@ describe("GoneView", () => {
 
     await user.click(screen.getByRole("button", { name: "Open in History" }));
 
-    expect(useAppStore.getState().location).toEqual({ kind: "archived-task", id: "task-1" });
+    expect(useAppStore.getState().location).toEqual({
+      kind: "history",
+      fresh: { kind: "task", id: "task-1" },
+    });
+  });
+
+  it.each<["review" | "discussion", Partial<State>]>([
+    ["review", { reviewHistory: [makeArchivedReview({ id: "item-1" })] }],
+    ["discussion", { discussionHistory: [makeArchivedDiscussion({ id: "item-1" })] }],
+  ])("opens the History on the row of the %s that ended", async (item, archive) => {
+    const { user } = page(gone(item, "item-1", "x"), stateWith(archive));
+
+    await user.click(screen.getByRole("button", { name: "Open in History" }));
+
+    expect(useAppStore.getState().location).toEqual({
+      kind: "history",
+      fresh: { kind: item, id: "item-1" },
+    });
   });
 });

@@ -3,6 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 import { readStoredPreference } from "@/features/theme/theme";
 import { boardOfRepository, findBoard } from "@/lib/boards";
 import {
+  type FreshItem,
   type GoneLocation,
   goneOutcome,
   goneTitle,
@@ -16,6 +17,7 @@ import {
   openItemId,
   type SettingsSection,
   sameLocation,
+  withoutFresh,
 } from "@/lib/locations";
 import {
   discussionSituation,
@@ -408,6 +410,8 @@ export interface AppStore {
 
   openHistory: () => void;
   openArchived: (id: string) => void;
+  /** openInHistory opens the History on the row of an item that was just archived, with the search cleared. */
+  openInHistory: (kind: FreshItem["kind"], id: string) => void;
   setHistoryQuery: (query: string) => void;
   /** clearHistoryFocus says History took the focus it was asked to put. */
   clearHistoryFocus: () => void;
@@ -661,7 +665,7 @@ export function readLastItem(): Location | null {
 // of items that left, which are never revisited, and the last active item
 // opened.
 function persistNav(state: Pick<AppStore, "location" | "back">): void {
-  const current = state.location.kind === "gone" ? HOME : state.location;
+  const current = state.location.kind === "gone" ? HOME : withoutFresh(state.location);
   const saved: SavedNav = {
     back: state.back.filter((place) => place.kind !== "gone"),
     current,
@@ -790,7 +794,9 @@ function navigate(
     };
   }
   const back =
-    state.location.kind === "gone" ? state.back : [...state.back, state.location].slice(-NAV_LIMIT);
+    state.location.kind === "gone"
+      ? state.back
+      : [...state.back, withoutFresh(state.location)].slice(-NAV_LIMIT);
   return { ...common, back: beside(back, location), forward: [] };
 }
 
@@ -831,7 +837,8 @@ function travel(
     return null;
   }
   const rest = from.slice(0, index);
-  const behind = state.location.kind === "gone" ? to : [...to, state.location].slice(-NAV_LIMIT);
+  const behind =
+    state.location.kind === "gone" ? to : [...to, withoutFresh(state.location)].slice(-NAV_LIMIT);
   const location = place;
   return {
     location,
@@ -1312,6 +1319,11 @@ export const useAppStore = create<AppStore>()((set, get) => {
     openHistory: () => go({ kind: "history" }),
 
     openArchived: (id) => go({ kind: "archived-task", id }),
+
+    openInHistory: (kind, id) => {
+      set({ historyQuery: "" });
+      go({ kind: "history", fresh: { kind, id } });
+    },
 
     setHistoryQuery: (query) => set({ historyQuery: query }),
 
