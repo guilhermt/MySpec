@@ -40,6 +40,14 @@ const WIDTHS = [WIDE_MAIN, HALF_MAIN];
 
 const HOME = "/home/guilherme";
 
+// The worktrees of the deleted task and of the deleted review, as the page writes them.
+const TASK_WORKTREE = "~/.local/share/myspec/worktrees/acme/api/rate-limit-per-api-key";
+const REVIEW_WORKTREE = "~/.local/share/myspec/worktrees/acme/web/pr_2291";
+// FOLDER_WARNING and FORCE_WARNING are the warnings over the command of a folder git forgot and of a
+// worktree git still lists.
+const FOLDER_WARNING = "rm -rf deletes the modified and untracked files in it too.";
+const FORCE_WARNING = "--force deletes the modified and untracked files in it too.";
+
 /** Case is a scene of the page of an item that left, or of the notices, named as the mock's query names it. */
 interface Case {
   name: "gone" | "notice";
@@ -67,7 +75,20 @@ const CASES: Case[] = [
     says: [
       "Rate limit per API key was deleted",
       "PR #1284 stays open on GitHub.",
-      "error: failed to delete '~/.local/share/myspec/worktrees/acme/api/rate-limit-per-api-key': Permission denied",
+      `error: failed to delete '${TASK_WORKTREE}': Permission denied`,
+      FOLDER_WARNING,
+      `rm -rf ${TASK_WORKTREE}`,
+    ],
+  },
+  {
+    name: "gone",
+    variant: "deleted-locked",
+    primary: NEXT,
+    says: [
+      "Rate limit per API key was deleted",
+      "fatal: cannot remove a locked working tree; use 'remove -f -f' to override or unlock first",
+      FORCE_WARNING,
+      `git worktree remove --force ${TASK_WORKTREE}`,
     ],
   },
   { name: "gone", variant: "review", primary: NEXT },
@@ -78,7 +99,7 @@ const CASES: Case[] = [
     name: "gone",
     variant: "review-deleted",
     primary: NEXT,
-    says: ["~/.local/share/myspec/worktrees/acme/web/pr_2291': Permission denied"],
+    says: [`${REVIEW_WORKTREE}': Permission denied`, FOLDER_WARNING, `rm -rf ${REVIEW_WORKTREE}`],
   },
   { name: "notice", variant: "", primary: null, says: ["The implementer's session", TURN_LINE] },
   { name: "notice", variant: "toast", primary: null, says: [TURN_LINE] },
@@ -115,11 +136,21 @@ const WAITING = makeTask({
 });
 
 // stayed is a worktree git couldn't remove, with the error it gives when a file in it is not the
-// user's to delete: the product removes with --force, so what is left is a permission.
+// user's to delete: the product removes with --force, so what is left is a permission, and git forgot
+// the worktree before it failed on the folder.
 const stayed = (path: string) => ({
   path,
   kept: true,
   error: `error: failed to delete '${path}': Permission denied`,
+  registered: false,
+});
+
+// locked is a worktree git refused to remove because it is locked: git still lists it.
+const locked = (path: string) => ({
+  path,
+  kept: true,
+  error:
+    "fatal: cannot remove a locked working tree;\nuse 'remove -f -f' to override or unlock first",
   registered: true,
 });
 
@@ -137,6 +168,7 @@ function pageOf({ variant }: Case): {
   const board = "board-platform";
   switch (variant) {
     case "deleted":
+    case "deleted-locked":
     case "deleted-clean": {
       const id = "task-deleted";
       return {
@@ -150,17 +182,17 @@ function pageOf({ variant }: Case): {
         },
         state,
         leftovers:
-          variant === "deleted"
-            ? {
+          variant === "deleted-clean"
+            ? {}
+            : {
                 [id]: makeLeftover({
                   repoPath: `${HOME}/code/api`,
-                  worktree: stayed(
+                  worktree: (variant === "deleted" ? stayed : locked)(
                     `${HOME}/.local/share/myspec/worktrees/acme/api/${DELETED.branch}`,
                   ),
                   branch: { name: DELETED.branch, kept: false, error: "" },
                 }),
-              }
-            : {},
+              },
       };
     }
     case "review":
@@ -389,9 +421,9 @@ describe("The page of an item that left, its blocks and its key", () => {
 
       const stayed = within(area).getByRole("group", { name: "What stayed on disk" });
       const warning = within(area)
-        .getByText(/--force deletes the modified/)
+        .getByText(/^rm -rf deletes the modified/)
         .closest("p");
-      const commands = within(area).getByText(/^git worktree remove --force/).parentElement;
+      const commands = within(area).getByText(/^rm -rf ~/).parentElement;
       if (warning === null || commands === null) {
         throw new Error("the warning or the commands are missing");
       }
