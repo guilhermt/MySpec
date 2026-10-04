@@ -50,6 +50,23 @@ function whollyBelow(bar: HTMLElement, viewport: HTMLElement): boolean {
   );
 }
 
+// STILL_FRAMES is how many frames the scroll keeps one place to count as stopped: a smooth scroll moves
+// it on every frame it runs.
+const STILL_FRAMES = 10;
+
+// stopped waits for the scroll to stop where the keys and the browser leave it, so a box is measured
+// where it stays and not on the way.
+async function stopped(viewport: HTMLElement): Promise<void> {
+  const frame = () => new Promise((done) => requestAnimationFrame(done));
+  let still = 0;
+  let last = viewport.scrollTop;
+  while (still < STILL_FRAMES) {
+    await frame();
+    still = viewport.scrollTop === last ? still + 1 : 0;
+    last = viewport.scrollTop;
+  }
+}
+
 // Chromium scrolls an element that takes the focus to the middle of the scroll, which hides where
 // the list scrolls it to; WebKitGTK scrolls it the least it can, to the edge, behind the bar. The
 // focus here does not scroll, for the scroll to be the list's own, as WebKitGTK leaves it.
@@ -78,7 +95,8 @@ describe.each(THEMES)("HistoryView, the entry the keys reach, in the %s theme", 
     await settle();
 
     expect(document.activeElement?.getAttribute("data-section-id")).not.toBeNull();
-    await vi.waitFor(() => expect(whollyBelow(bar, viewport)).toBe(true));
+    await stopped(viewport);
+    expect(whollyBelow(bar, viewport)).toBe(true);
   });
 
   it("keeps the first day below the bar when Home goes back from the end", async () => {
@@ -92,7 +110,8 @@ describe.each(THEMES)("HistoryView, the entry the keys reach, in the %s theme", 
     await settle();
 
     expect(viewport.scrollTop).toBe(0);
-    await vi.waitFor(() => expect(whollyBelow(bar, viewport)).toBe(true));
+    await stopped(viewport);
+    expect(whollyBelow(bar, viewport)).toBe(true);
   });
 
   it("keeps a row below the bar when ↑ moves to one scrolled behind it", async () => {
@@ -109,6 +128,7 @@ describe.each(THEMES)("HistoryView, the entry the keys reach, in the %s theme", 
     await settle();
 
     expect(document.activeElement).toBe(rows[19]);
-    await vi.waitFor(() => expect(whollyBelow(bar, viewport)).toBe(true));
+    await stopped(viewport);
+    expect(whollyBelow(bar, viewport)).toBe(true);
   });
 });

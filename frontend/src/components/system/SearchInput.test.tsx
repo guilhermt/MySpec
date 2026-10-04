@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import { createRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
@@ -56,6 +56,14 @@ describe("SearchInput", () => {
     await user.keyboard("{Escape}{ArrowDown}");
     expect(onEscape).toHaveBeenCalledOnce();
     expect(onArrowDown).toHaveBeenCalledOnce();
+  });
+
+  it("keeps ArrowDown from scrolling when it hands the focus on, and only then", () => {
+    const { rerender } = renderWithStore(<Subject onArrowDown={vi.fn()} />);
+    const box = screen.getByRole("searchbox", { name: "Search tasks" });
+    expect(fireEvent.keyDown(box, { key: "ArrowDown" })).toBe(false);
+    rerender(<Subject />);
+    expect(fireEvent.keyDown(box, { key: "ArrowDown" })).toBe(true);
   });
 
   it("takes the focus", async () => {
