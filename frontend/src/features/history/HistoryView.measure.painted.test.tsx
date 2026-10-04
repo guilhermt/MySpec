@@ -21,30 +21,32 @@ vi.mock("@/lib/wails", async (importOriginal) => ({
 
 /**
  * The History with 400 archived items in the window, the size the 90 days are measured at
- * (docs/development/target-machine.md, A lista do History): the first paint, from before the render
- * to the frame after its commit, and ↓ in the list, from the keydown to the frame after it, once
- * cold and five times warm. The targets are the ones of the board, 300 ms and 16 ms. The test
- * prints the numbers and holds them to a ceiling a whole order above the targets, so that a list
- * that stopped being a list fails and a slow runner does not.
+ * (docs/development/target-machine.md, A lista do History), against the History with 40, in the same
+ * run: the first paint, from before the render to the frame after its commit, and ↓ in the list, from
+ * the keydown to the frame after it, once cold and five times warm, the two sizes in turn. The targets
+ * are the ones of the board, 300 ms and 16 ms. The test prints the numbers and holds the warm median of
+ * 400 to a ratio over the one of 40: ten times the items cost about ten times the work in a list, and
+ * a list that stopped being one, with work that grows with the square of the rows, costs a hundred.
+ * A loaded runner slows both sizes alike, so the ratio does not depend on the machine.
  */
 const ITEMS = 400;
+const FEW_ITEMS = 40;
 const WARM_RUNS = 5;
-const FIRST_PAINT_CEILING_MS = 3000;
-const ARROW_CEILING_MS = 500;
-// TEST_TIMEOUT_MS holds the six runs on a loaded runner: they take 8 s alone and over 20 s beside the other browser tests.
+const RATIO_CEILING = 30;
+// TEST_TIMEOUT_MS holds the twelve runs on a loaded runner: they take 8 s alone and over 20 s beside the other browser tests.
 const TEST_TIMEOUT_MS = 60_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NOW = Date.UTC(2026, 8, 24, 12);
 
-// archivedAt spreads the items over 90 days, the newest first, four or five a day.
-const archivedAt = (i: number) =>
-  new Date(NOW - Math.floor((i * 90 * DAY_MS) / ITEMS)).toISOString();
+// archivedAt spreads the items over 90 days, the newest first.
+const archivedAt = (i: number, items: number) =>
+  new Date(NOW - Math.floor((i * 90 * DAY_MS) / items)).toISOString();
 
-function scene() {
+function scene(items: number) {
   const tasks: ArchivedTask[] = [];
   const reviews: ArchivedReview[] = [];
   const discussions: ArchivedDiscussion[] = [];
-  for (let i = 0; i < ITEMS; i++) {
+  for (let i = 0; i < items; i++) {
     const id = `item-${String(i).padStart(3, "0")}`;
     if (i % 20 < 12) {
       tasks.push(
@@ -52,7 +54,7 @@ function scene() {
           id,
           name: `Task number ${i}`,
           mode: i % 5 === 0 ? "one_shot" : "structured",
-          archivedAt: archivedAt(i),
+          archivedAt: archivedAt(i, items),
         }),
       );
     } else if (i % 20 < 17) {
@@ -61,12 +63,16 @@ function scene() {
           id,
           title: `Review number ${i}`,
           number: i,
-          archivedAt: archivedAt(i),
+          archivedAt: archivedAt(i, items),
         }),
       );
     } else {
       discussions.push(
-        makeArchivedDiscussion({ id, title: `Discussion number ${i}`, archivedAt: archivedAt(i) }),
+        makeArchivedDiscussion({
+          id,
+          title: `Discussion number ${i}`,
+          archivedAt: archivedAt(i, items),
+        }),
       );
     }
   }
@@ -79,7 +85,7 @@ function scene() {
       tasks: tasks.length,
       reviews: reviews.length,
       discussions: discussions.length,
-      oldest: archivedAt(ITEMS - 1),
+      oldest: archivedAt(items - 1, items),
     }),
   });
 }
@@ -97,14 +103,15 @@ function nextFrame(): Promise<number> {
 const median = (values: readonly number[]) =>
   [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
 
-// draw mounts the History in a main area of the whole monitor and returns the milliseconds to the frame after its commit.
-async function draw(): Promise<number> {
+// draw mounts the History of a number of items in a main area of the whole monitor and returns the
+// milliseconds to the frame after its commit.
+async function draw(items: number): Promise<number> {
   const started = performance.now();
   renderWithStore(
     <div style={{ ...mainArea(2180), height: "800px", display: "flex" }}>
       <HistoryView />
     </div>,
-    { state: scene(), ui: { location: { kind: "history" } } },
+    { state: scene(items), ui: { location: { kind: "history" } } },
   );
   const frame = (await nextFrame()) - started;
   await settle();
@@ -119,27 +126,51 @@ async function arrowDown(): Promise<number> {
   return (await nextFrame()) - started;
 }
 
+/** Times are the first paints and the ↓ of a size, the cold one first. */
+interface Times {
+  paints: number[];
+  keys: number[];
+}
+
+// measure draws the History of a number of items, presses ↓ on its first day and adds both times.
+async function measure(items: number, times: Times) {
+  times.paints.push(await draw(items));
+  expect(document.querySelectorAll("[data-row-key]")).toHaveLength(items);
+  (document.querySelector("[data-section-id]") as HTMLElement).focus();
+  times.keys.push(await arrowDown());
+  cleanup();
+}
+
+const ms = (value: number) => value.toFixed(1);
+
+// told is what the run prints of a size: the cold time, the warm median and the warm maximum.
+function told(values: readonly number[]): string {
+  const [cold = 0, ...warm] = values;
+  return `cold ${ms(cold)} ms, warm median ${ms(median(warm))} ms, max ${ms(Math.max(...warm))} ms`;
+}
+
+// warmMedian is the median of the warm times, the cold one left out.
+const warmMedian = (values: readonly number[]) => median(values.slice(1));
+
 describe("HistoryView with 400 items", () => {
-  it("paints and moves with ↓ within the ceilings", { timeout: TEST_TIMEOUT_MS }, async ({
-    annotate,
-  }) => {
-    const paints: number[] = [];
-    const keys: number[] = [];
+  it("paints and moves with ↓ within a ratio of the History with 40", {
+    timeout: TEST_TIMEOUT_MS,
+  }, async ({ annotate }) => {
+    const many: Times = { paints: [], keys: [] };
+    const few: Times = { paints: [], keys: [] };
     for (let run = 0; run <= WARM_RUNS; run++) {
-      paints.push(await draw());
-      expect(document.querySelectorAll("[data-row-key]")).toHaveLength(ITEMS);
-      (document.querySelector("[data-section-id]") as HTMLElement).focus();
-      keys.push(await arrowDown());
-      cleanup();
+      await measure(FEW_ITEMS, few);
+      await measure(ITEMS, many);
     }
-    const [coldPaint = 0, ...warmPaints] = paints;
-    const [coldKey = 0, ...warmKeys] = keys;
-    const ms = (value: number) => value.toFixed(1);
+    const paintRatio = warmMedian(many.paints) / warmMedian(few.paints);
+    const keyRatio = warmMedian(many.keys) / warmMedian(few.keys);
     await annotate(
-      `history ${ITEMS} items: first paint cold ${ms(coldPaint)} ms, warm median ${ms(median(warmPaints))} ms, max ${ms(Math.max(...warmPaints))} ms; ↓ cold ${ms(coldKey)} ms, warm median ${ms(median(warmKeys))} ms, max ${ms(Math.max(...warmKeys))} ms`,
+      `history ${ITEMS} items: first paint ${told(many.paints)}; ↓ ${told(many.keys)}. ` +
+        `${FEW_ITEMS} items: first paint ${told(few.paints)}; ↓ ${told(few.keys)}. ` +
+        `Ratio of the warm medians: first paint ${paintRatio.toFixed(1)}, ↓ ${keyRatio.toFixed(1)}`,
     );
 
-    expect(median(warmPaints)).toBeLessThan(FIRST_PAINT_CEILING_MS);
-    expect(median(warmKeys)).toBeLessThan(ARROW_CEILING_MS);
+    expect(paintRatio).toBeLessThan(RATIO_CEILING);
+    expect(keyRatio).toBeLessThan(RATIO_CEILING);
   });
 });
