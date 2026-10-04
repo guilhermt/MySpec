@@ -175,6 +175,10 @@ describe("ArchivedDiscussion", () => {
     await waitFor(() =>
       expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus(),
     );
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    await expect.poll(() => dialog.contains(document.activeElement)).toBe(true);
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
 
     await waitFor(() => expect(screen.getByRole("button", { name: "More actions" })).toHaveFocus());

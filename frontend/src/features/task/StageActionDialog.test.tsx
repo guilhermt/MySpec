@@ -236,6 +236,10 @@ describe("StageActionDialog", () => {
     await waitFor(() =>
       expect(within(opened).getByRole("button", { name: "Cancel" })).toHaveFocus(),
     );
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    await expect.poll(() => opened.contains(document.activeElement)).toBe(true);
     await user.click(within(opened).getByRole("button", { name: "Cancel" }));
 
     await waitFor(() => expect(screen.getByRole("button", { name: "More actions" })).toHaveFocus());

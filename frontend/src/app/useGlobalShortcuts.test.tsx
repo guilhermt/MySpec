@@ -117,6 +117,21 @@ describe("useGlobalShortcuts", () => {
     );
   });
 
+  it("opens the next entry on Ctrl+J from the page of an item that left", async () => {
+    vi.mocked(api.getState).mockResolvedValue(waitingState());
+    const { user } = renderWithStore(<App />, {
+      ui: { location: { kind: "gone", item: "task", id: "task-9", name: "add-docs", boardId: "" } },
+    });
+    await screen.findByText("add-docs was deleted");
+
+    await user.keyboard("{Control>}j{/Control}");
+
+    expect(await screen.findByRole("treeitem", { name: /^task fix-header\./ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
   it("opens the review a situation is in on Ctrl+J", async () => {
     vi.mocked(api.getState).mockResolvedValue(
       makeState({

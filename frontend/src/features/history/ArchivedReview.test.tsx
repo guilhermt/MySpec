@@ -148,6 +148,10 @@ describe("ArchivedReview, Delete…", () => {
     await waitFor(() =>
       expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus(),
     );
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    await expect.poll(() => dialog.contains(document.activeElement)).toBe(true);
 
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
 

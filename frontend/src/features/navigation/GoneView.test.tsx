@@ -322,6 +322,16 @@ describe("GoneView", () => {
     expect(screen.getByRole("button", { name: "Open in History" })).toHaveFocus();
   });
 
+  it("starts a deleted task with nothing waiting on the way back", () => {
+    page(
+      gone("task", "task-1", "add-login", "board-1"),
+      stateWith({ tasks: [], boards: [makeBoard({ id: "board-1", title: "Platform Roadmap" })] }),
+    );
+
+    expect(screen.getByRole("button", { name: "Back to Platform Roadmap" })).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Open in History" })).not.toBeInTheDocument();
+  });
+
   it("opens the next item that needs the user", async () => {
     const { user } = page(gone("task", "task-1", "add-login"), stateWith());
 

@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ArchivedTask } from "@/features/history/ArchivedTask";
 import { olderKey } from "@/lib/history";
@@ -167,6 +167,23 @@ describe("ArchivedTask", () => {
     expect(screen.queryByRole("button", { name: "Open in Artifacts" })).not.toBeInTheDocument();
   });
 
+  it("opens and folds a step with Enter, Space and the arrows", async () => {
+    const { user } = view();
+    await user.click(screen.getByRole("tab", { name: "Steps · 1" }));
+    const step = screen.getByRole("button", { name: "1 Add the login form, c19f02e" });
+    step.focus();
+
+    await user.keyboard("{Enter}");
+    expect(step).toHaveAttribute("aria-expanded", "true");
+    await user.keyboard(" ");
+    expect(step).toHaveAttribute("aria-expanded", "false");
+    await user.keyboard("{ArrowRight}");
+    expect(step).toHaveAttribute("aria-expanded", "true");
+    await user.keyboard("{ArrowLeft}");
+
+    expect(step).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("lists the reports of the review of a step under it", async () => {
     const { user } = view({
       steps: [
@@ -287,6 +304,33 @@ describe("ArchivedTask, Delete…", () => {
 
     await waitFor(() => expect(screen.getByRole("button", { name: "More actions" })).toHaveFocus());
     expect(api.deleteTask).not.toHaveBeenCalled();
+  });
+
+  it("does not delete with Ctrl+Enter", async () => {
+    const { user } = await openDialog();
+    await screen.findByRole("alertdialog");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus());
+
+    await user.keyboard("{Control>}{Enter}{/Control}");
+
+    expect(api.deleteTask).not.toHaveBeenCalled();
+  });
+
+  it("keeps the dialog shut on Esc while it deletes", async () => {
+    let finish: () => void = () => {};
+    vi.mocked(api.deleteTask).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = () => resolve({ leftover: null });
+      }),
+    );
+    const { user } = await openDialog();
+
+    await user.click(await screen.findByRole("button", { name: "Delete task" }));
+    await user.keyboard("{Escape}");
+
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Deleting…" })).toHaveAttribute("aria-busy", "true");
+    await act(async () => finish());
   });
 
   it("keeps the refusal in the footer, the dialog open", async () => {
