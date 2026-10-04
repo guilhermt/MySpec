@@ -67,9 +67,13 @@ func (a *App) snapshot() bindings.State {
 			a.repositories.Get,
 			summaries, situations,
 		),
-		History: bindings.FromArchived(
-			a.tasks.ListArchived(), a.taskArtifacts, a.tasks.PRRun, a.repositories.Get,
-		),
+		History: bindings.FromArchived(a.tasks.ListArchived(), bindings.ArchivedSources{
+			Artifacts:    a.taskArtifacts,
+			PRRun:        a.tasks.PRRun,
+			PRPasses:     a.tasks.PRPasses,
+			StepRuns:     a.tasks.StepRuns,
+			Repositories: a.repositories.Get,
+		}),
 		Boards: bindings.FromBoards(
 			a.boards.List(), a.boards.Stored, a.boards.Reading,
 			a.repositories.List(), a.repositories.Missing, a.tasks.CardTasks(),

@@ -607,6 +607,160 @@ func TestFromTasksCarriesAReadingThatFailedAndTheMissingClone(t *testing.T) {
 	}
 }
 
+// archivedSources are the sources of FromArchived for tests that need only the
+// artifacts and the pull request run of a task.
+func archivedSources(artifacts task.Artifacts, run task.PRRun, hasRun bool) bindings.ArchivedSources {
+	return bindings.ArchivedSources{
+		Artifacts:    func(string) task.Artifacts { return artifacts },
+		PRRun:        func(string) (task.PRRun, bool) { return run, hasRun },
+		PRPasses:     func(string) []task.PRPass { return nil },
+		StepRuns:     func(string) []task.StepRun { return nil },
+		Repositories: repoOf,
+	}
+}
+
+func TestFromArchivedCarriesTheClosingThePullRequestAndTheCommits(t *testing.T) {
+	t.Parallel()
+
+	mergedAt := time.Date(2026, 9, 8, 17, 0, 0, 0, time.UTC)
+	closedAt := time.Date(2026, 9, 8, 18, 30, 0, 0, time.UTC)
+	plan := task.Plan{Present: true, Steps: []task.Step{
+		{Number: 1, File: "1-first.md", Title: "First"},
+		{Number: 2, File: "2-second.md", Title: "Second"},
+	}}
+	closing := &task.CloseResult{
+		Worktree:     task.CloseStep{Outcome: task.OutcomeDone},
+		Branch:       task.CloseStep{Outcome: task.OutcomeSkipped, Reason: "kept"},
+		Base:         task.CloseStep{Outcome: task.OutcomeFailed, Detail: "fetch failed"},
+		WorktreePath: "/data/worktrees/dev/web/login-screen",
+		BranchName:   "login-screen",
+		BaseBranch:   "main",
+		BaseCommits:  2,
+		ClosedAt:     closedAt,
+	}
+	tests := []struct {
+		name      string
+		artifacts task.Artifacts
+		run       task.PRRun
+		hasRun    bool
+		passes    []task.PRPass
+		stepRuns  []task.StepRun
+		check     func(t *testing.T, got bindings.ArchivedTask)
+	}{
+		{
+			name:      "the closing and the pull request",
+			artifacts: task.Artifacts{Plan: plan},
+			run: task.PRRun{Close: closing, PR: task.PRDetails{
+				Number: 7, URL: "https://github.com/dev/web/pull/7", State: task.PRStateMerged,
+				Base: "main", MergedBy: "ana", MergedAt: mergedAt,
+			}},
+			hasRun: true,
+			check: func(t *testing.T, got bindings.ArchivedTask) {
+				t.Helper()
+				wantClose := &bindings.CloseResult{
+					Worktree:     bindings.CloseStep{Outcome: "done"},
+					Branch:       bindings.CloseStep{Outcome: "skipped", Reason: "kept"},
+					Base:         bindings.CloseStep{Outcome: "failed", Detail: "fetch failed"},
+					WorktreePath: "/data/worktrees/dev/web/login-screen",
+					BranchName:   "login-screen",
+					BaseBranch:   "main",
+					BaseCommits:  2,
+					ClosedAt:     "2026-09-08T18:30:00Z",
+				}
+				if diff := cmp.Diff(wantClose, got.Close); diff != "" {
+					t.Errorf("close mismatch (-want +got):\n%s", diff)
+				}
+				wantPR := &bindings.ArchivedPR{
+					Number: 7, URL: "https://github.com/dev/web/pull/7", State: "merged",
+					Base: "main", MergedBy: "ana", MergedAt: "2026-09-08T17:00:00Z",
+				}
+				if diff := cmp.Diff(wantPR, got.PR); diff != "" {
+					t.Errorf("pull request mismatch (-want +got):\n%s", diff)
+				}
+			},
+		},
+		{
+			name:      "the commit of each step",
+			artifacts: task.Artifacts{Plan: plan},
+			stepRuns:  []task.StepRun{{Number: 1, CommitSHA: "abc123"}},
+			check: func(t *testing.T, got bindings.ArchivedTask) {
+				t.Helper()
+				if got.Steps[0].CommitSHA != "abc123" || got.Steps[1].CommitSHA != "" {
+					t.Errorf("commits = %q, %q, want abc123 and none",
+						got.Steps[0].CommitSHA, got.Steps[1].CommitSHA)
+				}
+			},
+		},
+		{
+			name: "the draft and the reports of the pull request",
+			artifacts: task.Artifacts{PR: task.PRArtifacts{
+				Draft: task.Draft{Present: true},
+				Reports: []task.ReviewReport{
+					{Pass: 1, File: "review-1.md", Findings: -1},
+					{Pass: 2, File: "review-2.md", Findings: -1},
+					{Pass: 3, File: "review-3.md", Clean: true, Findings: -1},
+				},
+			}},
+			passes: []task.PRPass{
+				{Pass: 1, Recorded: true, Findings: make([]prreport.Finding, 2)},
+				{Pass: 3, Recorded: true, Clean: true},
+			},
+			check: func(t *testing.T, got bindings.ArchivedTask) {
+				t.Helper()
+				if !got.HasPRDraft {
+					t.Error("hasPrDraft = false, want the draft reported")
+				}
+				want := []bindings.ArchivedPRReport{
+					{Pass: 1, File: "review-1.md", Structured: true, Findings: 2},
+					{Pass: 2, File: "review-2.md", Findings: -1},
+					{Pass: 3, File: "review-3.md", Clean: true, Structured: true, Findings: 0},
+				}
+				if diff := cmp.Diff(want, got.PRReports); diff != "" {
+					t.Errorf("reports mismatch (-want +got):\n%s", diff)
+				}
+			},
+		},
+		{
+			name:      "a task archived before these were recorded",
+			artifacts: task.Artifacts{Plan: plan},
+			run:       task.PRRun{PR: task.PRDetails{Number: 7, State: task.PRStateMerged}},
+			hasRun:    true,
+			check: func(t *testing.T, got bindings.ArchivedTask) {
+				t.Helper()
+				if got.Close != nil || got.HasPRDraft {
+					t.Errorf("close = %+v, hasPrDraft = %v, want neither", got.Close, got.HasPRDraft)
+				}
+				if got.PR == nil || got.PR.Base != "" || got.PR.MergedBy != "" || got.PR.MergedAt != "" {
+					t.Errorf("pull request = %+v, want one without base, merger or date", got.PR)
+				}
+				if got.PRReports == nil || len(got.PRReports) != 0 {
+					t.Errorf("reports = %#v, want an empty slice", got.PRReports)
+				}
+				for _, step := range got.Steps {
+					if step.CommitSHA != "" {
+						t.Errorf("step %d commit = %q, want none", step.Number, step.CommitSHA)
+					}
+				}
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			sources := archivedSources(tt.artifacts, tt.run, tt.hasRun)
+			sources.PRPasses = func(string) []task.PRPass { return tt.passes }
+			sources.StepRuns = func(string) []task.StepRun { return tt.stepRuns }
+
+			got := bindings.FromArchived([]task.Task{{ID: "task-1", Name: "login-screen"}}, sources)
+			if len(got) != 1 {
+				t.Fatalf("len(FromArchived()) = %d, want 1", len(got))
+			}
+			tt.check(t, got[0])
+		})
+	}
+}
+
 func TestFromArchivedCarriesTheDocumentsAndThePullRequest(t *testing.T) {
 	t.Parallel()
 
@@ -655,14 +809,10 @@ func TestFromArchivedCarriesTheDocumentsAndThePullRequest(t *testing.T) {
 		ArtifactVersion: 4,
 		CreatedAt:       "2026-09-01T09:00:00Z",
 		ArchivedAt:      "2026-09-08T18:30:00Z",
+		PRReports:       []bindings.ArchivedPRReport{},
 	}}
 
-	got := bindings.FromArchived(
-		tasks,
-		func(string) task.Artifacts { return artifacts },
-		func(string) (task.PRRun, bool) { return run, true },
-		repoOf,
-	)
+	got := bindings.FromArchived(tasks, archivedSources(artifacts, run, true))
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("history mismatch (-want +got):\n%s", diff)
 	}
@@ -716,9 +866,7 @@ func TestFromArchivedCarriesTheModeAndTheOneShotDocument(t *testing.T) {
 
 	got := bindings.FromArchived(
 		[]task.Task{{ID: "task-1", Name: "login-screen", Mode: task.ModeOneShot}},
-		func(string) task.Artifacts { return artifacts },
-		func(string) (task.PRRun, bool) { return task.PRRun{}, false },
-		repoOf,
+		archivedSources(artifacts, task.PRRun{}, false),
 	)
 	if len(got) != 1 {
 		t.Fatalf("len(FromArchived()) = %d, want 1", len(got))
@@ -763,9 +911,7 @@ func TestFromArchivedCarriesTheReportsOfTheSteps(t *testing.T) {
 
 	got := bindings.FromArchived(
 		[]task.Task{{ID: "task-1", Name: "login-screen"}},
-		func(string) task.Artifacts { return artifacts },
-		func(string) (task.PRRun, bool) { return task.PRRun{}, false },
-		repoOf,
+		archivedSources(artifacts, task.PRRun{}, false),
 	)
 	if len(got) != 1 {
 		t.Fatalf("len(FromArchived()) = %d, want 1", len(got))
@@ -784,9 +930,7 @@ func TestFromArchivedAllocatesEveryList(t *testing.T) {
 
 	got := bindings.FromArchived(
 		[]task.Task{{ID: "task-1", Name: "login-screen"}},
-		func(string) task.Artifacts { return task.Artifacts{} },
-		func(string) (task.PRRun, bool) { return task.PRRun{}, false },
-		repoOf,
+		archivedSources(task.Artifacts{}, task.PRRun{}, false),
 	)
 	if len(got) != 1 {
 		t.Fatalf("len(FromArchived()) = %d, want 1", len(got))
@@ -853,22 +997,72 @@ func TestFromDeletePreviewAndResultKeepNilForWhatIsNotThere(t *testing.T) {
 	}
 }
 
-func TestFromDeleteResultCarriesWhatStayed(t *testing.T) {
+func TestFromDeleteResultCarriesWhatStayedOfEachPart(t *testing.T) {
 	t.Parallel()
 
-	result := flow.DeleteResult{Leftover: &flow.LeftoverInfo{
-		Path:   "/data/worktrees/dev/web/login-screen",
-		Branch: "login-screen",
-		Error:  "git worktree remove: permission denied",
-	}}
-	want := bindings.DeleteResult{Leftover: &bindings.Leftover{
-		Path:   "/data/worktrees/dev/web/login-screen",
-		Branch: "login-screen",
-		Error:  "git worktree remove: permission denied",
-	}}
+	tests := []struct {
+		name string
+		left worktree.Leftover
+		want bindings.Leftover
+	}{
+		{
+			name: "only the worktree stayed",
+			left: worktree.Leftover{
+				RepoPath: "/code/web", Path: "/data/worktrees/dev/web/login-screen",
+				PathKept: true, PathError: "git worktree remove: permission denied",
+				Branch: "login-screen",
+			},
+			want: bindings.Leftover{
+				RepoPath: "/code/web",
+				Worktree: &bindings.LeftoverWorktree{
+					Path: "/data/worktrees/dev/web/login-screen", Kept: true,
+					Error: "git worktree remove: permission denied",
+				},
+				Branch: &bindings.LeftoverBranch{Name: "login-screen"},
+			},
+		},
+		{
+			name: "only the branch stayed",
+			left: worktree.Leftover{
+				RepoPath: "/code/web", Path: "/data/worktrees/dev/web/login-screen", Branch: "login-screen",
+				BranchKept: true, BranchError: "git branch -D: checked out",
+			},
+			want: bindings.Leftover{
+				RepoPath: "/code/web",
+				Worktree: &bindings.LeftoverWorktree{Path: "/data/worktrees/dev/web/login-screen"},
+				Branch:   &bindings.LeftoverBranch{Name: "login-screen", Kept: true, Error: "git branch -D: checked out"},
+			},
+		},
+		{
+			name: "both stayed",
+			left: worktree.Leftover{
+				RepoPath: "/code/web", Path: "/w", PathKept: true, PathError: "a",
+				Branch: "b", BranchKept: true, BranchError: "c",
+			},
+			want: bindings.Leftover{
+				RepoPath: "/code/web",
+				Worktree: &bindings.LeftoverWorktree{Path: "/w", Kept: true, Error: "a"},
+				Branch:   &bindings.LeftoverBranch{Name: "b", Kept: true, Error: "c"},
+			},
+		},
+		{
+			name: "a task without a worktree",
+			left: worktree.Leftover{RepoPath: "/code/web", Branch: "b", BranchKept: true},
+			want: bindings.Leftover{
+				RepoPath: "/code/web",
+				Branch:   &bindings.LeftoverBranch{Name: "b", Kept: true},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	if diff := cmp.Diff(want, bindings.FromDeleteResult(result)); diff != "" {
-		t.Errorf("result mismatch (-want +got):\n%s", diff)
+			got := bindings.FromDeleteResult(flow.DeleteResult{Leftover: &tt.left})
+			if diff := cmp.Diff(bindings.DeleteResult{Leftover: &tt.want}, got); diff != "" {
+				t.Errorf("result mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
 
@@ -2053,9 +2247,13 @@ func TestFromTasksAndFromArchivedCarryTheCardOfTheTask(t *testing.T) {
 	)
 	archived := bindings.FromArchived(
 		tasks,
-		func(string) task.Artifacts { return task.Artifacts{} },
-		func(string) (task.PRRun, bool) { return task.PRRun{}, false },
-		func(string) (repository.Repository, bool) { return repository.Repository{}, false },
+		bindings.ArchivedSources{
+			Artifacts:    func(string) task.Artifacts { return task.Artifacts{} },
+			PRRun:        func(string) (task.PRRun, bool) { return task.PRRun{}, false },
+			PRPasses:     func(string) []task.PRPass { return nil },
+			StepRuns:     func(string) []task.StepRun { return nil },
+			Repositories: func(string) (repository.Repository, bool) { return repository.Repository{}, false },
+		},
 	)
 
 	if diff := cmp.Diff(want, summaries[0].Card); diff != "" {
@@ -2666,9 +2864,15 @@ func TestFromArchivedReviewsCarriesWhatBecameOfThePullRequest(t *testing.T) {
 func TestFromReviewLeftoverKeepsTheWorktreeGitCouldNotRemove(t *testing.T) {
 	t.Parallel()
 
-	left := bindings.FromReviewLeftover(reviewflow.Leftover{WorktreePath: "/data/worktrees/acme/web/pr_7"})
-	if left.Leftover == nil || left.Leftover.Path != "/data/worktrees/acme/web/pr_7" {
-		t.Errorf("FromReviewLeftover() = %+v, want the path of the worktree", left.Leftover)
+	got := bindings.FromReviewLeftover(reviewflow.Leftover{
+		RepoPath: "/code/web", WorktreePath: "/data/worktrees/acme/web/pr_7", Error: "permission denied",
+	})
+	want := bindings.DeleteResult{Leftover: &bindings.Leftover{
+		RepoPath: "/code/web",
+		Worktree: &bindings.LeftoverWorktree{Path: "/data/worktrees/acme/web/pr_7", Kept: true, Error: "permission denied"},
+	}}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("FromReviewLeftover() mismatch (-want +got):\n%s", diff)
 	}
 	if clean := bindings.FromReviewLeftover(reviewflow.Leftover{}); clean.Leftover != nil {
 		t.Errorf("FromReviewLeftover() = %+v, want nil when git removed everything", clean.Leftover)

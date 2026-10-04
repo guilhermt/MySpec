@@ -158,6 +158,7 @@ type WorktreePreview struct {
 type BranchPreview struct {
 	Name   string
 	Merged bool // GitHub merged the pull request, or git sees the branch in its base
+	Ahead  int  // commits of the branch not in its base; 0 when merged, -1 when unknown
 	Error  string
 }
 
@@ -170,14 +171,7 @@ type PRPreview struct {
 
 // DeleteResult is what deleting a task left behind.
 type DeleteResult struct {
-	Leftover *LeftoverInfo // nil when git removed everything
-}
-
-// LeftoverInfo is what git could not remove of the worktree of a task.
-type LeftoverInfo struct {
-	Path   string
-	Branch string
-	Error  string
+	Leftover *worktree.Leftover // nil when git removed everything
 }
 
 // PreviewDelete reads what deleting a task would destroy. It holds the lock of
@@ -234,6 +228,7 @@ func (s *Service) branchPreview(
 		preview.Merged = true
 		return preview
 	}
+	preview.Ahead = -1
 	if wt.Base == "" {
 		// Nothing to compare the branch with; the user is told nothing rather
 		// than told it is merged.
@@ -241,6 +236,16 @@ func (s *Service) branchPreview(
 	}
 	merged, err := s.worktrees.Merged(ctx, wt, wt.Base)
 	preview.Merged, preview.Error = merged, errText(err)
+	if err != nil {
+		return preview
+	}
+	if merged {
+		preview.Ahead = 0
+		return preview
+	}
+	if ahead, err := s.worktrees.Ahead(ctx, wt, wt.Base); err == nil {
+		preview.Ahead = ahead
+	}
 	return preview
 }
 

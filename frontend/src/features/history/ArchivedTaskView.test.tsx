@@ -86,6 +86,7 @@ describe("ArchivedTaskView", () => {
           file: "1-add-the-login-form.md",
           title: "Add the login form",
           reports: [{ pass: 1, file: "1-review-1.md", clean: true, findings: 0 }],
+          commitSha: "",
         },
       ],
     });
@@ -133,6 +134,7 @@ describe("ArchivedTaskView", () => {
         file: "one-shot.md",
         title: "Add login",
         reports: [{ pass: 1, file: "1-review-1.md", clean: true, findings: 0 }],
+        commitSha: "",
       },
     ],
   };

@@ -354,6 +354,16 @@ func (s *Service) Merged(ctx context.Context, wt Worktree, base string) (bool, e
 	})
 }
 
+// Ahead is how many commits the branch of the worktree has that base does not.
+func (s *Service) Ahead(ctx context.Context, wt Worktree, base string) (int, error) {
+	unlock := s.lockRepo(wt.RepoPath)
+	defer unlock()
+
+	return ask(ctx, CommandTimeout, func(ctx context.Context) (int, error) {
+		return s.git.CountCommits(ctx, wt.RepoPath, base, wt.Branch)
+	})
+}
+
 // Commit reads a commit of the repository of a worktree.
 func (s *Service) Commit(ctx context.Context, wt Worktree, rev string) (git.Commit, error) {
 	unlock := s.lockRepo(wt.RepoPath)

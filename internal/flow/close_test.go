@@ -406,6 +406,50 @@ func TestPreviewingADeletionSaysWhatWouldBeDestroyed(t *testing.T) {
 	}
 }
 
+func TestThePreviewCountsTheCommitsOutsideTheBase(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		pr     task.PRDetails
+		noBase bool
+		merged bool
+		ahead  int
+		failed error
+		want   int
+	}{
+		{name: "merged on GitHub", pr: mergedPR(), ahead: 3, want: 0},
+		{name: "merged as git sees it", pr: openPR(), merged: true, ahead: 3, want: 0},
+		{name: "not merged with 3 commits", pr: openPR(), ahead: 3, want: 3},
+		{name: "no base", pr: openPR(), noBase: true, ahead: 3, want: -1},
+		{name: "the count fails", pr: openPR(), ahead: 3, failed: errors.New("git rev-list: bad revision"), want: -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			if tt.noBase {
+				f.worktrees.base = ""
+			}
+			awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: tt.pr})
+			f.worktrees.merged = tt.merged
+			f.worktrees.ahead, f.worktrees.aheadErr = tt.ahead, tt.failed
+
+			preview, err := f.service.PreviewDelete(t.Context(), "task-1")
+			if err != nil {
+				t.Fatalf("PreviewDelete() = %v, want nil", err)
+			}
+			if preview.Branch == nil || preview.Branch.Ahead != tt.want {
+				t.Errorf("branch = %+v, want ahead %d", preview.Branch, tt.want)
+			}
+			if tt.failed != nil && preview.Branch.Error != "" {
+				t.Errorf("branch error = %q, want the merge reading's alone", preview.Branch.Error)
+			}
+		})
+	}
+}
+
 func TestAPreviewAsksGitAboutABranchWithNoConfirmedMerge(t *testing.T) {
 	t.Parallel()
 
@@ -461,9 +505,11 @@ func TestDeleteReportsWhatGitCouldNotRemove(t *testing.T) {
 
 	f := newFixture(t)
 	f.worktrees.setLeftover(worktree.Leftover{
-		Path:   worktree.Path(dataDir, "dev", "web", "task-1"),
-		Branch: "task-1",
-		Error:  "git worktree remove: permission denied; git branch -D: permission denied",
+		RepoPath: "/code/web",
+		Path:     worktree.Path(dataDir, "dev", "web", "task-1"), PathKept: true,
+		PathError: "git worktree remove: permission denied",
+		Branch:    "task-1", BranchKept: true,
+		BranchError: "git branch -D: permission denied",
 	})
 	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: openPR()})
 
@@ -472,10 +518,12 @@ func TestDeleteReportsWhatGitCouldNotRemove(t *testing.T) {
 		t.Fatalf("Delete() = %v, want nil", err)
 	}
 
-	want := flow.LeftoverInfo{
-		Path:   worktree.Path(dataDir, "dev", "web", "task-1"),
-		Branch: "task-1",
-		Error:  "git worktree remove: permission denied; git branch -D: permission denied",
+	want := worktree.Leftover{
+		RepoPath: "/code/web",
+		Path:     worktree.Path(dataDir, "dev", "web", "task-1"), PathKept: true,
+		PathError: "git worktree remove: permission denied",
+		Branch:    "task-1", BranchKept: true,
+		BranchError: "git branch -D: permission denied",
 	}
 	if result.Leftover == nil || *result.Leftover != want {
 		t.Errorf("leftover = %+v, want %+v", result.Leftover, want)

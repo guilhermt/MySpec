@@ -337,17 +337,105 @@ func TestPurgeReportsTheFolderGitCouldNotRemove(t *testing.T) {
 	if !kept {
 		t.Fatal("Purge() left nothing behind, want the worktree that stayed")
 	}
-	if left.Path != wt.Path {
-		t.Errorf("Path = %q, want the folder %q", left.Path, wt.Path)
+	if left.Path != wt.Path || !left.PathKept {
+		t.Errorf("Path = %q, kept = %v, want the folder %q kept", left.Path, left.PathKept, wt.Path)
 	}
-	if left.Error == "" {
-		t.Error("Error is empty, want what git said")
+	if left.PathError == "" {
+		t.Error("PathError is empty, want what git said")
 	}
 	if !f.gone(t, wt) {
 		t.Error("the worktree that stayed is still registered, want the record gone anyway")
 	}
 	if len(f.store.all()) != 0 {
 		t.Errorf("the store has %d worktrees, want none", len(f.store.all()))
+	}
+}
+
+func TestPurgeSaysWhatStayedOfEachPart(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		hold       func(t *testing.T, f fixture, wt worktree.Worktree)
+		pathKept   bool
+		branchKept bool
+	}{
+		{
+			name: "both went",
+			hold: func(*testing.T, fixture, worktree.Worktree) {},
+		},
+		{
+			name: "the worktree and the branch stayed",
+			hold: func(t *testing.T, f fixture, wt worktree.Worktree) {
+				t.Helper()
+				gittest.Run(t, wt.Path, "checkout", "--detach")
+				gittest.Run(t, f.repo.Path, "checkout", wt.Branch)
+				lockDir(t, filepath.Dir(wt.Path))
+			},
+			pathKept:   true,
+			branchKept: true,
+		},
+		{
+			name: "only the worktree stayed",
+			hold: func(t *testing.T, _ fixture, wt worktree.Worktree) {
+				t.Helper()
+				lockDir(t, filepath.Dir(wt.Path))
+			},
+			pathKept: true,
+		},
+		{
+			// The clone has the branch checked out, so git will not delete it.
+			name: "only the branch stayed",
+			hold: func(t *testing.T, f fixture, wt worktree.Worktree) {
+				t.Helper()
+				gittest.Run(t, wt.Path, "checkout", "--detach")
+				gittest.Run(t, f.repo.Path, "checkout", wt.Branch)
+			},
+			branchKept: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t, true)
+			wt := f.ensure(t)
+			tt.hold(t, f, wt)
+
+			left, kept := f.svc.Purge(t.Context(), f.task.ID)
+
+			if kept != (tt.pathKept || tt.branchKept) {
+				t.Fatalf("Purge() kept = %v, want %v", kept, tt.pathKept || tt.branchKept)
+			}
+			if !kept {
+				return
+			}
+			if left.RepoPath != f.repo.Path || left.Path != wt.Path || left.Branch != wt.Branch {
+				t.Errorf("Purge() = %+v, want the clone, the folder and the branch of the worktree", left)
+			}
+			if left.PathKept != tt.pathKept || (left.PathError != "") != tt.pathKept {
+				t.Errorf("path kept = %v with %q, want kept = %v with what git said", left.PathKept, left.PathError, tt.pathKept)
+			}
+			if left.BranchKept != tt.branchKept || (left.BranchError != "") != tt.branchKept {
+				t.Errorf("branch kept = %v with %q, want kept = %v with what git said", left.BranchKept, left.BranchError, tt.branchKept)
+			}
+		})
+	}
+}
+
+func TestAheadCountsTheCommitsOfTheBranchOutsideTheBase(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+	wt := f.ensure(t)
+
+	if got, err := f.svc.Ahead(t.Context(), wt, wt.Base); err != nil || got != 0 {
+		t.Fatalf("Ahead() = %d, %v, want 0 on a branch that just started", got, err)
+	}
+
+	gittest.Commit(t, wt.Path, "one.txt", "one\n", "Add one")
+	gittest.Commit(t, wt.Path, "two.txt", "two\n", "Add two")
+
+	if got, err := f.svc.Ahead(t.Context(), wt, wt.Base); err != nil || got != 2 {
+		t.Errorf("Ahead() = %d, %v, want 2", got, err)
 	}
 }
 

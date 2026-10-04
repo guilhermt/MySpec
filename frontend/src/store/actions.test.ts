@@ -106,6 +106,7 @@ import {
   makeDiscussion,
   makeDraft,
   makeEntry,
+  makeLeftover,
   makeRepository,
   makeReviewFilters,
   makeReviewSummary,
@@ -694,11 +695,9 @@ describe("task actions", () => {
   });
 
   it("keeps what the deletion could not remove from disk", async () => {
-    const leftover = {
-      path: "/worktrees/dev/web/add-login",
-      branch: "add-login",
-      error: "permission denied",
-    };
+    const leftover = makeLeftover({
+      branch: { name: "add-login", kept: true, error: "branch is checked out" },
+    });
     vi.mocked(api.deleteTask).mockResolvedValueOnce({ leftover });
 
     await deleteTask("task-1");
@@ -1005,11 +1004,13 @@ describe("review actions reported in the app notice", () => {
   });
 
   it("say what the deletion of a review left behind", async () => {
-    const leftover = {
-      path: "/home/dev/worktrees/dev/web/pr_31",
-      branch: "",
-      error: "the worktree is busy",
-    };
+    const leftover = makeLeftover({
+      worktree: {
+        path: "/home/dev/worktrees/dev/web/pr_31",
+        kept: true,
+        error: "the worktree is busy",
+      },
+    });
     vi.mocked(api.deleteReview).mockResolvedValueOnce({ leftover });
 
     await deleteReview("review-1");

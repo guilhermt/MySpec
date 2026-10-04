@@ -129,6 +129,7 @@ type Worktrees interface {
 	Get(taskID string) (worktree.Worktree, bool)
 	Base(ctx context.Context, wt worktree.Worktree) (string, error)
 	Merged(ctx context.Context, wt worktree.Worktree, base string) (bool, error)
+	Ahead(ctx context.Context, wt worktree.Worktree, base string) (int, error)
 	Ensure(
 		ctx context.Context, t task.Task, repo repository.Repository, onPhase func(worktree.Phase),
 	) (worktree.Worktree, error)

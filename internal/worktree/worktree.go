@@ -65,12 +65,16 @@ const (
 	DeleteBranchIfMerged
 )
 
-// Leftover is what Purge could not take back: the folder of a worktree, its
-// branch, or both, with what git said.
+// Leftover is what git could not remove when a worktree was purged: each part
+// with whether it stayed and what git said, and the clone it belongs to.
 type Leftover struct {
-	Path   string // "" when the folder went
-	Branch string // "" when the branch went
-	Error  string
+	RepoPath    string // the clone the worktree and the branch belong to
+	Path        string // the worktree folder
+	PathKept    bool   // git couldn't remove the folder
+	PathError   string // what git said; "" when it went
+	Branch      string
+	BranchKept  bool   // git couldn't delete the branch
+	BranchError string // what git said; "" when it went
 }
 
 // The reasons Ensure refuses to create a worktree. Each wraps the git error

@@ -52,7 +52,8 @@ func (s *Service) Purge(ctx context.Context, taskID string) (Leftover, bool) {
 		return Leftover{}, false
 	}
 	s.log.Warn("worktree left behind",
-		"task", taskID, "path", left.Path, "branch", left.Branch, "error", left.Error)
+		"task", taskID, "path", left.Path, "path_kept", left.PathKept, "path_error", left.PathError,
+		"branch", left.Branch, "branch_kept", left.BranchKept, "branch_error", left.BranchError)
 	return left, true
 }
 
@@ -235,18 +236,18 @@ func (s *Service) purge(ctx context.Context, wt Worktree) (Leftover, bool) {
 	unlock := s.lockRepo(wt.RepoPath)
 	defer unlock()
 
-	var left Leftover
+	left := Leftover{RepoPath: wt.RepoPath, Path: wt.Path, Branch: wt.Branch}
 	if _, err := os.Stat(wt.Path); err == nil {
 		if err = do(ctx, CommandTimeout, func(ctx context.Context) error {
 			return s.git.RemoveWorktree(ctx, wt.RepoPath, wt.Path)
 		}); err != nil {
-			left.Path, left.Error = wt.Path, err.Error()
+			left.PathKept, left.PathError = true, err.Error()
 		}
 	}
 	s.prune(ctx, wt.RepoPath)
 
 	if err := s.deleteBranch(ctx, wt); err != nil {
-		left.Branch, left.Error = wt.Branch, join(left.Error, err.Error())
+		left.BranchKept, left.BranchError = true, err.Error()
 	}
 
 	// The record goes whatever git managed to do: the task is going away, and a
@@ -256,7 +257,7 @@ func (s *Service) purge(ctx context.Context, wt Worktree) (Leftover, bool) {
 	}
 	s.forget(wt)
 
-	return left, left.Path != "" || left.Branch != ""
+	return left, left.PathKept || left.BranchKept
 }
 
 // deleteBranch deletes the branch of a worktree when it is still there,
@@ -299,12 +300,4 @@ func failed(err error) task.CloseStep {
 // skipped is a part of the closing the app left alone on purpose.
 func skipped(reason string) task.CloseStep {
 	return task.CloseStep{Outcome: task.OutcomeSkipped, Reason: reason}
-}
-
-// join puts two things git said about the same clone in one message.
-func join(first, second string) string {
-	if first == "" {
-		return second
-	}
-	return first + "; " + second
 }

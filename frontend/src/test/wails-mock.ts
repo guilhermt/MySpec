@@ -25,6 +25,7 @@ import type {
   Entry,
   EntryKind,
   FindingDecision,
+  Leftover,
   Machine,
   MarkerCommit,
   Migration,
@@ -702,18 +703,42 @@ export function makeArchivedTask(overrides: Partial<ArchivedTask> = {}): Archive
         file: "1-add-the-login-form.md",
         title: "Add the login form",
         reports: [],
+        commitSha: "",
       },
     ],
-    pr: { number: 12, url: "https://github.com/dev/web/pull/12", state: "merged" },
+    pr: {
+      number: 12,
+      url: "https://github.com/dev/web/pull/12",
+      state: "merged",
+      base: "main",
+      mergedBy: "",
+      mergedAt: "",
+    },
     artifactVersion: 3,
     createdAt: "2026-09-05T10:00:00Z",
     archivedAt: "2026-09-08T10:00:00Z",
+    close: null,
+    hasPrDraft: false,
+    prReports: [],
     ...overrides,
   };
 }
 
 export function makeDeletePreview(overrides: Partial<DeletePreview> = {}): DeletePreview {
   return { sessionRunning: false, worktree: null, branch: null, pr: null, ...overrides };
+}
+
+export function makeLeftover(overrides: Partial<Leftover> = {}): Leftover {
+  return {
+    repoPath: "/home/dev/code/api",
+    worktree: {
+      path: "/home/dev/.local/share/myspec/worktrees/acme/api/add-login",
+      kept: true,
+      error: "permission denied",
+    },
+    branch: null,
+    ...overrides,
+  };
 }
 
 export function makeCloseResult(overrides: Partial<CloseResult> = {}): CloseResult {

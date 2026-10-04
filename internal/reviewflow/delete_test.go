@@ -48,8 +48,8 @@ func TestAWorktreeGitKeepsNeverKeepsTheReview(t *testing.T) {
 		t.Fatalf("delete review: %v", err)
 	}
 
-	if left.WorktreePath != wt.Path {
-		t.Errorf("leftover = %+v, want the folder the user has to clean up", left)
+	if left.WorktreePath != wt.Path || left.RepoPath != wt.RepoPath || left.Error != errGit.Error() {
+		t.Errorf("leftover = %+v, want the folder, its clone and what git said", left)
 	}
 	if _, ok := f.reviews.Lookup(id); ok {
 		t.Error("the review is still there after it was deleted")

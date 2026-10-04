@@ -68,6 +68,7 @@ import {
   makeDiscussion,
   makeDraft,
   makeEntry,
+  makeLeftover,
   makeMigration,
   makeModelCatalog,
   makePullRequest,
@@ -1014,11 +1015,7 @@ describe("toasts", () => {
 describe("notices", () => {
   it("holds what the last deletion left on disk", () => {
     const { result } = renderHook(() => useLeftover());
-    const leftover = {
-      path: "/home/dev/.local/share/myspec/worktrees/dev/web/add-login",
-      branch: "",
-      error: "permission denied",
-    };
+    const leftover = makeLeftover();
 
     expect(result.current).toBeNull();
 

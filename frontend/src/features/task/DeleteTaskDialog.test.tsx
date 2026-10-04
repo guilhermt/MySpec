@@ -12,7 +12,7 @@ const WORKTREE = {
   error: "",
 };
 
-const BRANCH = { name: "add-login", merged: false, error: "" };
+const BRANCH = { name: "add-login", merged: false, ahead: 2, error: "" };
 
 const PR = { number: 12, url: "https://github.com/o/r/pull/12", state: "open" };
 

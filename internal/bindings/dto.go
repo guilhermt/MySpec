@@ -571,13 +571,28 @@ type ArchivedStep struct {
 	File    string       `json:"file"` // name inside steps/, the artifact is "steps/" + File; one-shot.md for the single step of a One-Shot task
 	Title   string       `json:"title"`
 	Reports []StepReport `json:"reports"` // never nil
+	// CommitSHA is the commit the step produced; "" when none is recorded.
+	CommitSHA string `json:"commitSha"`
 }
 
 // ArchivedPR is the pull request an archived task opened.
 type ArchivedPR struct {
-	Number int    `json:"number"`
-	URL    string `json:"url"`
-	State  string `json:"state"`
+	Number   int    `json:"number"`
+	URL      string `json:"url"`
+	State    string `json:"state"`
+	Base     string `json:"base"`     // the branch it merged into; "" when unknown
+	MergedBy string `json:"mergedBy"` // the login of who merged it; "" when unknown
+	MergedAt string `json:"mergedAt"` // RFC 3339; "" when unknown
+}
+
+// ArchivedPRReport is a pass of the review of the pull request of an archived
+// task, without its text, which ReadArtifact reads as "pr/" + File.
+type ArchivedPRReport struct {
+	Pass       int    `json:"pass"`
+	File       string `json:"file"` // name inside pr/
+	Clean      bool   `json:"clean"`
+	Structured bool   `json:"structured"`
+	Findings   int    `json:"findings"` // how many findings a structured pass had; -1 for a pass in text
 }
 
 // ArchivedTask is a finished task, as the history shows it: its artifacts and
@@ -599,6 +614,10 @@ type ArchivedTask struct {
 	ArtifactVersion int            `json:"artifactVersion"`
 	CreatedAt       string         `json:"createdAt"`
 	ArchivedAt      string         `json:"archivedAt"`
+
+	Close      *CloseResult       `json:"close"`      // what the closing did; nil for a task archived before it was recorded
+	HasPRDraft bool               `json:"hasPrDraft"` // pr/draft.md was kept
+	PRReports  []ArchivedPRReport `json:"prReports"`  // by pass; never nil
 }
 
 // WorktreePreview is the worktree the deletion of a task would remove, and
@@ -615,6 +634,7 @@ type WorktreePreview struct {
 type BranchPreview struct {
 	Name   string `json:"name"`
 	Merged bool   `json:"merged"`
+	Ahead  int    `json:"ahead"` // commits of the branch not in its base; 0 when merged, -1 when unknown
 	Error  string `json:"error"`
 }
 
@@ -635,11 +655,26 @@ type DeletePreview struct {
 	PR             *PRPreview       `json:"pr"`       // nil when there is none
 }
 
-// Leftover is what git could not remove when a task was deleted.
+// Leftover is what git could not remove when a task or a review was deleted:
+// each part, with what git said, and the clone it belongs to.
 type Leftover struct {
-	Path   string `json:"path"`   // "" when the folder went
-	Branch string `json:"branch"` // "" when the branch went
-	Error  string `json:"error"`
+	RepoPath string            `json:"repoPath"`
+	Worktree *LeftoverWorktree `json:"worktree"` // nil when the item had none
+	Branch   *LeftoverBranch   `json:"branch"`   // nil for a review, which has no branch of its own
+}
+
+// LeftoverWorktree is the worktree folder of a deletion.
+type LeftoverWorktree struct {
+	Path  string `json:"path"`
+	Kept  bool   `json:"kept"`  // git couldn't remove it
+	Error string `json:"error"` // what git said; "" when it went
+}
+
+// LeftoverBranch is the branch of a deletion.
+type LeftoverBranch struct {
+	Name  string `json:"name"`
+	Kept  bool   `json:"kept"`
+	Error string `json:"error"`
 }
 
 // DeleteResult is what deleting a task left behind.

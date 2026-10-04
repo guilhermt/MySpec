@@ -124,6 +124,41 @@ export interface ArchivedPR {
     "number": number;
     "url": string;
     "state": string;
+
+    /**
+     * the branch it merged into; "" when unknown
+     */
+    "base": string;
+
+    /**
+     * the login of who merged it; "" when unknown
+     */
+    "mergedBy": string;
+
+    /**
+     * RFC 3339; "" when unknown
+     */
+    "mergedAt": string;
+}
+
+/**
+ * ArchivedPRReport is a pass of the review of the pull request of an archived
+ * task, without its text, which ReadArtifact reads as "pr/" + File.
+ */
+export interface ArchivedPRReport {
+    "pass": number;
+
+    /**
+     * name inside pr/
+     */
+    "file": string;
+    "clean": boolean;
+    "structured": boolean;
+
+    /**
+     * how many findings a structured pass had; -1 for a pass in text
+     */
+    "findings": number;
 }
 
 /**
@@ -192,6 +227,11 @@ export interface ArchivedStep {
      * never nil
      */
     "reports": StepReport[] | null;
+
+    /**
+     * CommitSHA is the commit the step produced; "" when none is recorded.
+     */
+    "commitSha": string;
 }
 
 /**
@@ -234,6 +274,21 @@ export interface ArchivedTask {
     "artifactVersion": number;
     "createdAt": string;
     "archivedAt": string;
+
+    /**
+     * what the closing did; nil for a task archived before it was recorded
+     */
+    "close": CloseResult | null;
+
+    /**
+     * pr/draft.md was kept
+     */
+    "hasPrDraft": boolean;
+
+    /**
+     * by pass; never nil
+     */
+    "prReports": ArchivedPRReport[] | null;
 }
 
 /**
@@ -529,6 +584,11 @@ export interface BoardStatus {
 export interface BranchPreview {
     "name": string;
     "merged": boolean;
+
+    /**
+     * commits of the branch not in its base; 0 when merged, -1 when unknown
+     */
+    "ahead": number;
     "error": string;
 }
 
@@ -1266,18 +1326,46 @@ export interface ErrorEntry {
 }
 
 /**
- * Leftover is what git could not remove when a task was deleted.
+ * Leftover is what git could not remove when a task or a review was deleted:
+ * each part, with what git said, and the clone it belongs to.
  */
 export interface Leftover {
+    "repoPath": string;
+
     /**
-     * "" when the folder went
+     * nil when the item had none
      */
+    "worktree": LeftoverWorktree | null;
+
+    /**
+     * nil for a review, which has no branch of its own
+     */
+    "branch": LeftoverBranch | null;
+}
+
+/**
+ * LeftoverBranch is the branch of a deletion.
+ */
+export interface LeftoverBranch {
+    "name": string;
+    "kept": boolean;
+    "error": string;
+}
+
+/**
+ * LeftoverWorktree is the worktree folder of a deletion.
+ */
+export interface LeftoverWorktree {
     "path": string;
 
     /**
-     * "" when the branch went
+     * git couldn't remove it
      */
-    "branch": string;
+    "kept": boolean;
+
+    /**
+     * what git said; "" when it went
+     */
     "error": string;
 }
 

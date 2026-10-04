@@ -14,17 +14,21 @@ export function LeftoversNotice() {
     return null;
   }
 
+  const errors = [leftover.worktree?.error, leftover.branch?.error].filter(
+    (error): error is string => error !== undefined && error !== "",
+  );
+
   return (
     <Banner title="Some files stayed on disk" onDismiss={() => setLeftover(null)}>
       <p>The task is gone, but git couldn't remove everything:</p>
       <div className="mt-1 flex flex-col">
-        {leftover.path !== "" && (
-          <span className="font-mono text-xs break-all">{leftover.path}</span>
+        {leftover.worktree?.kept && (
+          <span className="font-mono text-xs break-all">{leftover.worktree.path}</span>
         )}
-        {leftover.branch !== "" && (
-          <span className="font-mono text-xs break-all">{leftover.branch}</span>
+        {leftover.branch?.kept && (
+          <span className="font-mono text-xs break-all">{leftover.branch.name}</span>
         )}
-        <span className="text-xs text-muted-foreground">{leftover.error}</span>
+        <span className="text-xs text-muted-foreground">{errors.join("; ")}</span>
       </div>
     </Banner>
   );

@@ -1027,7 +1027,7 @@ func (s *Service) Delete(ctx context.Context, id string) (DeleteResult, error) {
 		}
 		s.review.Forget(id)
 		if left, kept := s.worktrees.Purge(ctx, id); kept {
-			result.Leftover = &LeftoverInfo{Path: left.Path, Branch: left.Branch, Error: left.Error}
+			result.Leftover = &left
 		}
 	}
 	if err := s.tasks.Delete(ctx, id); err != nil {
