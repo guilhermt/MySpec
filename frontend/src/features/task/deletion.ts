@@ -23,12 +23,23 @@ export function interruptedSentence(role: string): string {
   return `The ${role}'s answer in progress is interrupted.`;
 }
 
+// worktreeLines is the line of the worktree: removed, with the uncommitted files git counted, or
+// unreadable, with what git said, in place of the count it couldn't make.
 function worktreeLines(preview: DeletePreview): DeletionLine[] {
   const worktree = preview.worktree;
   if (worktree === null) {
     return [];
   }
-  const lines: DeletionLine[] = [
+  if (worktree.error !== "") {
+    return [
+      {
+        icon: "blocked",
+        text: "Couldn't read the worktree",
+        detail: `${displayPaths(worktree.error)}. Deleting still removes it.`,
+      },
+    ];
+  }
+  return [
     {
       icon: ICONS.folder,
       text: "The worktree is removed",
@@ -39,14 +50,6 @@ function worktreeLines(preview: DeletePreview): DeletionLine[] {
       detailMono: true,
     },
   ];
-  if (worktree.error !== "") {
-    lines.push({
-      icon: "blocked",
-      text: "Couldn't read the worktree",
-      detail: `${displayPaths(worktree.error)}. Deleting still removes it.`,
-    });
-  }
-  return lines;
 }
 
 function branchLine(preview: DeletePreview): DeletionLine[] {

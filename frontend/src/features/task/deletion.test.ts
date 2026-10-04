@@ -94,15 +94,21 @@ describe("deletionLines", () => {
     expect(line?.tag).toBe(tag);
   });
 
-  it("says when the worktree could not be read", () => {
+  it("says when the worktree could not be read, in place of the worktree that is removed", () => {
     const lines = linesOf(
-      ready({ worktree: { ...WORKTREE, dirty: false, files: 0, error: "git status failed" } }),
+      ready({
+        worktree: { ...WORKTREE, dirty: false, files: 0, error: "git status failed" },
+        branch: null,
+        pr: null,
+      }),
     );
-    expect(lines?.[1]).toEqual({
-      icon: "blocked",
-      text: "Couldn't read the worktree",
-      detail: "git status failed. Deleting still removes it.",
-    });
+    expect(lines).toEqual([
+      {
+        icon: "blocked",
+        text: "Couldn't read the worktree",
+        detail: "git status failed. Deleting still removes it.",
+      },
+    ]);
   });
 
   it.each([
