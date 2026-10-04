@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { CutText } from "./CutText";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons";
 import { Link } from "./Link";
@@ -140,14 +141,15 @@ export function ChecksList({ summary, rows, onOpen, live, trailing }: ChecksList
                     event.preventDefault();
                     onOpen(row.url);
                   }}
-                  className="min-w-0 truncate font-mono text-(length:--text-micro)"
+                  className="flex min-w-0 font-mono text-(length:--text-micro)"
                 >
-                  {row.name}
+                  <CutText text={row.name} />
                 </Link>
               ) : (
-                <span className="truncate font-mono text-(length:--text-micro) text-ink-1">
-                  {row.name}
-                </span>
+                <CutText
+                  text={row.name}
+                  className="font-mono text-(length:--text-micro) text-ink-1"
+                />
               );
             return (
               <li

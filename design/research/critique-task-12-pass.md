@@ -240,97 +240,97 @@ Conferido nas capturas `scene-*`, `bar-*`, `conversation-*` e `widths-*`, nos do
 
 ### Problemas
 
-**T1 · Bloqueia. O prompt de início de um step aparece como mensagem do usuário na fila, vazia, com Remove.**
+**T1 · Bloqueia. O prompt de início de um step aparece como mensagem do usuário na fila, vazia, com Remove.** · **Fechado no step 9**
 
 - Onde: `features/chat/Conversation.tsx:446–458` desenha toda entrada pendente com `QueuedMessage`, inclusive o prompt do produto (`prompt: true`, texto vazio), que fica pendente enquanto a sessão abre e para sempre quando ela não abre. `RemovePending` (`internal/session/service.go:548–570`) apaga a entrada sem distinguir o prompt.
 - Visto: no app (`rate-limit-per-api-key`, step 4, `claude` ausente), a conversa mostra `Queued · sends after the retry` sem texto e **Remove** (`QueuedMessage.tsx:63–64`). O **Retry implementer** seguinte abriria a sessão sem a instrução do step.
 - Regra: `screens/task.md` §6 (a fila é da mensagem do usuário; o início já é o marco `Started with steps/04-…md`); `components.md` Entradas da conversa (Mensagem na fila). Lacuna L21.
 
-**T2 · Deve. A PR bloqueada esconde a conversa do review e os apontamentos.**
+**T2 · Deve. A PR bloqueada esconde a conversa do review e os apontamentos.** · **Fechado no step 9**
 
 - Onde: `features/task/place.ts:152–162` troca o lugar inteiro por `The pull request stage stopped` e o bloco de erro sempre que o status é `blocked`, mesmo com a conversa do review existindo.
 - Visto: no app, a task na passada 1 com quatro apontamentos por decidir virou só o título e o bloco ao abrir sem `gh` (log: `pull request blocked`, `gh_missing`).
 - Regra: `screens/task.md` §12, Erro ("Uma leitura que falha nunca esconde o que estava na tela"), e §6, Erro (o bloco sem título; o step bloqueado já segue: marco `Step 5 is next` e o bloco, sem título). Lacuna L5.
 
-**T3 · Deve. O mermaid e a tabela da fala fogem do bloco decidido.**
+**T3 · Deve. O mermaid e a tabela da fala fogem do bloco decidido.** · **Fechado no step 9**
 
 - Onde: `features/chat/Markdown.tsx:17` liga o `panZoom` do Streamdown.
 - Visto: o diagrama sai encolhido a ~6 px de texto, dentro de uma segunda caixa clara, com os botões de zoom por cima (`conversation-planning-950-light`). No mock (`16-conversation-wide/a.html?scene=planning`), o diagrama tem o tamanho natural, num só bloco afundado com `<> mermaid` e tela cheia. A tabela também sai como caixa dentro de caixa.
 - O componente do Streamdown traz ainda `bg-red-50`/`text-red-700` no erro do diagrama, `Loading diagram...` com um spinner próprio e `duration-150` no zoom, fora dos tokens e do spinner único.
 - Regra: `components.md` Bloco de código (afundado, fio interno, um bloco); `principles.md` 8 (um spinner); o mock decidido. É a pauta `critique-task-04.md:119–123` (9), o `panZoom`, pior que nota. Lacuna L9.
 
-**T4 · Deve. O placeholder da permissão diz `1–3` quando o cartão tem duas respostas.**
+**T4 · Deve. O placeholder da permissão diz `1–3` quando o cartão tem duas respostas.** · **Fechado no step 9**
 
 - Onde: `features/chat/composer.ts:143` fixa `Answer with 1–3 above, or queue a message…`. Em `conversation-ask-impl-950-light`, o cartão tem só **Allow** `1` e **Deny…** `2` (sem regra de sessão, `PermissionCard.tsx:261` já conta 2). O texto manda uma tecla que não age.
 - Regra: `components.md` Cartão de pedido (`1` a `3` só com a regra); `principles.md` 9. Lacuna L7.
 
-**T5 · Deve. Textos cortados sem tooltip nos painéis.**
+**T5 · Deve. Textos cortados sem tooltip nos painéis.** · **Fechado no step 9**
 
 - Em `Details`, a 1450 px, os steps não iniciados viram `5 · Token …` ao lado dos seletores: `components/system/PanelRow.tsx:73` corta com `truncate`, sem `CutText` (`DetailsPanel.tsx:280–286`).
 - Os nomes dos checks em `Details` e no vazio do PR review cortam do mesmo jeito (`components/system/ChecksList.tsx:139–148`, `truncate` sem tooltip), o que a pauta T3 5 dava como "com o nome inteiro no tooltip".
 - Regra: `principles.md` 10.
 
-**T6 · Pode esperar. O nome acessível da pílula repete o encerramento.**
+**T6 · Pode esperar. O nome acessível da pílula repete o encerramento.** · **Fechado no step 9**
 
 - Onde: `features/task/stepper.ts:231–235` monta `tom: fragmento` para todo grupo, e para `merge` na forma `close` dá `Progress · Closing · ready to close: ready to close in PR`. `lib/situations.ts:290–299` (`situationPillState`, usado pela discussão e pelo review) já trata o encerramento sem repetir; o stepper tem uma cópia própria.
 - Regra: `screens/task.md` §4 (Foco); pauta `critique-task-03.md:58` (3).
 
-**T7 · Pode esperar. A razão da PR bloqueada mostra crases.**
+**T7 · Pode esperar. A razão da PR bloqueada mostra crases.** · **Fechado no step 9**
 
 - Onde: `features/task/pr-status.ts:186` e `:188` escrevem ``make sure `gh` is on the PATH`` e ``Run `gh auth login` ``, e o bloco de erro desenha o texto cru: no app, `` `gh` `` com as crases.
 - Regra: `components.md` Bloco de erro (a explicação em texto).
 
-**T8 · Pode esperar. A primeira passada do revisor usa outra forma da mensagem do produto.**
+**T8 · Pode esperar. A primeira passada do revisor usa outra forma da mensagem do produto.** · **Fechado no step 9**
 
 - Onde: `features/chat/markers.ts:265–271` desenha `MySpec → Reviewer` com o ícone `start` (bandeira) e peso 500 (`MarkerLine.tsx:336`), enquanto toda outra mensagem do produto usa a marca e peso 400 (`MarkerLine.tsx:33`). Visto em `scene-ask-950-light`.
 - Regra: `components.md` Ícones ("um ícone por significado") e Marco em linha (Mensagem do produto).
 
-**T9 · Pode esperar. A opção do cartão de pergunta não tem pressionado nem desabilitado à vista.**
+**T9 · Pode esperar. A opção do cartão de pergunta não tem pressionado nem desabilitado à vista.** · **Fechado no step 9**
 
 - Onde: `OPTION_CLASS` (`components/system/OptionGroup.tsx:6`) não tem `active:` em `--veil-press`, e `QuestionCard.tsx:342–348`, enviando, só põe `aria-disabled` com `cursor-not-allowed`, sem o tracejado nem a tinta apagada que `OptionGroup.tsx:80`, `:86` usam.
 - Regra: `components.md` Cartão de pedido (Estados da opção); pauta `critique-task-04.md:101` (2), que pede manter o `radio` ou o `checkbox` com `aria-checked`.
 
-**T10 · Pode esperar. A hora da resposta fora do nome da pergunta e da permissão respondidas.**
+**T10 · Pode esperar. A hora da resposta fora do nome da pergunta e da permissão respondidas.** · **Fechado no step 9**
 
 - Onde: `QuestionCard.tsx:117` e `PermissionCard.tsx:135` nomeiam o `article` com a hora da pergunta; a da resposta fica só no tooltip, que abre pelo ponteiro sobre o texto.
 - Regra: `screens/task.md` §6 ("Está sempre no nome acessível"); pauta `critique-task-04.md:102` (3).
 
-**T11 · Pode esperar. A volta ao fim não tem hover.**
+**T11 · Pode esperar. A volta ao fim não tem hover.** · **Fechado no step 9**
 
 - Onde: `features/chat/entries/BackToEnd.tsx:32`, `hover:bg-surface-3` sobre `bg-surface-3`.
 - Regra: `components.md` Volta ao fim (Estados); pauta `critique-task-04.md:119–123` (9).
 
-**T12 · Pode esperar. O cursor do streaming é um bloco em tinta cheia.**
+**T12 · Pode esperar. O cursor do streaming é um bloco em tinta cheia.** · **Fechado no step 9**
 
 - Onde: `Markdown.tsx:95` pede `caret: "block"` ao Streamdown, que desenha `▋` na cor do texto (`--ink-1`).
 - Regra: `components.md` Entradas da conversa (Streaming: "um cursor parado, em `--ink-3`"); pauta `critique-task-04.md:119–123` (9).
 
-**T13 · Pode esperar. `step_review` e `step_empty` marcam a aba do implementador.**
+**T13 · Pode esperar. `step_review` e `step_empty` marcam a aba do implementador.** · **Fechado no step 9**
 
 - Onde: `agent-tabs.ts:102` dá ao implementador a situação de `stepSituation` (`lib/situations.ts:319–326`), que acha a de lugar `step`. Com a aba do revisor escolhida depois de **Review myself**, a de fora diz `Implementer · waits`, apontando uma conversa que não espera nada.
 - Regra: `screens/task.md` §7 ("são do step, não de uma conversa"); pauta `critique-task-03.md:64–70` (6). Lacuna L6.
 
-**T14 · Pode esperar. O medidor brilha sem leitura a caminho.**
+**T14 · Pode esperar. O medidor brilha sem leitura a caminho.** · **Fechado no step 9**
 
 - Com a sessão que não abriu (`claude` ausente), o medidor fica com o trilho em brilho e `…` indefinidamente (`components/system/ContextMeter.tsx:17`, `:38–40`; app, 2000 e 2560 px).
 - Regra: `principles.md` 8 (o brilho diz que uma leitura ainda não tem resultado).
 
-**T15 · Pode esperar. Valores soltos.**
+**T15 · Pode esperar. Valores soltos.** · **Fechado no step 9**
 
 - `PermissionCard.tsx:81` (`max-h-48`), `Markdown.tsx:164` (`h-8`), `features/task/StepDocument.tsx:9` (`max-w-[58.5rem]`, `gap-2`).
 - Regra: `docs/architecture/design-system.md` (Utilitários); pauta `critique-task-04.md:115–118` (8).
 
-**T16 · Pode esperar. `clone_missing` manda a Settings.**
+**T16 · Pode esperar. `clone_missing` manda a Settings.** · **Fechado no step 9**
 
 - `features/task/step-status.ts:229` diz `Change the path of the repository in Settings › Repositories` enquanto a barra oferece **Change path…**.
 - Regra: pauta `critique-task-04.md:125` (11): o texto diz o que a barra faz.
 
-**T17 · Pode esperar. O lugar que muda com a tela aberta não é anunciado.**
+**T17 · Pode esperar. O lugar que muda com a tela aberta não é anunciado.** · **Fechado no step 9**
 
 - Nenhum `announce` em `features/task` (`TaskView.tsx`, `place.ts`).
 - Regra: pauta `critique-task-04.md:132` (nota 3): o anúncio pela região do app (`store.announce`).
 
-**T18 · Pode esperar. Provas que faltam.**
+**T18 · Pode esperar. Provas que faltam.** · **Fechado no step 9**
 
 - Page Up e Page Down com o `feed` de três entradas (`useFeed.test.tsx:192–195`); o `feed` de mais de dez entradas nasce com a janela da conversa (`12:231`).
 - `where-actions-went.test.tsx` sem **Retry reviewer** (só `Retry implementer`, `:391`, e `Retry PRD agent`, `:406`) e sem **Deny** com `defaultToNo`.
@@ -657,26 +657,26 @@ Cada item da pauta de polimento (`lab/08-visual-final/critique.md` §7; `12:272�
 | Polimento 1, três eixos de alinhamento no topo a 2500 px (149–154) | Não vale mais | Um eixo só; o stepper até ~1.414 px e as ferramentas desde ~2.080 px (app, 2560, claro e escuro) | — |
 | Polimento 5, `Enter to send · Shift+Enter…` (158) | Feito na task 4 | `12:280`; o passe não o reabriu | — |
 | Polimento 8, os botões de painel e **Pause** com o mesmo peso (161) | Feito nas tasks 2 e 3 | `12:283`; o passe não o reabriu | — |
-| `critique-task-03.md:58` (3), o nome da pílula repete o lugar | Feito para os bloqueios; sobra o encerramento | `lib/situations.ts:262–284` (`PLACE_IN_LABEL`) | T6 |
-| `critique-task-03.md:64–70` (5), os checks cortados em `Details` | Vale, sem tooltip | `ChecksList.tsx:139–148` | T5 |
+| `critique-task-03.md:58` (3), o nome da pílula repete o lugar | Feito para os bloqueios; sobra o encerramento | `lib/situations.ts:262–284` (`PLACE_IN_LABEL`) | T6 · **Fechado no step 9** |
+| `critique-task-03.md:64–70` (5), os checks cortados em `Details` | Vale, sem tooltip | `ChecksList.tsx:139–148` | T5 · **Fechado no step 9** |
 | `critique-task-03.md:64–70` (6), o status congelado de `request.ts` | Feito | `request.ts:434–442` (`statusOf(label, place)`), congelado por `useBornStatus` (`TaskRequest.tsx:100`) | — |
 | `critique-task-03.md:64–70` (6), o nome de **Resume** | Não vale mais | `components/PauseButton.tsx:44`, `:58`: o nome é `Resume`, o resto na descrição | — |
-| `critique-task-03.md:64–70` (6), `step_review` na aba do implementador | Vale | `agent-tabs.ts:102` | T13 |
+| `critique-task-03.md:64–70` (6), `step_review` na aba do implementador | Vale | `agent-tabs.ts:102` | T13 · **Fechado no step 9** |
 | `critique-task-03.md:64–70` (6), a escolha própria no popover Models | Não vale mais | `ModelsPopover.tsx:108` (`own={false}`); a própria é do step, em `Details` (`task.md` §10) | — |
-| `critique-task-04.md:101` (2), a opção sem pressionado nem desabilitado | Vale | `OptionGroup.tsx:6`; `QuestionCard.tsx:342–348` | T9 |
-| `critique-task-04.md:102` (3), a hora da resposta no nome | Vale | `QuestionCard.tsx:117`, `PermissionCard.tsx:135` | T10 |
-| `critique-task-04.md:103–111` (4), as provas | Vale em parte | **Go to reviewer** tem prova (`TaskRequest.test.tsx:404`) e **Retry reviewer** está em `TaskRequest.test.tsx:429`; o resto falta | T18 |
+| `critique-task-04.md:101` (2), a opção sem pressionado nem desabilitado | Vale | `OptionGroup.tsx:6`; `QuestionCard.tsx:342–348` | T9 · **Fechado no step 9** |
+| `critique-task-04.md:102` (3), a hora da resposta no nome | Vale | `QuestionCard.tsx:117`, `PermissionCard.tsx:135` | T10 · **Fechado no step 9** |
+| `critique-task-04.md:103–111` (4), as provas | Vale em parte | **Go to reviewer** tem prova (`TaskRequest.test.tsx:404`) e **Retry reviewer** está em `TaskRequest.test.tsx:429`; o resto falta | T18 · **Fechado no step 9** |
 | `critique-task-04.md:112` (5), `error_status` | Fecha como nota | `12:299` | — |
 | `critique-task-04.md:113` (6), `GetActionOutput` | Fecha como nota | `12:300` | — |
-| `critique-task-04.md:114` (7), o teste de `Close` com `spawnPRWork` | Vale | Só `TestCloseWaitsForThePreparationItCancels` | T18 |
-| `critique-task-04.md:115–118` (8), os valores soltos | Vale | `max-h-48`, `h-8`, `max-w-[58.5rem]` | T15 |
-| `critique-task-04.md:119–123` (9), o `panZoom` do mermaid | Vale, e pior que nota | `Markdown.tsx:17` | T3 |
-| `critique-task-04.md:119–123` (9), o cursor do streaming | Vale | `Markdown.tsx:95` | T12 |
-| `critique-task-04.md:119–123` (9), `BackToEnd` sem hover | Vale | `BackToEnd.tsx:32` | T11 |
-| `critique-task-04.md:124` (10), as fixtures da conversa | Vale | `test/conversation-scenes.ts:233`, `:397–415` | T18 |
-| `critique-task-04.md:125` (11), o `blockHint` de `clone_missing` | Vale | `step-status.ts:229` | T16 |
-| `critique-task-04.md:132` (nota 3), o lugar vazio não anunciado | Vale | Nenhum `announce` em `features/task` | T17 |
-| `critique-task-07.md:369` (4), a prova do corte não morde | Vale | `TaskView.scenes.painted.test.tsx:411`, sem `longName` | T18 |
+| `critique-task-04.md:114` (7), o teste de `Close` com `spawnPRWork` | Vale | Só `TestCloseWaitsForThePreparationItCancels` | T18 · **Fechado no step 9** |
+| `critique-task-04.md:115–118` (8), os valores soltos | Vale | `max-h-48`, `h-8`, `max-w-[58.5rem]` | T15 · **Fechado no step 9** |
+| `critique-task-04.md:119–123` (9), o `panZoom` do mermaid | Vale, e pior que nota | `Markdown.tsx:17` | T3 · **Fechado no step 9** |
+| `critique-task-04.md:119–123` (9), o cursor do streaming | Vale | `Markdown.tsx:95` | T12 · **Fechado no step 9** |
+| `critique-task-04.md:119–123` (9), `BackToEnd` sem hover | Vale | `BackToEnd.tsx:32` | T11 · **Fechado no step 9** |
+| `critique-task-04.md:124` (10), as fixtures da conversa | Vale | `test/conversation-scenes.ts:233`, `:397–415` | T18 · **Fechado no step 9** |
+| `critique-task-04.md:125` (11), o `blockHint` de `clone_missing` | Vale | `step-status.ts:229` | T16 · **Fechado no step 9** |
+| `critique-task-04.md:132` (nota 3), o lugar vazio não anunciado | Vale | Nenhum `announce` em `features/task` | T17 · **Fechado no step 9** |
+| `critique-task-07.md:369` (4), a prova do corte não morde | Vale | `TaskView.scenes.painted.test.tsx:411`, sem `longName` | T18 · **Fechado no step 9** |
 | `critique-task-10.md`, o `Textarea` com `rows` (`PermissionCard` 2) | Feito | `components/system/Textarea.tsx` respeita `rows`; sem mudança visível | — |
 
 ### Home, board e criação

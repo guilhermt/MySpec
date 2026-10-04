@@ -138,6 +138,7 @@ function TaskTools({ task, now }: { task: TaskSummary; now: number }) {
           percent={onScreen.contextPercent === 0 ? null : onScreen.contextPercent}
           paused={asSessionStatus(onScreen.sessionStatus) === "paused"}
           compact="narrow"
+          reading={onScreen.lastError === ""}
           detail={contextDetail(onScreen)}
         />
       )}

@@ -668,11 +668,13 @@ export function Conversation({
                   <Fragment key={key}>{node}</Fragment>
                 ))}
               {fixed}
-              {/* An earlier conversation is read without what was queued: it sends nothing more. */}
+              {/* An earlier conversation is read without what was queued: it sends nothing more.
+                  The product's own prompt is never queued: its start is already a marker. */}
               {!readOnly &&
                 pending.map(
                   (entry) =>
-                    entry.user !== null && (
+                    entry.user !== null &&
+                    !entry.user.prompt && (
                       <QueuedMessage
                         key={entry.id}
                         taskId={taskId}

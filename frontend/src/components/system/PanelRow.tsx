@@ -1,9 +1,10 @@
 import { type ReactNode, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
+import { CutText } from "./CutText";
 
 export interface PanelRowProps {
-  /** children is the text of the row, cut when it runs out of room. */
-  children: ReactNode;
+  /** children is the text of the row, cut when it runs out of room, and whole in a tooltip then. */
+  children: string;
   /** glyph is the sign in the first column: the check, a state glyph, the file icon. */
   glyph?: ReactNode;
   /** meta is what the row holds on the right: a time, a SHA, the choosers of a step. */
@@ -70,7 +71,7 @@ export function PanelRow({
           {glyph}
         </span>
       )}
-      <span className="min-w-0 flex-1 truncate">{children}</span>
+      <CutText text={children} className="flex-1" />
       {meta !== undefined && (
         <span className="flex shrink-0 items-center gap-(--space-1-5) text-(length:--text-micro) leading-(--leading-micro) whitespace-nowrap text-ink-3 tabular-nums">
           {meta}

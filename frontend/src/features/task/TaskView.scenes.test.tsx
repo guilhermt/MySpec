@@ -42,7 +42,7 @@ describe("TaskView, the nine scenes", () => {
       "Progress · PR review pass 1 · waiting for you: decide findings in PR review",
       "wait",
     ],
-    ["close", "Progress · Closing · ready to close: ready to close in PR", "close"],
+    ["close", "Progress · Closing · ready to close", "close"],
   ])("draws the stepper of the %s scene, with the glyph of its pill", (name, label, glyph) => {
     scene(name);
 

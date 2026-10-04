@@ -212,7 +212,7 @@ function action(
  * of a subagent follow it, spread over its own time.
  */
 function group(at: string, spanSeconds: number, acts: readonly Act[]): Entry[] {
-  const turnId = `turn_${at.replace(":", "")}`;
+  const turnId = `turn_${at.replaceAll(":", "")}`;
   const first = clock(at);
   const gap = spanSeconds / Math.max(acts.length, 1);
   return acts.flatMap((act, index) => {
@@ -369,8 +369,8 @@ const PASSED_TESTS = lines(
  * step files and the reports, by the name ReadArtifact takes.
  */
 export const CONVERSATION_ARTIFACTS: Record<string, string> = {
-  "steps/3-count-the-requests-in-a-token-bucket.md": STEP_FILE_3,
-  "steps/6-document-the-limits.md": lines(
+  "steps/03-token-bucket.md": STEP_FILE_3,
+  "steps/06-throttle-metrics.md": lines(
     "#### Step 6: Count throttled requests per plan",
     "",
     "A counter of 429 answers labelled by plan, exported to Prometheus, and a panel in the gateway dashboard.",
@@ -394,10 +394,36 @@ export const CONVERSATION_ARTIFACTS: Record<string, string> = {
 // ---------------- Step 3: the implementer and the reviewer ----------------
 
 const STEP_3_READS: readonly Act[] = [
-  act("Read the PRD's limits section", "sed -n '40,90p' .myspec/rate-limit-per-api-key/PRD.md"),
-  act("Read the tech spec", "cat .myspec/rate-limit-per-api-key/tech-spec.md"),
+  act(
+    "Read the PRD's limits section",
+    "sed -n '40,90p' .myspec/rate-limit-per-api-key/PRD.md",
+    0.1,
+    {
+      out: lines(
+        "A key over its limit gets 429 with a `Retry-After` header and the headers that say how far it is.",
+        "Keys with the `internal` scope are exempt; every other key has the burst and the rate of its plan.",
+        "The limits live where the plan lives, so a change of plan needs no deploy.",
+      ),
+      outLines: 51,
+    },
+  ),
+  act("Read the tech spec", "cat .myspec/rate-limit-per-api-key/tech-spec.md", 0.1, {
+    out: lines(
+      "The limiter keeps one bucket per key, created on first use and refilled when it is read.",
+      "The bucket and the map behind it stay in `internal/ratelimit`; the middleware only asks it.",
+    ),
+    outLines: 118,
+  }),
   act("Find the plan source", 'grep -rn "PlanSource" internal/', 0.2),
-  act("Read the plan source", "sed -n '1,40p' internal/billing/plans.go"),
+  act("Read the plan source", "sed -n '1,40p' internal/billing/plans.go", 0.1, {
+    out: lines(
+      "// PlanSource says what each plan allows: its rate and its burst.",
+      "type PlanSource interface {",
+      "\tLimits(ctx context.Context, plan string) (Limits, error)",
+      "}",
+    ),
+    outLines: 40,
+  }),
   act("Find where 429 is written", 'grep -rn "StatusTooManyRequests" internal/', 0.2),
   act("List the ratelimit package", "ls internal/ratelimit"),
   act("Find the middleware tests", "find internal/http -name '*_test.go'", 0.2),
@@ -408,11 +434,47 @@ const STEP_3_START: Entry[] = [
   ...start("13:48", { stage: "step:3", step: 3 }, { text: "Implement step 3." }),
   ...group("13:48", 110, [
     ...earlier(8, STEP_3_READS),
-    act("Read the step file", "cat .myspec/rate-limit-per-api-key/steps/03-token-bucket.md"),
-    act("Read the rate limit config from step 1", "sed -n '1,80p' internal/ratelimit/config.go"),
+    act("Read the step file", "cat .myspec/rate-limit-per-api-key/steps/03-token-bucket.md", 0.1, {
+      out: lines(
+        "#### Step 3: Token bucket middleware",
+        "",
+        "One bucket per key, refilled when it is read, behind the API key middleware.",
+      ),
+      outLines: 24,
+    }),
+    act(
+      "Read the rate limit config from step 1",
+      "sed -n '1,80p' internal/ratelimit/config.go",
+      0.1,
+      {
+        out: lines(
+          "type Config struct {",
+          "\tBurst           int",
+          "\tRefillPerSecond float64",
+          "}",
+        ),
+        outLines: 80,
+      },
+    ),
     act("Find the API key middleware", 'grep -rn "X-API-Key" internal/http', 0.2),
-    act("Read the auth middleware", "sed -n '20,90p' internal/http/middleware/auth.go"),
-    act("Read the key cache of step 2", "sed -n '1,60p' internal/keys/cache.go"),
+    act("Read the auth middleware", "sed -n '20,90p' internal/http/middleware/auth.go", 0.1, {
+      out: lines(
+        "func Auth(keys *keys.Cache, next http.Handler) http.Handler {",
+        "\treturn http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {",
+        '\t\tkey, ok := keys.Lookup(r.Header.Get("X-API-Key"))',
+      ),
+      outLines: 71,
+    }),
+    act("Read the key cache of step 2", "sed -n '1,60p' internal/keys/cache.go", 0.1, {
+      out: lines(
+        "// Cache holds the keys read from the database for 60 s.",
+        "type Cache struct {",
+        "\tmu    sync.RWMutex",
+        "\tkeys  map[string]Key",
+        "}",
+      ),
+      outLines: 60,
+    }),
     act("See what steps 1 and 2 changed", "git log --oneline -3 && git diff HEAD~2 --stat", 0.2),
   ]),
   speech(
@@ -851,7 +913,8 @@ const RUNNING: Entry[] = [
   ...STEP_3_START,
   HAND_IMPLEMENTER_1,
   speech("14:19", "Two findings. I'll sweep idle buckets once a minute and add the refill test."),
-  ...group("14:19", 200, [
+  // The live group starts with the turn: 3m 40s before the scene, as the status line counts it.
+  ...group("14:19:20", 200, [
     ...earlier(5, STEP_3_READS, 3),
     act("Read the finding's file", "sed -n '1,60p' internal/ratelimit/limiter.go"),
     {

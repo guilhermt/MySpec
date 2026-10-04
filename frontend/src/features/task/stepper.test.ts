@@ -488,6 +488,15 @@ describe("stepperOf, the name and the tooltip", () => {
       ["● PRD  ○ Tech spec  ○ Plan  ○ Implementation  ○ PR  ○ PR review  ○ Closing"],
     ],
     [
+      "the closing, which says itself",
+      inPR(
+        { status: "merged", prNumber: 1284, sessionStage: "pr_review", canClose: true },
+        { situations: [situation("merge", "closing", place("pr"), "close")] },
+      ),
+      "Progress · Closing · ready to close",
+      ["✓ PRD  ✓ Tech spec  ✓ Plan  ✓ Implementation  ✓ PR  ✓ PR review  ● Closing"],
+    ],
+    [
       "several situations",
       inStep(
         3,

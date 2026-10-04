@@ -32,7 +32,9 @@ export function DiscussionComposer({ discussion }: DiscussionComposerProps) {
       permissionPending={cards.permission}
       chips={kind === "reply" ? cards.chips : []}
       otherPrimary={
-        discussionOtherPrimary(discussion, request) || cards.question !== null || cards.permission
+        discussionOtherPrimary(discussion, request) ||
+        cards.question !== null ||
+        cards.permission !== null
       }
       context={discussionComposerContext(discussion)}
       starters={discussionStarters(discussion)}

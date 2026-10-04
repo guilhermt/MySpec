@@ -182,10 +182,16 @@ describe("prPlaceOf", () => {
       false,
       empty("The pull request stage stopped", "", {
         error: {
-          explanation: "Run `gh auth login` in a terminal, then try again.",
+          explanation: "Run gh auth login in a terminal, then try again.",
           detail: "not logged in",
         },
       }),
+    ],
+    [
+      "the PR blocked with the conversation of the review",
+      pr({ status: "blocked", block: { reason: "gh_missing", detail: "" } }),
+      true,
+      { kind: "conversation" },
     ],
     ["the PR opening", pr({ status: "opening", prNumber: 0 }), false, { kind: "conversation" }],
     [

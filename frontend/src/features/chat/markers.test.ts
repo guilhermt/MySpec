@@ -381,7 +381,7 @@ describe("startLineOf", () => {
       markerEntry({ type: "step_review_started", step: 3 }),
       null,
       ctx("step_review:3"),
-      view("start", "MySpec → Reviewer", { complement: FIRST_PASS }),
+      view("product", "MySpec → Reviewer", { complement: FIRST_PASS }),
     ],
   ])("reads %s", (_, start, first, context, expected) => {
     expect(startLineOf(start, first, context)).toEqual(expected);
@@ -725,7 +725,7 @@ describe("markerOf", () => {
       "the start of a reviewer alone",
       { type: "step_review_started", step: 3 },
       ctx("step_review:3"),
-      view("start", "MySpec → Reviewer", { complement: FIRST_PASS }),
+      view("product", "MySpec → Reviewer", { complement: FIRST_PASS }),
     ],
     ["a type the app does not know", { type: "rewound" }, ctx("step:3"), null],
   ])("reads %s", (_, fields, context, expected) => {

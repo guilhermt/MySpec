@@ -12,7 +12,13 @@ import { DetailsPanel } from "@/features/task/DetailsPanel";
 import { earlierPlace } from "@/features/task/details";
 import { EarlierConversationFoot } from "@/features/task/EarlierConversationFoot";
 import { PRPane } from "@/features/task/PRPane";
-import { hasReviewConversation, prPlaceOf } from "@/features/task/place";
+import {
+  hasReviewConversation,
+  type PlaceView,
+  placeTitleOf,
+  prPlaceOf,
+  stepPlaceOf,
+} from "@/features/task/place";
 import { cardFindings } from "@/features/task/pr-findings";
 import { screenSituationKindOf, screenStageOf } from "@/features/task/request";
 import { useFocusRescue } from "@/features/task/request-focus";
@@ -78,6 +84,25 @@ function EarlierConversation({ task, stage }: { task: TaskSummary; stage: string
 }
 
 /**
+ * usePlaceAnnouncement says the title of the place when it changes with the screen open: the live
+ * region of the app hears what the eyes see change. Arriving on a place says nothing.
+ */
+function usePlaceAnnouncement(taskId: string, view: PlaceView | null) {
+  const announce = useAppStore((state) => state.announce);
+  const title = view === null ? null : placeTitleOf(view);
+  const key = `${view?.kind ?? ""}:${title ?? ""}`;
+  const seen = useRef<{ taskId: string; key: string } | null>(null);
+
+  useEffect(() => {
+    const before = seen.current;
+    seen.current = { taskId, key };
+    if (before !== null && before.taskId === taskId && before.key !== key && title !== null) {
+      announce(title);
+    }
+  }, [taskId, key, title, announce]);
+}
+
+/**
  * TaskArrival is the focus on arriving at a situation of the task, apart from TaskView so only it
  * follows the clock of the request.
  */
@@ -125,6 +150,15 @@ export function TaskView({ taskId }: TaskViewProps) {
     const status = state.transcripts[sessionKey(taskId, stage)]?.status;
     return status === "ready" || status === "error";
   });
+  const placeView =
+    task === null
+      ? null
+      : implementing
+        ? stepPlaceOf(task)
+        : opening && pr !== null
+          ? prPlaceOf(task, pr, hasReviewConversation(task))
+          : null;
+  usePlaceAnnouncement(taskId, placeView);
   const rescue = useRef<HTMLElement>(null);
   useFocusRescue(rescue);
 

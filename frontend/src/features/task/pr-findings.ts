@@ -83,7 +83,8 @@ export function discardedPass(pr: PullRequest): boolean {
 /**
  * cardOf is the card of findings the conversation of the review holds: the current pass, recorded
  * with findings and not sent, while it is decided (DECIDING_STATUSES, the pull request open), and,
- * disabled, the current pass with every finding discarded once the pull request was merged or closed;
+ * disabled, the current pass with every finding discarded once the pull request was merged or closed,
+ * and the same pass, unsent, while the stage is blocked (the decisions wait for it to resume);
  * null otherwise.
  */
 export function cardOf(pr: PullRequest): { report: PRReport; disabled: boolean } | null {
@@ -101,11 +102,11 @@ export function cardOf(pr: PullRequest): { report: PRReport; disabled: boolean }
     !report.clean &&
     report.sentAt === "" &&
     (report.findings ?? []).length > 0 &&
-    DECIDING_STATUSES.includes(status) &&
+    (DECIDING_STATUSES.includes(status) || status === "blocked") &&
     state !== "merged" &&
     state !== "closed"
   ) {
-    return { report, disabled: false };
+    return { report, disabled: status === "blocked" };
   }
   return null;
 }

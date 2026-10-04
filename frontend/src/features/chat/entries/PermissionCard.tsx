@@ -5,6 +5,7 @@ import { ICONS } from "@/components/system/icons";
 import { Tag } from "@/components/system/Tag";
 import { Textarea } from "@/components/system/Textarea";
 import { Tooltip } from "@/components/system/Tooltip";
+import { permissionKeys } from "@/features/chat/composer";
 import { ANSWERED_CARD, ENTRY, REQUEST_CARD } from "@/features/chat/entries/QuestionCard";
 import { cn } from "@/lib/utils";
 import {
@@ -48,17 +49,6 @@ function parseInput(raw: string): Record<string, unknown> {
   }
 }
 
-// An empty suggestion list means the CLI offered no rule to remember, so there
-// is nothing "for this session" could save.
-function hasSuggestions(raw: string): boolean {
-  try {
-    const value: unknown = JSON.parse(raw);
-    return Array.isArray(value) && value.length > 0;
-  } catch {
-    return false;
-  }
-}
-
 function stringField(input: Record<string, unknown>, name: string): string | null {
   const value = input[name];
   return typeof value === "string" ? value : null;
@@ -78,7 +68,9 @@ function Detail({ tool, input }: { tool: string; input: string }) {
     );
   }
   return (
-    <pre className={cn(CODE, "max-h-48 overflow-auto")}>{JSON.stringify(parsed, null, 2)}</pre>
+    <pre className={cn(CODE, "max-h-[calc(var(--space-16)*3)] overflow-auto")}>
+      {JSON.stringify(parsed, null, 2)}
+    </pre>
   );
 }
 
@@ -128,11 +120,15 @@ export function PermissionCard({
     permission.answeredAt === ""
       ? answer
       : `${answer} at ${clockTime(permission.answeredAt, Date.now())}`;
+  const answeredAt =
+    permission.answeredAt === ""
+      ? ""
+      : `, answered at ${clockTime(permission.answeredAt, Date.now())}`;
   return (
     <article
       data-feed-item
       tabIndex={-1}
-      aria-label={`Permission, ${clockTime(createdAt, Date.now())}`}
+      aria-label={`Permission, ${clockTime(createdAt, Date.now())}${answeredAt}`}
       className={cn(ENTRY, ANSWERED_CARD)}
     >
       <div className="grid grid-cols-[var(--icon-sm)_minmax(0,1fr)] items-baseline gap-(--space-2) select-text">
@@ -185,7 +181,7 @@ function PendingPermission({ taskId, stage, permission, flash }: PendingPermissi
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState<PermissionDecision | null>(null);
   const [failure, setFailure] = useState("");
-  const forSession = !permission.suppressAlwaysAllow && hasSuggestions(permission.suggestions);
+  const forSession = permissionKeys(permission) === 3;
 
   const answer = async (decision: PermissionDecision, text: string) => {
     if (sending !== null) {

@@ -5,7 +5,7 @@ import { leaveDecisionCard } from "@/features/chat/useFeed";
 import { EDIT_NOTES, reportMarkerIds } from "@/features/reviews/review-conversation";
 import { cardOf, disabledNote } from "@/features/task/pr-findings";
 import { findingViewsOf } from "@/lib/findings";
-import type { Entry, PullRequest, TaskSummary } from "@/lib/wails";
+import { asPRStatus, type Entry, type PullRequest, type TaskSummary } from "@/lib/wails";
 import {
   decidePRFindingInPlace,
   openPRFindingInEditor,
@@ -40,6 +40,7 @@ export function usePRConversationAnchors(
       return anchors;
     }
     const { report } = card;
+    const blocked = asPRStatus(pr.status) === "blocked";
     const now = Date.now();
     anchors.set(
       reportMarkerIds(entries).get(report.pass) ?? END,
@@ -52,7 +53,9 @@ export function usePRConversationAnchors(
         findings={report.findings ?? []}
         views={findingViewsOf(
           report.findings ?? [],
-          card.disabled ? (finding) => disabledNote(report, finding, now) : null,
+          card.disabled
+            ? (finding) => (blocked ? "Not sent" : disabledNote(report, finding, now))
+            : null,
         )}
         editNote={EDIT_NOTES.apply}
         disabled={card.disabled}

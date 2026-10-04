@@ -62,6 +62,7 @@ export function ReviewHeader({ review }: ReviewHeaderProps) {
           percent={review.contextPercent === 0 ? null : review.contextPercent}
           paused={isPausedReview(review)}
           compact="narrow"
+          reading={review.lastError === ""}
           detail={reviewContextDetail(review)}
         />
       )}

@@ -23,7 +23,7 @@ export function ReviewComposer({ review }: ReviewComposerProps) {
       session={review}
       question={cards.question}
       permissionPending={cards.permission}
-      otherPrimary={barPrimary || cards.question !== null || cards.permission}
+      otherPrimary={barPrimary || cards.question !== null || cards.permission !== null}
       context={{ ...reviewComposerContext(review), drafts: null }}
     />
   );

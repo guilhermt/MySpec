@@ -287,7 +287,7 @@ describe("blockHint", () => {
     ["git_failed", "Fix what git reports, then try again."],
     [
       "clone_missing",
-      "Change the path of the repository in Settings › Repositories, then try again.",
+      "The clone of the repository isn't there. Change its path, or clone it again.",
     ],
   ])("tells the user what to do about %s", (reason, expected) => {
     expect(blockHint(blockedStep(reason), makeTask())).toBe(expected);

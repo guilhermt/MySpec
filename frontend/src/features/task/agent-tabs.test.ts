@@ -123,6 +123,40 @@ describe("agentTabsOf", () => {
       ],
     ],
     [
+      "the step in review by the user, which no conversation holds",
+      task([
+        makeSituation({
+          id: "r",
+          kind: "step_review",
+          place: { kind: "step", stage: "", step: 3 },
+          startedAt: MINUTES_AGO(2),
+        }),
+      ]),
+      step({ reviewer: reviewer("waiting"), status: "in_review" }),
+      "reviewer",
+      [
+        tab({ tab: "implementer", name: "Implementer", label: "Implementer: idle" }),
+        tab({ tab: "reviewer", name: "Reviewer", label: "Reviewer: idle" }),
+      ],
+    ],
+    [
+      "the step without changes, which no conversation holds",
+      task([
+        makeSituation({
+          id: "x",
+          kind: "step_empty",
+          place: { kind: "step", stage: "", step: 3 },
+          startedAt: MINUTES_AGO(2),
+        }),
+      ]),
+      step({ reviewer: reviewer("waiting"), status: "in_review" }),
+      "reviewer",
+      [
+        tab({ tab: "implementer", name: "Implementer", label: "Implementer: idle" }),
+        tab({ tab: "reviewer", name: "Reviewer", label: "Reviewer: idle" }),
+      ],
+    ],
+    [
       "the implementer paused",
       task([], { sessionStatus: "paused" }),
       step({ status: "addressing_review" }),

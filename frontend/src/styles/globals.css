@@ -8,7 +8,6 @@
 /* Tailwind only scans source files, and these packages ship classes of their own. */
 @source "../../node_modules/streamdown/dist/*.js";
 @source "../../node_modules/@streamdown/code/dist/*.js";
-@source "../../node_modules/@streamdown/mermaid/dist/*.js";
 
 /* The theme is the data-theme attribute on the document element. */
 @custom-variant dark (&:is([data-theme="dark"] *));
@@ -622,6 +621,41 @@
   font-family: var(--font-mono);
   font-size: var(--text-code);
   line-height: var(--leading-code);
+}
+
+/* A table of the speech is one sunken block, like the code: the frame is the wrapper's, and the table
+   inside keeps neither a border nor a background of its own. */
+.markdown [data-streamdown="table-wrapper"] {
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+  box-shadow: inset 0 0 0 var(--border) var(--line-1);
+}
+.markdown [data-streamdown="table-wrapper"] > div {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.markdown [data-streamdown="table-wrapper"] [data-streamdown="table"] {
+  border: 0;
+}
+.markdown [data-streamdown="table-wrapper"] [data-streamdown="table"] tr {
+  border-color: var(--line-1);
+}
+
+/* The caret of a speech that still grows: a still block in --ink-3, after its last block. */
+.streaming-caret {
+  display: block;
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  color: var(--ink-3);
+}
+.streaming-caret::before {
+  content: "▋";
 }
 
 /* Every icon draws with the stroke of the system, on every screen. */

@@ -1,12 +1,8 @@
 import { code } from "@streamdown/code";
-import { createMermaidPlugin } from "@streamdown/mermaid";
 import { type ReactNode, useMemo, useState } from "react";
 import { Streamdown } from "streamdown";
 import { Button } from "@/components/system/Button";
-import { CopyButton } from "@/components/system/CopyButton";
-import { CutText } from "@/components/system/CutText";
-import { Icon } from "@/components/system/Icon";
-import { ICONS } from "@/components/system/icons";
+import { CodeFrame } from "@/features/chat/CodeFrame";
 import {
   CUT_ABOVE,
   CUT_SHOWN,
@@ -16,7 +12,7 @@ import {
 } from "@/features/chat/code-cut";
 import { CODE_THEMES } from "@/features/chat/code-theme";
 import { ExternalLink } from "@/features/chat/ExternalLink";
-import { useEffectiveMode } from "@/features/theme/useApplyTheme";
+import { MermaidBlock } from "@/features/chat/MermaidBlock";
 import { cn } from "@/lib/utils";
 
 // Nothing here downloads a file: the webview has no download target. The Copy of a code block is the
@@ -24,8 +20,9 @@ import { cn } from "@/lib/utils";
 const CONTROLS = {
   table: false,
   code: { copy: false, download: false },
-  mermaid: { copy: false, download: false, fullscreen: true, panZoom: true },
 } as const;
+
+const PLUGINS = { code } as const;
 
 // The safety modal warns before leaving the page; links never navigate here.
 const LINK_SAFETY = { enabled: false } as const;
@@ -57,16 +54,6 @@ interface BlockProps {
 
 // Block is one Streamdown over a piece of the text.
 function Block({ children, streaming, className, renderInlineCode }: BlockProps) {
-  const dark = useEffectiveMode() === "dark";
-  const plugins = useMemo(
-    () => ({
-      code,
-      mermaid: createMermaidPlugin({
-        config: { theme: dark ? "dark" : "neutral", fontFamily: "var(--font-ui)" },
-      }),
-    }),
-    [dark],
-  );
   const components = useMemo(() => {
     if (renderInlineCode === undefined) {
       return COMPONENTS;
@@ -89,8 +76,7 @@ function Block({ children, streaming, className, renderInlineCode }: BlockProps)
       )}
       mode={streaming ? "streaming" : "static"}
       isAnimating={streaming}
-      {...(streaming ? { caret: "block" as const } : {})}
-      plugins={plugins}
+      plugins={PLUGINS}
       shikiTheme={[...CODE_THEMES]}
       lineNumbers={false}
       controls={CONTROLS}
@@ -133,24 +119,7 @@ function CodeBlock({ part, streaming, cutCode, className }: CodeBlockProps) {
   // The frame is the sunken block: Streamdown's code block draws inside it without a frame or a
   // header of its own, and the foot is the last row of the block, under a rule.
   return (
-    <div
-      data-code-block
-      className="relative flex flex-col overflow-hidden rounded-md bg-surface-0 shadow-[inset_0_0_0_var(--border)_var(--line-1)]"
-    >
-      <div className="flex h-8 items-center gap-(--space-2) px-(--space-3) text-(length:--text-micro) leading-(--leading-micro) text-ink-3 shadow-[inset_0_calc(var(--border)*-1)_0_var(--line-1)]">
-        <Icon icon={ICONS.openInEditor} size="sm" />
-        {language !== "" && <span>{language}</span>}
-        {path !== "" && <CutText text={path} className="font-mono text-ink-3" />}
-        {range !== "" && <span className="tabular-nums">{range}</span>}
-        <span className="ml-auto">
-          <CopyButton
-            text={part.lines.join("\n")}
-            label="Copy the code"
-            variant="icon"
-            note="before"
-          />
-        </span>
-      </div>
+    <CodeFrame language={language} path={path} range={range} copyText={part.lines.join("\n")}>
       <Block
         streaming={streaming && !part.closed}
         className={className}
@@ -166,11 +135,16 @@ function CodeBlock({ part, streaming, cutCode, className }: CodeBlockProps) {
           {!open && <span className="tabular-nums">{total - CUT_SHOWN} more</span>}
         </div>
       )}
-    </div>
+    </CodeFrame>
   );
 }
 
 const RAIL = "markdown-rail-last";
+
+// isMermaid tells a block drawn as a diagram from the language its info starts with.
+function isMermaid(info: string): boolean {
+  return info.split(/\s+/)[0]?.toLowerCase() === "mermaid";
+}
 
 /** Markdown draws what the agent wrote; every code block has its header, and in the conversation the long ones are cut. */
 export function Markdown({
@@ -182,16 +156,21 @@ export function Markdown({
   className,
 }: MarkdownProps) {
   const parts = useMemo(() => codeParts(children), [children]);
+  // The caret of the speech that still grows stands after its last block, still.
+  const caret = streaming ? <span aria-hidden="true" className="streaming-caret" /> : null;
 
   if (parts.every((part) => part.kind === "text")) {
     return (
-      <Block
-        streaming={streaming}
-        className={cn(railLast && RAIL, className)}
-        renderInlineCode={renderInlineCode}
-      >
-        {children}
-      </Block>
+      <>
+        <Block
+          streaming={streaming}
+          className={cn(railLast && RAIL, className)}
+          renderInlineCode={renderInlineCode}
+        >
+          {children}
+        </Block>
+        {caret}
+      </>
     );
   }
   return (
@@ -199,16 +178,26 @@ export function Markdown({
       {parts.map((part, index) => {
         const last = index === parts.length - 1;
         const partClass = cn(last && railLast && RAIL, className);
-        return part.kind === "text" ? (
-          <Block
+        if (part.kind === "text") {
+          return (
+            <Block
+              // biome-ignore lint/suspicious/noArrayIndexKey: the order of the parts never changes
+              key={index}
+              streaming={streaming && last}
+              className={partClass}
+              renderInlineCode={renderInlineCode}
+            >
+              {part.text}
+            </Block>
+          );
+        }
+        return isMermaid(part.info) ? (
+          <MermaidBlock
             // biome-ignore lint/suspicious/noArrayIndexKey: the order of the parts never changes
             key={index}
-            streaming={streaming && last}
-            className={partClass}
-            renderInlineCode={renderInlineCode}
-          >
-            {part.text}
-          </Block>
+            source={part.lines.join("\n")}
+            closed={part.closed}
+          />
         ) : (
           <CodeBlock
             // biome-ignore lint/suspicious/noArrayIndexKey: the order of the parts never changes
@@ -220,6 +209,7 @@ export function Markdown({
           />
         );
       })}
+      {caret}
     </div>
   );
 }

@@ -183,9 +183,9 @@ export function closeHint(pr: PullRequest, repository: Repository | null): strin
 export function prBlockHint(reason: PRBlockReason): string {
   switch (reason) {
     case "gh_missing":
-      return "Install the GitHub CLI and make sure `gh` is on the PATH, then try again.";
+      return "Install the GitHub CLI and make sure gh is on the PATH, then try again.";
     case "gh_unauthenticated":
-      return "Run `gh auth login` in a terminal, then try again.";
+      return "Run gh auth login in a terminal, then try again.";
     case "gh_failed":
       return "Fix what gh reports, then try again.";
     case "git_failed":

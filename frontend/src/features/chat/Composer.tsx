@@ -26,7 +26,7 @@ import type { SessionState } from "@/features/chat/session";
 import { ModelChip } from "@/features/models/ModelChip";
 import { focusRequest } from "@/lib/focus";
 import { cn } from "@/lib/utils";
-import { asSessionStatus, type QuestionEntry } from "@/lib/wails";
+import { asSessionStatus, type PermissionEntry, type QuestionEntry } from "@/lib/wails";
 import {
   answerQuestionInPlace,
   interrupt,
@@ -54,8 +54,8 @@ export interface ComposerProps {
   session: SessionState;
   /** question is the question the conversation holds pending, which a text answers (T26). */
   question?: QuestionEntry | null;
-  /** permissionPending is a permission the conversation holds pending. */
-  permissionPending?: boolean;
+  /** permissionPending is the permission the conversation holds pending, null without one. */
+  permissionPending?: PermissionEntry | null;
   /** otherPrimary is another primary on screen: the bar's, enabled or dashed, or a pending card's. */
   otherPrimary: boolean;
   /** chips are the quick replies of the question in text of the reply situation. */
@@ -91,7 +91,7 @@ export function Composer({
   stage,
   session,
   question = null,
-  permissionPending = false,
+  permissionPending = null,
   otherPrimary,
   chips = NO_CHIPS,
   starters = NO_STARTERS,

@@ -29,7 +29,7 @@ export function BackToEnd({ newCount, voice, work, onClick }: BackToEndProps) {
       icon={ICONS.toEnd}
       aria-label={name}
       onClick={onClick}
-      className="absolute bottom-(--space-3) left-[round(50%,1px)] min-w-(--newmsg-w) translate-x-[round(-50%,1px)] rounded-(--radius-pill) border-transparent bg-surface-3 shadow-float hover:bg-surface-3"
+      className="absolute bottom-(--space-3) left-[round(50%,1px)] min-w-(--newmsg-w) translate-x-[round(-50%,1px)] rounded-(--radius-pill) border-transparent bg-surface-3 shadow-float hover:bg-surface-2"
     >
       {newCount > 0 && (
         <span className="font-medium">

@@ -234,6 +234,32 @@ describe("Conversation", () => {
     expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
   });
 
+  it("never queues the product's own prompt", () => {
+    const pending = [
+      makeEntry("user", {
+        user: {
+          text: "",
+          pending: true,
+          prompt: true,
+          app: false,
+          sent: "",
+          appKind: "",
+          appPass: 0,
+          appRound: 0,
+          appRounds: 0,
+          appCount: 0,
+        },
+      }),
+    ];
+    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
+      state: withTask({ pendingCount: 1 }),
+      ui: { transcripts: ready([], pending) },
+    });
+
+    expect(screen.queryByRole("article", { name: /queued/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
+  });
+
   it("says the agent is thinking when nothing else is happening", () => {
     renderWithStore(
       <Conversation

@@ -110,11 +110,13 @@ function AnsweredQuestion({ question, createdAt }: { question: QuestionEntry; cr
     question.answeredAt === ""
       ? "Answered"
       : `Answered at ${clockTime(question.answeredAt, Date.now())}`;
+  const answeredAt =
+    question.answeredAt === "" ? "" : `, answered at ${clockTime(question.answeredAt, Date.now())}`;
   return (
     <article
       data-feed-item
       tabIndex={-1}
-      aria-label={`Question, ${clockTime(createdAt, Date.now())}`}
+      aria-label={`Question, ${clockTime(createdAt, Date.now())}${answeredAt}`}
       className={cn(ENTRY, ANSWERED_CARD)}
     >
       {(question.questions ?? []).map((item) => (
@@ -344,11 +346,11 @@ function QuestionGroup({ at, question, titleId, choice, disabled, onPick }: Ques
             aria-checked={checked[index] ?? false}
             aria-disabled={disabled || undefined}
             tabIndex={stop < 0 || stop === index ? 0 : -1}
-            className={cn("group", OPTION_CLASS)}
+            className={cn("group", OPTION_CLASS, disabled && "aria-disabled:dashed-disabled")}
             onClick={() => onPick(index)}
           >
             <span className={KEY_CLASS}>{index + 1}</span>
-            <span className="flex flex-col gap-(--space-0-5) font-medium text-ink-1">
+            <span className="flex flex-col gap-(--space-0-5) font-medium text-ink-1 group-aria-disabled:text-ink-4">
               {row.title}
               {row.note !== "" && (
                 <small className="text-(length:--text-meta) leading-(--leading-meta) font-normal text-ink-3">

@@ -26,6 +26,14 @@ describe("ContextMeter", () => {
     expect(container.querySelector(".shimmer-track")).toBeInTheDocument();
   });
 
+  it("says … without a shimmer when no reading is on its way", () => {
+    const { container } = renderWithStore(
+      <ContextMeter percent={null} reading={false} detail="Not read yet" />,
+    );
+    expect(screen.getByRole("meter", { name: "Context" })).toHaveTextContent("…");
+    expect(container.querySelector(".shimmer-track")).not.toBeInTheDocument();
+  });
+
   it("shows a dash while paused", () => {
     renderWithStore(<ContextMeter percent={30} paused detail="Paused" />);
     const meter = screen.getByRole("meter", { name: "Context" });

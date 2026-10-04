@@ -155,6 +155,9 @@ var (
 	ErrPaused       = errors.New("session: paused")
 	ErrNoRequest    = errors.New("session: no pending request with that id")
 	ErrNotPending   = errors.New("session: entry is not pending")
+
+	// ErrProductPrompt marks the product's own prompt, which opens a session and is never the user's to remove.
+	ErrProductPrompt = errors.New("session: the product's prompt can't be removed")
 )
 
 // The timeouts of a session's life cycle.
@@ -558,6 +561,9 @@ func (s *Service) RemovePending(ctx context.Context, k Key, entryID string) erro
 	index := slices.IndexFunc(r.pending, func(e *Entry) bool { return e.ID == entryID })
 	if index < 0 {
 		return fmt.Errorf("remove entry %s: %w", entryID, ErrNotPending)
+	}
+	if u := r.pending[index].User; u != nil && u.Prompt {
+		return fmt.Errorf("remove entry %s: %w", entryID, ErrProductPrompt)
 	}
 
 	r.pending = slices.Delete(r.pending, index, index+1)

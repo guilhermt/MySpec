@@ -652,6 +652,22 @@ func TestSendDuringATurnQueues(t *testing.T) {
 	}
 }
 
+func TestRemovePendingRefusesTheProductPrompt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixtureWith(t, &fakeLauncher{scenario: "echo", preflightErr: errors.New("exec: permission denied")}, 0)
+	f.start(t, taskInfo(t, "t1"))
+
+	pending := f.transcript(t, prd("t1")).Pending
+	if len(pending) != 1 || !pending[0].User.Prompt {
+		t.Fatalf("pending = %+v, want the product's prompt alone", pending)
+	}
+	wantErrIs(t, f.service.RemovePending(t.Context(), prd("t1"), pending[0].ID), session.ErrProductPrompt)
+	if sum := f.summary(t, prd("t1")); sum.PendingCount != 1 {
+		t.Errorf("PendingCount = %d, want the prompt kept", sum.PendingCount)
+	}
+}
+
 func TestCrashIsReportedAndRetried(t *testing.T) {
 	t.Parallel()
 

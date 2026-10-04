@@ -264,7 +264,7 @@ function startView(start: StartOf, prompt: UserEntry | null, ctx: MarkerContext)
     // alone, before its prompt arrives, it opens nothing.
     case "step_review_started":
       return line(
-        "start",
+        "product",
         `MySpec → ${voiceOf(ctx.stage)}`,
         firstPassComplement(ctx.oneShot),
         markdownOf(prompt?.text ?? ""),

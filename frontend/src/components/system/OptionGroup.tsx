@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 /** OPTION_CLASS is an option of a choice: a button with its key, its title and its note. */
 export const OPTION_CLASS =
-  "flex w-full items-start gap-(--space-3) rounded-md border border-line-2 bg-surface-2 px-(--space-3) py-(--space-2) text-left transition-[background-color,border-color] duration-(--duration-fast) ease-standard outline-none not-aria-disabled:hover:border-line-3 not-aria-disabled:hover:bg-surface-2-hover focus-visible:focus-ring aria-checked:border-brand-ring aria-checked:bg-brand-tint aria-disabled:cursor-not-allowed";
+  "flex w-full items-start gap-(--space-3) rounded-md border border-line-2 bg-surface-2 px-(--space-3) py-(--space-2) text-left transition-[background-color,border-color] duration-(--duration-fast) ease-standard outline-none not-aria-disabled:hover:border-line-3 not-aria-disabled:hover:bg-surface-2-hover not-aria-disabled:active:bg-veil-press focus-visible:focus-ring aria-checked:border-brand-ring aria-checked:bg-brand-tint aria-disabled:cursor-not-allowed";
 
 /** KEY_CLASS is the key drawn at the start of an option, in the brand when the option is chosen. */
 export const KEY_CLASS =

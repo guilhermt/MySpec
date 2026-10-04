@@ -35,6 +35,7 @@ import {
   Link,
   ListChecks,
   ListFilter,
+  Maximize2,
   MessageSquare,
   Pause,
   Pencil,
@@ -48,6 +49,8 @@ import {
   Trash2,
   User,
   X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { CardIcon } from "./CardIcon";
@@ -65,6 +68,9 @@ export const ICONS = {
   agentMode: Bot,
   manualMode: User,
   openInEditor: Code,
+  fullscreen: Maximize2,
+  zoomIn: ZoomIn,
+  zoomOut: ZoomOut,
   external: ArrowUpRight,
   revised: Pencil,
   chain: Link,

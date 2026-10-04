@@ -387,6 +387,29 @@ describe("TaskView", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
+  it("announces the place that changes with the screen open, and not the one it arrives on", () => {
+    const at = (phase: string) =>
+      makeState({
+        tasks: [
+          makeTask({
+            stage: "implementation",
+            steps: [makeStep({ status: "preparing", phase })],
+            currentStep: 1,
+          }),
+        ],
+      });
+    renderWithStore(<TaskView taskId="task-1" />, {
+      state: at("fetching"),
+      ui: { location: { kind: "task", id: "task-1" } },
+    });
+    expect(useAppStore.getState().announcement).toBeNull();
+
+    act(() => {
+      useAppStore.setState({ app: at("creating") });
+    });
+    expect(useAppStore.getState().announcement?.text).toBe("Creating the worktree…");
+  });
+
   it("lets nothing but the conversation scroll in its column", () => {
     view();
 

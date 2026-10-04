@@ -26,7 +26,7 @@ export interface DialogProps {
   onOpenChange: (open: boolean) => void;
   title: string;
   subtitle?: string;
-  size?: "default" | "wide";
+  size?: "default" | "wide" | "full";
   alert?: boolean;
   onConfirm?: () => void;
   initialFocus?: RefObject<HTMLElement | null>;
@@ -44,6 +44,8 @@ const WIDTHS = {
   default:
     "max-w-(--size-dialog) sm:max-w-(--size-dialog) data-[size=default]:max-w-(--size-dialog) data-[size=default]:sm:max-w-(--size-dialog)",
   wide: "max-w-(--size-dialog-wide) sm:max-w-(--size-dialog-wide) data-[size=default]:max-w-(--size-dialog-wide) data-[size=default]:sm:max-w-(--size-dialog-wide)",
+  /* The window less --space-8 around, rounded to the pixel so the sheet lands on whole pixels. */
+  full: "h-[round(calc(100dvh-2*var(--space-8)),1px)] max-h-[round(calc(100dvh-2*var(--space-8)),1px)] w-[round(calc(100vw-2*var(--space-8)),1px)] max-w-[round(calc(100vw-2*var(--space-8)),1px)] sm:max-w-[round(calc(100vw-2*var(--space-8)),1px)] data-[size=default]:max-w-[round(calc(100vw-2*var(--space-8)),1px)] data-[size=default]:sm:max-w-[round(calc(100vw-2*var(--space-8)),1px)]",
 } as const;
 
 const TITLE =
@@ -54,6 +56,7 @@ const TITLE =
  * Its variants are compositions:
  * - minimal: size="default", with alert on a confirmation;
  * - wide: size="wide";
+ * - full: size="full", the size of the window less --space-8 around;
  * - in steps: subtitle with the step, a DialogFooter with back from the second step and refusal;
  * - destructive: alert, with the confirmation as a danger Button.
  * While the dialog waits for a call, closeDisabled and a disabled DialogCancel draw the ways out
