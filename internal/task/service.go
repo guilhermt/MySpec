@@ -407,8 +407,8 @@ func sameCard(a, b Card) bool {
 }
 
 // CardTaskIDs are the tasks created from one card: the active one and the most
-// recently archived one; "" for none.
-type CardTaskIDs struct{ Active, Archived string }
+// recently archived one, with the name of the archived one; "" for none.
+type CardTaskIDs struct{ Active, Archived, ArchivedName string }
 
 // CardTasks are the tasks created from a card: for each card key, the active task
 // and the most recently archived one; "" for none.
@@ -432,7 +432,7 @@ func (s *Service) CardTasks() map[string]CardTaskIDs {
 		}
 		ids := out[t.Card.Key()]
 		if ids.Archived == "" {
-			ids.Archived = t.ID
+			ids.Archived, ids.ArchivedName = t.ID, t.Name
 			out[t.Card.Key()] = ids
 		}
 	}

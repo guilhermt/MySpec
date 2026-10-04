@@ -5,20 +5,11 @@ import type { Location } from "@/lib/locations";
 import type { State } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import {
-  makeArchivedDiscussion,
-  makeArchivedReview,
-  makeArchivedTask,
-  makeState,
-} from "@/test/wails-mock";
+import { makeHistorySummary, makeState } from "@/test/wails-mock";
 
 // Two archived tasks, one archived review and no archived discussion.
 function archive(): State {
-  return makeState({
-    history: [makeArchivedTask({ id: "old-1" }), makeArchivedTask({ id: "old-2" })],
-    reviewHistory: [makeArchivedReview()],
-    discussionHistory: [],
-  });
+  return makeState({ historySummary: makeHistorySummary({ tasks: 2, reviews: 1 }) });
 }
 
 function footer(options: { rail?: boolean; state?: State; location?: Location } = {}) {
@@ -42,7 +33,7 @@ describe("SidebarFooter", () => {
 
   it("shows no count with nothing archived", () => {
     footer({
-      state: makeState({ history: [], reviewHistory: [], discussionHistory: [] }),
+      state: makeState(),
     });
 
     expect(screen.getByRole("button", { name: "History" })).toBeInTheDocument();
@@ -62,7 +53,9 @@ describe("SidebarFooter", () => {
     ["an archived discussion", { kind: "archived-discussion", id: "d" }],
   ])("presses History with %s on screen", (_, location) => {
     footer({
-      state: makeState({ ...archive(), discussionHistory: [makeArchivedDiscussion({ id: "d" })] }),
+      state: makeState({
+        historySummary: makeHistorySummary({ tasks: 2, reviews: 1, discussions: 1 }),
+      }),
       location,
     });
 

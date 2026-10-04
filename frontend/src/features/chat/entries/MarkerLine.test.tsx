@@ -133,6 +133,63 @@ describe("MarkerLine", () => {
     expect(useAppStore.getState()).toMatchObject({ panel: "artifacts", panelDocument: "PRD.md" });
   });
 
+  describe("of an archived item", () => {
+    const step = view({
+      text: "Add the limiter",
+      lead: "3",
+      aside: "c19f02e",
+      timeHidden: true,
+      body: { kind: "artifact", name: "steps/03-limiter.md", openIn: "artifacts" },
+    });
+
+    it("reads the task's document by its id, without the way to a panel", async () => {
+      vi.mocked(api.readArtifact).mockResolvedValue("# Step three");
+      const { user } = renderWithStore(
+        <MarkerLine view={step} createdAt="" archived={{ kind: "task", id: "task-9" }} />,
+        { state: makeState() },
+      );
+      expect(api.readArtifact).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole("button", { name: "3 Add the limiter, c19f02e" }));
+
+      expect(await screen.findByTestId("markdown")).toHaveTextContent("# Step three");
+      expect(api.readArtifact).toHaveBeenCalledWith("task-9", "steps/03-limiter.md");
+      expect(screen.queryByRole("button", { name: "Open in Artifacts" })).not.toBeInTheDocument();
+    });
+
+    it("reads the review's report by its id", async () => {
+      vi.mocked(api.readReviewArtifact).mockResolvedValue("## Two things");
+      const { user } = renderWithStore(
+        <MarkerLine
+          view={view({
+            text: "Report",
+            body: { kind: "artifact", name: "reviews/pass-1.md", openIn: "reports" },
+          })}
+          createdAt=""
+          archived={{ kind: "review", id: "review-4" }}
+        />,
+        { state: makeState() },
+      );
+
+      await user.click(screen.getByRole("button", { name: "Report" }));
+
+      expect(await screen.findByTestId("markdown")).toHaveTextContent("## Two things");
+      expect(api.readReviewArtifact).toHaveBeenCalledWith("review-4", "reviews/pass-1.md");
+      expect(api.readArtifact).not.toHaveBeenCalled();
+    });
+
+    it("draws the number and the commit of a line, and reads them in its name", () => {
+      renderWithStore(
+        <MarkerLine view={step} createdAt="" archived={{ kind: "task", id: "task-9" }} />,
+        { state: makeState() },
+      );
+
+      const article = screen.getByRole("article", { name: "3 Add the limiter, c19f02e" });
+      expect(article).toHaveTextContent("3");
+      expect(article).toHaveTextContent("c19f02e");
+    });
+  });
+
   it("shows a step file without its metadata header, and a report opens in Details", async () => {
     vi.mocked(api.readArtifact).mockResolvedValue("---\nrepository: web\n---\n# Step 3\n");
     const { user } = line(

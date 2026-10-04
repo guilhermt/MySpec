@@ -32,7 +32,7 @@ import {
   useForwardTarget,
   useHistory,
   useHistoryUi,
-  useLeftover,
+  useLeftoverOf,
   useMigration,
   useModelCatalog,
   useNewDiscussion,
@@ -68,6 +68,8 @@ import {
   makeDiscussion,
   makeDraft,
   makeEntry,
+  makeHistorySummary,
+  makeLeftover,
   makeMigration,
   makeModelCatalog,
   makePullRequest,
@@ -248,7 +250,9 @@ describe("applyState", () => {
 
     useAppStore.getState().applyState(withTasks());
     useAppStore.getState().openHistory();
-    useAppStore.getState().applyState({ ...WELCOME, history: [makeArchivedTask()] });
+    useAppStore
+      .getState()
+      .applyState({ ...WELCOME, historySummary: makeHistorySummary({ tasks: 1 }) });
     expect(location()).toEqual({ kind: "history" });
   });
 
@@ -428,6 +432,29 @@ describe("open task", () => {
 
     expect(location().kind).toBe("gone");
     expect(useAppStore.getState().transcripts[WEB_KEY]).toBeUndefined();
+  });
+
+  it.each([
+    ["the open pull request", { prNumber: 7, prState: "open" }, { number: 7, state: "open" }],
+    ["the merged pull request", { prNumber: 7, prState: "merged" }, { number: 7, state: "merged" }],
+    ["no pull request number", { prNumber: 0, prState: "" }, null],
+  ])("keeps %s of the task that left", (_name, fields, pr) => {
+    const withPR = makeTask({ ...WEB_TASK, pr: makePullRequest(fields) });
+    useAppStore.getState().applyState(withTasks({ tasks: [withPR, API_TASK] }));
+    useAppStore.getState().openTask(WEB_TASK.id);
+
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
+
+    expect(location()).toMatchObject({ kind: "gone", id: WEB_TASK.id, pr });
+  });
+
+  it("keeps no pull request of a task that never had one", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openTask(WEB_TASK.id);
+
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
+
+    expect(location()).toMatchObject({ kind: "gone", pr: null });
   });
 
   it("forgets tasks, transcripts and drafts once no repository is registered", () => {
@@ -942,8 +969,47 @@ describe("toasts", () => {
     useAppStore.getState().applyState(withTasks({ tasks: [API_TASK], history: [ARCHIVED] }));
 
     expect(useAppStore.getState().toasts).toEqual([
-      { id: ARCHIVED.id, taskId: ARCHIVED.id, name: ARCHIVED.name },
+      { id: ARCHIVED.id, kind: "task", task: ARCHIVED },
     ]);
+  });
+
+  it("shows a toast for a review and for a discussion archived while not open", () => {
+    useAppStore.getState().applyState(withTasks());
+
+    useAppStore
+      .getState()
+      .applyState(
+        withTasks({ reviewHistory: [ARCHIVED_REVIEW], discussionHistory: [ARCHIVED_DISCUSSION] }),
+      );
+
+    expect(useAppStore.getState().toasts).toEqual([
+      { id: ARCHIVED_REVIEW.id, kind: "review", review: ARCHIVED_REVIEW },
+      { id: ARCHIVED_DISCUSSION.id, kind: "discussion", discussion: ARCHIVED_DISCUSSION },
+    ]);
+  });
+
+  it("shows no toast for the review or the discussion archived while open", () => {
+    const review = makeReviewSummary({ id: ARCHIVED_REVIEW.id });
+    const discussion = makeDiscussion({ id: ARCHIVED_DISCUSSION.id });
+    useAppStore.getState().applyState(withTasks({ reviews: [review], discussions: [discussion] }));
+
+    useAppStore.getState().openReview(review.id);
+    useAppStore
+      .getState()
+      .applyState(
+        withTasks({ reviews: [], discussions: [discussion], reviewHistory: [ARCHIVED_REVIEW] }),
+      );
+    useAppStore.getState().openDiscussion(discussion.id);
+    useAppStore.getState().applyState(
+      withTasks({
+        reviews: [],
+        discussions: [],
+        reviewHistory: [ARCHIVED_REVIEW],
+        discussionHistory: [ARCHIVED_DISCUSSION],
+      }),
+    );
+
+    expect(useAppStore.getState().toasts).toEqual([]);
   });
 
   it("shows no toast for the task archived while open", () => {
@@ -962,8 +1028,8 @@ describe("toasts", () => {
     useAppStore.getState().applyState(withTasks({ tasks: [], history: [ARCHIVED, OLDER] }));
 
     expect(useAppStore.getState().toasts).toEqual([
-      { id: ARCHIVED.id, taskId: ARCHIVED.id, name: ARCHIVED.name },
-      { id: OLDER.id, taskId: OLDER.id, name: OLDER.name },
+      { id: ARCHIVED.id, kind: "task", task: ARCHIVED },
+      { id: OLDER.id, kind: "task", task: OLDER },
     ]);
   });
 
@@ -974,9 +1040,7 @@ describe("toasts", () => {
 
     useAppStore.getState().applyState(withTasks({ tasks: [], history: [ARCHIVED, OLDER] }));
 
-    expect(useAppStore.getState().toasts).toEqual([
-      { id: OLDER.id, taskId: OLDER.id, name: OLDER.name },
-    ]);
+    expect(useAppStore.getState().toasts).toEqual([{ id: OLDER.id, kind: "task", task: OLDER }]);
   });
 
   // The first snapshot brings the whole history; none of it was archived now.
@@ -1012,25 +1076,16 @@ describe("toasts", () => {
 });
 
 describe("notices", () => {
-  it("holds what the last deletion left on disk", () => {
-    const { result } = renderHook(() => useLeftover());
-    const leftover = {
-      path: "/home/dev/.local/share/myspec/worktrees/dev/web/add-login",
-      branch: "",
-      error: "permission denied",
-    };
+  it("holds what the deletion of an item left on disk, by its id", () => {
+    const { result } = renderHook(() => useLeftoverOf("task-1"));
+    const leftover = makeLeftover();
 
     expect(result.current).toBeNull();
 
     act(() => {
-      useAppStore.getState().setLeftover(leftover);
+      useAppStore.setState({ leftovers: { "task-1": leftover } });
     });
     expect(result.current).toEqual(leftover);
-
-    act(() => {
-      useAppStore.getState().setLeftover(null);
-    });
-    expect(result.current).toBeNull();
   });
 });
 
@@ -2545,6 +2600,58 @@ describe("history of places", () => {
   });
 });
 
+describe("the row just archived", () => {
+  const FRESH: Location = { kind: "history", fresh: { kind: "review", id: "review-1" } };
+  const TASK: Location = { kind: "task", id: WEB_TASK.id };
+
+  beforeEach(() => {
+    localStorage.clear();
+    useAppStore.getState().applyState(withTasks({ boards: [BOARD], history: [ARCHIVED] }));
+  });
+
+  it("opens the History on the row, with the search cleared", () => {
+    useAppStore.setState({ historyQuery: "refund" });
+
+    useAppStore.getState().openInHistory("review", "review-1");
+
+    expect(useAppStore.getState()).toMatchObject({ location: FRESH, historyQuery: "" });
+  });
+
+  it("does not stack the row behind the place it leaves", () => {
+    useAppStore.getState().go(FRESH);
+    useAppStore.getState().go(TASK);
+
+    expect(useAppStore.getState().back.at(-1)).toEqual({ kind: "history" });
+    expect(useAppStore.getState().back.at(-1)).not.toHaveProperty("fresh");
+  });
+
+  it("does not put the row ahead when going back from it", () => {
+    useAppStore.setState({ location: FRESH, back: [TASK], forward: [] });
+
+    useAppStore.getState().goBack();
+
+    expect(useAppStore.getState().forward).toEqual([{ kind: "history" }]);
+  });
+
+  it("does not keep the row between runs", () => {
+    useAppStore.getState().go(FRESH);
+
+    expect(localStorage.getItem(NAV_STACK_KEY) ?? "").not.toContain("fresh");
+  });
+
+  it("only takes the row when the History is already open", () => {
+    useAppStore.getState().go({ kind: "history" });
+
+    useAppStore.getState().openInHistory("task", "task-1");
+
+    expect(useAppStore.getState().location).toEqual({
+      kind: "history",
+      fresh: { kind: "task", id: "task-1" },
+    });
+    expect(useAppStore.getState().back.filter((place) => place.kind === "history")).toEqual([]);
+  });
+});
+
 describe("kept places", () => {
   const TASK: Location = { kind: "task", id: WEB_TASK.id };
   const HISTORY: Location = { kind: "history" };
@@ -2693,6 +2800,7 @@ describe("place in a new snapshot", () => {
       id: WEB_TASK.id,
       name: WEB_TASK.name,
       boardId: BOARD.id,
+      pr: null,
     });
   });
 
@@ -2708,6 +2816,7 @@ describe("place in a new snapshot", () => {
       id: WEB_TASK.id,
       name: WEB_TASK.name,
       boardId: "",
+      pr: null,
     });
   });
 
@@ -3081,5 +3190,134 @@ describe("the dialogs of a review", () => {
     act(() => useAppStore.getState().applyState(withReviews({})));
 
     expect(useAppStore.getState().reviewDialog).toEqual({ reviewId: REVIEW.id, kind: "again" });
+  });
+});
+
+describe("the History beyond the window", () => {
+  const OLD = makeArchivedTask({ id: "task-beyond", name: "beyond" });
+  const CACHED = { tasks: { [OLD.id]: OLD }, reviews: {}, discussions: {} };
+
+  it("keeps the page of an archived item that is in the cache", () => {
+    resetAppStore({
+      ui: { olderArchived: CACHED, location: { kind: "archived-task", id: OLD.id } },
+    });
+    useAppStore.getState().applyState(withTasks());
+
+    useAppStore.getState().applyState(withTasks());
+
+    expect(location()).toEqual({ kind: "archived-task", id: OLD.id });
+  });
+
+  it.each([
+    [
+      "review",
+      {
+        tasks: {},
+        reviews: { "review-beyond": makeArchivedReview({ id: "review-beyond" }) },
+        discussions: {},
+      },
+      { kind: "archived-review", id: "review-beyond" },
+    ],
+    [
+      "discussion",
+      {
+        tasks: {},
+        reviews: {},
+        discussions: { "discussion-beyond": makeArchivedDiscussion({ id: "discussion-beyond" }) },
+      },
+      { kind: "archived-discussion", id: "discussion-beyond" },
+    ],
+  ] as const)(
+    "keeps the page of an archived %s that is in the cache",
+    (_, olderArchived, place) => {
+      resetAppStore({ ui: { olderArchived, location: place } });
+      useAppStore.getState().applyState(withTasks());
+
+      useAppStore.getState().applyState(withTasks());
+
+      expect(location()).toEqual(place);
+    },
+  );
+
+  it("keeps the page of an archived item the Go is looking for", () => {
+    resetAppStore({
+      ui: {
+        archivedLookups: { [OLD.id]: "loading" },
+        location: { kind: "archived-task", id: OLD.id },
+      },
+    });
+    useAppStore.getState().applyState(withTasks());
+
+    useAppStore.getState().applyState(withTasks());
+
+    expect(location()).toEqual({ kind: "archived-task", id: OLD.id });
+  });
+
+  it("keeps the page of an archived item in the first state, where it may be beyond the window", () => {
+    resetAppStore({ ui: { location: { kind: "archived-review", id: "review-beyond" } } });
+
+    useAppStore.getState().applyState(withTasks());
+
+    expect(location()).toEqual({ kind: "archived-review", id: "review-beyond" });
+  });
+
+  it("sends the page of an archived item that is nowhere to the History", () => {
+    resetAppStore({ ui: { location: { kind: "archived-discussion", id: "discussion-gone" } } });
+    useAppStore.getState().applyState(withTasks());
+
+    useAppStore.getState().applyState(withTasks());
+
+    expect(location()).toEqual({ kind: "history" });
+  });
+
+  it("finds the archived items of the cache after the ones of the window", () => {
+    resetAppStore({ state: withTasks({ history: [ARCHIVED] }), ui: { olderArchived: CACHED } });
+
+    const { result } = renderHook(() => ({
+      window: useArchivedTask(ARCHIVED.id),
+      beyond: useArchivedTask(OLD.id),
+      none: useArchivedTask("nope"),
+    }));
+
+    expect(result.current).toEqual({ window: ARCHIVED, beyond: OLD, none: null });
+  });
+
+  it("keeps the pages across states of the same window", () => {
+    const summary = makeHistorySummary({ windowStart: "2026-06-24T00:00:00Z" });
+    const list = { ids: [OLD.id], next: null, matched: 1, status: "idle" as const, error: "" };
+    resetAppStore({
+      state: withTasks({ historySummary: summary }),
+      ui: { olderLists: { k: list } },
+    });
+
+    useAppStore.getState().applyState(withTasks({ historySummary: { ...summary } }));
+
+    expect(useAppStore.getState().olderLists).toEqual({ k: list });
+  });
+
+  it("starts the pages over when the window moves, and keeps the items", () => {
+    const list = { ids: [OLD.id], next: null, matched: 1, status: "idle" as const, error: "" };
+    resetAppStore({
+      state: withTasks({
+        historySummary: makeHistorySummary({ windowStart: "2026-06-24T12:00:00Z" }),
+      }),
+      ui: { olderArchived: CACHED, olderLists: { k: list } },
+    });
+
+    useAppStore
+      .getState()
+      .applyState(
+        withTasks({ historySummary: makeHistorySummary({ windowStart: "2026-06-24T12:00:00Z" }) }),
+      );
+    expect(useAppStore.getState().olderLists).toEqual({ k: list });
+
+    useAppStore
+      .getState()
+      .applyState(
+        withTasks({ historySummary: makeHistorySummary({ windowStart: "2026-06-25T12:00:00Z" }) }),
+      );
+
+    expect(useAppStore.getState().olderLists).toEqual({});
+    expect(useAppStore.getState().olderArchived).toEqual(CACHED);
   });
 });

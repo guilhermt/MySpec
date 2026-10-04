@@ -899,9 +899,13 @@ func (f *fixture) snapshot() bindings.State {
 			f.taskSvc.List(), f.taskArtifacts, f.flow.Steps, f.flow.PullRequest, f.flow.Worktree, f.sessions.Conversations,
 			f.repositories.Get, f.sessions.Summaries(), nil,
 		),
-		History: bindings.FromArchived(
-			f.taskSvc.ListArchived(), f.taskArtifacts, f.taskSvc.PRRun, f.repositories.Get,
-		),
+		History: bindings.FromArchived(f.taskSvc.ListArchived(), bindings.ArchivedSources{
+			Artifacts:    f.taskArtifacts,
+			PRRun:        f.taskSvc.PRRun,
+			PRPasses:     f.taskSvc.PRPasses,
+			StepRuns:     f.taskSvc.StepRuns,
+			Repositories: f.repositories.Get,
+		}),
 		Boards: bindings.FromBoards(
 			f.boards.List(), f.boards.Stored, f.boards.Reading,
 			f.repositories.List(), f.repositories.Missing, f.taskSvc.CardTasks(),

@@ -47,6 +47,8 @@ export interface TaskMenuProps {
 /** TaskMenu is the ⋯ of a task: what can be done to its step, its pull request, its stages and itself. */
 export function TaskMenu({ task }: TaskMenuProps) {
   const moreRef = useRef<HTMLButtonElement>(null);
+  // The item hands the focus to the dialog it opens; the menu doesn't take it back.
+  const handsFocus = useRef(false);
   const [opened, setOpened] = useState<Opened | null>(null);
   const groups = taskMenuOf(task, useNow(MINUTE, true));
   const step = currentStepOf(task);
@@ -74,12 +76,21 @@ export function TaskMenu({ task }: TaskMenuProps) {
         void reviewAgain(task.id);
         break;
       default:
+        handsFocus.current =
+          action.kind === "deleteTask" || action.kind === "discardStep" || action.kind === "stage";
         setOpened(action);
     }
   };
   const close = (open: boolean) => {
     if (!open) {
       setOpened(null);
+    }
+  };
+  // A dialog the item handed the focus to gives it back to the ⋯ when it closes.
+  const closeDialog = (open: boolean) => {
+    close(open);
+    if (!open) {
+      moreRef.current?.focus();
     }
   };
 
@@ -89,7 +100,14 @@ export function TaskMenu({ task }: TaskMenuProps) {
         <MenuTrigger
           render={<IconButton ref={moreRef} label="More actions" icon={ICONS.more} size="sm" />}
         />
-        <MenuContent align="end">
+        <MenuContent
+          align="end"
+          finalFocus={() => {
+            const handed = handsFocus.current;
+            handsFocus.current = false;
+            return !handed;
+          }}
+        >
           {groups.map((group) => (
             <Fragment key={group.label ?? "last"}>
               {group.label === null && <MenuSeparator />}
@@ -105,7 +123,7 @@ export function TaskMenu({ task }: TaskMenuProps) {
       </Menu>
 
       {opened?.kind === "discardStep" && step !== null && (
-        <DiscardStepDialog task={task} step={step} open onOpenChange={close} />
+        <DiscardStepDialog task={task} step={step} open onOpenChange={closeDialog} />
       )}
       {opened?.kind === "stage" && (
         <StageActionDialog
@@ -113,15 +131,13 @@ export function TaskMenu({ task }: TaskMenuProps) {
           action={opened.action}
           stage={opened.stage}
           open
-          onOpenChange={close}
+          onOpenChange={closeDialog}
         />
       )}
       <DeleteTaskDialog
-        taskId={task.id}
-        name={task.name}
-        archived={false}
+        task={task}
         open={opened?.kind === "deleteTask"}
-        onOpenChange={close}
+        onOpenChange={closeDialog}
       />
       <ReviewModePopover
         task={task}

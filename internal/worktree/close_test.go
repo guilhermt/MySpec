@@ -337,17 +337,161 @@ func TestPurgeReportsTheFolderGitCouldNotRemove(t *testing.T) {
 	if !kept {
 		t.Fatal("Purge() left nothing behind, want the worktree that stayed")
 	}
-	if left.Path != wt.Path {
-		t.Errorf("Path = %q, want the folder %q", left.Path, wt.Path)
+	if left.Path != wt.Path || !left.PathKept {
+		t.Errorf("Path = %q, kept = %v, want the folder %q kept", left.Path, left.PathKept, wt.Path)
 	}
-	if left.Error == "" {
-		t.Error("Error is empty, want what git said")
+	if left.PathError == "" {
+		t.Error("PathError is empty, want what git said")
+	}
+	// Git forgets the worktree before it fails on the folder.
+	if left.PathRegistered {
+		t.Error("PathRegistered = true, want the folder git forgot")
 	}
 	if !f.gone(t, wt) {
 		t.Error("the worktree that stayed is still registered, want the record gone anyway")
 	}
 	if len(f.store.all()) != 0 {
 		t.Errorf("the store has %d worktrees, want none", len(f.store.all()))
+	}
+}
+
+func TestPurgeSaysWhatStayedOfEachPart(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		hold       func(t *testing.T, f fixture, wt worktree.Worktree)
+		pathKept   bool
+		registered bool
+		locked     bool
+		branchKept bool
+	}{
+		{
+			name: "both went",
+			hold: func(*testing.T, fixture, worktree.Worktree) {},
+		},
+		{
+			name: "the worktree and the branch stayed",
+			hold: func(t *testing.T, f fixture, wt worktree.Worktree) {
+				t.Helper()
+				gittest.Run(t, wt.Path, "checkout", "--detach")
+				gittest.Run(t, f.repo.Path, "checkout", wt.Branch)
+				lockDir(t, filepath.Dir(wt.Path))
+			},
+			pathKept:   true,
+			branchKept: true,
+		},
+		{
+			// A locked worktree is one git refuses to remove and keeps listed,
+			// with its branch checked out in it.
+			name: "the worktree stayed registered, with its branch",
+			hold: func(t *testing.T, f fixture, wt worktree.Worktree) {
+				t.Helper()
+				gittest.Run(t, f.repo.Path, "worktree", "lock", wt.Path)
+			},
+			pathKept:   true,
+			registered: true,
+			locked:     true,
+			branchKept: true,
+		},
+		{
+			name: "only the worktree stayed",
+			hold: func(t *testing.T, _ fixture, wt worktree.Worktree) {
+				t.Helper()
+				lockDir(t, filepath.Dir(wt.Path))
+			},
+			pathKept: true,
+		},
+		{
+			// The clone has the branch checked out, so git will not delete it.
+			name: "only the branch stayed",
+			hold: func(t *testing.T, f fixture, wt worktree.Worktree) {
+				t.Helper()
+				gittest.Run(t, wt.Path, "checkout", "--detach")
+				gittest.Run(t, f.repo.Path, "checkout", wt.Branch)
+			},
+			branchKept: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t, true)
+			wt := f.ensure(t)
+			tt.hold(t, f, wt)
+
+			left, kept := f.svc.Purge(t.Context(), f.task.ID)
+
+			if kept != (tt.pathKept || tt.branchKept) {
+				t.Fatalf("Purge() kept = %v, want %v", kept, tt.pathKept || tt.branchKept)
+			}
+			if !kept {
+				return
+			}
+			if left.RepoPath != f.repo.Path || left.Path != wt.Path || left.Branch != wt.Branch {
+				t.Errorf("Purge() = %+v, want the clone, the folder and the branch of the worktree", left)
+			}
+			if left.PathKept != tt.pathKept || (left.PathError != "") != tt.pathKept {
+				t.Errorf("path kept = %v with %q, want kept = %v with what git said", left.PathKept, left.PathError, tt.pathKept)
+			}
+			if left.BranchKept != tt.branchKept || (left.BranchError != "") != tt.branchKept {
+				t.Errorf("branch kept = %v with %q, want kept = %v with what git said", left.BranchKept, left.BranchError, tt.branchKept)
+			}
+			if left.PathRegistered != tt.registered || left.PathLocked != tt.locked {
+				t.Errorf("path registered = %v, locked = %v, want %v, %v",
+					left.PathRegistered, left.PathLocked, tt.registered, tt.locked)
+			}
+			if tt.pathKept && tt.branchKept &&
+				(strings.Contains(left.PathError, left.BranchError) || strings.Contains(left.BranchError, left.PathError)) {
+				t.Errorf("path error %q, branch error %q, want each part with only what git said of it", left.PathError, left.BranchError)
+			}
+		})
+	}
+}
+
+func TestRegistrationSaysWhetherGitCanStillRemoveAWorktreeAndHow(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+	wt := f.ensure(t)
+	listed := worktree.Registration{Registered: true}
+
+	if got := f.svc.Registration(t.Context(), wt.RepoPath, wt.Path+string(filepath.Separator)); got != listed {
+		t.Errorf("Registration() = %+v for the worktree git lists, want %+v", got, listed)
+	}
+	if got := f.svc.Registration(t.Context(), wt.RepoPath, filepath.Join(filepath.Dir(wt.Path), "elsewhere")); got != (worktree.Registration{}) {
+		t.Errorf("Registration() = %+v for a folder git never listed, want none", got)
+	}
+	// A listing that fails keeps the command of a worktree.
+	if got := f.svc.Registration(t.Context(), t.TempDir(), wt.Path); got != listed {
+		t.Errorf("Registration() = %+v where git could not list, want %+v", got, listed)
+	}
+	gittest.Run(t, f.repo.Path, "worktree", "lock", wt.Path)
+	if got, want := f.svc.Registration(t.Context(), wt.RepoPath, wt.Path), (worktree.Registration{Registered: true, Locked: true}); got != want {
+		t.Errorf("Registration() = %+v for a locked worktree, want %+v", got, want)
+	}
+	gittest.Run(t, f.repo.Path, "worktree", "unlock", wt.Path)
+	if err := os.RemoveAll(wt.Path); err != nil {
+		t.Fatalf("RemoveAll(%s) = %v, want nil", wt.Path, err)
+	}
+	if got := f.svc.Registration(t.Context(), wt.RepoPath, wt.Path); got != (worktree.Registration{}) {
+		t.Errorf("Registration() = %+v for a worktree git would prune, want none", got)
+	}
+}
+
+func TestAheadCountsTheCommitsOfTheBranchOutsideTheBase(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+	wt := f.ensure(t)
+
+	if got, err := f.svc.Ahead(t.Context(), wt, wt.Base); err != nil || got != 0 {
+		t.Fatalf("Ahead() = %d, %v, want 0 on a branch that just started", got, err)
+	}
+
+	gittest.Commit(t, wt.Path, "one.txt", "one\n", "Add one")
+	gittest.Commit(t, wt.Path, "two.txt", "two\n", "Add two")
+
+	if got, err := f.svc.Ahead(t.Context(), wt, wt.Base); err != nil || got != 2 {
+		t.Errorf("Ahead() = %d, %v, want 2", got, err)
 	}
 }
 

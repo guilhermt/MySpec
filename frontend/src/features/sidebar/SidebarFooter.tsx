@@ -5,14 +5,7 @@ import { IconButton } from "@/components/system/IconButton";
 import { Tooltip } from "@/components/system/Tooltip";
 import { ThemeButton } from "@/features/sidebar/ThemeButton";
 import { cn } from "@/lib/utils";
-import {
-  useAppStore,
-  useDiscussionHistory,
-  useHistory,
-  useHistoryUi,
-  useReviewHistory,
-  useSettingsUi,
-} from "@/store/app-store";
+import { useAppStore, useHistorySummary, useHistoryUi, useSettingsUi } from "@/store/app-store";
 
 export interface SidebarFooterProps {
   /** rail stacks the three as icon buttons, for the collapsed strip. */
@@ -46,9 +39,7 @@ function archivedText(tasks: number, reviews: number, discussions: number): stri
  * is on screen, History also with an archived item.
  */
 export function SidebarFooter({ rail = false, welcome = false }: SidebarFooterProps) {
-  const tasks = useHistory().length;
-  const reviews = useReviewHistory().length;
-  const discussions = useDiscussionHistory().length;
+  const { tasks, reviews, discussions } = useHistorySummary();
   const { historyOpen } = useHistoryUi();
   const { settingsOpen } = useSettingsUi();
   const openHistory = useAppStore((state) => state.openHistory);

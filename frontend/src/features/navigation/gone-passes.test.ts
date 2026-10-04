@@ -37,6 +37,20 @@ describe("goneReviewText", () => {
       archived: { outcome: "closed", closedAt: "" },
       want: `It was closed. ${TAIL}`,
     },
+    {
+      name: "a merge of another day, with the day once",
+      archived: {
+        outcome: "merged",
+        mergedBy: "rsouza",
+        mergedAt: new Date(2026, 8, 29, 16, 20).toISOString(),
+      },
+      want: `rsouza merged it into dev on Sep 29 at 16:20. ${TAIL}`,
+    },
+    {
+      name: "a close of another day",
+      archived: { outcome: "closed", closedAt: new Date(2026, 8, 23, 9, 5).toISOString() },
+      want: `It was closed on Sep 23 at 09:05. ${TAIL}`,
+    },
   ])("says $name", ({ archived, want }) => {
     expect(goneReviewText(makeArchivedReview(archived), NOW)).toBe(want);
   });

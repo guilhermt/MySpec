@@ -1,7 +1,12 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
-import { ListSectionHeader, type ListSectionHeaderProps } from "./ListSectionHeader";
+import {
+  DaySectionHeader,
+  type DaySectionHeaderProps,
+  ListSectionHeader,
+  type ListSectionHeaderProps,
+} from "./ListSectionHeader";
 
 function header(props: Partial<ListSectionHeaderProps> = {}) {
   const onToggle = vi.fn();
@@ -76,5 +81,51 @@ describe("ListSectionHeader", () => {
   it("shows the count", () => {
     header();
     expect(screen.getByText("27")).toBeInTheDocument();
+  });
+});
+
+describe("DaySectionHeader", () => {
+  function day(props: Partial<DaySectionHeaderProps> = {}) {
+    const onFocus = vi.fn();
+    const rendered = renderWithStore(
+      <DaySectionHeader
+        id="2026-09-22"
+        name="Monday, Sep 22"
+        count={5}
+        label="Archived on Monday, Sep 22: 5"
+        tabStop={false}
+        onFocus={onFocus}
+        {...props}
+      />,
+    );
+    return { ...rendered, onFocus, item: screen.getByRole("treeitem") };
+  }
+
+  it("is a treeitem of level 1, always open, named by its label", () => {
+    const { item } = day();
+    expect(item).toHaveAttribute("aria-level", "1");
+    expect(item).toHaveAttribute("aria-expanded", "true");
+    expect(item).toHaveAccessibleName("Archived on Monday, Sep 22: 5");
+    expect(item).toHaveAttribute("data-section-id", "2026-09-22");
+  });
+
+  it("has no chevron and does not collapse on click", async () => {
+    const { user, item } = day();
+    expect(item.querySelector("svg")).toBeNull();
+    await user.click(item);
+    expect(item).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("says its name and its count", () => {
+    day();
+    expect(screen.getByText("Monday, Sep 22")).toBeInTheDocument();
+    expect(screen.getByText("5")).toBeInTheDocument();
+  });
+
+  it("is the tab stop only when told, and tells its focus", () => {
+    const { item, onFocus } = day({ tabStop: true });
+    expect(item).toHaveAttribute("tabindex", "0");
+    item.focus();
+    expect(onFocus).toHaveBeenCalled();
   });
 });

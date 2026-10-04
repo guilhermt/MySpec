@@ -1,6 +1,7 @@
 package bindings_test
 
 import (
+	"log/slog"
 	"sync"
 	"testing"
 
@@ -23,6 +24,10 @@ func calls(s *bindings.Services) map[string]func() error {
 		"board":      func() error { return s.Board.RefreshBoard("nope") },
 		"review":     func() error { return s.Review.ApplyReview("nope") },
 		"discussion": func() error { return s.Discussion.ArchiveDiscussion("nope") },
+		"history": func() error {
+			_, err := s.History.ListArchived(bindings.HistoryRequest{Before: "nope"})
+			return err
+		},
 	}
 }
 
@@ -36,6 +41,11 @@ func builtServices(f *fixture) bindings.Services {
 		Board:      f.boardService,
 		Review:     f.reviewSvc,
 		Discussion: f.discussionSvc,
+		History: bindings.NewHistoryService(bindings.HistorySources{
+			Tasks:       func() []bindings.ArchivedTask { return nil },
+			Reviews:     func() []bindings.ArchivedReview { return nil },
+			Discussions: func() []bindings.ArchivedDiscussion { return nil },
+		}, slog.New(slog.DiscardHandler)),
 	}
 }
 
@@ -145,7 +155,7 @@ func TestWailsListsEveryPlaceholderInOrder(t *testing.T) {
 
 	want := []any{
 		services.State, services.Repository, services.Settings, services.Task,
-		services.Board, services.Review, services.Discussion, services.Attention,
+		services.Board, services.Review, services.Discussion, services.Attention, services.History,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("len(Wails()) = %d, want %d", len(got), len(want))

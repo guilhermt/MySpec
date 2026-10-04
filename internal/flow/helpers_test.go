@@ -1486,6 +1486,8 @@ type memWorktrees struct {
 	merged    bool   // whether git sees every branch in the base it is asked about
 	baseErr   error
 	mergedErr error
+	ahead     int // how many commits every branch is said to have past the base
+	aheadErr  error
 	subject   string           // the subject every commit reading answers with
 	committed time.Time        // the committer date every commit reading answers with
 	phases    []worktree.Phase // reported by every Ensure
@@ -1662,6 +1664,17 @@ func (m *memWorktrees) Merged(_ context.Context, wt worktree.Worktree, base stri
 		return false, m.mergedErr
 	}
 	return m.merged, nil
+}
+
+func (m *memWorktrees) Ahead(_ context.Context, wt worktree.Worktree, base string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "ahead:"+wt.TaskID+":"+base)
+	if m.aheadErr != nil {
+		return 0, m.aheadErr
+	}
+	return m.ahead, nil
 }
 
 func (m *memWorktrees) Close(

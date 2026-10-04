@@ -60,6 +60,9 @@ type Repository struct {
 	ReviewInstructions string `json:"reviewInstructions"`
 	ActiveReviews      int    `json:"activeReviews"`
 	ArchivedReviews    int    `json:"archivedReviews"`
+	// ArchivedDiscussions are the archived discussions with a card or a
+	// published draft of the repository.
+	ArchivedDiscussions int `json:"archivedDiscussions"`
 }
 
 // RepositoryCandidate is a clone of a GitHub repository the scan found under
@@ -126,8 +129,8 @@ type State struct {
 	// Tasks are the active tasks of every repository, in creation order; never
 	// nil.
 	Tasks []TaskSummary `json:"tasks"`
-	// History are the archived tasks of every repository, newest first; never
-	// nil.
+	// History are the archived tasks of every repository since
+	// HistorySummary.WindowStart, newest first; never nil.
 	History []ArchivedTask `json:"history"`
 	// Boards are the registered boards, by title ignoring case; never nil.
 	Boards []Board `json:"boards"`
@@ -138,13 +141,16 @@ type State struct {
 	// never nil.
 	Reviews []ReviewSummary `json:"reviews"`
 	// ReviewHistory are the reviews whose pull request was merged or closed,
-	// newest first; never nil.
+	// archived since HistorySummary.WindowStart, newest first; never nil.
 	ReviewHistory []ArchivedReview `json:"reviewHistory"`
 	// Discussions are the active discussions of every board, in creation
 	// order; never nil.
 	Discussions []DiscussionSummary `json:"discussions"`
-	// DiscussionHistory are the archived discussions, newest first; never nil.
+	// DiscussionHistory are the discussions archived since
+	// HistorySummary.WindowStart, newest first; never nil.
 	DiscussionHistory []ArchivedDiscussion `json:"discussionHistory"`
+	// HistorySummary is the whole History in numbers.
+	HistorySummary HistorySummary `json:"historySummary"`
 	// CloneFolder is where new clones go; "" until chosen.
 	CloneFolder string `json:"cloneFolder"`
 }
@@ -571,13 +577,28 @@ type ArchivedStep struct {
 	File    string       `json:"file"` // name inside steps/, the artifact is "steps/" + File; one-shot.md for the single step of a One-Shot task
 	Title   string       `json:"title"`
 	Reports []StepReport `json:"reports"` // never nil
+	// CommitSHA is the commit the step produced; "" when none is recorded.
+	CommitSHA string `json:"commitSha"`
 }
 
 // ArchivedPR is the pull request an archived task opened.
 type ArchivedPR struct {
-	Number int    `json:"number"`
-	URL    string `json:"url"`
-	State  string `json:"state"`
+	Number   int    `json:"number"`
+	URL      string `json:"url"`
+	State    string `json:"state"`
+	Base     string `json:"base"`     // the branch it merged into; "" when unknown
+	MergedBy string `json:"mergedBy"` // the login of who merged it; "" when unknown
+	MergedAt string `json:"mergedAt"` // RFC 3339; "" when unknown
+}
+
+// ArchivedPRReport is a pass of the review of the pull request of an archived
+// task, without its text, which ReadArtifact reads as "pr/" + File.
+type ArchivedPRReport struct {
+	Pass       int    `json:"pass"`
+	File       string `json:"file"` // name inside pr/
+	Clean      bool   `json:"clean"`
+	Structured bool   `json:"structured"`
+	Findings   int    `json:"findings"` // how many findings a structured pass had; -1 for a pass in text
 }
 
 // ArchivedTask is a finished task, as the history shows it: its artifacts and
@@ -599,6 +620,10 @@ type ArchivedTask struct {
 	ArtifactVersion int            `json:"artifactVersion"`
 	CreatedAt       string         `json:"createdAt"`
 	ArchivedAt      string         `json:"archivedAt"`
+
+	Close      *CloseResult       `json:"close"`      // what the closing did; nil for a task archived before it was recorded
+	HasPRDraft bool               `json:"hasPrDraft"` // pr/draft.md was kept
+	PRReports  []ArchivedPRReport `json:"prReports"`  // by pass; never nil
 }
 
 // WorktreePreview is the worktree the deletion of a task would remove, and
@@ -615,6 +640,7 @@ type WorktreePreview struct {
 type BranchPreview struct {
 	Name   string `json:"name"`
 	Merged bool   `json:"merged"`
+	Ahead  int    `json:"ahead"` // commits of the branch not in its base; 0 when merged, -1 when unknown
 	Error  string `json:"error"`
 }
 
@@ -629,17 +655,38 @@ type PRPreview struct {
 // DeletePreview is what deleting a task would destroy, as the confirmation
 // dialog spells it out.
 type DeletePreview struct {
-	SessionRunning bool             `json:"sessionRunning"`
-	Worktree       *WorktreePreview `json:"worktree"` // nil when there is none
-	Branch         *BranchPreview   `json:"branch"`   // nil when there is none
-	PR             *PRPreview       `json:"pr"`       // nil when there is none
+	Worktree *WorktreePreview `json:"worktree"` // nil when there is none
+	Branch   *BranchPreview   `json:"branch"`   // nil when there is none
+	PR       *PRPreview       `json:"pr"`       // nil when there is none
 }
 
-// Leftover is what git could not remove when a task was deleted.
+// Leftover is what git could not remove when a task or a review was deleted:
+// each part, with what git said, and the clone it belongs to.
 type Leftover struct {
-	Path   string `json:"path"`   // "" when the folder went
-	Branch string `json:"branch"` // "" when the branch went
-	Error  string `json:"error"`
+	RepoPath string            `json:"repoPath"`
+	Worktree *LeftoverWorktree `json:"worktree"` // nil when the item had none
+	Branch   *LeftoverBranch   `json:"branch"`   // nil for a review, which has no branch of its own
+}
+
+// LeftoverWorktree is the worktree folder of a deletion.
+type LeftoverWorktree struct {
+	Path  string `json:"path"`
+	Kept  bool   `json:"kept"`  // git couldn't remove it
+	Error string `json:"error"` // what git said; "" when it went
+	// Registered says that git still lists the folder that stayed as a
+	// worktree, which git worktree remove --force takes down; a folder git
+	// forgot is removed as a folder.
+	Registered bool `json:"registered"`
+	// Locked says that the worktree git lists is locked, which only
+	// git worktree remove --force --force takes down.
+	Locked bool `json:"locked"`
+}
+
+// LeftoverBranch is the branch of a deletion.
+type LeftoverBranch struct {
+	Name  string `json:"name"`
+	Kept  bool   `json:"kept"`
+	Error string `json:"error"`
 }
 
 // DeleteResult is what deleting a task left behind.
@@ -1118,6 +1165,8 @@ type BoardCard struct {
 	RepositoryID   string            `json:"repositoryId"`   // the registered repository of the card; "" when not registered
 	ActiveTaskID   string            `json:"activeTaskId"`   // "" without one
 	ArchivedTaskID string            `json:"archivedTaskId"` // the most recently archived; "" without one
+	// ArchivedTaskName is the name of the task ArchivedTaskID names; "" without one.
+	ArchivedTaskName string `json:"archivedTaskName"`
 	// Action is start, clone, clone_missing, add_to_board, other_board,
 	// has_task or closed: what Start task does for the card, a string for the
 	// same reason as State.Theme.
@@ -1727,4 +1776,44 @@ type DiscussionContextRequest struct {
 	BoardID string   `json:"boardId"`
 	Text    string   `json:"text"`
 	Cards   []string `json:"cards"`
+}
+
+// HistorySummary is the whole History in numbers, beyond the window the state
+// carries.
+type HistorySummary struct {
+	Tasks       int    `json:"tasks"`
+	Reviews     int    `json:"reviews"`
+	Discussions int    `json:"discussions"`
+	Oldest      string `json:"oldest"`      // RFC 3339, the archiving of the oldest item; "" with none
+	WindowStart string `json:"windowStart"` // RFC 3339; History, ReviewHistory and DiscussionHistory hold what was archived from it on
+}
+
+// HistoryRequest asks for a page of the History.
+type HistoryRequest struct {
+	// Before and BeforeID are the cursor: the page holds items archived before
+	// Before (RFC 3339), or at Before with an id below BeforeID. The first page
+	// asks for HistorySummary.WindowStart and "".
+	Before       string `json:"before"`
+	BeforeID     string `json:"beforeId"`
+	Query        string `json:"query"`        // "" matches every item
+	RepositoryID string `json:"repositoryId"` // "" for every repository
+}
+
+// HistoryPage is a page of the History, newest first.
+type HistoryPage struct {
+	Tasks        []ArchivedTask       `json:"tasks"`       // never nil
+	Reviews      []ArchivedReview     `json:"reviews"`     // never nil
+	Discussions  []ArchivedDiscussion `json:"discussions"` // never nil
+	NextBefore   string               `json:"nextBefore"`  // the cursor of the next page; "" when there is none
+	NextBeforeID string               `json:"nextBeforeId"`
+	// Matched is how many items of the whole History, the window included,
+	// match the query and the repository.
+	Matched int `json:"matched"`
+}
+
+// ArchivedItem is one archived item; only the field of its kind is set.
+type ArchivedItem struct {
+	Task       *ArchivedTask       `json:"task"`
+	Review     *ArchivedReview     `json:"review"`
+	Discussion *ArchivedDiscussion `json:"discussion"`
 }

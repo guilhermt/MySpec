@@ -368,6 +368,7 @@ func (a *App) bound(
 		),
 		Discussion: bindings.NewDiscussionService(a.discussionFlow, a.discussions, repositories, log),
 		Attention:  bindings.NewAttentionService(a.attention),
+		History:    bindings.NewHistoryService(a.historySources(), log),
 	}
 }
 

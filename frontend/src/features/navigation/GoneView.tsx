@@ -1,12 +1,23 @@
+import { CloseResult } from "@/components/system/CloseResult";
+import { CopyBlock } from "@/components/system/CopyBlock";
 import type { GoneAction } from "@/components/system/GonePage";
 import { GonePage } from "@/components/system/GonePage";
 import { ICONS, type IconGlyph } from "@/components/system/icons";
+import { closeLegendTime, closeResultLines } from "@/features/history/close-result";
 import { gonePassLines, goneReviewText } from "@/features/navigation/gone-passes";
 import {
   DELETED_DISCUSSION_TEXT,
   goneDiscussionText,
   goneRoundLines,
 } from "@/features/navigation/gone-rounds";
+import {
+  closedTaskText,
+  deletedTaskText,
+  forceWarning,
+  leftoverCommands,
+  leftoverHeading,
+  leftoverLines,
+} from "@/features/navigation/gone-task";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { findBoard } from "@/lib/boards";
 import {
@@ -18,11 +29,15 @@ import {
   locationTitle,
 } from "@/lib/locations";
 import { nextWaiting } from "@/lib/situations";
+import type { Leftover } from "@/lib/wails";
 import {
   useAppStore,
   useArchivedDiscussion,
   useArchivedReview,
+  useArchivedTask,
   useBackTarget,
+  useLeftoverOf,
+  useRepository,
 } from "@/store/app-store";
 
 export interface GoneViewProps {
@@ -36,18 +51,6 @@ const ICON: Record<GoneOutcome, IconGlyph> = {
   closed: ICONS.merge,
   removed: ICONS.board,
 };
-
-// The archived item the page of an item that left opens in the History.
-function archivedOf(item: Exclude<GoneLocation["item"], "board">, id: string): Location {
-  switch (item) {
-    case "task":
-      return { kind: "archived-task", id };
-    case "review":
-      return { kind: "archived-review", id };
-    case "discussion":
-      return { kind: "archived-discussion", id };
-  }
-}
 
 /** GonePasses is the result of each pass of a review that ended, or of each round of a discussion: what went to GitHub or to the agent, and when. */
 function GonePasses({
@@ -77,18 +80,55 @@ function GonePasses({
 }
 
 /**
+ * GoneLeftover is what git couldn't remove when the item was deleted, then the commands that remove it
+ * from the clone. The warning comes before the commands: they delete what the worktree may still hold.
+ */
+function GoneLeftover({ leftover }: { leftover: Leftover }) {
+  const warning = forceWarning(leftover);
+  return (
+    <>
+      <CloseResult
+        legend="Git couldn't remove everything"
+        label="What stayed on disk"
+        lines={leftoverLines(leftover)}
+      />
+      {warning !== null && (
+        <p className="flex gap-(--space-2) text-(length:--text-meta) leading-(--leading-meta) text-ink-2">
+          <span aria-hidden="true">◇</span>
+          <span>
+            <span className="font-medium text-ink-1">{warning}</span> Copy out what you want to keep
+            first.
+          </span>
+        </p>
+      )}
+      <CopyBlock
+        heading="sentence"
+        label={leftoverHeading(leftover)}
+        copyLabel="Copy the command"
+        text={leftoverCommands(leftover)}
+      />
+    </>
+  );
+}
+
+/**
  * GoneView is the place of an item that left while open: what became of it, read from the state,
  * and the ways on from there.
  */
 export function GoneView({ location }: GoneViewProps) {
   const app = useAppStore((state) => state.app);
   const go = useAppStore((state) => state.go);
+  const openInHistory = useAppStore((state) => state.openInHistory);
   const goBack = useAppStore((state) => state.goBack);
   const openSituation = useAppStore((state) => state.openSituation);
   const backTarget = useBackTarget();
   const outcome = goneOutcome(app, location);
   // A review that ended says how, from the archive; a deleted one has nothing to say.
   const archived = useArchivedReview(location.item === "review" ? location.id : null);
+  const archivedTask = useArchivedTask(location.item === "task" ? location.id : null);
+  const close = archivedTask?.close ?? null;
+  const repository = useRepository(archivedTask?.repositoryId ?? "");
+  const leftover = useLeftoverOf(location.id);
   const archivedDiscussion = useArchivedDiscussion(
     location.item === "discussion" ? location.id : null,
   );
@@ -123,11 +163,8 @@ export function GoneView({ location }: GoneViewProps) {
           },
     );
     if (outcome !== "deleted") {
-      const archived = archivedOf(location.item, location.id);
-      actions.push({
-        label: "Open in History",
-        onClick: () => go(archived, { focus: "title" }),
-      });
+      const { item, id } = location;
+      actions.push({ label: "Open in History", onClick: () => openInHistory(item, id) });
     }
     actions.push(returnAction(location, findBoard(app, location.boardId)?.title ?? null, go));
   }
@@ -139,6 +176,14 @@ export function GoneView({ location }: GoneViewProps) {
         icon={ICON[outcome]}
         title={goneTitle(location, outcome)}
         {...(archived !== null ? { description: goneReviewText(archived, now) } : {})}
+        {...(location.item === "task"
+          ? {
+              description:
+                archivedTask === null
+                  ? deletedTaskText(location.pr)
+                  : closedTaskText(archivedTask, now),
+            }
+          : {})}
         {...(location.item === "discussion"
           ? {
               description:
@@ -149,6 +194,15 @@ export function GoneView({ location }: GoneViewProps) {
           : {})}
         actions={actions}
       >
+        {close !== null && (
+          <CloseResult
+            legend="Closing"
+            time={closeLegendTime(close, now)}
+            label="What the closing did"
+            lines={closeResultLines(close, repository?.path ?? null)}
+          />
+        )}
+        {leftover !== null && <GoneLeftover leftover={leftover} />}
         {passes.length > 0 && <GonePasses label="Passes" lines={passes} />}
         {rounds.length > 0 && <GonePasses label="Rounds" lines={rounds} />}
       </GonePage>

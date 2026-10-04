@@ -13,6 +13,7 @@ import {
   locationTitle,
   openItemId,
   sameLocation,
+  withoutFresh,
 } from "@/lib/locations";
 import {
   makeArchivedDiscussion,
@@ -211,16 +212,41 @@ describe("isLocation", () => {
     ["a task", { kind: "task", id: "task-1" }, true],
     ["a page of Settings", { kind: "settings", section: "pr_review" }, true],
     ["an item that left", GONE, true],
+    ["the History", { kind: "history" }, true],
+    ["the History on a fresh row", { kind: "history", fresh: { kind: "review", id: "r" } }, true],
+    [
+      "the History on a row of an unknown kind",
+      { kind: "history", fresh: { kind: "card", id: "r" } },
+      false,
+    ],
+    ["the History on a row without an id", { kind: "history", fresh: { kind: "task" } }, false],
     ["a task without an id", { kind: "task" }, false],
     ["a task with a numeric id", { kind: "task", id: 1 }, false],
     ["an unknown page of Settings", { kind: "settings", section: "colors" }, false],
     ["an item that left of an unknown kind", { ...GONE, item: "card" }, false],
+    ["a task that left with its pull request", { ...GONE, pr: { number: 7, state: "open" } }, true],
+    ["a task that left without a pull request", { ...GONE, pr: null }, true],
+    [
+      "a task that left with a pull request of an unknown state",
+      { ...GONE, pr: { number: 7, state: "x" } },
+      false,
+    ],
     ["an item that left without a name", { ...GONE, name: undefined }, false],
     ["an unknown kind", { kind: "inbox" }, false],
     ["null", null, false],
     ["a string", "home", false],
   ])("%s is %s", (_name, value, valid) => {
     expect(isLocation(value)).toBe(valid);
+  });
+});
+
+describe("withoutFresh", () => {
+  it("takes the row off the History and leaves every other place as it is", () => {
+    expect(withoutFresh({ kind: "history", fresh: { kind: "task", id: "t" } })).toEqual({
+      kind: "history",
+    });
+    expect(withoutFresh({ kind: "task", id: "t" })).toEqual({ kind: "task", id: "t" });
+    expect(withoutFresh(HOME)).toBe(HOME);
   });
 });
 

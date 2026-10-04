@@ -1,7 +1,7 @@
 import { verdictLabel } from "@/features/reviews/review-status";
 import { counted } from "@/lib/situations";
 import type { ArchivedReview, ReviewPass } from "@/lib/wails";
-import { clockTime } from "@/lib/when";
+import { atMoment, clockTime } from "@/lib/when";
 
 // GONE_TAIL is what every text of a review that left says after what became of its pull request.
 const GONE_TAIL =
@@ -13,20 +13,14 @@ const GONE_TAIL =
  */
 export function goneReviewText(archived: ArchivedReview, now: number): string {
   if (archived.outcome === "merged") {
-    const at = timeOf(archived.mergedAt, now);
+    const at = atMoment(archived.mergedAt, now);
     const merged =
       archived.mergedBy === ""
         ? `It was merged into ${archived.baseBranch}${at}.`
         : `${archived.mergedBy} merged it into ${archived.baseBranch}${at}.`;
     return `${merged} ${GONE_TAIL}`;
   }
-  return `It was closed${timeOf(archived.closedAt, now)}. ${GONE_TAIL}`;
-}
-
-// timeOf is " at 16:20", or "" when the moment wasn't kept.
-function timeOf(iso: string, now: number): string {
-  const time = clockTime(iso, now);
-  return time === "" ? "" : ` at ${time}`;
+  return `It was closed${atMoment(archived.closedAt, now)}. ${GONE_TAIL}`;
 }
 
 /**

@@ -3,6 +3,7 @@ import type {
   ActionEntry,
   ActionOutput,
   ArchivedDiscussion,
+  ArchivedItem,
   ArchivedReview,
   ArchivedTask,
   Board,
@@ -25,6 +26,10 @@ import type {
   Entry,
   EntryKind,
   FindingDecision,
+  HistoryPage,
+  HistoryRequest,
+  HistorySummary,
+  Leftover,
   Machine,
   MarkerCommit,
   Migration,
@@ -304,6 +309,13 @@ export const api = {
   ),
 
   viewSituation: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+
+  listArchived: vi.fn<(request: HistoryRequest) => Promise<HistoryPage>>(() =>
+    Promise.resolve(makeHistoryPage()),
+  ),
+  getArchived: vi.fn<(id: string) => Promise<ArchivedItem>>(() =>
+    Promise.resolve({ task: null, review: null, discussion: null }),
+  ),
 };
 
 let startupHandlers: ((startup: Startup) => void)[] = [];
@@ -442,7 +454,31 @@ export function makeState(overrides: Partial<State> = {}): State {
     reviewHistory: [],
     discussions: [],
     discussionHistory: [],
+    historySummary: makeHistorySummary(),
     cloneFolder: "",
+    ...overrides,
+  };
+}
+
+export function makeHistorySummary(overrides: Partial<HistorySummary> = {}): HistorySummary {
+  return {
+    tasks: 0,
+    reviews: 0,
+    discussions: 0,
+    oldest: "",
+    windowStart: "2026-06-24T12:00:00Z",
+    ...overrides,
+  };
+}
+
+export function makeHistoryPage(overrides: Partial<HistoryPage> = {}): HistoryPage {
+  return {
+    tasks: [],
+    reviews: [],
+    discussions: [],
+    nextBefore: "",
+    nextBeforeId: "",
+    matched: 0,
     ...overrides,
   };
 }
@@ -464,6 +500,7 @@ export function makeRepository(overrides: Partial<Repository> = {}): Repository 
     reviewInstructions: "",
     activeReviews: 0,
     archivedReviews: 0,
+    archivedDiscussions: 0,
     ...overrides,
   };
 }
@@ -530,6 +567,7 @@ export function makeBoardCard(overrides: Partial<BoardCard> = {}): BoardCard {
     repositoryId: "repo-1",
     activeTaskId: "",
     archivedTaskId: "",
+    archivedTaskName: "",
     action: "start",
     otherBoard: "",
     writtenBy: null,
@@ -702,18 +740,44 @@ export function makeArchivedTask(overrides: Partial<ArchivedTask> = {}): Archive
         file: "1-add-the-login-form.md",
         title: "Add the login form",
         reports: [],
+        commitSha: "",
       },
     ],
-    pr: { number: 12, url: "https://github.com/dev/web/pull/12", state: "merged" },
+    pr: {
+      number: 12,
+      url: "https://github.com/dev/web/pull/12",
+      state: "merged",
+      base: "main",
+      mergedBy: "",
+      mergedAt: "",
+    },
     artifactVersion: 3,
     createdAt: "2026-09-05T10:00:00Z",
     archivedAt: "2026-09-08T10:00:00Z",
+    close: null,
+    hasPrDraft: false,
+    prReports: [],
     ...overrides,
   };
 }
 
 export function makeDeletePreview(overrides: Partial<DeletePreview> = {}): DeletePreview {
-  return { sessionRunning: false, worktree: null, branch: null, pr: null, ...overrides };
+  return { worktree: null, branch: null, pr: null, ...overrides };
+}
+
+export function makeLeftover(overrides: Partial<Leftover> = {}): Leftover {
+  return {
+    repoPath: "/home/dev/code/api",
+    worktree: {
+      path: "/home/dev/.local/share/myspec/worktrees/acme/api/add-login",
+      kept: true,
+      error: "permission denied",
+      registered: true,
+      locked: false,
+    },
+    branch: null,
+    ...overrides,
+  };
 }
 
 export function makeCloseResult(overrides: Partial<CloseResult> = {}): CloseResult {
@@ -1537,6 +1601,11 @@ export function resetWailsMock(): void {
   api.discussionContext.mockImplementation(() => Promise.resolve("## Board\n"));
   api.groupIntoEpic.mockImplementation(() => Promise.resolve("draft-epic"));
   api.readDiscussionArtifact.mockImplementation(() => Promise.resolve("# Discussion\n"));
+  api.listArchived.mockImplementation(() => Promise.resolve(makeHistoryPage()));
+  api.getArchived.mockImplementation(() =>
+    Promise.resolve({ task: null, review: null, discussion: null }),
+  );
+  api.deleteTask.mockImplementation(() => Promise.resolve({ leftover: null }));
   api.deleteReview.mockImplementation(() => Promise.resolve({ leftover: null }));
   api.readReviewArtifact.mockImplementation(() => Promise.resolve("## Findings\n"));
   api.getTranscript.mockImplementation((taskId, stage) =>

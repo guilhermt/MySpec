@@ -140,7 +140,7 @@ func TestArchivingATaskFreesItsCard(t *testing.T) {
 
 	second := f.createWithCard(t, "add-login-again", newCard(12))
 
-	want := map[string]task.CardTaskIDs{"dev/web#12": {Active: second.ID, Archived: first.ID}}
+	want := map[string]task.CardTaskIDs{"dev/web#12": {Active: second.ID, Archived: first.ID, ArchivedName: "add-login"}}
 	if diff := cmp.Diff(want, f.service.CardTasks()); diff != "" {
 		t.Errorf("CardTasks() mismatch (-want +got):\n%s", diff)
 	}
@@ -171,7 +171,7 @@ func TestCardTasksKeepsTheMostRecentlyArchivedTask(t *testing.T) {
 		archived = append(archived, created.ID)
 	}
 
-	want := map[string]task.CardTaskIDs{"dev/web#12": {Archived: archived[1]}}
+	want := map[string]task.CardTaskIDs{"dev/web#12": {Archived: archived[1], ArchivedName: "second"}}
 	if diff := cmp.Diff(want, f.service.CardTasks()); diff != "" {
 		t.Errorf("CardTasks() mismatch (-want +got):\n%s", diff)
 	}

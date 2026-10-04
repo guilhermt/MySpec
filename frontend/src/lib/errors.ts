@@ -26,3 +26,11 @@ export function noticeDetail(message: string, remedy: Remedy | null): string {
   }
   return /[.!?]$/.test(said) ? `${said} ${remedy}` : `${said}. ${remedy}`;
 }
+
+/**
+ * isMissingFile says whether a failure to read a file is the file not being there, which Go words
+ * as "no such file or directory" (os.ErrNotExist), rather than a read that failed.
+ */
+export function isMissingFile(message: string): boolean {
+  return message.includes("no such file or directory");
+}

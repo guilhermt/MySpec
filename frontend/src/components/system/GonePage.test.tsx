@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
 import { GonePage } from "./GonePage";
@@ -27,6 +27,28 @@ describe("GonePage", () => {
     expect(primary).toHaveFocus();
     expect(primary).toHaveClass("bg-brand");
     expect(screen.getByRole("button", { name: "Open in History" })).not.toHaveClass("bg-brand");
+  });
+
+  it("writes the key of an action on its button, and names it in the tooltip", async () => {
+    const { user } = renderWithStore(
+      <GonePage
+        icon={ICONS.archive}
+        title="add-login was closed and archived"
+        actions={[
+          {
+            label: "Next that needs you",
+            onClick: vi.fn(),
+            tooltip: "Next: fix-header",
+            shortcut: "Ctrl+J",
+          },
+        ]}
+      />,
+    );
+
+    const primary = screen.getByRole("button", { name: "Next that needs you" });
+    expect(within(primary).getByText("Ctrl J")).toBeInTheDocument();
+    await user.hover(primary);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Next: fix-headerCtrl+J");
   });
 
   it("says why an action is off and makes the next one the primary", () => {

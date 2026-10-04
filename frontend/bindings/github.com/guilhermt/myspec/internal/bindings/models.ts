@@ -118,12 +118,56 @@ export interface ArchivedDiscussion {
 }
 
 /**
+ * ArchivedItem is one archived item; only the field of its kind is set.
+ */
+export interface ArchivedItem {
+    "task": ArchivedTask | null;
+    "review": ArchivedReview | null;
+    "discussion": ArchivedDiscussion | null;
+}
+
+/**
  * ArchivedPR is the pull request an archived task opened.
  */
 export interface ArchivedPR {
     "number": number;
     "url": string;
     "state": string;
+
+    /**
+     * the branch it merged into; "" when unknown
+     */
+    "base": string;
+
+    /**
+     * the login of who merged it; "" when unknown
+     */
+    "mergedBy": string;
+
+    /**
+     * RFC 3339; "" when unknown
+     */
+    "mergedAt": string;
+}
+
+/**
+ * ArchivedPRReport is a pass of the review of the pull request of an archived
+ * task, without its text, which ReadArtifact reads as "pr/" + File.
+ */
+export interface ArchivedPRReport {
+    "pass": number;
+
+    /**
+     * name inside pr/
+     */
+    "file": string;
+    "clean": boolean;
+    "structured": boolean;
+
+    /**
+     * how many findings a structured pass had; -1 for a pass in text
+     */
+    "findings": number;
 }
 
 /**
@@ -192,6 +236,11 @@ export interface ArchivedStep {
      * never nil
      */
     "reports": StepReport[] | null;
+
+    /**
+     * CommitSHA is the commit the step produced; "" when none is recorded.
+     */
+    "commitSha": string;
 }
 
 /**
@@ -234,6 +283,21 @@ export interface ArchivedTask {
     "artifactVersion": number;
     "createdAt": string;
     "archivedAt": string;
+
+    /**
+     * what the closing did; nil for a task archived before it was recorded
+     */
+    "close": CloseResult | null;
+
+    /**
+     * pr/draft.md was kept
+     */
+    "hasPrDraft": boolean;
+
+    /**
+     * by pass; never nil
+     */
+    "prReports": ArchivedPRReport[] | null;
 }
 
 /**
@@ -379,6 +443,11 @@ export interface BoardCard {
      * the most recently archived; "" without one
      */
     "archivedTaskId": string;
+
+    /**
+     * ArchivedTaskName is the name of the task ArchivedTaskID names; "" without one.
+     */
+    "archivedTaskName": string;
 
     /**
      * Action is start, clone, clone_missing, add_to_board, other_board,
@@ -529,6 +598,11 @@ export interface BoardStatus {
 export interface BranchPreview {
     "name": string;
     "merged": boolean;
+
+    /**
+     * commits of the branch not in its base; 0 when merged, -1 when unknown
+     */
+    "ahead": number;
     "error": string;
 }
 
@@ -725,8 +799,6 @@ export interface CreateTaskRequest {
  * dialog spells it out.
  */
 export interface DeletePreview {
-    "sessionRunning": boolean;
-
     /**
      * nil when there is none
      */
@@ -1266,19 +1338,135 @@ export interface ErrorEntry {
 }
 
 /**
- * Leftover is what git could not remove when a task was deleted.
+ * HistoryPage is a page of the History, newest first.
+ */
+export interface HistoryPage {
+    /**
+     * never nil
+     */
+    "tasks": ArchivedTask[] | null;
+
+    /**
+     * never nil
+     */
+    "reviews": ArchivedReview[] | null;
+
+    /**
+     * never nil
+     */
+    "discussions": ArchivedDiscussion[] | null;
+
+    /**
+     * the cursor of the next page; "" when there is none
+     */
+    "nextBefore": string;
+    "nextBeforeId": string;
+
+    /**
+     * Matched is how many items of the whole History, the window included,
+     * match the query and the repository.
+     */
+    "matched": number;
+}
+
+/**
+ * HistoryRequest asks for a page of the History.
+ */
+export interface HistoryRequest {
+    /**
+     * Before and BeforeID are the cursor: the page holds items archived before
+     * Before (RFC 3339), or at Before with an id below BeforeID. The first page
+     * asks for HistorySummary.WindowStart and "".
+     */
+    "before": string;
+    "beforeId": string;
+
+    /**
+     * "" matches every item
+     */
+    "query": string;
+
+    /**
+     * "" for every repository
+     */
+    "repositoryId": string;
+}
+
+/**
+ * HistorySummary is the whole History in numbers, beyond the window the state
+ * carries.
+ */
+export interface HistorySummary {
+    "tasks": number;
+    "reviews": number;
+    "discussions": number;
+
+    /**
+     * RFC 3339, the archiving of the oldest item; "" with none
+     */
+    "oldest": string;
+
+    /**
+     * RFC 3339; History, ReviewHistory and DiscussionHistory hold what was archived from it on
+     */
+    "windowStart": string;
+}
+
+/**
+ * Leftover is what git could not remove when a task or a review was deleted:
+ * each part, with what git said, and the clone it belongs to.
  */
 export interface Leftover {
+    "repoPath": string;
+
     /**
-     * "" when the folder went
+     * nil when the item had none
      */
+    "worktree": LeftoverWorktree | null;
+
+    /**
+     * nil for a review, which has no branch of its own
+     */
+    "branch": LeftoverBranch | null;
+}
+
+/**
+ * LeftoverBranch is the branch of a deletion.
+ */
+export interface LeftoverBranch {
+    "name": string;
+    "kept": boolean;
+    "error": string;
+}
+
+/**
+ * LeftoverWorktree is the worktree folder of a deletion.
+ */
+export interface LeftoverWorktree {
     "path": string;
 
     /**
-     * "" when the branch went
+     * git couldn't remove it
      */
-    "branch": string;
+    "kept": boolean;
+
+    /**
+     * what git said; "" when it went
+     */
     "error": string;
+
+    /**
+     * Registered says that git still lists the folder that stayed as a
+     * worktree, which git worktree remove --force takes down; a folder git
+     * forgot is removed as a folder.
+     */
+    "registered": boolean;
+
+    /**
+     * Locked says that the worktree git lists is locked, which only
+     * git worktree remove --force --force takes down.
+     */
+    "locked": boolean;
 }
 
 /**
@@ -2195,6 +2383,12 @@ export interface Repository {
     "reviewInstructions": string;
     "activeReviews": number;
     "archivedReviews": number;
+
+    /**
+     * ArchivedDiscussions are the archived discussions with a card or a
+     * published draft of the repository.
+     */
+    "archivedDiscussions": number;
 }
 
 /**
@@ -2926,8 +3120,8 @@ export interface State {
     "tasks": TaskSummary[] | null;
 
     /**
-     * History are the archived tasks of every repository, newest first; never
-     * nil.
+     * History are the archived tasks of every repository since
+     * HistorySummary.WindowStart, newest first; never nil.
      */
     "history": ArchivedTask[] | null;
 
@@ -2950,7 +3144,7 @@ export interface State {
 
     /**
      * ReviewHistory are the reviews whose pull request was merged or closed,
-     * newest first; never nil.
+     * archived since HistorySummary.WindowStart, newest first; never nil.
      */
     "reviewHistory": ArchivedReview[] | null;
 
@@ -2961,9 +3155,15 @@ export interface State {
     "discussions": DiscussionSummary[] | null;
 
     /**
-     * DiscussionHistory are the archived discussions, newest first; never nil.
+     * DiscussionHistory are the discussions archived since
+     * HistorySummary.WindowStart, newest first; never nil.
      */
     "discussionHistory": ArchivedDiscussion[] | null;
+
+    /**
+     * HistorySummary is the whole History in numbers.
+     */
+    "historySummary": HistorySummary;
 
     /**
      * CloneFolder is where new clones go; "" until chosen.

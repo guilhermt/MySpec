@@ -87,4 +87,29 @@ describe("Toast", () => {
 
     expect(onDismiss).not.toHaveBeenCalled();
   });
+
+  it("writes the detail under the text, and not without one", () => {
+    renderWithStore(
+      <ToastRegion announcement={null}>
+        <Toast
+          icon={ICONS.archive}
+          text="“add-login” was archived"
+          detail="Closed at 15:02"
+          action={{ label: "Open in History", onClick: vi.fn() }}
+          onDismiss={vi.fn()}
+        />
+      </ToastRegion>,
+    );
+    const text = screen.getByText("“add-login” was archived");
+    expect(text.nextElementSibling).toHaveTextContent("Closed at 15:02");
+    expect(screen.getByText("Closed at 15:02").nextElementSibling).toBe(
+      screen.getByRole("button", { name: "Open in History" }),
+    );
+  });
+
+  it("has no detail line without a detail", () => {
+    toast();
+    const text = screen.getByText("“add-login” was archived");
+    expect(text.nextElementSibling).toBe(screen.getByRole("button", { name: "Open in History" }));
+  });
 });

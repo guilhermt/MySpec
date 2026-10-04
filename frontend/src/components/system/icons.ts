@@ -21,6 +21,7 @@ import {
   FoldVertical,
   GitBranch,
   GitCommitHorizontal,
+  GitFork,
   GitMerge,
   GitPullRequest,
   History,
@@ -110,6 +111,7 @@ export const ICONS = {
   copy: Copy,
   folder: Folder,
   back: ArrowLeft,
+  branch: GitFork,
 } as const satisfies Record<string, IconGlyph>;
 
 /** IconMeaning is the name of a meaning in ICONS. */

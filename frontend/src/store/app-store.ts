@@ -3,6 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 import { readStoredPreference } from "@/features/theme/theme";
 import { boardOfRepository, findBoard } from "@/lib/boards";
 import {
+  type FreshItem,
   type GoneLocation,
   goneOutcome,
   goneTitle,
@@ -16,6 +17,7 @@ import {
   openItemId,
   type SettingsSection,
   sameLocation,
+  withoutFresh,
 } from "@/lib/locations";
 import {
   discussionSituation,
@@ -43,6 +45,7 @@ import type {
   DiscussionSummary,
   Draft,
   Entry,
+  HistorySummary,
   Leftover,
   MarkerType,
   Migration,
@@ -61,7 +64,7 @@ import type {
   Transcript,
   TranscriptEvent,
 } from "@/lib/wails";
-import { asPlaceKind, asTaskStage, asThemePreference, sessionKey } from "@/lib/wails";
+import { asPlaceKind, asPRState, asTaskStage, asThemePreference, sessionKey } from "@/lib/wails";
 import { allowedInWelcome, welcomeMode } from "@/lib/welcome";
 import { firstTab } from "@/store/step-tab";
 import {
@@ -80,12 +83,11 @@ const MAX_TOASTS = 3;
 /** PanelId is an auxiliary panel of an item: its artifacts, its reports, its documents, its details or its card. */
 export type PanelId = "artifacts" | "reports" | "documents" | "details" | "card";
 
-/** Toast is the notice of an item that left without being open; its id is the id of the task. */
-export interface Toast {
-  id: string;
-  taskId: string;
-  name: string;
-}
+/** Toast is the notice of an item that left without being open, with the item as it was archived. */
+export type Toast =
+  | { id: string; kind: "task"; task: ArchivedTask }
+  | { id: string; kind: "review"; review: ArchivedReview }
+  | { id: string; kind: "discussion"; discussion: ArchivedDiscussion };
 
 /** StepTab is the conversation of a step on screen: the agent that implements it, or the one that reviews it. */
 export type StepTab = "implementer" | "reviewer";
@@ -295,8 +297,8 @@ export interface AppStore {
    */
   lastRepositoryId: string | null;
   historyQuery: string;
-  /** leftover is what the last deletion could not remove from disk, until dismissed. */
-  leftover: Leftover | null;
+  /** leftovers are what git couldn't remove when an item was deleted, by its id, while the app runs. */
+  leftovers: Readonly<Record<string, Leftover>>;
   /**
    * flashing are the situations that just started while the user was looking,
    * by id, for the brief highlight.
@@ -311,6 +313,14 @@ export interface AppStore {
    * on its row and clears it.
    */
   promptReturn: PromptStage | null;
+  /** olderLists are the lists of the History beyond the window that History asked the Go for, by query and repository. */
+  olderLists: Readonly<Record<OlderKey, OlderList>>;
+  /** olderArchived are the archived items brought from beyond the window, by id, while the app runs. */
+  olderArchived: OlderArchived;
+  /** archivedLookups are the archived items asked for by id: loading while the Go answers, missing when no item has the id. */
+  archivedLookups: Readonly<Record<string, "loading" | "missing">>;
+  /** historyFocus is where History puts the focus when it opens next: an entry id, or "search". */
+  historyFocus: string | null;
 
   applyStartup: (next: Startup) => void;
   chooseStartupTheme: (preference: ThemePreference) => void;
@@ -397,10 +407,13 @@ export interface AppStore {
 
   openHistory: () => void;
   openArchived: (id: string) => void;
+  /** openInHistory opens the History on the row of an item that was just archived, with the search cleared. */
+  openInHistory: (kind: FreshItem["kind"], id: string) => void;
   setHistoryQuery: (query: string) => void;
+  /** clearHistoryFocus says History took the focus it was asked to put. */
+  clearHistoryFocus: () => void;
   /** dismissToast takes a toast off the screen. */
   dismissToast: (id: string) => void;
-  setLeftover: (leftover: Leftover | null) => void;
 
   flashSituation: (id: string) => void;
   unflashSituation: (id: string) => void;
@@ -419,6 +432,29 @@ export interface AppStore {
   confirmLeave: () => void;
   cancelLeave: () => void;
   setPromptReturn: (stage: PromptStage | null) => void;
+}
+
+/** OlderKey names a list of the History beyond the window: the query and the repository it filters by. */
+export type OlderKey = string;
+
+/** OlderList is what History asked the Go for beyond the window, for one query and repository. */
+export interface OlderList {
+  /** ids are the items loaded, in the order the pages came. */
+  ids: readonly string[];
+  /** next is the cursor of the next page; null once everything came. */
+  next: { before: string; beforeId: string } | null;
+  /** matched is how many items of the whole History match; null before the first answer. */
+  matched: number | null;
+  status: "idle" | "loading" | "error";
+  /** error is the message of the last page that failed; "" otherwise. */
+  error: string;
+}
+
+/** OlderArchived are the archived items History brought from beyond the window, by id, while the app runs. */
+export interface OlderArchived {
+  tasks: Readonly<Record<string, ArchivedTask>>;
+  reviews: Readonly<Record<string, ArchivedReview>>;
+  discussions: Readonly<Record<string, ArchivedDiscussion>>;
 }
 
 /** PrDraft is the title and the description of a pull request being edited. */
@@ -451,8 +487,38 @@ function reviewHistoryOf(state: State | null): readonly ArchivedReview[] {
   return state?.reviewHistory ?? NO_REVIEW_HISTORY;
 }
 
-function findArchivedReview(state: State | null, id: string | null): ArchivedReview | null {
-  return reviewHistoryOf(state).find((review) => review.id === id) ?? null;
+const NO_HISTORY_SUMMARY: HistorySummary = {
+  tasks: 0,
+  reviews: 0,
+  discussions: 0,
+  oldest: "",
+  windowStart: "",
+};
+
+const NO_OLDER: OlderArchived = { tasks: {}, reviews: {}, discussions: {} };
+
+/** findArchivedTask is an archived task of the window or, after it, of what History brought from beyond it. */
+export function findArchivedTask(
+  state: State | null,
+  older: OlderArchived,
+  id: string | null,
+): ArchivedTask | null {
+  if (id === null) {
+    return null;
+  }
+  return historyOf(state).find((entry) => entry.id === id) ?? older.tasks[id] ?? null;
+}
+
+/** findArchivedReview is an archived review of the window or, after it, of what History brought from beyond it. */
+export function findArchivedReview(
+  state: State | null,
+  older: OlderArchived,
+  id: string | null,
+): ArchivedReview | null {
+  if (id === null) {
+    return null;
+  }
+  return reviewHistoryOf(state).find((review) => review.id === id) ?? older.reviews[id] ?? null;
 }
 
 function discussionsOf(state: State | null): readonly DiscussionSummary[] {
@@ -467,18 +533,45 @@ function discussionHistoryOf(state: State | null): readonly ArchivedDiscussion[]
   return state?.discussionHistory ?? NO_DISCUSSION_HISTORY;
 }
 
-function findArchivedDiscussion(state: State | null, id: string | null): ArchivedDiscussion | null {
-  return discussionHistoryOf(state).find((discussion) => discussion.id === id) ?? null;
+/** findArchivedDiscussion is an archived discussion of the window or, after it, of what History brought from beyond it. */
+export function findArchivedDiscussion(
+  state: State | null,
+  older: OlderArchived,
+  id: string | null,
+): ArchivedDiscussion | null {
+  if (id === null) {
+    return null;
+  }
+  return (
+    discussionHistoryOf(state).find((discussion) => discussion.id === id) ??
+    older.discussions[id] ??
+    null
+  );
 }
 
-// The tasks that show up in the history between two snapshots were archived
-// while the user was watching, which is what a toast says.
-function newlyArchived(
-  previous: readonly ArchivedTask[],
-  next: readonly ArchivedTask[],
-): ArchivedTask[] {
+// The items that show up in a history between two snapshots were archived while the user was
+// watching, which is what a toast says.
+function newlyArchived<T extends { id: string }>(previous: readonly T[], next: readonly T[]): T[] {
   const known = new Set(previous.map((entry) => entry.id));
   return next.filter((entry) => !known.has(entry.id));
+}
+
+const NO_ARCHIVED: Toast[] = [];
+
+// newlyArchivedOf are the toasts of what the new state archived since the last: tasks, then
+// reviews, then discussions.
+function newlyArchivedOf(previous: State, next: State): Toast[] {
+  return [
+    ...newlyArchived(historyOf(previous), historyOf(next)).map(
+      (task): Toast => ({ id: task.id, kind: "task", task }),
+    ),
+    ...newlyArchived(reviewHistoryOf(previous), reviewHistoryOf(next)).map(
+      (review): Toast => ({ id: review.id, kind: "review", review }),
+    ),
+    ...newlyArchived(discussionHistoryOf(previous), discussionHistoryOf(next)).map(
+      (discussion): Toast => ({ id: discussion.id, kind: "discussion", discussion }),
+    ),
+  ];
 }
 
 function withoutTranscript(
@@ -583,7 +676,7 @@ export function readLastItem(): Location | null {
 // of items that left, which are never revisited, and the last active item
 // opened.
 function persistNav(state: Pick<AppStore, "location" | "back">): void {
-  const current = state.location.kind === "gone" ? HOME : state.location;
+  const current = state.location.kind === "gone" ? HOME : withoutFresh(state.location);
   const saved: SavedNav = {
     back: state.back.filter((place) => place.kind !== "gone"),
     current,
@@ -628,7 +721,8 @@ function initialTaskUi(): Pick<
   | "textDrafts"
   | "lastRepositoryId"
   | "historyQuery"
-  | "leftover"
+  | "historyFocus"
+  | "leftovers"
   | "flashing"
 > {
   return {
@@ -653,7 +747,8 @@ function initialTaskUi(): Pick<
     textDrafts: {},
     lastRepositoryId: null,
     historyQuery: "",
-    leftover: null,
+    historyFocus: null,
+    leftovers: {},
     flashing: new Set<string>(),
   };
 }
@@ -708,7 +803,9 @@ function navigate(
     };
   }
   const back =
-    state.location.kind === "gone" ? state.back : [...state.back, state.location].slice(-NAV_LIMIT);
+    state.location.kind === "gone"
+      ? state.back
+      : [...state.back, withoutFresh(state.location)].slice(-NAV_LIMIT);
   return { ...common, back: beside(back, location), forward: [] };
 }
 
@@ -720,8 +817,13 @@ function keptOut(app: State | null, place: Location): boolean {
 // reachable is whether Back or Forward can go to a place: it still exists and
 // is not the place on screen, which a place that left between them can hide
 // from beside.
-function reachable(app: State | null, place: Location, current: Location): boolean {
-  return locationExists(app, place) && !sameLocation(place, current) && !keptOut(app, place);
+function reachable(
+  app: State | null,
+  older: OlderArchived,
+  place: Location,
+  current: Location,
+): boolean {
+  return locationExists(app, place, older) && !sameLocation(place, current) && !keptOut(app, place);
 }
 
 // travel opens the nearest place behind (or ahead of) the current one it can
@@ -735,7 +837,8 @@ function travel(
   const from = direction === "back" ? state.back : state.forward;
   const to = direction === "back" ? state.forward : state.back;
   const index = from.reduce(
-    (found, place, at) => (reachable(state.app, place, state.location) ? at : found),
+    (found, place, at) =>
+      reachable(state.app, state.olderArchived, place, state.location) ? at : found,
     -1,
   );
   const place = from[index];
@@ -743,7 +846,8 @@ function travel(
     return null;
   }
   const rest = from.slice(0, index);
-  const behind = state.location.kind === "gone" ? to : [...to, state.location].slice(-NAV_LIMIT);
+  const behind =
+    state.location.kind === "gone" ? to : [...to, withoutFresh(state.location)].slice(-NAV_LIMIT);
   const location = place;
   return {
     location,
@@ -772,31 +876,57 @@ function keptEarlier(next: State, earlier: EarlierConversation | null): EarlierC
 
 // gone is the page of an item that left, with what the state no longer has of
 // it: the name its page says and the board it lived under.
-function gone(item: GoneLocation["item"], id: string, name: string, boardId: string): GoneLocation {
-  return { kind: "gone", item, id, name, boardId };
+function gone(
+  item: GoneLocation["item"],
+  id: string,
+  name: string,
+  boardId: string,
+  pr?: GoneLocation["pr"],
+): GoneLocation {
+  return pr === undefined
+    ? { kind: "gone", item, id, name, boardId }
+    : { kind: "gone", item, id, name, boardId, pr };
 }
 
 // The place on screen once a new state arrives. An archived item that left
 // goes back to the History; an active item or a board that was there and is
 // no longer becomes the page of what left. An item that was not in the
 // previous state is not treated as gone: it was just created.
-function placeIn(prev: State | null, next: State, location: Location): Location {
+function placeIn(
+  prev: State | null,
+  next: State,
+  location: Location,
+  cache: Pick<AppStore, "olderArchived" | "archivedLookups">,
+): Location {
+  // An archived item stays while the window or the cache has it, while the Go is looking for it,
+  // and in the first state, when the item may simply be beyond the window: its page asks by id.
+  const stays = (id: string, found: unknown): boolean =>
+    found !== null || cache.archivedLookups[id] === "loading" || prev === null;
   switch (location.kind) {
     case "archived-task":
-      return (next.history ?? []).some((entry) => entry.id === location.id)
+      return stays(location.id, findArchivedTask(next, cache.olderArchived, location.id))
         ? location
         : { kind: "history" };
     case "archived-review":
-      return findArchivedReview(next, location.id) === null ? { kind: "history" } : location;
+      return stays(location.id, findArchivedReview(next, cache.olderArchived, location.id))
+        ? location
+        : { kind: "history" };
     case "archived-discussion":
-      return findArchivedDiscussion(next, location.id) === null ? { kind: "history" } : location;
+      return stays(location.id, findArchivedDiscussion(next, cache.olderArchived, location.id))
+        ? location
+        : { kind: "history" };
     case "task": {
       const task = findTask(prev, location.id);
       if (task === null || findTask(next, location.id) !== null) {
         return location;
       }
       const boardId = boardOfRepository(prev, task.repositoryId)?.id ?? "";
-      return gone("task", task.id, task.name, boardId);
+      const state = task.pr === null ? "" : asPRState(task.pr.prState);
+      const pr =
+        task.pr !== null && task.pr.prNumber > 0 && state !== ""
+          ? { number: task.pr.prNumber, state }
+          : null;
+      return gone("task", task.id, task.name, boardId, pr);
     }
     case "review": {
       const review = findReview(prev, location.id);
@@ -875,6 +1005,9 @@ export const useAppStore = create<AppStore>()((set, get) => {
     promptEdit: null,
     pendingLeave: null,
     promptReturn: null,
+    olderLists: {},
+    olderArchived: NO_OLDER,
+    archivedLookups: {},
     sidebarCollapsed: new Set(readStored(SIDEBAR_COLLAPSED_KEY, [], isStringList)),
     ...initialTaskUi(),
 
@@ -900,32 +1033,27 @@ export const useAppStore = create<AppStore>()((set, get) => {
             ...(location.kind === "settings" ? {} : { promptEdit: null, pendingLeave: null }),
           };
         }
-        const history = historyOf(next);
         // The first snapshot brings the whole history at once; nothing in it was
         // archived under the eyes of the user.
-        const archived = state.app === null ? [] : newlyArchived(historyOf(state.app), history);
+        const archived = state.app === null ? NO_ARCHIVED : newlyArchivedOf(state.app, next);
         // A repository that is gone stops preselecting the creation dialog.
         const lastRepositoryId =
           state.lastRepositoryId !== null &&
           !(next.repositories ?? []).some((repository) => repository.id === state.lastRepositoryId)
             ? null
             : state.lastRepositoryId;
-        const location = placeIn(state.app, next, state.location);
+        const location = placeIn(state.app, next, state.location, state);
         const moved = location !== state.location;
         // The first registration takes the Home of the welcome to the Home of the app: the row that
         // opened the dialog is gone, so the title takes the focus.
         const registered = welcomeMode(state.app) && location.kind === "home";
         // An item that left takes every conversation it had with it.
         const left = moved ? openItemId(state.location) : null;
-        // The task archived while open has its page; every other one, a toast.
-        const toasted = archived.filter((entry) => entry.id !== openItemId(state.location));
+        // The item archived while open has its page; every other one, a toast.
+        const open = openItemId(state.location);
+        const toasted = archived.filter((toast) => toast.id !== open);
         const toasts =
-          toasted.length === 0
-            ? state.toasts
-            : [
-                ...state.toasts,
-                ...toasted.map((entry) => ({ id: entry.id, taskId: entry.id, name: entry.name })),
-              ].slice(-MAX_TOASTS);
+          toasted.length === 0 ? state.toasts : [...state.toasts, ...toasted].slice(-MAX_TOASTS);
         // The page of an item that left on its own is announced; the one the
         // user just asked to remove is not.
         const arrived = moved && location.kind === "gone" ? location : null;
@@ -951,6 +1079,11 @@ export const useAppStore = create<AppStore>()((set, get) => {
               ? null
               : state.reviewDialog,
           location,
+          // An item may have left the window since the pages were read: they start over.
+          olderLists:
+            state.app?.historySummary?.windowStart === next.historySummary?.windowStart
+              ? state.olderLists
+              : {},
           ...(registered ? { pendingFocus: "title" as const } : {}),
           back: moved ? beside(state.back, location) : state.back,
           forward: moved ? beside(state.forward, location) : state.forward,
@@ -1204,12 +1337,17 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     openArchived: (id) => go({ kind: "archived-task", id }),
 
+    openInHistory: (kind, id) => {
+      set({ historyQuery: "" });
+      go({ kind: "history", fresh: { kind, id } });
+    },
+
     setHistoryQuery: (query) => set({ historyQuery: query }),
+
+    clearHistoryFocus: () => set({ historyFocus: null }),
 
     dismissToast: (id) =>
       set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
-
-    setLeftover: (leftover) => set({ leftover }),
 
     // A new set every time: the selectors hand the set itself to the components,
     // which only see a change through a new reference.
@@ -1385,22 +1523,22 @@ export function useOpenBoardId(): string | null {
 }
 
 // The last of the places Back or Forward can reach, null when there is none.
-function lastReachable(
-  app: State | null,
-  places: readonly Location[],
-  current: Location,
-): Location | null {
-  return [...places].reverse().find((place) => reachable(app, place, current)) ?? null;
+function lastReachable(state: AppStore, places: readonly Location[]): Location | null {
+  return (
+    [...places]
+      .reverse()
+      .find((place) => reachable(state.app, state.olderArchived, place, state.location)) ?? null
+  );
 }
 
 /** useBackTarget is the place Back goes to, null when there is none. */
 export function useBackTarget(): Location | null {
-  return useAppStore((state) => lastReachable(state.app, state.back, state.location));
+  return useAppStore((state) => lastReachable(state, state.back));
 }
 
 /** useForwardTarget is the place Forward goes to, null when there is none. */
 export function useForwardTarget(): Location | null {
-  return useAppStore((state) => lastReachable(state.app, state.forward, state.location));
+  return useAppStore((state) => lastReachable(state, state.forward));
 }
 
 /** useEarlierConversation is the earlier conversation on screen of a task, null when none is. */
@@ -1594,8 +1732,13 @@ export function useHistory(): readonly ArchivedTask[] {
   return useAppStore((state) => historyOf(state.app));
 }
 
+/** useHistorySummary is the whole History in numbers, beyond the window the state carries. */
+export function useHistorySummary(): HistorySummary {
+  return useAppStore((state) => state.app?.historySummary ?? NO_HISTORY_SUMMARY);
+}
+
 export function useArchivedTask(id: string | null): ArchivedTask | null {
-  return useAppStore((state) => historyOf(state.app).find((entry) => entry.id === id) ?? null);
+  return useAppStore((state) => findArchivedTask(state.app, state.olderArchived, id));
 }
 
 /** useReviewCenter is the Reviews view: the pull requests of the last reading and the filters. */
@@ -1620,7 +1763,7 @@ export function useReviewHistory(): readonly ArchivedReview[] {
 
 /** useArchivedReview is an archived review by id, null when none is. */
 export function useArchivedReview(id: string | null): ArchivedReview | null {
-  return useAppStore((state) => findArchivedReview(state.app, id));
+  return useAppStore((state) => findArchivedReview(state.app, state.olderArchived, id));
 }
 
 /** useStartReview is the pull request the dialog that starts a review is open for. */
@@ -1658,7 +1801,7 @@ export function useDiscussionHistory(): readonly ArchivedDiscussion[] {
 
 /** useArchivedDiscussion is an archived discussion by id, null when none is. */
 export function useArchivedDiscussion(id: string | null): ArchivedDiscussion | null {
-  return useAppStore((state) => findArchivedDiscussion(state.app, id));
+  return useAppStore((state) => findArchivedDiscussion(state.app, state.olderArchived, id));
 }
 
 /** useNewDiscussion is what the dialog that creates a discussion is open for, null when it is closed. */
@@ -1714,8 +1857,9 @@ export function useAnnouncement(): { id: number; text: string } | null {
   return useAppStore((state) => state.announcement);
 }
 
-export function useLeftover(): Leftover | null {
-  return useAppStore((state) => state.leftover);
+/** useLeftoverOf is what git couldn't remove when an item was deleted, null when it removed everything. */
+export function useLeftoverOf(id: string): Leftover | null {
+  return useAppStore((state) => state.leftovers[id] ?? null);
 }
 
 // The history of places is kept whenever it changes, whatever changed it.

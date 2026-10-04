@@ -54,6 +54,7 @@ type Worktrees interface {
 	Status(ctx context.Context, wt worktree.Worktree) (git.Status, error)
 	Clean(ctx context.Context, wt worktree.Worktree) error
 	Remove(ctx context.Context, itemID string) error
+	Registration(ctx context.Context, repoPath, path string) worktree.Registration
 	Commit(ctx context.Context, wt worktree.Worktree, rev string) (git.Commit, error)
 }
 

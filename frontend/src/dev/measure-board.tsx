@@ -126,6 +126,7 @@ function card(i: number, readAt: string): BoardCard {
     repositoryId: `repo-${REPOSITORIES[i % REPOSITORIES.length]}`,
     activeTaskId: hasTask ? `task-${i}` : "",
     archivedTaskId: "",
+    archivedTaskName: "",
     action: hasTask ? "has_task" : open ? "start" : "closed",
     otherBoard: "",
     writtenBy: null,
@@ -211,6 +212,7 @@ function repository(name: string): Repository {
     reviewInstructions: "",
     activeReviews: 0,
     archivedReviews: 0,
+    archivedDiscussions: 0,
   };
 }
 
@@ -271,6 +273,7 @@ function measuredState(): State {
     reviewHistory: [],
     discussions: [],
     discussionHistory: [],
+    historySummary: { tasks: 0, reviews: 0, discussions: 0, oldest: "", windowStart: "" },
     cloneFolder: "",
   };
 }

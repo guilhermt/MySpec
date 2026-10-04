@@ -48,11 +48,50 @@ func TestAWorktreeGitKeepsNeverKeepsTheReview(t *testing.T) {
 		t.Fatalf("delete review: %v", err)
 	}
 
-	if left.WorktreePath != wt.Path {
-		t.Errorf("leftover = %+v, want the folder the user has to clean up", left)
+	if left.WorktreePath != wt.Path || left.RepoPath != wt.RepoPath || left.Error != errGit.Error() ||
+		!left.Registered || left.Locked {
+		t.Errorf("leftover = %+v, want the folder git still lists, unlocked, its clone and what git said", left)
 	}
 	if _, ok := f.reviews.Lookup(id); ok {
 		t.Error("the review is still there after it was deleted")
+	}
+}
+
+func TestALockedWorktreeIsLeftLocked(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := decided(t, f)
+	wt, _ := f.worktrees.Get(id)
+	f.worktrees.failRemove(errGit)
+	f.worktrees.lockRegistration()
+
+	left, err := f.service.Delete(t.Context(), id)
+	if err != nil {
+		t.Fatalf("delete review: %v", err)
+	}
+
+	if left.WorktreePath != wt.Path || !left.Registered || !left.Locked {
+		t.Errorf("leftover = %+v, want the folder git lists as a locked worktree", left)
+	}
+}
+
+func TestAWorktreeGitForgotIsLeftAsAFolder(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := decided(t, f)
+	wt, _ := f.worktrees.Get(id)
+	f.worktrees.failRemove(errGit)
+	f.worktrees.forgetRegistration()
+
+	left, err := f.service.Delete(t.Context(), id)
+	if err != nil {
+		t.Fatalf("delete review: %v", err)
+	}
+
+	if left.WorktreePath != wt.Path || left.Registered || left.Locked {
+		t.Errorf("leftover = %+v, want the folder git no longer lists", left)
 	}
 }
 

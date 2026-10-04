@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { olderKey } from "@/lib/history";
 import { api } from "@/lib/wails";
 import {
   addBoard,
@@ -13,7 +14,7 @@ import {
   approveStep,
   archiveDiscussionInPlace,
   askReviewAgain,
-  backToStage,
+  backToStageInPlace,
   browseRepository,
   cardContext,
   changeClonePath,
@@ -28,17 +29,20 @@ import {
   createTask,
   decideDraft,
   decideFindingInPlace,
+  deleteArchivedInPlace,
   deleteDiscussionInPlace,
-  deleteReview,
-  deleteTask,
+  deleteReviewInPlace,
+  deleteTaskInPlace,
   discardDraft,
-  discardStage,
-  discardStep,
+  discardStageInPlace,
+  discardStepInPlace,
   discussionContext,
+  findArchived,
   followTaskReviewMode,
   groupIntoEpicInPlace,
   interrupt,
   listPrompts,
+  loadOlderHistory,
   loadTranscript,
   openExternal,
   openFileInEditor,
@@ -52,6 +56,7 @@ import {
   previewRemoveBoard,
   publishReview,
   readActionOutput,
+  readDeletePreview,
   readEarlierConversation,
   refreshBoard,
   refreshCard,
@@ -97,15 +102,21 @@ import {
 import { useAppStore } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
 import {
+  makeArchivedDiscussion,
+  makeArchivedReview,
   makeArchivedTask,
   makeBoard,
   makeBoardCard,
   makeBoardPreview,
   makeBoardRemoval,
   makeBoardRepositoryOption,
+  makeDeletePreview,
   makeDiscussion,
   makeDraft,
   makeEntry,
+  makeHistoryPage,
+  makeHistorySummary,
+  makeLeftover,
   makeRepository,
   makeReviewFilters,
   makeReviewSummary,
@@ -209,15 +220,23 @@ describe("the app notice of a failed action", () => {
     expect(useAppStore.getState().error?.label).toBe("Couldn't show every repository");
   });
 
-  it("names the stage a task goes back to", async () => {
+  it("answers the refusal of going back to a stage, without the app notice", async () => {
     withState();
     vi.mocked(api.backToStage).mockRejectedValueOnce(new Error("busy"));
 
-    await backToStage("task-1", "tech_spec");
+    expect(await backToStageInPlace("task-1", "tech_spec")).toBe("busy");
+    expect(useAppStore.getState().error).toBeNull();
+    expect(await backToStageInPlace("task-1", "tech_spec")).toBeNull();
+  });
 
-    expect(useAppStore.getState().error?.label).toBe(
-      "Couldn't go back to the tech spec of add-login",
-    );
+  it("answers the refusal of discarding a stage and of a step", async () => {
+    withState();
+    vi.mocked(api.discardStage).mockRejectedValueOnce(new Error("disk full"));
+    vi.mocked(api.discardStep).mockRejectedValueOnce(new Error("the clone is missing"));
+
+    expect(await discardStageInPlace("task-1", "prd")).toBe("disk full");
+    expect(await discardStepInPlace("task-1", true)).toBe("the clone is missing");
+    expect(useAppStore.getState().error).toBeNull();
   });
 
   it("says to change the path of a missing clone", async () => {
@@ -539,9 +558,9 @@ describe("board actions reported in the app notice", () => {
 
 describe("task actions", () => {
   it.each([
-    ["deleteTask", () => deleteTask("item-1")],
+    ["deleteTaskInPlace", () => deleteTaskInPlace("item-1")],
     ["closeTask", () => closeTask("item-1")],
-    ["deleteReview", () => deleteReview("item-1")],
+    ["deleteReviewInPlace", () => deleteReviewInPlace("item-1")],
     ["archiveDiscussionInPlace", () => archiveDiscussionInPlace("item-1")],
     ["deleteDiscussionInPlace", () => deleteDiscussionInPlace("item-1")],
   ])("%s marks the item whose page is not announced", async (_name, action) => {
@@ -552,19 +571,9 @@ describe("task actions", () => {
 
   it.each([
     [
-      "deleteTask",
-      () => vi.mocked(api.deleteTask).mockRejectedValueOnce(new Error("busy")),
-      () => deleteTask("item-1"),
-    ],
-    [
       "closeTask",
       () => vi.mocked(api.closeTask).mockRejectedValueOnce(new Error("busy")),
       () => closeTask("item-1"),
-    ],
-    [
-      "deleteReview",
-      () => vi.mocked(api.deleteReview).mockRejectedValueOnce(new Error("busy")),
-      () => deleteReview("item-1"),
     ],
   ])("%s forgets the mark when the removal fails", async (_name, refuse, action) => {
     refuse();
@@ -586,6 +595,16 @@ describe("task actions", () => {
       () => vi.mocked(api.deleteDiscussion).mockRejectedValueOnce(new Error("busy")),
       () => deleteDiscussionInPlace("item-1"),
     ],
+    [
+      "deleteTaskInPlace",
+      () => vi.mocked(api.deleteTask).mockRejectedValueOnce(new Error("busy")),
+      () => deleteTaskInPlace("item-1"),
+    ],
+    [
+      "deleteReviewInPlace",
+      () => vi.mocked(api.deleteReview).mockRejectedValueOnce(new Error("busy")),
+      () => deleteReviewInPlace("item-1"),
+    ],
   ])("%s answers the refusal and forgets the mark", async (_name, refuse, action) => {
     refuse();
 
@@ -602,7 +621,7 @@ describe("task actions", () => {
   it("keeps the mark of a later removal when an earlier one fails", async () => {
     vi.mocked(api.deleteTask).mockRejectedValueOnce(new Error("busy"));
 
-    const first = deleteTask("item-1");
+    const first = deleteTaskInPlace("item-1");
     await deleteDiscussionInPlace("item-2");
     await first;
 
@@ -610,19 +629,19 @@ describe("task actions", () => {
   });
 
   it("delegate to the matching binding", async () => {
-    await deleteTask("task-1");
+    await deleteTaskInPlace("task-1");
     await removePending("task-1", "prd", "entry-1");
     await interrupt("task-1", "prd");
     await pause("task-1", "prd");
     await resume("task-1", "prd");
     await retry("task-1", "prd");
     await openExternal("https://anthropic.com");
-    await backToStage("task-1", "prd");
-    await discardStage("task-1", "tech_spec");
+    await backToStageInPlace("task-1", "prd");
+    await discardStageInPlace("task-1", "tech_spec");
     await continueStage("task-1");
     await retryStep("task-1");
     await cleanAndStartStep("task-1");
-    await discardStep("task-1", true);
+    await discardStepInPlace("task-1", true);
     await openInEditor("task-1");
     await approveStep("task-1");
     await setReviewMode("task-1", "agent");
@@ -694,24 +713,40 @@ describe("task actions", () => {
   });
 
   it("keeps what the deletion could not remove from disk", async () => {
-    const leftover = {
-      path: "/worktrees/dev/web/add-login",
-      branch: "add-login",
-      error: "permission denied",
-    };
+    const leftover = makeLeftover({
+      branch: { name: "add-login", kept: true, error: "branch is checked out" },
+    });
     vi.mocked(api.deleteTask).mockResolvedValueOnce({ leftover });
 
-    await deleteTask("task-1");
+    expect(await deleteTaskInPlace("task-1")).toBeNull();
 
-    expect(useAppStore.getState().leftover).toEqual(leftover);
+    expect(useAppStore.getState().leftovers).toEqual({ "task-1": leftover });
+  });
+
+  it("answers the refusal of the deletion of a task, as the dialog shows it", async () => {
+    vi.mocked(api.deleteTask).mockRejectedValueOnce(new Error("busy"));
+
+    expect(await deleteTaskInPlace("task-1")).toBe("busy");
+
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("reads what the deletion would destroy, and says when the reading failed", async () => {
+    const preview = makeDeletePreview();
+    vi.mocked(api.previewDelete).mockResolvedValueOnce(preview);
+    expect(await readDeletePreview("task-1")).toEqual({ kind: "ready", preview });
+
+    vi.mocked(api.previewDelete).mockRejectedValueOnce(new Error("git is busy"));
+    expect(await readDeletePreview("task-1")).toEqual({ kind: "failed", error: "git is busy" });
+    expect(useAppStore.getState().error).toBeNull();
   });
 
   it("says nothing when the deletion left nothing behind", async () => {
     vi.mocked(api.deleteTask).mockResolvedValueOnce({ leftover: null });
 
-    await deleteTask("task-1");
+    await deleteTaskInPlace("task-1");
 
-    expect(useAppStore.getState().leftover).toBeNull();
+    expect(useAppStore.getState().leftovers).toEqual({});
   });
 
   it("makes a step follow the review mode of the task again", async () => {
@@ -1004,24 +1039,29 @@ describe("review actions reported in the app notice", () => {
     });
   });
 
-  it("say what the deletion of a review left behind", async () => {
-    const leftover = {
-      path: "/home/dev/worktrees/dev/web/pr_31",
-      branch: "",
-      error: "the worktree is busy",
-    };
+  it("say, by the id of the review, what its deletion left behind", async () => {
+    const leftover = makeLeftover({
+      worktree: {
+        path: "/home/dev/worktrees/dev/web/pr_31",
+        kept: true,
+        error: "the worktree is busy",
+        registered: true,
+        locked: false,
+      },
+    });
     vi.mocked(api.deleteReview).mockResolvedValueOnce({ leftover });
 
-    await deleteReview("review-1");
+    expect(await deleteReviewInPlace("review-1")).toBeNull();
 
     expect(api.deleteReview).toHaveBeenCalledWith("review-1");
-    expect(useAppStore.getState().leftover).toEqual(leftover);
+    expect(useAppStore.getState().leftovers).toEqual({ "review-1": leftover });
   });
 
   it("say nothing when the deletion of a review left nothing behind", async () => {
-    await deleteReview("review-1");
+    await deleteReviewInPlace("review-1");
 
-    expect(useAppStore.getState().leftover).toBeNull();
+    expect(useAppStore.getState().leftovers).toEqual({});
+    expect(useAppStore.getState().leftovers).toEqual({});
   });
 });
 
@@ -1229,5 +1269,254 @@ describe("the actions of a finding, which answer on the finding", () => {
       "pass is over",
     );
     expect(useAppStore.getState().error).toBeNull();
+  });
+});
+
+describe("loadOlderHistory", () => {
+  const WINDOW_START = "2026-06-24T12:00:00Z";
+  const KEY = olderKey("", "");
+
+  function list() {
+    return useAppStore.getState().olderLists[KEY];
+  }
+
+  beforeEach(() => {
+    resetAppStore({
+      state: makeState({
+        historySummary: makeHistorySummary({ tasks: 3, windowStart: WINDOW_START }),
+      }),
+    });
+  });
+
+  it("asks for the first page from the start of the window and keeps what comes", async () => {
+    const task = makeArchivedTask({ id: "task-old", archivedAt: "2026-06-20T10:00:00Z" });
+    const review = makeArchivedReview({ id: "review-old", archivedAt: "2026-06-19T10:00:00Z" });
+    vi.mocked(api.listArchived).mockResolvedValueOnce(
+      makeHistoryPage({
+        tasks: [task],
+        reviews: [review],
+        nextBefore: "2026-06-19T10:00:00Z",
+        nextBeforeId: "review-old",
+        matched: 5,
+      }),
+    );
+
+    await loadOlderHistory("", "");
+
+    expect(api.listArchived).toHaveBeenCalledWith({
+      before: WINDOW_START,
+      beforeId: "",
+      query: "",
+      repositoryId: "",
+    });
+    expect(list()).toEqual({
+      ids: ["task-old", "review-old"],
+      next: { before: "2026-06-19T10:00:00Z", beforeId: "review-old" },
+      matched: 5,
+      status: "idle",
+      error: "",
+    });
+    expect(useAppStore.getState().olderArchived.tasks["task-old"]).toEqual(task);
+    expect(useAppStore.getState().olderArchived.reviews["review-old"]).toEqual(review);
+  });
+
+  it("asks for the next page with the cursor and ends when there is none", async () => {
+    vi.mocked(api.listArchived)
+      .mockResolvedValueOnce(
+        makeHistoryPage({
+          tasks: [makeArchivedTask({ id: "task-1" })],
+          nextBefore: "2026-06-01T10:00:00Z",
+          nextBeforeId: "task-1",
+          matched: 2,
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeHistoryPage({
+          discussions: [makeArchivedDiscussion({ id: "discussion-1" })],
+          matched: 2,
+        }),
+      );
+
+    await loadOlderHistory("", "");
+    await loadOlderHistory("", "");
+    await loadOlderHistory("", "");
+
+    expect(api.listArchived).toHaveBeenCalledTimes(2);
+    expect(api.listArchived).toHaveBeenLastCalledWith({
+      before: "2026-06-01T10:00:00Z",
+      beforeId: "task-1",
+      query: "",
+      repositoryId: "",
+    });
+    expect(list()).toMatchObject({ ids: ["task-1", "discussion-1"], next: null, matched: 2 });
+  });
+
+  it("keeps a failure on the list, not in the app notice", async () => {
+    vi.mocked(api.listArchived).mockRejectedValueOnce(new Error("cursor refused"));
+
+    await loadOlderHistory("", "");
+
+    expect(list()).toMatchObject({ status: "error", error: "cursor refused", matched: null });
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("does not ask twice while a page is on its way", async () => {
+    let answer: (page: ReturnType<typeof makeHistoryPage>) => void = () => {};
+    vi.mocked(api.listArchived).mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      }) as ReturnType<typeof api.listArchived>,
+    );
+
+    const first = loadOlderHistory("", "");
+    await loadOlderHistory("", "");
+    answer(makeHistoryPage());
+    await first;
+
+    expect(api.listArchived).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops the page that answers after the lists were started over", async () => {
+    let answer: (page: ReturnType<typeof makeHistoryPage>) => void = () => {};
+    vi.mocked(api.listArchived).mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      }) as ReturnType<typeof api.listArchived>,
+    );
+
+    const asking = loadOlderHistory("", "");
+    useAppStore.setState({ olderLists: {} });
+    answer(makeHistoryPage({ tasks: [makeArchivedTask({ id: "task-stale" })], matched: 9 }));
+    await asking;
+
+    expect(list()).toBeUndefined();
+  });
+
+  it("keeps a list for each query and repository", async () => {
+    await loadOlderHistory("Cache", "repo-1");
+
+    expect(api.listArchived).toHaveBeenCalledWith(
+      expect.objectContaining({ query: "Cache", repositoryId: "repo-1" }),
+    );
+    expect(useAppStore.getState().olderLists[olderKey("cache", "repo-1")]).toBeDefined();
+    expect(list()).toBeUndefined();
+  });
+});
+
+describe("deleteArchivedInPlace", () => {
+  it("takes the page of an item beyond the window back to the History, with the focus on its neighbor", async () => {
+    const old = makeArchivedReview({ id: "review-old" });
+    resetAppStore({
+      state: makeState(),
+      ui: {
+        location: { kind: "archived-review", id: old.id },
+        olderArchived: { tasks: {}, reviews: { [old.id]: old }, discussions: {} },
+        olderLists: {
+          [olderKey("", "")]: {
+            ids: [old.id, "task-older"],
+            next: null,
+            matched: 2,
+            status: "idle",
+            error: "",
+          },
+        },
+      },
+    });
+
+    expect(await deleteArchivedInPlace("review", old.id, "task-older")).toBeNull();
+
+    expect(api.deleteReview).toHaveBeenCalledWith(old.id);
+    expect(useAppStore.getState().location).toEqual({ kind: "history" });
+    expect(useAppStore.getState().historyFocus).toBe("task-older");
+    expect(useAppStore.getState().olderArchived.reviews).toEqual({});
+    expect(useAppStore.getState().olderLists[olderKey("", "")]?.ids).toEqual(["task-older"]);
+  });
+
+  it("leaves the page of an item of the window to the state that no longer has it", async () => {
+    const task = makeArchivedTask({ id: "task-window" });
+    resetAppStore({
+      state: makeState({ history: [task] }),
+      ui: { location: { kind: "archived-task", id: task.id } },
+    });
+
+    expect(await deleteArchivedInPlace("task", task.id, null)).toBeNull();
+
+    expect(useAppStore.getState().location).toEqual({ kind: "archived-task", id: task.id });
+    expect(useAppStore.getState().historyFocus).toBe("search");
+  });
+
+  it("answers the refusal and leaves everything where it was", async () => {
+    vi.mocked(api.deleteDiscussion).mockRejectedValueOnce(new Error("locked"));
+    resetAppStore({
+      state: makeState(),
+      ui: { location: { kind: "archived-discussion", id: "discussion-old" } },
+    });
+
+    expect(await deleteArchivedInPlace("discussion", "discussion-old", null)).toBe("locked");
+
+    expect(useAppStore.getState().location).toEqual({
+      kind: "archived-discussion",
+      id: "discussion-old",
+    });
+  });
+});
+
+describe("findArchived", () => {
+  it("brings the item of any kind into the cache and clears the mark", async () => {
+    const review = makeArchivedReview({ id: "review-old" });
+    vi.mocked(api.getArchived).mockResolvedValueOnce({ task: null, review, discussion: null });
+
+    await findArchived("review-old");
+
+    expect(api.getArchived).toHaveBeenCalledWith("review-old");
+    expect(useAppStore.getState().olderArchived.reviews["review-old"]).toEqual(review);
+    expect(useAppStore.getState().archivedLookups).toEqual({});
+  });
+
+  it("marks an id no item has as missing and takes its page back to the History", async () => {
+    resetAppStore({
+      state: makeState(),
+      ui: { location: { kind: "archived-task", id: "task-gone" } },
+    });
+
+    await findArchived("task-gone");
+
+    expect(useAppStore.getState().archivedLookups).toEqual({ "task-gone": "missing" });
+    expect(useAppStore.getState().location).toEqual({ kind: "history" });
+  });
+
+  it("says in the app notice why the Go couldn't find it, and takes its page back to the History", async () => {
+    resetAppStore({
+      state: makeState(),
+      ui: { location: { kind: "archived-review", id: "review-old" } },
+    });
+    vi.mocked(api.getArchived).mockRejectedValueOnce(new Error("database is locked"));
+
+    await findArchived("review-old");
+
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't open the archived item",
+      detail: "database is locked. Try again.",
+    });
+    expect(useAppStore.getState().location).toEqual({ kind: "history" });
+  });
+
+  it("raises no notice for an id no item has", async () => {
+    resetAppStore({ state: makeState(), ui: { location: { kind: "history" } } });
+
+    await findArchived("task-gone");
+
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("leaves the place alone when it is another one", async () => {
+    resetAppStore({
+      state: makeState(),
+      ui: { location: { kind: "settings", section: "boards" } },
+    });
+
+    await findArchived("task-gone");
+
+    expect(useAppStore.getState().location).toEqual({ kind: "settings", section: "boards" });
   });
 });

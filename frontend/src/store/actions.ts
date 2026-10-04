@@ -1,10 +1,14 @@
+import type { PreviewReading } from "@/features/task/deletion";
 import { draftTitle } from "@/lib/drafts";
 import { messageOf, noticeDetail, type Remedy } from "@/lib/errors";
+import { olderKey } from "@/lib/history";
 import { locationTitle } from "@/lib/locations";
 import type { ModelChoice } from "@/lib/models";
-import { stageName } from "@/lib/situations";
 import type {
   ActionOutput,
+  ArchivedDiscussion,
+  ArchivedReview,
+  ArchivedTask,
   BoardPreview,
   BoardRemoval,
   BoardRepositoryChoice,
@@ -30,7 +34,7 @@ import type {
   ThemePreference,
 } from "@/lib/wails";
 import { api } from "@/lib/wails";
-import { storedDraft, useAppStore } from "@/store/app-store";
+import { type OlderList, storedDraft, useAppStore } from "@/store/app-store";
 
 /** Failure is how the app notice names an action that failed: the action with its item, and what to do. */
 interface Failure {
@@ -415,16 +419,6 @@ async function runRemoval(
   );
 }
 
-/** deleteTask removes the task for good and reports what stayed on disk. */
-export function deleteTask(taskId: string): Promise<void> {
-  return runRemoval(taskId, fail(withItem("Couldn't delete", itemName(taskId)), TRY), async () => {
-    const result = await api.deleteTask(taskId);
-    if (result.leftover !== null) {
-      useAppStore.getState().setLeftover(result.leftover);
-    }
-  });
-}
-
 /** loadTranscript fetches a conversation and buffers what arrives meanwhile. */
 export async function loadTranscript(taskId: string, stage: string): Promise<void> {
   useAppStore.getState().beginTranscript(taskId, stage);
@@ -548,18 +542,22 @@ export async function answerQuestionInPlace(
   return "";
 }
 
-/** backToStage reopens a stage that is already done. */
-export async function backToStage(taskId: string, stage: TaskStage): Promise<void> {
-  await run(fail(`Couldn't go back to the ${stageName(stage)} of ${theItem(taskId)}`, TRY), () =>
-    api.backToStage(taskId, stage),
-  );
+/**
+ * focusRequestAfterRestart asks the screen of the task for the focus once a dialog that started a
+ * conversation over is closed: what the situation asks first, the composer of the new session.
+ */
+export function focusRequestAfterRestart(): void {
+  useAppStore.setState({ pendingFocus: "request" });
 }
 
-/** discardStage throws a stage away and starts it over. */
-export async function discardStage(taskId: string, stage: TaskStage): Promise<void> {
-  await run(fail(`Couldn't discard the ${stageName(stage)} of ${theItem(taskId)}`, TRY), () =>
-    api.discardStage(taskId, stage),
-  );
+/** backToStageInPlace reopens a stage that is already done; it answers the refusal, or null. */
+export function backToStageInPlace(taskId: string, stage: TaskStage): Promise<string | null> {
+  return inPlace(() => api.backToStage(taskId, stage));
+}
+
+/** discardStageInPlace throws a stage away and starts it over; it answers the refusal, or null. */
+export function discardStageInPlace(taskId: string, stage: TaskStage): Promise<string | null> {
+  return inPlace(() => api.discardStage(taskId, stage));
 }
 
 /** continueStage moves a task revisiting a stage on to the next one. */
@@ -584,11 +582,12 @@ export function cleanAndStartStep(taskId: string): Promise<string | null> {
   return inPlace(() => api.cleanAndStartStep(taskId));
 }
 
-/** discardStep deletes the conversation of the step and runs it again from scratch. */
-export async function discardStep(taskId: string, cleanWorktree: boolean): Promise<void> {
-  await run(fail(`Couldn't discard the step of ${theItem(taskId)}`, cloneRemedy(taskId, TRY)), () =>
-    api.discardStep(taskId, cleanWorktree),
-  );
+/**
+ * discardStepInPlace deletes the conversation of the step and runs it again from scratch; it
+ * answers the refusal, or null.
+ */
+export function discardStepInPlace(taskId: string, cleanWorktree: boolean): Promise<string | null> {
+  return inPlace(() => api.discardStep(taskId, cleanWorktree));
 }
 
 /** approveStep sends the reviewed step to be committed by the agent that wrote it. */
@@ -863,16 +862,6 @@ export function approveRestOfFindings(id: string, pass: number): Promise<boolean
   );
 }
 
-/** deleteReview removes the review for good and reports what stayed on disk. */
-export function deleteReview(id: string): Promise<void> {
-  return runRemoval(id, fail(withItem("Couldn't delete", itemName(id)), TRY), async () => {
-    const result = await api.deleteReview(id);
-    if (result.leftover !== null) {
-      useAppStore.getState().setLeftover(result.leftover);
-    }
-  });
-}
-
 /**
  * startDiscussion and discussionContext do not swallow their failure: the
  * dialog that creates a discussion shows it next to the form.
@@ -1005,6 +994,46 @@ async function removalInPlace(id: string, operation: () => Promise<void>): Promi
   return error;
 }
 
+/**
+ * deleteReviewInPlace removes the active review for good and reports what stayed on disk; it answers
+ * the refusal, or null.
+ */
+export async function deleteReviewInPlace(id: string): Promise<string | null> {
+  return removalInPlace(id, async () => {
+    const result = await api.deleteReview(id);
+    if (result.leftover !== null) {
+      const { leftover } = result;
+      useAppStore.setState((state) => ({ leftovers: { ...state.leftovers, [id]: leftover } }));
+    }
+  });
+}
+
+/**
+ * deleteTaskInPlace removes the task for good and reports what stayed on disk; it answers the
+ * refusal, or null.
+ */
+export async function deleteTaskInPlace(taskId: string): Promise<string | null> {
+  return removalInPlace(taskId, async () => {
+    const result = await api.deleteTask(taskId);
+    if (result.leftover !== null) {
+      const { leftover } = result;
+      useAppStore.setState((state) => ({ leftovers: { ...state.leftovers, [taskId]: leftover } }));
+    }
+  });
+}
+
+/**
+ * readDeletePreview reads what deleting the task would destroy. It does not go through run: the
+ * dialog that asks says what failed, as part of what it shows.
+ */
+export async function readDeletePreview(taskId: string): Promise<PreviewReading> {
+  try {
+    return { kind: "ready", preview: await api.previewDelete(taskId) };
+  } catch (error) {
+    return { kind: "failed", error: messageOf(error) };
+  }
+}
+
 /** archiveDiscussionInPlace ends the conversation and sends the discussion to the history; it answers the refusal, or null. */
 export function archiveDiscussionInPlace(id: string): Promise<string | null> {
   return removalInPlace(id, () => api.archiveDiscussion(id));
@@ -1013,4 +1042,183 @@ export function archiveDiscussionInPlace(id: string): Promise<string | null> {
 /** deleteDiscussionInPlace removes the discussion for good; it answers the refusal, or null. */
 export function deleteDiscussionInPlace(id: string): Promise<string | null> {
   return removalInPlace(id, () => api.deleteDiscussion(id));
+}
+
+// without is a record with no entry for the id.
+function without<T>(record: Readonly<Record<string, T>>, id: string): Record<string, T> {
+  const { [id]: _removed, ...rest } = record;
+  return rest;
+}
+
+/**
+ * deleteArchivedInPlace removes an archived item for good; on success History opens with the focus on
+ * the row that took its place. It answers the refusal, or null.
+ */
+export async function deleteArchivedInPlace(
+  kind: "task" | "review" | "discussion",
+  id: string,
+  neighbor: string | null,
+): Promise<string | null> {
+  const error = await removalInPlace(id, async () => {
+    switch (kind) {
+      case "task":
+        await api.deleteTask(id);
+        break;
+      case "review":
+        await api.deleteReview(id);
+        break;
+      case "discussion":
+        await api.deleteDiscussion(id);
+        break;
+    }
+  });
+  if (error !== null) {
+    return error;
+  }
+  useAppStore.setState((state) => ({
+    olderArchived: {
+      tasks: without(state.olderArchived.tasks, id),
+      reviews: without(state.olderArchived.reviews, id),
+      discussions: without(state.olderArchived.discussions, id),
+    },
+    olderLists: Object.fromEntries(
+      Object.entries(state.olderLists).map(([key, list]) => [
+        key,
+        { ...list, ids: list.ids.filter((listed) => listed !== id) },
+      ]),
+    ),
+    historyFocus: neighbor ?? "search",
+  }));
+  // An item of the window leaves with the state that no longer has it; one beyond the window leaves
+  // with nothing to say so, and its page goes back to History here.
+  const { app, location, go } = useAppStore.getState();
+  const opened =
+    (location.kind === "archived-task" ||
+      location.kind === "archived-review" ||
+      location.kind === "archived-discussion") &&
+    location.id === id;
+  const inWindow =
+    (app?.history ?? []).some((task) => task.id === id) ||
+    (app?.reviewHistory ?? []).some((review) => review.id === id) ||
+    (app?.discussionHistory ?? []).some((discussion) => discussion.id === id);
+  if (opened && !inWindow) {
+    useAppStore.setState({ expectGone: null });
+    go({ kind: "history" });
+  }
+  return null;
+}
+
+const NEW_OLDER_LIST: OlderList = { ids: [], next: null, matched: null, status: "idle", error: "" };
+
+// withOlderList puts the change of a list of the History beyond the window in the store.
+function withOlderList(key: string, change: (list: OlderList) => OlderList): void {
+  useAppStore.setState((state) => ({
+    olderLists: { ...state.olderLists, [key]: change(state.olderLists[key] ?? NEW_OLDER_LIST) },
+  }));
+}
+
+// withOlderItems puts archived items, by id, in what the History brought from beyond the window.
+function withOlderItems(items: {
+  tasks: readonly ArchivedTask[];
+  reviews: readonly ArchivedReview[];
+  discussions: readonly ArchivedDiscussion[];
+}): void {
+  const byId = <T extends { id: string }>(list: readonly T[]) =>
+    Object.fromEntries(list.map((item) => [item.id, item]));
+  useAppStore.setState((state) => ({
+    olderArchived: {
+      tasks: { ...state.olderArchived.tasks, ...byId(items.tasks) },
+      reviews: { ...state.olderArchived.reviews, ...byId(items.reviews) },
+      discussions: { ...state.olderArchived.discussions, ...byId(items.discussions) },
+    },
+  }));
+}
+
+/**
+ * loadOlderHistory asks for the next page of the History beyond the window, for the query and the
+ * repository; a failure stays on the list, which says so where it is shown.
+ */
+export async function loadOlderHistory(query: string, repositoryId: string): Promise<void> {
+  const key = olderKey(query, repositoryId);
+  const { olderLists, app } = useAppStore.getState();
+  const list = olderLists[key] ?? NEW_OLDER_LIST;
+  if (list.status === "loading" || (list.next === null && list.matched !== null)) {
+    return;
+  }
+  withOlderList(key, (current) => ({ ...current, status: "loading" }));
+  // A state with another window starts the lists over while the page is on its way; the answer of
+  // the list that was reset is dropped, since its cursor no longer fits.
+  const loading = useAppStore.getState().olderLists[key];
+  const stale = () => useAppStore.getState().olderLists[key] !== loading;
+  try {
+    const page = await api.listArchived({
+      before: list.next?.before ?? app?.historySummary.windowStart ?? "",
+      beforeId: list.next?.beforeId ?? "",
+      query,
+      repositoryId,
+    });
+    const items = {
+      tasks: page.tasks ?? [],
+      reviews: page.reviews ?? [],
+      discussions: page.discussions ?? [],
+    };
+    withOlderItems(items);
+    if (stale()) {
+      return;
+    }
+    withOlderList(key, (current) => ({
+      ids: [
+        ...current.ids,
+        ...[...items.tasks, ...items.reviews, ...items.discussions].map((item) => item.id),
+      ],
+      next:
+        page.nextBefore === "" ? null : { before: page.nextBefore, beforeId: page.nextBeforeId },
+      matched: page.matched,
+      status: "idle",
+      error: "",
+    }));
+  } catch (error) {
+    if (!stale()) {
+      withOlderList(key, (current) => ({ ...current, status: "error", error: messageOf(error) }));
+    }
+  }
+}
+
+/**
+ * findArchived asks the Go for an archived item outside the window, for a place that opens it. An
+ * id no archived item has takes the place back to the History; a failure of the Go does too, and
+ * the app notice says why.
+ */
+export async function findArchived(id: string): Promise<void> {
+  const mark = (lookup: "loading" | "missing" | null) =>
+    useAppStore.setState((state) => {
+      const { [id]: _dropped, ...rest } = state.archivedLookups;
+      return { archivedLookups: lookup === null ? rest : { ...rest, [id]: lookup } };
+    });
+  mark("loading");
+  let found = false;
+  try {
+    const item = await api.getArchived(id);
+    withOlderItems({
+      tasks: item.task === null ? [] : [item.task],
+      reviews: item.review === null ? [] : [item.review],
+      discussions: item.discussion === null ? [] : [item.discussion],
+    });
+    found = item.task !== null || item.review !== null || item.discussion !== null;
+  } catch (error) {
+    useAppStore.getState().setError({
+      label: "Couldn't open the archived item",
+      detail: noticeDetail(messageOf(error), TRY),
+    });
+  }
+  mark(found ? null : "missing");
+  const { location, go } = useAppStore.getState();
+  const opened =
+    (location.kind === "archived-task" ||
+      location.kind === "archived-review" ||
+      location.kind === "archived-discussion") &&
+    location.id === id;
+  if (!found && opened) {
+    go({ kind: "history" });
+  }
 }

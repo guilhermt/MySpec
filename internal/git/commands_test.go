@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -468,6 +469,53 @@ func TestRemoveWorktreeAndDeleteBranchUndoAnAdd(t *testing.T) {
 	}
 	if exists {
 		t.Error("BranchExists(login-screen) = true, want the branch gone")
+	}
+}
+
+func TestWorktreesListsTheWorktreesOfTheCloneWhatGitWouldPruneAndWhatIsLocked(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+	kept := filepath.Join(t.TempDir(), "login-screen")
+	gone := filepath.Join(t.TempDir(), "sign-up")
+	locked := filepath.Join(t.TempDir(), "pricing")
+	reason := filepath.Join(t.TempDir(), "billing")
+	for _, path := range []string{kept, gone, locked, reason} {
+		if err := runner.AddWorktree(t.Context(), dir, path, filepath.Base(path), "refs/remotes/origin/dev"); err != nil {
+			t.Fatalf("AddWorktree(%s) = %v, want nil", path, err)
+		}
+	}
+	if err := os.RemoveAll(gone); err != nil {
+		t.Fatalf("RemoveAll(%s) = %v, want nil", gone, err)
+	}
+	gittest.Run(t, dir, "worktree", "lock", locked)
+	gittest.Run(t, dir, "worktree", "lock", "--reason", "on a removable drive", reason)
+
+	got, err := runner.Worktrees(t.Context(), dir)
+	if err != nil {
+		t.Fatalf("Worktrees() = %v, want nil", err)
+	}
+
+	want := []git.ListedWorktree{
+		{Path: dir}, {Path: kept}, {Path: gone, Prunable: true}, {Path: locked, Locked: true}, {Path: reason, Locked: true},
+	}
+	// The main worktree comes first; git lists the others in the order it
+	// reads its own folder, which the file system decides.
+	byPath := func(a, b git.ListedWorktree) int { return strings.Compare(a.Path, b.Path) }
+	if len(got) > 1 {
+		slices.SortFunc(got[1:], byPath)
+	}
+	slices.SortFunc(want[1:], byPath)
+	if !slices.Equal(got, want) {
+		t.Errorf("Worktrees() = %+v, want %+v", got, want)
+	}
+}
+
+func TestWorktreesFailsOutsideARepository(t *testing.T) {
+	t.Parallel()
+	runner, _ := repo(t)
+
+	if _, err := runner.Worktrees(t.Context(), t.TempDir()); err == nil {
+		t.Error("Worktrees() = nil, want the error outside a repository")
 	}
 }
 

@@ -393,6 +393,10 @@ type memWorktrees struct {
 	updateOnce bool // the update failure is spent on the next call
 	removeErr  error
 	commitErr  error // returned when a commit is read
+	// unlisted says git no longer lists a worktree whose removal failed.
+	unlisted bool
+	// locked says the worktree git still lists is locked.
+	locked bool
 }
 
 func newWorktrees(dataDir string) *memWorktrees {
@@ -498,6 +502,34 @@ func (m *memWorktrees) failUpdate(err error, once bool) {
 	defer m.mu.Unlock()
 
 	m.updateErr, m.updateOnce = err, once
+}
+
+func (m *memWorktrees) Registration(_ context.Context, _, path string) worktree.Registration {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "registered:"+path)
+	if m.unlisted {
+		return worktree.Registration{}
+	}
+	return worktree.Registration{Registered: true, Locked: m.locked}
+}
+
+// lockRegistration makes git list a worktree whose removal failed as locked.
+func (m *memWorktrees) lockRegistration() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.locked = true
+}
+
+// forgetRegistration makes git no longer list a worktree whose removal
+// failed, as when it forgot the worktree before failing on the folder.
+func (m *memWorktrees) forgetRegistration() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.unlisted = true
 }
 
 // failRemove makes every removal of a worktree fail with err.

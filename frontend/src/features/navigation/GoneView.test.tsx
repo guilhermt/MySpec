@@ -1,5 +1,5 @@
-import { screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { GoneView } from "@/features/navigation/GoneView";
 import type { GoneLocation, Location } from "@/lib/locations";
 import type { State } from "@/lib/wails";
@@ -10,7 +10,9 @@ import {
   makeArchivedReview,
   makeArchivedTask,
   makeBoard,
+  makeCloseResult,
   makeDraft,
+  makeLeftover,
   makeRepository,
   makeReviewFinding,
   makeReviewPass,
@@ -52,8 +54,15 @@ function page(location: GoneLocation, state: State, back: Location[] = []) {
   });
 }
 
+// buttons are the labels of the buttons, without what is hidden from the reader: the key written on one.
 function buttons(): string[] {
-  return screen.getAllByRole("button").map((button) => button.textContent ?? "");
+  return screen.getAllByRole("button").map((button) => {
+    const label = button.cloneNode(true) as HTMLElement;
+    for (const hidden of label.querySelectorAll('[aria-hidden="true"]')) {
+      hidden.remove();
+    }
+    return label.textContent ?? "";
+  });
 }
 
 function actions(): string[] {
@@ -76,11 +85,66 @@ describe("GoneView", () => {
     expect(screen.getByRole("button", { name: /Next that needs you/ })).toHaveFocus();
   });
 
+  it("tells what became of the pull request and the closing of the task, with its result", () => {
+    const closedAt = today(15, 2);
+    page(
+      gone("task", "task-1", "add-login", "board-1"),
+      stateWith({
+        history: [
+          makeArchivedTask({
+            id: "task-1",
+            pr: {
+              number: 12,
+              url: "",
+              state: "merged",
+              base: "dev",
+              mergedBy: "",
+              mergedAt: today(14, 51),
+            },
+            close: makeCloseResult({ closedAt }),
+          }),
+        ],
+      }),
+    );
+
+    expect(
+      screen.getByText(
+        "PR #12 was merged into dev at 14:51. MySpec closed the task at 15:02; its documents, steps and reports are in History.",
+      ),
+    ).toBeInTheDocument();
+    const closing = screen.getByRole("group", { name: "What the closing did" });
+    expect(closing).toHaveTextContent("Closing");
+    expect(closing).toHaveTextContent("15:02");
+    expect(within(closing).getByText("Worktree removed")).toBeInTheDocument();
+  });
+
+  it("leaves out the closing of a task archived without its result", () => {
+    page(
+      gone("task", "task-1", "add-login", "board-1"),
+      stateWith({ history: [makeArchivedTask({ id: "task-1", close: null })] }),
+    );
+
+    expect(screen.queryByRole("group", { name: "What the closing did" })).not.toBeInTheDocument();
+  });
+
   it("shows a task that was deleted, going back Home without a board", () => {
     page(gone("task", "task-1", "add-login"), stateWith());
 
     expect(screen.getByText("add-login was deleted")).toBeInTheDocument();
     expect(actions()).toEqual(["Next that needs you", "Back to Home"]);
+  });
+
+  it.each([
+    [{ number: 1284, state: "open" as const }, " PR #1284 stays open on GitHub."],
+    [{ number: 1284, state: "merged" as const }, " PR #1284 stays on GitHub, merged."],
+    [{ number: 1284, state: "closed" as const }, " PR #1284 stays on GitHub, closed."],
+    [null, ""],
+  ])("tells what stays of the pull request of a task that was deleted: %j", (pr, tail) => {
+    page({ ...gone("task", "task-1", "add-login"), pr }, stateWith());
+
+    expect(
+      screen.getByText(`The documents, the steps and every record of the task are gone.${tail}`),
+    ).toBeInTheDocument();
   });
 
   it("shows a review that was merged", () => {
@@ -265,6 +329,16 @@ describe("GoneView", () => {
     expect(screen.getByRole("button", { name: "Open in History" })).toHaveFocus();
   });
 
+  it("starts a deleted task with nothing waiting on the way back", () => {
+    page(
+      gone("task", "task-1", "add-login", "board-1"),
+      stateWith({ tasks: [], boards: [makeBoard({ id: "board-1", title: "Platform Roadmap" })] }),
+    );
+
+    expect(screen.getByRole("button", { name: "Back to Platform Roadmap" })).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Open in History" })).not.toBeInTheDocument();
+  });
+
   it("opens the next item that needs the user", async () => {
     const { user } = page(gone("task", "task-1", "add-login"), stateWith());
 
@@ -273,7 +347,7 @@ describe("GoneView", () => {
     expect(useAppStore.getState().location).toEqual({ kind: "task", id: WAITING.id });
   });
 
-  it("opens the archived item in the History", async () => {
+  it("opens the History on the row of the archived item", async () => {
     const { user } = page(
       gone("task", "task-1", "add-login"),
       stateWith({ history: [makeArchivedTask({ id: "task-1" })] }),
@@ -281,6 +355,201 @@ describe("GoneView", () => {
 
     await user.click(screen.getByRole("button", { name: "Open in History" }));
 
-    expect(useAppStore.getState().location).toEqual({ kind: "archived-task", id: "task-1" });
+    expect(useAppStore.getState().location).toEqual({
+      kind: "history",
+      fresh: { kind: "task", id: "task-1" },
+    });
+  });
+
+  it.each<["review" | "discussion", Partial<State>]>([
+    ["review", { reviewHistory: [makeArchivedReview({ id: "item-1" })] }],
+    ["discussion", { discussionHistory: [makeArchivedDiscussion({ id: "item-1" })] }],
+  ])("opens the History on the row of the %s that ended", async (item, archive) => {
+    const { user } = page(gone(item, "item-1", "x"), stateWith(archive));
+
+    await user.click(screen.getByRole("button", { name: "Open in History" }));
+
+    expect(useAppStore.getState().location).toEqual({
+      kind: "history",
+      fresh: { kind: item, id: "item-1" },
+    });
+  });
+
+  describe("what stayed on disk", () => {
+    const worktree = {
+      path: "/home/dev/.local/share/myspec/worktrees/acme/api/add-login",
+      kept: true,
+      error: "contains modified files",
+      registered: true,
+      locked: false,
+    };
+    const forgotten = { ...worktree, registered: false };
+    const locked = { ...worktree, locked: true };
+    const removed = { ...worktree, kept: false, error: "" };
+    const branch = { name: "add-login", kept: true, error: "checked out" };
+    const deleted = { ...branch, kept: false, error: "" };
+    const WORKTREE_COMMAND =
+      "git worktree remove --force ~/.local/share/myspec/worktrees/acme/api/add-login";
+    const FOLDER_COMMAND = "rm -rf ~/.local/share/myspec/worktrees/acme/api/add-login";
+    const LOCKED_COMMAND =
+      "git worktree remove --force --force ~/.local/share/myspec/worktrees/acme/api/add-login";
+    const WORKTREE_STAYED =
+      "The worktree stayed at ~/.local/share/myspec/worktrees/acme/api/add-login";
+
+    function stayed(): HTMLElement {
+      return screen.getByRole("group", { name: "What stayed on disk" });
+    }
+
+    it("shows nothing when git removed everything", () => {
+      page(gone("task", "task-1", "add-login"), stateWith());
+
+      expect(screen.queryByRole("group", { name: "What stayed on disk" })).not.toBeInTheDocument();
+    });
+
+    const FORCE_WARNING = "--force deletes the modified and untracked files in it too.";
+    const FOLDER_WARNING = "rm -rf deletes the modified and untracked files in it too.";
+    const LOCKED_WARNING =
+      "--force --force unlocks the worktree and deletes the modified and untracked files in it too.";
+
+    it.each([
+      [
+        "the worktree git still lists",
+        { worktree, branch: null },
+        [`${WORKTREE_STAYED}contains modified files`],
+        [WORKTREE_COMMAND],
+        FORCE_WARNING,
+      ],
+      [
+        "the locked worktree git still lists",
+        { worktree: locked, branch: null },
+        [`${WORKTREE_STAYED}contains modified files`],
+        [LOCKED_COMMAND],
+        LOCKED_WARNING,
+      ],
+      [
+        "the folder of a worktree git forgot",
+        { worktree: forgotten, branch: null },
+        [`${WORKTREE_STAYED}contains modified files`],
+        [FOLDER_COMMAND],
+        FOLDER_WARNING,
+      ],
+      [
+        "the worktree that stayed and the branch deleted",
+        { worktree, branch: deleted },
+        [`${WORKTREE_STAYED}contains modified files`, "Branch add-login deleted"],
+        [WORKTREE_COMMAND],
+        FORCE_WARNING,
+      ],
+      [
+        "the worktree removed and the branch that stayed",
+        { worktree: removed, branch },
+        ["Worktree removed", "The branch add-login stayedchecked out"],
+        ["git branch -D add-login"],
+        null,
+      ],
+      [
+        "only the branch, of an item without a worktree",
+        { worktree: null, branch },
+        ["The branch add-login stayedchecked out"],
+        ["git branch -D add-login"],
+        null,
+      ],
+      [
+        "both",
+        { worktree, branch },
+        [`${WORKTREE_STAYED}contains modified files`, "The branch add-login stayedchecked out"],
+        [WORKTREE_COMMAND, "git branch -D add-login"],
+        FORCE_WARNING,
+      ],
+      [
+        "both, the worktree forgotten by git",
+        { worktree: forgotten, branch },
+        [`${WORKTREE_STAYED}contains modified files`, "The branch add-login stayedchecked out"],
+        [FOLDER_COMMAND, "git branch -D add-login"],
+        FOLDER_WARNING,
+      ],
+    ])("shows %s", (_name, parts, lines, commands, warning) => {
+      const leftover = makeLeftover({ repoPath: "/home/dev/code/api", ...parts });
+      renderWithStore(<GoneView location={gone("task", "task-1", "add-login")} />, {
+        state: stateWith(),
+        ui: { location: gone("task", "task-1", "add-login"), leftovers: { "task-1": leftover } },
+      });
+
+      expect(stayed()).toHaveTextContent("Git couldn't remove everything");
+      // Each line in order, with what git said in a span of its own after it.
+      const items = within(stayed()).getAllByRole("listitem");
+      expect(items.map((item) => item.textContent)).toEqual(lines);
+      // The warning and the commands come after the block, outside it.
+      expect(within(stayed()).queryByText("To remove it yourself, in ~/code/api")).toBeNull();
+      const heading = screen.getByText("To remove it yourself, in ~/code/api");
+      expect(stayed().compareDocumentPosition(heading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(heading.className).not.toContain("uppercase");
+      expect(document.querySelector("pre")?.textContent).toBe(commands.join("\n"));
+      const warned = screen.queryByText(/deletes the modified and untracked files in it too/);
+      expect(warned?.textContent ?? null).toBe(warning);
+      if (warned !== null) {
+        expect(stayed().contains(warned)).toBe(false);
+        expect(warned.compareDocumentPosition(heading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      }
+    });
+
+    it("comes in when the answer of the deletion arrives, without taking the focus", () => {
+      const location = gone("task", "task-1", "add-login");
+      renderWithStore(<GoneView location={location} />, { state: stateWith(), ui: { location } });
+      const primary = screen.getByRole("button", { name: /Next that needs you/ });
+      expect(primary).toHaveFocus();
+
+      act(() =>
+        useAppStore.setState({
+          leftovers: { "task-1": makeLeftover({ worktree, branch: null }) },
+        }),
+      );
+
+      expect(stayed()).toBeInTheDocument();
+      expect(primary).toHaveFocus();
+    });
+
+    it("shows what a review that was deleted left, in its clone", () => {
+      const location = gone("review", "review-1", "web#12");
+      renderWithStore(<GoneView location={location} />, {
+        state: stateWith(),
+        ui: {
+          location,
+          leftovers: { "review-1": makeLeftover({ repoPath: "/home/dev/code/web", worktree }) },
+        },
+      });
+
+      expect(screen.getByText("To remove it yourself, in ~/code/web")).toBeInTheDocument();
+      expect(screen.getByText(WORKTREE_COMMAND, { selector: "pre" })).toBeInTheDocument();
+    });
+
+    it("removes the folder of a review that git forgot as a folder", () => {
+      const location = gone("review", "review-1", "web#12");
+      renderWithStore(<GoneView location={location} />, {
+        state: stateWith(),
+        ui: {
+          location,
+          leftovers: {
+            "review-1": makeLeftover({ repoPath: "/home/dev/code/web", worktree: forgotten }),
+          },
+        },
+      });
+
+      expect(screen.getByText(FOLDER_COMMAND, { selector: "pre" })).toBeInTheDocument();
+      expect(screen.getByText(FOLDER_WARNING)).toBeInTheDocument();
+    });
+
+    it("copies the command", async () => {
+      const location = gone("task", "task-1", "add-login");
+      const { user } = renderWithStore(<GoneView location={location} />, {
+        state: stateWith(),
+        ui: { location, leftovers: { "task-1": makeLeftover({ worktree, branch }) } },
+      });
+      const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+
+      await user.click(screen.getByRole("button", { name: "Copy the command" }));
+
+      expect(writeText).toHaveBeenCalledWith(`${WORKTREE_COMMAND}\ngit branch -D add-login`);
+    });
   });
 });

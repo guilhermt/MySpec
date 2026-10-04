@@ -27,4 +27,13 @@ describe.each(THEMES)("CopyBlock in the %s theme", (theme) => {
     expect(text.whiteSpace).toBe("pre-wrap");
     expect(text.color).toBe(token("--ink-1"));
   });
+
+  it("writes a sentence heading in the micro size and the third ink, without capitals", () => {
+    setTheme(theme);
+    render(<CopyBlock label="What stayed" heading="sentence" copyLabel="Copy it" text="boom" />);
+    const label = getComputedStyle(screen.getByText("What stayed"));
+    expect(label.color).toBe(token("--ink-3"));
+    expect(label.fontSize).toBe(resolve("var(--text-micro)", "font-size"));
+    expect(label.textTransform).toBe("none");
+  });
 });

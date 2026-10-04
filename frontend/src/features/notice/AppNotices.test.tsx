@@ -24,14 +24,6 @@ describe("AppNotices", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("shows what a deletion left on disk", () => {
-    renderWithStore(<AppNotices />, {
-      ui: { leftover: { path: "/worktrees/add-login", branch: "", error: "permission denied" } },
-    });
-
-    expect(screen.getByRole("status")).toHaveTextContent("Some files stayed on disk");
-  });
-
   it("says nothing when nothing failed", () => {
     const { container } = renderWithStore(<AppNotices />);
 

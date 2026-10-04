@@ -10,7 +10,6 @@ import (
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/repository"
-	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
@@ -377,18 +376,11 @@ func TestPreviewingADeletionSaysWhatWouldBeDestroyed(t *testing.T) {
 		{X: '?', Y: '?', Path: "scratch.md"},
 	}})
 	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: mergedPR()})
-	f.sessions.setSummary("task-1", session.Summary{
-		Stage: session.PRReviewStage, Status: session.StatusWorking, ProcessRunning: true,
-	})
-
 	preview, err := f.service.PreviewDelete(t.Context(), "task-1")
 	if err != nil {
 		t.Fatalf("PreviewDelete() = %v, want nil", err)
 	}
 
-	if !preview.SessionRunning {
-		t.Error("sessionRunning = false, want the conversation counted")
-	}
 	if preview.Worktree == nil || !preview.Worktree.Dirty || preview.Worktree.Files != 2 {
 		t.Errorf("worktree = %+v, want it dirty with two files", preview.Worktree)
 	}
@@ -403,6 +395,58 @@ func TestPreviewingADeletionSaysWhatWouldBeDestroyed(t *testing.T) {
 
 	if preview.PR == nil || preview.PR.Number != 7 {
 		t.Errorf("pull request = %+v, want the one the app leaves on GitHub", preview.PR)
+	}
+}
+
+func TestThePreviewCountsTheCommitsOutsideTheBase(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		pr     task.PRDetails
+		noBase bool
+		merged bool
+		ahead  int
+		failed error
+		// unread is the failure of the reading of the merge, which leaves the
+		// count unread too.
+		unread error
+		want   int
+	}{
+		{name: "merged on GitHub", pr: mergedPR(), ahead: 3, want: 0},
+		{name: "merged as git sees it", pr: openPR(), merged: true, ahead: 3, want: 0},
+		{name: "not merged with 3 commits", pr: openPR(), ahead: 3, want: 3},
+		{name: "no base", pr: openPR(), noBase: true, ahead: 3, want: -1},
+		{name: "the count fails", pr: openPR(), ahead: 3, failed: errors.New("git rev-list: bad revision"), want: -1},
+		{name: "the merge reading fails", pr: openPR(), ahead: 3, unread: errors.New("git merge-base: bad revision"), want: -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			if tt.noBase {
+				f.worktrees.base = ""
+			}
+			awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: tt.pr})
+			f.worktrees.merged = tt.merged
+			f.worktrees.ahead, f.worktrees.aheadErr = tt.ahead, tt.failed
+			f.worktrees.mergedErr = tt.unread
+
+			preview, err := f.service.PreviewDelete(t.Context(), "task-1")
+			if err != nil {
+				t.Fatalf("PreviewDelete() = %v, want nil", err)
+			}
+			if preview.Branch == nil || preview.Branch.Ahead != tt.want {
+				t.Errorf("branch = %+v, want ahead %d", preview.Branch, tt.want)
+			}
+			if tt.failed != nil && preview.Branch.Error != "" {
+				t.Errorf("branch error = %q, want the merge reading's alone", preview.Branch.Error)
+			}
+			if tt.unread != nil && preview.Branch.Error != tt.unread.Error() {
+				t.Errorf("branch error = %q, want %q", preview.Branch.Error, tt.unread.Error())
+			}
+		})
 	}
 }
 
@@ -461,9 +505,11 @@ func TestDeleteReportsWhatGitCouldNotRemove(t *testing.T) {
 
 	f := newFixture(t)
 	f.worktrees.setLeftover(worktree.Leftover{
-		Path:   worktree.Path(dataDir, "dev", "web", "task-1"),
-		Branch: "task-1",
-		Error:  "git worktree remove: permission denied; git branch -D: permission denied",
+		RepoPath: "/code/web",
+		Path:     worktree.Path(dataDir, "dev", "web", "task-1"), PathKept: true,
+		PathError: "git worktree remove: permission denied",
+		Branch:    "task-1", BranchKept: true,
+		BranchError: "git branch -D: permission denied",
 	})
 	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: openPR()})
 
@@ -472,10 +518,12 @@ func TestDeleteReportsWhatGitCouldNotRemove(t *testing.T) {
 		t.Fatalf("Delete() = %v, want nil", err)
 	}
 
-	want := flow.LeftoverInfo{
-		Path:   worktree.Path(dataDir, "dev", "web", "task-1"),
-		Branch: "task-1",
-		Error:  "git worktree remove: permission denied; git branch -D: permission denied",
+	want := worktree.Leftover{
+		RepoPath: "/code/web",
+		Path:     worktree.Path(dataDir, "dev", "web", "task-1"), PathKept: true,
+		PathError: "git worktree remove: permission denied",
+		Branch:    "task-1", BranchKept: true,
+		BranchError: "git branch -D: permission denied",
 	}
 	if result.Leftover == nil || *result.Leftover != want {
 		t.Errorf("leftover = %+v, want %+v", result.Leftover, want)

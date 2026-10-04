@@ -188,7 +188,7 @@ export function compareSituations(a: Situation, b: Situation): number {
 }
 
 /** reviewName is what a line of the interface calls a review: name#number. */
-export function reviewName(review: ReviewSummary): string {
+export function reviewName(review: Pick<ReviewSummary, "repository" | "number">): string {
   return `${shortName(review.repository)}#${review.number}`;
 }
 

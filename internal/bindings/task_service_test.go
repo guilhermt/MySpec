@@ -1316,9 +1316,6 @@ func TestPreviewDeleteSaysWhatTheDeletionWouldDestroy(t *testing.T) {
 		t.Fatalf("PreviewDelete(%s) = %v, want nil", id, err)
 	}
 
-	if !preview.SessionRunning {
-		t.Error("sessionRunning = false, want the conversation of the step counted")
-	}
 	want := worktree.Path(f.dataDir, "dev", "web", "login-screen")
 	if preview.Worktree == nil || preview.Worktree.Path != want {
 		t.Errorf("worktree = %+v, want the one of the task", preview.Worktree)

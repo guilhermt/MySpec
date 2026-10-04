@@ -1,6 +1,7 @@
 import { type ReactElement, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { CheckboxSign } from "./Checkbox";
+import { CutText } from "./CutText";
 import { observeSize, useFits } from "./fits";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons";
@@ -545,6 +546,120 @@ export function PullRequestRow({
             {model.keys}
           </span>
         )}
+      </span>
+    </div>
+  );
+}
+
+/** HistoryRowView is everything a row of the History draws and says; the caller builds it from the archived item. */
+export interface HistoryRowView {
+  key: string;
+  glyph: "task" | "oneShot" | "review" | "discussion";
+  name: string;
+  /** where is the short reference: api#398, web#2291, the board. */
+  where: string;
+  whereTooltip: string;
+  /** result is the part of the result in the second ink; resultStrong is the part that asks for attention, in the first ink at 500. */
+  result: string;
+  resultStrong: string;
+  /** strongFirst puts resultStrong before result, as in "Closed · 1 pass". */
+  strongFirst: boolean;
+  time: string;
+  /** label is the whole accessible name. */
+  label: string;
+}
+
+export interface HistoryRowProps {
+  model: HistoryRowView;
+  /** fresh is the row of the item that was just archived: the open row of the list. */
+  fresh: boolean;
+  /** tabStop is the row the list's one tab stop sits on. */
+  tabStop: boolean;
+  onActivate: () => void;
+  onFocus: () => void;
+}
+
+/**
+ * HistoryRow is the row of an archived item in the History: a treeitem of level 2 on the columns
+ * --col-where, --col-result and --col-time. Under 860px of the list, where and result go to a second
+ * line under the name, whole.
+ */
+export function HistoryRow({
+  model,
+  fresh,
+  tabStop,
+  onActivate,
+  onFocus,
+}: HistoryRowProps): ReactElement {
+  const strong = <span className="font-medium text-ink-1">{model.resultStrong}</span>;
+  const rest = <span className="text-ink-2">{model.result}</span>;
+  const whole = model.strongFirst
+    ? `${model.resultStrong}${model.result}`
+    : `${model.result}${model.resultStrong}`;
+  return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the list owns the keyboard of its rows
+    <div
+      role="treeitem"
+      aria-level={2}
+      aria-label={model.label}
+      {...(fresh ? { "aria-selected": true } : {})}
+      tabIndex={tabStop ? 0 : -1}
+      data-row-key={model.key}
+      onClick={onActivate}
+      onFocus={onFocus}
+      className={cn(
+        ROW,
+        "gap-x-(--space-3) grid-cols-[var(--icon)_minmax(0,1fr)_var(--col-where)_var(--col-result)_var(--col-time)]",
+        "@max-[860px]/list:grid-cols-[var(--icon)_minmax(0,1fr)_var(--col-time)] @max-[860px]/list:gap-y-(--space-0-5) @max-[860px]/list:py-(--space-1-5)",
+        fresh ? ROW_OPEN : ROW_REST,
+      )}
+    >
+      <span
+        className={cn(
+          "col-start-1 row-start-1 grid size-(--icon) place-items-center",
+          fresh ? "text-brand-ink" : "text-ink-3",
+        )}
+      >
+        <Icon icon={ICONS[model.glyph]} size="sm" />
+      </span>
+      <CutText text={model.name} className="col-start-2 row-start-1" />
+      <span
+        className={cn(
+          "contents @max-[860px]/list:col-[2/-1] @max-[860px]/list:row-start-2 @max-[860px]/list:flex @max-[860px]/list:gap-x-(--space-4)",
+          META,
+        )}
+      >
+        <CutText
+          text={model.whereTooltip}
+          className="col-start-3 row-start-1 text-ink-3 @max-[860px]/list:col-auto @max-[860px]/list:row-auto"
+        >
+          {model.where}
+        </CutText>
+        <CutText
+          text={whole}
+          className="col-start-4 row-start-1 @max-[860px]/list:col-auto @max-[860px]/list:row-auto"
+        >
+          {model.strongFirst ? (
+            <>
+              {strong}
+              {rest}
+            </>
+          ) : (
+            <>
+              {rest}
+              {strong}
+            </>
+          )}
+        </CutText>
+      </span>
+      <span
+        className={cn(
+          "col-start-5 row-start-1 whitespace-nowrap text-right tabular-nums @max-[860px]/list:col-start-3",
+          META,
+          fresh ? "text-ink-3" : "text-ink-4",
+        )}
+      >
+        {model.time}
       </span>
     </div>
   );

@@ -9,6 +9,7 @@ export interface GoneAction {
   label: string;
   onClick: () => void;
   tooltip?: string;
+  /** shortcut is the key of the action, Ctrl+J: written on the button as Ctrl J, and named in the tooltip. */
   shortcut?: string;
   /** disabledReason disables the action and says why. */
   disabledReason?: string;
@@ -27,7 +28,8 @@ export interface GonePageProps {
 
 /**
  * GonePage stands in the place of an item that left while open: what became of it and where to
- * go from here. The first action that can run is the primary one and holds the focus.
+ * go from here. The first action that can run is the primary one and holds the focus. The blocks
+ * take the whole reading measure, whatever their lines hold.
  */
 export function GonePage({ icon, title, description, children, actions }: GonePageProps) {
   const primaryRef = useRef<HTMLButtonElement>(null);
@@ -38,8 +40,8 @@ export function GonePage({ icon, title, description, children, actions }: GonePa
   }, []);
 
   return (
-    <div className="flex max-w-(--measure-read) flex-col items-start gap-4 px-(--space-8) pt-(--space-12)">
-      <Icon icon={icon} tone="muted" size="md" />
+    <div className="flex max-w-(--measure-read) flex-col gap-4 px-(--space-6) pt-(--space-12)">
+      <Icon icon={icon} tone="muted" size="md" className="self-start" />
       <p className="text-(length:--text-title) leading-(--leading-title) font-semibold text-ink-1">
         {title}
       </p>
@@ -57,6 +59,7 @@ export function GonePage({ icon, title, description, children, actions }: GonePa
               ref={index === primary ? primaryRef : undefined}
               variant={index === primary ? "primary" : "secondary"}
               onClick={action.onClick}
+              {...(action.shortcut !== undefined ? { shortcut: keyOf(action.shortcut) } : {})}
               {...(action.disabledReason !== undefined
                 ? { disabled: true, disabledReason: action.disabledReason }
                 : {})}
@@ -79,4 +82,9 @@ export function GonePage({ icon, title, description, children, actions }: GonePa
       </div>
     </div>
   );
+}
+
+// keyOf is a shortcut as the button writes it, the keys apart: Ctrl+J is Ctrl J.
+function keyOf(shortcut: string): string {
+  return shortcut.replaceAll("+", " ");
 }

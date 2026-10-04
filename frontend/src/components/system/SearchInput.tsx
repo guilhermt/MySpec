@@ -72,7 +72,11 @@ export function SearchInput({
         onChange={(event) => onValueChange(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Escape") onEscape?.(event);
-          if (event.key === "ArrowDown") onArrowDown?.();
+          // ↓ hands the focus on, and the browser would also scroll the place it lands in by a line.
+          if (event.key === "ArrowDown" && onArrowDown !== undefined) {
+            event.preventDefault();
+            onArrowDown();
+          }
         }}
         className="min-w-0 flex-1 border-0 bg-transparent read-only:cursor-not-allowed text-(length:--text-meta) leading-(--leading-meta) text-ink-1 aria-disabled:text-ink-4 placeholder:text-ink-4 outline-none"
       />

@@ -1,6 +1,7 @@
 package attention
 
 import (
+	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 )
 
@@ -25,7 +26,7 @@ func DeriveDiscussion(in DiscussionInput) []Found {
 				// The user paused the conversation: it waits for nobody.
 				return nil
 			}
-			found.Kind, found.Body = kind, sessionBody(kind, placeName(place))
+			found.Kind, found.Body = kind, sessionBody(kind, placeName(place, false))
 			return []Found{found}
 		}
 	}
@@ -38,11 +39,23 @@ func DeriveDiscussion(in DiscussionInput) []Found {
 		if !state.SessionOpen || !state.Session.Idle || state.Discussion.DraftsRead {
 			return nil
 		}
-		found.Kind, found.Body = KindReply, sessionBody(KindReply, placeName(place))
+		found.Kind, found.Body = KindReply, sessionBody(KindReply, placeName(place, false))
 	case discussionflow.StatusDeciding:
-		found.Kind, found.Body = KindDrafts, draftsBody()
+		undecided := 0
+		for _, d := range state.Drafts {
+			if !d.Draft.Decided() {
+				undecided++
+			}
+		}
+		found.Kind, found.Body = KindDrafts, draftsBody(undecided)
 	case discussionflow.StatusPublishFailed:
-		found.Kind, found.Body = KindPublishFailed, draftsPublishFailedBody()
+		var failed []discussion.Draft
+		for _, d := range state.Drafts {
+			if d.Draft.PublishError != "" {
+				failed = append(failed, d.Draft)
+			}
+		}
+		found.Kind, found.Body = KindPublishFailed, draftsPublishFailedBody(failed)
 	case discussionflow.StatusEpicCantPublish:
 		approved, cards, _ := state.ShortEpic()
 		found.Kind, found.Body = KindEpicCantPublish, epicCantPublishBody(approved, cards)

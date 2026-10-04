@@ -86,6 +86,10 @@ export interface MarkerView {
   body: MarkerBody;
   /** link is the external action of the line, drawn on the right before the time. */
   link?: { label: string; url: string };
+  /** lead is the mono text on the edge of the line, in the place of the icon: the number of a step. */
+  lead?: string;
+  /** aside is the mono text on the right of the line, always in view: the commit of a step. */
+  aside?: string;
   /** timeHidden says the line never shows its time, not even on hover: a retry. */
   timeHidden: boolean;
   /** timeText replaces the time of the hover: the span of a publication, "14:29 – 15:12". */

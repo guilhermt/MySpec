@@ -2,11 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { Location } from "@/lib/locations";
 import { allowedInWelcome, archivedAnything, welcomeMode } from "@/lib/welcome";
 import {
-  makeArchivedDiscussion,
-  makeArchivedReview,
-  makeArchivedTask,
   makeBoard,
   makeDiscussion,
+  makeHistorySummary,
   makeMigration,
   makeRepository,
   makeReviewSummary,
@@ -38,7 +36,11 @@ describe("welcomeMode", () => {
       makeState({ ...EMPTY, discussions: [makeDiscussion({ boardId: "" })] }),
       false,
     ],
-    ["only archived items", makeState({ ...EMPTY, history: [makeArchivedTask()] }), true],
+    [
+      "only archived items",
+      makeState({ ...EMPTY, historySummary: makeHistorySummary({ tasks: 1 }) }),
+      true,
+    ],
     ["a refused migration", makeState({ ...EMPTY, migration: makeMigration() }), false],
   ])("is %s: %s", (_name, app, expected) => {
     expect(welcomeMode(app)).toBe(expected);
@@ -48,9 +50,14 @@ describe("welcomeMode", () => {
 describe("archivedAnything", () => {
   it.each([
     ["nothing", EMPTY, false],
-    ["a task", { history: [makeArchivedTask()] }, true],
-    ["a review", { reviewHistory: [makeArchivedReview()] }, true],
-    ["a discussion", { discussionHistory: [makeArchivedDiscussion()] }, true],
+    ["a task", { historySummary: makeHistorySummary({ tasks: 1 }) }, true],
+    ["a review", { historySummary: makeHistorySummary({ reviews: 1 }) }, true],
+    ["a discussion", { historySummary: makeHistorySummary({ discussions: 1 }) }, true],
+    [
+      "only items beyond the window",
+      { historySummary: makeHistorySummary({ tasks: 2, oldest: "2026-01-02T10:00:00Z" }) },
+      true,
+    ],
   ])("says %s archived is %s", (_name, overrides, expected) => {
     expect(archivedAnything(makeState({ ...EMPTY, ...overrides }))).toBe(expected);
   });
@@ -58,7 +65,7 @@ describe("archivedAnything", () => {
 
 describe("allowedInWelcome", () => {
   const bare = makeState(EMPTY);
-  const archived = makeState({ ...EMPTY, history: [makeArchivedTask()] });
+  const archived = makeState({ ...EMPTY, historySummary: makeHistorySummary({ tasks: 1 }) });
   const places: [string, Location, boolean, boolean][] = [
     ["Home", { kind: "home" }, true, true],
     ["Settings", { kind: "settings", section: "boards" }, true, true],

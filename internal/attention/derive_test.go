@@ -54,12 +54,12 @@ func TestDeriveAPlanningStage(t *testing.T) {
 		{
 			"the agent waits in the PRD",
 			stageInput(task.StagePRD, task.Artifacts{}, waiting),
-			situation(task.StagePRD, attention.KindReply, "The agent is waiting for your reply in PRD."),
+			situation(task.StagePRD, attention.KindReply, "The agent is waiting for your reply in the PRD."),
 		},
 		{
 			"the agent waits in the tech spec",
 			stageInput(task.StageTechSpec, task.Artifacts{PRD: true}, waiting),
-			situation(task.StageTechSpec, attention.KindReply, "The agent is waiting for your reply in tech spec."),
+			situation(task.StageTechSpec, attention.KindReply, "The agent is waiting for your reply in the tech spec."),
 		},
 		{"the document is written", stageInput(task.StageTechSpec, written, waiting), nil},
 		{
@@ -71,27 +71,27 @@ func TestDeriveAPlanningStage(t *testing.T) {
 		{
 			"the plan is invalid after every correction",
 			stageInput(task.StagePlan, invalidPlan, uncorrected),
-			situation(task.StagePlan, attention.KindPlanInvalid, "The plan is still invalid after automatic corrections."),
+			situation(task.StagePlan, attention.KindPlanInvalid, "The plan is still invalid after 3 automatic corrections."),
 		},
 		{
 			"the session stopped with an error",
 			stageInput(task.StagePlan, written, summary(session.StatusError, false)),
-			situation(task.StagePlan, attention.KindSessionError, "The session stopped with an error in plan."),
+			situation(task.StagePlan, attention.KindSessionError, "The session stopped with an error in the plan."),
 		},
 		{
 			"the last turn failed",
 			stageInput(task.StagePlan, written, failedTurn),
-			situation(task.StagePlan, attention.KindSessionError, "The session stopped with an error in plan."),
+			situation(task.StagePlan, attention.KindSessionError, "The session stopped with an error in the plan."),
 		},
 		{
 			"a permission waits",
 			stageInput(task.StagePRD, task.Artifacts{}, summary(session.StatusNeedsPermission, false)),
-			situation(task.StagePRD, attention.KindPermission, "Permission requested in PRD."),
+			situation(task.StagePRD, attention.KindPermission, "Permission requested in the PRD."),
 		},
 		{
 			"a question waits",
 			stageInput(task.StagePRD, task.Artifacts{}, summary(session.StatusNeedsAnswer, false)),
-			situation(task.StagePRD, attention.KindQuestion, "The agent has a question in PRD."),
+			situation(task.StagePRD, attention.KindQuestion, "The agent has a question in the PRD."),
 		},
 		{
 			"the agent waits in the One-Shot planning",
@@ -158,22 +158,29 @@ func TestDeriveTheCurrentStep(t *testing.T) {
 		{
 			"awaiting review",
 			stepInput(flow.StepState{Status: flow.StepAwaitingReview, Review: &review.Snapshot{Total: 3}}, waiting),
-			situation(attention.KindStepReview, attention.FormReview, 0, "Step 2 is ready for review."),
+			situation(attention.KindStepReview, attention.FormReview, 0, "Step 2 is ready for your review. 3 files changed."),
+		},
+		{
+			"awaiting review, the reading of its files failed",
+			stepInput(flow.StepState{
+				Status: flow.StepAwaitingReview, Review: &review.Snapshot{Total: 3, Err: "git status: exit status 128"},
+			}, waiting),
+			situation(attention.KindStepReview, attention.FormReview, 0, "Step 2 is ready for your review."),
 		},
 		{
 			"a step not started after the one awaiting review",
 			followed,
-			situation(attention.KindStepReview, attention.FormReview, 0, "Step 2 is ready for review."),
+			situation(attention.KindStepReview, attention.FormReview, 0, "Step 2 is ready for your review. 3 files changed."),
 		},
 		{
 			"one of three files staged",
 			stepInput(flow.StepState{Status: flow.StepInReview, Review: &review.Snapshot{Staged: 1, Total: 3}}, waiting),
-			situation(attention.KindStepReview, attention.FormStaged, 33, "Step 2 is ready for review."),
+			situation(attention.KindStepReview, attention.FormStaged, 33, "Step 2 is ready for your review. 3 files changed."),
 		},
 		{
 			"ready to approve",
 			stepInput(flow.StepState{Status: flow.StepReadyToApprove, Review: &review.Snapshot{Staged: 3, Total: 3}}, waiting),
-			situation(attention.KindStepReview, attention.FormApprove, 0, "Step 2 is ready for review."),
+			situation(attention.KindStepReview, attention.FormApprove, 0, "Step 2 is ready for your review. 3 files changed."),
 		},
 		{
 			"the last approval left no commit",
@@ -210,7 +217,7 @@ func TestDeriveTheCurrentStep(t *testing.T) {
 			stepInput(flow.StepState{
 				Status: flow.StepAwaitingReview, Review: &review.Snapshot{Total: 3}, Fallback: task.FallbackRoundsExhausted,
 			}, waiting),
-			situation(attention.KindStepReview, attention.FormReview, 0, "Step 2: the agent review didn't come clean after three rounds."),
+			situation(attention.KindStepReview, attention.FormReview, 0, "Step 2: the agent review didn't come clean after 3 rounds. It's yours now."),
 		},
 		{
 			"fell to the user without the commit",
@@ -357,8 +364,8 @@ func TestDeriveThePullRequestOfThePRStage(t *testing.T) {
 		},
 		{
 			"the pull request was closed without a merge",
-			prInput(flow.PullRequest{Status: flow.PRClosedUnmerged}),
-			situation(attention.KindPRClosed, attention.FormNone, 0, "The pull request was closed without a merge."),
+			prInput(flow.PullRequest{Status: flow.PRClosedUnmerged, PR: task.PRDetails{Number: 1284}}),
+			situation(attention.KindPRClosed, attention.FormNone, 0, "PR #1284 was closed without a merge."),
 		},
 		{
 			"the agent stopped short of what the app waits for",
@@ -452,7 +459,8 @@ func TestDeriveThePullRequestOfThePRStage(t *testing.T) {
 				Status: flow.PRDone, PR: task.PRDetails{Number: 1284}, CheckError: "gh pr view: timeout", CanClose: true,
 				Pass: structuredPass(discarded, discarded),
 			}),
-			situation(attention.KindMerge, attention.FormClose, 0, "The pull request is ready to close."),
+			situation(attention.KindMerge, attention.FormClose, 0,
+				"PR #1284 is ready to close: MySpec couldn't confirm the merge."),
 		},
 		{
 			"ready to merge after a clean pass",
@@ -460,7 +468,7 @@ func TestDeriveThePullRequestOfThePRStage(t *testing.T) {
 				Status: flow.PRDone, PR: task.PRDetails{Number: 1284},
 				Pass: &task.PRPass{Pass: 2, Recorded: true, Clean: true},
 			}),
-			situation(attention.KindMerge, attention.FormMerge, 0, "The pull request is ready to merge."),
+			situation(attention.KindMerge, attention.FormMerge, 0, "PR #1284 is ready to merge."),
 		},
 		{
 			"changes with nothing staged",
@@ -469,7 +477,7 @@ func TestDeriveThePullRequestOfThePRStage(t *testing.T) {
 				SessionStage: session.PRReviewStage, Session: waiting,
 			}),
 			situation(attention.KindChangesReview, attention.FormReview, 0,
-				"The changes from the review of the pull request are ready for review."),
+				"The changes from the review of the pull request are ready for your review."),
 		},
 		{
 			"changes with one of two files staged",
@@ -478,7 +486,7 @@ func TestDeriveThePullRequestOfThePRStage(t *testing.T) {
 				SessionStage: session.PRReviewStage, Session: waiting,
 			}),
 			situation(attention.KindChangesReview, attention.FormStaged, 50,
-				"The changes from the review of the pull request are ready for review."),
+				"The changes from the review of the pull request are ready for your review."),
 		},
 		{
 			"changes ready to approve",
@@ -487,7 +495,7 @@ func TestDeriveThePullRequestOfThePRStage(t *testing.T) {
 				SessionStage: session.PRReviewStage, Session: waiting,
 			}),
 			situation(attention.KindChangesReview, attention.FormApprove, 0,
-				"The changes from the review of the pull request are ready for review."),
+				"The changes from the review of the pull request are ready for your review."),
 		},
 		{
 			"the last approval of the changes left no commit",
@@ -500,13 +508,14 @@ func TestDeriveThePullRequestOfThePRStage(t *testing.T) {
 		},
 		{
 			"ready to merge",
-			prInput(flow.PullRequest{Status: flow.PRDone}),
-			situation(attention.KindMerge, attention.FormMerge, 0, "The pull request is ready to merge."),
+			prInput(flow.PullRequest{Status: flow.PRDone, PR: task.PRDetails{Number: 1284}}),
+			situation(attention.KindMerge, attention.FormMerge, 0, "PR #1284 is ready to merge."),
 		},
 		{
 			"the merge could not be confirmed",
-			prInput(flow.PullRequest{Status: flow.PRDone, CheckError: "gh pr view: timeout", CanClose: true}),
-			situation(attention.KindMerge, attention.FormClose, 0, "The pull request is ready to close."),
+			prInput(flow.PullRequest{Status: flow.PRDone, PR: task.PRDetails{Number: 1284}, CheckError: "gh pr view: timeout", CanClose: true}),
+			situation(attention.KindMerge, attention.FormClose, 0,
+				"PR #1284 is ready to close: MySpec couldn't confirm the merge."),
 		},
 		{
 			"a check failed after the review",
@@ -552,8 +561,8 @@ func TestDeriveThePullRequestOfThePRStage(t *testing.T) {
 		},
 		{
 			"merged",
-			prInput(flow.PullRequest{Status: flow.PRMerged, CanClose: true}),
-			situation(attention.KindMerge, attention.FormClose, 0, "The pull request is ready to close."),
+			prInput(flow.PullRequest{Status: flow.PRMerged, PR: task.PRDetails{Number: 1284}, CanClose: true}),
+			situation(attention.KindMerge, attention.FormClose, 0, "PR #1284 was merged. The task is ready to close."),
 		},
 		{
 			"the agent is drafting",
@@ -590,6 +599,15 @@ func TestDeriveThePullRequestOfThePRStage(t *testing.T) {
 			}),
 			situation(attention.KindPermission, attention.FormNone, 0,
 				"Permission requested in the pull request."),
+		},
+		{
+			"a permission waits in the review",
+			prInput(flow.PullRequest{
+				Status: flow.PRReviewing, SessionStage: session.PRReviewStage,
+				Session: summary(session.StatusNeedsPermission, false),
+			}),
+			situation(attention.KindPermission, attention.FormNone, 0,
+				"Permission requested in the review."),
 		},
 		{
 			"a task in the PR stage before its run exists",

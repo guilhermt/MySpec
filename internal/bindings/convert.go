@@ -421,25 +421,41 @@ func fromCloseStep(step task.CloseStep) CloseStep {
 	return CloseStep{Outcome: string(step.Outcome), Reason: step.Reason, Detail: step.Detail}
 }
 
+// ArchivedSources are where FromArchived reads an archived task from.
+type ArchivedSources struct {
+	Artifacts    func(id string) task.Artifacts
+	PRRun        func(id string) (task.PRRun, bool)
+	PRPasses     func(id string) []task.PRPass
+	StepRuns     func(id string) []task.StepRun
+	Repositories func(id string) (repository.Repository, bool)
+}
+
 // FromArchived converts the tasks of the history, each with the artifacts of
-// its folder, its repository and the pull request it left behind. The slices
-// are always allocated so the frontend never sees null.
-func FromArchived(
-	tasks []task.Task,
-	artifacts func(id string) task.Artifacts,
-	prRun func(id string) (task.PRRun, bool),
-	repositories func(id string) (repository.Repository, bool),
-) []ArchivedTask {
+// its folder, its repository, the closing and the pull request it left behind.
+// The slices are always allocated so the frontend never sees null.
+func FromArchived(tasks []task.Task, sources ArchivedSources) []ArchivedTask {
 	converted := make([]ArchivedTask, len(tasks))
 	for i, t := range tasks {
-		a := artifacts(t.ID)
+		a := sources.Artifacts(t.ID)
 		fullName := ""
-		if repo, ok := repositories(t.RepositoryID); ok {
+		if repo, ok := sources.Repositories(t.RepositoryID); ok {
 			fullName = repo.FullName()
 		}
 		var pr *ArchivedPR
-		if run, ok := prRun(t.ID); ok && run.PR.Number > 0 {
-			pr = &ArchivedPR{Number: run.PR.Number, URL: run.PR.URL, State: string(run.PR.State)}
+		var closing *CloseResult
+		run, hasRun := sources.PRRun(t.ID)
+		if hasRun {
+			closing = fromCloseResult(run.Close)
+			if run.PR.Number > 0 {
+				pr = &ArchivedPR{
+					Number:   run.PR.Number,
+					URL:      run.PR.URL,
+					State:    string(run.PR.State),
+					Base:     run.PR.Base,
+					MergedBy: run.PR.MergedBy,
+					MergedAt: timeOrEmpty(run.PR.MergedAt),
+				}
+			}
 		}
 		converted[i] = ArchivedTask{
 			ID:              t.ID,
@@ -451,26 +467,58 @@ func FromArchived(
 			HasPRD:          a.PRD,
 			HasTechSpec:     a.TechSpec,
 			HasOneShot:      a.OneShot,
-			Steps:           fromArchivedSteps(a.Plan.Steps, a.StepReports),
+			Steps:           fromArchivedSteps(a.Plan.Steps, a.StepReports, sources.StepRuns(t.ID)),
 			PR:              pr,
 			ArtifactVersion: t.ArtifactVersion,
 			CreatedAt:       t.CreatedAt.Format(time.RFC3339),
 			ArchivedAt:      t.ArchivedAt.Format(time.RFC3339),
+			Close:           closing,
+			HasPRDraft:      a.PR.Draft.Present,
+			PRReports:       fromArchivedPRReports(a.PR.Reports, sources.PRPasses(t.ID)),
 		}
 	}
 	return converted
 }
 
 // fromArchivedSteps converts the steps of the plan of an archived task, with
-// the reports of their agent review, which the history renders and never runs.
-func fromArchivedSteps(steps []task.Step, reports map[int][]task.ReviewReport) []ArchivedStep {
+// the reports of their agent review and the commit each one produced, which the
+// history renders and never runs.
+func fromArchivedSteps(
+	steps []task.Step, reports map[int][]task.ReviewReport, runs []task.StepRun,
+) []ArchivedStep {
+	commits := make(map[int]string, len(runs))
+	for _, run := range runs {
+		commits[run.Number] = run.CommitSHA
+	}
 	converted := make([]ArchivedStep, len(steps))
 	for i, step := range steps {
 		converted[i] = ArchivedStep{
-			Number:  step.Number,
-			File:    step.File,
-			Title:   step.Title,
-			Reports: fromStepReports(reports[step.Number]),
+			Number:    step.Number,
+			File:      step.File,
+			Title:     step.Title,
+			Reports:   fromStepReports(reports[step.Number]),
+			CommitSHA: commits[step.Number],
+		}
+	}
+	return converted
+}
+
+// fromArchivedPRReports converts the reports of the review of the pull request
+// of an archived task, without their text. A pass the app recorded is
+// structured and counts its findings; one that is only text does not.
+func fromArchivedPRReports(reports []task.ReviewReport, passes []task.PRPass) []ArchivedPRReport {
+	recorded := make(map[int]task.PRPass, len(passes))
+	for _, pass := range passes {
+		if pass.Recorded {
+			recorded[pass.Pass] = pass
+		}
+	}
+	converted := make([]ArchivedPRReport, len(reports))
+	for i, report := range reports {
+		converted[i] = ArchivedPRReport{Pass: report.Pass, File: report.File, Clean: report.Clean, Findings: -1}
+		if pass, ok := recorded[report.Pass]; ok {
+			converted[i].Structured = true
+			converted[i].Findings = len(pass.Findings)
 		}
 	}
 	return converted
@@ -479,7 +527,7 @@ func fromArchivedSteps(steps []task.Step, reports map[int][]task.ReviewReport) [
 // FromDeletePreview converts what deleting a task would destroy, keeping nil
 // for what it has none of.
 func FromDeletePreview(preview flow.DeletePreview) DeletePreview {
-	converted := DeletePreview{SessionRunning: preview.SessionRunning}
+	converted := DeletePreview{}
 	if wt := preview.Worktree; wt != nil {
 		converted.Worktree = &WorktreePreview{
 			Path:  wt.Path,
@@ -489,7 +537,7 @@ func FromDeletePreview(preview flow.DeletePreview) DeletePreview {
 		}
 	}
 	if branch := preview.Branch; branch != nil {
-		converted.Branch = &BranchPreview{Name: branch.Name, Merged: branch.Merged, Error: branch.Error}
+		converted.Branch = &BranchPreview{Name: branch.Name, Merged: branch.Merged, Ahead: branch.Ahead, Error: branch.Error}
 	}
 	if pr := preview.PR; pr != nil {
 		converted.PR = &PRPreview{Number: pr.Number, URL: pr.URL, State: string(pr.State)}
@@ -503,11 +551,18 @@ func FromDeleteResult(result flow.DeleteResult) DeleteResult {
 	if result.Leftover == nil {
 		return DeleteResult{}
 	}
-	return DeleteResult{Leftover: &Leftover{
-		Path:   result.Leftover.Path,
-		Branch: result.Leftover.Branch,
-		Error:  result.Leftover.Error,
-	}}
+	left := result.Leftover
+	converted := &Leftover{RepoPath: left.RepoPath}
+	if left.Path != "" {
+		converted.Worktree = &LeftoverWorktree{
+			Path: left.Path, Kept: left.PathKept, Error: left.PathError,
+			Registered: left.PathRegistered, Locked: left.PathLocked,
+		}
+	}
+	if left.Branch != "" {
+		converted.Branch = &LeftoverBranch{Name: left.Branch, Kept: left.BranchKept, Error: left.BranchError}
+	}
+	return DeleteResult{Leftover: converted}
 }
 
 // FromReviewLeftover converts what deleting a review left on disk, keeping nil
@@ -516,7 +571,12 @@ func FromReviewLeftover(left reviewflow.Leftover) DeleteResult {
 	if left.WorktreePath == "" {
 		return DeleteResult{}
 	}
-	return DeleteResult{Leftover: &Leftover{Path: left.WorktreePath}}
+	return DeleteResult{Leftover: &Leftover{
+		RepoPath: left.RepoPath,
+		Worktree: &LeftoverWorktree{
+			Path: left.WorktreePath, Kept: true, Error: left.Error, Registered: left.Registered, Locked: left.Locked,
+		},
+	}}
 }
 
 // fromPRBlock converts why the pull request of a task cannot go on, keeping nil
@@ -1101,20 +1161,21 @@ func fromBoardCard(
 	ids := cardTasks[card.Key()]
 	repo, registered := repositoriesByKey[strings.ToLower(card.FullName())]
 	converted := BoardCard{
-		CardIssue:      fromCardIssue(card.Issue),
-		Body:           card.Body,
-		StatusID:       card.StatusID,
-		Status:         card.Status,
-		Final:          card.State == task.IssueClosed || slices.Contains(b.FinalStatuses, card.StatusID),
-		Assignees:      fromAssignees(card.Assignees),
-		Fields:         fromFields(card.Fields),
-		PullRequests:   fromCardPullRequests(card.PullRequests),
-		Siblings:       fromRelated(card.Siblings),
-		Dependencies:   fromDependencies(card.Dependencies),
-		ReadAt:         card.ReadAt.Format(time.RFC3339),
-		SuggestedName:  board.SuggestName(card.Number, card.Title),
-		ActiveTaskID:   ids.Active,
-		ArchivedTaskID: ids.Archived,
+		CardIssue:        fromCardIssue(card.Issue),
+		Body:             card.Body,
+		StatusID:         card.StatusID,
+		Status:           card.Status,
+		Final:            card.State == task.IssueClosed || slices.Contains(b.FinalStatuses, card.StatusID),
+		Assignees:        fromAssignees(card.Assignees),
+		Fields:           fromFields(card.Fields),
+		PullRequests:     fromCardPullRequests(card.PullRequests),
+		Siblings:         fromRelated(card.Siblings),
+		Dependencies:     fromDependencies(card.Dependencies),
+		ReadAt:           card.ReadAt.Format(time.RFC3339),
+		SuggestedName:    board.SuggestName(card.Number, card.Title),
+		ActiveTaskID:     ids.Active,
+		ArchivedTaskID:   ids.Archived,
+		ArchivedTaskName: ids.ArchivedName,
 	}
 	if card.Epic != nil {
 		epic := fromCardIssue(card.Epic.Issue)
@@ -2336,4 +2397,47 @@ func fromMarkerProblems(problems []session.PlanProblem) []PlanProblem {
 		out = append(out, PlanProblem{File: p.File, Message: p.Message})
 	}
 	return out
+}
+
+// FromHistorySummary counts the whole History and finds its oldest item.
+func FromHistorySummary(
+	tasks []task.Task, reviews []prreview.Review, discussions []discussion.Discussion, start time.Time,
+) HistorySummary {
+	summary := HistorySummary{
+		Tasks: len(tasks), Reviews: len(reviews), Discussions: len(discussions),
+		WindowStart: start.UTC().Format(time.RFC3339),
+	}
+	var oldest time.Time
+	note := func(at time.Time) {
+		if oldest.IsZero() || at.Before(oldest) {
+			oldest = at
+		}
+	}
+	for _, t := range tasks {
+		note(t.ArchivedAt)
+	}
+	for _, r := range reviews {
+		note(r.ArchivedAt)
+	}
+	for _, d := range discussions {
+		note(d.ArchivedAt)
+	}
+	summary.Oldest = timeOrEmpty(oldest)
+	return summary
+}
+
+// ArchivedDiscussionRepositories counts, for each repository, the archived
+// discussions that touched it, by the same rules as the repositories of an
+// archived discussion.
+func ArchivedDiscussionRepositories(
+	list []discussion.Discussion, drafts func(id string) []discussion.Draft, repos []Repository,
+) map[string]int {
+	counts := map[string]int{}
+	byKey := repositoriesByFullName(repos)
+	for _, d := range list {
+		for _, id := range repositoryIDsOf(d, drafts(d.ID), byKey) {
+			counts[id]++
+		}
+	}
+	return counts
 }

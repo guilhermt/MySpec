@@ -1,5 +1,6 @@
 import { boardOfRepository, findBoard } from "@/lib/boards";
 import type { PromptStage, State } from "@/lib/wails";
+import type { OlderArchived } from "@/store/app-store";
 
 /** SettingsSection is what the settings screen shows: the defaults of a new task, the boards, the repositories, the list of prompts or one prompt. */
 export type SettingsSection = "defaults" | "boards" | "repositories" | "prompts" | PromptStage;
@@ -7,12 +8,19 @@ export type SettingsSection = "defaults" | "boards" | "repositories" | "prompts"
 /** GoneItem is what left the state while its place was open. */
 export type GoneItem = "task" | "review" | "discussion" | "board";
 
+/** FreshItem is the archived item the History opens on: the one a page of an item that left or a toast brought there. */
+export interface FreshItem {
+  kind: "task" | "review" | "discussion";
+  id: string;
+}
+
 /** Location is the one place the main area shows. */
 export type Location =
   | { kind: "home" }
   | { kind: "board"; id: string }
   | { kind: "reviews" }
-  | { kind: "history" }
+  /** history may name the item that was just archived: its row is drawn selected, and not kept in the places behind. */
+  | { kind: "history"; fresh?: FreshItem }
   | { kind: "settings"; section: SettingsSection }
   | { kind: "task"; id: string }
   | { kind: "review"; id: string }
@@ -20,8 +28,21 @@ export type Location =
   | { kind: "archived-task"; id: string }
   | { kind: "archived-review"; id: string }
   | { kind: "archived-discussion"; id: string }
-  /** gone is the page of an item that left while open: its name and the board it lived under ("" for none) are kept, because the state no longer has them. */
-  | { kind: "gone"; item: GoneItem; id: string; name: string; boardId: string };
+  /** gone is the page of an item that left while open: its name and the board it lived under ("" for none) are kept, because the state no longer has them; a task keeps its pull request too, null without one. */
+  | {
+      kind: "gone";
+      item: GoneItem;
+      id: string;
+      name: string;
+      boardId: string;
+      pr?: GonePR | null;
+    };
+
+/** GonePR is the pull request a task had when it left, as the last reading of its state said. */
+export interface GonePR {
+  number: number;
+  state: "open" | "merged" | "closed";
+}
 
 /** Crumb is one level of the breadcrumb: a place it opens, or plain text. */
 export interface Crumb {
@@ -57,6 +78,8 @@ const GONE_ITEMS: readonly string[] = [
   "discussion",
   "board",
 ] satisfies readonly GoneItem[];
+
+const FRESH_KINDS: readonly string[] = ["task", "review", "discussion"];
 
 const REVIEWS: Location = { kind: "reviews" };
 const HISTORY: Location = { kind: "history" };
@@ -94,20 +117,31 @@ function findDiscussion(app: State | null, id: string) {
   return (app?.discussions ?? []).find((discussion) => discussion.id === id) ?? null;
 }
 
-function findArchivedTask(app: State | null, id: string) {
-  return (app?.history ?? []).find((task) => task.id === id) ?? null;
+// An archived item is in the window the state carries or in what the History brought from beyond it.
+function findArchivedTask(app: State | null, id: string, older?: OlderArchived) {
+  return (app?.history ?? []).find((task) => task.id === id) ?? older?.tasks[id] ?? null;
 }
 
-function findArchivedReview(app: State | null, id: string) {
-  return (app?.reviewHistory ?? []).find((review) => review.id === id) ?? null;
+function findArchivedReview(app: State | null, id: string, older?: OlderArchived) {
+  return (
+    (app?.reviewHistory ?? []).find((review) => review.id === id) ?? older?.reviews[id] ?? null
+  );
 }
 
-function findArchivedDiscussion(app: State | null, id: string) {
-  return (app?.discussionHistory ?? []).find((discussion) => discussion.id === id) ?? null;
+function findArchivedDiscussion(app: State | null, id: string, older?: OlderArchived) {
+  return (
+    (app?.discussionHistory ?? []).find((discussion) => discussion.id === id) ??
+    older?.discussions[id] ??
+    null
+  );
 }
 
 /** locationExists tells whether a place can still be opened; the page of an item that left never is again. */
-export function locationExists(app: State | null, location: Location): boolean {
+export function locationExists(
+  app: State | null,
+  location: Location,
+  older?: OlderArchived,
+): boolean {
   switch (location.kind) {
     case "home":
     case "reviews":
@@ -123,18 +157,22 @@ export function locationExists(app: State | null, location: Location): boolean {
     case "discussion":
       return findDiscussion(app, location.id) !== null;
     case "archived-task":
-      return findArchivedTask(app, location.id) !== null;
+      return findArchivedTask(app, location.id, older) !== null;
     case "archived-review":
-      return findArchivedReview(app, location.id) !== null;
+      return findArchivedReview(app, location.id, older) !== null;
     case "archived-discussion":
-      return findArchivedDiscussion(app, location.id) !== null;
+      return findArchivedDiscussion(app, location.id, older) !== null;
     case "gone":
       return false;
   }
 }
 
 /** locationTitle is the name of a place, "" for one that no longer exists. */
-export function locationTitle(app: State | null, location: Location): string {
+export function locationTitle(
+  app: State | null,
+  location: Location,
+  older?: OlderArchived,
+): string {
   switch (location.kind) {
     case "home":
       return "Home";
@@ -153,11 +191,11 @@ export function locationTitle(app: State | null, location: Location): string {
     case "discussion":
       return findDiscussion(app, location.id)?.title ?? "";
     case "archived-task":
-      return findArchivedTask(app, location.id)?.name ?? "";
+      return findArchivedTask(app, location.id, older)?.name ?? "";
     case "archived-review":
-      return findArchivedReview(app, location.id)?.title ?? "";
+      return findArchivedReview(app, location.id, older)?.title ?? "";
     case "archived-discussion":
-      return findArchivedDiscussion(app, location.id)?.title ?? "";
+      return findArchivedDiscussion(app, location.id, older)?.title ?? "";
     case "gone":
       return location.name;
   }
@@ -221,6 +259,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function isFresh(value: unknown): value is FreshItem {
+  return (
+    isRecord(value) &&
+    typeof value.kind === "string" &&
+    FRESH_KINDS.includes(value.kind) &&
+    typeof value.id === "string"
+  );
+}
+
+/** withoutFresh is the place as the places behind keep it: the History without the row it opened on. */
+export function withoutFresh(location: Location): Location {
+  return location.kind === "history" && location.fresh !== undefined ? HISTORY : location;
+}
+
+function isGonePR(value: unknown): value is GonePR {
+  return (
+    isRecord(value) &&
+    typeof value.number === "number" &&
+    (value.state === "open" || value.state === "merged" || value.state === "closed")
+  );
+}
+
 /** isLocation tells whether a value read back from storage is a place. */
 export function isLocation(value: unknown): value is Location {
   if (!isRecord(value)) {
@@ -229,8 +289,9 @@ export function isLocation(value: unknown): value is Location {
   switch (value.kind) {
     case "home":
     case "reviews":
-    case "history":
       return true;
+    case "history":
+      return value.fresh === undefined || isFresh(value.fresh);
     case "settings":
       return typeof value.section === "string" && SETTINGS_SECTIONS.includes(value.section);
     case "board":
@@ -247,7 +308,8 @@ export function isLocation(value: unknown): value is Location {
         GONE_ITEMS.includes(value.item) &&
         typeof value.id === "string" &&
         typeof value.name === "string" &&
-        typeof value.boardId === "string"
+        typeof value.boardId === "string" &&
+        (value.pr === undefined || value.pr === null || isGonePR(value.pr))
       );
     default:
       return false;

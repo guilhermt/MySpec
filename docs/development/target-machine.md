@@ -67,6 +67,21 @@ Verificado com o build de produção (`task build`) e `XDG_DATA_HOME` e `XDG_STA
 - Devolvida a permissão (`chmod 700`), **Try again** recomeça o início no mesmo processo: sob o Broadway (`GDK_BACKEND=broadway`), `Enter` em **Try again** mostra `Starting MySpec…` com `Opening your data`, e o app abre com o mesmo PID. A tentativa de verdade, da falha de permissão ao `ready` depois de **Try again**, é coberta em `internal/app/attempt_test.go`, e a tela em `StartScreen.test.tsx`. O clique em **Try again** na janela real, no Hyprland, fica na checklist de verificação do usuário na máquina alvo.
 - Com o diretório de dados num `tmpfs` de 1 MiB quase cheio (`unshare -Urm`, `mount -t tmpfs -o size=1M tmpfs <dir>` e `fallocate` do espaço), o início falha com `open database: commit migration 0001_initial.sql: database or disk is full (13)`. O erro do SQLite (`SQLITE_FULL`) é o que `store.DiskFull` reconhece como `disk_full`, e a janela mostra `MySpec can't open its data: the disk of <diretório de dados> is full. Free some space, then try again.`
 
+## A lista do History
+
+O History mostra os arquivados dos últimos 90 dias sem virtualização: umas 360 linhas no ritmo medido, e 400 é o tamanho a que a lista é medida. O teste `frontend/src/features/history/HistoryView.measure.painted.test.tsx` monta `HistoryView` com 400 itens na janela (240 tasks, 100 reviews e 60 discussões, em 90 dias, numa área principal de 2180 px) e mede a primeira pintura, do render ao quadro seguinte ao commit com o layout feito, e `↓` a partir do primeiro dia, do `keydown` ao quadro seguinte, uma vez frio e cinco vezes quente, como a lista do board. As metas são as do board: 300 ms e 16 ms. `pnpm vitest run --project painted src/features/history/HistoryView.measure.painted.test.tsx --reporter=verbose` imprime os números; o teste mede, na mesma execução e alternado com os 400, o History com 40 itens, e só falha quando a mediana quente de 400 passa de 30 vezes a de 40, nas duas medidas. Linear, a razão fica perto de 10 (entre 5 e 9 nas rodadas medidas); 30 pega uma lista que deixou de ser lista e não uma máquina lenta, que atrasa os dois tamanhos juntos.
+
+No Chromium do Playwright, com o React de desenvolvimento, em cinco rodadas:
+
+| | Fria | Quente, mediana | Quente, máximo | Meta |
+|---|---|---|---|---|
+| Primeira pintura | 674 a 704 ms | 404 a 501 ms | 512 a 526 ms | 300 ms |
+| `↓` na lista | 177 a 189 ms | 134 a 145 ms | 191 a 239 ms | 16 ms |
+
+As duas metas ficam fora, a primeira por pouco mais de uma vez e meia e a tecla por uma ordem de grandeza: cada `↓` muda o foco registrado de `useListTree` e refaz as 400 linhas montadas, e a primeira pintura monta todas. A virtualização da lista é decisão da task 12, que parte desta medida.
+
+To measure on the target machine: com o build instalado e 400 itens arquivados nos últimos 90 dias, abrir o History e, no inspetor do WebKitGTK, gravar a linha do tempo da primeira pintura e de um `↓` no primeiro dia, e registrar aqui os dois tempos, frios e quentes, contra as metas de 300 ms e 16 ms.
+
 ## Estado da janela
 
 `StartState: WindowStateMaximised` chega a um compositor de tiling como "preencha o tile que recebeu", que é o que acontece aqui. Nada da geometria da janela é persistido. Num desktop de janelas flutuantes a mesma opção produz uma janela maximizada de verdade.

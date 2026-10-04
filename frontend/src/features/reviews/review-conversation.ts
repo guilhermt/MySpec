@@ -146,7 +146,7 @@ export function derivedDecidedPasses(
  * agent · 13:41" or "Not sent".
  */
 export function disabledFindingNote(
-  review: ReviewSummary,
+  review: Pick<ReviewSummary, "mode">,
   pass: ReviewPass,
   finding: ReviewFinding,
   now: number,
@@ -171,6 +171,20 @@ export function disabledFindingNote(
 }
 
 /**
+ * passFindingViews are the findings of a pass as the system draws them, each disabled, with where it
+ * went: for a review of the `mode` that is over, active or archived.
+ */
+export function passFindingViews(
+  pass: ReviewPass,
+  mode: ReviewSummary["mode"],
+  now: number,
+): FindingView[] {
+  return findingViewsOf(pass.findings ?? [], (finding) =>
+    disabledFindingNote({ mode }, pass, finding, now),
+  );
+}
+
+/**
  * findingViews are the findings of a pass as the system draws them. With disabled they carry where
  * each went, for the list a finished pass leaves in the conversation.
  */
@@ -180,10 +194,9 @@ export function findingViews(
   now: number,
   disabled = false,
 ): FindingView[] {
-  return findingViewsOf(
-    pass.findings ?? [],
-    disabled ? (finding) => disabledFindingNote(review, pass, finding, now) : null,
-  );
+  return disabled
+    ? passFindingViews(pass, review.mode, now)
+    : findingViewsOf(pass.findings ?? [], null);
 }
 
 /**

@@ -211,13 +211,13 @@ describe("App", () => {
     await screen.findByRole("treeitem", { name: /^task add-login\./ });
 
     await user.click(screen.getByRole("button", { name: /^History/ }));
-    await user.click(screen.getByRole("button", { name: /fix-header/ }));
+    await user.click(screen.getByRole("treeitem", { name: /fix-header/ }));
 
-    expect(screen.getByText("Archived")).toBeInTheDocument();
+    expect(screen.getByText("Archived", { selector: "span" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("treeitem", { name: /^task add-login\./ }));
 
-    expect(screen.queryByText("Archived")).not.toBeInTheDocument();
+    expect(screen.queryByText("Archived", { selector: "span" })).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Artifacts" })).toBeInTheDocument();
   });
 
@@ -357,10 +357,8 @@ describe("App", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "Add the login screen" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Merged")).toBeInTheDocument();
-    await waitFor(() => {
-      expect(api.readReviewArtifact).toHaveBeenCalledWith("review-1", "review-1.md");
-    });
+    expect(screen.getByText("Merged", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Report · review-1.md" })).toBeInTheDocument();
   });
 
   it("starts the review of a pull request from anywhere in the app", async () => {

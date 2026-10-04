@@ -1,23 +1,19 @@
-import { stageIndex, stageLabel } from "@/lib/stages";
-import type { TaskMode, TaskStage } from "@/lib/wails";
+import type { PreviewReading } from "@/features/task/deletion";
+import { shortRef } from "@/lib/repositories";
+import { counted } from "@/lib/situations";
+import { stageLabel } from "@/lib/stages";
+import {
+  asStepStatus,
+  asTaskMode,
+  asTaskStage,
+  type StepStatus,
+  type TaskMode,
+  type TaskStage,
+  type TaskSummary,
+} from "@/lib/wails";
 
 /** StageAction is what the stage track can do to a stage. */
 export type StageAction = "back" | "discard";
-
-// What a task loses when a planning stage is thrown away, in stage order, for
-// each mode.
-const LOSSES: Record<TaskMode, readonly string[]> = {
-  structured: [
-    "the PRD conversation and document",
-    "the tech spec conversation and document",
-    "the plan conversation and the step files",
-    "the step conversations, the worktree and the branch, with any uncommitted work in them",
-  ],
-  one_shot: [
-    "the planning conversation and the One-Shot document",
-    "the implementation conversations and review reports, and its worktree and branch, with any uncommitted work in them",
-  ],
-};
 
 // How a stage reads in the middle of a sentence, where the label of the track
 // would carry a capital it should not.
@@ -47,15 +43,11 @@ export function nextStage(stage: TaskStage): TaskStage {
   }
 }
 
-/**
- * lostItems lists what going back to, or discarding, a stage takes with it: the
- * stage itself and every planning stage the task has reached since.
- */
-export function lostItems(mode: TaskMode, from: TaskStage, current: TaskStage): string[] {
-  const losses = LOSSES[mode];
-  const last = Math.min(stageIndex(mode, current), losses.length - 1);
-  return losses.slice(stageIndex(mode, from), last + 1);
-}
+// The stages a task passes through before its pull request, in order, for each mode.
+const TRACKS: Record<TaskMode, readonly TaskStage[]> = {
+  structured: ["prd", "tech_spec", "plan", "implementation", "pr"],
+  one_shot: ["one_shot", "implementation", "pr"],
+};
 
 /** joinList reads a list out loud: "a", "a and b", "a, b and c". */
 export function joinList(items: readonly string[]): string {
@@ -65,30 +57,186 @@ export function joinList(items: readonly string[]): string {
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
-/** backDescription says what reopening a stage costs. */
-export function backDescription(mode: TaskMode, target: TaskStage, current: TaskStage): string {
-  const lost = joinList(lostItems(mode, nextStage(target), current));
-  if (mode === "one_shot") {
-    return `This deletes ${lost}. The One-Shot document and its conversation stay, and the implementation starts again from scratch when you continue.`;
-  }
-  return `This deletes ${lost}. The ${stageLabel(target)} stays, and the next stage starts again from scratch when you continue.`;
+// reportsOf is how many review reports the steps wrote.
+function reportsOf(task: TaskSummary): number {
+  return startedSteps(task).reduce((sum, step) => sum + (step.reports ?? []).length, 0);
 }
 
-/** discardDescription says what starting a stage over costs. */
-export function discardDescription(mode: TaskMode, stage: TaskStage, current: TaskStage): string {
-  const lost = joinList(lostItems(mode, stage, current));
+// UNSTARTED are the statuses of a step that has run nothing yet: waiting its turn, getting its
+// worktree ready, or held back before its first turn.
+const UNSTARTED: ReadonlySet<StepStatus> = new Set(["not_started", "preparing", "blocked"]);
+
+// startedSteps are the steps that began: the ones with a conversation, or that ran (every done step
+// once the task is past the implementation). A step held back before its first turn has nothing to lose.
+function startedSteps(task: TaskSummary) {
+  const conversations = new Set((task.conversations ?? []).map((each) => each.stage));
+  return (task.steps ?? []).filter(
+    (step) =>
+      !UNSTARTED.has(asStepStatus(step.status)) ||
+      conversations.has(`step:${step.number}`) ||
+      conversations.has(`step_review:${step.number}`),
+  );
+}
+
+function withReports(lead: string, reports: number, pronoun: "its" | "their"): string {
+  return reports === 0 ? lead : `${lead} and ${pronoun} ${counted(reports, "review report")}`;
+}
+
+function implementationItem(task: TaskSummary, mode: TaskMode): string | null {
+  const reports = reportsOf(task);
   if (mode === "one_shot") {
-    return `This deletes ${lost}. A new planning session starts right away.`;
+    return withReports("the implementation conversations", reports, "their");
   }
-  return `This deletes ${lost}. A new ${stageLabel(stage)} session starts right away.`;
+  const started = startedSteps(task);
+  const first = started[0];
+  const last = started[started.length - 1];
+  if (first === undefined || last === undefined) {
+    return null;
+  }
+  if (started.length === 1) {
+    return withReports(`the conversation of step ${first.number}`, reports, "its");
+  }
+  return withReports(
+    `the conversations of steps ${first.number} to ${last.number}`,
+    reports,
+    "their",
+  );
+}
+
+function pullRequestItem(task: TaskSummary): string | null {
+  const pr = task.pr;
+  if (pr === null) {
+    return null;
+  }
+  const parts: string[] = [];
+  if (pr.draft !== null) {
+    parts.push("the pull request draft");
+  }
+  if (pr.sessionStage !== "" || (task.conversations ?? []).some((each) => each.stage === "pr")) {
+    parts.push("the PR conversation");
+  }
+  if ((pr.reports ?? []).length > 0) {
+    parts.push("the reports of its review");
+  }
+  return parts.length === 0 ? null : joinList(parts);
+}
+
+function worktreeItem(task: TaskSummary, reading: PreviewReading | null): string | null {
+  if (task.worktreePath === "") {
+    return null;
+  }
+  let uncommitted = ", with any uncommitted work in them";
+  if (reading?.kind === "ready") {
+    const worktree = reading.preview.worktree;
+    uncommitted =
+      worktree?.dirty && worktree.files > 0
+        ? `, with ${counted(worktree.files, "uncommitted file")}`
+        : "";
+  }
+  return `the worktree and the branch ${task.branch}${uncommitted}`;
+}
+
+function stageItem(task: TaskSummary, mode: TaskMode, stage: TaskStage): string | null {
+  switch (stage) {
+    case "prd":
+      return "the PRD conversation and document";
+    case "tech_spec":
+      return "the tech spec conversation and document";
+    case "plan": {
+      const files = (task.steps ?? []).length;
+      if (files === 0) {
+        return "the plan conversation";
+      }
+      return `the plan conversation and the ${files === 1 ? "step file" : `${files} step files`}`;
+    }
+    case "one_shot":
+      return "the planning conversation and the One-Shot document";
+    case "implementation":
+      return implementationItem(task, mode);
+    case "pr":
+      return pullRequestItem(task);
+  }
+}
+
+/**
+ * lostItems lists what going back to, or discarding, a stage takes with it: from the stage after
+ * the target (going back) or the target itself (discarding) to the stage the task is in, and the
+ * worktree and the branch last.
+ */
+export function lostItems(
+  task: TaskSummary,
+  action: StageAction,
+  target: TaskStage,
+  reading: PreviewReading | null,
+): string[] {
+  const mode = asTaskMode(task.mode);
+  const track = TRACKS[mode];
+  const from = track.indexOf(action === "back" ? nextStage(target) : target);
+  const to = track.indexOf(asTaskStage(task.stage));
+  const items = track
+    .slice(from, to + 1)
+    .map((stage) => stageItem(task, mode, stage))
+    .filter((item): item is string => item !== null);
+  const worktree = worktreeItem(task, reading);
+  return worktree === null ? items : [...items, worktree];
 }
 
 /** stageActionTitle is the question that confirms an action on a stage. */
-export function stageActionTitle(action: StageAction, stage: TaskStage): string {
-  if (stage === "one_shot") {
+export function stageActionTitle(action: StageAction, mode: TaskMode, stage: TaskStage): string {
+  if (mode === "one_shot") {
     return action === "back" ? "Back to planning?" : "Discard the planning and start over?";
   }
   return action === "back"
     ? `Back to the ${stageLabel(stage)}?`
     : `Discard the ${stageLabel(stage)} and start over?`;
+}
+
+/** stageActionConfirm is the button that confirms an action on a stage. */
+export function stageActionConfirm(action: StageAction, mode: TaskMode, stage: TaskStage): string {
+  if (mode === "one_shot") {
+    return action === "back" ? "Back to planning" : "Discard the planning";
+  }
+  return action === "back"
+    ? `Back to the ${stageLabel(stage)}`
+    : `Discard the ${stageLabel(stage)}`;
+}
+
+/** stageActionLoading is what the confirmation says while the call runs. */
+export function stageActionLoading(action: StageAction): string {
+  return action === "back" ? "Going back…" : "Discarding…";
+}
+
+// sourceOf is what a new session of a stage starts from.
+function sourceOf(task: TaskSummary, stage: TaskStage): string {
+  switch (stage) {
+    case "tech_spec":
+      return "the PRD";
+    case "plan":
+      return "the tech spec";
+    default:
+      return task.card === null
+        ? "your description"
+        : `the card ${shortRef(`${task.card.repository}#${task.card.number}`)}`;
+  }
+}
+
+/** whatStays says what the action keeps and what happens next. */
+export function whatStays(task: TaskSummary, action: StageAction, target: TaskStage): string {
+  const mode = asTaskMode(task.mode);
+  if (action === "discard") {
+    return `A new ${stageNoun(target)} session starts right away, from ${sourceOf(task, target)}.`;
+  }
+  if (mode === "one_shot") {
+    return "The One-Shot document and its conversation stay, and the implementation starts again from scratch when you continue.";
+  }
+  return `The ${stageLabel(target)} stays, and the ${stageNoun(nextStage(target))} starts again from scratch when you continue.`;
+}
+
+/** openPR is the pull request of the task that stays open on GitHub, null when there is none. */
+export function openPR(task: TaskSummary): { number: number; url: string } | null {
+  const pr = task.pr;
+  if (pr === null || pr.prNumber === 0 || pr.prState !== "open") {
+    return null;
+  }
+  return { number: pr.prNumber, url: pr.prUrl };
 }

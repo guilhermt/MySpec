@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   age,
   ageLong,
+  atMoment,
+  clockOf,
+  clockOrDateAt,
   clockTime,
+  dateAt,
+  dayOf,
   duration,
   fullTime,
   readClock,
@@ -26,6 +31,36 @@ describe("clockTime", () => {
     ["no time", "", ""],
   ])("writes a time of %s", (_, iso, text) => {
     expect(clockTime(iso, NOW)).toBe(text);
+  });
+});
+
+describe("dateAt", () => {
+  it.each([
+    ["this year", local(2026, 8, 24, 14, 51), "Sep 24 at 14:51"],
+    ["another year", local(2025, 8, 24, 14, 51), "Sep 24, 2025 at 14:51"],
+    ["no time", "", ""],
+  ])("writes a moment of %s", (_, iso, text) => {
+    expect(dateAt(iso, NOW)).toBe(text);
+  });
+});
+
+describe("clockOrDateAt", () => {
+  it.each([
+    ["today", local(2026, 8, 27, 15, 2), "15:02"],
+    ["another day", local(2026, 8, 24, 15, 2), "Sep 24 at 15:02"],
+    ["no time", "", ""],
+  ])("writes a moment of %s", (_, iso, text) => {
+    expect(clockOrDateAt(iso, NOW)).toBe(text);
+  });
+});
+
+describe("atMoment", () => {
+  it.each([
+    ["today", local(2026, 8, 27, 15, 2), " at 15:02"],
+    ["another day", local(2026, 8, 24, 15, 2), " on Sep 24 at 15:02"],
+    ["no time", "", ""],
+  ])("writes a moment of %s for a sentence", (_, iso, text) => {
+    expect(atMoment(iso, NOW)).toBe(text);
   });
 });
 
@@ -127,5 +162,20 @@ describe("duration", () => {
     [-5_000, "0s"],
   ])("reads %i ms as %s", (ms, text) => {
     expect(duration(ms)).toBe(text);
+  });
+});
+
+describe("clockOf and dayOf", () => {
+  const now = new Date(2026, 8, 24, 15, 10).getTime();
+
+  it("reads the hour of any day and the day without its hour", () => {
+    expect(clockOf(new Date(2026, 8, 21, 9, 5).toISOString())).toBe("09:05");
+    expect(dayOf(new Date(2026, 8, 21, 9, 5).toISOString(), now)).toBe("Sep 21");
+    expect(dayOf(new Date(2025, 8, 21, 9, 5).toISOString(), now)).toBe("Sep 21, 2025");
+  });
+
+  it("says nothing of a time that is not there", () => {
+    expect(clockOf("")).toBe("");
+    expect(dayOf("nope", now)).toBe("");
   });
 });

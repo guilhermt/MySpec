@@ -74,6 +74,8 @@ A conversa longa é medida no motor do app. Com o Vite de pé (`task dev`, ou `p
 
 A lista do board é medida do mesmo modo. A URL `http://127.0.0.1:9245/?measure=board` monta no lugar do app `frontend/src/dev/measure-board.tsx`: um board de 2.000 cards em dez status, com épicos, dependências e tasks na proporção do `Platform Roadmap` e todas as seções expandidas. Ela mede a primeira pintura de `BoardView`, do render ao quadro seguinte ao commit, uma tecla na busca, do `onChange` ao quadro com a lista nova, e `↓`, do `keydown` ao quadro seguinte. Cada medida roda uma vez fria e cinco quentes, e a saída, no console e na página, traz a mediana e o máximo das quentes ao lado da fria, com as metas de 300 ms, 50 ms e 16 ms. Também só existe no servidor de dev.
 
+A lista do History é medida no Chromium, por um teste pintado, e os números estão em [target-machine.md](./target-machine.md#a-lista-do-history).
+
 ## Instalação
 
 `task install` faz o build e escreve, sob `$HOME`:

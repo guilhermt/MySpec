@@ -451,11 +451,12 @@
   }
 
   /* The live region of the app: toasts and announcements, bottom left of the
-     main area. */
+     main area, above the composer docked at its foot (--toast-lift, from
+     useToastLift). */
   .toasts {
     position: absolute;
     left: var(--space-4);
-    bottom: var(--space-4);
+    bottom: calc(var(--space-4) + var(--toast-lift, 0px));
     z-index: var(--z-toast);
     display: flex;
     flex-direction: column;
