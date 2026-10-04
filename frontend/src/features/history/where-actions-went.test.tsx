@@ -239,15 +239,15 @@ const HISTORY: Row[] = [
     state: "a filter with nothing archived",
     draw: () => {
       history({
-        history: [],
-        reviewHistory: [],
-        discussionHistory: [],
-        historySummary: makeHistorySummary(),
-        repositoryFilter: "repo-1",
+        repositories: [
+          WEB,
+          API,
+          makeRepository({ id: "repo-3", name: "docs", fullName: "dev/docs" }),
+        ],
+        repositoryFilter: "repo-3",
       });
-      expect(
-        screen.getAllByRole("button", { name: "Show all repositories" }).length,
-      ).toBeGreaterThan(0);
+      const empty = screen.getByText("Nothing archived in dev/docs").parentElement as HTMLElement;
+      expect(within(empty).getByRole("button", { name: "Show all repositories" })).toBeVisible();
     },
   },
   {
@@ -304,6 +304,7 @@ const ARCHIVED_TASK: Row[] = [
     draw: () => {
       archivedTask();
       expect(screen.getByRole("heading", { level: 1, name: "add-login" })).toBeInTheDocument();
+      expect(screen.getByText("Archived", { selector: "span" })).toBeInTheDocument();
       expect(screen.getByText("Archived", { selector: "dt" })).toBeInTheDocument();
       expect(screen.getByText("Started", { selector: "dt" })).toBeInTheDocument();
       expect(screen.getByRole("tab", { name: "Steps · 1" })).toBeInTheDocument();
@@ -353,9 +354,30 @@ const ARCHIVED_TASK: Row[] = [
       const step = screen.getByRole("button", { name: "1 Add the login form, c19f02e" });
       await user.click(step);
       expect(await screen.findByTestId("markdown")).toBeInTheDocument();
+      expect(api.readArtifact).toHaveBeenCalledWith("task-1", "steps/1-add-the-login-form.md");
       expect(
         screen.getByRole("button", { name: "Review 1 · changes · 2 findings" }),
       ).toBeInTheDocument();
+    },
+  },
+  {
+    screen: "Archived task",
+    control: "← Steps",
+    state: "a step file open",
+    draw: async () => {
+      const { user } = archivedTask();
+      await user.click(screen.getByRole("tab", { name: "Steps · 1" }));
+      const step = screen.getByRole("button", { name: "1 Add the login form, c19f02e" });
+      await user.click(step);
+      expect(await screen.findByTestId("markdown")).toBeInTheDocument();
+
+      // The line of the step folds the file back, and the list of the steps stays where it was.
+      await user.click(step);
+      expect(step).toHaveAttribute("aria-expanded", "false");
+      expect(screen.getByRole("tab", { name: "Steps · 1" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
     },
   },
   {
@@ -394,9 +416,25 @@ const ARCHIVED_TASK: Row[] = [
     control: "the skeleton and the read error",
     state: "reading, and a document that failed",
     draw: async () => {
-      vi.mocked(api.readArtifact).mockRejectedValue(new Error("no such file"));
+      vi.mocked(api.readArtifact).mockRejectedValue(new Error("permission denied"));
       archivedTask();
-      expect(await screen.findByRole("button", { name: "Try again" })).toBeInTheDocument();
+      expect(await screen.findByText("Couldn't read PRD.md")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    },
+  },
+  {
+    screen: "Archived task",
+    control: "the skeleton of the task",
+    state: "a task beyond the window, on its way",
+    draw: () => {
+      renderWithStore(<ArchivedTask taskId="task-9" />, {
+        state: makeState(),
+        ui: {
+          location: { kind: "archived-task", id: "task-9" },
+          archivedLookups: { "task-9": "loading" },
+        },
+      });
+      expect(screen.getByRole("status", { name: "Reading the task" })).toBeInTheDocument();
     },
   },
 ];
@@ -445,6 +483,26 @@ const ARCHIVED_REVIEW: Row[] = [
       archivedReview();
       expect(screen.getByRole("button", { name: "Open on GitHub" })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "web#31" })).toBeInTheDocument();
+    },
+  },
+  {
+    screen: "Archived review",
+    control: "the link of the card",
+    state: "a review of a card",
+    draw: () => {
+      archivedReview({
+        card: {
+          boardId: "board-1",
+          number: 2238,
+          title: "Settings form keeps the old validation",
+          url: "https://github.com/dev/web/issues/2238",
+          status: "Done",
+        },
+      });
+      expect(screen.getByRole("link", { name: "web#2238" })).toHaveAttribute(
+        "href",
+        "https://github.com/dev/web/issues/2238",
+      );
     },
   },
   {
@@ -571,7 +629,9 @@ const ARCHIVED_DISCUSSION: Row[] = [
     state: "a conversation",
     draw: async () => {
       archivedDiscussion();
-      expect(await screen.findByRole("button", { name: /^Conversation/ })).toBeInTheDocument();
+      expect(
+        await screen.findByRole("article", { name: /^Conversation · \d+ messages?, read only$/ }),
+      ).toBeInTheDocument();
     },
   },
 ];
@@ -606,10 +666,32 @@ const DIALOGS: Row[] = [
         <DeleteTaskDialog task={makeTask({ sessionStatus: "working" })} open onOpenChange={noop} />,
       );
       const list = await screen.findByRole("list", { name: "What will be destroyed" });
-      expect(within(list).getByText("3 uncommitted files")).toBeInTheDocument();
-      expect(within(list).getByText("not merged · 2 commits")).toBeInTheDocument();
-      expect(within(list).getByText("PR #12 stays open on GitHub")).toBeInTheDocument();
+      // One line per thing, in the order the dialog lists them.
+      expect(
+        within(list)
+          .getAllByRole("listitem")
+          .map((line) => line.textContent),
+      ).toEqual([
+        "The PRD agent's answer in progress is interrupted",
+        "The worktree is removed3 uncommitted files~/.local/share/myspec/worktrees/dev/web/add-login",
+        "The branch add-login is deletednot merged · 2 commits",
+        "PR #12 stays open on GitHubClose it there if you don't need it. Open #12",
+      ]);
+      expect(within(list).getByRole("link", { name: "Open #12" })).toBeVisible();
       expect(screen.getByText(/answer in progress is interrupted/)).toBeInTheDocument();
+    },
+  },
+  {
+    screen: "Dialog",
+    control: "Delete task: the pull request that was merged",
+    state: "a merged pull request",
+    draw: async () => {
+      vi.mocked(api.previewDelete).mockResolvedValue(
+        makeDeletePreview({ pr: { ...PR, state: "merged" } }),
+      );
+      dialogIn(<DeleteTaskDialog task={TASK} open onOpenChange={noop} />);
+      const list = await screen.findByRole("list", { name: "What will be destroyed" });
+      expect(within(list).getByText("PR #12 is merged")).toBeVisible();
     },
   },
   {
@@ -658,6 +740,21 @@ const DIALOGS: Row[] = [
   },
   {
     screen: "Dialog",
+    control: "Discard step: the text with the implementer alone",
+    state: "no reviewer, no report",
+    draw: () => {
+      const step = makeStep({ number: 3, status: "implementing", reviewer: null, reports: [] });
+      const task = makeTask({ stage: "implementation", steps: [step], currentStep: 3 });
+      dialogIn(<DiscardStepDialog task={task} step={step} open onOpenChange={noop} />, {
+        tasks: [task],
+      });
+      expect(screen.getByRole("alertdialog")).toHaveTextContent(
+        "This ends the session and deletes the conversation of step 3.",
+      );
+    },
+  },
+  {
+    screen: "Dialog",
     control: "Also clean the worktree, checked at each opening, and Discard step",
     state: "open",
     draw: () => {
@@ -688,7 +785,61 @@ const DIALOGS: Row[] = [
       );
       expect(screen.getByRole("heading", { name: "Back to the PRD?" })).toBeInTheDocument();
       expect(screen.getByText("PR #1284 stays open on GitHub.")).toBeVisible();
+      expect(screen.getByRole("link", { name: "Open #1284" })).toHaveAttribute(
+        "href",
+        "https://github.com/o/r/pull/1284",
+      );
       expect(screen.getByRole("button", { name: "Back to the PRD" })).toBeInTheDocument();
+    },
+  },
+  {
+    screen: "Dialog",
+    control: "Back to…: what is lost, the documents of the stages after it",
+    state: "from the plan, back to the PRD",
+    draw: () => {
+      const task = makeTask({ stage: "plan" });
+      dialogIn(
+        <StageActionDialog task={task} action="back" stage="prd" open onOpenChange={noop} />,
+        { tasks: [task] },
+      );
+      expect(screen.getByRole("heading", { name: "Back to the PRD?" })).toBeInTheDocument();
+      expect(screen.getByRole("alertdialog")).toHaveTextContent(
+        "the tech spec conversation and document",
+      );
+    },
+  },
+  {
+    screen: "Dialog",
+    control: "Discard and restart…: what is lost, the document of the stage itself",
+    state: "from the tech spec, the PRD",
+    draw: () => {
+      const task = makeTask({ stage: "tech_spec" });
+      dialogIn(
+        <StageActionDialog task={task} action="discard" stage="prd" open onOpenChange={noop} />,
+        { tasks: [task] },
+      );
+      expect(screen.getByRole("alertdialog")).toHaveTextContent(
+        "the PRD conversation and document",
+      );
+    },
+  },
+  {
+    screen: "Dialog",
+    control: "Back to…: what is lost, the conversation of the step that began",
+    state: "from the implementation of step 1",
+    draw: () => {
+      const step = makeStep({ number: 1, status: "implementing" });
+      const task = makeTask({
+        stage: "implementation",
+        steps: [step, makeStep({ number: 2, status: "not_started" })],
+        currentStep: 1,
+        conversations: [{ stage: "step:1", startedAt: "2026-09-05T10:00:00Z" }],
+      });
+      dialogIn(
+        <StageActionDialog task={task} action="back" stage="plan" open onOpenChange={noop} />,
+        { tasks: [task] },
+      );
+      expect(screen.getByRole("alertdialog")).toHaveTextContent("the conversation of step 1");
     },
   },
   {
@@ -742,6 +893,7 @@ const PAGES: Row[] = [
         }),
       );
       const group = screen.getByRole("group", { name: "What stayed on disk" });
+      expect(group).toHaveTextContent("The worktree stayed at ~/wt/add-login");
       expect(group).toHaveTextContent("contains modified files");
       expect(group).toHaveTextContent("checked out");
       expect(screen.getByRole("button", { name: "Copy the command" })).toBeInTheDocument();
