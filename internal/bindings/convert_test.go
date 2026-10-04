@@ -1071,12 +1071,12 @@ func TestFromDeleteResultCarriesWhatStayedOfEachPart(t *testing.T) {
 		{
 			name: "both stayed",
 			left: worktree.Leftover{
-				RepoPath: "/code/web", Path: "/w", PathKept: true, PathError: "a", PathRegistered: true,
+				RepoPath: "/code/web", Path: "/w", PathKept: true, PathError: "a", PathRegistered: true, PathLocked: true,
 				Branch: "b", BranchKept: true, BranchError: "c",
 			},
 			want: bindings.Leftover{
 				RepoPath: "/code/web",
-				Worktree: &bindings.LeftoverWorktree{Path: "/w", Kept: true, Error: "a", Registered: true},
+				Worktree: &bindings.LeftoverWorktree{Path: "/w", Kept: true, Error: "a", Registered: true, Locked: true},
 				Branch:   &bindings.LeftoverBranch{Name: "b", Kept: true, Error: "c"},
 			},
 		},
@@ -2901,12 +2901,12 @@ func TestFromReviewLeftoverKeepsTheWorktreeGitCouldNotRemove(t *testing.T) {
 	t.Parallel()
 
 	got := bindings.FromReviewLeftover(reviewflow.Leftover{
-		RepoPath: "/code/web", WorktreePath: "/data/worktrees/acme/web/pr_7", Error: "permission denied", Registered: true,
+		RepoPath: "/code/web", WorktreePath: "/data/worktrees/acme/web/pr_7", Error: "locked", Registered: true, Locked: true,
 	})
 	want := bindings.DeleteResult{Leftover: &bindings.Leftover{
 		RepoPath: "/code/web",
 		Worktree: &bindings.LeftoverWorktree{
-			Path: "/data/worktrees/acme/web/pr_7", Kept: true, Error: "permission denied", Registered: true,
+			Path: "/data/worktrees/acme/web/pr_7", Kept: true, Error: "locked", Registered: true, Locked: true,
 		},
 	}}
 	if diff := cmp.Diff(want, got); diff != "" {

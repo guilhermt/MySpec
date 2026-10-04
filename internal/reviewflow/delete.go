@@ -15,6 +15,7 @@ type Leftover struct {
 	WorktreePath string // "" when everything went
 	Error        string // what git said
 	Registered   bool   // git still lists the folder as a worktree it can remove
+	Locked       bool   // the worktree git lists is locked: only --force twice removes it
 }
 
 // Delete removes a review for good, active or in the history: its
@@ -44,7 +45,8 @@ func (s *Service) Delete(ctx context.Context, id string) (Leftover, error) {
 			// is told where it is instead.
 			s.log.Warn("remove review worktree failed", "review", id, "path", wt.Path, "error", err)
 			left.RepoPath, left.WorktreePath, left.Error = wt.RepoPath, wt.Path, err.Error()
-			left.Registered = s.worktrees.Registered(ctx, wt.RepoPath, wt.Path)
+			listed := s.worktrees.Registration(ctx, wt.RepoPath, wt.Path)
+			left.Registered, left.Locked = listed.Registered, listed.Locked
 		}
 	}
 	if err := s.reviews.Delete(ctx, id); err != nil {

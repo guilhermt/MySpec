@@ -73,16 +73,25 @@ function detailOf(error: string): Pick<CloseResultLine, "detail"> {
   return error === "" ? {} : { detail: displayPaths(error) };
 }
 
+// removal is how what stayed of a worktree goes: a locked worktree git still lists takes --force twice,
+// which also unlocks it, an unlocked one --force, and a folder git forgot, rm -rf.
+function removal(worktree: NonNullable<Leftover["worktree"]>): string {
+  if (!worktree.registered) {
+    return "rm -rf";
+  }
+  return worktree.locked ? "git worktree remove --force --force" : "git worktree remove --force";
+}
+
 /**
  * leftoverCommands are the commands that remove what stayed, one per line, in the clone: a worktree git
- * still lists goes with git worktree remove, and a folder git forgot, with rm -rf.
+ * still lists goes with git worktree remove, with --force twice when it is locked, and a folder git
+ * forgot, with rm -rf.
  */
 export function leftoverCommands(leftover: Leftover): string {
   const commands: string[] = [];
   const { worktree } = leftover;
   if (worktree?.kept === true) {
-    const path = displayPath(worktree.path);
-    commands.push(worktree.registered ? `git worktree remove --force ${path}` : `rm -rf ${path}`);
+    commands.push(`${removal(worktree)} ${displayPath(worktree.path)}`);
   }
   if (leftover.branch?.kept === true) {
     commands.push(`git branch -D ${leftover.branch.name}`);
@@ -99,12 +108,18 @@ export function leftoverHeading(leftover: Leftover): string {
 
 /**
  * forceWarning is the warning over the command that deletes a worktree that stayed, with whatever work it
- * still holds: --force, or rm -rf for a folder git forgot; null when no worktree stayed.
+ * still holds: --force, --force twice for a locked worktree, which also unlocks it, or rm -rf for a folder
+ * git forgot; null when no worktree stayed.
  */
 export function forceWarning(leftover: Leftover): string | null {
   const { worktree } = leftover;
   if (worktree?.kept !== true) {
     return null;
   }
-  return `${worktree.registered ? "--force" : "rm -rf"} deletes the modified and untracked files in it too.`;
+  if (!worktree.registered) {
+    return "rm -rf deletes the modified and untracked files in it too.";
+  }
+  return worktree.locked
+    ? "--force --force unlocks the worktree and deletes the modified and untracked files in it too."
+    : "--force deletes the modified and untracked files in it too.";
 }

@@ -677,6 +677,9 @@ type LeftoverWorktree struct {
 	// worktree, which git worktree remove --force takes down; a folder git
 	// forgot is removed as a folder.
 	Registered bool `json:"registered"`
+	// Locked says that the worktree git lists is locked, which only
+	// git worktree remove --force --force takes down.
+	Locked bool `json:"locked"`
 }
 
 // LeftoverBranch is the branch of a deletion.

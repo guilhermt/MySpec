@@ -76,9 +76,12 @@ type Leftover struct {
 	// worktree of the clone, which git worktree remove can take down; a
 	// folder git forgot is only a folder.
 	PathRegistered bool
-	Branch         string
-	BranchKept     bool   // git couldn't delete the branch
-	BranchError    string // what git said; "" when it went
+	// PathLocked says that the worktree git still lists is locked, which
+	// only git worktree remove with --force twice takes down.
+	PathLocked  bool
+	Branch      string
+	BranchKept  bool   // git couldn't delete the branch
+	BranchError string // what git said; "" when it went
 }
 
 // The reasons Ensure refuses to create a worktree. Each wraps the git error

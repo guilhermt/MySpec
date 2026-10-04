@@ -381,14 +381,18 @@ describe("GoneView", () => {
       kept: true,
       error: "contains modified files",
       registered: true,
+      locked: false,
     };
     const forgotten = { ...worktree, registered: false };
+    const locked = { ...worktree, locked: true };
     const removed = { ...worktree, kept: false, error: "" };
     const branch = { name: "add-login", kept: true, error: "checked out" };
     const deleted = { ...branch, kept: false, error: "" };
     const WORKTREE_COMMAND =
       "git worktree remove --force ~/.local/share/myspec/worktrees/acme/api/add-login";
     const FOLDER_COMMAND = "rm -rf ~/.local/share/myspec/worktrees/acme/api/add-login";
+    const LOCKED_COMMAND =
+      "git worktree remove --force --force ~/.local/share/myspec/worktrees/acme/api/add-login";
     const WORKTREE_STAYED =
       "The worktree stayed at ~/.local/share/myspec/worktrees/acme/api/add-login";
 
@@ -404,6 +408,8 @@ describe("GoneView", () => {
 
     const FORCE_WARNING = "--force deletes the modified and untracked files in it too.";
     const FOLDER_WARNING = "rm -rf deletes the modified and untracked files in it too.";
+    const LOCKED_WARNING =
+      "--force --force unlocks the worktree and deletes the modified and untracked files in it too.";
 
     it.each([
       [
@@ -412,6 +418,13 @@ describe("GoneView", () => {
         [`${WORKTREE_STAYED}contains modified files`],
         [WORKTREE_COMMAND],
         FORCE_WARNING,
+      ],
+      [
+        "the locked worktree git still lists",
+        { worktree: locked, branch: null },
+        [`${WORKTREE_STAYED}contains modified files`],
+        [LOCKED_COMMAND],
+        LOCKED_WARNING,
       ],
       [
         "the folder of a worktree git forgot",

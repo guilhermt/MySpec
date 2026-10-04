@@ -96,6 +96,7 @@ describe("what stayed on disk", () => {
     kept: true,
     error: "fatal: '/home/dev/x' contains modified files",
     registered: true,
+    locked: false,
   };
   const both = makeLeftover({
     worktree,
@@ -140,6 +141,14 @@ describe("what stayed on disk", () => {
     );
   });
 
+  it("removes a locked worktree with --force twice, which git asks for", () => {
+    const locked = makeLeftover({ ...both, worktree: { ...worktree, locked: true } });
+
+    expect(leftoverCommands(locked)).toBe(
+      "git worktree remove --force --force ~/.local/share/myspec/worktrees/acme/api/rate-limit\ngit branch -D rate-limit",
+    );
+  });
+
   it("gives the commands of the parts that stayed, one per line", () => {
     expect(leftoverCommands(both)).toBe(
       "git worktree remove --force ~/.local/share/myspec/worktrees/acme/api/rate-limit\ngit branch -D rate-limit",
@@ -160,6 +169,9 @@ describe("what stayed on disk", () => {
     expect(forceWarning(both)).toBe("--force deletes the modified and untracked files in it too.");
     expect(forceWarning(makeLeftover({ worktree: { ...worktree, registered: false } }))).toBe(
       "rm -rf deletes the modified and untracked files in it too.",
+    );
+    expect(forceWarning(makeLeftover({ worktree: { ...worktree, locked: true } }))).toBe(
+      "--force --force unlocks the worktree and deletes the modified and untracked files in it too.",
     );
     expect(forceWarning(makeLeftover({ worktree: null, branch: both.branch }))).toBeNull();
     expect(forceWarning(makeLeftover({ worktree: { ...worktree, kept: false } }))).toBeNull();

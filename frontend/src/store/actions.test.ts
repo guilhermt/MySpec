@@ -1046,6 +1046,7 @@ describe("review actions reported in the app notice", () => {
         kept: true,
         error: "the worktree is busy",
         registered: true,
+        locked: false,
       },
     });
     vi.mocked(api.deleteReview).mockResolvedValueOnce({ leftover });

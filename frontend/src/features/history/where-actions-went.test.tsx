@@ -889,6 +889,7 @@ const PAGES: Row[] = [
             kept: true,
             error: "contains modified files",
             registered: true,
+            locked: false,
           },
           branch: { name: "add-login", kept: true, error: "checked out" },
         }),

@@ -43,10 +43,11 @@ const HOME = "/home/guilherme";
 // The worktrees of the deleted task and of the deleted review, as the page writes them.
 const TASK_WORKTREE = "~/.local/share/myspec/worktrees/acme/api/rate-limit-per-api-key";
 const REVIEW_WORKTREE = "~/.local/share/myspec/worktrees/acme/web/pr_2291";
-// FOLDER_WARNING and FORCE_WARNING are the warnings over the command of a folder git forgot and of a
-// worktree git still lists.
+// FOLDER_WARNING and LOCKED_WARNING are the warnings over the command of a folder git forgot and of a
+// locked worktree git still lists.
 const FOLDER_WARNING = "rm -rf deletes the modified and untracked files in it too.";
-const FORCE_WARNING = "--force deletes the modified and untracked files in it too.";
+const LOCKED_WARNING =
+  "--force --force unlocks the worktree and deletes the modified and untracked files in it too.";
 
 /** Case is a scene of the page of an item that left, or of the notices, named as the mock's query names it. */
 interface Case {
@@ -87,8 +88,8 @@ const CASES: Case[] = [
     says: [
       "Rate limit per API key was deleted",
       "fatal: cannot remove a locked working tree; use 'remove -f -f' to override or unlock first",
-      FORCE_WARNING,
-      `git worktree remove --force ${TASK_WORKTREE}`,
+      LOCKED_WARNING,
+      `git worktree remove --force --force ${TASK_WORKTREE}`,
     ],
   },
   { name: "gone", variant: "review", primary: NEXT },
@@ -143,15 +144,18 @@ const stayed = (path: string) => ({
   kept: true,
   error: `error: failed to delete '${path}': Permission denied`,
   registered: false,
+  locked: false,
 });
 
-// locked is a worktree git refused to remove because it is locked: git still lists it.
+// locked is a worktree git refused to remove because it is locked: git still lists it, and removes it
+// only with --force twice.
 const locked = (path: string) => ({
   path,
   kept: true,
   error:
     "fatal: cannot remove a locked working tree;\nuse 'remove -f -f' to override or unlock first",
   registered: true,
+  locked: true,
 });
 
 // The task deleted with the page open is the reference task, with its pull request still open.

@@ -96,6 +96,9 @@ type ListedWorktree struct {
 	// Prunable is a worktree git forgets on the next prune: its folder or the
 	// .git file in it is gone.
 	Prunable bool
+	// Locked is a worktree git refuses to remove or prune until it is
+	// unlocked, or removed with --force twice.
+	Locked bool
 }
 
 // Worktrees lists the worktrees git keeps for the clone at dir, the main one
@@ -111,8 +114,14 @@ func (r *Runner) Worktrees(ctx context.Context, dir string) ([]ListedWorktree, e
 			listed = append(listed, ListedWorktree{Path: path})
 			continue
 		}
-		if (field == "prunable" || strings.HasPrefix(field, "prunable ")) && len(listed) > 0 {
+		if len(listed) == 0 {
+			continue
+		}
+		switch {
+		case field == "prunable" || strings.HasPrefix(field, "prunable "):
 			listed[len(listed)-1].Prunable = true
+		case field == "locked" || strings.HasPrefix(field, "locked "):
+			listed[len(listed)-1].Locked = true
 		}
 	}
 	return listed, nil

@@ -1461,6 +1461,12 @@ export interface LeftoverWorktree {
      * forgot is removed as a folder.
      */
     "registered": boolean;
+
+    /**
+     * Locked says that the worktree git lists is locked, which only
+     * git worktree remove --force --force takes down.
+     */
+    "locked": boolean;
 }
 
 /**

@@ -773,6 +773,7 @@ export function makeLeftover(overrides: Partial<Leftover> = {}): Leftover {
       kept: true,
       error: "permission denied",
       registered: true,
+      locked: false,
     },
     branch: null,
     ...overrides,
