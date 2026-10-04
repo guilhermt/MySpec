@@ -64,7 +64,7 @@ import type {
   Transcript,
   TranscriptEvent,
 } from "@/lib/wails";
-import { asPlaceKind, asTaskStage, asThemePreference, sessionKey } from "@/lib/wails";
+import { asPlaceKind, asPRState, asTaskStage, asThemePreference, sessionKey } from "@/lib/wails";
 import { allowedInWelcome, welcomeMode } from "@/lib/welcome";
 import { firstTab } from "@/store/step-tab";
 import {
@@ -867,8 +867,16 @@ function keptEarlier(next: State, earlier: EarlierConversation | null): EarlierC
 
 // gone is the page of an item that left, with what the state no longer has of
 // it: the name its page says and the board it lived under.
-function gone(item: GoneLocation["item"], id: string, name: string, boardId: string): GoneLocation {
-  return { kind: "gone", item, id, name, boardId };
+function gone(
+  item: GoneLocation["item"],
+  id: string,
+  name: string,
+  boardId: string,
+  pr?: GoneLocation["pr"],
+): GoneLocation {
+  return pr === undefined
+    ? { kind: "gone", item, id, name, boardId }
+    : { kind: "gone", item, id, name, boardId, pr };
 }
 
 // The place on screen once a new state arrives. An archived item that left
@@ -904,7 +912,12 @@ function placeIn(
         return location;
       }
       const boardId = boardOfRepository(prev, task.repositoryId)?.id ?? "";
-      return gone("task", task.id, task.name, boardId);
+      const state = task.pr === null ? "" : asPRState(task.pr.prState);
+      const pr =
+        task.pr !== null && task.pr.prNumber > 0 && state !== ""
+          ? { number: task.pr.prNumber, state }
+          : null;
+      return gone("task", task.id, task.name, boardId, pr);
     }
     case "review": {
       const review = findReview(prev, location.id);

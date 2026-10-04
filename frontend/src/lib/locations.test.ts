@@ -224,6 +224,13 @@ describe("isLocation", () => {
     ["a task with a numeric id", { kind: "task", id: 1 }, false],
     ["an unknown page of Settings", { kind: "settings", section: "colors" }, false],
     ["an item that left of an unknown kind", { ...GONE, item: "card" }, false],
+    ["a task that left with its pull request", { ...GONE, pr: { number: 7, state: "open" } }, true],
+    ["a task that left without a pull request", { ...GONE, pr: null }, true],
+    [
+      "a task that left with a pull request of an unknown state",
+      { ...GONE, pr: { number: 7, state: "x" } },
+      false,
+    ],
     ["an item that left without a name", { ...GONE, name: undefined }, false],
     ["an unknown kind", { kind: "inbox" }, false],
     ["null", null, false],

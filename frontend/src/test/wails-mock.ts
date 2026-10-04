@@ -762,7 +762,7 @@ export function makeArchivedTask(overrides: Partial<ArchivedTask> = {}): Archive
 }
 
 export function makeDeletePreview(overrides: Partial<DeletePreview> = {}): DeletePreview {
-  return { sessionRunning: false, worktree: null, branch: null, pr: null, ...overrides };
+  return { worktree: null, branch: null, pr: null, ...overrides };
 }
 
 export function makeLeftover(overrides: Partial<Leftover> = {}): Leftover {

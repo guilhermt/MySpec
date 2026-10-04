@@ -28,8 +28,21 @@ export type Location =
   | { kind: "archived-task"; id: string }
   | { kind: "archived-review"; id: string }
   | { kind: "archived-discussion"; id: string }
-  /** gone is the page of an item that left while open: its name and the board it lived under ("" for none) are kept, because the state no longer has them. */
-  | { kind: "gone"; item: GoneItem; id: string; name: string; boardId: string };
+  /** gone is the page of an item that left while open: its name and the board it lived under ("" for none) are kept, because the state no longer has them; a task keeps its pull request too, null without one. */
+  | {
+      kind: "gone";
+      item: GoneItem;
+      id: string;
+      name: string;
+      boardId: string;
+      pr?: GonePR | null;
+    };
+
+/** GonePR is the pull request a task had when it left, as the last reading of its state said. */
+export interface GonePR {
+  number: number;
+  state: "open" | "merged" | "closed";
+}
 
 /** Crumb is one level of the breadcrumb: a place it opens, or plain text. */
 export interface Crumb {
@@ -260,6 +273,14 @@ export function withoutFresh(location: Location): Location {
   return location.kind === "history" && location.fresh !== undefined ? HISTORY : location;
 }
 
+function isGonePR(value: unknown): value is GonePR {
+  return (
+    isRecord(value) &&
+    typeof value.number === "number" &&
+    (value.state === "open" || value.state === "merged" || value.state === "closed")
+  );
+}
+
 /** isLocation tells whether a value read back from storage is a place. */
 export function isLocation(value: unknown): value is Location {
   if (!isRecord(value)) {
@@ -287,7 +308,8 @@ export function isLocation(value: unknown): value is Location {
         GONE_ITEMS.includes(value.item) &&
         typeof value.id === "string" &&
         typeof value.name === "string" &&
-        typeof value.boardId === "string"
+        typeof value.boardId === "string" &&
+        (value.pr === undefined || value.pr === null || isGonePR(value.pr))
       );
     default:
       return false;

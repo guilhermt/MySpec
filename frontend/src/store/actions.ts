@@ -1,3 +1,4 @@
+import type { PreviewReading } from "@/features/task/deletion";
 import { draftTitle } from "@/lib/drafts";
 import { messageOf, noticeDetail, type Remedy } from "@/lib/errors";
 import { olderKey } from "@/lib/history";
@@ -417,16 +418,6 @@ async function runRemoval(
       throw error;
     }),
   );
-}
-
-/** deleteTask removes the task for good and reports what stayed on disk. */
-export function deleteTask(taskId: string): Promise<void> {
-  return runRemoval(taskId, fail(withItem("Couldn't delete", itemName(taskId)), TRY), async () => {
-    const result = await api.deleteTask(taskId);
-    if (result.leftover !== null) {
-      useAppStore.getState().setLeftover(result.leftover);
-    }
-  });
 }
 
 /** loadTranscript fetches a conversation and buffers what arrives meanwhile. */
@@ -1012,6 +1003,33 @@ export async function deleteReviewInPlace(id: string): Promise<string | null> {
       useAppStore.setState((state) => ({ leftovers: { ...state.leftovers, [id]: leftover } }));
     }
   });
+}
+
+/**
+ * deleteTaskInPlace removes the task for good and reports what stayed on disk; it answers the
+ * refusal, or null.
+ */
+export async function deleteTaskInPlace(taskId: string): Promise<string | null> {
+  return removalInPlace(taskId, async () => {
+    const result = await api.deleteTask(taskId);
+    if (result.leftover !== null) {
+      const { leftover } = result;
+      useAppStore.getState().setLeftover(leftover);
+      useAppStore.setState((state) => ({ leftovers: { ...state.leftovers, [taskId]: leftover } }));
+    }
+  });
+}
+
+/**
+ * readDeletePreview reads what deleting the task would destroy. It does not go through run: the
+ * dialog that asks says what failed, as part of what it shows.
+ */
+export async function readDeletePreview(taskId: string): Promise<PreviewReading> {
+  try {
+    return { kind: "ready", preview: await api.previewDelete(taskId) };
+  } catch (error) {
+    return { kind: "failed", error: messageOf(error) };
+  }
 }
 
 /** archiveDiscussionInPlace ends the conversation and sends the discussion to the history; it answers the refusal, or null. */

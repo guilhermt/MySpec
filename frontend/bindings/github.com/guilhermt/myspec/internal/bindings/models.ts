@@ -799,8 +799,6 @@ export interface CreateTaskRequest {
  * dialog spells it out.
  */
 export interface DeletePreview {
-    "sessionRunning": boolean;
-
     /**
      * nil when there is none
      */

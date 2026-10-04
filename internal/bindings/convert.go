@@ -527,7 +527,7 @@ func fromArchivedPRReports(reports []task.ReviewReport, passes []task.PRPass) []
 // FromDeletePreview converts what deleting a task would destroy, keeping nil
 // for what it has none of.
 func FromDeletePreview(preview flow.DeletePreview) DeletePreview {
-	converted := DeletePreview{SessionRunning: preview.SessionRunning}
+	converted := DeletePreview{}
 	if wt := preview.Worktree; wt != nil {
 		converted.Worktree = &WorktreePreview{
 			Path:  wt.Path,

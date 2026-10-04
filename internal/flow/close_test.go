@@ -10,7 +10,6 @@ import (
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/repository"
-	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
@@ -377,18 +376,11 @@ func TestPreviewingADeletionSaysWhatWouldBeDestroyed(t *testing.T) {
 		{X: '?', Y: '?', Path: "scratch.md"},
 	}})
 	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: mergedPR()})
-	f.sessions.setSummary("task-1", session.Summary{
-		Stage: session.PRReviewStage, Status: session.StatusWorking, ProcessRunning: true,
-	})
-
 	preview, err := f.service.PreviewDelete(t.Context(), "task-1")
 	if err != nil {
 		t.Fatalf("PreviewDelete() = %v, want nil", err)
 	}
 
-	if !preview.SessionRunning {
-		t.Error("sessionRunning = false, want the conversation counted")
-	}
 	if preview.Worktree == nil || !preview.Worktree.Dirty || preview.Worktree.Files != 2 {
 		t.Errorf("worktree = %+v, want it dirty with two files", preview.Worktree)
 	}

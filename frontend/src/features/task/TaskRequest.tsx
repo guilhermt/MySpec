@@ -194,13 +194,7 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
           <CleanAndStartDialog task={task} step={step} open={cleaning} onOpenChange={setCleaning} />
         </>
       )}
-      <DeleteTaskDialog
-        taskId={task.id}
-        name={task.name}
-        archived={false}
-        open={deleting}
-        onOpenChange={setDeleting}
-      />
+      <DeleteTaskDialog task={task} open={deleting} onOpenChange={setDeleting} />
     </div>
   );
 }

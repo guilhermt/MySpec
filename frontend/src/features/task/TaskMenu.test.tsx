@@ -113,7 +113,7 @@ describe("TaskMenu", () => {
 
     await user.click(screen.getByRole("menuitem", { name: "Delete task…" }));
 
-    expect(await screen.findByRole("alertdialog")).toHaveTextContent('Delete "add-login"?');
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent("Delete “add-login”?");
   });
 
   it("opens the review mode popover from the ⋯ and returns the focus to it", async () => {

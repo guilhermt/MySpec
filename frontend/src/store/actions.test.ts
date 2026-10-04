@@ -31,7 +31,7 @@ import {
   decideFindingInPlace,
   deleteDiscussionInPlace,
   deleteReviewInPlace,
-  deleteTask,
+  deleteTaskInPlace,
   discardDraft,
   discardStage,
   discardStep,
@@ -55,6 +55,7 @@ import {
   previewRemoveBoard,
   publishReview,
   readActionOutput,
+  readDeletePreview,
   readEarlierConversation,
   refreshBoard,
   refreshCard,
@@ -108,6 +109,7 @@ import {
   makeBoardPreview,
   makeBoardRemoval,
   makeBoardRepositoryOption,
+  makeDeletePreview,
   makeDiscussion,
   makeDraft,
   makeEntry,
@@ -547,7 +549,7 @@ describe("board actions reported in the app notice", () => {
 
 describe("task actions", () => {
   it.each([
-    ["deleteTask", () => deleteTask("item-1")],
+    ["deleteTaskInPlace", () => deleteTaskInPlace("item-1")],
     ["closeTask", () => closeTask("item-1")],
     ["deleteReviewInPlace", () => deleteReviewInPlace("item-1")],
     ["archiveDiscussionInPlace", () => archiveDiscussionInPlace("item-1")],
@@ -559,11 +561,6 @@ describe("task actions", () => {
   });
 
   it.each([
-    [
-      "deleteTask",
-      () => vi.mocked(api.deleteTask).mockRejectedValueOnce(new Error("busy")),
-      () => deleteTask("item-1"),
-    ],
     [
       "closeTask",
       () => vi.mocked(api.closeTask).mockRejectedValueOnce(new Error("busy")),
@@ -590,6 +587,11 @@ describe("task actions", () => {
       () => deleteDiscussionInPlace("item-1"),
     ],
     [
+      "deleteTaskInPlace",
+      () => vi.mocked(api.deleteTask).mockRejectedValueOnce(new Error("busy")),
+      () => deleteTaskInPlace("item-1"),
+    ],
+    [
       "deleteReviewInPlace",
       () => vi.mocked(api.deleteReview).mockRejectedValueOnce(new Error("busy")),
       () => deleteReviewInPlace("item-1"),
@@ -610,7 +612,7 @@ describe("task actions", () => {
   it("keeps the mark of a later removal when an earlier one fails", async () => {
     vi.mocked(api.deleteTask).mockRejectedValueOnce(new Error("busy"));
 
-    const first = deleteTask("item-1");
+    const first = deleteTaskInPlace("item-1");
     await deleteDiscussionInPlace("item-2");
     await first;
 
@@ -618,7 +620,7 @@ describe("task actions", () => {
   });
 
   it("delegate to the matching binding", async () => {
-    await deleteTask("task-1");
+    await deleteTaskInPlace("task-1");
     await removePending("task-1", "prd", "entry-1");
     await interrupt("task-1", "prd");
     await pause("task-1", "prd");
@@ -707,15 +709,34 @@ describe("task actions", () => {
     });
     vi.mocked(api.deleteTask).mockResolvedValueOnce({ leftover });
 
-    await deleteTask("task-1");
+    expect(await deleteTaskInPlace("task-1")).toBeNull();
 
     expect(useAppStore.getState().leftover).toEqual(leftover);
+    expect(useAppStore.getState().leftovers).toEqual({ "task-1": leftover });
+  });
+
+  it("answers the refusal of the deletion of a task, as the dialog shows it", async () => {
+    vi.mocked(api.deleteTask).mockRejectedValueOnce(new Error("busy"));
+
+    expect(await deleteTaskInPlace("task-1")).toBe("busy");
+
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("reads what the deletion would destroy, and says when the reading failed", async () => {
+    const preview = makeDeletePreview();
+    vi.mocked(api.previewDelete).mockResolvedValueOnce(preview);
+    expect(await readDeletePreview("task-1")).toEqual({ kind: "ready", preview });
+
+    vi.mocked(api.previewDelete).mockRejectedValueOnce(new Error("git is busy"));
+    expect(await readDeletePreview("task-1")).toEqual({ kind: "failed", error: "git is busy" });
+    expect(useAppStore.getState().error).toBeNull();
   });
 
   it("says nothing when the deletion left nothing behind", async () => {
     vi.mocked(api.deleteTask).mockResolvedValueOnce({ leftover: null });
 
-    await deleteTask("task-1");
+    await deleteTaskInPlace("task-1");
 
     expect(useAppStore.getState().leftover).toBeNull();
   });

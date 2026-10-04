@@ -434,6 +434,29 @@ describe("open task", () => {
     expect(useAppStore.getState().transcripts[WEB_KEY]).toBeUndefined();
   });
 
+  it.each([
+    ["the open pull request", { prNumber: 7, prState: "open" }, { number: 7, state: "open" }],
+    ["the merged pull request", { prNumber: 7, prState: "merged" }, { number: 7, state: "merged" }],
+    ["no pull request number", { prNumber: 0, prState: "" }, null],
+  ])("keeps %s of the task that left", (_name, fields, pr) => {
+    const withPR = makeTask({ ...WEB_TASK, pr: makePullRequest(fields) });
+    useAppStore.getState().applyState(withTasks({ tasks: [withPR, API_TASK] }));
+    useAppStore.getState().openTask(WEB_TASK.id);
+
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
+
+    expect(location()).toMatchObject({ kind: "gone", id: WEB_TASK.id, pr });
+  });
+
+  it("keeps no pull request of a task that never had one", () => {
+    useAppStore.getState().applyState(withTasks());
+    useAppStore.getState().openTask(WEB_TASK.id);
+
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
+
+    expect(location()).toMatchObject({ kind: "gone", pr: null });
+  });
+
   it("forgets tasks, transcripts and drafts once no repository is registered", () => {
     useAppStore.getState().applyState(withTasks());
     useAppStore.getState().openTask(WEB_TASK.id);
@@ -2745,6 +2768,7 @@ describe("place in a new snapshot", () => {
       id: WEB_TASK.id,
       name: WEB_TASK.name,
       boardId: BOARD.id,
+      pr: null,
     });
   });
 
@@ -2760,6 +2784,7 @@ describe("place in a new snapshot", () => {
       id: WEB_TASK.id,
       name: WEB_TASK.name,
       boardId: "",
+      pr: null,
     });
   });
 

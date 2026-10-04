@@ -946,7 +946,6 @@ func TestFromDeletePreviewCarriesWhatWouldBeDestroyed(t *testing.T) {
 	t.Parallel()
 
 	preview := flow.DeletePreview{
-		SessionRunning: true,
 		Worktree: &flow.WorktreePreview{
 			Path:  "/data/worktrees/dev/web/login-screen",
 			Dirty: true,
@@ -963,7 +962,6 @@ func TestFromDeletePreviewCarriesWhatWouldBeDestroyed(t *testing.T) {
 		},
 	}
 	want := bindings.DeletePreview{
-		SessionRunning: true,
 		Worktree: &bindings.WorktreePreview{
 			Path:  "/data/worktrees/dev/web/login-screen",
 			Dirty: true,

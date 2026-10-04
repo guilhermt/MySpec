@@ -655,10 +655,9 @@ type PRPreview struct {
 // DeletePreview is what deleting a task would destroy, as the confirmation
 // dialog spells it out.
 type DeletePreview struct {
-	SessionRunning bool             `json:"sessionRunning"`
-	Worktree       *WorktreePreview `json:"worktree"` // nil when there is none
-	Branch         *BranchPreview   `json:"branch"`   // nil when there is none
-	PR             *PRPreview       `json:"pr"`       // nil when there is none
+	Worktree *WorktreePreview `json:"worktree"` // nil when there is none
+	Branch   *BranchPreview   `json:"branch"`   // nil when there is none
+	PR       *PRPreview       `json:"pr"`       // nil when there is none
 }
 
 // Leftover is what git could not remove when a task or a review was deleted:

@@ -47,6 +47,8 @@ export interface TaskMenuProps {
 /** TaskMenu is the ⋯ of a task: what can be done to its step, its pull request, its stages and itself. */
 export function TaskMenu({ task }: TaskMenuProps) {
   const moreRef = useRef<HTMLButtonElement>(null);
+  // The item hands the focus to the dialog it opens; the menu doesn't take it back.
+  const handsFocus = useRef(false);
   const [opened, setOpened] = useState<Opened | null>(null);
   const groups = taskMenuOf(task, useNow(MINUTE, true));
   const step = currentStepOf(task);
@@ -74,6 +76,7 @@ export function TaskMenu({ task }: TaskMenuProps) {
         void reviewAgain(task.id);
         break;
       default:
+        handsFocus.current = action.kind === "deleteTask";
         setOpened(action);
     }
   };
@@ -89,7 +92,14 @@ export function TaskMenu({ task }: TaskMenuProps) {
         <MenuTrigger
           render={<IconButton ref={moreRef} label="More actions" icon={ICONS.more} size="sm" />}
         />
-        <MenuContent align="end">
+        <MenuContent
+          align="end"
+          finalFocus={() => {
+            const handed = handsFocus.current;
+            handsFocus.current = false;
+            return !handed;
+          }}
+        >
           {groups.map((group) => (
             <Fragment key={group.label ?? "last"}>
               {group.label === null && <MenuSeparator />}
@@ -117,11 +127,14 @@ export function TaskMenu({ task }: TaskMenuProps) {
         />
       )}
       <DeleteTaskDialog
-        taskId={task.id}
-        name={task.name}
-        archived={false}
+        task={task}
         open={opened?.kind === "deleteTask"}
-        onOpenChange={close}
+        onOpenChange={(open) => {
+          close(open);
+          if (!open) {
+            moreRef.current?.focus();
+          }
+        }}
       />
       <ReviewModePopover
         task={task}

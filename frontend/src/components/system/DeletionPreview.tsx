@@ -15,6 +15,8 @@ export interface DeletionLine {
   text: string;
   /** mono ends the text in mono: a branch name. */
   mono?: string;
+  /** after is plain text that follows the mono part: " is deleted". */
+  after?: string;
   /** tag is the number that goes in a contoured tag: "3 uncommitted files". */
   tag?: string;
   /** detail goes on a line of its own, in the third ink. */
@@ -78,6 +80,7 @@ export function DeletionPreview({ state }: DeletionPreviewProps) {
                 <>
                   {" "}
                   <span className="font-mono">{line.mono}</span>
+                  {line.after}
                 </>
               )}
             </span>

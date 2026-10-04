@@ -139,10 +139,9 @@ func (s *Service) archive(ctx context.Context, t task.Task) {
 // DeletePreview is what deleting a task would destroy, read from git and from
 // the sessions at the moment the user asks.
 type DeletePreview struct {
-	SessionRunning bool             // a process of the task is alive and will be stopped
-	Worktree       *WorktreePreview // nil when the task has none
-	Branch         *BranchPreview   // nil when the task has no worktree
-	PR             *PRPreview       // nil when no pull request stays on GitHub
+	Worktree *WorktreePreview // nil when the task has none
+	Branch   *BranchPreview   // nil when the task has no worktree
+	PR       *PRPreview       // nil when no pull request stays on GitHub
 }
 
 // WorktreePreview is the worktree of the task and whether it holds work.
@@ -190,13 +189,6 @@ func (s *Service) PreviewDelete(ctx context.Context, id string) (DeletePreview, 
 		// An archived task has no worktree, no branch and no conversation left:
 		// the closing took them all.
 		return preview, nil
-	}
-
-	for key, sum := range s.sessions.Summaries() {
-		if key.TaskID == id && sum.ProcessRunning {
-			preview.SessionRunning = true
-			break
-		}
 	}
 
 	run, hasRun := s.tasks.PRRun(id)
