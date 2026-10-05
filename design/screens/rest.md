@@ -315,7 +315,7 @@ O foco começa na busca.
 - `Nothing matches "refund"` / `Try another name, title or #number, or clear the search.`, com **Clear the search**;
 - com o filtro da lateral e nada dele: `Nothing archived in <repo>` / `Choose another repository, or all of them.`
 
-**Muitos itens.** O History cresce cerca de 4 itens por dia. A lista carrega os últimos 90 dias e busca os mais antigos quando a busca pede ou quando a rolagem chega ao fim. O dado é local.
+**Muitos itens.** O History cresce cerca de 4 itens por dia. A lista carrega os últimos 90 dias e busca os mais antigos quando a busca pede ou quando a rolagem chega ao fim. O dado é local. A lista é virtualizada, como a do board (`structure.md` §7): monta os dias e as linhas à vista, a linha com a parada de Tab e a linha a que se chega por **Open in History**; o teclado anda por toda linha, montada ou não, e cada `treeitem` diz `aria-setsize` e `aria-posinset` entre os seus irmãos.
 
 ## 4. Os arquivados
 
@@ -640,7 +640,7 @@ São 61 textos. Esta seção é a fonte única dos textos das notificações; as
 | **Aguardando o usuário** | Nenhuma destas telas cria situação. As notificações (seção 11) levam às situações das outras telas |
 | **Agente trabalhando** | Os diálogos da task dizem que a resposta em curso é interrompida. A pausa |
 | **Pausado e ocioso** | A pausa: a pílula neutra, **Resume**, o marco e o compositor. O implementador ocioso na aba |
-| **Muitos itens** | History carrega 90 dias e busca os mais antigos sob demanda, com os dias como seções. Repositories agrupa por board, com o que precisa de clone no topo. A lista da varredura rola, com os registrados dobrados. A tabela de status do board e a lista de repositórios do diálogo rolam dentro do diálogo |
+| **Muitos itens** | History carrega 90 dias e busca os mais antigos sob demanda, com os dias como seções, numa lista em janela (§3). Repositories agrupa por board, com o que precisa de clone no topo. A lista da varredura rola, com os registrados dobrados. A tabela de status do board e a lista de repositórios do diálogo rolam dentro do diálogo |
 | **Item que sumiu** | A página do item que saiu (seção 9). O arquivado apagado volta ao History. O board removido segue `screens/board.md` §3.8 |
 
 ## 13. Atalhos
@@ -682,7 +682,7 @@ São 61 textos. Esta seção é a fonte única dos textos das notificações; as
 
 - **O aviso do app** tem como rótulo a ação que falhou e é só para uma ação sem lugar próprio.
 - **`Some files stayed on disk`** sai da faixa e vai para a página da task apagada.
-- **Muitos itens no History:** 90 dias carregados e os mais antigos sob demanda.
+- **Muitos itens no History:** 90 dias carregados, numa lista em janela, e os mais antigos sob demanda.
 - **O início** lista só os passos que bloqueiam a primeira tela.
 
 **`features.md`, Configurações e aparência.**
@@ -731,7 +731,7 @@ São 61 textos. Esta seção é a fonte única dos textos das notificações; as
 - A lista é agrupada por dia, com o tipo, onde, o resultado e a hora.
 - O resultado de uma task é a PR, os steps e o que o encerramento pulou.
 - O filtro da lateral aparece como chip removível.
-- A lista carrega 90 dias.
+- A lista carrega 90 dias, em janela: monta só o que está à vista.
 - A task arquivada mostra o resultado do encerramento e a aba **Pull request**, com o rascunho e os relatórios do review da PR. É o que `features.md` já promete.
 - A discussão arquivada mostra primeiro o que publicou.
 - Apagar um arquivado volta ao History.

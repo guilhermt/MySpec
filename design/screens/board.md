@@ -272,7 +272,7 @@ A falha nunca é situação, nunca notifica e nunca é vermelha.
 
 | Campo | Livre | De card | Padrão |
 |---|---|---|---|
-| **O topo** | **Repository**, um seletor (seção 4.4) | O card num bloco afundado: `#474`, o título em peso 500, e `acme/api · Ready · Usage-based billing` em `--ink-3`. Sem seletor | Livre: o primeiro utilizável entre o repositório do filtro da lateral, o da task aberta, o último usado e o primeiro da lista |
+| **O topo** | **Repository**, um seletor (seção 4.4) | O card num bloco afundado: `#474`, o título em peso 500, e `acme/api · Ready · Usage-based billing` em `--ink-3`. Sem seletor | Livre: o primeiro utilizável entre o repositório do filtro da lateral, o da task aberta, o último usado e o primeiro utilizável da lista; utilizável é o repositório clonado, com o clone no lugar. Sem nenhum, o campo abre vazio |
 | **Name** | Vazio | Sugerido, `<número>-<slug>` até 64 (`474-usage-alerts-at-80-of-the-plan`) | Em mono, `--text-meta`. A ajuda: `Lowercase letters, digits and hyphens. It names the branch and the worktree.` |
 | **Context** | Obrigatório: uma área de texto de quatro linhas, com `What you want to build, in your own words. High level or detailed.` | A linha do contexto montado (seção 4.3) | — |
 | **A dependência** | — | Um aviso por dependência não satisfeita, neutro: `◇ Depends on #461 Metering events from the gateway` e `acme/gateway · Open · Backlog · no pull request. A warning only: the task can start.` | Nunca bloqueia |
