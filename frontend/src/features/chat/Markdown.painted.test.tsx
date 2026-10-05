@@ -30,6 +30,29 @@ describe.each(THEMES)("Markdown in %s", (theme) => {
     expect(getComputedStyle(heading).fontSize).toBe(resolve("var(--text-ui)", "font-size"));
   });
 
+  it("ends the last paragraph of a speech that still grows with a still caret in --ink-3, in its line", async () => {
+    setTheme(theme);
+    const { container } = renderWithStore(
+      <div style={{ width: 640 }}>
+        <Markdown streaming>{"The invoice.\n\nHalf a sen"}</Markdown>
+      </div>,
+    );
+
+    const last = await screen.findByText(/Half a sen/);
+    const caret = getComputedStyle(last, "::after");
+    expect([caret.content, caret.display, caret.color]).toEqual([
+      '"▋" / ""',
+      "inline",
+      token("--ink-3"),
+    ]);
+    // In the line of the text: the paragraph keeps one line, and nothing follows it.
+    expect(last.getBoundingClientRect().height).toBe(
+      parseFloat(resolve("var(--leading-body)", "line-height")),
+    );
+    expect(getComputedStyle(screen.getByText("The invoice."), "::after").content).toBe("none");
+    expect(container.querySelector(".streaming-caret-line")).toBeNull();
+  });
+
   it("puts Copy of a block at the end of its own header, in the header's height", async () => {
     setTheme(theme);
     const { container } = renderWithStore(

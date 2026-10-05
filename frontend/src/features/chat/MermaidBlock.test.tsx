@@ -103,11 +103,21 @@ describe("Markdown with a diagram", () => {
     expect(await screen.findByRole("button", { name: "Full screen" })).toBeInTheDocument();
   });
 
-  it("draws the caret of a speech that still grows after its last block, and only then", () => {
+  it("ends the text of a speech that still grows with the caret, and only then", () => {
     const { container, rerender } = renderWithStore(<Markdown streaming>Half a sen</Markdown>);
 
-    expect(container.querySelector(".streaming-caret")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByTestId("markdown")).toHaveClass("streaming-caret");
+    expect(container.querySelector(".streaming-caret-line")).toBeNull();
     rerender(<Markdown>Half a sen</Markdown>);
     expect(container.querySelector(".streaming-caret")).toBeNull();
+  });
+
+  it("puts the caret on a line of its own after a code block that still grows", () => {
+    const { container } = renderWithStore(
+      <Markdown streaming>{"Run:\n\n```bash\nls -la"}</Markdown>,
+    );
+
+    expect(container.querySelector(".streaming-caret")).toBeNull();
+    expect(container.querySelector(".streaming-caret-line")).toHaveAttribute("aria-hidden", "true");
   });
 });
