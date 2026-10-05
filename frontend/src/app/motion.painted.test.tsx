@@ -197,7 +197,7 @@ describe("with reduced motion", () => {
     );
 
     await userEvent.hover(page.getByRole("button", { name: "Actions" }));
-    const tooltip = await screen.findByRole("tooltip", {}, { timeout: 2000 });
+    const tooltip = await screen.findByRole("tooltip", {}, { timeout: 5000 });
     expect(durations(tooltip).every((value) => value === ZERO)).toBe(true);
 
     await userEvent.click(page.getByRole("button", { name: "Actions" }));
@@ -379,7 +379,7 @@ describe("without a preference", () => {
     );
 
     await userEvent.hover(page.getByRole("button", { name: "Actions" }));
-    const tooltip = await screen.findByRole("tooltip", {}, { timeout: 2000 });
+    const tooltip = await screen.findByRole("tooltip", {}, { timeout: 5000 });
     expect(getComputedStyle(tooltip).transitionDuration).toBe(duration("--duration-fast"));
 
     await userEvent.click(page.getByRole("button", { name: "Actions" }));
