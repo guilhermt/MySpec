@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { playwright } from "@vitest/browser-playwright";
 import { defineConfig, mergeConfig } from "vitest/config";
-import { emulateReducedMotion } from "./src/test/browser-commands.ts";
+import { emulateReducedMotion, pressPointer, releasePointer } from "./src/test/browser-commands.ts";
 import viteConfig from "./vite.config.ts";
 
 /** PAINTED holds the computed-style tests, which run in Chromium with the real CSS. */
@@ -85,7 +85,7 @@ export default mergeConfig(
               enabled: true,
               headless: true,
               provider: playwright(),
-              commands: { emulateReducedMotion },
+              commands: { emulateReducedMotion, pressPointer, releasePointer },
               instances: [{ browser: "chromium" }],
               viewport: { width: 1280, height: 800 },
             },

@@ -1,7 +1,16 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
-import { focusRing, paintOf, resolve, setTheme, spillsOut, THEMES, token } from "@/test/painted";
+import {
+  focusRing,
+  paintOf,
+  resolve,
+  scriptFocused,
+  setTheme,
+  spillsOut,
+  THEMES,
+  token,
+} from "@/test/painted";
 import {
   CardRow,
   type CardRowProps,
@@ -122,6 +131,13 @@ describe.each(THEMES)("CardRow in the %s theme", (theme) => {
     expect(getComputedStyle(keys).visibility).toBe("hidden");
     await userEvent.tab();
     expect(getComputedStyle(keys).visibility).toBe("visible");
+  });
+
+  it("shows the keys on a script focus that follows a click", async () => {
+    setTheme(theme);
+    const row = draw(1200);
+    const keys = screen.getByText("start").parentElement as HTMLElement;
+    expect(await scriptFocused(row, () => getComputedStyle(keys).visibility)).toBe("visible");
   });
 
   it("shows the focus ring", async () => {

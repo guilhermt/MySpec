@@ -6,12 +6,16 @@
 import { screen, within } from "@testing-library/react";
 import type { CSSProperties } from "react";
 import { inject, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
     /** emulateReducedMotion is the command of test/browser-commands.ts, which the config registers. */
     emulateReducedMotion: (value: "reduce" | "no-preference") => Promise<void>;
+    /** pressPointer holds the main button down where the pointer rests: what is under it is :active. */
+    pressPointer: () => Promise<void>;
+    /** releasePointer lets go of the button pressPointer holds. */
+    releasePointer: () => Promise<void>;
   }
 }
 
@@ -584,4 +588,35 @@ export async function uiHeadings(): Promise<{ got: string[][]; want: string[][] 
     }),
     want: headings.map(() => ui),
   };
+}
+
+/**
+ * pressed reads what an element paints while the pointer holds it down: the pointer rests on it, the
+ * main button goes down, read runs, and the button is let go, also when read throws.
+ */
+export async function pressed<T>(element: Element, read: () => T): Promise<T> {
+  await userEvent.hover(element);
+  await commands.pressPointer();
+  try {
+    return read();
+  } finally {
+    await commands.releasePointer();
+  }
+}
+
+/**
+ * scriptFocused reads what an element paints when a script focuses it after a click, the last input
+ * being a key: WebKitGTK gives no :focus-visible to that focus, and Chromium, after the click, gives
+ * none either, so the ring can only come from data-input, the modality the app keeps on the root.
+ */
+export async function scriptFocused<T>(element: HTMLElement, read: () => T): Promise<T> {
+  await userEvent.click(element);
+  element.blur();
+  document.documentElement.dataset.input = "keyboard";
+  try {
+    element.focus();
+    return read();
+  } finally {
+    delete document.documentElement.dataset.input;
+  }
 }
