@@ -40,7 +40,7 @@ export function CardPanel({ task }: CardPanelProps) {
   return (
     <AuxPanel id="card" title={`Card #${task.card.number}`} onClose={() => openPanel(null)}>
       <div className="flex flex-col gap-(--space-4) px-(--space-4) pt-(--space-3) pb-(--space-6)">
-        <LiveRegion kind="status" className="contents">
+        <LiveRegion kind="status" as="div" className="empty:absolute">
           {notice !== null && <NoticeStrip title={notice} outlined />}
         </LiveRegion>
         <div className="flex flex-col gap-(--space-1)">

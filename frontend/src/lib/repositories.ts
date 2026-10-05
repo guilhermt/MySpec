@@ -28,19 +28,23 @@ export function sharedNames(app: State): ReadonlySet<string> {
   if (known !== undefined) {
     return known;
   }
-  const owners = new Map<string, Set<string>>();
-  const names = [
+  const shared = sharedAmong([
     ...(app.repositories ?? []).map((repository) => repository.fullName),
     ...(app.history ?? []).map((task) => task.repository),
     ...(app.reviewHistory ?? []).map((review) => review.repository),
-  ];
-  for (const fullName of names) {
+  ]);
+  SHARED.set(app, shared);
+  return shared;
+}
+
+/** sharedAmong are the short names, in lower case, that two or more of the full names answer to. */
+export function sharedAmong(fullNames: readonly string[]): ReadonlySet<string> {
+  const owners = new Map<string, Set<string>>();
+  for (const fullName of fullNames) {
     const name = shortName(fullName).toLowerCase();
     owners.set(name, (owners.get(name) ?? new Set()).add(fullName.toLowerCase()));
   }
-  const shared = new Set([...owners].filter(([, full]) => full.size > 1).map(([name]) => name));
-  SHARED.set(app, shared);
-  return shared;
+  return new Set([...owners].filter(([, full]) => full.size > 1).map(([name]) => name));
 }
 
 /** shortRef is an issue as the screen writes it, "billing#479" for "acme/billing#479". */

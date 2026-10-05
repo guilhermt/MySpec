@@ -41,7 +41,7 @@ import {
   renderPage,
   renderShell,
   SWEEP_TIMEOUT,
-  WINDOWS,
+  windowsIn,
 } from "@/test/widths";
 
 // Only the boundary is replaced, as in the jsdom suite: no call reaches the runtime of Wails.
@@ -189,7 +189,11 @@ describe.each(THEMES)(
       fixClock();
 
       describe.each(scenes)("the %s scene", (name, draw) => {
-        it.each(WINDOWS)("holds the checks of every screen at %ipx", async (window) => {
+        it.each(
+          windowsIn(theme, {
+            reference: name === reference || name === "newer" || name === "migration",
+          }),
+        )("holds the checks of every screen at %ipx", async (window) => {
           setTheme(theme);
           await atWindow(window);
           const main = await draw();
@@ -214,16 +218,19 @@ describe.each(THEMES)(
     )("the %s scene, variant “%s”", (name, variant) => {
       fixHistorySceneClock(historyScene(name, variant));
 
-      it.each(WINDOWS)("holds the checks of every screen at %ipx", async (window) => {
-        setTheme(theme);
-        await atWindow(window);
-        const main = await history(name, variant)();
+      it.each(windowsIn(theme, { reference: name === "history" && variant === "" }))(
+        "holds the checks of every screen at %ipx",
+        async (window) => {
+          setTheme(theme);
+          await atWindow(window);
+          const main = await history(name, variant)();
 
-        expect(await proveScene(main)).toEqual({});
-        if (name === "history" && variant === "") {
-          await capture(`ref-history-${window}-${theme}`, main);
-        }
-      });
+          expect(await proveScene(main)).toEqual({});
+          if (name === "history" && variant === "") {
+            await capture(`ref-history-${window}-${theme}`, main);
+          }
+        },
+      );
     });
   },
 );
@@ -250,7 +257,7 @@ describe.each(THEMES)("The dialogs of the task in every window, in the %s theme"
   describe.each(DIALOGS)("the %s scene", (name, item, sceneOf) => {
     fixSceneClock();
 
-    it.each(WINDOWS)("holds the checks of every screen at %ipx", async (window) => {
+    it.each(windowsIn(theme))("holds the checks of every screen at %ipx", async (window) => {
       setTheme(theme);
       await atWindow(window);
       vi.mocked(api.previewDelete).mockResolvedValue(
@@ -339,7 +346,7 @@ describe.each(THEMES)(
     describe.each(GONE)("the %s scene", (name, location, leftovers) => {
       fixHistorySceneClock(historyScene("archived-task"));
 
-      it.each(WINDOWS)("holds the checks of every screen at %ipx", async (window) => {
+      it.each(windowsIn(theme))("holds the checks of every screen at %ipx", async (window) => {
         setTheme(theme);
         await atWindow(window);
         const { main } = renderShell({
@@ -355,7 +362,7 @@ describe.each(THEMES)(
     describe.each(["notice", "toast", "toast-three"] as const)("the %s scene", (name) => {
       fixHistorySceneClock(historyScene("archived-task"));
 
-      it.each(WINDOWS)("holds the checks of every screen at %ipx", async (window) => {
+      it.each(windowsIn(theme))("holds the checks of every screen at %ipx", async (window) => {
         setTheme(theme);
         await atWindow(window);
         const archived = historyScene("archived-task");

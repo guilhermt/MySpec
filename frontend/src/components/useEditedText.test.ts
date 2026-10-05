@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
-import { useEditedText } from "@/components/useEditedText";
+import { textKey, useEditedText } from "@/components/useEditedText";
 import { useAppStore } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
 
@@ -240,5 +240,12 @@ describe("useEditedText", () => {
     });
 
     expect(save).toHaveBeenCalledExactlyOnceWith("");
+  });
+});
+
+describe("textKey", () => {
+  it("names the texts of a review apart", () => {
+    expect(textKey("review-1", 2, 3)).toBe("review-1|2|3");
+    expect(textKey("review-1", 2, "summary")).toBe("review-1|2|summary");
   });
 });

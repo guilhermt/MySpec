@@ -7,7 +7,7 @@ import {
   type ReviewSceneName,
   reviewScene,
 } from "@/test/review-scenes";
-import { atWindow, proveScene, renderShell, SWEEP_TIMEOUT, WINDOWS } from "@/test/widths";
+import { atWindow, proveScene, renderShell, SWEEP_TIMEOUT, windowsIn } from "@/test/widths";
 
 // Only the boundary is replaced, as in the jsdom suite: no call reaches the runtime of Wails.
 vi.mock("@/lib/wails", async (importOriginal) => ({
@@ -61,15 +61,18 @@ describe.each(THEMES)("Reviews and the review in every window, in the %s theme",
       return main;
     };
 
-    it.each(WINDOWS)("holds the checks of every screen at %ipx", async (window) => {
-      setTheme(theme);
-      await atWindow(window);
-      const main = await draw();
+    it.each(windowsIn(theme, { reference: REFERENCE.includes(label) }))(
+      "holds the checks of every screen at %ipx",
+      async (window) => {
+        setTheme(theme);
+        await atWindow(window);
+        const main = await draw();
 
-      expect(await proveScene(main)).toEqual({});
-      if (REFERENCE.includes(label)) {
-        await capture(`ref-${name}-${window}-${theme}`, main);
-      }
-    });
+        expect(await proveScene(main)).toEqual({});
+        if (REFERENCE.includes(label)) {
+          await capture(`ref-${name}-${window}-${theme}`, main);
+        }
+      },
+    );
   });
 });

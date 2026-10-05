@@ -392,13 +392,16 @@ export function useFeed(feedRef: RefObject<HTMLElement | null>, units?: FeedUnit
         case "PageUp":
           seek(Math.max(from - PAGE, 0), 1);
           return true;
-        case "PageDown":
-          if (unitOf(item) === -1 || from + PAGE >= units.count) {
+        case "PageDown": {
+          // From the tail, or when the last unit is the one the item stands in, the end of the feed.
+          const target = Math.min(from + PAGE, units.count - 1);
+          if (unitOf(item) === -1 || target === from) {
             go(items.at(-1), items, 1);
           } else {
-            seek(from + PAGE, 1);
+            seek(target, 1);
           }
           return true;
+        }
         default:
           return false;
       }

@@ -1,4 +1,4 @@
-import { Fragment, useId } from "react";
+import { Fragment, useId, useState } from "react";
 import { cn } from "@/lib/utils";
 import { CutText } from "./CutText";
 import { Icon } from "./Icon";
@@ -103,6 +103,9 @@ export function Select({
   disabledReason,
 }: SelectProps) {
   const reasonId = useId();
+  const [open, setOpen] = useState(false);
+  // A disabled select keeps its menu shut; the state follows, so it does not open when enabled again.
+  if (open && disabled === true) setOpen(false);
   const withReason = disabled === true && disabledReason !== undefined;
   const all = [...(options ?? []), ...(groups ?? []).flatMap((group) => group.options)];
   const chosen = all.find((option) => option.value === value);
@@ -134,7 +137,7 @@ export function Select({
   );
 
   return (
-    <Menu {...(disabled ? { open: false } : {})}>
+    <Menu open={open} onOpenChange={setOpen}>
       {withReason ? (
         <span className="inline-flex items-center gap-(--space-2)">
           {trigger}

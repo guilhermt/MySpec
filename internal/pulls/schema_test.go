@@ -26,7 +26,7 @@ func githubSchema(t *testing.T) *ast.Schema {
 	return schema
 }
 
-func TestQueriesAgainstGitHubSchema(t *testing.T) {
+func TestEveryQueryIsValidAgainstTheGitHubSchema(t *testing.T) {
 	t.Parallel()
 
 	schema := githubSchema(t)

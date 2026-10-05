@@ -164,6 +164,17 @@ describe("ExternalLink", () => {
     expect(await screen.findByText(/Can't copy/)).toBeInTheDocument();
   });
 
+  it("keeps a fence of a list item inside the list, with no frame of its own", async () => {
+    const { container } = renderWithStore(
+      <Markdown cutCode>{"1. Run:\n   ```bash\n   ls -la\n   ```\n2. Then"}</Markdown>,
+    );
+
+    // The list is one piece of text for Streamdown, not text around a CodeBlock.
+    expect(container.querySelectorAll('[data-testid="markdown"]')).toHaveLength(1);
+    expect(container.querySelector("[data-code-block]")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Copy the code" })).not.toBeInTheDocument();
+  });
+
   it("leaves code whole out of the conversation", () => {
     const code = Array.from({ length: 46 }, (_, at) => `line ${at + 1}`).join("\n");
     renderWithStore(<Markdown>{`\`\`\`\n${code}\n\`\`\``}</Markdown>);

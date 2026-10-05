@@ -67,8 +67,7 @@ describe("Conversation renders", () => {
         },
       },
     });
-    // The window mounts the rows that show, not the fifty.
-    expect(renders.size).toBeGreaterThan(20);
+    expect(renders.size).toBeGreaterThan(30);
     renders.clear();
 
     act(() => {

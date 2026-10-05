@@ -4,6 +4,13 @@ import { LiveRegion } from "./LiveRegion";
 import { useArrivedLater } from "./useArrivedLater";
 
 describe("LiveRegion", () => {
+  it("is a span unless it is asked to be a div", () => {
+    const { rerender } = render(<LiveRegion kind="status" />);
+    expect(screen.getByRole("status").tagName).toBe("SPAN");
+    rerender(<LiveRegion kind="status" as="div" />);
+    expect(screen.getByRole("status").tagName).toBe("DIV");
+  });
+
   it("stays on screen without a text and holds it when there is one", () => {
     const { rerender } = render(<LiveRegion kind="status" />);
     const region = screen.getByRole("status");

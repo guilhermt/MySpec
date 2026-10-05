@@ -16,33 +16,31 @@ export interface StretchFoldProps {
  */
 export function StretchFold({ fold, open, onToggle }: StretchFoldProps) {
   const id = useId();
+  // The line is the stop of the walk, with the state of the fold; the article holds the name.
   return (
-    <>
-      {/* The line is the stop of the walk, with the state of the fold; the article holds the name. */}
-      <article id={id} data-feed-entry aria-label={fold.name} className="flex flex-col">
-        <button
-          type="button"
-          data-feed-item
-          data-feed-toggle
-          tabIndex={-1}
-          aria-expanded={open}
-          aria-labelledby={id}
-          onClick={onToggle}
-          className="-mx-(--space-2) flex min-h-(--size-control-sm) min-w-0 items-center gap-(--space-2) rounded-sm px-(--space-2) text-left text-(length:--text-meta) leading-(--leading-meta) text-ink-3 outline-none transition-colors duration-(--duration-fast) ease-standard hover:bg-veil-hover active:bg-veil-press focus-visible:focus-ring"
-        >
-          <Chevron open={open} />
-          <Icon icon={ICONS.history} size="sm" className="text-ink-4" />
-          <span className="shrink-0 font-medium whitespace-nowrap text-ink-2 tabular-nums">
-            {fold.text}
+    <article id={id} data-feed-entry aria-label={fold.name} className="flex flex-col">
+      <button
+        type="button"
+        data-feed-item
+        data-feed-toggle
+        tabIndex={-1}
+        aria-expanded={open}
+        aria-labelledby={id}
+        onClick={onToggle}
+        className="-mx-(--space-2) flex min-h-(--size-control-sm) min-w-0 items-center gap-(--space-2) rounded-sm px-(--space-2) text-left text-(length:--text-meta) leading-(--leading-meta) text-ink-3 outline-none transition-colors duration-(--duration-fast) ease-standard hover:bg-veil-hover active:bg-veil-press focus-visible:focus-ring"
+      >
+        <Chevron open={open} />
+        <Icon icon={ICONS.history} size="sm" className="text-ink-4" />
+        <span className="shrink-0 font-medium whitespace-nowrap text-ink-2 tabular-nums">
+          {fold.text}
+        </span>
+        <span className="min-w-0 truncate text-ink-3">{fold.from}</span>
+        {fold.interval !== "" && (
+          <span className="entry-time ml-auto shrink-0 text-(length:--text-micro) leading-(--leading-micro) whitespace-nowrap text-ink-4 tabular-nums">
+            {fold.interval}
           </span>
-          <span className="min-w-0 truncate text-ink-3">{fold.from}</span>
-          {fold.interval !== "" && (
-            <span className="entry-time ml-auto shrink-0 text-(length:--text-micro) leading-(--leading-micro) whitespace-nowrap text-ink-4 tabular-nums">
-              {fold.interval}
-            </span>
-          )}
-        </button>
-      </article>
-    </>
+        )}
+      </button>
+    </article>
   );
 }

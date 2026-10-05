@@ -150,6 +150,7 @@ describe("prPanelModel", () => {
       summary: "1 failed · 1 of 2 passed · conflict with dev",
       age: "read 2m ago",
       failed: null,
+      blocked: false,
     });
     expect(model.checks.ageTooltip).toMatch(/^Last read at \d\d:\d\d$/);
   });
@@ -161,9 +162,9 @@ describe("prPanelModel", () => {
       reviewCenter: makeReviewCenter({ pullRequests: [row], readAt: ago(MINUTE), failures }),
     });
 
-    expect(prPanelModel(row, { app, now: NOW }).checks.failed).toBe(
-      "acme/ios couldn't be read · 4m ago",
-    );
+    const { checks } = prPanelModel(row, { app, now: NOW });
+    expect(checks.failed).toBe("acme/ios couldn't be read · 4m ago");
+    expect(checks.blocked).toBe(true);
   });
 
   it("lists the facts, with your review only in Reviewed", () => {

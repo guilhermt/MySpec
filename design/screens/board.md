@@ -53,11 +53,13 @@ O item de **Continue** é o primeiro item ativo que ainda existe entre o lugar n
 - **Review a pull request** · `4 pending in 3 repositories`. Vai a Reviews;
 - **New discussion** · `About the demand of one board`. Abre o diálogo de discussão (seção 2.3).
 
-**Boards.** Uma linha por board, em ordem alfabética. Cada linha tem o ícone, o título e, em `--ink-3`, os cards abertos fora dos status finais (o que ainda se escolhe; num board sem campo de status, todos os abertos) e os repositórios (`46 open cards · api, billing, docs, gateway, web`, os nomes curtos em ordem alfabética; `No open cards`; num board nunca lido, `Not read yet`). À direita fica a idade da leitura (`read 2m ago`) ou `◇ Read failed 18m ago`, e, num board nunca lido, `reading…` durante a primeira leitura; durante qualquer leitura, o texto da direita brilha. A linha abre a visão do board. Sob ela, recuadas, ficam as linhas do que bloqueia sem ser situação:
+**Boards.** Uma linha por board, em ordem alfabética. Cada linha tem o ícone, o título e, em `--ink-3`, os cards abertos fora dos status finais (o que ainda se escolhe; num board sem campo de status, todos os abertos) e os repositórios (`46 open cards · api, billing, docs, gateway, web`, os nomes curtos em ordem alfabética; `No open cards`; num board nunca lido, só os repositórios). À direita fica a idade da leitura (`read 2m ago`) ou `◇ Read failed 18m ago`, e, num board nunca lido, `reading…` durante a primeira leitura; durante qualquer leitura, o texto da direita brilha. A linha abre a visão do board. Sob ela, recuadas, ficam as linhas do que bloqueia sem ser situação:
 
 - a razão da falha, com **Try again** (`GitHub's rate limit was reached. It resets at 14:32.`);
 - `◇ acme/billing isn't cloned. Its cards can't start a task yet.`, com **Clone**;
 - `◇ The clone at ~/code/infra is missing.`, com **Change path…**.
+
+O texto de uma linha de bloqueio ocupa uma linha só: um caminho ou uma razão longa corta com reticências, e o ponteiro sobre o texto cortado abre o texto inteiro num tooltip. A linha nunca quebra, e a ação à direita mantém o lugar.
 
 A falha da leitura vem primeiro; depois, uma linha por repositório do board, em ordem alfabética, com o caso dele (sem clone ou clone inexistente), e não agrupadas por caso.
 
@@ -118,7 +120,7 @@ A barra fica fixa acima da lista e tem, da esquerda para a direita:
 - **Filter**, um chip que abre o menu com três grupos de escolha: **Repository** (os do board), **Assignee** (o usuário marcado `· you`) e **Status** (as opções do board e `No status`, só num board com campo de status);
 - **Clear filters**, fantasma, só com algum filtro ativo.
 
-Os filtros combinam entre si e são lembrados por board entre execuções. Um filtro de um repositório que saiu do board, ou de um status que saiu das opções, vira um chip com `◇` e a razão no tooltip, continua filtrando, e o `×` o remove. Abaixo de 620 px de lista, a busca encolhe para `--space-16` vezes 3.
+Os filtros combinam entre si e são lembrados por board entre execuções. Um filtro de um repositório que saiu do board, ou de um status que saiu das opções, vira um chip com `◇` e a razão no tooltip, continua filtrando, e o `×` o remove. A barra fica numa linha só, em qualquer largura de lista: abaixo de 620 px de lista, os chips dos filtros ativos se dobram no `Filter`, que passa a dizer `Filter · N` com o número de filtros ativos, e a busca encolhe para `--space-16` vezes 3, a largura mínima dela.
 
 ### 3.4 As seções por status e a linha do card
 

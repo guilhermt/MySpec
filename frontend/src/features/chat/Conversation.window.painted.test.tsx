@@ -1,4 +1,5 @@
 import { act, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
   measuredConversation,
@@ -8,6 +9,8 @@ import {
   TASK_ID,
 } from "@/dev/measure-conversation";
 import { Conversation } from "@/features/chat/Conversation";
+import { roundLineOf } from "@/features/chat/discussion-markers";
+import { MarkerLine } from "@/features/chat/entries/MarkerLine";
 import { type Entry, sessionKey } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { fromTranscript } from "@/store/transcript";
@@ -31,6 +34,8 @@ const MAIN_HEIGHT = 1080;
 // The places of the entries that are put in the conversation, far from its end.
 const MARKER_AT = 200;
 const QUESTION_AT = 320;
+// The question asked last, the one pending that the conversation holds: the earlier one is stale.
+const LATE_QUESTION_AT = 900;
 
 const QUESTION_ID = "entry-question";
 const MARKER_ID = "entry-marker";
@@ -50,7 +55,10 @@ function entries(): Entry[] {
   const base = makeEntry("marker", { ...entryOf(all, markerAt), id: MARKER_ID });
   const marker: Entry =
     base.marker === null ? base : { ...base, marker: { ...base.marker, type: "prd_written" } };
+  const lateAt = speechAt(all, LATE_QUESTION_AT);
+  const late = makeEntry("question", { ...entryOf(all, lateAt), id: "entry-late-question" });
   all[questionAt] = { ...question, kind: "question", assistant: null };
+  all[lateAt] = { ...late, kind: "question", assistant: null };
   all[markerAt] = { ...marker, kind: "marker", assistant: null };
   return all;
 }
@@ -61,11 +69,23 @@ function entryOf(all: readonly Entry[], at: number): Partial<Entry> {
   return { seq: entry?.seq ?? 0, turnId: entry?.turnId ?? "", createdAt: entry?.createdAt ?? "" };
 }
 
-async function draw() {
+// Anchors are the nodes a conversation draws before and after an entry, by its id.
+interface Anchors {
+  before: ReadonlyMap<string, ReactNode>;
+  after: ReadonlyMap<string, ReactNode>;
+}
+
+async function draw(anchorsOf?: (all: readonly Entry[]) => Anchors) {
   const all = entries();
+  const anchors = anchorsOf?.(all);
   const { container, user } = renderWithStore(
     <div style={{ ...mainArea(MAIN_WIDTH), height: `${MAIN_HEIGHT}px`, display: "flex" }}>
-      <Conversation taskId={TASK_ID} stage={STAGE} session={SESSION} />
+      <Conversation
+        taskId={TASK_ID}
+        stage={STAGE}
+        session={SESSION}
+        {...(anchors === undefined ? {} : { before: anchors.before, after: anchors.after })}
+      />
     </div>,
     {
       state: makeState({ tasks: [makeTask({ id: TASK_ID })] }),
@@ -119,6 +139,36 @@ function textOf(id: string, text: string) {
       text,
     }),
   );
+}
+
+// numbered are the articles of a unit that take a position in the feed.
+const numbered = (unit: HTMLElement) => [
+  ...unit.querySelectorAll<HTMLElement>(":scope > article:not([role])"),
+];
+
+// checkContiguity expects the first article of each unit to follow the last one of the unit before.
+function checkContiguity(feed: HTMLElement) {
+  const mounted = units(feed);
+  let compared = 0;
+  for (const [at, unit] of mounted.entries()) {
+    const next = mounted[at + 1];
+    const positions = numbered(unit).map((article) =>
+      Number(article.getAttribute("aria-posinset")),
+    );
+    for (const [place, position] of positions.entries()) {
+      expect(position).toBe((positions[0] ?? 0) + place);
+    }
+    if (
+      next === undefined ||
+      Number(next.dataset.unitIndex) !== Number(unit.dataset.unitIndex) + 1
+    ) {
+      continue;
+    }
+    const first = Number(numbered(next)[0]?.getAttribute("aria-posinset"));
+    expect(first).toBe((positions.at(-1) ?? 0) + 1);
+    compared += 1;
+  }
+  expect(compared).toBeGreaterThan(10);
 }
 
 describe("the conversation window", () => {
@@ -178,6 +228,37 @@ describe("the conversation window", () => {
     expect(feed.querySelector("[data-pending-card=question]")).toBeInTheDocument();
     expect(stop).toBeInTheDocument();
     expect(feed.querySelectorAll('[data-feed-item][tabindex="0"]')).toHaveLength(1);
+  });
+
+  it("pins only the question the conversation holds pending, not an earlier one left pending", async () => {
+    const { scroll, feed } = await draw();
+    await vi.waitFor(() => expect(atEnd(scroll)).toBe(true));
+
+    await scrollAway(scroll, 0);
+
+    expect(feed.querySelectorAll("[data-pending-card=question]")).toHaveLength(1);
+  });
+
+  it("keeps the unit of the tab stop mounted when it is an ordinary entry far from the window", async () => {
+    const { scroll, feed } = await draw();
+    await vi.waitFor(() => expect(atEnd(scroll)).toBe(true));
+    await scrollAway(scroll, scroll.scrollHeight / 2);
+    const frame = scroll.getBoundingClientRect();
+    const middle = units(feed).find(
+      (unit) =>
+        unit.getBoundingClientRect().top > frame.top && unit.querySelector("[data-feed-item]"),
+    );
+    const item = middle?.querySelector<HTMLElement>("[data-feed-item]");
+    if (item == null || item.matches("[data-pending-card]")) {
+      throw new Error("no ordinary entry in the middle of the conversation");
+    }
+    item.focus();
+    expect(item).toHaveAttribute("tabindex", "0");
+
+    await scrollAway(scroll, 0);
+
+    expect(item).toBeInTheDocument();
+    expect(item).toHaveAttribute("tabindex", "0");
   });
 
   it("mounts the marker the request bar asked for, from afar", async () => {
@@ -243,5 +324,41 @@ describe("the conversation window", () => {
     const start = check();
     expect(start.positions[0]).toBe(1);
     expect(start.size).toBe(end.size);
+  });
+
+  it("numbers the articles contiguously across units, with lines before and after entries and a card", async () => {
+    const { scroll, feed } = await draw((all) => {
+      const near = (back: number) => all[speechAt(all, all.length - back)]?.id ?? "";
+      const line = (round: number) => (
+        <MarkerLine key={round} view={roundLineOf(round, [], 0)} createdAt="" />
+      );
+      return {
+        before: new Map([[near(40), line(1)]]),
+        after: new Map([
+          [near(30), line(2)],
+          [
+            near(20),
+            // biome-ignore lint/a11y/useSemanticElements: the card of decisions is an article with the role of group
+            <article key="card" role="group" aria-label="Cards" data-testid="card">
+              A card
+            </article>,
+          ],
+        ]),
+      };
+    });
+    await vi.waitFor(() => expect(atEnd(scroll)).toBe(true));
+    await settle();
+
+    expect(screen.getByRole("article", { name: /^Round 1/ })).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: /^Round 2/ })).toBeInTheDocument();
+    const card = screen.getByTestId("card");
+    expect(card).not.toHaveAttribute("aria-posinset");
+    checkContiguity(feed);
+    const sizes = new Set(
+      [...feed.querySelectorAll<HTMLElement>("[aria-setsize]")].map((article) =>
+        article.getAttribute("aria-setsize"),
+      ),
+    );
+    expect(sizes.size).toBe(1);
   });
 });

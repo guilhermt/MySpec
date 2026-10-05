@@ -60,10 +60,8 @@ const SPACED_HEADER_PX = 44;
 const ROW_PX = 32;
 /** TWO_LINE_ROW_PX is the height of a row on two lines, in a list of up to 860 px (components.md, Linha de lista). */
 const TWO_LINE_ROW_PX = 52;
-/** TWO_LINES_UP_TO_PX is the width of the list up to which a row takes two lines: the container query of the row. */
+/** TWO_LINES_UP_TO_PX is the width of the scroll area (the "list" container of the row's query, @max-[860px]/list) up to which a row takes two lines. */
 const TWO_LINES_UP_TO_PX = 860;
-/** LIST_GUTTER_PX is what the list column leaves at both sides of the scroll area: 2 × --space-6. */
-const LIST_GUTTER_PX = 48;
 /** OVERSCAN is how many rows are mounted past each end of what shows. */
 const OVERSCAN = 20;
 
@@ -154,7 +152,7 @@ export function HistoryView() {
   };
   // The tree walks by index and the window mounts by index: each is told of the other by a ref,
   // since the window pins the tab stop the tree names and the tree scrolls through the window.
-  const scrollTo = useRef<(index: number) => void>(undefined);
+  const scrollTo = useRef<(index: number, align?: "auto" | "center") => void>(undefined);
   const tree = useListTree({
     entries: treeEntries,
     openKey: null,
@@ -166,7 +164,7 @@ export function HistoryView() {
         open(entry);
       }
     },
-    scrollToIndex: (index) => scrollTo.current?.(index),
+    scrollToIndex: (index, align) => scrollTo.current?.(index, align),
   });
   const freshId = fresh?.id;
   const freshIndex = freshId === undefined ? -1 : ids.indexOf(`item:${freshId}`);
@@ -177,8 +175,8 @@ export function HistoryView() {
       if (row?.kind === "day") {
         return index === 0 ? HEADER_PX : SPACED_HEADER_PX;
       }
-      const width =
-        treeRef.current?.clientWidth || (viewportRef.current?.clientWidth ?? 0) - LIST_GUTTER_PX;
+      // The viewport fills the area the container query measures, not the narrower list column.
+      const width = viewportRef.current?.clientWidth ?? 0;
       return width > TWO_LINES_UP_TO_PX || width <= 0 ? ROW_PX : TWO_LINE_ROW_PX;
     },
     [rows],
@@ -232,7 +230,8 @@ export function HistoryView() {
         view !== undefined &&
         (box === undefined || box.top < view.top || box.bottom > view.bottom)
       ) {
-        windowed.scrollToIndex(index, "center");
+        tree.focusIndex(index, "center");
+        return;
       }
     }
     tree.focusIndex(index);

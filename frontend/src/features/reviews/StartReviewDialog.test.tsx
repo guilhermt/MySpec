@@ -92,6 +92,18 @@ describe("StartReviewDialog", () => {
     expect(screen.getByRole("button", { name: /^Review model:/ })).toBeInTheDocument();
   });
 
+  it("stops saying the model comes from Defaults once it is changed", async () => {
+    const { user } = dialog();
+
+    await user.click(screen.getByRole("button", { name: /^Review model:/ }));
+    const options = await screen.findAllByRole("menuitemradio");
+    const other = options.find((option) => option.getAttribute("aria-checked") !== "true");
+    await user.click(other as HTMLElement);
+
+    expect(screen.getByText("It can change in the conversation.")).toBeInTheDocument();
+    expect(screen.queryByText(/From Defaults/)).not.toBeInTheDocument();
+  });
+
   it("opens Instructions on Add instructions, with the focus in it, and sends them", async () => {
     vi.mocked(api.startReview).mockResolvedValue("review-1");
     const { user } = dialog();

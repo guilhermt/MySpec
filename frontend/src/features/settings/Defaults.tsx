@@ -69,7 +69,7 @@ export function Defaults() {
           )
         }
       >
-        <LiveRegion kind="status" className="contents">
+        <LiveRegion kind="status" as="div" className="empty:absolute">
           {notice !== null && <NoticeStrip title={notice.title} reason={notice.text} />}
         </LiveRegion>
         <div className="flex flex-col gap-(--space-4)">

@@ -33,7 +33,7 @@ import { ModelChip } from "@/features/models/ModelChip";
 import { issueLabel } from "@/lib/boards";
 import { messageOf } from "@/lib/errors";
 import { choiceOf, type ModelChoice } from "@/lib/models";
-import { sharedNames, shortName } from "@/lib/repositories";
+import { sharedAmong, shortName } from "@/lib/repositories";
 import type { Board, BoardCard, StageModel } from "@/lib/wails";
 import { startDiscussion } from "@/store/actions";
 import {
@@ -46,7 +46,6 @@ import {
 
 const NO_MODELS: readonly StageModel[] = [];
 
-const NO_SHARED: ReadonlySet<string> = new Set();
 const GONE = "This board is no longer in the app.";
 
 /** SECTION_LABEL is the type of the label of a part that is not a field: Cards, Model. */
@@ -125,8 +124,13 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
   const go = useAppStore((state) => state.go);
   const defaults = useAppStore((state) => state.app?.modelDefaults ?? NO_MODELS);
   const app = useAppStore((state) => state.app);
-  const shared = app === null ? NO_SHARED : sharedNames(app);
   const repositories = useRepositories();
+  // Only the repositories of the board decide whether a short name is ambiguous.
+  const shared = sharedAmong(
+    (board.repositoryIds ?? []).flatMap(
+      (id) => repositories.find((repository) => repository.id === id)?.fullName ?? [],
+    ),
+  );
   const now = useNow(60_000, askBoard);
   const boardTrigger = useRef<HTMLElement | null>(null);
 

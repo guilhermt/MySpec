@@ -32,7 +32,7 @@ export function ReadingAge(props: ReadingAgeProps) {
   // The region is on screen before the reading starts: Reading… arrives into it.
   return (
     <>
-      <LiveRegion kind="status" className="contents">
+      <LiveRegion kind="status">
         {reading && (
           <span className={`inline-flex items-center gap-(--space-1-5) ${SIZES[size]} text-ink-3`}>
             <Spinner />

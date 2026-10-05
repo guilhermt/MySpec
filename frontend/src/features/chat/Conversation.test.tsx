@@ -48,8 +48,6 @@ function scrollUp(container: HTMLElement) {
   Object.defineProperty(scroller, "scrollTop", { value: 0, configurable: true });
   Object.defineProperty(scroller, "scrollTo", { value: scrollTo, configurable: true });
   act(() => {
-    // The reader scrolls with the wheel: a scroll of the content growing is not theirs.
-    scroller.dispatchEvent(new Event("wheel"));
     scroller.dispatchEvent(new Event("scroll"));
   });
   return scrollTo;

@@ -50,7 +50,7 @@ O hook, definido em `lefthook.yml`, é de pre-commit e só formata: Biome nos ar
 | `task fmt` | Formata Go e frontend |
 | `task lint` | `lint:go` (golangci-lint) e `lint:web` (Biome, as regras do design e o `knip`) |
 | `task typecheck` | `tsc --noEmit` no frontend |
-| `task test` | `test:go` (os testes Go, com o cache de testes) e `test:web` (os testes do frontend que a branch alcança), sem cobertura ([testing.md](../guidelines/testing.md)) |
+| `task test` | `test:go` (os testes Go, com o cache de testes) e `test:web` (os testes do frontend que a branch alcança, sem a varredura de largura (`MYSPEC_SKIP_SWEEP=1`), que o resto roda: o CI, `pnpm test`, `task test:full` e `task captures`; ela custa uns 3 a 4 min), sem cobertura ([testing.md](../guidelines/testing.md)) |
 | `task test:full` | Todos os testes, com race, embaralhamento, cobertura e os limiares |
 | `task vuln` | `govulncheck ./...` |
 | `task tidy:check` | Falha quando `go.mod` e `go.sum` não estão tidy |
@@ -101,3 +101,4 @@ Abrir a pasta normalmente; não há arquivo de workspace. `.vscode/settings.json
 | `MYSPEC_LOG_LEVEL` | `debug`, `info` (padrão), `warn` ou `error` |
 | `WAILS_VITE_PORT` | Porta do Vite em `task dev` (padrão 9245) |
 | `MYSPEC_CAPTURES` | `1` faz os testes pintados gravarem as capturas em `frontend/captures/`; sem ela, nada é gravado |
+| `MYSPEC_SKIP_SWEEP` | `1` deixa a varredura de largura (`*.widths.painted.test.tsx`) fora da suíte pintada; o `task test:web` a define |

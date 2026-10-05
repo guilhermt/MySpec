@@ -160,16 +160,20 @@ export function currentDraftId(): string | null {
 /**
  * focusDraft takes the focus to a draft of the drafts card, scrolled to the centre, or by its top
  * when it is taller than the conversation: the draft opens as it takes the focus. With retry, on the next frame it goes on to the Retry of the draft, which
- * only exists once the draft is open. False when the draft is not on screen.
+ * only exists once the draft is open. With arrival, the one the request bar's Show (and Ctrl+J) makes, the scroll goes
+ * on until the control the request asks of the draft is whole. False when the draft is not on screen.
  */
-export function focusDraft(id: string, retry: boolean): boolean {
+export function focusDraft(id: string, retry: boolean, arrival = false): boolean {
   const selector = `[data-decision-card] [data-card-item="${id}"]`;
   const element = document.querySelector<HTMLElement>(selector);
   if (element === null) {
     return false;
   }
   element.focus();
-  revealItem(element, element.hasAttribute("data-request-target") ? controlOf(element) : undefined);
+  revealItem(
+    element,
+    arrival && element.hasAttribute("data-request-target") ? controlOf(element) : undefined,
+  );
   if (retry) {
     // The Retry only exists once the draft is open: it takes the focus without a scroll of its own,
     // and the draft goes on until the Retry is whole.

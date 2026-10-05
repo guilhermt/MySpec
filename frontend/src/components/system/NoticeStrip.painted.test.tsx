@@ -27,17 +27,20 @@ describe.each(THEMES)("NoticeStrip in the %s theme", (theme) => {
     setTheme(theme);
     const text = strip().querySelector("p") as HTMLElement;
     const lineHeight = parseFloat(getComputedStyle(text).lineHeight);
-    expect(text.getBoundingClientRect().height).toBeLessThanOrEqual(lineHeight * 3);
+    expect(text.getBoundingClientRect().height).toBeLessThanOrEqual(lineHeight * 2 + 1);
     expect(text.getBoundingClientRect().width).toBeGreaterThan(LIST_WIDTH_PX / 2);
   });
 
-  it("drops Try again under the text, at the end, in the narrowest list", () => {
-    setTheme(theme);
-    const box = strip(NARROW_WIDTH_PX);
-    const text = box.querySelector("p") as HTMLElement;
-    const button = screen.getByRole("button", { name: "Try again" }).getBoundingClientRect();
-    expect(button.top).toBeGreaterThanOrEqual(text.getBoundingClientRect().bottom);
-    const padRight = parseFloat(getComputedStyle(box).paddingRight);
-    expect(box.getBoundingClientRect().right - padRight - button.right).toBeLessThanOrEqual(1);
-  });
+  it.each([LIST_WIDTH_PX, NARROW_WIDTH_PX])(
+    "drops Try again under the text, at the end, in a list of %i px",
+    (width) => {
+      setTheme(theme);
+      const box = strip(width);
+      const text = box.querySelector("p") as HTMLElement;
+      const button = screen.getByRole("button", { name: "Try again" }).getBoundingClientRect();
+      expect(button.top).toBeGreaterThanOrEqual(text.getBoundingClientRect().bottom);
+      const padRight = parseFloat(getComputedStyle(box).paddingRight);
+      expect(box.getBoundingClientRect().right - padRight - button.right).toBeLessThanOrEqual(1);
+    },
+  );
 });

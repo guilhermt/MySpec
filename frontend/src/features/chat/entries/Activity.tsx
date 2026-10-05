@@ -69,7 +69,7 @@ export function Activity(props: ActivityProps) {
   const now = useNow(1000, retrying);
   const { session } = props;
   if (session !== undefined && (!session.turnRunning || !isSilent(props.entries.at(-1)))) {
-    return <LiveRegion kind="status" className="contents" />;
+    return <LiveRegion kind="status" as="div" className="empty:absolute" />;
   }
   const text =
     session === undefined
@@ -86,7 +86,7 @@ export function Activity(props: ActivityProps) {
   // The countdown changes every second: it stays out of what the status says, which speaks only
   // when the attempt or the reason changes.
   return (
-    <LiveRegion kind="status" className="contents">
+    <LiveRegion kind="status" as="div" className="empty:absolute">
       <p className="flex items-center gap-(--space-1-5) text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
         <Spinner />
         <span>

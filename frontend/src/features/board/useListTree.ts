@@ -56,7 +56,7 @@ export interface UseListTreeOptions<S extends string> {
   /** onActivateItem runs on Enter on an item. */
   onActivateItem: (key: string) => void;
   /** scrollToIndex brings an entry into view; absent, the entry's element scrolls itself into view. */
-  scrollToIndex?: (index: number) => void;
+  scrollToIndex?: (index: number, align?: "auto" | "center") => void;
 }
 
 export interface ListTree {
@@ -68,7 +68,7 @@ export interface ListTree {
   onEntryFocus: (id: string) => void;
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
   /** focusIndex focuses an entry by its index, bringing it into view and waiting for it to mount. */
-  focusIndex: (index: number) => void;
+  focusIndex: (index: number, align?: "auto" | "center") => void;
 }
 
 /**
@@ -109,17 +109,17 @@ export function useListTree<S extends string>({
   }, [entries, flat, focused, openKey]);
   const tabStopIndex = tabStop === null ? -1 : entries.indexOf(tabStop);
 
-  const focusIndex = (index: number) => {
+  const focusIndex = (index: number, align: "auto" | "center" = "auto") => {
     const id = entries[index];
     if (id === undefined) {
       return;
     }
     pending.current = id;
     if (scrollToIndex !== undefined) {
-      scrollToIndex(index);
+      scrollToIndex(index, align);
     } else {
       const element = treeRef.current === null ? null : entryElement(treeRef.current, id);
-      element?.scrollIntoView?.({ block: "nearest" });
+      element?.scrollIntoView?.({ block: align === "center" ? "center" : "nearest" });
     }
     focusPending();
   };

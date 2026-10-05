@@ -12,6 +12,7 @@ import {
 import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
 import { useWindowedRows } from "@/components/system/useWindowedRows";
 import { ConversationColumn } from "@/features/chat/ConversationColumn";
+import { type Pending, pendingOf } from "@/features/chat/composer";
 import {
   buildConversation,
   type ConversationModel,
@@ -52,13 +53,7 @@ import { useAutoScroll } from "@/features/chat/useAutoScroll";
 import { type FeedUnits, useFeed } from "@/features/chat/useFeed";
 import { decidedMarkerIds, reportMarkerIds } from "@/features/reviews/review-conversation";
 import { bottomPadding } from "@/lib/reveal";
-import {
-  asPermissionStatus,
-  asSituationKind,
-  asTaskMode,
-  type Entry,
-  type UserEntry,
-} from "@/lib/wails";
+import { asSituationKind, asTaskMode, type Entry, type UserEntry } from "@/lib/wails";
 import { useAppStore, useFlashing, useReview, useTask, useTranscript } from "@/store/app-store";
 
 const NO_ENTRIES: readonly Entry[] = [];
@@ -315,15 +310,16 @@ function estimateOf(unit: ConversationUnit, hasAfter: boolean): number {
   }
 }
 
-// isPending tells whether a row is a question or a permission still unanswered.
-function isPending(row: Row): boolean {
-  const card =
-    row.kind === "question"
-      ? row.entry.question
-      : row.kind === "permission"
-        ? row.entry.permission
-        : null;
-  return card != null && asPermissionStatus(card.status) === "pending";
+// isPendingRow tells whether a row is the question or the permission pendingOf points at.
+function isPendingRow(row: Row, pending: Pending): boolean {
+  return (
+    (row.kind === "question" &&
+      pending.question !== null &&
+      row.entry.question === pending.question) ||
+    (row.kind === "permission" &&
+      pending.permission !== null &&
+      row.entry.permission === pending.permission)
+  );
 }
 
 // lastCompleteSpeech is the key of the last speech that is complete, "" without one.
@@ -542,6 +538,7 @@ export function Conversation({
       ),
     [model, foldable, openFolds, ctx, after, before],
   );
+  const pendingCards = useMemo(() => pendingOf(entries), [entries]);
   const pinned = useMemo(() => {
     if (units.length <= WINDOW_MIN_UNITS) {
       return units.map((_unit, index) => index);
@@ -550,7 +547,7 @@ export function Conversation({
     units.forEach((unit, index) => {
       if (
         unit.kind === "row" &&
-        (isPending(unit.row) ||
+        (isPendingRow(unit.row, pendingCards) ||
           before?.has(unit.row.key) ||
           after?.has(unit.row.key) ||
           unit.row.key === asked?.row)
@@ -559,7 +556,7 @@ export function Conversation({
       }
     });
     return [...out].sort((a, b) => a - b);
-  }, [units, currentUnit, before, after, asked?.row]);
+  }, [units, currentUnit, before, after, asked?.row, pendingCards]);
   const { parts, measureRef, scrollToIndex, attached } = useWindowedRows({
     count: units.length,
     keyOf: (index) => units[index]?.key ?? String(index),
@@ -606,7 +603,7 @@ export function Conversation({
     if (feed === null) {
       return;
     }
-    const tail = [...feed.querySelectorAll<HTMLElement>(":scope > article")];
+    const tail = [...feed.querySelectorAll<HTMLElement>(":scope > article:not([role])")];
     const size = articleOffsets.total + tail.length;
     const number = (article: HTMLElement, position: number) => {
       article.setAttribute("aria-posinset", String(position));
@@ -615,7 +612,7 @@ export function Conversation({
     for (const element of feed.querySelectorAll<HTMLElement>(":scope > [data-unit-index]")) {
       const offset = articleOffsets.offsets[Number(element.dataset.unitIndex)] ?? 0;
       for (const [at, article] of element
-        .querySelectorAll<HTMLElement>(":scope > article")
+        .querySelectorAll<HTMLElement>(":scope > article:not([role])")
         .entries()) {
         number(article, offset + at + 1);
       }

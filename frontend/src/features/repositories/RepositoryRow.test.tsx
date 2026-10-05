@@ -71,13 +71,34 @@ describe("RepositoryRow", () => {
     expect(screen.queryByRole("button", { name: "Clone" })).not.toBeInTheDocument();
   });
 
-  it("shows why the clone failed, with Try again", async () => {
+  it("shows why the clone failed, with Try again, without alerting a page that opens with it", async () => {
     const { user } = row({ ...UNCLONED, cloneError: "gh: repository not found" });
 
-    expect(screen.getByRole("alert")).toHaveTextContent("gh: repository not found");
+    expect(screen.getByText("gh: repository not found")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Try again" }));
 
     expect(api.cloneRepository).toHaveBeenCalledWith("repo-1");
+  });
+
+  it("alerts the failure of a clone that ran while the page was open", () => {
+    const repository = makeRepository({ ...UNCLONED, cloning: true });
+    const state = makeState({ repositories: [repository] });
+    const onRemoved = vi.fn();
+    const { rerender } = renderWithStore(
+      <ul>
+        <RepositoryRow repository={repository} inNeedsAClone={false} onRemoved={onRemoved} />
+      </ul>,
+      { state },
+    );
+    const failed = { ...repository, cloning: false, cloneError: "gh: repository not found" };
+    rerender(
+      <ul>
+        <RepositoryRow repository={failed} inNeedsAClone={false} onRemoved={onRemoved} />
+      </ul>,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("gh: repository not found");
   });
 
   it("offers Change path… to a clone that is gone", async () => {

@@ -123,10 +123,17 @@ export function useWindowedRows({
   useLayoutEffect(learnScrollElement, [learnScrollElement]);
   useEffect(learnScrollElement, [learnScrollElement]);
 
+  // The list may mount after the hook (a History that opens empty draws its tree later) or be
+  // replaced: every commit looks at the element the ref holds and the measure follows it.
+  const [listElement, setListElement] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    setListElement(listRef.current);
+  });
+
   // What the list sits under moves it, and the sticky bar changes height with its wrapped lines.
   useLayoutEffect(() => {
     const scroll = scrollElement;
-    const list = listRef.current;
+    const list = listElement;
     if (scroll === null || list === null) {
       return;
     }
@@ -142,7 +149,7 @@ export function useWindowedRows({
       observer.observe(scroll.firstElementChild);
     }
     return () => observer.disconnect();
-  }, [scrollElement, listRef, stickyRef]);
+  }, [scrollElement, listElement, stickyRef]);
 
   const pinnedKey = pinned.join(",");
   // biome-ignore lint/correctness/useExhaustiveDependencies: pinnedKey is pinned, as a value

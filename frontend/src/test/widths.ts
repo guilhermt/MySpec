@@ -28,6 +28,19 @@ export const WINDOWS = [1100, 1250, 1450, 2000, 2560] as const;
 /** RAIL_WINDOWS are the windows the sweep also draws with the sidebar folded into its rail. */
 export const RAIL_WINDOWS = [1100, 2560] as const;
 
+/**
+ * windowsIn are the windows a scene is drawn at in a theme. The narrowest and the widest windows are
+ * drawn in both themes, where the layout is tightest and loosest; the windows between are drawn in
+ * the light theme only, since the theme changes colors and not boxes. A reference screen, whose
+ * captures go to the pull request, is drawn in all of them.
+ */
+export function windowsIn(theme: string, { reference = false } = {}): readonly number[] {
+  if (reference || theme === "light") {
+    return WINDOWS;
+  }
+  return WINDOWS.filter((_, index) => index === 0 || index === WINDOWS.length - 1);
+}
+
 /** WINDOW_HEIGHT is the height of the window of the sweep. */
 export const WINDOW_HEIGHT = 1080;
 
@@ -193,18 +206,24 @@ function columnsApart(main: HTMLElement): string[] {
     .map(describe);
 }
 
-// POPUP_MS is how long a scene waits for a popup that may still be mounting.
-const POPUP_MS = 400;
-
-// menuOpened waits for the menu a trigger says it opened: it mounts a frame after the click, and a
-// check that starts before it would find the page under a menu that was not there yet.
-async function menuOpened(): Promise<void> {
+// popupsOpened waits for every popup a trigger says it opened: it mounts a frame after the click, and
+// a check that starts before it would find the page under a popup that was not there yet. A trigger
+// that opened nothing in five seconds is left for the checks to find.
+async function popupsOpened(): Promise<void> {
   await vi
     .waitFor(
       () => {
-        const opening = document.querySelector('[aria-haspopup="menu"][aria-expanded="true"]');
-        if (opening !== null && document.querySelector("[role=menu]") === null) {
-          throw new Error("the menu is not on screen yet");
+        for (const trigger of document.querySelectorAll("[aria-haspopup][aria-expanded=true]")) {
+          const kind = trigger.getAttribute("aria-haspopup");
+          const popup =
+            kind === "dialog"
+              ? "[role=dialog]"
+              : kind === "listbox"
+                ? "[role=listbox]"
+                : "[role=menu]";
+          if (document.querySelector(popup) === null) {
+            throw new Error(`the ${kind} is not on screen yet`);
+          }
         }
       },
       { timeout: 5000 },
@@ -212,15 +231,20 @@ async function menuOpened(): Promise<void> {
     .catch(() => undefined);
 }
 
+// frame waits for the browser to paint a frame.
+const frame = () => new Promise<void>((done) => requestAnimationFrame(() => done()));
+
 /**
  * proveScene runs every check of a scene and returns what failed, by check, empty when nothing did.
  * The checks that rest the pointer on the text a screen cuts come last, since they move the pointer.
  */
 export async function proveScene(main: HTMLElement): Promise<Record<string, string[]>> {
   await settle();
-  await menuOpened();
-  // A popup a click opened mounts a frame or two later, and under load a few more.
-  await new Promise((done) => setTimeout(done, POPUP_MS));
+  await popupsOpened();
+  // The popup that opened starts its animation a frame after it mounts, and settle waits for it.
+  await frame();
+  await frame();
+  await settle();
   const failed: Record<string, string[]> = {};
   const record = (check: string, names: string[]) => {
     if (names.length > 0) {

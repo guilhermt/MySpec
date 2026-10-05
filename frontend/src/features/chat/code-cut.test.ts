@@ -67,6 +67,84 @@ describe("codeMarkdown", () => {
   });
 });
 
+describe("codeParts nested fences", () => {
+  it("keeps an item going through a lazy line of its text, with the fence indented inside it", () => {
+    const markdown = ["- item", "continued", "  ```js", "  x", "  ```"].join("\n");
+
+    expect(codeParts(markdown)).toEqual([{ kind: "text", text: markdown }]);
+  });
+
+  it("leaves a fence inside a list item in the text, so the list stays whole", () => {
+    const markdown = "1. Run:\n   ```bash\n   ls -la\n   ```\n2. Then";
+
+    expect(codeParts(markdown)).toEqual([{ kind: "text", text: markdown }]);
+  });
+
+  it("splits a fence at the margin after a list, and one that follows an item's fence", () => {
+    const markdown = ["- a", "  ```", "  - not an item", "  ```", "", "```go", "x", "```"].join(
+      "\n",
+    );
+
+    expect(codeParts(markdown)).toEqual([
+      { kind: "text", text: ["- a", "  ```", "  - not an item", "  ```", ""].join("\n") },
+      { kind: "code", fence: "```", info: "go", lines: ["x"], closed: true },
+    ]);
+  });
+
+  it("takes a fence opened on the line of the item as the item's, up to its close", () => {
+    const markdown = ["- ```js", "  code", "  ```", "", "```go", "x", "```"].join("\n");
+
+    expect(codeParts(markdown)).toEqual([
+      { kind: "text", text: ["- ```js", "  code", "  ```", ""].join("\n") },
+      { kind: "code", fence: "```", info: "go", lines: ["x"], closed: true },
+    ]);
+  });
+
+  it("leaves a fence inside a blockquote and one indented four spaces in the text", () => {
+    const markdown = ["> ```", "> quoted", "> ```", "", "    ```", "    indented", "    ```"].join(
+      "\n",
+    );
+
+    expect(codeParts(markdown)).toEqual([{ kind: "text", text: markdown }]);
+  });
+
+  it.each([
+    [
+      "a nested item whose fence never closes",
+      ["- a", "  - ```js", "    x", "    ```", "", "```go", "y", "```"],
+      ["- a", "  - ```js", "    x", "    ```", ""],
+    ],
+    [
+      "an ordered item with a wide marker",
+      ["10. ```js", "    x", "    ```", "", "```go", "y", "```"],
+      ["10. ```js", "    x", "    ```", ""],
+    ],
+    [
+      "an item fence left open, which the margin ends",
+      ["- ```js", "  x", "", "```go", "y", "```"],
+      ["- ```js", "  x", ""],
+    ],
+  ])("splits a fence at the margin after %s", (_, markdown, want) => {
+    expect(codeParts(markdown.join("\n"))).toEqual([
+      { kind: "text", text: want.join("\n") },
+      { kind: "code", fence: "```", info: "go", lines: ["y"], closed: true },
+    ]);
+  });
+
+  it("splits a fence indented less than the text column of the item", () => {
+    expect(codeParts(["1. a", "", "  ```go", "  y", "  ```"].join("\n"))).toEqual([
+      { kind: "text", text: "1. a\n" },
+      { kind: "code", fence: "```", info: "go", lines: ["y"], closed: true },
+    ]);
+  });
+
+  it("takes the indent of a fence off its lines", () => {
+    expect(codeParts("  ```\n  a\n    b\n  ```")).toEqual([
+      { kind: "code", fence: "```", info: "", lines: ["a", "  b"], closed: true },
+    ]);
+  });
+});
+
 describe("fencedLines", () => {
   it.each([
     [

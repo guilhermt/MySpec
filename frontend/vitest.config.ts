@@ -7,6 +7,13 @@ import viteConfig from "./vite.config.ts";
 /** PAINTED holds the computed-style tests, which run in Chromium with the real CSS. */
 const PAINTED = "src/**/*.painted.test.{ts,tsx}";
 
+/**
+ * SWEEP is the width sweep, which MYSPEC_SKIP_SWEEP=1 leaves out of the painted suite: task test:web
+ * sets it, since --changed reaches the sweep through any component, and the CI runs it in full. A
+ * --exclude on the command line does not reach the projects, so the choice lives here.
+ */
+const SWEEP = "src/**/*.widths.painted.test.tsx";
+
 export default mergeConfig(
   viteConfig,
   defineConfig({
@@ -67,6 +74,7 @@ export default mergeConfig(
           test: {
             name: "painted",
             include: [PAINTED],
+            exclude: process.env.MYSPEC_SKIP_SWEEP === "1" ? [SWEEP] : [],
             // capture saves the screenshots of the pull request here, only when asked to.
             provide: {
               captureDir:

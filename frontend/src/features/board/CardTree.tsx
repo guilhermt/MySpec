@@ -33,10 +33,8 @@ const HEADER_PX = 28;
 const ROW_PX = 32;
 /** TWO_LINE_ROW_PX is the height of a card row on two lines, in a list narrower than TWO_LINES_BELOW_PX (components.md, Linha de lista). */
 const TWO_LINE_ROW_PX = 52;
-/** TWO_LINES_BELOW_PX is the width of the list from which a card row takes one line: the row's container query holds up to 1041 px. */
+/** TWO_LINES_BELOW_PX is the width of the scroll area (the "list" container of the row's query, @max-[1041px]/list) from which a card row takes one line: the query holds up to 1041 px. */
 const TWO_LINES_BELOW_PX = 1042;
-/** LIST_GUTTER_PX is what the list column leaves at both sides of the scroll area: 2 × --space-6. */
-const LIST_GUTTER_PX = 48;
 /** OVERSCAN is how many rows are mounted past each end of what shows. */
 const OVERSCAN = 20;
 
@@ -164,15 +162,16 @@ export function CardTree({
       if (rows[index]?.kind === "section") {
         return HEADER_PX;
       }
-      const width = scrollRef.current?.clientWidth ?? TWO_LINES_BELOW_PX + LIST_GUTTER_PX;
-      return width - LIST_GUTTER_PX >= TWO_LINES_BELOW_PX ? ROW_PX : TWO_LINE_ROW_PX;
+      // The viewport fills the area the container query measures, not the narrower list column.
+      const width = scrollRef.current?.clientWidth ?? TWO_LINES_BELOW_PX;
+      return width >= TWO_LINES_BELOW_PX ? ROW_PX : TWO_LINE_ROW_PX;
     },
     [rows, scrollRef],
   );
 
   // The tree walks by index and the window mounts by index: each is told of the other by a ref,
   // since the window pins the tab stop the tree names and the tree scrolls through the window.
-  const scrollTo = useRef<(index: number) => void>(undefined);
+  const scrollTo = useRef<(index: number, align?: "auto" | "center") => void>(undefined);
   const tree = useListTree({
     entries,
     openKey,
@@ -184,7 +183,7 @@ export function CardTree({
         onActivateCard(card);
       }
     },
-    scrollToIndex: (index) => scrollTo.current?.(index),
+    scrollToIndex: (index, align) => scrollTo.current?.(index, align),
   });
   const windowed = useWindowedRows({
     count: rows.length,

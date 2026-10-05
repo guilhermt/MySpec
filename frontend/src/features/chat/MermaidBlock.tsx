@@ -79,9 +79,10 @@ function useDrawing(source: string, closed: boolean): Drawn | null {
   return drawn !== null && drawn.source === source && drawn.theme === theme ? drawn : null;
 }
 
-// Diagram is the SVG at its natural width, or at the width of its container when that is narrower.
-// The height of a scaled SVG is a fraction of a pixel, which the box rounds up to a whole one.
-function Diagram({ drawing, width }: { drawing: Drawing; width: number }) {
+// Diagram is the SVG at its width, which fits its container when fit is set (the block in the
+// conversation) and is the width itself otherwise (the full screen, whose area scrolls). The height
+// of a scaled SVG is a fraction of a pixel, which the box rounds up to a whole one.
+function Diagram({ drawing, width, fit }: { drawing: Drawing; width: number; fit: boolean }) {
   const box = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState<number | undefined>(undefined);
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new drawing is a new SVG to measure
@@ -103,7 +104,7 @@ function Diagram({ drawing, width }: { drawing: Drawing; width: number }) {
         ref={box}
         style={{
           width: `${width}px`,
-          maxWidth: "100%",
+          ...(fit ? { maxWidth: "100%" } : {}),
           ...(height === undefined ? {} : { height: `${height}px` }),
         }}
         // The markup is the SVG Mermaid drew with securityLevel "strict", which sanitizes it.
@@ -149,7 +150,7 @@ function FullScreen({ drawing, onClose }: { drawing: Drawing; onClose: () => voi
         </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto bg-surface-0">
-        <Diagram drawing={drawing} width={Math.round(drawing.width * zoom)} />
+        <Diagram drawing={drawing} width={Math.round(drawing.width * zoom)} fit={false} />
       </div>
     </Dialog>
   );
@@ -196,7 +197,7 @@ export function MermaidBlock({ source, closed }: MermaidBlockProps) {
     >
       {drawing !== null ? (
         <>
-          <Diagram drawing={drawing} width={drawing.width} />
+          <Diagram drawing={drawing} width={drawing.width} fit />
           {fullScreen && <FullScreen drawing={drawing} onClose={() => setFullScreen(false)} />}
         </>
       ) : (

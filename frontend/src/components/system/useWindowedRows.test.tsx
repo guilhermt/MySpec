@@ -11,7 +11,7 @@ const SHOWN = 600 / 40;
 
 let latest: WindowedRows;
 
-function List({ pinned = [] }: { pinned?: number[] }) {
+function List({ pinned = [], show = true }: { pinned?: number[]; show?: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const rows = useWindowedRows({
@@ -26,17 +26,19 @@ function List({ pinned = [] }: { pinned?: number[] }) {
   latest = rows;
   return (
     <div ref={scrollRef}>
-      <div ref={listRef} style={{ display: "flex", flexDirection: "column", rowGap: GAP }}>
-        {rows.parts.map((part) =>
-          part.kind === "spacer" ? (
-            <div key={part.key} data-spacer="" style={{ height: part.height }} />
-          ) : (
-            <div key={part.key} ref={rows.measureRef} data-index={part.index} data-row="">
-              {part.key}
-            </div>
-          ),
-        )}
-      </div>
+      {show && (
+        <div ref={listRef} style={{ display: "flex", flexDirection: "column", rowGap: GAP }}>
+          {rows.parts.map((part) =>
+            part.kind === "spacer" ? (
+              <div key={part.key} data-spacer="" style={{ height: part.height }} />
+            ) : (
+              <div key={part.key} ref={rows.measureRef} data-index={part.index} data-row="">
+                {part.key}
+              </div>
+            ),
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -83,6 +85,22 @@ describe("useWindowedRows", () => {
 
   it("adds up to the total height: the rows and the spacers with the gaps", () => {
     const { container } = render(<List pinned={[500]} />);
+    const children = Array.from(
+      container.querySelector("[data-row]")?.parentElement?.children ?? [],
+    );
+    const heights = children.map((child) =>
+      child.hasAttribute("data-spacer")
+        ? Number.parseFloat((child as HTMLElement).style.height)
+        : 40,
+    );
+    const total = heights.reduce((sum, height) => sum + height, 0) + GAP * (children.length - 1);
+    expect(total).toBe(ROWS * 40 + GAP * (ROWS - 1));
+  });
+
+  it("measures the gap of a list that mounts after the hook", () => {
+    const { container, rerender } = render(<List pinned={[500]} show={false} />);
+    expect(rowsIn(container)).toHaveLength(0);
+    rerender(<List pinned={[500]} show />);
     const children = Array.from(
       container.querySelector("[data-row]")?.parentElement?.children ?? [],
     );

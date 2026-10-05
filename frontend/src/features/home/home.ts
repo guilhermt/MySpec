@@ -142,7 +142,7 @@ export type BlockerModel =
 export interface BoardLineModel {
   boardId: string;
   title: string;
-  /** summary is "46 open cards · api, billing", "Not read yet · api" or "No open cards · api". */
+  /** summary is "46 open cards · api, billing", "No open cards · api", or "api" for a board never read. */
   summary: string;
   /** reading is what the right edge says: "read 2m ago", "Read failed 18m ago" (blocked) or "reading…"; failure is the failed one's times, for its tooltip. */
   reading: {
@@ -242,7 +242,7 @@ export function boardLines(app: State, now: number): BoardLineModel[] {
     const count = openCards(board);
     const cards =
       board.readAt === ""
-        ? "Not read yet"
+        ? ""
         : count === 0
           ? "No open cards"
           : `${count} open ${plural(count, "card", "cards")}`;
@@ -251,9 +251,9 @@ export function boardLines(app: State, now: number): BoardLineModel[] {
     return {
       boardId: board.id,
       title: board.title,
-      summary: names === "" ? cards : `${cards} · ${names}`,
+      summary: [cards, names].filter((part) => part !== "").join(" · "),
       reading,
-      label: `${board.title}, ${cards}, ${reading.text}`,
+      label: [board.title, cards, reading.text].filter((part) => part !== "").join(", "),
       blockers: [
         ...(board.failure === null
           ? []

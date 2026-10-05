@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { isValidElement, type ReactNode } from "react";
 import type { Row, Stretch } from "@/features/chat/conversation";
+import { MarkerLine } from "@/features/chat/entries/MarkerLine";
 import { discussionOpeningOf, type MarkerContext, markerOf } from "@/features/chat/markers";
 
 /**
@@ -67,7 +68,13 @@ export function conversationUnits(
   return units;
 }
 
-/** unitArticles is how many top-level articles a unit draws: its row's, and one for each before and after node. */
+// numbered tells whether a before or after node draws an article that is numbered: a line does, a
+// decision card is an article with the role of group, which takes no position.
+function numbered(node: ReactNode): boolean {
+  return isValidElement(node) && node.type === MarkerLine;
+}
+
+/** unitArticles is how many numbered top-level articles a unit draws: its row's, and one for each before and after line. */
 export function unitArticles(
   unit: ConversationUnit,
   ctx: MarkerContext,
@@ -82,5 +89,9 @@ export function unitArticles(
     const opening = discussionOpeningOf(unit.row.prompt, ctx);
     count += (opening.context !== null ? 1 : 0) + (opening.message !== "" ? 1 : 0);
   }
-  return count + (before?.has(unit.row.key) ? 1 : 0) + (after?.has(unit.row.key) ? 1 : 0);
+  return (
+    count +
+    (numbered(before?.get(unit.row.key)) ? 1 : 0) +
+    (numbered(after?.get(unit.row.key)) ? 1 : 0)
+  );
 }

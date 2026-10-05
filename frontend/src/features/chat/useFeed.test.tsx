@@ -101,10 +101,12 @@ function Windowed({
   mounted,
   reveal,
   onCurrent,
+  tail = false,
 }: {
   mounted: readonly number[];
   reveal: (index: number) => void;
   onCurrent?: (index: number) => void;
+  tail?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useFeed(ref, { count: 12, reveal, onCurrent: onCurrent ?? (() => {}) } satisfies FeedUnits);
@@ -117,6 +119,7 @@ function Windowed({
           ))}
         </div>
       ))}
+      {tail ? <article data-feed-item tabIndex={-1} aria-label="Tail" /> : null}
     </div>
   );
 }
@@ -394,6 +397,41 @@ describe("useFeed", () => {
 
     key(entry("Unit 10a"), "PageUp");
     expect(reveal).toHaveBeenLastCalledWith(0);
+  });
+
+  it("clamps Page Down near the end to the first entry of the last unit", async () => {
+    const reveal = vi.fn();
+    const { rerender } = renderWithStore(<Windowed mounted={[5, 6]} reveal={reveal} />);
+    entry("Unit 6b").focus();
+
+    key(entry("Unit 6b"), "PageDown");
+
+    expect(reveal).toHaveBeenCalledWith(11);
+    rerender(<Windowed mounted={[5, 6, 11]} reveal={reveal} />);
+    await synced();
+    expect(entry("Unit 11a")).toHaveFocus();
+  });
+
+  it("goes to the last entry with Page Down from inside the last unit", () => {
+    const reveal = vi.fn();
+    renderWithStore(<Windowed mounted={[10, 11]} reveal={reveal} />);
+    entry("Unit 11a").focus();
+
+    key(entry("Unit 11a"), "PageDown");
+
+    expect(entry("Unit 11b")).toHaveFocus();
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it("keeps focus at the end with Page Down from the tail", () => {
+    const reveal = vi.fn();
+    renderWithStore(<Windowed mounted={[10, 11]} reveal={reveal} tail />);
+    entry("Tail").focus();
+
+    key(entry("Tail"), "PageDown");
+
+    expect(entry("Tail")).toHaveFocus();
+    expect(reveal).not.toHaveBeenCalled();
   });
 
   it("tells which unit holds the stop of Tab", () => {

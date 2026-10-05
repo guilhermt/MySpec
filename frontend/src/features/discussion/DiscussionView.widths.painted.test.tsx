@@ -8,7 +8,7 @@ import {
   fixDiscussionSceneClock,
 } from "@/test/discussion-scenes";
 import { capture, setTheme, THEMES } from "@/test/painted";
-import { atWindow, proveScene, renderShell, SWEEP_TIMEOUT, WINDOWS } from "@/test/widths";
+import { atWindow, proveScene, renderShell, SWEEP_TIMEOUT, windowsIn } from "@/test/widths";
 
 // Only the boundary is replaced, as in the jsdom suite: no call reaches the runtime of Wails.
 vi.mock("@/lib/wails", async (importOriginal) => ({
@@ -69,22 +69,25 @@ describe.each(THEMES)("The discussion in every window, in the %s theme", (theme)
       );
     });
 
-    it.each(WINDOWS)("holds the checks of every screen at %ipx", async (window) => {
-      setTheme(theme);
-      await atWindow(window);
-      for (const [key, value] of Object.entries(sceneOf.storage)) {
-        localStorage.setItem(key, value);
-      }
-      const { main, user } = renderShell({
-        state: sceneOf.state,
-        ui: { location: sceneOf.location, transcripts: sceneOf.transcripts },
-      });
-      await sceneOf.after?.(user);
+    it.each(windowsIn(theme, { reference: REFERENCE.includes(label) }))(
+      "holds the checks of every screen at %ipx",
+      async (window) => {
+        setTheme(theme);
+        await atWindow(window);
+        for (const [key, value] of Object.entries(sceneOf.storage)) {
+          localStorage.setItem(key, value);
+        }
+        const { main, user } = renderShell({
+          state: sceneOf.state,
+          ui: { location: sceneOf.location, transcripts: sceneOf.transcripts },
+        });
+        await sceneOf.after?.(user);
 
-      expect(await proveScene(main)).toEqual({});
-      if (REFERENCE.includes(label)) {
-        await capture(`ref-discussion-${name}-${window}-${theme}`, main);
-      }
-    });
+        expect(await proveScene(main)).toEqual({});
+        if (REFERENCE.includes(label)) {
+          await capture(`ref-discussion-${name}-${window}-${theme}`, main);
+        }
+      },
+    );
   });
 });

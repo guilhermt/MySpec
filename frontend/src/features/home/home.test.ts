@@ -319,9 +319,9 @@ describe("boardLines", () => {
     const [line] = linesOf(board({ readAt: "", reading: true, cards: [] }));
 
     expect(line).toMatchObject({
-      summary: "Not read yet · api, web",
+      summary: "api, web",
       reading: { text: "reading…", tone: "quiet", shimmer: true },
-      label: "Platform Roadmap, Not read yet, reading…",
+      label: "Platform Roadmap, reading…",
     });
   });
 
@@ -329,6 +329,8 @@ describe("boardLines", () => {
     const [line] = linesOf(board({ readAt: "", reading: false, cards: [] }));
 
     expect(line?.reading).toEqual({ text: "Not read yet", tone: "quiet", shimmer: false });
+    expect(line?.summary).toBe("api, web");
+    expect(line?.label).toBe("Platform Roadmap, Not read yet");
   });
 
   it("shimmers the reading age while a read board is read again", () => {

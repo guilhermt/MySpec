@@ -114,12 +114,25 @@ describe("NewDiscussionDialog", () => {
     renderWithStore(<NewDiscussionDialog />, {
       state: makeState({
         repositories: [makeRepository(), makeRepository({ id: "repo-2", fullName: "other/web" })],
-        boards: [makeBoard({ cards: [LOGIN], repositoryIds: ["repo-1"] })],
+        boards: [makeBoard({ cards: [LOGIN], repositoryIds: ["repo-1", "repo-2"] })],
       }),
       ui: { newDiscussion: { boardId: "board-1", cardKeys: ["dev/web#12"], askBoard: false } },
     });
 
     expect(screen.getByText("dev/web", { selector: "span" })).toBeInTheDocument();
+  });
+
+  it("keeps the short name when the repository with the same name is not on the board", () => {
+    renderWithStore(<NewDiscussionDialog />, {
+      state: makeState({
+        repositories: [makeRepository(), makeRepository({ id: "repo-2", fullName: "other/web" })],
+        boards: [makeBoard({ cards: [LOGIN], repositoryIds: ["repo-1"] })],
+      }),
+      ui: { newDiscussion: { boardId: "board-1", cardKeys: ["dev/web#12"], askBoard: false } },
+    });
+
+    expect(screen.getByText("web", { selector: "span" })).toBeInTheDocument();
+    expect(screen.queryByText("dev/web", { selector: "span" })).not.toBeInTheDocument();
   });
 
   it("drops a card the user takes out of the discussion", async () => {

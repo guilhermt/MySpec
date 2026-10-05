@@ -33,7 +33,7 @@ import {
   RAIL_WINDOWS,
   renderShell,
   SWEEP_TIMEOUT,
-  WINDOWS,
+  windowsIn,
 } from "@/test/widths";
 
 // Only the boundary is replaced, as in the jsdom suite: no call reaches the runtime of Wails. The
@@ -147,16 +147,19 @@ describe.each(THEMES)("The task screen in every window, in the %s theme", (theme
   describe.each(SWEPT)("the %s scene", (name, sceneOf, fixClock) => {
     fixClock();
 
-    it.each(WINDOWS)("holds the checks of every screen at %ipx", async (window) => {
-      setTheme(theme);
-      await atWindow(window);
-      const { main } = drawShell(sceneOf());
+    it.each(windowsIn(theme, { reference: name === "run" || name === "checks" }))(
+      "holds the checks of every screen at %ipx",
+      async (window) => {
+        setTheme(theme);
+        await atWindow(window);
+        const { main } = drawShell(sceneOf());
 
-      expect(await proveScene(main)).toEqual({});
-      if (name === "run" || name === "checks") {
-        await capture(`ref-${name}-${window}-${theme}`, main);
-      }
-    });
+        expect(await proveScene(main)).toEqual({});
+        if (name === "run" || name === "checks") {
+          await capture(`ref-${name}-${window}-${theme}`, main);
+        }
+      },
+    );
 
     if (name === "run") {
       it.each(RAIL_WINDOWS)(

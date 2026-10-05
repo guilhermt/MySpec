@@ -76,6 +76,9 @@ describe("the board window", () => {
       expect(last).toHaveAttribute("role", "treeitem");
       expect(last?.getAttribute("aria-posinset")).toBe(last?.getAttribute("aria-setsize"));
       expect(list).toContainElement(last as HTMLElement);
+      // The last row of the list, not just the last of its section: no row and no spacer follows it.
+      expect(last?.nextElementSibling).toBeNull();
+      expect(last).toBe(items(list).at(-1));
     });
     expect(belowBar(document.activeElement as Element, bar)).toBeGreaterThanOrEqual(0);
   });

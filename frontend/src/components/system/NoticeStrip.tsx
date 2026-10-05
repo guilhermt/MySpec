@@ -16,8 +16,8 @@ export interface NoticeStripProps {
 
 /**
  * NoticeStrip is the strip that says something could not be read, with the action that retries. The
- * title and the reason are one text that wraps in whole lines; in a narrow list the action drops to
- * a line of its own, at the end.
+ * title and the reason are one text that wraps in whole lines; in a list narrower than 32rem the text takes the whole line beside the glyph and the action drops
+ * to a line of its own, at the end.
  */
 export function NoticeStrip({
   id,
@@ -35,13 +35,13 @@ export function NoticeStrip({
       data-slot="notice-strip"
       {...(role !== undefined ? { role } : {})}
       className={cn(
-        "flex min-h-(--size-ask) flex-wrap items-center gap-(--space-2) rounded-sm bg-surface-0 py-(--space-1-5) pr-(--space-1-5) pl-(--space-4) text-(length:--text-meta) leading-(--leading-meta)",
+        "@container flex min-h-(--size-ask) flex-wrap items-center gap-(--space-2) rounded-sm bg-surface-0 py-(--space-1-5) pr-(--space-1-5) pl-(--space-4) text-(length:--text-meta) leading-(--leading-meta)",
         outlined && "border border-line-2",
         className,
       )}
     >
       <StateGlyph state="blocked" />
-      <p className="min-w-0 flex-[1_1_var(--notice-detail-min)]">
+      <p className="min-w-0 flex-[1_1_var(--notice-detail-min)] @max-lg:basis-[calc(100%-var(--icon)-var(--space-2))]">
         <span className="font-semibold text-ink-1">{title}</span>
         {reason !== undefined && <span className="text-ink-2"> {reason}</span>}
       </p>

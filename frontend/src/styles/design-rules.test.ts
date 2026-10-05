@@ -21,13 +21,21 @@ interface Rule {
   patterns: (path: string) => RegExp[];
 }
 
-/** The names the generated components read through the bridge of globals.css, which no token has. */
+/**
+ * The names the generated components read through the bridge of globals.css, which no colour token
+ * has. A token that is not a colour (--border is a 1px width) does not stand for the bridge name:
+ * border-border still reads the bridge.
+ */
 function bridgeNames(): string[] {
   const theme = /@theme inline \{([^}]*)\}/.exec(GLOBALS)?.[1] ?? "";
-  const tokens = new Set([...TOKENS.matchAll(/(?<![\w-])--([\w-]+)\s*:/g)].map(([, name]) => name));
+  const colours = new Set(
+    [...TOKENS.matchAll(/(?<![\w-])--([\w-]+)\s*:\s*([^;]*);/g)]
+      .filter(([, , value]) => !/^[\d.]+[a-z%]*\s*$/.test(value ?? ""))
+      .map(([, name]) => name),
+  );
   return [...theme.matchAll(/--color-([\w-]+)\s*:/g)]
     .map(([, name]) => name ?? "")
-    .filter((name) => !tokens.has(name))
+    .filter((name) => !colours.has(name))
     .sort((a, b) => b.length - a.length);
 }
 
@@ -134,6 +142,7 @@ describe("design rules", () => {
         '<p className="text-muted-foreground">',
         '<p className="bg-sidebar-guide">',
       ],
+      ["V4", "foo.tsx", '<p className="border-border">', '<p className="border-line-2">'],
       ["V5", "foo.css", "color: var(--status-working);", "color: var(--state-work);"],
       ["V6", "foo.css", "@apply text-sm;", "font-size: var(--text-ui);"],
       ["V6", "foo.tsx", 'className="text-sm"', 'className="text-(length:--text-ui)"'],
@@ -174,6 +183,7 @@ describe("design rules", () => {
       expect(FILES.length).toBeGreaterThan(0);
       expect(NAMES.length).toBeGreaterThan(0);
       expect(NAMES).toContain("muted-foreground");
+      expect(NAMES).toContain("border");
     });
 
     it.each(RULES)("$id finds nothing", (current) => {

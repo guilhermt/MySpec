@@ -109,7 +109,7 @@ export function PullRequestPanel({
           trailing={
             model.checks.failed === null
               ? { text: model.checks.age, tooltip: model.checks.ageTooltip }
-              : { text: model.checks.failed, error: true, blocked: true }
+              : { text: model.checks.failed, error: true, blocked: model.checks.blocked }
           }
         />
         <dl className={FACTS}>

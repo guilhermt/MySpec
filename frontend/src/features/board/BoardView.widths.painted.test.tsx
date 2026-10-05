@@ -7,7 +7,7 @@ import {
   RAIL_WINDOWS,
   renderShell,
   SWEEP_TIMEOUT,
-  WINDOWS,
+  windowsIn,
 } from "@/test/widths";
 
 // Only the boundary is replaced, as in the jsdom suite: no call reaches the runtime of Wails.
@@ -42,16 +42,19 @@ describe.each(THEMES)(
   "The board, the Home and the creation in every window, in the %s theme",
   (theme) => {
     describe.each(BOARD_SCENES)("the %s scene", (name) => {
-      it.each(WINDOWS)("holds the checks of every screen at %ipx", async (window) => {
-        setTheme(theme);
-        await atWindow(window);
-        const main = await draw(name, false);
+      it.each(windowsIn(theme, { reference: REFERENCE.includes(name) }))(
+        "holds the checks of every screen at %ipx",
+        async (window) => {
+          setTheme(theme);
+          await atWindow(window);
+          const main = await draw(name, false);
 
-        expect(await proveScene(main)).toEqual({});
-        if (REFERENCE.includes(name)) {
-          await capture(`ref-${name}-${window}-${theme}`, main);
-        }
-      });
+          expect(await proveScene(main)).toEqual({});
+          if (REFERENCE.includes(name)) {
+            await capture(`ref-${name}-${window}-${theme}`, main);
+          }
+        },
+      );
 
       if (RAIL.includes(name)) {
         it.each(RAIL_WINDOWS)(

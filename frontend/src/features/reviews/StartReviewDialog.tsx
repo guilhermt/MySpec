@@ -95,6 +95,7 @@ function StartReviewFields({ pull, row, gone }: StartReviewFieldsProps) {
   const [instructions, setInstructions] = useState("");
   const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [choice, setChoice] = useState<ModelChoice>(() => choiceOf(defaults, "pr_review"));
+  const byDefault = sameChoice(choice, choiceOf(defaults, "pr_review"));
   // Every review starts in publish mode: applying is a choice made for the pull request at hand,
   // and only the user's own can be applied to.
   const [mode, setMode] = useState<PullReviewMode>("publish");
@@ -198,11 +199,13 @@ function StartReviewFields({ pull, row, gone }: StartReviewFieldsProps) {
             <ModelChip
               label="Review"
               value={choice}
-              own={!sameChoice(choice, choiceOf(defaults, "pr_review"))}
+              own={!byDefault}
               followNote=""
               onChange={setChoice}
             />
-            <span className={HINT}>From Defaults. It can change in the conversation.</span>
+            <span className={HINT}>
+              {byDefault ? "From Defaults. " : ""}It can change in the conversation.
+            </span>
           </div>
         </div>
 

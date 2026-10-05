@@ -87,4 +87,22 @@ describe.each(THEMES)("Markdown in %s", (theme) => {
     expect(row.bottom).toBe(box.bottom);
     expect([row.left, row.right]).toEqual([box.left, box.right]);
   });
+
+  it("draws a block that stays in a list item in the sunken frame of the system", async () => {
+    setTheme(theme);
+    const { container } = renderWithStore(
+      <Markdown>{"1. Run:\n   ```bash\n   ls -la\n   ```\n2. Then"}</Markdown>,
+    );
+
+    await screen.findByText("Then");
+    const block = container.querySelector('[data-streamdown="code-block"]');
+    if (block === null) {
+      throw new Error("the block is not drawn");
+    }
+    expect(container.querySelector("[data-code-block]")).toBeNull();
+    expect(paintOf(block, { background: "" })).toEqual({ background: token("--surface-0") });
+    expect(getComputedStyle(block).borderRadius).toBe(resolve("var(--radius-md)", "border-radius"));
+    const header = container.querySelector('[data-streamdown="code-block-header"]');
+    expect(header === null || getComputedStyle(header).display === "none").toBe(true);
+  });
 });

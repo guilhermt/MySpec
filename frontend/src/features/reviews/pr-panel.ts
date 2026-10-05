@@ -46,13 +46,14 @@ export interface PrPanelModel {
     updatedTooltip: string;
   };
   action: PanelAction;
-  /** checks is the reading of the list; failed takes the place of the age when the repository failed to be read. */
+  /** checks is the reading of the list; failed takes the place of the age when the repository failed to be read, with the blocked glyph. */
   checks: {
     reading: ChecksReading;
     summary: string;
     age: string;
     ageTooltip: string;
     failed: string | null;
+    blocked: boolean;
   };
   /** facts are the key and value pairs; labels "" without any, yourReview null outside Reviewed. */
   facts: { branch: string; card: PullCard | null; labels: string; yourReview: string | null };
@@ -177,6 +178,7 @@ export function prPanelModel(row: PullRequestRow, ctx: { app: State; now: number
       summary: checksSummary(reading, "panel"),
       age: `read ${age(center.readAt, ctx.now)}`,
       ageTooltip: `Last read ${readClock(center.readAt, ctx.now)}`,
+      blocked: failure !== undefined,
       failed:
         failure === undefined
           ? null

@@ -36,7 +36,7 @@ export function UnclonedRepository({ repository, layout = "line" }: UnclonedRepo
     const missing = repository.missing;
     return (
       <>
-        <LiveRegion kind="status" className="contents">
+        <LiveRegion kind="status" as="div" className="empty:absolute">
           {repository.cloning && (
             <p className="flex items-center gap-(--space-2) py-(--space-1-5) pl-(--space-4) text-(length:--text-meta) leading-(--leading-meta) text-ink-2">
               <Spinner />

@@ -87,6 +87,7 @@ export const SETTINGS_VARIATIONS: Record<SettingsSceneName, readonly string[]> =
     "remove",
     "empty",
     "add-failed",
+    "clone-failed",
   ],
   "settings-prompts": ["", "view", "edit", "reset", "discard", "list-failed", "view-failed"],
 };
@@ -224,6 +225,8 @@ interface SceneRepository {
   /** path is where the clone is, null when there is none. */
   path: string | null;
   missing?: boolean;
+  /** cloneError is why the last clone failed, kept with the repository. */
+  cloneError?: string;
   active: number;
   activeReviews?: number;
 }
@@ -303,6 +306,7 @@ const repositoryOf = (entry: SceneRepository): Repository => {
     path: entry.path === null ? "" : `${HOME}/${entry.path}`,
     cloned: entry.path !== null,
     missing: entry.missing === true,
+    cloneError: entry.cloneError ?? "",
     activeTasks: entry.active,
     archivedTasks: mine.filter(([kind]) => kind !== "r").length,
     activeReviews: entry.activeReviews ?? 0,
@@ -783,6 +787,20 @@ function repositoriesScene(variation: string): SettingsSceneSetup {
       return base;
     case "empty":
       return { ...base, state: sceneState({ repositories: [] }) };
+    case "clone-failed":
+      // The failure was kept with the repository: the page opens with it, and no one is alerted.
+      return {
+        ...base,
+        state: sceneState({
+          repositories: REPOSITORIES.map((entry) =>
+            repositoryOf(
+              entry.fullName === "acme/billing"
+                ? { ...entry, cloneError: "gh: repository not found" }
+                : entry,
+            ),
+          ),
+        }),
+      };
     case "add":
       return {
         ...base,
