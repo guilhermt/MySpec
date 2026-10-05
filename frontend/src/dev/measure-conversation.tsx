@@ -3,20 +3,23 @@
  * (design/tasks/04-task-conversation.md §4.2, A virtualização): 1,500 entries in four stretches, the
  * first three folded, the agent writing at the end. It measures the first paint, from before the
  * render to the frame after the commit with its layout, and an update of the text being written:
- * the work it takes, the commit and the layout, which must fit in a frame, and the time to the next
- * frame, which also waits for the display.
+ * the work it takes, the commit and the layout, and the frames it loses before the frame that paints
+ * it (dev/frames.ts), none being the target.
  *
  * With ?measure=conversation&stretches=open the same 1,500 entries come in stretches too short to
- * fold, so the window has 362 units to mount from, and it also measures ↓ in the feed, from the
- * keydown to the next frame, and Home, to the frame with an entry of the first unit focused.
+ * fold, so the window has 362 units to mount from, and it also measures ↓ in the feed, the frames lost
+ * between the keydown and the frame that paints the focus on the next entry, and Home, the
+ * milliseconds to the frame with an entry of the first unit focused.
  *
  * A tool of the development build: main.tsx mounts it in place of the app only with
  * ?measure=conversation under the Vite dev server (task dev) or in the measure build, and the
- * production bundle never has it. The numbers go to the console and to the page.
+ * production bundle never has it. The numbers go to the page and to the console as JSON, which the
+ * MiniBrowser writes to its output with --enable-write-console-messages-to-stdout=true.
  */
 
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
+import { countDropped, droppedOf, frameInterval, median } from "@/dev/frames";
 import { Conversation } from "@/features/chat/Conversation";
 import type { SessionState } from "@/features/chat/session";
 import { type Entry, sessionKey, type UserEntry } from "@/lib/wails";
@@ -202,11 +205,6 @@ function nextFrame(): Promise<number> {
   );
 }
 
-function median(values: readonly number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)] ?? 0;
-}
-
 // paint mounts the conversation and returns the milliseconds to the frame after its commit.
 async function paint(root: Root): Promise<number> {
   const started = performance.now();
@@ -214,23 +212,31 @@ async function paint(root: Root): Promise<number> {
   return (await nextFrame()) - started;
 }
 
-// update writes one more word of the last entry and returns the milliseconds of the work, to the
-// commit and its layout, and to the frame after it.
-async function update(entryId: string, text: string): Promise<{ work: number; frame: number }> {
-  const started = performance.now();
-  flushSync(() =>
-    useAppStore.getState().applyTranscriptEvent({
-      taskId: TASK_ID,
-      stage: STAGE,
-      kind: "text",
-      entry: null,
-      entryId,
-      text,
-    }),
-  );
-  void document.body.offsetHeight;
-  const work = performance.now() - started;
-  return { work, frame: (await nextFrame()) - started };
+// update writes one more word of the last entry, at the start of a frame, and returns the
+// milliseconds of the work, to the commit and its layout, and the frames lost before the frame that
+// paints it.
+async function update(
+  interval: number,
+  entryId: string,
+  text: string,
+): Promise<{ work: number; dropped: number }> {
+  let work = 0;
+  const dropped = await countDropped(interval, () => {
+    const started = performance.now();
+    flushSync(() =>
+      useAppStore.getState().applyTranscriptEvent({
+        taskId: TASK_ID,
+        stage: STAGE,
+        kind: "text",
+        entry: null,
+        entryId,
+        text,
+      }),
+    );
+    void document.body.offsetHeight;
+    work = performance.now() - started;
+  });
+  return { work, dropped };
 }
 
 // feedItems are the stops of the feed, in the order of the page.
@@ -238,16 +244,26 @@ function feedItems(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>("[role=feed] [data-feed-item]")];
 }
 
-// press presses a key on the item in focus and returns the milliseconds to the frame after it, or,
-// given what to wait for, to the frame in which it holds.
-async function press(key: string, item: HTMLElement, until?: () => boolean): Promise<number> {
+// press presses a key on the item in focus and returns the milliseconds to the frame in which what
+// it waits for holds.
+async function press(key: string, item: HTMLElement, until: () => boolean): Promise<number> {
   const started = performance.now();
   item.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
   let frame = await nextFrame();
-  while (until !== undefined && !until() && frame - started < 2000) {
+  while (!until() && frame - started < 2000) {
     frame = await nextFrame();
   }
   return frame - started;
+}
+
+// arrowDown presses ↓ on the item in focus, at the start of a frame, and returns the frames lost
+// before the frame that paints the focus on the next one.
+function arrowDown(interval: number, item: HTMLElement, next: HTMLElement | undefined) {
+  return countDropped(
+    interval,
+    () => item.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })),
+    () => document.activeElement === next,
+  );
 }
 
 // inFirstUnit tells whether the focus is on an entry of the first unit of the conversation, which
@@ -287,17 +303,18 @@ export async function measureConversation(container: HTMLElement): Promise<void>
     await nextFrame();
     warm.push(await paint(root));
   }
+  const interval = await frameInterval();
   const work: number[] = [];
-  const frames: number[] = [];
+  const dropped: number[] = [];
   let text = last?.assistant?.text ?? "";
   for (let word = 0; word < UPDATES; word++) {
     text += " word";
-    const one = await update(last?.id ?? "", text);
+    const one = await update(interval, last?.id ?? "", text);
     work.push(one.work);
-    frames.push(one.frame);
+    dropped.push(one.dropped);
   }
 
-  const keys: Record<string, number> = {};
+  const keys: Record<string, unknown> = {};
   if (open) {
     const items = feedItems();
     const downs: number[] = [];
@@ -306,8 +323,7 @@ export async function measureConversation(container: HTMLElement): Promise<void>
       const from = items[items.length - 2 - run];
       from?.focus();
       if (from !== undefined) {
-        const next = items[items.length - 1 - run];
-        downs.push(await press("ArrowDown", from, () => document.activeElement === next));
+        downs.push(await arrowDown(interval, from, items[items.length - 1 - run]));
       }
     }
     for (let run = 0; run < KEY_RUNS; run++) {
@@ -317,9 +333,7 @@ export async function measureConversation(container: HTMLElement): Promise<void>
         homes.push(await press("Home", from, inFirstUnit));
       }
     }
-    keys.keyDownFirstMs = ms(downs[0] ?? 0);
-    keys.keyDownWarmMedianMs = ms(median(downs.slice(1)));
-    keys.keyDownWarmMaxMs = ms(Math.max(...downs.slice(1)));
+    keys.keyDown = droppedOf(downs);
     keys.keyHomeFirstMs = ms(homes[0] ?? 0);
     keys.keyHomeWarmMedianMs = ms(median(homes.slice(1)));
     keys.keyHomeWarmMaxMs = ms(Math.max(...homes.slice(1)));
@@ -330,16 +344,22 @@ export async function measureConversation(container: HTMLElement): Promise<void>
     ...keys,
     entries: entries.length,
     mountedArticles: container.querySelectorAll("article").length,
+    frameMs: ms(interval),
     firstPaintMs: Math.round(first),
     warmPaintMedianMs: Math.round(median(warm)),
     // The first update is the cold one, the rest are warm.
     updateWorkFirstMs: ms(work[0] ?? 0),
     updateWorkWarmMedianMs: ms(median(work.slice(1))),
     updateWorkWarmMaxMs: ms(Math.max(...work.slice(1))),
-    updateFrameWarmMedianMs: ms(median(frames.slice(1))),
+    update: droppedOf(dropped),
+    targets: {
+      firstPaintMs: 300,
+      updateDroppedFrames: 0,
+      ...(open ? { keyDownDroppedFrames: 0, keyHomeMs: 100 } : {}),
+    },
     userAgent: navigator.userAgent,
   };
-  console.info("measure-conversation", result);
+  console.info("measure-conversation", JSON.stringify(result));
   const out = document.createElement("pre");
   out.id = "measure-conversation";
   // Fixed, so that the focus the keys move down the feed does not scroll it out of the page.

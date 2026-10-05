@@ -3,16 +3,18 @@
  * (docs/development/target-machine.md, A lista do History): 400 archived items, 240 tasks, 100
  * reviews and 60 discussions, spread over 90 days. It measures two things, each once cold and five
  * times warm: the first paint of HistoryView, from before the render to the frame after the commit
- * with its layout, and ↓ in the list, from the keydown to the frame after it. The targets are 300 ms
- * and 16 ms.
+ * with its layout, and ↓ in the list, the frames lost between the keydown and the frame that paints
+ * the focus on the next row (dev/frames.ts). The targets are 300 ms and no frame lost.
  *
  * A tool of the development build and of the measure mode of the build: main.tsx mounts it in place
  * of the app only with ?measure=history, and the production bundle never has it. The numbers go to
- * the console and to the page.
+ * the page and to the console as JSON, which the MiniBrowser writes to its output with
+ * --enable-write-console-messages-to-stdout=true.
  */
 
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
+import { countDropped, droppedOf, frameInterval, median } from "@/dev/frames";
 import { measuredState } from "@/dev/measure-board";
 import { HistoryView } from "@/features/history/HistoryView";
 import type { ArchivedDiscussion, ArchivedReview, ArchivedTask, State } from "@/lib/wails";
@@ -158,11 +160,6 @@ function nextFrame(): Promise<number> {
   );
 }
 
-function median(values: readonly number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)] ?? 0;
-}
-
 // ms rounds milliseconds to a tenth.
 const ms = (value: number) => Number(value.toFixed(1));
 
@@ -173,11 +170,14 @@ async function paint(root: Root): Promise<number> {
   return (await nextFrame()) - started;
 }
 
-// arrowDown presses ↓ on the element in focus, and returns the milliseconds to the frame after it.
-async function arrowDown(target: HTMLElement): Promise<number> {
-  const started = performance.now();
-  target.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-  return (await nextFrame()) - started;
+// arrowDown presses ↓ on the element in focus, and returns the frames lost before the frame that
+// paints the focus on the next row.
+function arrowDown(interval: number, target: HTMLElement): Promise<number> {
+  return countDropped(
+    interval,
+    () => target.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })),
+    () => document.activeElement !== target,
+  );
 }
 
 /** Measure is what one measure says: the cold run, and the median and the maximum of the warm ones. */
@@ -213,22 +213,23 @@ export async function measureHistory(container: HTMLElement): Promise<void> {
     throw new Error("the list of the History has no day");
   }
   first.focus();
+  const interval = await frameInterval();
   const downs: number[] = [];
   for (let run = 0; run <= WARM_RUNS; run++) {
     const focused = document.activeElement;
-    downs.push(await arrowDown(focused instanceof HTMLElement ? focused : first));
+    downs.push(await arrowDown(interval, focused instanceof HTMLElement ? focused : first));
   }
 
-  const [coldDown, ...warmDowns] = downs;
   const result = {
     items: ITEMS,
     mountedRows,
+    frameMs: ms(interval),
     firstPaint: measureOf(coldPaint, warmPaint),
-    arrowDown: measureOf(coldDown ?? 0, warmDowns),
-    targetsMs: { firstPaint: 300, arrowDown: 16 },
+    arrowDown: droppedOf(downs),
+    targets: { firstPaintMs: 300, arrowDownDroppedFrames: 0 },
     userAgent: navigator.userAgent,
   };
-  console.info("measure-history", result);
+  console.info("measure-history", JSON.stringify(result));
   const out = document.createElement("pre");
   out.id = "measure-history";
   // The numbers cover the page, so a screenshot of a window of any size reads them.
