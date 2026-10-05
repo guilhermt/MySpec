@@ -581,6 +581,12 @@
   left: round(50%, 1px);
   translate: round(-50%, 1px) 0;
 }
+/* The full sheet is the window less --space-8 around: it opens --space-8 from the top, and its height
+   ends --space-8 from the bottom. */
+[data-slot="dialog-content"][data-dialog-size="full"],
+[data-slot="alert-dialog-content"][data-dialog-size="full"] {
+  top: var(--space-8);
+}
 
 /* The veil under a dialog is the scrim of the system, without blur. */
 [data-slot="dialog-overlay"],
@@ -656,15 +662,21 @@
   border-color: var(--line-1);
 }
 
-/* The caret of a speech that still grows: a still block in --ink-3, after its last block. */
-.streaming-caret {
+/* The caret of a speech that still grows: a still block in --ink-3 at the end of its last paragraph,
+   in the line of its text, or of the last item of a list. After a code block, which has no line of
+   text to end, it stands on a line of its own. Assistive technology skips it: its alternative is "". */
+.streaming-caret > :last-child:not(ul, ol)::after,
+.streaming-caret > :is(ul, ol):last-child > li:last-child:not(:has(> p))::after,
+.streaming-caret > :is(ul, ol):last-child > li:last-child > p:last-child::after,
+.streaming-caret-line::before {
+  content: "▋" / "";
+  font-weight: normal;
+  color: var(--ink-3);
+}
+.streaming-caret-line {
   display: block;
   font-size: var(--text-body);
   line-height: var(--leading-body);
-  color: var(--ink-3);
-}
-.streaming-caret::before {
-  content: "▋";
 }
 
 /* Every icon draws with the stroke of the system, on every screen. */

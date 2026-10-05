@@ -94,6 +94,8 @@ export function Dialog({
     // Base UI makes the rest of the page inert without saying so; aria-modal says it.
     "aria-modal": true,
     onKeyDown: handleKeyDown,
+    // globals.css reads it: the full sheet opens --space-8 from the top, not at 8vh.
+    "data-dialog-size": size,
     className: cn(CONTENT, WIDTHS[size]),
   };
   const heading = (

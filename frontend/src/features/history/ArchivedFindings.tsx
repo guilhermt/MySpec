@@ -8,10 +8,11 @@ import { CutText } from "@/components/system/CutText";
 import { LINE, SUNKEN } from "@/features/chat/entries/MarkerLine";
 import { Markdown } from "@/features/chat/Markdown";
 import type { OutFinding } from "@/features/history/archived";
+import { inlineCode, spokenTitle } from "@/lib/inline-code";
 import { cn } from "@/lib/utils";
 
-// FindingLine is one finding that left the pass: closed, its title, where it points and where it
-// went, opening the text that went.
+// FindingLine is one finding that left the pass: closed, its title with its code drawn as code, where
+// it points and where it went, opening the text that went.
 function FindingLine({ finding }: { finding: OutFinding }) {
   const [open, setOpen] = useState(false);
   return (
@@ -19,7 +20,7 @@ function FindingLine({ finding }: { finding: OutFinding }) {
       <Collapsible open={open} onOpenChange={setOpen}>
         <CollapsibleTrigger
           chevronSize="xs"
-          aria-label={[finding.title, finding.location, finding.went]
+          aria-label={[spokenTitle(finding.title), finding.location, finding.went]
             .filter((part) => part !== "")
             .join(" · ")}
           className={cn(
@@ -27,7 +28,9 @@ function FindingLine({ finding }: { finding: OutFinding }) {
             "w-[calc(100%+var(--space-4))] outline-none transition-colors duration-(--duration-fast) ease-standard hover:bg-veil-hover active:bg-veil-press focus-visible:focus-ring",
           )}
         >
-          <CutText text={finding.title} className="text-ink-1" />
+          <CutText text={spokenTitle(finding.title)} className="text-ink-1">
+            {inlineCode(finding.title)}
+          </CutText>
           {finding.location !== "" && (
             <CutText
               text={finding.location}

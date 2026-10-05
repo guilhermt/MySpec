@@ -7,7 +7,9 @@ import { Button } from "./Button";
 import {
   Menu,
   MenuActionItem,
+  MenuCheckboxItem,
   MenuContent,
+  MenuCycleItem,
   MenuGroup,
   MenuGroupLabel,
   MenuItem,
@@ -145,6 +147,17 @@ describe.each(THEMES)("Menu in the %s theme", (theme) => {
     expect(getComputedStyle(screen.getByText("Clone")).color).toBe(token("--ink-3"));
   });
 
+  it("writes a disabled item with an action in the third ink while it is focused", async () => {
+    setTheme(theme);
+    await open();
+    const item = screen.getByRole("menuitem", {
+      name: "acme/billing, clone failed. Enter clones it.",
+    });
+    await userEvent.hover(item);
+    await expect.poll(() => document.activeElement).toBe(item);
+    expect(paintOf(item, { color: "" })).toEqual({ color: token("--ink-3") });
+  });
+
   it("writes an item that is its action in the ink of any item, the action in the third ink", async () => {
     setTheme(theme);
     await open();
@@ -155,6 +168,26 @@ describe.each(THEMES)("Menu in the %s theme", (theme) => {
 });
 
 describe("Menu in the browser", () => {
+  it("starts the label of a cycling filter in the column of a checked one", async () => {
+    render(
+      <Menu>
+        <MenuTrigger render={<Button />}>Filter</MenuTrigger>
+        <MenuContent>
+          <MenuCheckboxItem checked onCheckedChange={() => {}}>
+            acme/api
+          </MenuCheckboxItem>
+          <MenuCycleItem label="lnakamura" state="any" onStateChange={() => {}} />
+        </MenuContent>
+      </Menu>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Filter" }));
+    await screen.findByRole("menu");
+
+    const checked = screen.getByText("acme/api").getBoundingClientRect();
+    const cycling = screen.getByText("lnakamura").getBoundingClientRect();
+    expect(cycling.left).toBe(checked.left);
+  });
+
   it("names a group by its label", async () => {
     await open();
     await expect.element(page.getByRole("group", { name: "Task 2 open" })).toBeInTheDocument();

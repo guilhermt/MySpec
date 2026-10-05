@@ -49,6 +49,31 @@ describe.each(THEMES)("RequestBar in the %s theme", (theme) => {
     expect(paintOf(requestBar(form), want)).toEqual(want);
   });
 
+  it("lifts the toasts of the main area above itself, without a composer under it", () => {
+    setTheme(theme);
+    const { container } = render(
+      <div className="main-area flex h-150 flex-col justify-end">
+        <RequestBar
+          form="quiet"
+          glyph="blocked"
+          label="Step 3 blocked"
+          place="Implementer"
+          status="Step 3 blocked"
+          actions={null}
+        />
+      </div>,
+    );
+    const main = container.querySelector<HTMLElement>(".main-area");
+    if (main === null) {
+      throw new Error("the main area is not drawn");
+    }
+    const bar = screen.getByRole("region", { name: "Request" }).getBoundingClientRect();
+
+    const lift = Math.ceil(main.getBoundingClientRect().bottom - bar.top);
+    expect(lift).toBeGreaterThan(0);
+    expect(main.style.getPropertyValue("--toast-lift")).toBe(`${lift}px`);
+  });
+
   it.each(LABELS)("writes the label of the %s form in %s", (form, ink) => {
     setTheme(theme);
     requestBar(form);

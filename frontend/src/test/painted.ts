@@ -3,15 +3,19 @@
  * CSS and compare what an element paints with the token it should paint, resolved in the same theme.
  */
 
-import { within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import type { CSSProperties } from "react";
 import { inject, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
     /** emulateReducedMotion is the command of test/browser-commands.ts, which the config registers. */
     emulateReducedMotion: (value: "reduce" | "no-preference") => Promise<void>;
+    /** pressPointer holds the main button down where the pointer rests: what is under it is :active. */
+    pressPointer: () => Promise<void>;
+    /** releasePointer lets go of the button pressPointer holds. */
+    releasePointer: () => Promise<void>;
   }
 }
 
@@ -558,4 +562,61 @@ export function centeredInWindow(dialog: HTMLElement, area: HTMLElement): boolea
     box.left >= main.left &&
     box.right <= main.right
   );
+}
+
+/** HEADED is a document with a heading of each level the documents of the product use. */
+export const HEADED = "# Wire the API\n\n## Context\n\nThe invoice.\n\n### Notes\n\nNone.";
+
+/**
+ * uiHeadings reads the size, the line and the weight of each heading of HEADED once it is drawn,
+ * with what each must have under a title of its own: the size of the UI, in 600.
+ */
+export async function uiHeadings(): Promise<{ got: string[][]; want: string[][] }> {
+  await screen.findByRole("heading", { name: "Context" });
+  const headings = ["Wire the API", "Context", "Notes"].map((name) =>
+    screen.getByRole("heading", { name }),
+  );
+  const ui = [
+    resolve("var(--text-ui)", "font-size"),
+    resolve("var(--leading-ui)", "line-height"),
+    "600",
+  ];
+  return {
+    got: headings.map((heading) => {
+      const style = getComputedStyle(heading);
+      return [style.fontSize, style.lineHeight, style.fontWeight];
+    }),
+    want: headings.map(() => ui),
+  };
+}
+
+/**
+ * pressed reads what an element paints while the pointer holds it down: the pointer rests on it, the
+ * main button goes down, read runs, and the button is let go, also when read throws.
+ */
+export async function pressed<T>(element: Element, read: () => T): Promise<T> {
+  await userEvent.hover(element);
+  await commands.pressPointer();
+  try {
+    return read();
+  } finally {
+    await commands.releasePointer();
+  }
+}
+
+/**
+ * scriptFocused reads what an element paints when a script focuses it after a click, the last input
+ * being a key: WebKitGTK gives no :focus-visible to that focus, and Chromium, after the click, gives
+ * none either, so the ring can only come from data-input, the modality the app keeps on the root.
+ */
+export async function scriptFocused<T>(element: HTMLElement, read: () => T): Promise<T> {
+  await userEvent.click(element);
+  element.blur();
+  document.documentElement.dataset.input = "keyboard";
+  try {
+    element.focus();
+    return read();
+  } finally {
+    delete document.documentElement.dataset.input;
+  }
 }

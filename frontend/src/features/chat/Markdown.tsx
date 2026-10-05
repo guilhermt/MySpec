@@ -141,6 +141,9 @@ function CodeBlock({ part, streaming, cutCode, className }: CodeBlockProps) {
 
 const RAIL = "markdown-rail-last";
 
+/** CARET puts the caret of a speech that still grows at the end of the last paragraph of a block. */
+const CARET = "streaming-caret";
+
 // isMermaid tells a block drawn as a diagram from the language its info starts with.
 function isMermaid(info: string): boolean {
   return info.split(/\s+/)[0]?.toLowerCase() === "mermaid";
@@ -156,20 +159,24 @@ export function Markdown({
   className,
 }: MarkdownProps) {
   const parts = useMemo(() => codeParts(children), [children]);
-  // The caret of the speech that still grows stands after its last block, still.
-  const caret = streaming ? <span aria-hidden="true" className="streaming-caret" /> : null;
+  // The caret of the speech that still grows ends its last paragraph, still; after a code block, or
+  // before any text, there is no line of text to end, and the caret takes a line of its own.
+  const caretInText = streaming && children.trim() !== "" && parts.at(-1)?.kind !== "code";
+  const caretLine = streaming && !caretInText && (
+    <span aria-hidden="true" className="streaming-caret-line" />
+  );
 
   if (parts.every((part) => part.kind === "text")) {
     return (
       <>
         <Block
           streaming={streaming}
-          className={cn(railLast && RAIL, className)}
+          className={cn(railLast && RAIL, caretInText && CARET, className)}
           renderInlineCode={renderInlineCode}
         >
           {children}
         </Block>
-        {caret}
+        {caretLine}
       </>
     );
   }
@@ -184,7 +191,7 @@ export function Markdown({
               // biome-ignore lint/suspicious/noArrayIndexKey: the order of the parts never changes
               key={index}
               streaming={streaming && last}
-              className={partClass}
+              className={cn(partClass, last && caretInText && CARET)}
               renderInlineCode={renderInlineCode}
             >
               {part.text}
@@ -209,7 +216,7 @@ export function Markdown({
           />
         );
       })}
-      {caret}
+      {caretLine}
     </div>
   );
 }

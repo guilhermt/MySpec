@@ -1,7 +1,15 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
-import { dashedDisabled, focusRing, paintOf, setTheme, THEMES, token } from "@/test/painted";
+import {
+  dashedDisabled,
+  focusRing,
+  paintOf,
+  pressed,
+  setTheme,
+  THEMES,
+  token,
+} from "@/test/painted";
 import { OptionGroup, type OptionView } from "./OptionGroup";
 
 const OPTIONS: OptionView[] = [
@@ -34,6 +42,18 @@ describe.each(THEMES)("OptionGroup in the %s theme", (theme) => {
     const key = screen.getByText("2");
     const keyWant = { border: token("--brand-ring"), color: token("--brand-ink") };
     expect(paintOf(key, keyWant)).toEqual(keyWant);
+  });
+
+  it("presses an option in the veil, and leaves a disabled one dashed", async () => {
+    setTheme(theme);
+    subject();
+    const option = radio(/Comment/);
+    expect(await pressed(option, () => paintOf(option, { background: "" }))).toEqual({
+      background: token("--veil-press"),
+    });
+    const disabled = radio(/Approve/);
+    const want = dashedDisabled();
+    expect(await pressed(disabled, () => paintOf(disabled, want))).toEqual(want);
   });
 
   it("dashes a disabled option", async () => {

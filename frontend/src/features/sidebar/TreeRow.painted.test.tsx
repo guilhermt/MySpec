@@ -2,7 +2,17 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { taskRow } from "@/features/sidebar/sidebar-tree";
 import { TreeRow } from "@/features/sidebar/TreeRow";
-import { NONE, paintOf, resolve, setTheme, THEMES, token } from "@/test/painted";
+import {
+  focusRing,
+  NONE,
+  paintOf,
+  pressed,
+  resolve,
+  scriptFocused,
+  setTheme,
+  THEMES,
+  token,
+} from "@/test/painted";
 import { makeSituation, makeState, makeTask } from "@/test/wails-mock";
 
 const NOW = Date.parse("2026-09-05T12:00:00Z");
@@ -38,6 +48,61 @@ describe.each(THEMES)("TreeRow in the %s theme", (theme) => {
       shadow: resolve("inset 0 0 0 var(--border) var(--brand-ring)", "box-shadow"),
     };
     expect(paintOf(screen.getByRole("treeitem"), want)).toEqual(want);
+  });
+
+  it("keeps the open row in the brand veil while it is pressed, and presses another in the veil", async () => {
+    setTheme(theme);
+    render(
+      <div role="tree">
+        <TreeRow
+          row={idle}
+          level={2}
+          selected
+          isNext={false}
+          flash={null}
+          narrow={false}
+          tabIndex={0}
+        />
+        <TreeRow
+          row={waiting}
+          level={2}
+          selected={false}
+          isNext={false}
+          flash={null}
+          narrow={false}
+          tabIndex={-1}
+        />
+      </div>,
+    );
+    const [open, other] = screen.getAllByRole("treeitem");
+    if (open === undefined || other === undefined) {
+      throw new Error("the rows are not drawn");
+    }
+
+    expect(await pressed(open, () => paintOf(open, { background: "" }))).toEqual({
+      background: token("--brand-veil"),
+    });
+    expect(await pressed(other, () => paintOf(other, { background: "" }))).toEqual({
+      background: token("--veil-press"),
+    });
+  });
+
+  it("shows the focus ring on a script focus that follows a click", async () => {
+    setTheme(theme);
+    render(
+      <TreeRow
+        row={idle}
+        level={2}
+        selected={false}
+        isNext={false}
+        flash={null}
+        narrow={false}
+        tabIndex={0}
+      />,
+    );
+    const row = screen.getByRole("treeitem");
+    const want = focusRing();
+    expect(await scriptFocused(row, () => paintOf(row, want))).toEqual(want);
   });
 
   it("writes line 2 of the open row in the second ink while it is pressed", () => {

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import {
   dashedDisabled,
+  focusRing,
   paintOf,
   resolve,
   setTheme,
@@ -64,6 +65,57 @@ describe.each(THEMES)("Dialog in the %s theme", (theme) => {
       expect(sheet.offsetWidth).toBe(window.innerWidth - free);
     } finally {
       await page.viewport(1280, 800);
+    }
+  });
+
+  it("keeps --space-8 free on every side of the full size, in a window of 1080 px", async () => {
+    setTheme(theme);
+    await page.viewport(1920, 1080);
+    try {
+      render(<Subject size="full" />);
+      const sheet = screen.getByRole("dialog", { name: "Delete the task" });
+      // Measured where it settles: the opening animation scales it.
+      await Promise.all(sheet.getAnimations().map((animation) => animation.finished));
+      const free = Number.parseFloat(resolve("var(--space-8)", "width"));
+      const box = sheet.getBoundingClientRect();
+      expect([
+        box.top,
+        window.innerWidth - box.right,
+        window.innerHeight - box.bottom,
+        box.left,
+      ]).toEqual([free, free, free, free]);
+    } finally {
+      await page.viewport(1280, 800);
+    }
+  });
+
+  it("rings Cancel of a confirmation the keyboard opens after a click", async () => {
+    setTheme(theme);
+    const discard = (open: boolean) => (
+      <>
+        <Button>More actions</Button>
+        <Dialog open={open} alert onOpenChange={() => {}} title="Discard step 4">
+          <DialogBody>The changes of the step are lost.</DialogBody>
+          <DialogFooter>
+            <DialogCancel />
+            <Button variant="danger">Discard step</Button>
+          </DialogFooter>
+        </Dialog>
+      </>
+    );
+    const { rerender } = render(discard(false));
+    // The menu opened by a click, the item chosen by a key: the dialog places its focus by script,
+    // which WebKitGTK and Chromium leave without :focus-visible after the click.
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    document.documentElement.dataset.input = "keyboard";
+    try {
+      rerender(discard(true));
+      const cancel = screen.getByRole("button", { name: "Cancel" });
+      await expect.poll(() => document.activeElement).toBe(cancel);
+      const want = focusRing();
+      expect(paintOf(cancel, want)).toEqual(want);
+    } finally {
+      delete document.documentElement.dataset.input;
     }
   });
 

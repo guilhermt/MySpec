@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Markdown } from "@/features/chat/Markdown";
-import { paintOf, resolve, setTheme, THEMES, token } from "@/test/painted";
+import { paintOf, resolve, setTheme, THEMES, TRANSPARENT, token } from "@/test/painted";
 import { renderWithStore } from "@/test/render";
 
 const LONG = Array.from({ length: 30 }, (_, at) => `line ${at + 1}`).join("\n");
@@ -28,6 +28,56 @@ describe.each(THEMES)("Markdown in %s", (theme) => {
 
     const heading = await screen.findByRole("heading", { name: "Context" });
     expect(getComputedStyle(heading).fontSize).toBe(resolve("var(--text-ui)", "font-size"));
+  });
+
+  it("ends the last paragraph of a speech that still grows with a still caret in --ink-3, in its line", async () => {
+    setTheme(theme);
+    const { container } = renderWithStore(
+      <div style={{ width: 640 }}>
+        <Markdown streaming>{"The invoice.\n\nHalf a sen"}</Markdown>
+      </div>,
+    );
+
+    const last = await screen.findByText(/Half a sen/);
+    const caret = getComputedStyle(last, "::after");
+    expect([caret.content, caret.display, caret.color]).toEqual([
+      '"▋" / ""',
+      "inline",
+      token("--ink-3"),
+    ]);
+    // In the line of the text: the paragraph keeps one line, and nothing follows it.
+    expect(last.getBoundingClientRect().height).toBe(
+      parseFloat(resolve("var(--leading-body)", "line-height")),
+    );
+    expect(getComputedStyle(screen.getByText("The invoice."), "::after").content).toBe("none");
+    expect(container.querySelector(".streaming-caret-line")).toBeNull();
+  });
+
+  it("draws a table as one sunken block, with no box or control inside it", async () => {
+    setTheme(theme);
+    const { container } = renderWithStore(
+      <div style={{ width: 640 }}>
+        <Markdown>{"| Plan | Price |\n| --- | --- |\n| Pro | 20 |"}</Markdown>
+      </div>,
+    );
+
+    await screen.findByText("Pro");
+    const wrapper = container.querySelector<HTMLElement>('[data-streamdown="table-wrapper"]');
+    if (wrapper === null) {
+      throw new Error("the table is not drawn");
+    }
+    expect(paintOf(wrapper, { background: "" })).toEqual({ background: token("--surface-0") });
+    expect(wrapper.querySelector("button")).toBeNull();
+    // Every box between the frame and the cells is bare: no border, no background of its own.
+    const table = wrapper.querySelector("table");
+    for (let box = table?.parentElement ?? null; box !== null && box !== wrapper; ) {
+      expect(getComputedStyle(box).borderTopWidth).toBe("0px");
+      expect(getComputedStyle(box).backgroundColor).toBe(TRANSPARENT);
+      box = box.parentElement;
+    }
+    if (table !== null) {
+      expect(getComputedStyle(table).borderTopWidth).toBe("0px");
+    }
   });
 
   it("puts Copy of a block at the end of its own header, in the header's height", async () => {

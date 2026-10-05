@@ -383,23 +383,36 @@ describe("useFeed", () => {
     expect(reveal).toHaveBeenCalledTimes(1);
   });
 
-  it("walks ten units with Page Up and Page Down, over the units that are not mounted", async () => {
+  it("walks ten entries with Page Down and Page Up, a unit counting its entries and one not mounted one", async () => {
     const reveal = vi.fn();
     const { rerender } = renderWithStore(<Windowed mounted={[0, 1]} reveal={reveal} />);
     entry("Unit 0a").focus();
 
+    // 0b, 1a and 1b are three entries; the units 2 to 8 are not mounted, one entry each.
     key(entry("Unit 0a"), "PageDown");
 
-    expect(reveal).toHaveBeenCalledWith(10);
-    rerender(<Windowed mounted={[1, 10, 11]} reveal={reveal} />);
+    expect(reveal).toHaveBeenCalledWith(8);
+    rerender(<Windowed mounted={[1, 8, 9]} reveal={reveal} />);
     await synced();
-    expect(entry("Unit 10a")).toHaveFocus();
+    expect(entry("Unit 8a")).toHaveFocus();
 
-    key(entry("Unit 10a"), "PageUp");
+    // 7 to 2 are six, 1b and 1a two more, 0 the ninth: the first entry of the feed.
+    key(entry("Unit 8a"), "PageUp");
     expect(reveal).toHaveBeenLastCalledWith(0);
   });
 
-  it("clamps Page Down near the end to the first entry of the last unit", async () => {
+  it("counts each entry a mounted unit holds, as an open group holds its commands", () => {
+    renderWithStore(<Windowed mounted={[0, 1, 2, 3, 4, 5, 6]} reveal={vi.fn()} />);
+    entry("Unit 6b").focus();
+
+    key(entry("Unit 6b"), "PageUp");
+    expect(entry("Unit 1b")).toHaveFocus();
+
+    key(entry("Unit 1b"), "PageDown");
+    expect(entry("Unit 6b")).toHaveFocus();
+  });
+
+  it("goes to the last entry of the feed with Page Down near the end", async () => {
     const reveal = vi.fn();
     const { rerender } = renderWithStore(<Windowed mounted={[5, 6]} reveal={reveal} />);
     entry("Unit 6b").focus();
@@ -409,7 +422,7 @@ describe("useFeed", () => {
     expect(reveal).toHaveBeenCalledWith(11);
     rerender(<Windowed mounted={[5, 6, 11]} reveal={reveal} />);
     await synced();
-    expect(entry("Unit 11a")).toHaveFocus();
+    expect(entry("Unit 11b")).toHaveFocus();
   });
 
   it("goes to the last entry with Page Down from inside the last unit", () => {

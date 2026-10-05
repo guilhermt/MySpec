@@ -161,8 +161,9 @@ describe("prBlockHint", () => {
     ["gh_failed", "gh reports"],
     ["git_failed", "git reports"],
     ["no_worktree", "worktree of this task"],
-  ] as const)("tells what to do about %s", (reason, hint) => {
+  ] as const)("tells what to do about %s, in plain text without backticks", (reason, hint) => {
     expect(prBlockHint(reason)).toContain(hint);
+    expect(prBlockHint(reason)).not.toContain("`");
   });
 });
 
