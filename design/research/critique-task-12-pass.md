@@ -116,7 +116,7 @@ Visto no app real nas cinco janelas e nos dois temas, e nas capturas `gone-*`, `
 - Com o board nunca lido e nenhuma leitura rodando: a Home diz `reading…` (`features/home/home.ts:225`, o caso que sobra de `readingOf`), Settings › Boards diz `Not read yet` (`components/system/ReadingAge.tsx:61`) e o nó `Platform Roadmap` da árvore não diz nada (`features/sidebar/TreeNodeRow.tsx:86–92`, certo, porque nada lê). Visto nas cinco janelas, nos dois temas, durante toda a sessão.
 - Regra: `components.md` Idade da leitura (nunca lida é `Not read yet`); "uma idade por significado"; `structure.md` §7 (Primeira leitura do GitHub).
 
-**S10 · Deve. As regiões ao vivo: o alerta presente ao montar e o status que nasce com o texto.** · **Fechado no step 14** As leituras do board e de Reviews o deram como **Deve**; as da task e da discussão, como **Pode esperar**.
+**S10 · Deve. As regiões ao vivo: o alerta presente ao montar e o status que nasce com o texto.** · **Fechado em** `b02ade41` (retoques em `af28179c`) As leituras do board e de Reviews o deram como **Deve**; as da task e da discussão, como **Pode esperar**.
 
 - O alerta de uma falha que já está na tela ao montar:
   - `features/board/BoardReadingStates.tsx:48` (a faixa da falha de leitura do board);
@@ -609,7 +609,7 @@ O que `design/` não decidia ou contradizia, com a decisão que o coordenador to
 - **L19 · Um relógio só para o tempo de uma situação** (S17; leitura de Reviews). A régua pede uma idade por significado, mas não diz que a árvore, a barra e **Continue** dividem o mesmo tique. **Decisão:** um relógio só para os chips de espera, um `useNow` compartilhado no store, para a barra e a árvore nunca discordarem. **Registrar em:** `structure.md` §7. **Implementa:** S17.
 - **L20 · A faixa de falha numa lista estreita** (R1). `components.md` Faixa de aviso não diz como a faixa cede. **Decisão:** numa lista estreita, a faixa de aviso por repositório quebra a razão sob o título em linhas inteiras e põe **Try again** à direita numa linha própria; nunca uma palavra por linha. **Registrar em:** `components.md` Faixa de aviso. **Implementa:** R1.
 - **L21 · O prompt do produto pendente** (T1; decisão do coordenador sobre o bloqueio da task). **Decisão:** o prompt do produto ao começar um step nunca aparece como mensagem do usuário com **Remove**: enquanto pendente, é o marco em linha `Step 3 started` sem ação, e o Go não aceita apagá-lo (`RemovePending`). **Registrar em:** `screens/task.md` §6. **Implementa:** T1.
-- **L22 · O banco de uma versão mais nova** (leitura de Settings; `critique-task-10.md`, opinião, deixada ao usuário). Não decidida: é de produto. Fica em Para o usuário confirmar. · **Fechado em** `ae011ab1`. Implementada como a recomendação de Para o usuário confirmar: `store.NewerError` antes de qualquer escrita, `Migration.Newer` e a página da migração recusada com **This data is from a newer MySpec**.
+- **L22 · O banco de uma versão mais nova** (leitura de Settings; `critique-task-10.md`, opinião, deixada ao usuário). Não decidida: é de produto. Fica em Para o usuário confirmar. · **Fechado em** `ae011ab1`. Implementada na pull request da task 12 como a recomendação de Para o usuário confirmar: `store.NewerError` antes de qualquer escrita, `Migration.Newer` e a página da migração recusada com **This data is from a newer MySpec**. A confirmação do usuário está pendente, na revisão da pull request.
 
 ## Pautas
 
@@ -634,11 +634,11 @@ Cada item da pauta de polimento (`lab/08-visual-final/critique.md` §7; `12:272�
 | `critique-task-02-fixes.md:46` (M4), a saída do toast empurrado | Vale (opinião da crítica) | `ShellToasts.tsx:21–36` | S26 · **Fechado em** `524e30fb` |
 | `critique-task-02-fixes.md:48` (M5), quatro toasts por 120 ms | Vale, sem defeito; decidido | `ShellToasts.tsx:38–41`; o mais antigo sai no mesmo instante, em `--duration-fast` (registro em `components.md` Aviso do app e toast) | S27 · **Fechado em** `524e30fb` |
 | `critique-task-05.md:183` (9), o item desabilitado com ação focado no escuro | Vale (**Deve**) | `Menu.tsx:271`, 4,44:1 no escuro | S14 · **Fechado em** `524e30fb` |
-| `critique-task-05.md:188` (10); `critique-task-06.md:173` (4), as faixas sempre `role="alert"` | Vale | `BoardReadingStates.tsx:48`, `ReviewsReadingStates.tsx:46`, `CheckStrip.tsx:47` | S10 · **Fechado no step 14** |
+| `critique-task-05.md:188` (10); `critique-task-06.md:173` (4), as faixas sempre `role="alert"` | Vale | `BoardReadingStates.tsx:48`, `ReviewsReadingStates.tsx:46`, `CheckStrip.tsx:47` | S10 · **Fechado em** `b02ade41` (retoques em `af28179c`) |
 | `critique-task-05.md:206` (16), `◇` como caractere solto | Vale | 15 lugares, do system e de fora | S23 · **Fechado em** `524e30fb` |
-| `critique-task-05.md:230–233` (21), a região do `KeyNotice` | Vale | `KeyNotice.tsx:100`, `:96` | S10 · **Fechado no step 14** |
+| `critique-task-05.md:230–233` (21), a região do `KeyNotice` | Vale | `KeyNotice.tsx:100`, `:96` | S10 · **Fechado em** `b02ade41` (retoques em `af28179c`) |
 | `critique-task-05.md:392`, o comentário de `REVIEW_MODES` | Vale | `lib/review-modes.ts:3` | S28 · **Fechado em** `190a38f7` |
-| `critique-task-05.md:394`, o `role="status"` de `Cloning` | Vale | `StartRow.tsx:150` (a pauta dizia `:143`) e `:125` | S10 · **Fechado no step 14** |
+| `critique-task-05.md:394`, o `role="status"` de `Cloning` | Vale | `StartRow.tsx:150` (a pauta dizia `:143`) e `:125` | S10 · **Fechado em** `b02ade41` (retoques em `af28179c`) |
 | `critique-task-06.md:169` (3), o anel de foco no WebKitGTK | Vale (**Bloqueia**) | Visto no Broadway na árvore, nos diálogos, no board e em Reviews, também só com o teclado | S1 · **Fechado em** `524e30fb` |
 | `critique-task-09.md`, segunda leitura: o `Cut` do dobrado com tooltip mesmo inteiro | Vale | `FoldedDraft.tsx:56–62`; `MarkerLine.tsx:173` | S22 · **Fechado em** `524e30fb` |
 | `critique-task-09.md`, O que ficou aberto: o tooltip, "um comportamento só" | Vale | `ListRow.tsx:121–135` (`Cell`); `GroupEpicDialog.tsx:137`; `NewDiscussionDialog.tsx:214` | S22 · **Fechado em** `524e30fb` |
@@ -720,16 +720,16 @@ As faixas sempre `role="alert"` (`critique-task-06.md:173`), o anel de foco (`cr
 | `critique-task-09.md` (1), o épico descartado a 60% | Feito | Sem `opacity` no `Draft.tsx`; `discussion-epic-off-*` com o título em `--ink-2` e o corpo em tinta cheia | — |
 | `critique-task-09.md` (2), a pastilha onde não há | Feito | `discussion-request.ts:345–369` | — |
 | `critique-task-09.md` (3), os títulos do corpo | Feito no rascunho | `CardDraft.tsx:158` (`ui-headings`); não no `Documents` nem no corpo do marco | S6 · **Fechado em** `4a88fada` |
-| `critique-task-09.md` (4), o que fica sob a barra · **Fechado em** `8c5b8b77` | Vale em parte | A edição rola e o `listbox` sobe; a pílula `↓` cobre o atual | D1 |
+| `critique-task-09.md` (4), o que fica sob a barra | Vale em parte | A edição rola e o `listbox` sobe; a pílula `↓` cobre o atual | D1 · **Fechado em** `8c5b8b77` |
 | `critique-task-09.md` (5, 6, 8, 9, 10, 11) | Feito | Segunda leitura da crítica 9; o 8 conferido no app (`✓ Created api#479 · 13:58`) | — |
 | `critique-task-09.md` (7), as áreas de texto | Feito | `DraftEditor.tsx:307`, `NewDiscussionDialog.tsx:241–242`; três linhas em `discussion-start-*` | — |
-| `critique-task-09.md` (12), os valores soltos · **Fechado em** `8c5b8b77` | Vale em parte | Os diálogos com `--space-*`; sobram `UnclonedRepository.tsx:37` e `DraftEditor.tsx:316` | D3 |
+| `critique-task-09.md` (12), os valores soltos | Vale em parte | Os diálogos com `--space-*`; sobram `UnclonedRepository.tsx:37` e `DraftEditor.tsx:316` | D3 · **Fechado em** `8c5b8b77` |
 | `critique-task-09.md` (13), os miúdos | Feito, menos a idade | `· click again to undo` depois de **Retry** no app | S17 · **Fechado em** `4a88fada` |
-| `critique-task-09.md`, segunda leitura: a pílula `↓` sobre o atual · **Fechado em** `8c5b8b77` | Vale | `discussion-drafts-978`/`-812` | D1 |
-| `critique-task-09.md`, segunda leitura: **Edit** ao lado de **Done**, **Body** sem `Markdown` · **Fechado em** `8c5b8b77` | Vale | `drafts-card.ts:498–505`; `DraftEditor.tsx:298` | D2 |
+| `critique-task-09.md`, segunda leitura: a pílula `↓` sobre o atual | Vale | `discussion-drafts-978`/`-812` | D1 · **Fechado em** `8c5b8b77` |
+| `critique-task-09.md`, segunda leitura: **Edit** ao lado de **Done**, **Body** sem `Markdown` | Vale | `drafts-card.ts:498–505`; `DraftEditor.tsx:298` | D2 · **Fechado em** `8c5b8b77` |
 | `critique-task-09.md`, segunda leitura: o tooltip sempre na lista e no dobrado | Vale | `MarkerLine.tsx:174`, `FoldedDraft.tsx:59` | S22 · **Fechado em** `524e30fb` |
 | `critique-task-09.md`, novo: a razão cortada do rodapé pelo teclado | Vale | **Group drafts into an epic** | S21 · **Fechado em** `524e30fb` |
-| `critique-task-09.md`, novo: a decisão abaixo da dobra · **Fechado em** `8c5b8b77` | Vale | `discussion-partial-fail-978`, `discussion-epic-off-978` | D1 |
+| `critique-task-09.md`, novo: a decisão abaixo da dobra | Vale | `discussion-partial-fail-978`, `discussion-epic-off-978` | D1 · **Fechado em** `8c5b8b77` |
 | `critique-task-10.md`, o `Textarea` com `rows` (`DraftEditor` 6) | Feito | Sem mudança visível em `discussion-drafts-edit-*` | — |
 
 ### Settings, History e diálogos
@@ -816,3 +816,5 @@ As faixas sempre `role="alert"` (`critique-task-06.md:173`), o anel de foco (`cr
 **O banco de uma versão mais nova** (L22). `internal/store/migrate.go:18` pula as migrações quando o `user_version` do banco está à frente do app, e o app abre sem aviso: uma versão antiga do MySpec passa a ler e escrever num banco de uma versão mais nova. `structure.md` §7 só tem a migração recusada. Veio de `critique-task-10.md` (opinião), e o coordenador o deixou ao usuário porque muda um fluxo.
 
 **Recomendação:** abrir na tela da migração recusada (`screens/rest.md` §7), com o caso "this data is from a newer MySpec". Se o usuário aprovar, entra em `changes.md`, em `screens/rest.md` §7 e no step da área Settings, History e diálogos; se não, fica como está, e a resposta é escrita aqui.
+
+**Estado:** a recomendação está implementada na pull request da task 12, em `ae011ab1`: `store.NewerError` antes de qualquer escrita (`internal/store/migrate.go`) e a página **This data is from a newer MySpec**, registradas em `changes.md` X21, `screens/rest.md` §7, `docs/architecture/storage.md` e `docs/product/features.md`. A confirmação do usuário está pendente, na revisão da pull request; recusada, o commit sai da branch.
