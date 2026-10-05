@@ -68,7 +68,14 @@ export function useAutoScroll(
       return;
     }
     const onScroll = () => {
-      if (follow && atBottomRef.current && followed.current === element.scrollTop) {
+      // A place at most the slack above where it went is its own too: WebKitGTK can report the
+      // end of a list that a commit measured shorter for a moment before it grew again.
+      if (
+        follow &&
+        atBottomRef.current &&
+        followed.current !== null &&
+        element.scrollTop >= followed.current - BOTTOM_SLACK
+      ) {
         // The content grew after it went to the end, as the rows of a window are measured: it goes on.
         if (!atBottomOf(element)) {
           followed.current = toBottom(element);

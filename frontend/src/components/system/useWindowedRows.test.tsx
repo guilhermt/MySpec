@@ -1,6 +1,6 @@
 import { act, render } from "@testing-library/react";
 import { useRef } from "react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { useWindowedRows, type WindowedRows } from "./useWindowedRows";
 
 const ROWS = 1000;
@@ -11,13 +11,21 @@ const SHOWN = 600 / 40;
 
 let latest: WindowedRows;
 
-function List({ pinned = [], show = true }: { pinned?: number[]; show?: boolean }) {
+function List({
+  pinned = [],
+  show = true,
+  estimate = 40,
+}: {
+  pinned?: number[];
+  show?: boolean;
+  estimate?: number;
+}) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const rows = useWindowedRows({
     count: ROWS,
     keyOf: (index) => `row:${index}`,
-    estimate: () => 40,
+    estimate: () => estimate,
     pinned,
     scrollRef,
     listRef,
@@ -45,6 +53,11 @@ function List({ pinned = [], show = true }: { pinned?: number[]; show?: boolean 
 
 const rowsIn = (container: HTMLElement) => container.querySelectorAll("[data-row]");
 const spacersIn = (container: HTMLElement) => container.querySelectorAll("[data-spacer]");
+const scrollOf = (container: HTMLElement) => container.firstElementChild as HTMLElement;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("useWindowedRows", () => {
   it("mounts only what shows, plus the overscan", () => {
@@ -74,6 +87,41 @@ describe("useWindowedRows", () => {
       expect(Number.isInteger(height)).toBe(true);
       expect(height).toBeGreaterThanOrEqual(0);
     }
+  });
+
+  it("draws the spacer above the window in whole pixels when the estimates are not", () => {
+    const { container } = render(<List estimate={40.37} />);
+    act(() => scrollOf(container).scrollTo({ top: 20_000 }));
+
+    const top = container.querySelector("[data-row]")?.parentElement?.firstElementChild;
+    expect(top).toHaveAttribute("data-spacer");
+    const height = Number.parseFloat((top as HTMLElement).style.height);
+    expect(height).toBeGreaterThan(0);
+    expect(Number.isInteger(height)).toBe(true);
+  });
+
+  it("scrolls to a row on a whole pixel when the rows measure a fraction", () => {
+    const rect = Element.prototype.getBoundingClientRect;
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: Element,
+    ) {
+      return this.hasAttribute("data-row") ? new DOMRect(0, 0, 960, 40.3) : rect.call(this);
+    });
+    const { container } = render(<List />);
+
+    act(() => latest.scrollToIndex(500));
+
+    expect(scrollOf(container).scrollTop).toBeGreaterThan(0);
+    expect(Number.isInteger(scrollOf(container).scrollTop)).toBe(true);
+  });
+
+  it("holds the list at the height of all its rows, so a commit never shortens it", () => {
+    const { container } = render(<List />);
+    const list = container.querySelector("[data-row]")?.parentElement as HTMLElement;
+
+    const held = Number.parseFloat(list.style.minHeight);
+    expect(held).toBeGreaterThanOrEqual(ROWS * 40 + GAP * (ROWS - 1));
+    expect(Number.isInteger(held)).toBe(true);
   });
 
   it("brings the last row in by scrollToIndex", () => {
