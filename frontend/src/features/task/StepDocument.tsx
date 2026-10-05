@@ -7,7 +7,7 @@ export function StepDocument({ content }: { content: string }) {
 
   return (
     <div className="flex max-w-(--measure-conversation) flex-col gap-(--space-2) select-text">
-      <Markdown>{body}</Markdown>
+      <Markdown className="ui-headings">{body}</Markdown>
     </div>
   );
 }

@@ -85,7 +85,6 @@ function DocumentBody({ taskId, file, artifactVersion, title, step, onRetry }: D
         role="alert"
         title={`Couldn't read ${file}`}
         reason={artifact.error}
-        className="bg-state-error-veil"
         action={
           <Button variant="ghost" size="sm" onClick={onRetry}>
             Try again

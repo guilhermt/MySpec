@@ -3,7 +3,7 @@
  * CSS and compare what an element paints with the token it should paint, resolved in the same theme.
  */
 
-import { within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import type { CSSProperties } from "react";
 import { inject, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
@@ -558,4 +558,30 @@ export function centeredInWindow(dialog: HTMLElement, area: HTMLElement): boolea
     box.left >= main.left &&
     box.right <= main.right
   );
+}
+
+/** HEADED is a document with a heading of each level the documents of the product use. */
+export const HEADED = "# Wire the API\n\n## Context\n\nThe invoice.\n\n### Notes\n\nNone.";
+
+/**
+ * uiHeadings reads the size, the line and the weight of each heading of HEADED once it is drawn,
+ * with what each must have under a title of its own: the size of the UI, in 600.
+ */
+export async function uiHeadings(): Promise<{ got: string[][]; want: string[][] }> {
+  await screen.findByRole("heading", { name: "Context" });
+  const headings = ["Wire the API", "Context", "Notes"].map((name) =>
+    screen.getByRole("heading", { name }),
+  );
+  const ui = [
+    resolve("var(--text-ui)", "font-size"),
+    resolve("var(--leading-ui)", "line-height"),
+    "600",
+  ];
+  return {
+    got: headings.map((heading) => {
+      const style = getComputedStyle(heading);
+      return [style.fontSize, style.lineHeight, style.fontWeight];
+    }),
+    want: headings.map(() => ui),
+  };
 }
