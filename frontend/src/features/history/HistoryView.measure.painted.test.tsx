@@ -23,9 +23,9 @@ vi.mock("@/lib/wails", async (importOriginal) => ({
  * The History with 400 archived items in the window, the size the 90 days are measured at
  * (docs/development/target-machine.md, A lista do History), against the History with 40, in the same
  * run: the first paint, from before the render to the frame after its commit, and ↓ in the list, from
- * the keydown to the frame after it, once cold and five times warm, the two sizes in turn. The targets
- * are the ones of the board, 300 ms and 16 ms. The test prints the numbers and holds the warm median of
- * 400 to a ratio over the one of 40: the list is windowed, so 400 items cost about what 40 do, and a
+ * the keydown to the frame after it, once cold and five times warm, the two sizes in turn. The targets,
+ * 300 ms and no frame lost, are measured in the engine of the app by dev/measure-history.tsx, never
+ * here. The test prints the numbers and holds the warm median of 400 to a ratio over the one of 40: the list is windowed, so 400 items cost about what 40 do, and a
  * list that stopped being windowed, or one with work that grows with the square of the rows, costs
  * ten times or a hundred.
  * A loaded runner slows both sizes alike, so the ratio does not depend on the machine.

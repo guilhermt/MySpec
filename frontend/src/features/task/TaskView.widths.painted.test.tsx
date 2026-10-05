@@ -143,11 +143,17 @@ const SWEPT: [string, () => Scene, () => void][] = [
   ),
 ];
 
+/**
+ * REFERENCE are the scenes whose captures go to the pull request: the implementer at work, the
+ * question, the findings of the PR, the checks and the long conversation.
+ */
+const REFERENCE = ["run", "ask", "findings", "checks", "conversation-long"];
+
 describe.each(THEMES)("The task screen in every window, in the %s theme", (theme) => {
   describe.each(SWEPT)("the %s scene", (name, sceneOf, fixClock) => {
     fixClock();
 
-    it.each(windowsIn(theme, { reference: name === "run" || name === "checks" }))(
+    it.each(windowsIn(theme, { reference: REFERENCE.includes(name) }))(
       "holds the checks of every screen at %ipx",
       async (window) => {
         setTheme(theme);
@@ -155,8 +161,8 @@ describe.each(THEMES)("The task screen in every window, in the %s theme", (theme
         const { main } = drawShell(sceneOf());
 
         expect(await proveScene(main)).toEqual({});
-        if (name === "run" || name === "checks") {
-          await capture(`ref-${name}-${window}-${theme}`, main);
+        if (REFERENCE.includes(name)) {
+          await capture(`ref-task-${name}-${window}-${theme}`, main);
         }
       },
     );
@@ -170,7 +176,7 @@ describe.each(THEMES)("The task screen in every window, in the %s theme", (theme
           const { main } = drawShell(sceneOf(), true);
 
           expect(await proveScene(main)).toEqual({});
-          await capture(`ref-${name}-${window}-rail-${theme}`, main);
+          await capture(`ref-task-${name}-${window}-rail-${theme}`, main);
         },
       );
     }

@@ -20,7 +20,7 @@ vi.mock("@/lib/wails", async (importOriginal) => ({
 vi.setConfig({ testTimeout: SWEEP_TIMEOUT });
 
 /** REFERENCE are the scenes whose captures go to the pull request. */
-const REFERENCE = ["board", "card", "home"];
+const REFERENCE = ["home", "home-none", "board", "card", "select", "create-card"];
 
 /** RAIL are the scenes drawn with the sidebar folded into its rail too. */
 const RAIL = ["card"];

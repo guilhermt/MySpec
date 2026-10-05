@@ -69,8 +69,8 @@ type Draw = () => Promise<HTMLElement>;
 /** Group is a family of scenes, each with the way it is drawn. */
 interface Group {
   title: string;
-  /** reference is the scene whose captures go to the pull request. */
-  reference?: string;
+  /** references are the scenes whose captures go to the pull request. */
+  references: string[];
   /** fixClock fixes the clock the scenes of the group are read at. */
   fixClock: () => void;
   scenes: [name: string, draw: Draw][];
@@ -155,7 +155,12 @@ const history =
 const GROUPS: Group[] = [
   {
     title: "Settings",
-    reference: "settings-defaults",
+    references: [
+      "settings-defaults",
+      "settings-boards-add-3",
+      "settings-repos",
+      "settings-prompts-edit",
+    ],
     fixClock: fixSettingsSceneClock,
     scenes: SETTINGS_SCENES.flatMap((name) =>
       SETTINGS_VARIATIONS[name].map((variation): [string, Draw] => [
@@ -166,6 +171,7 @@ const GROUPS: Group[] = [
   },
   {
     title: "The start, the welcome and the refused migration",
+    references: ["start-slow", "welcome-no-login", "migration", "newer"],
     fixClock: fixSettingsSceneClock,
     scenes: [
       ...START_VARIATIONS.map((variation): [string, Draw] => [
@@ -185,24 +191,23 @@ const GROUPS: Group[] = [
 describe.each(THEMES)(
   "Settings, the start, the welcome and the migration in every window, in the %s theme",
   (theme) => {
-    describe.each(GROUPS)("$title", ({ fixClock, reference, scenes }) => {
+    describe.each(GROUPS)("$title", ({ fixClock, references, scenes }) => {
       fixClock();
 
       describe.each(scenes)("the %s scene", (name, draw) => {
-        it.each(
-          windowsIn(theme, {
-            reference: name === reference || name === "newer" || name === "migration",
-          }),
-        )("holds the checks of every screen at %ipx", async (window) => {
-          setTheme(theme);
-          await atWindow(window);
-          const main = await draw();
+        it.each(windowsIn(theme, { reference: references.includes(name) }))(
+          "holds the checks of every screen at %ipx",
+          async (window) => {
+            setTheme(theme);
+            await atWindow(window);
+            const main = await draw();
 
-          expect(await proveScene(main)).toEqual({});
-          if (name === reference || name === "newer" || name === "migration") {
-            await capture(`ref-${name}-${window}-${theme}`, main);
-          }
-        });
+            expect(await proveScene(main)).toEqual({});
+            if (references.includes(name)) {
+              await capture(`ref-${name}-${window}-${theme}`, main);
+            }
+          },
+        );
       });
     });
   },
@@ -218,7 +223,10 @@ describe.each(THEMES)(
     )("the %s scene, variant “%s”", (name, variant) => {
       fixHistorySceneClock(historyScene(name, variant));
 
-      it.each(windowsIn(theme, { reference: name === "history" && variant === "" }))(
+      // The History and the archived task are reference screens, each in its plain variant.
+      const reference = (name === "history" || name === "archived-task") && variant === "";
+
+      it.each(windowsIn(theme, { reference }))(
         "holds the checks of every screen at %ipx",
         async (window) => {
           setTheme(theme);
@@ -226,8 +234,8 @@ describe.each(THEMES)(
           const main = await history(name, variant)();
 
           expect(await proveScene(main)).toEqual({});
-          if (name === "history" && variant === "") {
-            await capture(`ref-history-${window}-${theme}`, main);
+          if (reference) {
+            await capture(`ref-${name}-${window}-${theme}`, main);
           }
         },
       );
@@ -257,30 +265,38 @@ describe.each(THEMES)("The dialogs of the task in every window, in the %s theme"
   describe.each(DIALOGS)("the %s scene", (name, item, sceneOf) => {
     fixSceneClock();
 
-    it.each(windowsIn(theme))("holds the checks of every screen at %ipx", async (window) => {
-      setTheme(theme);
-      await atWindow(window);
-      vi.mocked(api.previewDelete).mockResolvedValue(
-        makeDeletePreview({ worktree: WORKTREE, branch: BRANCH, pr: PR }),
-      );
-      const { state, transcripts, openStepTab } = sceneOf();
-      const { main, user } = renderShell({
-        state,
-        ui: {
-          location: { kind: "task", id: TASK_ID },
-          back: [{ kind: "board", id: "board-1" }],
-          transcripts,
-          openStepTab,
-        },
-      });
-      await user.click(await screen.findByRole("button", { name: "More actions" }));
-      await user.click(await screen.findByRole("menuitem", { name: item }));
-      await screen.findByRole("alertdialog");
-      await vi.waitFor(() => expect(screen.queryByText(/^Reading the worktree/)).toBeNull());
+    // The dialog that deletes the task is the reference destructive dialog.
+    const reference = name === "delete-task";
 
-      expect(await proveScene(main)).toEqual({});
-      void name;
-    });
+    it.each(windowsIn(theme, { reference }))(
+      "holds the checks of every screen at %ipx",
+      async (window) => {
+        setTheme(theme);
+        await atWindow(window);
+        vi.mocked(api.previewDelete).mockResolvedValue(
+          makeDeletePreview({ worktree: WORKTREE, branch: BRANCH, pr: PR }),
+        );
+        const { state, transcripts, openStepTab } = sceneOf();
+        const { main, user } = renderShell({
+          state,
+          ui: {
+            location: { kind: "task", id: TASK_ID },
+            back: [{ kind: "board", id: "board-1" }],
+            transcripts,
+            openStepTab,
+          },
+        });
+        await user.click(await screen.findByRole("button", { name: "More actions" }));
+        await user.click(await screen.findByRole("menuitem", { name: item }));
+        await screen.findByRole("alertdialog");
+        await vi.waitFor(() => expect(screen.queryByText(/^Reading the worktree/)).toBeNull());
+
+        expect(await proveScene(main)).toEqual({});
+        if (reference) {
+          await capture(`ref-${name}-${window}-${theme}`, main);
+        }
+      },
+    );
   });
 });
 
@@ -345,68 +361,83 @@ describe.each(THEMES)(
   (theme) => {
     describe.each(GONE)("the %s scene", (name, location, leftovers) => {
       fixHistorySceneClock(historyScene("archived-task"));
+      // The page of a task deleted with what stayed on disk is the reference page of an item that left.
+      const reference = name === "gone-task-deleted";
 
-      it.each(windowsIn(theme))("holds the checks of every screen at %ipx", async (window) => {
-        setTheme(theme);
-        await atWindow(window);
-        const { main } = renderShell({
-          state: { ...historyScene("archived-task").state, tasks: [WAITING] },
-          ui: { location, back: [HOME_PLACE], leftovers },
-        });
+      it.each(windowsIn(theme, { reference }))(
+        "holds the checks of every screen at %ipx",
+        async (window) => {
+          setTheme(theme);
+          await atWindow(window);
+          const { main } = renderShell({
+            state: { ...historyScene("archived-task").state, tasks: [WAITING] },
+            ui: { location, back: [HOME_PLACE], leftovers },
+          });
 
-        expect(await proveScene(main)).toEqual({});
-        void name;
-      });
+          expect(await proveScene(main)).toEqual({});
+          if (reference) {
+            await capture(`ref-${name}-${window}-${theme}`, main);
+          }
+        },
+      );
     });
 
     describe.each(["notice", "toast", "toast-three"] as const)("the %s scene", (name) => {
       fixHistorySceneClock(historyScene("archived-task"));
+      // The toasts over the task screen are the reference screen of the notice and the toasts.
+      const reference = name === "toast";
 
-      it.each(windowsIn(theme))("holds the checks of every screen at %ipx", async (window) => {
-        setTheme(theme);
-        await atWindow(window);
-        const archived = historyScene("archived-task");
-        const task = archived.state.history?.[0];
-        const review = historyScene("archived-review").state.reviewHistory?.[0];
-        const discussion = historyScene("archived-discussion").state.discussionHistory?.[0];
-        const toasts: Toast[] = [
-          ...(task === undefined ? [] : [{ id: task.id, kind: "task" as const, task }]),
-          ...(review === undefined ? [] : [{ id: review.id, kind: "review" as const, review }]),
-          ...(name === "toast-three" && discussion !== undefined
-            ? [{ id: discussion.id, kind: "discussion" as const, discussion }]
-            : []),
-        ];
-        const scene = sceneTask("run");
-        const state: State = {
-          ...scene.state,
-          history: archived.state.history,
-          reviewHistory: archived.state.reviewHistory,
-          discussionHistory: archived.state.discussionHistory,
-        };
-        const location: Location = { kind: "task", id: TASK_ID };
-        const { main } = renderShell({
-          state,
-          ui: {
-            location,
-            back: [HOME_PLACE],
-            transcripts: scene.transcripts,
-            openStepTab: scene.openStepTab,
-            ...(name === "notice" ? {} : { toasts }),
-          },
-        });
-        // The failure of an action arrives after the screen, as it does in the app.
-        if (name === "notice") {
-          act(() =>
-            useAppStore.getState().setError({
-              label: "Couldn't pause Rate limit per API key",
-              detail:
-                "The implementer's session didn't stop in 10 seconds, so it keeps running. Try Pause again, or Stop its answer from the Implementer tab.",
-            }),
-          );
-        }
+      it.each(windowsIn(theme, { reference }))(
+        "holds the checks of every screen at %ipx",
+        async (window) => {
+          setTheme(theme);
+          await atWindow(window);
+          const archived = historyScene("archived-task");
+          const task = archived.state.history?.[0];
+          const review = historyScene("archived-review").state.reviewHistory?.[0];
+          const discussion = historyScene("archived-discussion").state.discussionHistory?.[0];
+          const toasts: Toast[] = [
+            ...(task === undefined ? [] : [{ id: task.id, kind: "task" as const, task }]),
+            ...(review === undefined ? [] : [{ id: review.id, kind: "review" as const, review }]),
+            ...(name === "toast-three" && discussion !== undefined
+              ? [{ id: discussion.id, kind: "discussion" as const, discussion }]
+              : []),
+          ];
+          const scene = sceneTask("run");
+          const state: State = {
+            ...scene.state,
+            history: archived.state.history,
+            reviewHistory: archived.state.reviewHistory,
+            discussionHistory: archived.state.discussionHistory,
+          };
+          const location: Location = { kind: "task", id: TASK_ID };
+          const { main } = renderShell({
+            state,
+            ui: {
+              location,
+              back: [HOME_PLACE],
+              transcripts: scene.transcripts,
+              openStepTab: scene.openStepTab,
+              ...(name === "notice" ? {} : { toasts }),
+            },
+          });
+          // The failure of an action arrives after the screen, as it does in the app.
+          if (name === "notice") {
+            act(() =>
+              useAppStore.getState().setError({
+                label: "Couldn't pause Rate limit per API key",
+                detail:
+                  "The implementer's session didn't stop in 10 seconds, so it keeps running. Try Pause again, or Stop its answer from the Implementer tab.",
+              }),
+            );
+          }
 
-        expect(await proveScene(main)).toEqual({});
-      });
+          expect(await proveScene(main)).toEqual({});
+          if (reference) {
+            await capture(`ref-${name}-${window}-${theme}`, main);
+          }
+        },
+      );
     });
   },
 );
