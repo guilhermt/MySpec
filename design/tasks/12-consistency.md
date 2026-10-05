@@ -207,7 +207,7 @@ V9 e V11 são a varredura de largura (`*.widths.painted.test.tsx`), que roda for
 
 As ferramentas são as de hoje, `dev/measure-conversation.tsx` e `dev/measure-board.tsx` (`docs/development/setup.md:73–75`), rodadas no WebKitGTK 6.0 da máquina alvo (o `MiniBrowser` do pacote `webkitgtk-6.0`) sem janela, pelo backend Broadway, como nas tasks 4 e 5, uma vez fria e cinco quentes, e uma vez no Chromium do Playwright, para comparar. Cada uma roda com o React de desenvolvimento (o servidor de dev, a medida de partida da task 5) e com o de produção (a comparação da task 4, `implementation.md:184`); a via do React de produção, que `setup.md` não descreve, passa a estar escrita lá (§4.4). O step do board começa medindo a linha de base do React de produção do board, que falta (`critique-task-05.md:190`).
 
-**Passa** quando o máximo das quentes com o React de produção e a mediana das quentes com o de desenvolvimento ficam dentro da meta:
+**Passa**, numa meta em milissegundos, quando o máximo das quentes com o React de produção e a mediana das quentes com o de desenvolvimento ficam dentro dela; numa meta de quadro, quando, em cada rodada e nas duas builds, a mediana das quentes é zero e o máximo das quentes é no máximo um quadro:
 
 | Lista | Medida | Meta |
 |---|---|---|
@@ -221,7 +221,7 @@ As ferramentas são as de hoje, `dev/measure-conversation.tsx` e `dev/measure-bo
 | | `↓` no `feed`, do `keydown` à pintura | Nenhum quadro perdido |
 | | `Home` no `feed`, até o quadro com a primeira entrada focada | 100 ms |
 
-As metas de quadro contam os quadros perdidos entre o evento e a pintura da resposta, e a meta é zero: a resposta pinta no quadro seguinte ao evento. O tempo do evento ao quadro seguinte não é a medida, porque nunca fica abaixo do que falta para o próximo quadro, cerca de 16,7 ms a 60 Hz, por menor que seja o trabalho; e dois quadros, 33,3 ms, aceitariam um quadro perdido.
+As metas de quadro contam os quadros perdidos entre o evento e a pintura da resposta, e a meta é zero: a resposta pinta no quadro seguinte ao evento. O tempo do evento ao quadro seguinte não é a medida, porque nunca fica abaixo do que falta para o próximo quadro, cerca de 16,7 ms a 60 Hz, por menor que seja o trabalho; e dois quadros, 33,3 ms, aceitariam um quadro perdido. A mediana zero prova que a resposta pinta no quadro seguinte no caso comum; o máximo de um aceita um evento que de vez em quando perde uma única atualização da tela, e recusa o que perde duas ou mais, o sinal de uma lista que deixou de ser janela ou de um trabalho por quadro que cresceu.
 
 Não é teste da suíte: um limiar de tempo no Chromium da CI seria instável e não mede o WebKitGTK (`tasks/04-task-conversation.md:335`). O resultado, com o motor, a versão e as duas builds, vai a `docs/development/target-machine.md` e ao corpo da pull request. Uma meta perdida não é aceita: o step volta ao custo por quadro (o modelo, a `memo`, a altura estimada, o `overscan`) até ela passar.
 

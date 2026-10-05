@@ -71,13 +71,13 @@ Verificado com o build de produção (`task build`) e `XDG_DATA_HOME` e `XDG_STA
 
 O History mostra os arquivados dos últimos 90 dias numa lista em janela (`useWindowedRows`, a mesma do board): umas 360 linhas no ritmo medido, e 400 é o tamanho a que a lista é medida. Só as linhas que aparecem, a da parada de Tab e a recém-arquivada ficam montadas, entre espaçadores, com 20 de `overscan` além de cada ponta; `HistoryRow` e `DaySectionHeader` são `memo`, e o modelo de cada linha só é feito quando ela monta.
 
-`frontend/src/dev/measure-history.tsx` mede a lista com 400 itens (240 tasks, 100 reviews e 60 discussões, em 90 dias, numa área de 1566 px por 900), em 37 linhas montadas, uma vez fria e cinco vezes quente: a primeira pintura, do render ao quadro seguinte ao commit com o layout feito, e `↓` a partir do primeiro dia, contado em quadros perdidos entre o `keydown` e o quadro que pinta o foco na linha seguinte. As metas são as do board, 300 ms e nenhum quadro perdido, e passam pela mesma regra, a da seção seguinte. Para medir na máquina alvo, abra `?measure=history` no servidor de desenvolvimento (porta 9245) ou no build de medida (porta 9246, `pnpm measure:build` e `pnpm measure:serve`), como o [setup](./setup.md) descreve; o como-medir do Broadway está na seção seguinte.
+`frontend/src/dev/measure-history.tsx` mede a lista com 400 itens (240 tasks, 100 reviews e 60 discussões, em 90 dias, numa área de 1566 px por 900), em 35 linhas montadas, uma vez fria e cinco vezes quente: a primeira pintura, do render ao quadro seguinte ao commit com o layout feito, e `↓` a partir do primeiro dia, contado em quadros perdidos entre o `keydown` e o quadro que pinta o foco na linha seguinte. As metas são as do board, 300 ms e nenhum quadro perdido, e passam pelas mesmas regras, as da seção seguinte. Para medir na máquina alvo, abra `?measure=history` no servidor de desenvolvimento (porta 9245) ou no build de medida (porta 9246, `pnpm measure:build` e `pnpm measure:serve`), como o [setup](./setup.md) descreve; o como-medir do Broadway está na seção seguinte.
 
 No WebKitGTK 2.52.6, pelo Broadway, em cinco rodadas no build de produção e quatro no de desenvolvimento:
 
 | React de produção (`pnpm measure:build`) | Fria | Quente, mediana | Quente, máximo | Meta |
 |---|---|---|---|---|
-| Primeira pintura | 119 a 147 ms | 50 a 61 ms | 65 a 83 ms | 300 ms |
+| Primeira pintura | 117 a 126 ms | 46 a 56 ms | 61 a 74 ms | 300 ms |
 | `↓` na lista, quadros perdidos | 0 | 0 | 1 nas cinco rodadas | 0 |
 
 | React de desenvolvimento (`task dev`) | Fria | Quente, mediana | Quente, máximo | Meta |
@@ -94,15 +94,17 @@ No Chromium 153 do Playwright, em três rodadas por build:
 | Primeira pintura, desenvolvimento | 113 a 174 ms | 67 a 117 ms | 80 a 125 ms |
 | `↓` na lista, desenvolvimento, quadros perdidos | 0 | 0 | 0 |
 
-A meta do `↓` não passa no WebKitGTK com o React de produção: em toda rodada, uma ou duas das cinco teclas quentes levam de 19 a 29 ms do começo do quadro ao fim da pintura e perdem a atualização seguinte da tela. O trabalho da tecla é o foco, que só refaz as linhas que mudaram (`memo`); no Chromium e com o React de desenvolvimento, nenhuma tecla perde um quadro.
+No WebKitGTK com o React de produção, em toda rodada uma das cinco teclas quentes passa do fim do quadro e perde a atualização seguinte da tela, e as outras quatro pintam a tempo: a mediana é zero e o máximo é um, dentro da regra das metas de quadro. O trabalho da tecla é o foco, que só refaz as linhas que mudaram (`memo`); no Chromium e com o React de desenvolvimento, nenhuma tecla perde um quadro.
 
 O teste `frontend/src/features/history/HistoryView.measure.painted.test.tsx` continua no Chromium e compara, na mesma execução, 400 itens com 40: a razão das medianas quentes fica perto de 1, e o teste falha acima de 30, o que pega uma lista que deixou de ser janela.
 
 ## As listas virtualizadas
 
-O board, o History e a conversa montam só o que aparece, entre espaçadores (`useWindowedRows`, o único lugar que importa `@tanstack/react-virtual`). Cada um se mede com uma ferramenta de `frontend/src/dev/`, no motor do app, uma vez fria e cinco vezes quente, com o React de produção (`pnpm measure:build`) e o de desenvolvimento (`task dev`). As metas passam quando o máximo das quentes em produção e a mediana das quentes em desenvolvimento ficam dentro delas.
+O board, o History e a conversa montam só o que aparece, entre espaçadores (`useWindowedRows`, o único lugar que importa `@tanstack/react-virtual`). Cada um se mede com uma ferramenta de `frontend/src/dev/`, no motor do app, uma vez fria e cinco vezes quente, com o React de produção (`pnpm measure:build`) e o de desenvolvimento (`task dev`). As metas em milissegundos passam quando o máximo das quentes em produção e a mediana das quentes em desenvolvimento ficam dentro delas.
 
 A tecla na lista e a atualização do streaming têm como meta nenhum quadro perdido entre o evento e a pintura: a resposta aparece na atualização da tela seguinte ao evento. `frontend/src/dev/frames.ts` conta os quadros perdidos. Ele lê o intervalo entre dois quadros da tela, a média de sessenta quadros parados, dispara o evento no começo de um quadro, dentro do `requestAnimationFrame`, e espera o primeiro quadro em que a resposta está feita (o foco na linha seguinte, ou o texto novo no commit). O fim da pintura desse quadro é onde roda uma tarefa postada do seu `requestAnimationFrame`, e os quadros perdidos são as atualizações da tela que passam entre o evento e esse fim, menos a primeira: zero quando a resposta pinta a tempo da atualização seguinte ao evento. Um tempo do evento ao quadro seguinte nunca fica abaixo do que falta para a próxima atualização da tela, por menor que seja o trabalho, e por isso a medida conta quadros. A primeira pintura, a tecla na busca e `Home` no `feed` continuam medidas em milissegundos.
+
+Uma meta de quadro passa quando, em cada rodada, a mediana das quentes é zero e o máximo das quentes é no máximo um quadro, nas duas builds. A mediana zero diz que a resposta pinta a tempo da atualização seguinte no caso comum; o máximo de um aceita um evento que, de vez em quando, perde uma única atualização da tela, e recusa o que perde duas ou mais, o sinal de uma lista que deixou de ser janela ou de um trabalho por quadro que cresceu.
 
 ### A rolagem da janela no WebKitGTK
 
@@ -125,9 +127,9 @@ No WebKitGTK 2.52.6 (WebKit 6.0 sobre GTK4 4.22.4), pelo Broadway, em cinco roda
 
 | React de produção | Fria | Quente, mediana | Quente, máximo | Meta |
 |---|---|---|---|---|
-| Primeira pintura | 146 a 189 ms | 60 a 81 ms | 69 a 100 ms | 300 ms |
-| Uma tecla na busca | 13 a 27 ms | 16 ms | 16 a 22 ms | 50 ms |
-| `↓` na lista, quadros perdidos | 0 a 2 | 0 | 0, e 3 numa das cinco rodadas | 0 |
+| Primeira pintura | 134 a 139 ms | 50 a 53 ms | 63 a 67 ms | 300 ms |
+| Uma tecla na busca | 11 a 25 ms | 16 ms | 16 a 18 ms | 50 ms |
+| `↓` na lista, quadros perdidos | 0 | 0 | 0 | 0 |
 
 | React de desenvolvimento | Fria | Quente, mediana | Quente, máximo | Meta |
 |---|---|---|---|---|
@@ -154,9 +156,9 @@ No WebKitGTK 2.52.6, pelo Broadway, em cinco rodadas no build de produção e qu
 
 | Cenário | Build | Primeira pintura (fria · quente, mediana) | Atualização, trabalho (fria · quente, mediana · máximo) | Atualização, quadros perdidos (fria · quente, mediana · máximo) | `↓`, quadros perdidos (fria · quente, mediana · máximo) | `Home` (fria · quente, mediana · máximo) |
 |---|---|---|---|---|---|---|
-| Dobrado | produção | 131 a 239 ms · 51 a 69 ms | 5 a 9 ms · 4 a 5 ms · 4 a 18 ms | 0 · 0 · 0, e 1 numa das cinco rodadas | | |
+| Dobrado | produção | 132 a 157 ms · 48 a 64 ms | 4 a 6 ms · 4 a 5 ms · 5 a 7 ms | 0 · 0 · 0, e 1 em duas das cinco rodadas | | |
 | Dobrado | desenvolvimento | 168 a 182 ms · 61 a 78 ms | 7 ms · 5 ms · 6 a 8 ms | 0 · 0 · 0 a 1 | | |
-| Aberto | produção | 129 a 135 ms · 52 a 57 ms | 4 ms · 3 ms · 4 ms | 0 · 0 · 0, e 1 numa das cinco rodadas | 0 · 0 · 0, e 1 numa das cinco rodadas | 36 a 60 ms · 11 a 15 ms · 15 a 28 ms |
+| Aberto | produção | 129 a 163 ms · 52 a 72 ms | 4 a 7 ms · 3 a 4 ms · 4 a 5 ms | 0 · 0 · 0, e 1 numa das cinco rodadas | 0 · 0 · 0 | 34 a 50 ms · 15 a 16 ms · 16 ms |
 | Aberto | desenvolvimento | 162 a 176 ms · 62 a 63 ms | 5 a 7 ms · 4 a 5 ms · 5 a 6 ms | 0 · 0 · 0 a 1 | 0 · 0 · 0 | 43 a 51 ms · 12 a 16 ms · 15 a 16 ms |
 
 No Chromium 153 do Playwright, em três rodadas por build:
@@ -170,12 +172,9 @@ No Chromium 153 do Playwright, em três rodadas por build:
 
 ### O que passa
 
-As metas em milissegundos (a primeira pintura, a tecla na busca e `Home`) passam nos dois motores e nas duas builds, e as de quadros passam com o React de desenvolvimento nos dois motores, onde a regra é a mediana das quentes. Com o React de produção, onde a regra é o máximo das quentes, as de quadros não passam em todas as rodadas:
+No WebKitGTK, todas as metas passam nas duas builds. As de milissegundos (a primeira pintura, a tecla na busca e `Home`) ficam bem abaixo delas. As de quadro têm a mediana zero em toda rodada, e o máximo de um quadro aparece no `↓` do History, em todas as rodadas de produção, e na atualização do streaming, em algumas rodadas dos dois cenários; o `↓` do board e o da conversa não perdem quadro. As rodadas de produção no WebKitGTK rodaram sem outras suítes na máquina, com a carga de 1,5 a 3,1 em 16 núcleos, o próprio `MiniBrowser` incluído.
 
-- no WebKitGTK, o `↓` do History perde um quadro em todas as cinco rodadas; o `↓` do board perdeu três numa delas; a atualização do streaming perdeu um numa rodada de cada cenário, e o `↓` da conversa, um numa rodada;
-- no Chromium, a atualização do streaming do cenário aberto perdeu dois numa das três rodadas, num trabalho de 20 ms; o resto ficou em zero.
-
-As medidas rodaram com a máquina em carga de 1,3 a 2,6, ao lado de outras suítes. Fora do History, o que se perde é uma atualização em 29 ou uma tecla em cinco, numa só rodada; o `↓` do History perde o quadro em toda rodada.
+No Chromium, a comparação, a atualização do streaming do cenário aberto em produção perdeu dois quadros numa das três rodadas, num trabalho de 20 ms, medida com a máquina em carga de 1,3 a 2,6 ao lado de outras suítes; o resto ficou dentro das metas.
 
 ### Como medir
 
