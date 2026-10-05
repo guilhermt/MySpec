@@ -14,6 +14,8 @@ Decidido pelo coordenador da frente, por delegação do usuário, na crítica da
 
 Decidido pelo coordenador da frente, por delegação do usuário, na crítica da pull request da task 12 (`research/critique-task-12.md`, bloqueio 4). Revê, nas metas de 16 ms, a entrada de 2026-10-02 (Virtualização: as metas e as builds). Uma tecla (`↓` no board, no History e no `feed`) e uma atualização do texto em streaming medem os quadros perdidos entre o evento e a pintura da resposta, e a meta é zero: a resposta pinta no quadro seguinte (`tasks/12-consistency.md` §4.2, As metas e a medição; `docs/development/target-machine.md`). Descartado: os 16 ms do evento ao quadro seguinte, e a régua de dois quadros, 33,3 ms. Razão: do evento ao quadro seguinte a medida nunca fica abaixo do que falta para o próximo quadro, cerca de 16,7 ms a 60 Hz, por menor que seja o trabalho; e dois quadros aceitam um quadro perdido.
 
+A meta passa quando, em cinco rodadas quentes no WebKitGTK com o React de produção, a mediana dos quadros perdidos é 0 e o máximo é no máximo 1; uma rodada com um quadro perdido é ruído da máquina, duas não são (`docs/development/target-machine.md`, Como medir).
+
 ## 2026-10-05 · Varredura: as 26 telas de referência
 
 Decidido pelo coordenador da frente, por delegação do usuário, na crítica da pull request da task 12 (`research/critique-task-12.md`, bloqueio 4). As telas de referência da varredura, que rodam as cinco janelas nos dois temas e cujas capturas vão à pull request, são as 26 da tabela de `tasks/12-consistency.md` §4.2 (A varredura de largura). Descartado: um subconjunto delas. Razão: são as capturas da pull request, e cada tela decidida tem a sua.
