@@ -29,24 +29,28 @@ Estados comuns a todo componente interativo, salvo quando a seção diz outra co
 
 ## Primitivos
 
-Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nunca editado) ou é próprio do MySpec. A task de implementação confirma a escolha de cada um.
+Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nunca editado), é próprio sobre um primitivo do Base UI (`@base-ui/react`) quando o gerado não alcança o estado do system pela classe, ou é próprio do MySpec. A tabela de cada arquivo, com a razão, está em `docs/architecture/design-system.md` (Componentes).
 
 | Componente | Base |
 |---|---|
-| Botão, botão de ícone | `button` (wrapper com as variantes daqui) |
+| Botão, botão de ícone, grupo de painéis, seletor de tema | `button` (wrapper com as variantes daqui); o botão de painel é um botão com `aria-pressed` |
 | Chip | `toggle` quando alterna, `button` com `dropdown-menu` ou `popover` quando abre |
 | Input, textarea, busca | `input`, `textarea`, com `label` |
-| Select, menu, menu do item, listbox | `dropdown-menu` (ações e escolhas curtas); `popover` com lista (escolhas longas, modelo e esforço, dependências) |
+| Select, menu, menu do item | `dropdown-menu`, com os itens de rádio e de caixa próprios sobre o menu do Base UI |
+| Listbox (escolhas longas com busca) | Próprio, sobre o `combobox` do Base UI |
 | Popovers Review mode e Models | `popover` |
-| Caixa de seleção | `checkbox` |
-| Rádio, opção de pergunta, veredito, popover Review mode | `radio-group` |
-| Controle segmentado, abas de agente, grupo de painéis, seletor de tema | `toggle-group` (semântica de `radiogroup` no segmentado, de `tablist` nas abas) |
-| Grupo de ações, marco em linha, resumo de modelos | `collapsible` |
-| Tooltip | `tooltip` |
-| Diálogo de confirmação | `alert-dialog`; os de criação e em passos, `dialog` |
+| Caixa de seleção | Próprio, sobre o `checkbox` do Base UI |
+| Rádio, popover Review mode | Próprio, sobre o `radio-group` do Base UI |
+| Opção de pergunta, veredito | O grupo de opções, próprio (`radiogroup`) |
+| Controle segmentado | Próprio, sobre o `radio-group` do Base UI (`radiogroup`) |
+| Abas de agente | Próprias (`tablist`) |
+| Collapsible dos arquivados e dos diálogos | `collapsible` |
+| Grupo de ações, marco em linha, dobra de trecho | Próprios: um botão com `aria-expanded` |
+| Tooltip | Próprio, sobre o `tooltip` do Base UI |
+| Diálogo de confirmação | `alert-dialog`; os de criação, em passos e a tela cheia, `dialog` |
 | Tecla | `kbd` |
-| Separadores | `separator` |
-| Área que rola (árvore, conversa, listas, painéis) | `scroll-area` |
+| Separadores | O fio do próprio componente; no menu, o separador do `dropdown-menu` |
+| Área que rola (árvore, conversa, listas, painéis) | Própria, sobre o `scroll-area` do Base UI |
 | Esqueleto | `skeleton` |
 | Os demais | Próprios |
 
@@ -80,7 +84,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Anatomia | Um conjunto só, de traço, em `--icon` (16 px), `--icon-sm` e `--icon-xs`, traço `--icon-stroke`, pontas e junções arredondadas, `currentColor` |
-| Significados fixos | Robô: modo `Agent`. Pessoa: modo `Manual`. `<>`: abrir no editor. Seta externa: abre fora do app (GitHub). Lápis: `Revised`. Cadeia: o gesto publica uma cadeia. Ampulheta: espera (neutra). Visto: feito, aprovado, escolhido. Documento (`file`): um artefato, um relatório, um painel de documentos. Arquivamento (`archive`): o item foi para o History. Merge (`merge`): a PR foi mergeada ou fechada. Lixeira (`trash`): apagado. Informação (`details`): o painel `Details`. Card (`card`): o painel `Card`. Balão (`conversation`): uma conversa em `Details`. Histórico (`history`): uma conversa anterior. Reticências (`more`): o menu do item. Pausa (`pause`) e play (`resume`): pausar e retomar. Na conversa: bandeira (`start`), o início de uma sessão; a marca do produto (`product`), a mensagem do produto; commit (`commit`); pull request (`pullRequest`), a PR aberta; lista com vistos (`checks`), os checks lidos; recolher (`compact`), a compactação do contexto; seta circular (`retry`), o retry automático; alerta neutro (`problem`), um problema que o produto achou; bloqueio (`ban`), uma interrupção; ramificação (`subagent`), o subagente; o garfo (`branch`), uma branch do git, na prévia de um apagamento; ampulheta (`hold`), a ação que espera a permissão. Nas listas e na Home: duas setas em ciclo (`refresh`), ler de novo (o board, as PRs, e o **Try again** de uma leitura que falhou), distinta da seta circular única do retry automático; três traços decrescentes (`filter`), o menu **Filter**; seta para baixo sobre a bandeja (`clone`), clonar; caixa com o visto (`select`), o modo de seleção; engrenagem (`settings`), Settings; mais (`plus`), começar algo novo; a pasta do git (`repository`), os repositórios, e **No board** na Home; a pilha de barras (`epic`), o épico. Os glifos de tipo (task, One-Shot, review, discussão, épico, board) são ícones, não glifos de estado |
+| Significados fixos | Robô: modo `Agent`. Pessoa: modo `Manual`. `<>`: abrir no editor. Seta externa, a diagonal (`external`): abre fora do app (GitHub); é a única seta diagonal. Ir (`go`), o chevron para a direita: leva a um lugar do app (o nó de board e de Reviews, a linha de um prompt). Lápis: `Revised`. Cadeia: o gesto publica uma cadeia. Ampulheta: espera (neutra). Visto: feito, aprovado, escolhido. Documento (`file`): um artefato, um relatório, um painel de documentos. Arquivamento (`archive`): o item foi para o History. Merge (`merge`): a PR foi mergeada ou fechada. Lixeira (`trash`): apagado. Informação (`details`): o painel `Details`. Card (`card`): o painel `Card`. Balão (`conversation`): uma conversa em `Details`. Histórico (`history`): uma conversa anterior. Reticências (`more`): o menu do item. Pausa (`pause`) e play (`resume`): pausar e retomar. Na conversa: bandeira (`start`), o início de uma sessão; a marca do produto (`product`), a mensagem do produto; commit (`commit`); pull request (`pullRequest`), a PR aberta; lista com vistos (`checks`), os checks lidos; recolher (`compact`), a compactação do contexto; seta circular (`retry`), o retry automático; alerta neutro (`problem`), um problema que o produto achou; bloqueio (`ban`), uma interrupção; ramificação (`subagent`), o subagente; o garfo (`branch`), uma branch do git, na prévia de um apagamento; ampulheta (`hold`), a ação que espera a permissão. Nas listas e na Home: duas setas em ciclo (`refresh`), ler de novo (o board, as PRs, e o **Try again** de uma leitura que falhou), distinta da seta circular única do retry automático; três traços decrescentes (`filter`), o menu **Filter**; seta para baixo sobre a bandeja (`clone`), clonar; caixa com o visto (`select`), o modo de seleção; engrenagem (`settings`), Settings; mais (`plus`), começar algo novo; a pasta do git (`repository`), os repositórios, e **No board** na Home; a pilha de barras (`epic`), o épico. Os glifos de tipo (task, One-Shot, review, discussão, épico, board) são ícones, não glifos de estado |
 | Tokens | `--icon`, `--icon-sm`, `--icon-xs`, `--icon-stroke`, `--ink-3` em repouso, `--brand-ink` ativo |
 | Acessibilidade | `aria-hidden` ao lado de um rótulo; num botão só de ícone, o `aria-label` e o tooltip |
 | Faça | Use um ícone por significado, o mesmo em todo o produto |
@@ -234,6 +238,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | Anatomia | Botão fantasma de ícone no fim do cabeçalho; o menu de ações, agrupado por assunto, cada grupo com a legenda (`Pull request web#2291`, `Discussion`), o destrutivo por último, depois de um separador, em vermelho |
 | Conteúdo | O da task, do review e da discussão está em `screens/task.md` §10, `review.md` §4 e `discussion.md` §3. **Review mode ›** e **Models ›** abrem os popovers |
 | Estados | Item: os do menu. Desabilitado com a razão ao lado, depois de `·` (`Review again… · a pass waits for the checks`, `Archive… · a publication is running`). Submenu que não carrega: a mensagem no lugar dos itens |
+| Ícones | Os itens só com texto. Só dois levam ícone, o do significado: `<>` em **Open in VS Code** e a seta externa no que abre o GitHub (**Open PR**). Igual nos menus da task, do review e da discussão |
 | Teclado | A tecla da ação escrita no item (`Open in VS Code Ctrl+E`) |
 | Faça | Deixe aqui as ferramentas do item e as ações raras e destrutivas. Cada destrutiva abre o diálogo que diz o que será perdido |
 | Não faça | Não ponha aqui a ação que resolve uma situação sem repeti-la na barra do pedido |
@@ -446,7 +451,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 |---|---|
 | Anatomia | Afundada (`--surface-0`, contornada por `--line-2` quando o fundo já é afundado), raio `--radius-sm`, `--text-meta`: `◇`, o que bloqueia e quando (`Couldn't read the board · 4m ago`), a razão em `--ink-2`, e a ação (**Try again**, **Change path…**, **Clone**) |
 | Variantes | **Sob o cabeçalho de um item**, na medida da conversa: o clone inexistente, `Couldn't check GitHub`; a conversa passa por baixo com o esmaecido. **No alto de uma lista**: a falha de leitura do board, uma por repositório em Reviews. **No alto de um painel**: o card fora da última leitura. **Sob uma linha**: na Home e em Settings, o que bloqueia um board ou um repositório (sem clone, clonando, clone inexistente, leitura falha) |
-| Faixa estreita | Abaixo de 32rem de largura da faixa, o texto toma a linha inteira ao lado do glifo, em no máximo duas linhas, e **Try again** desce para baixo do texto, alinhado à direita |
+| Faixa estreita | O título e a razão são um texto só, que quebra em linhas inteiras, nunca uma palavra por linha. Abaixo de 32rem de largura da faixa, o texto toma a linha inteira ao lado do glifo, e a ação (**Try again**) desce para uma linha própria, à direita |
 | Estados | Padrão; tentando (a ação vira `Reading…` com o spinner); erro de uma ação (o clone que falhou: a mensagem do `gh` em vermelho, sem fundo, com **Try again**) |
 | Acessibilidade | `role="alert"` para uma falha que chega; `role="status"` para a tentativa |
 | Faça | Deixe à vista o que estava na tela: a faixa fica sobre a leitura guardada |
@@ -466,7 +471,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Aviso do app | Faixa no topo da área principal, sobre o cabeçalho, `--state-error-veil` com trilho, o rótulo em vermelho e 700, que é a ação que falhou (`Couldn't pause Rate limit per API key`), o detalhe com o que aconteceu e o que fazer (`<mensagem do erro>. <o que fazer>`, e só a mensagem quando a ação não tem saída conhecida), e **Dismiss**. Fica até ser dispensado; a próxima falha substitui a anterior. Só para uma ação sem lugar próprio: a falha que tem lugar (a linha do modelo, o rodapé do diálogo, a linha do repositório) fica nele |
-| Toast | Flutuante, `--surface-3` com `--shadow-float`, até `--size-toast`: ícone, texto (`“Idempotency keys for payment intents” was archived`), detalhe (o resultado curto), **Open in History** sob o texto, e `×`. Só para uma task, um review ou uma discussão que saiu sem estar aberta. Fica 10 segundos, contados só enquanto ele não tem o ponteiro nem o foco; até três empilhados, e o mais antigo sai |
+| Toast | Flutuante, `--surface-3` com `--shadow-float`, até `--size-toast`: ícone, texto (`“Idempotency keys for payment intents” was archived`), detalhe (o resultado curto), **Open in History** sob o texto, e `×`. Só para uma task, um review ou uma discussão que saiu sem estar aberta. Fica 10 segundos, contados só enquanto ele não tem o ponteiro nem o foco; até três empilhados. O quarto que chega não espera: o mais antigo sai no mesmo instante, com a saída de `--duration-fast` |
 | Estados | O toast entra em `--duration-base` com `--ease-enter` e sai em `--duration-fast` com `--ease-exit`; mora na região `.toasts`, embaixo à esquerda da área principal (`--z-toast`), que é também a região `aria-live` do app |
 | Tokens | `--surface-3`, `--shadow-float`, `--state-error-veil`, `--state-error`, `--error-rail`, `--notice-detail-min`, `--size-toast`, `--z-toast` |
 | Acessibilidade | A região `.toasts` (`role="status"`, `aria-live="polite"`) é a única região ao vivo dos toasts e dos anúncios do app (situação nova, `Ctrl+J` sem destino, página do item que saiu): os toasts dentro dela não têm papel próprio, e o anúncio é um texto visualmente oculto no mesmo contêiner. Os componentes com papel próprio (a idade da leitura, o esqueleto, a faixa de aviso, a barra do pedido, a atividade, a linha do que o gesto publica, a barra da seleção) o mantêm, fora dela e nunca dentro dela. Aviso em `role="alert"` |
@@ -554,7 +559,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 | Fala do agente | Texto na página, sem cartão e sem fundo: a faixa de quem fala e o Markdown em `--text-body`/`--leading-body` (15/22) e `--ink-1`, com cabeçalhos, listas, tabelas, mermaid e código na largura da coluna. `Interrupted by you` é uma linha sob a fala interrompida por **Stop**; uma queda da sessão é o bloco de erro |
 | Streaming | A fala cresce e termina num cursor parado, em `--ink-3`. O spinner fica antes da palavra de quem fala; ele é o único laço da fala |
 | Mensagem do usuário | Na largura da coluna, em `--surface-user`, raio `--radius-lg`: `You`, a hora com hover e foco, e o texto em 15/22, sem Markdown. Sem destinatário. Enviando e não enviada são estados do compositor: a mensagem só existe depois que o envio deu certo |
-| Mensagem na fila | A mesma forma em `--surface-0`, com `Queued · sends when the turn ends` (com a sessão em erro, `sends after the retry`; pausada, `sends when the task resumes`) e **Remove** na cabeça. Sai da fila quando o turno acaba |
+| Mensagem na fila | A mesma forma em `--surface-0`, com `Queued · sends when the turn ends` (com a sessão em erro, `sends after the retry`; pausada, `sends when the task resumes`) e **Remove** na cabeça. Sai da fila quando o turno acaba. Só a mensagem do usuário entra na fila: uma entrada do produto pendente (o prompt de uma etapa ou de um step, a instrução de uma passada) é o marco da mensagem do produto, sem **Remove**, e o produto não aceita apagá-la |
 | Atividade | Uma linha no fim, em `role="status"`, com o spinner: `Starting session…`, `Thinking…`, `Retrying · attempt 3 of 10 · the API is overloaded · next try in 8s` |
 | Ritmo | `--space-3` entre as entradas |
 | Acessibilidade | A conversa é um `feed`, e cada filho é um `article` com nome (`Implementer, 14:19`, `You, 14:28`, `14 actions, Read 8 · Searched 4 · git 2, started 13:48`) |
@@ -613,6 +618,14 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 | Anatomia | `--surface-0` com o trilho `--error-rail` vermelho, na largura da coluna: a explicação e o detalhe em mono (`exit status 1 · claude --resume …`, o `git status`), sem título, sem hora e sem botão |
 | Faça | Deixe a ação na barra do pedido |
 
+### Markdown
+
+| | |
+|---|---|
+| Anatomia | O Markdown de leitura (a fala do agente, um documento, um relatório, o corpo de um card ou de uma PR, um prompt) com o bloco de código, a tabela e o diagrama do system |
+| Títulos | Sob um título próprio, os títulos do Markdown ficam em `--text-ui` e peso 600, abaixo do título que se lê primeiro: em todo painel (`Artifacts`, `Details`, `Documents`, o painel do card e o da PR), no corpo de um marco aberto, no prompt, no rascunho e no arquivado. A fala do agente, que não tem título acima, mantém os seus. É a classe `.ui-headings`, fora de camada, para vencer as classes que o Streamdown põe nos títulos |
+| Não faça | Não deixe um título do Markdown maior que o título do lugar ou do painel em que ele está |
+
 ### Bloco de código
 
 | | |
@@ -620,6 +633,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 | Anatomia | Afundado, raio `--radius-md`, fio interno, na largura da coluna; cabeçalho com a linguagem, o caminho em mono e o intervalo de linhas (cada um quando existe) e **Copy**; o código em 13/20, sem números de linha. O **Copy** é o da Marca e cópia, o mesmo em todo bloco, curto ou cortado, com o nome `Copy the code`; o bloco não tem outra cópia |
 | Tinta | O código é todo em peso 400, sem itálico nem negrito: os quatro matizes `--code-*` e o comentário em `--code-comment` separam os tipos de token só pela cor |
 | Código longo | Na conversa, acima de 24 linhas, o bloco mostra as 20 primeiras e um rodapé de fio com **Show all 46 lines** e `26 more`; aberto, **Show less**. Vale também durante o streaming, a partir da linha 25, para o bloco não encolher quando a fala termina. Continua rolando na horizontal. Fora da conversa (painéis, prompts), não corta |
+| Diagrama | O mermaid é um bloco de código: o cabeçalho com `<> mermaid`, **Full screen** e **Copy**, e o diagrama no tamanho natural no corpo, encolhido só até a largura da coluna. Enquanto desenha, `Drawing the diagram…` com o spinner e o código como texto; uma falha diz `Couldn't draw the diagram: <razão>` em `--state-error`, sobre o código. O zoom é só na tela cheia: o diálogo **Diagram** na variante tela cheia, com **Zoom out**, **Zoom in** e **Reset zoom**, de 0,5 a 3 vezes a largura natural, rolando quando passa do diálogo |
 | Estados de Copy | Hover, foco, copiado (visto e `Copied`), erro (`Can't copy · select the text`) |
 | Estados de Show all | Padrão, hover, foco, aberto |
 | Tokens | `--surface-0`, `--line-1`, `--code-keyword`, `--code-string`, `--code-function`, `--code-number`, `--code-comment`, `--text-code` |
@@ -794,10 +808,11 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 | | |
 |---|---|
 | Anatomia | Sobre `--scrim`: folha `--surface-3` com `--shadow-overlay`, raio `--radius-xl`. Título em 18/24 com o `×` (`Close · Esc`) e, num diálogo em passos, o passo no subtítulo; corpo que rola quando passa da janela; rodapé afundado com a razão ao lado quando a primária está desabilitada, **Cancel** fantasma e a confirmação por último, numa linha só: a razão ocupa o espaço que sobra, cortada com o texto inteiro no tooltip, e os botões nunca quebram nem mudam de lugar |
-| Variantes | Todos ficam a `8vh` do topo, em pixel inteiro, e crescem para baixo, para abrir uma seção sem mover o título. **Mínimo** (`--size-dialog`, `alertdialog` numa confirmação): a confirmação, com o que acontece, uma linha apagada com a consequência secundária, e o que é opcional atrás de um clique (**Add instructions**). **Largo** (`--size-dialog-wide`): os de criação, de cadastro e de início. **Em passos**: o passo no subtítulo (`Data Platform · acme · Step 2 of 3 · Statuses`); no rodapé, **Back** fantasma à esquerda a partir do segundo passo, o que falta ou a consequência (`acme/docs moves to No board, and acme/billing leaves MySpec.`), **Cancel** e **Continue** ou, no último, a confirmação; uma recusa em vermelho numa linha própria acima dos botões. **Destrutivo**: a prévia do que será destruído, a confirmação perigosa |
+| Posição | Todo diálogo centra na janela inteira, que o `--scrim` cobre, e não na área principal |
+| Variantes | Todos, menos a tela cheia, ficam a `8vh` do topo, em pixel inteiro, e crescem para baixo, para abrir uma seção sem mover o título. **Mínimo** (`--size-dialog`, `alertdialog` numa confirmação): a confirmação, com o que acontece, uma linha apagada com a consequência secundária, e o que é opcional atrás de um clique (**Add instructions**). **Largo** (`--size-dialog-wide`): os de criação, de cadastro e de início. **Em passos**: o passo no subtítulo (`Data Platform · acme · Step 2 of 3 · Statuses`); no rodapé, **Back** fantasma à esquerda a partir do segundo passo, o que falta ou a consequência (`acme/docs moves to No board, and acme/billing leaves MySpec.`), **Cancel** e **Continue** ou, no último, a confirmação; uma recusa em vermelho numa linha própria acima dos botões. **Destrutivo**: a prévia do que será destruído, a confirmação perigosa. **Tela cheia** (`size="full"`): a janela menos `--space-8` de cada lado, na largura e na altura, em pixel inteiro, com o título e o ×, sem rodapé; é a do diagrama (Bloco de código) |
 | Instâncias | Criação de task (`screens/board.md` §4), início de review, **Review again** e publicação (`review.md` §3, §11, §12), nova discussão, arquivar, apagar e agrupar (`discussion.md` §2, §11, §12), os de Settings, apagar task, descartar step e voltar a uma etapa (`screens/rest.md`) |
 | Estados | Padrão; confirmando (`Deleting…`, **Cancel** tracejado); falha (a razão em vermelho no rodapé, o diálogo fica aberto, e a confirmação volta a agir: ela é o repetir, sem um **Try again** ao lado) |
-| Tokens | `--scrim`, `--surface-3`, `--surface-0`, `--shadow-overlay`, `--radius-xl`, `--size-dialog`, `--size-dialog-wide` |
+| Tokens | `--scrim`, `--surface-3`, `--surface-0`, `--shadow-overlay`, `--radius-xl`, `--size-dialog`, `--size-dialog-wide`, `--space-8` |
 | Teclado | Um diálogo destrutivo ou de confirmação abre com o foco em **Cancel**; um de criação, no primeiro campo. O foco fica preso; `Ctrl+Enter` confirma com o primário, e um diálogo cuja confirmação é perigosa não confirma por ele (`decisions.md`, 2026-10-02); `Esc` e o × fecham e devolvem o foco. `Ctrl+N`, `Ctrl+J` e `Ctrl+,` ficam inertes com um diálogo de criação aberto |
 | Acessibilidade | `role="dialog"` ou `alertdialog`, `aria-modal`, `aria-labelledby` |
 | Faça | Diga exatamente o que será perdido e o que fica |
