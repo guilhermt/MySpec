@@ -2,6 +2,94 @@
 
 Uma entrada por decisão, da mais recente para a mais antiga. Cada uma diz a data, o que foi decidido, o que foi descartado e a razão em uma ou duas frases. Uma decisão revista ganha uma entrada nova que aponta a antiga; a antiga não é apagada.
 
+## 2026-10-04 · Ícones: ir é um chevron, e só sair do app é diagonal
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L1). A seta de ir (`go`), que leva a um lugar do app (o nó de board e de Reviews, a linha de um prompt), é um chevron para a direita; a seta diagonal fica só para o que abre fora do app (`external`). Descartado: a seta diagonal de `go` que vinha dos mocks (`lab/05-visual-b-variations/a.html:652`). Razão: o mesmo desenho servia a dois significados, e as linhas de Prompts se liam como links para o GitHub.
+
+## 2026-10-04 · Cabeçalho: sem stepper, o breadcrumb dobra só quando o título não cabe
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L2). Os níveis do breadcrumb dobram no `…` abaixo de 1660 px de área principal só num lugar com o stepper; num lugar sem stepper, como um arquivado, dobram só quando o título não cabe ao lado deles (`structure.md` §1). Descartado: o mesmo limite em todo lugar. Razão: o limite existe para dar espaço ao stepper; sem ele, o arquivado a 1134 px mostrava `← …` com a faixa vazia no meio.
+
+## 2026-10-04 · Diálogo: centrado na janela inteira
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L3). Os diálogos centram sobre a janela inteira, que o `--scrim` cobre, e não sobre a área principal (`components.md` Diálogo). Razão: é o que o app e as cenas da task 11 já fazem, e `components.md` fixava só os `8vh` do topo.
+
+## 2026-10-04 · Arquivados: a hora de hoje nos fatos
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L4). Os fatos de um arquivado usam `clockOrDateAt`: `15:02` hoje, `Sep 24 at 15:02` em outro dia, como a linha do History e o toast (`screens/rest.md` §4). Razão: uma hora por significado, e a régua não dizia se um fato de hoje leva o dia.
+
+## 2026-10-04 · Task: a PR bloqueada depois de o review começar mantém a conversa
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L5). A PR bloqueada depois de o review começar mantém a conversa do review, com o cartão de decisão desabilitado e a barra de erro; antes da primeira passada, o vazio com título continua (`screens/task.md` §7, §11, §12). Descartado: o vazio e o bloco de erro no lugar da conversa em todo caso. Razão: uma leitura que falha nunca esconde o que estava na tela, e os apontamentos a decidir sumiam.
+
+## 2026-10-04 · Abas: nenhuma marca a situação do step
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L6). `step_review` e `step_empty` não marcam nenhuma das abas Implementer e Reviewer; a pílula e a barra do pedido bastam (`screens/task.md` §5, §7). Descartado: a aba do implementador com `waits`. Razão: as duas situações são do step, não de uma conversa, e a aba de fora apontava uma conversa que não esperava nada.
+
+## 2026-10-04 · Compositor: o número do placeholder segue o cartão
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L7). Com um cartão aberto, o placeholder diz as teclas que ele tem: numa permissão, `1–2` sem **Allow for this session** e `1–3` com ela; numa pergunta, as opções e **Other…** (`screens/task.md` §8). Descartado: o `1–3` fixo. Razão: o cartão já mostra só as respostas que oferece, e o placeholder não pede uma tecla que não existe.
+
+## 2026-10-04 · Markdown: os títulos sob um título próprio
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L8). Os títulos de um Markdown aberto sob um título próprio ficam em `--text-ui` e peso 600 em todo painel (`Artifacts`, `Details`, `Documents`, o painel do card e o da PR), no corpo de um marco aberto, no prompt, no rascunho e no arquivado; a fala do agente mantém os seus. A classe `.ui-headings`, fora de camada, vale para todos, e a regra de `.card-body` em `@layer components` não é a dos títulos (`components.md` Markdown). Razão: o título do lugar se lê primeiro, e a regra em camada perdia para as classes que o Streamdown põe nos títulos; era a quarta vez do mesmo desvio.
+
+## 2026-10-04 · Bloco de código: o mermaid no tamanho natural
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L9). O mermaid fica no tamanho natural dentro do bloco de código afundado, com `<> mermaid` e **Full screen** no cabeçalho, e o zoom só na tela cheia (`components.md` Bloco de código). O erro do diagrama não ganha forma própria: vale a régua, sem o vermelho, o spinner próprio e a duração do componente do Streamdown. Descartado: o `panZoom` do Streamdown. Razão: o diagrama saía encolhido a uns 6 px de texto, numa segunda caixa, contra o mock decidido (`lab/16-conversation-wide`).
+
+## 2026-10-04 · Menu do item: os itens só com texto
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L10). Os itens do `⋯` são só texto; o ícone fica em `<>` (**Open in VS Code**) e na seta externa (**Open PR**), igual nos menus da task, do review e da discussão (`components.md` Menu do item). Descartado: um ícone em todo item, como o menu da discussão tinha. Razão: um componente com a mesma forma em todo lugar, e os dois ícones que ficam dizem para onde o item leva.
+
+## 2026-10-04 · Discussão: a chegada mostra o controle que a barra pede
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L11). A chegada numa discussão (**Show** e `Ctrl+J`) rola até o controle que a barra pede ficar inteiro à vista, e a pílula `↓` não se desenha sobre o rascunho atual (`screens/discussion.md` §5.5, §8). Razão: a barra levava a um controle no pé de um rascunho alto (**Retry**, **Approve** do épico descartado), que ficava abaixo da dobra, sob o esmaecido e a pílula.
+
+## 2026-10-04 · Nova discussão: o repositório no card
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L12). O card no diálogo de nova discussão diz `dono/nome` só quando dois repositórios do board têm o mesmo nome curto, como a Home e o History; senão, o nome curto (`screens/discussion.md` §2). Descartado: sempre o curto, como `tasks/09-discussion.md:106` dizia. Razão: um nome de repositório com a mesma regra em todo o produto.
+
+## 2026-10-04 · Criação: o repositório padrão é o primeiro utilizável
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L13). O repositório padrão do diálogo livre de criação é o primeiro utilizável entre o do filtro da lateral, o da task aberta, o último usado e o primeiro utilizável da lista (`screens/board.md` §4.2). Descartado: o primeiro da lista ao pé da letra. Razão: um clone inexistente primeiro na ordem alfabética abria o campo vazio, com um repositório utilizável logo abaixo.
+
+## 2026-10-04 · Board: a barra de filtros numa linha
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L14). Numa lista estreita (452 px, a janela de 1100 com o painel), a barra de filtros fica numa linha: os chips dobram em `Filter · N`, e a busca mantém a largura mínima (`screens/board.md` §3.3). Descartado: encolher a busca até caber, ou a barra em duas linhas fixas. Razão: duas linhas fixas comem a lista estreita, e uma busca abaixo da largura mínima não serve.
+
+## 2026-10-04 · Select: a largura do menu e a razão longa
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L15). O menu de um `Select` tem largura máxima `--size-menu-max` (320 px, `calc(var(--space-16) * 5)`), ou a do gatilho quando ela é maior, e o subtítulo de um item corta com tooltip (`components.md` Select, menu e listbox; `tokens.css`). Razão: `components.md` não fixava a largura máxima do menu nem o corte do subtítulo.
+
+## 2026-10-04 · Board: a faixa da falha é alerta só na chegada
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L16). `screens/board.md` §8 diz o que `components.md` (Faixa de aviso) e a entrada de 2026-10-02 (Faixa de aviso: alerta só quando chega) dizem: a faixa da falha é `role="alert"` só quando chega com a tela aberta. Razão: a régua se contradizia.
+
+## 2026-10-04 · Home: o caminho longo numa linha de bloqueio corta
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L17). Um caminho longo numa linha de bloqueio da Home corta com tooltip, nunca quebra (`screens/board.md` §2.2). Razão: a linha quebrava em três, e a régua não decidia.
+
+## 2026-10-04 · Apontamento: o código no título
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L18). Um título de apontamento com código em linha desenha o código como código (mono sobre `--surface-0`, como o texto do apontamento), e o nome acessível fica sem as crases (`components.md` Apontamento). Razão: as crases dos relatórios apareciam cruas na tela e no nome acessível.
+
+## 2026-10-04 · Tempo: um relógio só para os chips de espera
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L19). Os chips de espera contam de um relógio só por intervalo, compartilhado no store (`useNow`), e a árvore, a barra do pedido, a aba e **Continue** nunca discordam (`structure.md` §7). Razão: cada chip contava o minuto desde a própria montagem, e a árvore e a barra da mesma task discordavam por um minuto.
+
+## 2026-10-04 · Faixa de aviso: numa lista estreita, linhas inteiras
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L20). Numa lista estreita, a faixa de aviso quebra o título e a razão em linhas inteiras, ao lado do glifo, e põe **Try again** à direita, numa linha própria; nunca uma palavra por linha (`components.md` Faixa de aviso). Razão: a régua não dizia como a faixa cede, e numa lista de 452 px a razão de cada faixa por repositório de Reviews caía uma palavra por linha.
+
+## 2026-10-04 · Conversa: o que o produto manda nunca está na fila
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L21). O prompt do produto ao começar uma etapa ou um step nunca aparece como mensagem do usuário com **Remove**: enquanto pendente, é o marco do início, sem ação, e o Go não aceita apagá-lo (`RemovePending`). A regra vale para toda entrada do produto pendente, a instrução de uma passada ao revisor incluída (`screens/task.md` §6; `components.md` Entradas da conversa). Razão: a fila é da mensagem do usuário, e remover a entrada do produto abriria a sessão sem a instrução.
+
+## 2026-10-04 · Toast: o quarto não espera
+
+Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, S27). Com três toasts à vista, o quarto que chega não espera: o mais antigo sai no mesmo instante, com a saída de `--duration-fast` (`components.md` Aviso do app e toast). Descartado: segurar o quarto até o mais antigo sair. Razão: o app já faz assim, sem defeito, e a régua não dizia quando o mais antigo sai.
+
 ## 2026-10-03 · Bloco copiável: o rótulo que é uma frase fica sem caixa alta
 
 Decidido pelo coordenador da frente, por delegação do usuário, na entrada da task 11 (`tasks/11-history-dialogs.md` §4.3 #35). O `CopyBlock` mantém em caixa alta o rótulo de uma palavra (`error`) e escreve como é o rótulo que é uma frase com um caminho, em `--text-micro` `--ink-3`, como o cabeçalho do bloco de código do mock (`lab/14-screen-rest/src/other.js:70`): `To remove it yourself, in ~/code/api`, na página da task apagada. Descartado: a caixa alta em todo rótulo, como a task 10 fez. Razão: a caixa alta trocaria a caixa do caminho (`~/CODE/API`), e o bloco apontaria para uma pasta que não existe.
