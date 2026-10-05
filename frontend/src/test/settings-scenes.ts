@@ -9,6 +9,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import type { UserEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, vi } from "vitest";
+import { SCANNING_TEXT } from "@/features/repositories/add-repository";
 import type { Location, SettingsSection } from "@/lib/locations";
 import type {
   Board,
@@ -796,7 +797,7 @@ function repositoriesScene(variation: string): SettingsSceneSetup {
         after: async (user) => {
           api.scanRepositories.mockImplementation(() => forever<RepositoryCandidate[]>());
           await user.click(button("Add repository"));
-          await screen.findByRole("status");
+          await screen.findAllByText(SCANNING_TEXT);
         },
       };
     case "add-refused":

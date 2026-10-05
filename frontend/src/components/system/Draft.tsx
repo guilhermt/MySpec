@@ -14,6 +14,7 @@ import { DraftGlyph, RevisedBadge } from "./FoldedDraft";
 import { GestureLine } from "./GestureLine";
 import { ICONS } from "./icons";
 import { Link } from "./Link";
+import { LiveRegion } from "./LiveRegion";
 import { SegmentedControl } from "./SegmentedControl";
 import { Shimmer } from "./Shimmer";
 import { StateGlyph } from "./StateGlyph";
@@ -183,8 +184,8 @@ export function Draft({
   const decided = decision.value !== "";
 
   const stateLine = (
-    <span
-      {...(state.glyph === "spinner" ? { role: "status" } : {})}
+    <LiveRegion
+      kind="status"
       className={cn(
         "inline-flex min-w-0 items-center gap-(--space-1-5)",
         META,
@@ -192,7 +193,7 @@ export function Draft({
       )}
     >
       <StateText state={state} onOpenLink={onOpenLink} />
-    </span>
+    </LiveRegion>
   );
 
   return (
@@ -293,13 +294,9 @@ export function Draft({
                   <span className="inline-flex h-(--leading-meta) shrink-0 items-center">
                     <StateGlyph state="blocked" size="sm" />
                   </span>
-                  {live ? (
-                    <span role="status">
-                      <Shimmer>{warning}</Shimmer>
-                    </span>
-                  ) : (
-                    <span>{warning}</span>
-                  )}
+                  <LiveRegion kind="status">
+                    {live ? <Shimmer>{warning}</Shimmer> : warning}
+                  </LiveRegion>
                 </p>
               );
             })}

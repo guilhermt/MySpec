@@ -150,14 +150,15 @@ describe("Menu", () => {
     ).toBeInTheDocument();
   });
 
-  it("announces a message as a status, or as an alert on error", () => {
+  it("says a message in the menu, and announces a failure as an alert", () => {
     renderWithStore(
       <>
         <MenuMessage>Loading branches…</MenuMessage>
         <MenuMessage tone="error">Could not list the branches</MenuMessage>
       </>,
     );
-    expect(screen.getByRole("status")).toHaveTextContent("Loading branches…");
+    expect(screen.getByText("Loading branches…")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Could not list the branches");
   });
 });

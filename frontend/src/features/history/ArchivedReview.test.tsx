@@ -148,7 +148,7 @@ describe("ArchivedReview", () => {
       },
     });
 
-    expect(screen.getByRole("status", { name: "Reading the review" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Reading the review" })).toBeInTheDocument();
   });
 });
 

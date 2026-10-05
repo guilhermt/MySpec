@@ -1,6 +1,7 @@
 import { type ReactNode, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "./Button";
+import { LiveRegion } from "./LiveRegion";
 import { type GlyphState, StateGlyph } from "./StateGlyph";
 import { TimeChip } from "./TimeChip";
 import { Tooltip } from "./Tooltip";
@@ -147,9 +148,9 @@ export function RequestBar({
       {...(flash !== undefined ? { "data-flash": flash } : {})}
       className={cn(BAR, BACKGROUNDS[form], "situation-flash outline-none")}
     >
-      <span role="status" className="sr-only">
+      <LiveRegion kind="status" className="sr-only">
         {status}
-      </span>
+      </LiveRegion>
       <span className="inline-flex items-center gap-(--space-2) whitespace-nowrap">
         <StateGlyph state={glyph} />
         <span className={cn("font-bold", LABELS[form])}>{label}</span>
@@ -197,9 +198,9 @@ export function OtherConversationBar({
       {...(flash !== undefined ? { "data-flash": flash } : {})}
       className={cn(BAR, "bg-surface-0 situation-flash outline-none", failed && RAIL)}
     >
-      <span role="status" className="sr-only">
+      <LiveRegion kind="status" className="sr-only">
         {status}
-      </span>
+      </LiveRegion>
       <span className="inline-flex items-center gap-(--space-2) whitespace-nowrap">
         <StateGlyph state={failed ? "error" : "wait"} />
         <span className={failed ? "font-bold text-state-error" : "text-ink-2"}>{label}</span>

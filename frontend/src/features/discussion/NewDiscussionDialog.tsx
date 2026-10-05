@@ -6,11 +6,13 @@ import { Field } from "@/components/system/Field";
 import { IconButton } from "@/components/system/IconButton";
 import { Input } from "@/components/system/Input";
 import { ICONS } from "@/components/system/icons";
+import { LiveRegion } from "@/components/system/LiveRegion";
 import { Select } from "@/components/system/Select";
 import { Shimmer } from "@/components/system/Shimmer";
 import { StateGlyph } from "@/components/system/StateGlyph";
 import { SunkenLine } from "@/components/system/SunkenLine";
 import { Textarea } from "@/components/system/Textarea";
+import { useArrivedLater } from "@/components/system/useArrivedLater";
 import { useNow } from "@/features/attention/useNow";
 import { Markdown } from "@/features/chat/Markdown";
 import {
@@ -142,6 +144,7 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
   const [starting, setStarting] = useState(false);
   const [showContext, setShowContext] = useState(false);
   const context = useDiscussionContext(board.id, text, cards);
+  const failureArrived = useArrivedLater(context.failure !== null);
 
   const reason = startReason({ board: board.id, title, text, cards: cards.length });
   const uncloned = unclonedRepositories(board, repositories);
@@ -279,6 +282,9 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
         )}
 
         <div className="flex flex-col gap-(--space-2)">
+          <LiveRegion kind="status" className="sr-only">
+            {context.refreshing && "Refreshing the cards…"}
+          </LiveRegion>
           {context.refreshing ? (
             <SunkenLine
               action={
@@ -292,15 +298,13 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
                 </Button>
               }
             >
-              <span role="status">
-                <Shimmer>Refreshing the cards…</Shimmer>
-              </span>
+              <Shimmer>Refreshing the cards…</Shimmer>
             </SunkenLine>
           ) : (
             <>
               {context.failure !== null && (
                 <SunkenLine>
-                  <span role="alert">
+                  <span {...(failureArrived ? { role: "alert" } : {})}>
                     <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />
                     {`Couldn't refresh the cards: ${context.failure}. The discussion will use the last reading.`}
                   </span>

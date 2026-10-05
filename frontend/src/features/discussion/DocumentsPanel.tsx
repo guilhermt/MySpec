@@ -90,6 +90,7 @@ export function DocumentsPanel({ discussion }: DocumentsPanelProps) {
         )}
         {artifact.status === "error" && (
           <NoticeStrip
+            role="alert"
             title="Couldn't read the document"
             reason={artifact.error}
             className="bg-state-error-veil"

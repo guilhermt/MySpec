@@ -159,6 +159,10 @@ Todas as metas passam nos dois motores e nas duas builds.
 
 O app e o `MiniBrowser` rodam sem janela pelo backend Broadway do GTK, que desenha sem GPU: `gtk4-broadwayd :N`, com `N` numa porta acima de 8090 (nunca a 8090), e o programa com `GDK_BACKEND=broadway`, `BROADWAY_DISPLAY=:N` e `env -i` com `HOME` e `XDG_*` temporários (`XDG_RUNTIME_DIR` é o do usuário, onde o `broadwayd` põe o socket). O `MiniBrowser` abre a URL de medida, e um navegador qualquer aberto na porta `8080 + N` mostra a janela, onde a página da medida cobre a tela com os números. Os processos são encerrados pelo PID, e os diretórios temporários, apagados.
 
+## A varredura e o movimento reduzido
+
+A varredura de largura e o teste do movimento reduzido ([testing.md](../guidelines/testing.md)) rodam no Chromium do Playwright, com o CSS real, e provam o layout, o pixel inteiro, os tooltips, as primárias, os nomes e as regiões ao vivo em cada janela do app. O que só o motor do produto mostra fica na checklist de verificação da pull request, que se roda no app instalado: a barra de rolagem global das áreas que rolam nativamente, o anel de foco depois de um clique e de uma tecla, o meio pixel numa captura ampliada da conversa e do board a 2560 e a 1280 px, o movimento reduzido com `gsettings set org.gnome.desktop.interface enable-animations false`, a conversa longa de uma task real, o board pelo teclado de ponta a ponta e a tela de recusa de um banco de uma versão mais nova.
+
 ## Estado da janela
 
 `StartState: WindowStateMaximised` chega a um compositor de tiling como "preencha o tile que recebeu", que é o que acontece aqui. Nada da geometria da janela é persistido. Num desktop de janelas flutuantes a mesma opção produz uma janela maximizada de verdade.

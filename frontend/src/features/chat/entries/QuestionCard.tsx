@@ -2,6 +2,7 @@ import { type KeyboardEvent, useEffect, useId, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
+import { LiveRegion } from "@/components/system/LiveRegion";
 import { KEY_CLASS, OPTION_CLASS } from "@/components/system/OptionGroup";
 import { Spinner } from "@/components/system/Spinner";
 import { Tooltip } from "@/components/system/Tooltip";
@@ -265,7 +266,7 @@ function PendingQuestion({ taskId, stage, question, flash }: PendingQuestionProp
           />
         ))}
         <div className="flex flex-wrap items-center gap-(--space-2)">
-          {!sending ? (
+          {!sending && (
             <Button
               variant="primary"
               shortcut="↵"
@@ -274,12 +275,15 @@ function PendingQuestion({ taskId, stage, question, flash }: PendingQuestionProp
             >
               Answer
             </Button>
-          ) : (
-            <p role="status" className="flex items-center gap-(--space-2) text-ink-2">
-              <Spinner />
-              {`Sending “${Object.values(answersOf(question, choices)).join(", ")}”…`}
-            </p>
           )}
+          <LiveRegion kind="status" className="flex items-center gap-(--space-2) text-ink-2">
+            {sending && (
+              <>
+                <Spinner />
+                {`Sending “${Object.values(answersOf(question, choices)).join(", ")}”…`}
+              </>
+            )}
+          </LiveRegion>
           {failure !== "" && !sending && (
             <p className="text-(length:--text-meta) leading-(--leading-meta) text-state-error">
               {`Not sent · ${failure}`}

@@ -110,7 +110,7 @@ Um componente **embrulha** o primitivo de `components/ui/` quando os estados do 
 | Listbox | `Listbox.tsx` | Próprio sobre `@base-ui/react/combobox` | Não há primitivo de lista com busca |
 | Diálogo | `Dialog.tsx` | `ui/dialog`, `ui/alert-dialog` | O conteúdo se sobrescreve por classe; posição e véu vêm das regras sem camada |
 | Collapsible | `Collapsible.tsx` | `ui/collapsible` | Sem estilo próprio |
-| Esqueleto | `Skeleton.tsx` | `ui/skeleton` | O fundo e a animação se sobrescrevem no elemento |
+| Esqueleto | `Skeleton.tsx` | `ui/skeleton` | O fundo e a animação se sobrescrevem no elemento; o conjunto é um `group` ocupado (`aria-busy`) com o nome do que se lê |
 | Popover | `Popover.tsx` | `ui/popover` na raiz e no título, com o posicionador e a folha próprios sobre `@base-ui/react/popover` | O `PopoverContent` do ui não repassa a âncora ao posicionador |
 | Tooltip | `Tooltip.tsx` | Próprio sobre `@base-ui/react/tooltip` | A seta e a animação estão em partes sem `className`, e a pausa do provider do ui é zero |
 | Scroll area | `ScrollArea.tsx` | Próprio sobre `@base-ui/react/scroll-area` | O polegar e o viewport do ui não expõem `className` |
@@ -143,6 +143,7 @@ Um componente **embrulha** o primitivo de `components/ui/` quando os estados do 
 | Região de toasts, toast | `ToastRegion.tsx`, `Toast.tsx` | Próprios, sobre o ícone e o botão | Não há primitivo |
 | Barra do pedido | `RequestBar.tsx` | Próprio, sobre o glifo, o chip de tempo e o botão | Não há primitivo |
 | Aviso do app | `AppNotice.tsx` | Próprio, sobre o botão | Não há primitivo |
+| Região ao vivo | `LiveRegion.tsx`, `useArrivedLater.ts` | Próprios | `LiveRegion` é o `status` ou o `alert` sempre montado, com `data-live-region`, e o filho só quando há o que dizer; `useArrivedLater(presente)` é verdadeiro quando algo passou a estar presente depois da primeira renderização, o que decide se uma falha é um `alert` |
 | Saída animada | `Presence.tsx` | Próprio | Mantém na tela o que sai enquanto a animação de saída do próprio elemento toca; um laço dentro dele, ou no próprio elemento (spinner, esqueleto, pulso), não é esperado, e a duração da saída é o teto; `onGone` avisa quando ela termina |
 
 As convenções de todo componente:
@@ -191,7 +192,7 @@ As convenções de todo componente:
 
 **A Home.** `Continue` é o botão elevado que volta ao item em que a pessoa estava: o glifo de tipo, o nome (`--text-body` 600), o que o item faz, o relógio (o chip, o turno ou a palavra do estado) e onde ele vive, com `Enter` à direita; lê tudo de um `ContinueView`, que o `ContinueModel` de `features/home/home.ts` satisfaz. `StartRow` é a linha que começa algo: o ícone, o rótulo em 500 (o nome acessível), o subtítulo em `--ink-3` (a descrição, por `aria-describedby`) e a tecla; desabilitada, é tracejada e a razão toma o lugar do subtítulo. `BoardStartRow` é um board da Home: a linha de início com a idade da leitura à direita (com brilho enquanto lê; a leitura que falhou é o `ReadingAge`, a idade do produto, com as horas no tooltip) e, sob ela, recuada até o texto, uma linha por bloqueio, cada uma com a ação fantasma `xs` (**Try again** ou `Reading…`; **Clone**, ou só o spinner no lugar dele enquanto a linha diz `Cloning acme/billing…`; **Change path…** com a recusa em vermelho sob a linha). `NoBoardRow` é a mesma forma para os repositórios sem board, num `group`, sem ser botão.
 
-`KeyNotice` diz por que uma tecla de uma letra não agiu, na superfície do tooltip, presa à linha em foco. `useKeyNotice` guarda o aviso único, que some em `KEY_NOTICE_MS` (4 s); o aviso fecha também na próxima tecla, num clique e ao rolar, mas não na tecla que o mostrou, cujo ouvinte entra um tick depois. Ele tem `role="status"` e não leva `data-slot="popover-content"`, então o `Esc` global não o conta como camada: quem o usa fecha o aviso no próprio `Esc`.
+`KeyNotice` diz por que uma tecla de uma letra não agiu, na superfície do tooltip, presa à linha em foco. `useKeyNotice` guarda o aviso único, que some em `KEY_NOTICE_MS` (4 s); o aviso fecha também na próxima tecla, num clique e ao rolar, mas não na tecla que o mostrou, cujo ouvinte entra um tick depois. O aviso é lido por uma `LiveRegion` `sr-only` que existe antes dele, e o que se vê, `aria-hidden`, fica em `--z-tooltip`, acima do tooltip. Ele não leva `data-slot="popover-content"`, então o `Esc` global não o conta como camada: quem o usa fecha o aviso no próprio `Esc`.
 
 **Títulos do Markdown.** `.ui-headings`, fora de camada, põe os títulos de um Markdown em `--text-ui` e peso 600, para que ele leia sob um título próprio sem repetir o tamanho de um `h1`: o `Markdown` que fica sob o título do lugar ou do cartão a leva (o documento de um painel, o corpo de um card do board ou de uma PR, o rascunho, o prompt, os arquivados e o contexto de uma discussão); a fala do agente, que não tem título acima, fica no tamanho dos títulos do Streamdown. Fora de camada, a regra vence as classes utilitárias que o Streamdown põe nos títulos; `.card-body` só dá o tamanho de leitura ao corpo.
 

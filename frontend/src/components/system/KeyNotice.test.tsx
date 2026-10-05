@@ -46,6 +46,19 @@ describe("KeyNotice", () => {
     await press("s");
   }
 
+  it("has its region on screen before the notice, and the notice arrives into it", async () => {
+    render(<Subject />);
+    const status = screen.getByRole("status");
+    expect(status).toBeEmptyDOMElement();
+    expect(status).toHaveAttribute("data-live-region");
+
+    screen.getByRole("treeitem").focus();
+    await press("s");
+
+    expect(screen.getByRole("status")).toBe(status);
+    expect(status).toHaveTextContent(`${FIRST.title} · ${FIRST.reason}`);
+  });
+
   it("says what did not happen and why, as a status", async () => {
     await shown();
     const status = await screen.findByRole("status");
@@ -72,7 +85,7 @@ describe("KeyNotice", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(KEY_NOTICE_MS + 1);
     });
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it("goes away on the next key", async () => {
@@ -82,7 +95,7 @@ describe("KeyNotice", () => {
       await vi.advanceTimersByTimeAsync(10);
     });
     await press("x");
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it("goes away on a click", async () => {
@@ -94,7 +107,7 @@ describe("KeyNotice", () => {
     await act(async () => {
       await userEvent.click(document.body);
     });
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it("gives its place to a new notice", async () => {

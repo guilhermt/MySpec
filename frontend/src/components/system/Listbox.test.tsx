@@ -126,10 +126,11 @@ describe("Listbox", () => {
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
-  it("says a neutral message as a status", async () => {
+  it("says a neutral message in the list, with no role of its own", async () => {
     const { user } = renderWithStore(<Subject message={{ text: "Reading the branches…" }} />);
     await user.click(screen.getByRole("combobox", { name: "Base branch: main" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Reading the branches…");
+    expect(await screen.findByText("Reading the branches…")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("marks a choice no longer offered without letting it be chosen", async () => {

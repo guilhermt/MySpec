@@ -1,9 +1,11 @@
 import { Button } from "@/components/system/Button";
 import { EmptyState } from "@/components/system/EmptyState";
+import { LiveRegion } from "@/components/system/LiveRegion";
 import { NoticeStrip } from "@/components/system/NoticeStrip";
 import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
 import { Spinner } from "@/components/system/Spinner";
-import { type BoardFilters, noMatchSentence } from "@/features/board/board-view";
+import { useArrivedLater } from "@/components/system/useArrivedLater";
+import { type BoardFilters, noMatchSentence, showsFailureStrip } from "@/features/board/board-view";
 import type { Board } from "@/lib/wails";
 import { age } from "@/lib/when";
 import { refreshBoard } from "@/store/actions";
@@ -13,21 +15,25 @@ const SKELETON_BARS = 4;
 
 /** TryAgain reads the board again, or says that it is being read. */
 function TryAgain({ board }: { board: Board }) {
-  if (board.reading) {
-    return (
-      <span
-        role="status"
-        className="inline-flex items-center gap-(--space-1-5) px-(--space-2) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
-      >
-        <Spinner />
-        Reading…
-      </span>
-    );
-  }
   return (
-    <Button variant="secondary" size="sm" onClick={() => void refreshBoard(board.id)}>
-      Try again
-    </Button>
+    <>
+      <LiveRegion
+        kind="status"
+        className="inline-flex items-center gap-(--space-1-5) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
+      >
+        {board.reading && (
+          <span className="inline-flex items-center gap-(--space-1-5) px-(--space-2)">
+            <Spinner />
+            Reading…
+          </span>
+        )}
+      </LiveRegion>
+      {!board.reading && (
+        <Button variant="secondary" size="sm" onClick={() => void refreshBoard(board.id)}>
+          Try again
+        </Button>
+      )}
+    </>
   );
 }
 
@@ -38,14 +44,16 @@ export interface FailureStripProps {
 
 /** FailureStrip says the last reading failed, above the cards of the reading before it. */
 export function FailureStrip({ board, now }: FailureStripProps) {
-  if (board.failure === null) {
+  const shows = showsFailureStrip(board);
+  const role = useArrivedLater(shows) ? "alert" : undefined;
+  if (!shows || board.failure === null) {
     return null;
   }
   return (
     <NoticeStrip
       title={`Couldn't read the board · ${age(board.failure.failedAt, now)}`}
       reason={board.failure.message}
-      role="alert"
+      role={role}
       action={<TryAgain board={board} />}
       className="mt-(--space-4) mb-(--space-4)"
     />

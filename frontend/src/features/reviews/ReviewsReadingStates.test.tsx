@@ -38,11 +38,28 @@ describe("ReviewsFailureStrips", () => {
     ],
   });
 
+  it("is an alert only for a failure that arrives after the screen", () => {
+    const { rerender } = renderWithStore(
+      <ReviewsFailureStrips center={makeReviewCenter()} now={FOUR_MINUTES_LATER} />,
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    rerender(<ReviewsFailureStrips center={center} now={FOUR_MINUTES_LATER} />);
+
+    expect(screen.getAllByRole("alert")).toHaveLength(2);
+  });
+
+  // stripsDrawn are the strips on screen, which have no role when their failure was there at the first draw.
+  const stripsDrawn = () => [
+    ...document.querySelectorAll<HTMLElement>('[data-slot="notice-strip"]'),
+  ];
+
   it("draws a strip for each repository that failed, in alphabetical order", () => {
     renderWithStore(<ReviewsFailureStrips center={center} now={FOUR_MINUTES_LATER} />);
 
-    const strips = screen.getAllByRole("alert");
+    const strips = stripsDrawn();
     expect(strips).toHaveLength(2);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(strips[0]).toHaveTextContent("Couldn't read acme/api · 4m ago");
     expect(strips[1]).toHaveTextContent("Couldn't read acme/ios · 4m ago");
     expect(strips[1]).toHaveTextContent("gh is not authenticated. Run gh auth login.");
@@ -64,7 +81,7 @@ describe("ReviewsFailureStrips", () => {
     );
 
     expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
-    for (const strip of screen.getAllByRole("alert")) {
+    for (const strip of stripsDrawn()) {
       expect(strip).toHaveTextContent("Reading…");
     }
   });
@@ -82,7 +99,7 @@ describe("ReadingSkeleton", () => {
   it("stands in with four bars under a name", () => {
     const { container } = renderWithStore(<ReadingSkeleton />);
 
-    expect(screen.getByRole("status", { name: "Reading the pull requests…" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Reading the pull requests…" })).toBeInTheDocument();
     expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(4);
   });
 });

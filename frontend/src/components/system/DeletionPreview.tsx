@@ -3,6 +3,7 @@ import { Badge } from "./Badge";
 import { Icon } from "./Icon";
 import type { IconGlyph } from "./icons";
 import { Link } from "./Link";
+import { LiveRegion } from "./LiveRegion";
 import { Shimmer } from "./Shimmer";
 import { SkeletonBar } from "./Skeleton";
 import { Spinner } from "./Spinner";
@@ -37,13 +38,28 @@ function Mark({ icon }: { icon: DeletionLine["icon"] }) {
 
 const BLOCK = "rounded-md bg-surface-0 px-(--space-3) py-(--space-1)";
 
+/** READING is what the preview says while git is read. */
+const READING = "Reading the worktree and the branch…";
+
 /** DeletionPreview is what an erasure will destroy, read from git when the dialog opens, in a sunken list; it draws nothing when there is nothing to list. */
 export function DeletionPreview({ state }: DeletionPreviewProps) {
+  return (
+    <>
+      <LiveRegion kind="status" className="sr-only">
+        {state.kind === "reading" && READING}
+      </LiveRegion>
+      <PreviewBody state={state} />
+    </>
+  );
+}
+
+// PreviewBody is what the preview draws for its state.
+function PreviewBody({ state }: DeletionPreviewProps) {
   if (state.kind === "reading") {
     return (
       <div className="flex flex-col gap-(--space-2)">
-        <div role="status" className="text-(length:--text-meta) leading-(--leading-meta)">
-          <Shimmer>Reading the worktree and the branch…</Shimmer>
+        <div className="text-(length:--text-meta) leading-(--leading-meta)">
+          <Shimmer>{READING}</Shimmer>
         </div>
         <div className={cn(BLOCK, "flex flex-col gap-(--space-2) py-(--space-2)")}>
           <SkeletonBar className="w-2/3" />

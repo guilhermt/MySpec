@@ -27,10 +27,10 @@ describe("Activity", () => {
   it("stays quiet while an action runs, and between turns", () => {
     const running = makeEntry("action", { action: makeAction({ status: "running" }) });
     const { rerender } = renderWithStore(<Activity session={WORKING} entries={[running]} />);
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
 
     rerender(<Activity session={IDLE_SESSION} entries={[]} />);
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it.each([

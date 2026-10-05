@@ -249,6 +249,7 @@ export function ArchivedDiscussion({ discussionId }: ArchivedDiscussionProps) {
         <ArchivedSection title="Document and conversation">
           {failed && (
             <NoticeStrip
+              role="alert"
               title={`Couldn't read ${DOCUMENT_FILE}`}
               reason={artifact.error}
               action={

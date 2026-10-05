@@ -1,3 +1,4 @@
+import { LiveRegion } from "@/components/system/LiveRegion";
 import { Spinner } from "@/components/system/Spinner";
 import { useNow } from "@/features/attention/useNow";
 import type { SessionState } from "@/features/chat/session";
@@ -68,7 +69,7 @@ export function Activity(props: ActivityProps) {
   const now = useNow(1000, retrying);
   const { session } = props;
   if (session !== undefined && (!session.turnRunning || !isSilent(props.entries.at(-1)))) {
-    return null;
+    return <LiveRegion kind="status" className="contents" />;
   }
   const text =
     session === undefined
@@ -85,15 +86,14 @@ export function Activity(props: ActivityProps) {
   // The countdown changes every second: it stays out of what the status says, which speaks only
   // when the attempt or the reason changes.
   return (
-    <p
-      role="status"
-      className="flex items-center gap-(--space-1-5) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
-    >
-      <Spinner />
-      <span>
-        {text}
-        {countdown !== "" && <span aria-hidden="true"> · {countdown}</span>}
-      </span>
-    </p>
+    <LiveRegion kind="status" className="contents">
+      <p className="flex items-center gap-(--space-1-5) text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
+        <Spinner />
+        <span>
+          {text}
+          {countdown !== "" && <span aria-hidden="true"> · {countdown}</span>}
+        </span>
+      </p>
+    </LiveRegion>
   );
 }

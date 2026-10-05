@@ -85,7 +85,7 @@ describe("Defaults", () => {
     defaults({ catalog: makeModelCatalog({ models: [], failure: "" }) });
 
     expect(screen.getByText("Reading the models of Claude Code…")).toBeInTheDocument();
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it.each([
@@ -113,7 +113,7 @@ describe("Defaults", () => {
   it("says nothing of the catalog when there is one", () => {
     defaults();
 
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 

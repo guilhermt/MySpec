@@ -124,7 +124,7 @@ describe("BoardStartRow", () => {
         onChangePath={() => {}}
       />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent("Reading…");
+    expect(screen.getAllByRole("status").map((region) => region.textContent)).toContain("Reading…");
     expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
   });
 

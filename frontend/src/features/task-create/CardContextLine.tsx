@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { Field } from "@/components/system/Field";
 import { ICONS } from "@/components/system/icons";
+import { LiveRegion } from "@/components/system/LiveRegion";
 import { Shimmer } from "@/components/system/Shimmer";
 import { StateGlyph } from "@/components/system/StateGlyph";
 import { SunkenLine } from "@/components/system/SunkenLine";
@@ -115,12 +116,15 @@ export function CardContextLine({
           </>
         }
       >
+        <LiveRegion kind="status" className="sr-only">
+          {refreshing
+            ? "Refreshing the card…"
+            : refreshError !== null && `Couldn't refresh the card: ${refreshError}.`}
+        </LiveRegion>
         {refreshing ? (
-          <span role="status">
-            <Shimmer>Refreshing the card…</Shimmer>
-          </span>
+          <Shimmer>Refreshing the card…</Shimmer>
         ) : refreshError !== null ? (
-          <span role="status" className="flex flex-col">
+          <span className="flex flex-col">
             <span>
               <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />
               {`Couldn't refresh the card: ${refreshError}. The task will use the last reading.`}

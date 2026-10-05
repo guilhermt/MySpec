@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "./Button";
 import { IconButton } from "./IconButton";
 import { ICONS } from "./icons";
+import { LiveRegion } from "./LiveRegion";
 
 /** COPIED_MS is how long a button says Copied before it offers the copy again. */
 const COPIED_MS = 2000;
@@ -85,9 +86,9 @@ export function CopyButton({ text, label, variant, note = "after" }: CopyButtonP
           Can't copy · select the text
         </span>
       )}
-      <span role="status" className="sr-only">
+      <LiveRegion kind="status" className="sr-only">
         {result === "copied" ? "Copied" : ""}
-      </span>
+      </LiveRegion>
     </span>
   );
 }

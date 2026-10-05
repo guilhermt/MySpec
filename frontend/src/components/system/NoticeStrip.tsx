@@ -9,7 +9,8 @@ export interface NoticeStripProps {
   action?: ReactNode;
   error?: string;
   outlined?: boolean;
-  role?: "alert" | "status";
+  /** role is alert for a failure that arrived after the screen, status for a note, and none for what was there when the screen opened. */
+  role?: "alert" | "status" | undefined;
   className?: string;
 }
 
@@ -25,13 +26,14 @@ export function NoticeStrip({
   action,
   error,
   outlined,
-  role = "alert",
+  role,
   className,
 }: NoticeStripProps) {
   return (
     <div
       id={id}
-      role={role}
+      data-slot="notice-strip"
+      {...(role !== undefined ? { role } : {})}
       className={cn(
         "flex min-h-(--size-ask) flex-wrap items-center gap-(--space-2) rounded-sm bg-surface-0 py-(--space-1-5) pr-(--space-1-5) pl-(--space-4) text-(length:--text-meta) leading-(--leading-meta)",
         outlined && "border border-line-2",

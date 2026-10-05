@@ -57,7 +57,8 @@ describe("DeletionPreview", () => {
   });
 
   it("draws nothing without lines", () => {
-    const { container } = render(<DeletionPreview state={{ kind: "lines", lines: [] }} />);
-    expect(container).toBeEmptyDOMElement();
+    render(<DeletionPreview state={{ kind: "lines", lines: [] }} />);
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
   });
 });

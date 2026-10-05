@@ -5,6 +5,7 @@ import { Badge } from "./Badge";
 import { CutText } from "./CutText";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons";
+import { LiveRegion } from "./LiveRegion";
 import { Spinner } from "./Spinner";
 import { StateGlyph } from "./StateGlyph";
 import { Tooltip } from "./Tooltip";
@@ -131,8 +132,8 @@ export function FoldedDraft({
             text={title}
             className={cn("grow font-medium", muted ? "text-ink-3" : "text-ink-1")}
           />
-          <span
-            {...(state.glyph === "spinner" ? { role: "status" } : {})}
+          <LiveRegion
+            kind="status"
             className={cn(
               "ml-auto inline-flex max-w-1/2 min-w-0 shrink-0 items-center gap-(--space-1-5)",
               META,
@@ -145,7 +146,7 @@ export function FoldedDraft({
           >
             <DraftGlyph glyph={state.glyph} />
             <CutText text={state.text} />
-          </span>
+          </LiveRegion>
         </div>
         {line2 !== "" && <CutText text={line2} className={cn(META, "text-ink-3")} />}
       </div>

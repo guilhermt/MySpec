@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { CutText } from "@/components/system/CutText";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import { Spinner } from "@/components/system/Spinner";
@@ -110,9 +111,10 @@ export function Group({ taskId, stage, group, waitingToolUseId }: GroupProps) {
             <Spinner />
             <span className="shrink-0 truncate text-ink-2">{running.label}</span>
             {running.command !== "" && (
-              <span className="min-w-0 truncate font-mono text-(length:--text-micro) leading-(--leading-micro) text-ink-4 [font-variant-ligatures:none]">
-                {running.command}
-              </span>
+              <CutText
+                text={running.command}
+                className="font-mono text-(length:--text-micro) leading-(--leading-micro) text-ink-4 [font-variant-ligatures:none]"
+              />
             )}
           </span>
         )}

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { LiveRegion } from "@/components/system/LiveRegion";
 import { NoticeStrip } from "@/components/system/NoticeStrip";
 import { Shimmer } from "@/components/system/Shimmer";
 import { ReviewModeOptions } from "@/features/review-mode/ReviewModeOptions";
@@ -68,7 +69,9 @@ export function Defaults() {
           )
         }
       >
-        {notice !== null && <NoticeStrip role="status" title={notice.title} reason={notice.text} />}
+        <LiveRegion kind="status" className="contents">
+          {notice !== null && <NoticeStrip title={notice.title} reason={notice.text} />}
+        </LiveRegion>
         <div className="flex flex-col gap-(--space-4)">
           {MODEL_GROUPS.map((group) => (
             <fieldset

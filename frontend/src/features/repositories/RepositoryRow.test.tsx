@@ -67,7 +67,7 @@ describe("RepositoryRow", () => {
   it("shows where the clone goes while it runs, and holds Clone", () => {
     row({ ...UNCLONED, name: "android", cloning: true }, { cloneFolder: "/home/dev/code" });
 
-    expect(screen.getByRole("status")).toHaveTextContent("Cloning into ~/code/android…");
+    expect(screen.getByText("Cloning into ~/code/android…")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Clone" })).not.toBeInTheDocument();
   });
 

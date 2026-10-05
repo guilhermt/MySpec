@@ -17,7 +17,7 @@ describe.each(THEMES)("ReadingAge in the %s theme", (theme) => {
   it("writes Reading… in the third ink", () => {
     setTheme(theme);
     render(<ReadingAge readAt="" reading now={NOW} />);
-    expect(getComputedStyle(screen.getByRole("status")).color).toBe(token("--ink-3"));
+    expect(getComputedStyle(screen.getByText("Reading…")).color).toBe(token("--ink-3"));
   });
 
   it("writes Not read yet in the fourth ink", () => {

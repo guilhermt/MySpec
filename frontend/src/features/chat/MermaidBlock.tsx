@@ -1,5 +1,5 @@
 import { createMermaidPlugin } from "@streamdown/mermaid";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { Dialog } from "@/components/system/Dialog";
 import { IconButton } from "@/components/system/IconButton";
@@ -79,12 +79,33 @@ function useDrawing(source: string, closed: boolean): Drawn | null {
   return drawn !== null && drawn.source === source && drawn.theme === theme ? drawn : null;
 }
 
-// Diagram is the SVG at a width, scrolling when it is wider than its container.
+// Diagram is the SVG at its natural width, or at the width of its container when that is narrower.
+// The height of a scaled SVG is a fraction of a pixel, which the box rounds up to a whole one.
 function Diagram({ drawing, width }: { drawing: Drawing; width: number }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | undefined>(undefined);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new drawing is a new SVG to measure
+  useLayoutEffect(() => {
+    const element = box.current;
+    const svg = element?.querySelector("svg");
+    if (element === null || svg === null || svg === undefined) {
+      return;
+    }
+    const measure = () => setHeight(Math.ceil(svg.getBoundingClientRect().height));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [drawing]);
   return (
-    <div className="overflow-x-auto p-(--space-3)">
+    <div className="p-(--space-3)">
       <div
-        style={{ width: `${width}px` }}
+        ref={box}
+        style={{
+          width: `${width}px`,
+          maxWidth: "100%",
+          ...(height === undefined ? {} : { height: `${height}px` }),
+        }}
         // The markup is the SVG Mermaid drew with securityLevel "strict", which sanitizes it.
         // biome-ignore lint/security/noDangerouslySetInnerHtml: the sanitized SVG of the diagram
         dangerouslySetInnerHTML={{ __html: drawing.markup }}

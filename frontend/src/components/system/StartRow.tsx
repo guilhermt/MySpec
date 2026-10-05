@@ -5,6 +5,7 @@ import { CutText } from "./CutText";
 import { Icon } from "./Icon";
 import { ICONS, type IconGlyph } from "./icons";
 import { Kbd } from "./Kbd";
+import { LiveRegion } from "./LiveRegion";
 import { ReadingAge } from "./ReadingAge";
 import { Shimmer } from "./Shimmer";
 import { Spinner } from "./Spinner";
@@ -128,16 +129,24 @@ interface BlockerActions {
   changePathError?: ChangePathError | null | undefined;
 }
 
-// Busy is the gerund that takes the place of an action while it runs.
-function Busy({ children }: { children: string }) {
+// Busy is the gerund that takes the place of an action while it runs: a region that stays on the
+// line, so the gerund arrives into a region the reader already holds, and the action it replaces.
+function Busy({ busy, action, children }: { busy: boolean; action: ReactNode; children: string }) {
   return (
-    <span
-      role="status"
-      className={cn("inline-flex items-center gap-(--space-1-5) text-ink-3", META)}
-    >
-      <Spinner />
-      {children}
-    </span>
+    <>
+      <LiveRegion
+        kind="status"
+        className={cn("inline-flex items-center gap-(--space-1-5) text-ink-3", META)}
+      >
+        {busy && (
+          <>
+            <Spinner />
+            {children}
+          </>
+        )}
+      </LiveRegion>
+      {!busy && action}
+    </>
   );
 }
 
@@ -156,8 +165,8 @@ function BlockerLine({
   return (
     <div className="flex flex-col">
       <div className={cn("flex min-h-(--size-control-sm) items-center gap-(--space-2)", META)}>
-        <span
-          {...(blocker.kind === "not-cloned" && blocker.cloning ? { role: "status" } : {})}
+        <LiveRegion
+          kind="status"
           className={cn("min-w-0 flex-1", failed ? "text-state-error" : "text-ink-2")}
         >
           <CutText
@@ -169,16 +178,19 @@ function BlockerLine({
             )}
             {blocker.kind === "read-failed" ? blocker.message : blocker.text}
           </CutText>
-        </span>
-        {blocker.kind === "read-failed" &&
-          onRetryRead !== undefined &&
-          (blocker.reading ? (
-            <Busy>Reading…</Busy>
-          ) : (
-            <Button variant="ghost" size="xs" icon={ICONS.refresh} onClick={onRetryRead}>
-              Try again
-            </Button>
-          ))}
+        </LiveRegion>
+        {blocker.kind === "read-failed" && onRetryRead !== undefined && (
+          <Busy
+            busy={blocker.reading}
+            action={
+              <Button variant="ghost" size="xs" icon={ICONS.refresh} onClick={onRetryRead}>
+                Try again
+              </Button>
+            }
+          >
+            Reading…
+          </Busy>
+        )}
         {blocker.kind === "not-cloned" &&
           (blocker.cloning ? (
             // The line already says Cloning acme/billing…: the spinner alone takes the place of Clone.

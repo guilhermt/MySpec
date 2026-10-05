@@ -160,6 +160,7 @@ export function ReportsPanel({ review }: ReportsPanelProps) {
             )}
             {artifact.status === "error" && (
               <NoticeStrip
+                role="alert"
                 title="Couldn't read the report"
                 reason={artifact.error}
                 className="bg-state-error-veil"

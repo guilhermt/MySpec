@@ -101,7 +101,7 @@ Da esquerda para a direita:
 
 - **`←`**, com o destino no tooltip (`Back to Rate limit per API key · Alt+←`). **`→`** aparece só com destino;
 - **o título** do board, em `--text-body` e peso 600;
-- à direita, **a idade da lista na tela** (`Read 2m ago`, em `--text-micro` e `--ink-4`, com a hora exata no tooltip). Durante uma leitura ela diz `Reading…` com o spinner (`role="status"`);
+- à direita, **a idade da lista na tela** (`Read 2m ago`, em `--text-micro` e `--ink-4`, com a hora exata no tooltip). Durante uma leitura ela diz `Reading…` com o spinner, numa região `role="status"` que já estava na tela, vazia, antes do texto;
 - **Refresh**, fantasma de ícone, tracejado durante uma leitura;
 - um divisor e **New discussion** `N`, secundário, que abre o diálogo de discussão com o board fixo e sem cards;
 - **`⋯`**, com **Select cards to discuss** `Space`, **Open on GitHub** e, depois de um separador, **Edit the board in Settings…**.
@@ -239,7 +239,7 @@ Uma leitura nunca apaga a lista: a visão mostra a leitura guardada enquanto lê
 | Lida | `Read 2m ago` | A lista | — |
 | Lendo sobre a última | `Reading…` com o spinner; **Refresh** tracejado | A lista guardada | `reading…` com brilho no nó |
 | A última leitura falhou | `Read 2h ago`, a idade da lista na tela | Uma faixa afundada no alto da lista, nunca vermelha: `◇ Couldn't read the board · 4m ago`, a mensagem de `features.md` (Falhas) e **Try again**. Tentando: **Try again** vira `Reading…` com o spinner | `◇ Read failed`, com a razão no tooltip |
-| Nunca lida, lendo | `Reading…` | O esqueleto de quatro linhas com brilho (`role="status"`) | `reading…` |
+| Nunca lida, lendo | `Reading…` | O esqueleto de quatro linhas com brilho (um grupo ocupado, `aria-busy`, com o nome `Reading the board…`) | `reading…` |
 | Nunca lida, falhou | — | No lugar da lista: `Couldn't read the board`, a mensagem e **Try again** | `◇ Read failed` |
 | Board que saiu do estado com a visão aberta | — | A página do lugar que saiu (`structure.md` §1): `This board was removed.`, com a volta ao lugar anterior | — |
 
@@ -401,7 +401,7 @@ A ordem de Tab é: cabeçalho (navegação, **Refresh**, **New discussion**, `�
 
 - A lista é um `tree` com uma parada de Tab (roving tabindex): os cabeçalhos de seção são `treeitem` de nível 1 com `aria-expanded`, e os cards são `treeitem` de nível 2 com `aria-selected` no aberto. O card abre fora da árvore, no painel.
 - O painel é `aside` com o nome `Card #474`. A barra de filtros é `role="search"`, e a barra da seleção é `role="toolbar"`, com a contagem em `role="status"`.
-- A idade da leitura durante uma leitura, o esqueleto e o aviso de uma tecla que não age são `role="status"`. A faixa da falha é `role="alert"`.
+- A idade da leitura durante uma leitura e o aviso de uma tecla que não age são `role="status"`, regiões que existem antes do texto: o texto chega depois. O esqueleto é um grupo ocupado com nome. A faixa da falha é `role="alert"` só quando a falha chega depois da tela; uma falha que já estava lá ao abrir não tem papel.
 - Todo botão desabilitado é tracejado, com a razão ligada por `aria-describedby`.
 
 ## 9. Os componentes que entram em `system/components.md`

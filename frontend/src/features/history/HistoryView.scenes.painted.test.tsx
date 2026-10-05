@@ -152,7 +152,7 @@ describe.each(THEMES)("HistoryView, the scenes in the %s theme", (theme) => {
       }
       // The line the older items add under the list is in the area the capture takes.
       if (variant === "older-loading" || variant === "older-failed") {
-        const line = area.querySelector("[data-older-sentinel] + p");
+        const line = area.querySelector("[data-older-sentinel] ~ p");
         expect(line).toHaveTextContent(
           variant === "older-loading" ? "Loading older items…" : "Couldn't load older items: ",
         );

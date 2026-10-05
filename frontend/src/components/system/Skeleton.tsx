@@ -12,11 +12,13 @@ export interface SkeletonBarProps {
   className?: string;
 }
 
-/** Skeleton stands in for content that is loading, named for the reader. */
+/** Skeleton stands in for content that is loading: a busy group, named for the reader. */
 export function Skeleton({ label, children, className }: SkeletonProps) {
   return (
+    // biome-ignore lint/a11y/useSemanticElements: a fieldset draws a frame and a legend a loading placeholder doesn't want
     <div
-      role="status"
+      role="group"
+      aria-busy="true"
       aria-label={label}
       className={cn("flex flex-col gap-(--space-2)", className)}
     >

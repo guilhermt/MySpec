@@ -268,7 +268,7 @@ describe("ArchivedTask", () => {
       },
     });
 
-    expect(screen.getByRole("status", { name: "Reading the task" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Reading the task" })).toBeInTheDocument();
   });
 });
 

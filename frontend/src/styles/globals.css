@@ -212,11 +212,12 @@
 }
 /* The one loop of the spinner. Without motion it stops as a three-quarter ring. */
 @utility spin-glyph {
+  border-color: var(--spin-track);
+  border-top-color: var(--spin-arc);
+  border-right-color: var(--spin-arc);
   animation: glyph-spin var(--duration-spin) linear infinite;
   @media (prefers-reduced-motion: reduce) {
     animation: none;
-    border-top-color: var(--spin-arc);
-    border-right-color: var(--spin-arc);
     border-left-color: var(--spin-arc);
   }
 }

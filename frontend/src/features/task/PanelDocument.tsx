@@ -82,6 +82,7 @@ function DocumentBody({ taskId, file, artifactVersion, title, step, onRetry }: D
   if (artifact.status === "error") {
     return (
       <NoticeStrip
+        role="alert"
         title={`Couldn't read ${file}`}
         reason={artifact.error}
         className="bg-state-error-veil"

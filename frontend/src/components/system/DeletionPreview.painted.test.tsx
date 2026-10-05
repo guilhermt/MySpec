@@ -61,7 +61,8 @@ describe.each(THEMES)("DeletionPreview in the %s theme", (theme) => {
   it("shimmers the reading line and sinks a block of three bars", () => {
     setTheme(theme);
     const { container } = render(<DeletionPreview state={{ kind: "reading" }} />);
-    const line = screen.getByText("Reading the worktree and the branch…");
+    const line = container.querySelector<HTMLElement>(".shimmer-text") as HTMLElement;
+    expect(line).toHaveTextContent("Reading the worktree and the branch…");
     expect(getComputedStyle(line).animationName).not.toBe("none");
     const bars = container.querySelectorAll('[data-slot="skeleton"]');
     expect(bars).toHaveLength(3);

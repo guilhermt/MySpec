@@ -2,6 +2,7 @@ import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/system/BrandMark";
 import { Button } from "@/components/system/Button";
 import { CopyBlock } from "@/components/system/CopyBlock";
+import { LiveRegion } from "@/components/system/LiveRegion";
 import { StartSteps } from "@/components/system/StartSteps";
 import { StateGlyph } from "@/components/system/StateGlyph";
 import { useNow } from "@/features/attention/useNow";
@@ -98,9 +99,9 @@ export function StartScreen() {
             <div className={COLUMN}>
               <BrandMark size="lg" />
               <h1 className={TITLE}>Starting MySpec…</h1>
-              <div role="status" aria-live="polite">
+              <LiveRegion kind="status" className="block">
                 <StartSteps steps={stepViews(startup, now)} />
-              </div>
+              </LiveRegion>
             </div>
           )
         )}

@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Button } from "@/components/system/Button";
 import { ICONS } from "@/components/system/icons";
+import { LiveRegion } from "@/components/system/LiveRegion";
 import { NoticeStrip } from "@/components/system/NoticeStrip";
 import { Spinner } from "@/components/system/Spinner";
+import { useArrivedLater } from "@/components/system/useArrivedLater";
 import { READS_CLONES } from "@/features/discussion/new-discussion";
 import { messageOf } from "@/lib/errors";
 import { cloneMissingText } from "@/lib/repositories";
@@ -28,45 +30,47 @@ export function UnclonedRepository({ repository, layout = "line" }: UnclonedRepo
       .finally(() => setBusy(false));
   };
   const failure = error ?? (repository.cloneError === "" ? null : repository.cloneError);
+  const arrived = useArrivedLater(failure !== null);
 
   if (layout === "strip") {
-    if (repository.cloning) {
-      return (
-        <p
-          role="status"
-          className="flex items-center gap-(--space-2) py-(--space-1-5) pl-(--space-4) text-(length:--text-meta) leading-(--leading-meta) text-ink-2"
-        >
-          <Spinner />
-          {`Cloning ${repository.fullName}…`}
-        </p>
-      );
-    }
     const missing = repository.missing;
     return (
-      <NoticeStrip
-        title={
-          missing
-            ? `The clone of ${repository.fullName} at ${repository.path} is missing.`
-            : `${repository.fullName} isn't cloned.`
-        }
-        reason={READS_CLONES}
-        action={
-          <Button
-            size="xs"
-            variant="ghost"
-            {...(missing ? {} : { icon: ICONS.clone })}
-            disabled={busy}
-            onClick={() =>
-              act(() =>
-                missing ? changeRepositoryPath(repository.id) : cloneRepository(repository.id),
-              )
+      <>
+        <LiveRegion kind="status" className="contents">
+          {repository.cloning && (
+            <p className="flex items-center gap-(--space-2) py-(--space-1-5) pl-(--space-4) text-(length:--text-meta) leading-(--leading-meta) text-ink-2">
+              <Spinner />
+              {`Cloning ${repository.fullName}…`}
+            </p>
+          )}
+        </LiveRegion>
+        {!repository.cloning && (
+          <NoticeStrip
+            title={
+              missing
+                ? `The clone of ${repository.fullName} at ${repository.path} is missing.`
+                : `${repository.fullName} isn't cloned.`
             }
-          >
-            {missing ? "Change path…" : failure === null ? "Clone" : "Try the clone again"}
-          </Button>
-        }
-        {...(failure !== null ? { error: failure } : {})}
-      />
+            reason={READS_CLONES}
+            action={
+              <Button
+                size="xs"
+                variant="ghost"
+                {...(missing ? {} : { icon: ICONS.clone })}
+                disabled={busy}
+                onClick={() =>
+                  act(() =>
+                    missing ? changeRepositoryPath(repository.id) : cloneRepository(repository.id),
+                  )
+                }
+              >
+                {missing ? "Change path…" : failure === null ? "Clone" : "Try the clone again"}
+              </Button>
+            }
+            {...(failure !== null ? { error: failure } : {})}
+          />
+        )}
+      </>
     );
   }
 
@@ -74,12 +78,15 @@ export function UnclonedRepository({ repository, layout = "line" }: UnclonedRepo
     <div className="flex flex-col gap-(--space-1-5)">
       <div className="flex items-center justify-between gap-(--space-2)">
         <span className="min-w-0 truncate text-ink-1">{repository.fullName}</span>
-        {repository.cloning ? (
-          <p role="status" className="flex items-center gap-(--space-1-5) text-ink-3">
-            <Spinner />
-            Cloning…
-          </p>
-        ) : repository.missing ? (
+        <LiveRegion kind="status" className="flex items-center gap-(--space-1-5) text-ink-3">
+          {repository.cloning && (
+            <>
+              <Spinner />
+              Cloning…
+            </>
+          )}
+        </LiveRegion>
+        {repository.cloning ? null : repository.missing ? (
           <Button
             size="xs"
             disabled={busy}
@@ -103,7 +110,10 @@ export function UnclonedRepository({ repository, layout = "line" }: UnclonedRepo
         </p>
       )}
       {failure !== null && (
-        <p role="alert" className="break-all text-(length:--text-micro) text-state-error">
+        <p
+          {...(arrived ? { role: "alert" } : {})}
+          className="break-all text-(length:--text-micro) text-state-error"
+        >
           {failure}
         </p>
       )}

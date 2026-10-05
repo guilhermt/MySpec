@@ -119,7 +119,6 @@ export function BoardCardPanel({
           <NoticeStrip
             id={STRIP_ID}
             outlined
-            role="status"
             title="This card isn't in the last reading of the board."
             reason={outOfReadingText(board, now)}
           />

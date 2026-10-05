@@ -5,6 +5,7 @@ import { olderKey } from "@/lib/history";
 import { api } from "@/lib/wails";
 import { type AppStore, useAppStore } from "@/store/app-store";
 import { intersect, observed } from "@/test/intersection";
+import { spoken } from "@/test/live";
 import { renderWithStore } from "@/test/render";
 import {
   makeArchivedDiscussion,
@@ -237,20 +238,20 @@ describe("HistoryView, older items", () => {
   it("says it is loading the older items, as a status", () => {
     view(MORE, "", list("", "", { status: "loading" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("Loading older items…");
+    expect(spoken()).toEqual(["Loading older items…"]);
   });
 
   it("says it is searching the older items while a search waits for the answer", () => {
     view(MORE, "refund");
 
-    expect(screen.getByRole("status")).toHaveTextContent("Searching older items…");
+    expect(spoken()).toEqual(["Searching older items…"]);
     expect(screen.queryByText(/Nothing matches/)).toBeNull();
   });
 
   it("shows nothing at the foot when everything came", () => {
     view({}, "", list("", "", { matched: 3 }));
 
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(spoken()).toEqual([]);
     expect(screen.queryByRole("alert")).toBeNull();
   });
 

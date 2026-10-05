@@ -1429,7 +1429,7 @@ const ROWS: Row[] = [
     },
     steps: openDocuments,
     where: "documents",
-    role: "status",
+    role: "group",
     name: /^Reading the document$/,
   },
   {
@@ -1617,7 +1617,11 @@ const ROWS: Row[] = [
     draw: start([LOGIN], [makeRepository({ cloned: false, cloning: true })]),
     where: "dialog",
     check: (place) =>
-      expect(within(place).getByRole("status")).toHaveTextContent("Cloning dev/web…"),
+      expect(
+        within(place)
+          .getAllByRole("status")
+          .map((region) => region.textContent),
+      ).toContain("Cloning dev/web…"),
   },
   {
     origin: "NewDiscussionDialog",

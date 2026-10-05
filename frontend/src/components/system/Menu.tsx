@@ -390,7 +390,7 @@ export function MenuMessage({ children, tone = "neutral", onRetry }: MenuMessage
   return (
     <div className="flex flex-col items-start gap-(--space-1) px-(--space-2) py-(--space-1-5)">
       <div
-        role={error ? "alert" : "status"}
+        {...(error ? { role: "alert" } : {})}
         className={cn(
           "max-w-(--size-tooltip-max) text-(length:--text-meta) leading-(--leading-meta) text-ink-3",
           tone === "notice" && "text-ink-2",

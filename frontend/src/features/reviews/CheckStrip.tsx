@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Button } from "@/components/system/Button";
+import { LiveRegion } from "@/components/system/LiveRegion";
 import { NoticeStrip } from "@/components/system/NoticeStrip";
 import { Spinner } from "@/components/system/Spinner";
+import { useArrivedLater } from "@/components/system/useArrivedLater";
 import { useNow } from "@/features/attention/useNow";
 import { COLUMN_CLASS } from "@/features/chat/ConversationColumn";
 import { checkStrip } from "@/features/reviews/review-header";
@@ -25,6 +27,7 @@ export function CheckStrip({ review }: CheckStripProps) {
   const [reading, setReading] = useState(false);
   const now = useNow(MINUTE, review.checkError !== "");
   const strip = checkStrip(review, now);
+  const role = useArrivedLater(strip !== null) ? "alert" : undefined;
   if (strip === null) {
     return null;
   }
@@ -44,21 +47,26 @@ export function CheckStrip({ review }: CheckStripProps) {
         <NoticeStrip
           title={strip.title}
           reason={strip.reason}
-          role="alert"
+          role={role}
           action={
-            reading ? (
-              <span
-                role="status"
-                className="inline-flex items-center gap-(--space-1-5) px-(--space-2) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
+            <>
+              <LiveRegion
+                kind="status"
+                className="inline-flex items-center gap-(--space-1-5) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
               >
-                <Spinner />
-                Reading…
-              </span>
-            ) : (
-              <Button variant="secondary" size="sm" onClick={() => void retry()}>
-                Try again
-              </Button>
-            )
+                {reading && (
+                  <span className="inline-flex items-center gap-(--space-1-5) px-(--space-2)">
+                    <Spinner />
+                    Reading…
+                  </span>
+                )}
+              </LiveRegion>
+              {!reading && (
+                <Button variant="secondary" size="sm" onClick={() => void retry()}>
+                  Try again
+                </Button>
+              )}
+            </>
           }
         />
       </div>

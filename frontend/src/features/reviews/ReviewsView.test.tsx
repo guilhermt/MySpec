@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ReviewsView } from "@/features/reviews/ReviewsView";
 import { api, type PullRequestRow, type ReviewCenter, type State } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
+import { spoken } from "@/test/live";
 import { renderWithStore } from "@/test/render";
 import {
   makePullRequestRow,
@@ -213,7 +214,7 @@ describe("ReviewsView", () => {
       expect(
         within(panel).getByRole("button", { name: /^Start review/ }),
       ).toHaveAccessibleDescription("Pull requests from forks can't be reviewed yet.");
-      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      expect(spoken()).toEqual([]);
     });
 
     it("closes when the pull request leaves the reading", async () => {
@@ -270,9 +271,7 @@ describe("ReviewsView", () => {
     it("shows a skeleton of four bars and no bar while the first reading runs", () => {
       const { container } = view({ readAt: "", reading: true });
 
-      expect(
-        screen.getByRole("status", { name: "Reading the pull requests…" }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("group", { name: "Reading the pull requests…" })).toBeInTheDocument();
       expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(4);
       expect(screen.queryByRole("search")).not.toBeInTheDocument();
     });
@@ -336,7 +335,8 @@ describe("ReviewsView", () => {
         ],
       });
 
-      const strip = screen.getByRole("alert");
+      const strip = screen.getByText("gh is not authenticated. Run gh auth login.").closest("div");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       expect(strip).toHaveTextContent("Couldn't read dev/api");
       expect(strip).toHaveTextContent("gh is not authenticated. Run gh auth login.");
       expect(screen.getByText("Add the login screen")).toBeInTheDocument();
@@ -348,7 +348,9 @@ describe("ReviewsView", () => {
         failures: [makePullsFailure({ repository: "dev/web", message: "No access." })],
       });
 
-      expect(screen.getByRole("alert")).toHaveTextContent("Couldn't read dev/web");
+      expect(screen.getByText("No access.").closest("div")).toHaveTextContent(
+        "Couldn't read dev/web",
+      );
       expect(screen.getByText("No open pull requests.")).toBeInTheDocument();
     });
 

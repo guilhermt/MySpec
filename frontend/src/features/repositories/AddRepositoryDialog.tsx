@@ -7,6 +7,7 @@ import {
 } from "@/components/system/Collapsible";
 import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
 import { ICONS } from "@/components/system/icons";
+import { LiveRegion } from "@/components/system/LiveRegion";
 import { SearchInput } from "@/components/system/SearchInput";
 import { Spinner } from "@/components/system/Spinner";
 import { Tooltip } from "@/components/system/Tooltip";
@@ -187,8 +188,11 @@ function AddRepositoryForm({ onOpenChange }: Pick<AddRepositoryDialogProps, "onO
       }}
     >
       <DialogBody className="overflow-hidden">
+        <LiveRegion kind="status" className="sr-only">
+          {scan.status === "scanning" && SCANNING_TEXT}
+        </LiveRegion>
         {scan.status === "scanning" ? (
-          <p role="status" className="flex items-center gap-(--space-2)">
+          <p className="flex items-center gap-(--space-2)">
             <Spinner tone="current" />
             {SCANNING_TEXT}
           </p>

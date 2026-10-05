@@ -565,7 +565,12 @@ describe("where the actions of Settings went", () => {
     });
     expect(found.length).toBeGreaterThan(0);
     if (row.text !== undefined) {
-      expect(found[0]).toHaveTextContent(row.text);
+      const text = row.text;
+      const has = (one: HTMLElement) =>
+        typeof text === "string"
+          ? (one.textContent ?? "").includes(text)
+          : text.test(one.textContent ?? "");
+      expect(found.some(has)).toBe(true);
     }
     if (row.description !== undefined) {
       expect(found[0]).toHaveAccessibleDescription(row.description);

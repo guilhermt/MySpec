@@ -436,7 +436,7 @@ Cada componente embrulha um primitivo gerado em `frontend/src/components/ui` (nu
 | | |
 |---|---|
 | Anatomia | Barras de `--space-4` em `--surface-0` com o brilho, na forma do que virá: quatro linhas de lista, três entradas da conversa, a lateral no início do app, a prévia de um apagamento |
-| Acessibilidade | `role="status"` com o que se lê (`Reading the board…`) |
+| Acessibilidade | um grupo ocupado (`role="group"`, `aria-busy`) com o que se lê no nome (`Reading the board…`) |
 | Não faça | Não use esqueleto numa releitura: a lista guardada fica, e a idade diz `Reading…` |
 
 ### Faixa de aviso

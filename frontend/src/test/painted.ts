@@ -8,6 +8,13 @@ import type { CSSProperties } from "react";
 import { inject, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    /** emulateReducedMotion is the command of test/browser-commands.ts, which the config registers. */
+    emulateReducedMotion: (value: "reduce" | "no-preference") => Promise<void>;
+  }
+}
+
 declare module "vitest" {
   export interface ProvidedContext {
     /** captureDir is where capture saves its screenshots: frontend/captures with MYSPEC_CAPTURES=1, "" without. */
@@ -358,12 +365,34 @@ export function cutTexts(root: ParentNode = document): HTMLElement[] {
 }
 
 /**
+ * reachable tells whether the pointer can rest on an element: nothing stands over its middle, and no
+ * popup holds the page inert around it. What lies out of the window is reachable, since resting the
+ * pointer scrolls to it.
+ */
+function reachable(element: Element): boolean {
+  if (document.querySelector("[data-base-ui-inert]") !== null) {
+    return element.closest("[data-base-ui-portal]") !== null;
+  }
+  const box = element.getBoundingClientRect();
+  const x = box.left + box.width / 2;
+  const y = box.top + box.height / 2;
+  if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) {
+    return true;
+  }
+  const hit = document.elementFromPoint(x, y);
+  return hit !== null && element.contains(hit);
+}
+
+/**
  * withoutTooltip are the names of the elements that say nothing when the pointer rests on them:
  * a text the screen cuts must have its whole text in a tooltip.
  */
 export async function withoutTooltip(elements: readonly HTMLElement[]): Promise<string[]> {
   const missing: string[] = [];
   for (const element of elements) {
+    // Resting the pointer on a row scrolls its list, and a windowed list lets go of the rows that
+    // left: what is no longer on the page is not a text the screen cuts.
+    if (!element.isConnected || !reachable(element)) continue;
     await userEvent.hover(element);
     const shown = await vi
       .waitFor(

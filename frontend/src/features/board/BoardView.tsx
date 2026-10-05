@@ -32,7 +32,6 @@ import {
   readingView,
   sections,
   selectNotice,
-  showsFailureStrip,
   startNotice,
 } from "@/features/board/board-view";
 import { CardTree, type CardTreeHandle } from "@/features/board/CardTree";
@@ -509,7 +508,7 @@ function BoardScreen({ board }: { board: Board }) {
       >
         <ScrollArea className="list-area min-h-0 flex-1" viewportRef={scrollRef}>
           <div className={LIST_COLUMN}>
-            {showsFailureStrip(board) && <FailureStrip board={board} now={now} />}
+            <FailureStrip board={board} now={now} />
             {bar}
             {content}
           </div>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/system/Button";
 import { ChecksList } from "@/components/system/ChecksList";
+import { LiveRegion } from "@/components/system/LiveRegion";
 import { Spinner } from "@/components/system/Spinner";
 import { useNow } from "@/features/attention/useNow";
 import {
@@ -28,17 +29,6 @@ export interface LiveChecksProps {
 /** Refresh reads the pull request out of the minute: Refresh, and Reading… while the promise runs. */
 function Refresh({ onRefresh }: { onRefresh: () => Promise<void> }) {
   const [running, setRunning] = useState(false);
-  if (running) {
-    return (
-      <span
-        role="status"
-        className="inline-flex items-center gap-(--space-1-5) px-(--space-2) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
-      >
-        <Spinner />
-        Reading…
-      </span>
-    );
-  }
   const press = async () => {
     setRunning(true);
     try {
@@ -48,9 +38,24 @@ function Refresh({ onRefresh }: { onRefresh: () => Promise<void> }) {
     }
   };
   return (
-    <Button variant="ghost" size="xs" onClick={() => void press()}>
-      Refresh
-    </Button>
+    <>
+      <LiveRegion
+        kind="status"
+        className="inline-flex items-center gap-(--space-1-5) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
+      >
+        {running && (
+          <span className="inline-flex items-center gap-(--space-1-5) px-(--space-2)">
+            <Spinner />
+            Reading…
+          </span>
+        )}
+      </LiveRegion>
+      {!running && (
+        <Button variant="ghost" size="xs" onClick={() => void press()}>
+          Refresh
+        </Button>
+      )}
+    </>
   );
 }
 

@@ -362,7 +362,7 @@ describe("DetailsPanel, reports", () => {
     await user.click(screen.getByRole("button", { name: "Review 1 · clean" }));
 
     expect(
-      screen.getByRole("status", { name: "Reading Implementation · Review 1 · clean" }),
+      screen.getByRole("group", { name: "Reading Implementation · Review 1 · clean" }),
     ).toBeInTheDocument();
   });
 });

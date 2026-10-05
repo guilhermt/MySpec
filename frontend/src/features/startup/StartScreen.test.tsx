@@ -36,7 +36,7 @@ describe("StartScreen", () => {
     });
 
     expect(screen.queryByRole("heading", { name: "Starting MySpec…" })).not.toBeInTheDocument();
-    expect(screen.getByRole("status", { name: "Loading your work" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Loading your work" })).toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(1);
@@ -61,7 +61,7 @@ describe("StartScreen", () => {
   it("stands the sidebar still on the failure", () => {
     renderWithStore(<StartScreen />, { startup: failed() });
 
-    expect(screen.queryByRole("status", { name: "Loading your work" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Loading your work" })).not.toBeInTheDocument();
   });
 
   it("tries again on Enter with the focus on the button", async () => {

@@ -169,6 +169,7 @@ export function PromptPage({ stage, state, onRetry, onReset, focus }: PromptPage
         )}
         {state.status === "failed" && (
           <NoticeStrip
+            role="alert"
             title={`Couldn't read the ${name} prompt`}
             reason={state.message}
             action={

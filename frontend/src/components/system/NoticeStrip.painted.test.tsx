@@ -19,7 +19,7 @@ function strip(width = LIST_WIDTH_PX) {
       />
     </div>,
   );
-  return screen.getByRole("alert");
+  return document.querySelector<HTMLElement>('[data-slot="notice-strip"]') as HTMLElement;
 }
 
 describe.each(THEMES)("NoticeStrip in the %s theme", (theme) => {

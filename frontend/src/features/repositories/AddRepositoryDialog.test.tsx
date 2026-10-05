@@ -2,6 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { AddRepositoryDialog } from "@/features/repositories/AddRepositoryDialog";
 import { api, type RepositoryCandidate } from "@/lib/wails";
+import { spoken } from "@/test/live";
 import { renderWithStore } from "@/test/render";
 import { makeRepository, makeRepositoryCandidate, makeState } from "@/test/wails-mock";
 
@@ -47,7 +48,7 @@ describe("AddRepositoryDialog", () => {
     expect(primary).toHaveAccessibleDescription("Wait for the scan to end.");
 
     expect(await screen.findByRole("checkbox", { name: "dev/web ~/projects/web" })).toBeVisible();
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(spoken()).toEqual([]);
     await waitFor(() => expect(screen.getByRole("searchbox", FILTER)).toHaveFocus());
     expect(screen.getByRole("button", ADD)).toHaveAccessibleDescription("Check the clones to add.");
   });
@@ -182,7 +183,7 @@ describe("AddRepositoryDialog", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Couldn't scan your home folder: read ~: denied",
     );
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(spoken()).toEqual([]);
     expect(screen.getByRole("button", { name: "Browse…" })).not.toHaveAttribute(
       "aria-disabled",
       "true",

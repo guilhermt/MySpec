@@ -435,7 +435,7 @@ const ARCHIVED_TASK: Row[] = [
           archivedLookups: { "task-9": "loading" },
         },
       });
-      expect(screen.getByRole("status", { name: "Reading the task" })).toBeInTheDocument();
+      expect(screen.getByRole("group", { name: "Reading the task" })).toBeInTheDocument();
     },
   },
 ];

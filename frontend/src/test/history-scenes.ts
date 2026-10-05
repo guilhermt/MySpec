@@ -834,7 +834,7 @@ async function scrollToEnd() {
   });
   await vi.waitFor(() => expect(vi.mocked(api.listArchived)).toHaveBeenCalled());
   const line = await vi.waitFor(() => {
-    const found = document.querySelector("[data-older-sentinel] + p");
+    const found = document.querySelector("[data-older-sentinel] ~ p");
     if (found === null) {
       throw new Error("the line under the list is not drawn");
     }

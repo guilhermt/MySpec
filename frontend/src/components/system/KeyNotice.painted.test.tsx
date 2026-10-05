@@ -13,7 +13,9 @@ async function draw() {
   await act(async () => {
     render(<KeyNotice notice={notice} onHide={() => {}} />);
   });
-  return { anchor, status: await screen.findByRole("status") };
+  // The notice on screen is the popup, which only the eye reads; the reader hears the region.
+  const popup = (await screen.findByText(TEXT.title)).parentElement as HTMLElement;
+  return { anchor, status: popup };
 }
 
 describe.each(THEMES)("KeyNotice in the %s theme", (theme) => {
@@ -26,6 +28,16 @@ describe.each(THEMES)("KeyNotice in the %s theme", (theme) => {
     expect(status.getBoundingClientRect().width).toBeLessThanOrEqual(
       parseFloat(resolve("var(--size-tooltip-max)", "width")),
     );
+  });
+
+  it("stands over a tooltip and is read from a region of its own", async () => {
+    setTheme(theme);
+    const { status } = await draw();
+    expect(status).toHaveAttribute("aria-hidden", "true");
+    expect(getComputedStyle(status.parentElement as Element).zIndex).toBe(
+      resolve("var(--z-tooltip)", "z-index"),
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(`${TEXT.title} · ${TEXT.reason}`);
   });
 
   it("writes the title at 600 and the reason in the second ink", async () => {

@@ -346,7 +346,9 @@ describe("BoardCardPanel", () => {
     it("says so in a strip and dashes the actions with it as their reason", () => {
       panel(makeBoardCard(), {}, { outOfReading: true });
 
-      const strip = screen.getByRole("status");
+      const strip = screen
+        .getByText("This card isn't in the last reading of the board.")
+        .closest("div") as HTMLElement;
       expect(strip).toHaveTextContent("This card isn't in the last reading of the board.");
       expect(strip).toHaveTextContent("so a task or a discussion can't start from it.");
       for (const name of [/^Start task/, /^Discuss/]) {
@@ -456,9 +458,11 @@ describe("BoardCardPanel in the board", () => {
 
     expect(screen.queryByRole("treeitem", { name: /#12/ })).not.toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "Card #12" })).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "This card isn't in the last reading of the board.",
-    );
+    expect(
+      within(screen.getByRole("complementary", { name: "Card #12" })).getByText(
+        "This card isn't in the last reading of the board.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("takes a card its reading dropped out of the selection", async () => {

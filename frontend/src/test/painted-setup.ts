@@ -10,6 +10,7 @@ Object.assign(globalThis, { BASE_UI_ANIMATIONS_DISABLED: true });
 
 // A transition would be read halfway; the suite reads the state a control settles in.
 const settled = document.createElement("style");
+settled.id = "settled-transitions";
 settled.textContent = "*, *::before, *::after { transition-duration: 0s !important; }";
 document.head.append(settled);
 

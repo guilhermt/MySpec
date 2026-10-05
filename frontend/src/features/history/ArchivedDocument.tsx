@@ -39,6 +39,7 @@ export function ArchivedDocument({
   if (artifact.status === "error") {
     return (
       <NoticeStrip
+        role="alert"
         title={`Couldn't read ${name}`}
         reason={artifact.error}
         action={

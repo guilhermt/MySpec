@@ -1,8 +1,10 @@
 import { Button } from "@/components/system/Button";
 import { EmptyState } from "@/components/system/EmptyState";
+import { LiveRegion } from "@/components/system/LiveRegion";
 import { NoticeStrip } from "@/components/system/NoticeStrip";
 import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
 import { Spinner } from "@/components/system/Spinner";
+import { useArrivedLater } from "@/components/system/useArrivedLater";
 import { emptyListBody, failureStrips, noMatchBody } from "@/features/reviews/review-list";
 import type { ReviewCenter, State } from "@/lib/wails";
 import { refreshPullRequests } from "@/store/actions";
@@ -12,21 +14,25 @@ const SKELETON_BARS = 4;
 
 /** TryAgain reads the pull requests again, or says that they are being read. */
 function TryAgain({ reading }: { reading: boolean }) {
-  if (reading) {
-    return (
-      <span
-        role="status"
-        className="inline-flex items-center gap-(--space-1-5) px-(--space-2) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
-      >
-        <Spinner />
-        Reading…
-      </span>
-    );
-  }
   return (
-    <Button variant="secondary" size="sm" onClick={() => void refreshPullRequests()}>
-      Try again
-    </Button>
+    <>
+      <LiveRegion
+        kind="status"
+        className="inline-flex items-center gap-(--space-1-5) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
+      >
+        {reading && (
+          <span className="inline-flex items-center gap-(--space-1-5) px-(--space-2)">
+            <Spinner />
+            Reading…
+          </span>
+        )}
+      </LiveRegion>
+      {!reading && (
+        <Button variant="secondary" size="sm" onClick={() => void refreshPullRequests()}>
+          Try again
+        </Button>
+      )}
+    </>
   );
 }
 
@@ -38,12 +44,13 @@ export interface ReviewsFailureStripsProps {
 /** ReviewsFailureStrips are the repositories the last reading could not read, one strip each, above the list. */
 export function ReviewsFailureStrips({ center, now }: ReviewsFailureStripsProps) {
   const strips = failureStrips(center, now);
+  const role = useArrivedLater(strips.length > 0) ? "alert" : undefined;
   return strips.map((strip) => (
     <NoticeStrip
       key={strip.repository}
       title={strip.title}
       reason={strip.message}
-      role="alert"
+      role={role}
       action={<TryAgain reading={center.reading} />}
       className="mt-(--space-4) mb-(--space-4)"
     />

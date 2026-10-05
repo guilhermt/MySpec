@@ -14,6 +14,7 @@ import { isTyping } from "@/components/system/keys";
 import { LIST_COLUMN } from "@/components/system/ListPanel";
 import { HistoryRow, type HistoryRowView } from "@/components/system/ListRow";
 import { DaySectionHeader } from "@/components/system/ListSectionHeader";
+import { LiveRegion } from "@/components/system/LiveRegion";
 import { ScrollArea } from "@/components/system/ScrollArea";
 import { SearchInput } from "@/components/system/SearchInput";
 import { Shimmer } from "@/components/system/Shimmer";
@@ -515,6 +516,11 @@ export function HistoryView() {
             </div>
           )}
           <div ref={sentinelRef} data-older-sentinel="" aria-hidden="true" />
+          <LiveRegion kind="status" className="sr-only">
+            {status !== "error" &&
+              (status === "loading" || (query !== "" && waiting)) &&
+              (query === "" ? "Loading older items…" : "Searching older items…")}
+          </LiveRegion>
           {status === "error" ? (
             <p
               role="alert"
@@ -531,10 +537,7 @@ export function HistoryView() {
             </p>
           ) : (
             (status === "loading" || (query !== "" && waiting)) && (
-              <p
-                role="status"
-                className="px-(--space-4) py-(--space-3) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
-              >
+              <p className="px-(--space-4) py-(--space-3) text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
                 <Shimmer>
                   {query === "" ? "Loading older items…" : "Searching older items…"}
                 </Shimmer>

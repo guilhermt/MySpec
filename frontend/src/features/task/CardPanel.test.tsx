@@ -100,7 +100,7 @@ describe("CardPanel", () => {
       screen.getByRole("heading", { level: 3, name: "Add the login screen" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Email and password.")).toBeInTheDocument();
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it("opens the card on GitHub", async () => {

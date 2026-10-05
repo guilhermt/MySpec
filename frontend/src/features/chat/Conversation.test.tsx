@@ -74,7 +74,7 @@ describe("Conversation", () => {
     });
 
     expect(screen.queryByText("Add a login screen")).not.toBeInTheDocument();
-    expect(screen.getByRole("status", { name: "Loading the conversation" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Loading the conversation" })).toBeInTheDocument();
   });
 
   it("shows the conversation of the stage it was given", () => {
@@ -330,7 +330,7 @@ describe("Conversation", () => {
       },
     );
 
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it("stays quiet between turns", () => {
@@ -339,7 +339,7 @@ describe("Conversation", () => {
       ui: { transcripts: ready([makeEntry("assistant")]) },
     });
 
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it("offers a way back to the end when the reader is further up, with what arrived", async () => {
@@ -407,7 +407,7 @@ describe("Conversation", () => {
     });
 
     expect(screen.getByText("Add a login screen")).toBeInTheDocument();
-    expect(screen.queryByRole("status", { name: "Loading the conversation" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Loading the conversation" })).toBeNull();
   });
 
   it("takes no message in an earlier conversation: no answer, no retry, nothing queued", () => {

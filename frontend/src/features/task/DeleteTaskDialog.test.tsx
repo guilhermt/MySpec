@@ -4,6 +4,7 @@ import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { TaskMenu } from "@/features/task/TaskMenu";
 import { api, type DeletePreview } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
+import { spoken } from "@/test/live";
 import { renderWithStore } from "@/test/render";
 import { makeDeletePreview, makeState, makeTask } from "@/test/wails-mock";
 
@@ -86,7 +87,7 @@ describe("DeleteTaskDialog", () => {
     previewing({});
     dialog();
 
-    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+    await waitFor(() => expect(spoken()).toEqual([]));
     expect(screen.queryByRole("list", { name: "What will be destroyed" })).not.toBeInTheDocument();
   });
 

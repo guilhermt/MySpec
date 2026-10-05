@@ -6,6 +6,7 @@ import { EMPTY_FILTERS } from "@/features/board/board-view";
 import { boardViewKey } from "@/lib/ui-storage";
 import { api, type Board, type BoardCard, type State } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
+import { spoken } from "@/test/live";
 import { renderWithStore } from "@/test/render";
 import {
   makeBoard,
@@ -302,8 +303,7 @@ describe("the keyboard of the board", () => {
 
       await user.keyboard("s");
 
-      const notice = await screen.findByRole("status");
-      expect(notice).toHaveTextContent(`${title} · ${reason}`);
+      await waitFor(() => expect(spoken()).toEqual([`${title} · ${reason}`]));
       expect(useAppStore.getState().newTaskOpen).toBe(false);
       expect(row(12)).toHaveFocus();
     });
@@ -315,7 +315,7 @@ describe("the keyboard of the board", () => {
       await user.keyboard("s");
 
       expect(useAppStore.getState().newTaskOpen).toBe(false);
-      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      expect(spoken()).toEqual([]);
     });
 
     it("acts on the card of the panel when the focus is in it", async () => {
@@ -382,8 +382,10 @@ describe("the keyboard of the board", () => {
 
       await user.keyboard("d");
 
-      expect(await screen.findByRole("status")).toHaveTextContent(
-        "#1 can't go into a discussion · dev/api isn't a repository of this board.",
+      await waitFor(() =>
+        expect(spoken()).toEqual([
+          "#1 can't go into a discussion · dev/api isn't a repository of this board.",
+        ]),
       );
       expect(useAppStore.getState().newDiscussion).toBeNull();
     });
@@ -466,7 +468,7 @@ describe("the keyboard of the board", () => {
 
       await user.keyboard(" ");
 
-      expect(await screen.findByRole("status")).toHaveTextContent("#1 can't go into a discussion");
+      await waitFor(() => expect(spoken()[0]).toContain("#1 can't go into a discussion"));
       expect(screen.queryByRole("toolbar", { name: "Selected cards" })).not.toBeInTheDocument();
     });
 
@@ -553,8 +555,8 @@ describe("the keyboard of the board", () => {
 
       await user.keyboard("n");
 
-      expect(await screen.findByRole("status", { name: "" })).toHaveTextContent(
-        "No discussion yet · The board hasn't been read yet.",
+      await waitFor(() =>
+        expect(spoken()).toEqual(["No discussion yet · The board hasn't been read yet."]),
       );
       expect(useAppStore.getState().newDiscussion).toBeNull();
     });
