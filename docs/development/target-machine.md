@@ -102,6 +102,19 @@ O teste `frontend/src/features/history/HistoryView.measure.painted.test.tsx` con
 
 O board, o History e a conversa montam só o que aparece, entre espaçadores (`useWindowedRows`, o único lugar que importa `@tanstack/react-virtual`). Cada um se mede com uma ferramenta de `frontend/src/dev/`, no motor do app, uma vez fria e cinco vezes quente, com o React de produção (`pnpm measure:build`) e o de desenvolvimento (`task dev`). As metas passam quando o máximo das quentes em produção e a mediana das quentes em desenvolvimento ficam dentro delas. As metas de 16 ms medem do evento ao quadro seguinte, e um quadro a 60 Hz dura 16,7 ms: uma medida assim nunca fica abaixo do tempo até o próximo quadro, por menor que seja o trabalho. Elas pedem que a resposta pinte no quadro seguinte ao evento, sem perder um quadro, e passam abaixo de dois quadros, 33,3 ms.
 
+### A rolagem da janela no WebKitGTK
+
+O WebKitGTK faz o layout da lista no meio do commit que troca as linhas da janela, com as que saem já fora e as que entram ainda não inseridas, e prende a rolagem ao fim dessa lista mais curta: sem nada que a segure, `End`, o fim da conversa e a barra arrastada até embaixo levam a rolagem ao topo. Por isso a lista nunca fica mais curta durante um commit: `useWindowedRows` dá a ela um `min-height` em pixel inteiro, a altura das linhas e dos espaçadores como o virtualizador as conta (uma linha ainda não medida pela estimativa) mais o que vem depois delas, como a cauda da conversa. Os espaçadores das pontas guardam a chave quando a janela anda, a medida de uma linha inclui as margens (o espaço sobre o dia do History) e o viewport não tem `overflow-anchor`, já que a janela corrige a rolagem ela mesma. Os testes pintados reproduzem o motor com `layoutInCommits` (`test/painted.ts`), que faz o layout depois de cada linha que sai.
+
+No `MiniBrowser` do WebKitGTK 2.52.6, pelo Broadway, com o build de medida e as cenas do board, do History e da tela da task:
+
+| Lista | Cena | O que o motor mostra |
+|---|---|---|
+| Board, 2.000 cards | 1134 px, sem painel | `End` foca o último card, inteiro na área que rola, 48 px acima do fundo; a barra arrastada até embaixo para no fim, com 31 linhas à vista |
+| Board, 2.000 cards | 812 px, com o painel (estimativa de 52 px) | `End` foca o último card, inteiro na área; a barra até embaixo para no fim |
+| History, 400 itens | 1134 e 812 px | `End` foca a última linha, inteira na área; a barra até embaixo para no fim, e a roda volta 120 px |
+| Conversa de 1.500 entradas, 362 unidades | a tela da task, 1134 px | abre no fim; lida do topo, `↓` volta ao fim; `End` no `feed` foca a última entrada, inteira na área; a barra até embaixo para no fim |
+
 ### O board
 
 `measure-board.tsx` mede 2.000 cards em dez status, todas as seções abertas, com 44 linhas montadas: a primeira pintura, do render ao quadro seguinte ao commit, uma tecla na busca, do `input` ao quadro com a lista nova, e `↓`, do `keydown` ao quadro seguinte. As metas são 300 ms, 50 ms e 16 ms.

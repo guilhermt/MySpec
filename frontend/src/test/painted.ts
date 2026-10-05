@@ -325,6 +325,22 @@ export async function settle(): Promise<void> {
   await Promise.allSettled(ending.map((animation) => animation.finished));
 }
 
+/**
+ * layoutInCommits lays a windowed list out in the middle of every commit that takes a row or a
+ * spacer out of it, as WebKitGTK does: the scroll is read after each one leaves, which lays the
+ * page out, so a list that got shorter there pulls the scroll up to the end of what is left.
+ * Chromium alone lays out only after the commit. It returns what undoes it.
+ */
+export function layoutInCommits(list: HTMLElement, scroll: HTMLElement): () => void {
+  const remove = list.removeChild.bind(list);
+  list.removeChild = <T extends Node>(child: T): T => {
+    const removed = remove(child);
+    void scroll.scrollTop;
+    return removed;
+  };
+  return () => Reflect.deleteProperty(list, "removeChild");
+}
+
 /** nameOf is what names an element in a failure: its label, else the start of its text. */
 function nameOf(element: Element): string {
   return element.getAttribute("aria-label") ?? element.textContent?.trim().slice(0, 48) ?? "";

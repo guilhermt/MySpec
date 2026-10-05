@@ -32,7 +32,7 @@ export interface WindowedRowsOptions {
   pinned: readonly number[];
   /** scrollRef is the element that scrolls: the viewport of the ScrollArea. */
   scrollRef: RefObject<HTMLElement | null>;
-  /** listRef is the element that holds the rows and the spacers, inside what scrolls. */
+  /** listRef is the element that holds the rows and the spacers, inside what scrolls; the hook sets its min-height. */
   listRef: RefObject<HTMLElement | null>;
   /** stickyRef is what sticks to the top of the scroll over the list, like the FilterBar: a row brought into view lands below it and its fade. */
   stickyRef?: RefObject<HTMLElement | null>;
@@ -77,6 +77,17 @@ function offsetIn(list: HTMLElement, scroll: HTMLElement): number {
   );
 }
 
+// roomOf is the room a row takes in the flow of the list: its height and its margins, which push
+// the rows after it as its height does (a day header has the room between days over it).
+function roomOf(row: Element): number {
+  const style = getComputedStyle(row);
+  return (
+    Math.round(row.getBoundingClientRect().height) +
+    pixels(style.marginTop) +
+    pixels(style.marginBottom)
+  );
+}
+
 // stickyHeight is the height of what sticks over the list plus its fade (the ::after), which a row
 // brought into view must land below.
 function stickyHeight(sticky: HTMLElement): number {
@@ -88,9 +99,10 @@ function stickyHeight(sticky: HTMLElement): number {
 /**
  * useWindowedRows keeps mounted only the rows of a long list that show, plus the pinned ones and an
  * overscan, and draws the rest as spacers of whole pixels: the rows stay in the flow of the list, with
- * no transform and no absolute position. The virtualizer of TanStack is only the calculation here
- * (what to mount, the measures, the scroll to an index, the correction when a row above the view
- * changes height); the DOM and the element that scrolls stay the caller's.
+ * no transform and no absolute position, and the list keeps its height while the window moves. The
+ * virtualizer of TanStack is only the calculation here (what to mount, the measures, the scroll to an
+ * index, the correction when a row above the view changes height); the DOM and the element that
+ * scrolls stay the caller's.
  */
 export function useWindowedRows({
   count,
@@ -112,11 +124,14 @@ export function useWindowedRows({
   const [scrollPaddingStart, setScrollPaddingStart] = useState(0);
 
   // The ScrollArea attaches its viewport a little after the layout effects of the commit that
-  // mounts it: the layout effect takes it when it is there, the effect when it is not.
+  // mounts it: the layout effect takes it when it is there, the effect when it is not. The window
+  // corrects the scroll itself when a row above the view changes height, as WebKitGTK has no scroll
+  // anchoring; a browser that has it would correct the same change twice.
   const learnScrollElement = useCallback(() => {
     const element = scrollRef.current;
     if (element !== null) {
       element.setAttribute(WINDOW_VIEWPORT, "");
+      element.style.overflowAnchor = "none";
     }
     setScrollElement(element);
   }, [scrollRef]);
@@ -172,7 +187,7 @@ export function useWindowedRows({
     overscan,
     useFlushSync: false,
     rangeExtractor,
-    measureElement: (element) => Math.round(element.getBoundingClientRect().height),
+    measureElement: roomOf,
     gap,
     scrollMargin,
     scrollPaddingStart,
@@ -224,10 +239,12 @@ export function useWindowedRows({
     }
     const totalEnd = virtualizer.measurementsCache[count - 1]?.end ?? last.end;
     const out: WindowPart[] = [];
+    // The spacers at the ends keep their keys as the window moves, so a move only changes their
+    // heights.
     if (first.index > 0) {
       out.push({
         kind: "spacer",
-        key: `spacer:${first.index}`,
+        key: "spacer:top",
         height: Math.max(0, Math.round(first.start - scrollMargin - gap)),
       });
     }
@@ -245,12 +262,46 @@ export function useWindowedRows({
     if (last.index < count - 1) {
       out.push({
         kind: "spacer",
-        key: "spacer:end",
+        key: "spacer:bottom",
         height: Math.max(0, Math.round(totalEnd - last.end - gap)),
       });
     }
     return out;
   }, [items, virtualizer, count, scrollMargin, gap]);
+
+  // WebKitGTK lays the list out in the middle of the commit that moves the window, with the rows
+  // that leave already out and the ones that come not yet in, and holds the scroll to the end of
+  // that shorter list: the end of the list, a jump with End or the bar dragged to the bottom would
+  // land at the top. So the list never gets shorter than it was at the end of the commit before:
+  // its min-height is the height of what it holds, the rows and the spacers as the virtualizer
+  // counts them and what the caller draws after them (the tail of the conversation), in whole
+  // pixels. A row not measured yet counts by its estimate, so the list shrinks to the rows a jump
+  // mounted only once they are measured, after the scroll has been corrected for them.
+  useLayoutEffect(() => {
+    const list = listElement;
+    if (list === null) {
+      return;
+    }
+    const top = list.getBoundingClientRect().top;
+    // The end of what it holds is the lowest of its children: the last one can be out of the flow,
+    // like a region only a screen reader reads.
+    let end = top;
+    for (const child of list.children) {
+      end = Math.max(end, child.getBoundingClientRect().bottom);
+    }
+    // The rows end with the last part: the spacer after the last mounted row, or that row.
+    const last = items.at(-1);
+    const lastRow =
+      last === undefined ? null : list.querySelector(`:scope > [data-index="${last.index}"]`);
+    const lastPart =
+      last !== undefined && last.index < count - 1 ? lastRow?.nextElementSibling : lastRow;
+    const tail = end - (lastPart?.getBoundingClientRect().bottom ?? end);
+    const height = Math.ceil(Math.max(end - top, virtualizer.getTotalSize() + tail));
+    const minHeight = `${height}px`;
+    if (list.style.minHeight !== minHeight) {
+      list.style.minHeight = minHeight;
+    }
+  });
 
   // The window is ready once it holds the rows of a list that has some: the first commit, before
   // the element that scrolls is known, holds none.
