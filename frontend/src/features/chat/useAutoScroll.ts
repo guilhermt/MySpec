@@ -50,8 +50,9 @@ export function useAutoScroll(
   const rowKeysRef = useRef(rowKeys);
   rowKeysRef.current = rowKeys;
   const previous = useRef(deps);
-  // followed is where the scroll was left by going to the end: a scroll event that reports that
-  // place is this hook's own, and the content that grew since says nothing of the reader.
+  // followed is where the scroll was left by going to the end, until the reader scrolls: a scroll
+  // event that reports that place is this hook's own, and the content that grew since says nothing
+  // of the reader.
   const followed = useRef<number | null>(null);
 
   const markAtBottom = useCallback((value: boolean) => {
@@ -82,6 +83,9 @@ export function useAutoScroll(
         }
         return;
       }
+      // The reader's own scroll: the slack no longer counts from where this hook went, so a turn
+      // of the wheel up from an end the reader scrolled back to stops following.
+      followed.current = null;
       markAtBottom(atBottomOf(element));
     };
     element.addEventListener("scroll", onScroll, { passive: true });
