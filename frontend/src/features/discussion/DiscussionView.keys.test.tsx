@@ -552,7 +552,11 @@ describe("DiscussionView, Ctrl+Enter", () => {
     const { user } = show(ready());
 
     await user.click(screen.getByRole("button", { name: "Archive…" }));
-    await screen.findByRole("alertdialog", { name: "Archive “Usage-based pricing tiers”?" });
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Archive “Usage-based pricing tiers”?",
+    });
+    // The dialog takes the key once its first focus lands inside it, a moment after it mounts.
+    await waitFor(() => expect(dialog).toContainElement(document.activeElement as HTMLElement));
     await user.keyboard("{Control>}{Enter}{/Control}");
 
     expect(api.archiveDiscussion).toHaveBeenCalledExactlyOnceWith("discussion-1");
