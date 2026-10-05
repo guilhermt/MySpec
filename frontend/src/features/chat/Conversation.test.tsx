@@ -258,6 +258,33 @@ describe("Conversation", () => {
     expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
   });
 
+  it("draws a queued message of the product as its marker, with nothing to remove", () => {
+    const pending = [
+      makeEntry("user", {
+        user: {
+          text: "Review the step again.",
+          pending: true,
+          prompt: false,
+          app: true,
+          sent: "",
+          appKind: "pass",
+          appPass: 2,
+          appRound: 0,
+          appRounds: 0,
+          appCount: 0,
+        },
+      }),
+    ];
+    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
+      state: withTask({ pendingCount: 1 }),
+      ui: { transcripts: ready([], pending) },
+    });
+
+    expect(screen.getByRole("button", { name: /^MySpec → .*pass 2/ })).toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: /queued/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
+  });
+
   it("says the agent is thinking when nothing else is happening", () => {
     renderWithStore(
       <Conversation

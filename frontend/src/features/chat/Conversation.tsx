@@ -717,22 +717,34 @@ export function Conversation({
                 ))}
               {fixed}
               {/* An earlier conversation is read without what was queued: it sends nothing more.
-                  The product's own prompt is never queued: its start is already a marker. */}
+                  What the product sends is never queued: its prompt's start is already a marker,
+                  and a message of the workflow is its marker, with nothing to remove. */}
               {!readOnly &&
-                pending.map(
-                  (entry) =>
-                    entry.user !== null &&
-                    !entry.user.prompt && (
-                      <QueuedMessage
-                        key={entry.id}
-                        taskId={taskId}
-                        stage={stage}
-                        entryId={entry.id}
-                        user={entry.user}
-                        session={session}
-                      />
-                    ),
-                )}
+                pending.map((entry) => {
+                  const user = entry.user;
+                  if (user === null || user.prompt) {
+                    return null;
+                  }
+                  return user.app ? (
+                    <MarkerLine
+                      key={entry.id}
+                      view={productMessageOf(user, voice, ctx)}
+                      createdAt={entry.createdAt}
+                      task={ctx.task}
+                      review={ctx.review}
+                      discussion={ctx.discussion}
+                    />
+                  ) : (
+                    <QueuedMessage
+                      key={entry.id}
+                      taskId={taskId}
+                      stage={stage}
+                      entryId={entry.id}
+                      user={user}
+                      session={session}
+                    />
+                  );
+                })}
               {!readOnly &&
                 (activity !== undefined ? (
                   <Activity text={activity} />

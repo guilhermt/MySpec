@@ -156,8 +156,9 @@ var (
 	ErrNoRequest    = errors.New("session: no pending request with that id")
 	ErrNotPending   = errors.New("session: entry is not pending")
 
-	// ErrProductPrompt marks the product's own prompt, which opens a session and is never the user's to remove.
-	ErrProductPrompt = errors.New("session: the product's prompt can't be removed")
+	// ErrProductMessage marks a message of the product, the prompt that opens a session or one
+	// the workflow sends, which is never the user's to remove.
+	ErrProductMessage = errors.New("session: the product's message can't be removed")
 )
 
 // The timeouts of a session's life cycle.
@@ -547,7 +548,7 @@ func (s *Service) Discard(ctx context.Context, taskID string, stages ...string) 
 	return nil
 }
 
-// RemovePending drops a queued message before it reaches the CLI.
+// RemovePending drops a queued message of the user before it reaches the CLI.
 func (s *Service) RemovePending(ctx context.Context, k Key, entryID string) error {
 	n := &notes{}
 	defer s.flush(n)
@@ -562,8 +563,8 @@ func (s *Service) RemovePending(ctx context.Context, k Key, entryID string) erro
 	if index < 0 {
 		return fmt.Errorf("remove entry %s: %w", entryID, ErrNotPending)
 	}
-	if u := r.pending[index].User; u != nil && u.Prompt {
-		return fmt.Errorf("remove entry %s: %w", entryID, ErrProductPrompt)
+	if u := r.pending[index].User; u != nil && (u.Prompt || u.App) {
+		return fmt.Errorf("remove entry %s: %w", entryID, ErrProductMessage)
 	}
 
 	r.pending = slices.Delete(r.pending, index, index+1)
