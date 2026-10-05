@@ -67,6 +67,27 @@ describe.each(THEMES)("Dialog in the %s theme", (theme) => {
     }
   });
 
+  it("keeps --space-8 free on every side of the full size, in a window of 1080 px", async () => {
+    setTheme(theme);
+    await page.viewport(1920, 1080);
+    try {
+      render(<Subject size="full" />);
+      const sheet = screen.getByRole("dialog", { name: "Delete the task" });
+      // Measured where it settles: the opening animation scales it.
+      await Promise.all(sheet.getAnimations().map((animation) => animation.finished));
+      const free = Number.parseFloat(resolve("var(--space-8)", "width"));
+      const box = sheet.getBoundingClientRect();
+      expect([
+        box.top,
+        window.innerWidth - box.right,
+        window.innerHeight - box.bottom,
+        box.left,
+      ]).toEqual([free, free, free, free]);
+    } finally {
+      await page.viewport(1280, 800);
+    }
+  });
+
   it("sinks the footer", () => {
     setTheme(theme);
     render(<Subject />);

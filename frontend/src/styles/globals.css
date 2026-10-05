@@ -581,6 +581,12 @@
   left: round(50%, 1px);
   translate: round(-50%, 1px) 0;
 }
+/* The full sheet is the window less --space-8 around: it opens --space-8 from the top, and its height
+   ends --space-8 from the bottom. */
+[data-slot="dialog-content"][data-dialog-size="full"],
+[data-slot="alert-dialog-content"][data-dialog-size="full"] {
+  top: var(--space-8);
+}
 
 /* The veil under a dialog is the scrim of the system, without blur. */
 [data-slot="dialog-overlay"],

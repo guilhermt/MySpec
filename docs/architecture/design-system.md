@@ -84,7 +84,7 @@ O WebKitGTK compõe um elemento em meio pixel e o reamostra, o que borra texto e
 
 - todo tamanho dos tokens é um pixel inteiro, e `styles/globals.test.tsx` falha quando um deixa de ser; os glifos de estado têm tamanhos pares, para centralizar num pixel inteiro;
 - toda largura que depende da janela é arredondada com `round()`, como a lateral e o preenchimento do medidor de contexto;
-- os diálogos abrem a `8vh` do topo e crescem para baixo, com o `left` e o translate horizontal arredondados, por uma regra sem camada que os seleciona pelo `data-slot`; o teste falha quando os componentes gerados deixam de corresponder a ela;
+- os diálogos abrem a `8vh` do topo e crescem para baixo, com o `left` e o translate horizontal arredondados, por uma regra sem camada que os seleciona pelo `data-slot`; o de tela cheia (`data-dialog-size="full"`, que o `Dialog` do system escreve) abre a `--space-8` do topo, para ficar a `--space-8` de cada borda da janela; o teste falha quando os componentes gerados deixam de corresponder a ela;
 - o véu atrás de um diálogo é o `--scrim`, sem desfoque;
 - a busca é um campo `type="text"` com `role="searchbox"` e `enterKeyHint="search"`, porque num `type="search"` o WebKit desenha o botão de cancelar dele ao lado do `×` do system;
 - todo ícone do Lucide (`svg.lucide`) desenha com o traço `--icon-stroke` do system.
