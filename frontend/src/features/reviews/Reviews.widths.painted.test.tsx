@@ -41,7 +41,7 @@ const CASES: Case[] = [
 ];
 
 /** REFERENCE are the scenes whose captures go to the pull request. */
-const REFERENCE = ["list", "findings"];
+const REFERENCE = ["list", "findings", "publish"];
 
 describe.each(THEMES)("Reviews and the review in every window, in the %s theme", (theme) => {
   describe.each(CASES)("the $label scene", ({ name, flags, label }) => {
