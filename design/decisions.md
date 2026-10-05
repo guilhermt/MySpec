@@ -2,6 +2,22 @@
 
 Uma entrada por decisão, da mais recente para a mais antiga. Cada uma diz a data, o que foi decidido, o que foi descartado e a razão em uma ou duas frases. Uma decisão revista ganha uma entrada nova que aponta a antiga; a antiga não é apagada.
 
+## 2026-10-05 · Varredura: fora do `task check`, inteira na CI
+
+Decidido pelo coordenador da frente, por delegação do usuário, na crítica da pull request da task 12 (`research/critique-task-12.md`, bloqueio 4). A varredura de largura (V9 e V11, os `*.widths.painted.test.tsx`) roda fora do `task check`: `test:web` define `MYSPEC_SKIP_SWEEP=1`, e a CI a roda inteira nos jobs `Painted`; V10, o teste do movimento, continua no `task check` que o alcança (`tasks/12-consistency.md` §4.2, As verificações que fecham a porta). Descartado: V9 a V11 no `task check` sempre que um arquivo que alcançam muda. Razão: o `--changed` alcança a varredura por qualquer mudança em componente, e ela leva uns 3 a 4 min contra os 20 s do `task check`; a CI a roda em toda pull request antes do merge.
+
+## 2026-10-05 · Varredura: o escuro só nas pontas
+
+Decidido pelo coordenador da frente, por delegação do usuário, na crítica da pull request da task 12 (`research/critique-task-12.md`, bloqueio 4). A varredura desenha o claro nas cinco janelas e o escuro só a 1100 e a 2560, onde o layout aperta e folga mais; as telas de referência rodam as cinco janelas nos dois temas (`tasks/12-consistency.md` §4.2, A varredura de largura). Descartado: as cinco janelas nos dois temas em toda cena. Razão: o tema muda cores e não caixas, e o contraste dos dois temas é provado à parte, nos tokens.
+
+## 2026-10-05 · Virtualização: a meta de quadro é nenhum quadro perdido
+
+Decidido pelo coordenador da frente, por delegação do usuário, na crítica da pull request da task 12 (`research/critique-task-12.md`, bloqueio 4). Revê, nas metas de 16 ms, a entrada de 2026-10-02 (Virtualização: as metas e as builds). Uma tecla (`↓` no board, no History e no `feed`) e uma atualização do texto em streaming medem os quadros perdidos entre o evento e a pintura da resposta, e a meta é zero: a resposta pinta no quadro seguinte (`tasks/12-consistency.md` §4.2, As metas e a medição; `docs/development/target-machine.md`). Descartado: os 16 ms do evento ao quadro seguinte, e a régua de dois quadros, 33,3 ms. Razão: do evento ao quadro seguinte a medida nunca fica abaixo do que falta para o próximo quadro, cerca de 16,7 ms a 60 Hz, por menor que seja o trabalho; e dois quadros aceitam um quadro perdido.
+
+## 2026-10-05 · Varredura: as 26 telas de referência
+
+Decidido pelo coordenador da frente, por delegação do usuário, na crítica da pull request da task 12 (`research/critique-task-12.md`, bloqueio 4). As telas de referência da varredura, que rodam as cinco janelas nos dois temas e cujas capturas vão à pull request, são as 26 da tabela de `tasks/12-consistency.md` §4.2 (A varredura de largura). Descartado: um subconjunto delas. Razão: são as capturas da pull request, e cada tela decidida tem a sua.
+
 ## 2026-10-04 · Ícones: ir é um chevron, e só sair do app é diagonal
 
 Decidido pelo coordenador da frente, por delegação do usuário, no passe de consistência da task 12 (`research/critique-task-12-pass.md`, L1). A seta de ir (`go`), que leva a um lugar do app (o nó de board e de Reviews, a linha de um prompt), é um chevron para a direita; a seta diagonal fica só para o que abre fora do app (`external`). Descartado: a seta diagonal de `go` que vinha dos mocks (`lab/05-visual-b-variations/a.html:652`). Razão: o mesmo desenho servia a dois significados, e as linhas de Prompts se liam como links para o GitHub.
