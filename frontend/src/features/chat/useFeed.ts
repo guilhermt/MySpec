@@ -86,6 +86,62 @@ function holeAfter(
   return null;
 }
 
+/**
+ * PageStop is where Page Up or Page Down lands in a windowed feed: an entry that is mounted, a unit
+ * to bring into view and focus at the end the key comes from, or an end of the feed.
+ */
+type PageStop =
+  | { kind: "item"; item: HTMLElement }
+  | { kind: "unit"; index: number }
+  | { kind: "first" }
+  | { kind: "last" };
+
+// pageStop walks PAGE entries from item, by -1 or 1, over the units of a windowed feed: a mounted
+// unit counts the entries it holds, an open group with each of its commands, and one that is not
+// mounted counts one, as its group mounts folded. The tail after the units is one more unit.
+function pageStop(
+  feed: HTMLElement,
+  items: readonly HTMLElement[],
+  item: HTMLElement,
+  by: -1 | 1,
+  count: number,
+): PageStop {
+  const inUnit = (index: number) =>
+    items.filter((one) => {
+      const unit = unitOf(one);
+      return index === count ? unit === -1 : unit === index;
+    });
+  const from = unitOf(item) === -1 ? count : unitOf(item);
+  const own = inUnit(from);
+  const at = own.indexOf(item);
+  let left = PAGE;
+  let ahead = by > 0 ? own.slice(at + 1) : own.slice(0, at).reverse();
+  for (let index = from; ; index += by) {
+    if (index !== from) {
+      if (index < 0) {
+        return { kind: "first" };
+      }
+      if (index > count) {
+        return { kind: "last" };
+      }
+      if (index < count && unitElement(feed, index) === null) {
+        if (left === 1) {
+          return { kind: "unit", index };
+        }
+        left -= 1;
+        continue;
+      }
+      const entries = inUnit(index);
+      ahead = by > 0 ? entries : [...entries].reverse();
+    }
+    const landing = ahead[left - 1];
+    if (landing !== undefined) {
+      return { kind: "item", item: landing };
+    }
+    left -= ahead.length;
+  }
+}
+
 function itemsOf(feed: HTMLElement): HTMLElement[] {
   return [...feed.querySelectorAll<HTMLElement>(ITEM)].filter((item) => !item.closest("[hidden]"));
 }
@@ -378,30 +434,49 @@ export function useFeed(feedRef: RefObject<HTMLElement | null>, units?: FeedUnit
       }
     };
 
+    // page goes PAGE entries from item, by -1 or 1, over the units that are not mounted.
+    const page = (item: HTMLElement, by: -1 | 1, units: FeedUnits) => {
+      const items = itemsOf(feed);
+      const stop = pageStop(feed, items, item, by, units.count);
+      switch (stop.kind) {
+        case "item":
+          go(stop.item, items, by);
+          break;
+        case "unit":
+          seek(stop.index, by);
+          break;
+        case "first":
+          seek(0, 1);
+          break;
+        case "last": {
+          // The last entry, at the end of the last unit when nothing after it is mounted.
+          const last = items.at(-1);
+          const unit = last === undefined ? null : unitOf(last);
+          if (unit === -1 || unit === units.count - 1) {
+            go(last, items, 1);
+          } else {
+            seek(units.count - 1, -1);
+          }
+          break;
+        }
+      }
+    };
+
     // walk is Page Up, Page Down, Home and End over units, true when the key is one of them.
     const walk = (key: string, item: HTMLElement, units: FeedUnits): boolean => {
-      const items = itemsOf(feed);
-      const from = unitOf(item) === -1 ? units.count - 1 : unitOf(item);
       switch (key) {
         case "Home":
           seek(0, 1);
           return true;
-        case "End":
+        case "End": {
+          const items = itemsOf(feed);
           go(items.at(-1), items, 1);
           return true;
-        case "PageUp":
-          seek(Math.max(from - PAGE, 0), 1);
-          return true;
-        case "PageDown": {
-          // From the tail, or when the last unit is the one the item stands in, the end of the feed.
-          const target = Math.min(from + PAGE, units.count - 1);
-          if (unitOf(item) === -1 || target === from) {
-            go(items.at(-1), items, 1);
-          } else {
-            seek(target, 1);
-          }
-          return true;
         }
+        case "PageUp":
+        case "PageDown":
+          page(item, key === "PageUp" ? -1 : 1, units);
+          return true;
         default:
           return false;
       }
