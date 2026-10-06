@@ -41,7 +41,7 @@ Este é o ponto de entrada para quem vai mudar o código, pessoa ou agente. Ele 
 
 ## Pull requests
 
-Uma branch por task, pull request para `main`, aberta depois de um `task check:full` verde (passo 5), com o CI verde. O título é uma linha no imperativo; o corpo diz, em poucas linhas, o que a pull request muda no projeto. Sem lista de commits, sem walkthrough arquivo a arquivo, sem seção de testes.
+Uma branch por task, pull request para `main`, aberta depois de um `task check:full` verde (passo 5), com o CI verde. O título é uma linha no imperativo; o corpo diz, em poucas linhas, o que a pull request muda no projeto. Sem lista de commits, sem walkthrough arquivo a arquivo, sem seção de testes. A única mudança que chega à `main` sem pull request é o commit `Release vX.Y.Z`, que `task release` faz e que só muda `VERSION` ([release.md](../development/release.md)).
 
 ## Quando parar e perguntar
 
