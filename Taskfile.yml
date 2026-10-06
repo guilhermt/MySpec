@@ -129,6 +129,23 @@ tasks:
     cmds:
       - pnpm test:coverage --maxWorkers={{.JOBS}}
 
+  lint:go:ci:
+    summary: Lints the Go packages that build without GTK and WebKit, the ones the CI reaches
+    vars:
+      NO_WAILS_PKGS: &no_wails_pkgs
+        # Every package but the three that import Wails, and so need the headers of GTK and WebKit: the
+        # root, the app and the bindings.
+        sh: go list -e ./... | grep -vxE '{{.MODULE}}|{{.MODULE}}/internal/(app|bindings)' | sed 's|^{{.MODULE}}|.|'
+    cmds:
+      - golangci-lint run --concurrency {{.JOBS}} {{catLines .NO_WAILS_PKGS}}
+
+  test:go:ci:
+    summary: Runs the Go tests of the packages that build without GTK and WebKit, without the race detector
+    vars:
+      NO_WAILS_PKGS: *no_wails_pkgs
+    cmds:
+      - gotestsum --format pkgname-and-test-fails -- -p {{.JOBS}} {{catLines .NO_WAILS_PKGS}}
+
   vuln:
     deps: [embed:stub]
     cmds:
