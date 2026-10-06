@@ -15,9 +15,6 @@ import (
 	"github.com/guilhermt/myspec/internal/bindings"
 )
 
-// settleTimeout is how long a test waits for the executor to move.
-const settleTimeout = 5 * time.Second
-
 // clock is a clock that moves one second at every reading.
 func clock() func() time.Time {
 	t := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
@@ -27,18 +24,15 @@ func clock() func() time.Time {
 	}
 }
 
-// waitFor reads the published startups until one satisfies ok.
+// waitFor reads the published startups until one satisfies ok. It has no deadline of its own: a
+// real attempt opens the database and runs the migrations, whose time follows the load of the
+// machine and the race detector, and the -timeout of go test is what catches a startup that never
+// arrives.
 func waitFor(t *testing.T, published <-chan bindings.Startup, ok func(bindings.Startup) bool) bindings.Startup {
 	t.Helper()
-	timeout := time.After(settleTimeout)
 	for {
-		select {
-		case got := <-published:
-			if ok(got) {
-				return got
-			}
-		case <-timeout:
-			t.Fatal("the startup did not reach the expected point")
+		if got := <-published; ok(got) {
+			return got
 		}
 	}
 }
