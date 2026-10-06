@@ -89,7 +89,7 @@ describe("BoardStartRow", () => {
       line: {
         ...LINE,
         reading: {
-          text: "◇ Read failed 18m ago",
+          text: "Read failed 18m ago",
           tone: "failed",
           shimmer: false,
           failure: { failedAt: "2026-09-24T13:52:00Z", readAt: "2026-09-24T11:30:00Z" },
@@ -124,7 +124,7 @@ describe("BoardStartRow", () => {
         onChangePath={() => {}}
       />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent("Reading…");
+    expect(screen.getAllByRole("status").map((region) => region.textContent)).toContain("Reading…");
     expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
   });
 
@@ -132,7 +132,7 @@ describe("BoardStartRow", () => {
     const blocker: BlockerView = {
       kind: "not-cloned",
       repositoryId: "r1",
-      text: "◇ acme/api isn't cloned. Its cards can't start a task yet.",
+      text: "acme/api isn't cloned. Its cards can't start a task yet.",
       cloning: false,
       error: "",
     };
@@ -178,7 +178,7 @@ describe("BoardStartRow", () => {
     const { user, onChangePath } = board({
       line: {
         ...LINE,
-        blockers: [{ kind: "clone-missing", repositoryId: "r2", text: "◇ The clone is missing" }],
+        blockers: [{ kind: "clone-missing", repositoryId: "r2", text: "The clone is missing" }],
       },
       changePathError: { repositoryId: "r2", message: "That folder isn't acme/web" },
     });
@@ -198,7 +198,7 @@ describe("NoBoardRow", () => {
           {
             kind: "not-cloned",
             repositoryId: "r3",
-            text: "◇ acme/docs isn't cloned.",
+            text: "acme/docs isn't cloned.",
             cloning: false,
             error: "",
           },

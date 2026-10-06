@@ -1,5 +1,6 @@
 import { Popover as BasePopover } from "@base-ui/react/popover";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { LiveRegion } from "./LiveRegion";
 import { TOOLTIP_OFFSET_PX } from "./Tooltip";
 
 /** KEY_NOTICE_MS is how long a key notice stays on screen. */
@@ -79,35 +80,40 @@ export function KeyNotice({ notice, onHide }: KeyNoticeProps) {
   }, [id, onHide]);
 
   return (
-    <BasePopover.Root
-      open={notice !== null}
-      modal={false}
-      onOpenChange={(open) => {
-        if (!open) onHide();
-      }}
-    >
-      <BasePopover.Portal>
-        {notice !== null && (
-          <BasePopover.Positioner
-            anchor={notice.anchor}
-            side="bottom"
-            align="start"
-            sideOffset={TOOLTIP_OFFSET_PX}
-            className="z-(--z-overlay)"
-          >
-            <BasePopover.Popup
-              key={notice.id}
-              role="status"
-              initialFocus={false}
-              finalFocus={false}
-              className="max-w-(--size-tooltip-max) rounded-sm bg-tooltip-surface px-2 py-1 text-(length:--text-meta) leading-(--leading-meta) text-tooltip-ink shadow-float outline-none motion-safe:transition-opacity motion-safe:duration-(--duration-fast) motion-safe:ease-enter motion-safe:data-starting-style:opacity-0"
+    <>
+      <LiveRegion kind="status" className="sr-only">
+        {notice !== null && `${notice.text.title} · ${notice.text.reason}`}
+      </LiveRegion>
+      <BasePopover.Root
+        open={notice !== null}
+        modal={false}
+        onOpenChange={(open) => {
+          if (!open) onHide();
+        }}
+      >
+        <BasePopover.Portal>
+          {notice !== null && (
+            <BasePopover.Positioner
+              anchor={notice.anchor}
+              side="bottom"
+              align="start"
+              sideOffset={TOOLTIP_OFFSET_PX}
+              className="z-(--z-tooltip)"
             >
-              <span className="font-semibold">{notice.text.title}</span>
-              <span className="text-tooltip-ink-2">{` · ${notice.text.reason}`}</span>
-            </BasePopover.Popup>
-          </BasePopover.Positioner>
-        )}
-      </BasePopover.Portal>
-    </BasePopover.Root>
+              <BasePopover.Popup
+                key={notice.id}
+                aria-hidden="true"
+                initialFocus={false}
+                finalFocus={false}
+                className="max-w-(--size-tooltip-max) rounded-sm bg-tooltip-surface px-(--space-2) py-(--space-1) text-(length:--text-meta) leading-(--leading-meta) text-tooltip-ink shadow-float outline-none motion-safe:transition-opacity motion-safe:duration-(--duration-fast) motion-safe:ease-enter motion-safe:data-starting-style:opacity-0"
+              >
+                <span className="font-semibold">{notice.text.title}</span>
+                <span className="text-tooltip-ink-2">{` · ${notice.text.reason}`}</span>
+              </BasePopover.Popup>
+            </BasePopover.Positioner>
+          )}
+        </BasePopover.Portal>
+      </BasePopover.Root>
+    </>
   );
 }

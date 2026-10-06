@@ -72,7 +72,7 @@ describe("Conversation", () => {
     });
 
     expect(screen.queryByText("Add a login screen")).not.toBeInTheDocument();
-    expect(screen.getByRole("status", { name: "Loading the conversation" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Loading the conversation" })).toBeInTheDocument();
   });
 
   it("shows the conversation of the stage it was given", () => {
@@ -232,6 +232,59 @@ describe("Conversation", () => {
     expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
   });
 
+  it("never queues the product's own prompt", () => {
+    const pending = [
+      makeEntry("user", {
+        user: {
+          text: "",
+          pending: true,
+          prompt: true,
+          app: false,
+          sent: "",
+          appKind: "",
+          appPass: 0,
+          appRound: 0,
+          appRounds: 0,
+          appCount: 0,
+        },
+      }),
+    ];
+    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
+      state: withTask({ pendingCount: 1 }),
+      ui: { transcripts: ready([], pending) },
+    });
+
+    expect(screen.queryByRole("article", { name: /queued/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
+  });
+
+  it("draws a queued message of the product as its marker, with nothing to remove", () => {
+    const pending = [
+      makeEntry("user", {
+        user: {
+          text: "Review the step again.",
+          pending: true,
+          prompt: false,
+          app: true,
+          sent: "",
+          appKind: "pass",
+          appPass: 2,
+          appRound: 0,
+          appRounds: 0,
+          appCount: 0,
+        },
+      }),
+    ];
+    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
+      state: withTask({ pendingCount: 1 }),
+      ui: { transcripts: ready([], pending) },
+    });
+
+    expect(screen.getByRole("button", { name: /^MySpec → .*pass 2/ })).toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: /queued/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
+  });
+
   it("says the agent is thinking when nothing else is happening", () => {
     renderWithStore(
       <Conversation
@@ -302,7 +355,7 @@ describe("Conversation", () => {
       },
     );
 
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it("stays quiet between turns", () => {
@@ -311,7 +364,7 @@ describe("Conversation", () => {
       ui: { transcripts: ready([makeEntry("assistant")]) },
     });
 
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it("offers a way back to the end when the reader is further up, with what arrived", async () => {
@@ -379,7 +432,7 @@ describe("Conversation", () => {
     });
 
     expect(screen.getByText("Add a login screen")).toBeInTheDocument();
-    expect(screen.queryByRole("status", { name: "Loading the conversation" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Loading the conversation" })).toBeNull();
   });
 
   it("takes no message in an earlier conversation: no answer, no retry, nothing queued", () => {
@@ -635,7 +688,7 @@ describe("Conversation stretches and markers", () => {
     expect(screen.getByText("Speech 0.")).toBeInTheDocument();
   });
 
-  it("keeps a stretch open when a new round arrives on screen", () => {
+  it("keeps a stretch open when a new round arrives on screen", async () => {
     renderWithStore(<Conversation stage="plan" taskId="task-1" session={makeTask()} />, {
       state: withTask(),
       ui: { transcripts: plan(speeches(12, 0)) },
@@ -647,7 +700,11 @@ describe("Conversation stretches and markers", () => {
       });
     });
 
-    expect(screen.getByText("Speech 0.")).toBeInTheDocument();
+    // The conversation opens at its end: the start of the stretch is mounted once the reader is there.
+    const viewport = document.querySelector<HTMLElement>("[data-window-viewport]");
+    act(() => viewport?.scrollTo({ top: 0 }));
+
+    expect(await screen.findByText("Speech 0.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /12 speeches/ })).not.toBeInTheDocument();
   });
 

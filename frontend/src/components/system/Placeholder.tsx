@@ -11,7 +11,7 @@ export function Placeholder({ children, className }: PlaceholderProps) {
   return (
     <span
       className={cn(
-        "inline-flex h-(--size-kbd) items-center rounded-xs border border-line-2 bg-surface-0 px-1 font-mono text-(length:--text-micro) leading-(--leading-micro) text-ink-2",
+        "inline-flex h-(--size-kbd) items-center rounded-xs border border-line-2 bg-surface-0 px-(--space-1) font-mono text-(length:--text-micro) leading-(--leading-micro) text-ink-2",
         className,
       )}
     >

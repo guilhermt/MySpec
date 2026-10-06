@@ -41,7 +41,7 @@ describe("DeletionPreview", () => {
 
   it("writes the tag, the mono, the detail and the link", () => {
     render(<DeletionPreview state={{ kind: "lines", lines: LINES }} />);
-    expect(screen.getByText("3 uncommitted files")).toBeInTheDocument();
+    expect(screen.getByText("3 uncommitted files")).toHaveAttribute("data-variant", "edited");
     expect(screen.getByText("rate-limit").className).toContain("font-mono");
     expect(screen.getByText("~/code/api-wt").className).toContain("font-mono");
     expect(screen.getByRole("link", { name: /Open #1284/ })).toHaveAttribute(
@@ -57,7 +57,8 @@ describe("DeletionPreview", () => {
   });
 
   it("draws nothing without lines", () => {
-    const { container } = render(<DeletionPreview state={{ kind: "lines", lines: [] }} />);
-    expect(container).toBeEmptyDOMElement();
+    render(<DeletionPreview state={{ kind: "lines", lines: [] }} />);
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
   });
 });

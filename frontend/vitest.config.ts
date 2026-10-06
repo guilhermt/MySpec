@@ -1,10 +1,18 @@
 import { resolve } from "node:path";
 import { playwright } from "@vitest/browser-playwright";
 import { defineConfig, mergeConfig } from "vitest/config";
+import { emulateReducedMotion, pressPointer, releasePointer } from "./src/test/browser-commands.ts";
 import viteConfig from "./vite.config.ts";
 
 /** PAINTED holds the computed-style tests, which run in Chromium with the real CSS. */
 const PAINTED = "src/**/*.painted.test.{ts,tsx}";
+
+/**
+ * SWEEP is the width sweep, which MYSPEC_SKIP_SWEEP=1 leaves out of the painted suite: task test:web
+ * sets it, since --changed reaches the sweep through any component, and the CI runs it in full. A
+ * --exclude on the command line does not reach the projects, so the choice lives here.
+ */
+const SWEEP = "src/**/*.widths.painted.test.tsx";
 
 export default mergeConfig(
   viteConfig,
@@ -54,12 +62,11 @@ export default mergeConfig(
           optimizeDeps: {
             entries: [PAINTED],
             include: [
-              "@base-ui/react/toggle-group",
               "@streamdown/code",
               "@streamdown/mermaid",
+              "@tanstack/react-virtual",
               "diff",
               "react-dom/client",
-              "react-resizable-panels",
               "streamdown",
             ],
             force: true,
@@ -67,6 +74,7 @@ export default mergeConfig(
           test: {
             name: "painted",
             include: [PAINTED],
+            exclude: process.env.MYSPEC_SKIP_SWEEP === "1" ? [SWEEP] : [],
             // capture saves the screenshots of the pull request here, only when asked to.
             provide: {
               captureDir:
@@ -77,6 +85,7 @@ export default mergeConfig(
               enabled: true,
               headless: true,
               provider: playwright(),
+              commands: { emulateReducedMotion, pressPointer, releasePointer },
               instances: [{ browser: "chromium" }],
               viewport: { width: 1280, height: 800 },
             },

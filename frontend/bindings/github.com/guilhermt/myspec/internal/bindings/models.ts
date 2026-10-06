@@ -1625,9 +1625,15 @@ export interface MarkerEntry {
  */
 export interface Migration {
     /**
-     * never nil
+     * never nil; empty when Newer is set
      */
     "cases": MigrationCase[] | null;
+
+    /**
+     * Newer is set when the data is from a newer version of the app, which
+     * nothing was read from or written to; nil for the cases of Cases.
+     */
+    "newer": NewerData | null;
 }
 
 /**
@@ -1687,6 +1693,15 @@ export interface ModelCatalog {
      * same reason as State.Theme.
      */
     "failure": string;
+}
+
+/**
+ * NewerData is the data a newer version of the app changed: the schema version
+ * it is at and the last one this version reads.
+ */
+export interface NewerData {
+    "dataVersion": number;
+    "appVersion": number;
 }
 
 /**

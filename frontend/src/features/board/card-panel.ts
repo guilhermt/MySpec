@@ -8,6 +8,7 @@ import {
 } from "@/features/board/board-view";
 import { referenceOf } from "@/features/task/card-panel";
 import { prStateLabel, stateLabel } from "@/lib/boards";
+import { displayPath } from "@/lib/paths";
 import { findRepository } from "@/lib/repositories";
 import {
   asIssueState,
@@ -122,11 +123,9 @@ function panelActions(card: BoardCard, ctx: CardPanelContext): PanelActions {
         return build(
           { kind: "cloning", repository: card.repository },
           !checkable,
-          neutral(
-            ctx.clone.opensDialog
-              ? "The dialog opens when the clone ends. You can leave the board meanwhile."
-              : "The clone is running.",
-          ),
+          ctx.clone.opensDialog
+            ? neutral("The dialog opens when the clone ends. You can leave the board meanwhile.")
+            : null,
         );
       }
       if (ctx.clone.error !== null && ctx.clone.error !== "") {
@@ -146,7 +145,7 @@ function panelActions(card: BoardCard, ctx: CardPanelContext): PanelActions {
       return build(
         { kind: "start", disabled: true },
         !checkable,
-        neutral(`The clone at ${path} is missing.`),
+        neutral(`The clone at ${displayPath(path)} is missing.`),
         true,
       );
     }

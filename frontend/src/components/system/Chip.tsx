@@ -1,4 +1,3 @@
-import { ChevronDown } from "lucide-react";
 import { type ComponentProps, type MouseEvent, type ReactNode, useId } from "react";
 import { Button as UIButton } from "@/components/ui/button";
 import { Toggle as UIToggle } from "@/components/ui/toggle";
@@ -37,11 +36,11 @@ export type ChipProps = ChipBaseProps & ButtonLoading;
 
 // Hover stays off the chosen or open chip. The plain hover:, rounded-lg and the pressed backgrounds neutralize the ui toggle and button.
 const BASE =
-  "h-(--size-chip) min-w-0 gap-1 px-2.5 rounded-(--radius-pill) border border-line-2 bg-surface-2 text-(length:--text-meta) leading-(--leading-meta) font-medium text-ink-2 shadow-none transition-colors duration-(--duration-fast) ease-standard hover:bg-surface-2 hover:text-ink-2 not-aria-disabled:not-aria-pressed:not-aria-expanded:hover:bg-surface-2-hover not-aria-disabled:not-aria-pressed:not-aria-expanded:hover:text-ink-1 focus-visible:border-line-2 focus-visible:ring-0 focus-visible:focus-ring active:not-aria-[haspopup]:translate-y-0 disabled:opacity-100 aria-disabled:dashed-disabled data-[state=on]:bg-brand-tint aria-pressed:bg-brand-tint aria-pressed:text-brand-ink aria-pressed:border-brand-ring aria-expanded:bg-brand-tint aria-expanded:text-brand-ink aria-expanded:border-brand-ring";
+  "h-(--size-chip) min-w-0 gap-(--space-1) px-(--space-2-5) rounded-(--radius-pill) border border-line-2 bg-surface-2 text-(length:--text-meta) leading-(--leading-meta) font-medium text-ink-2 shadow-none transition-colors duration-(--duration-fast) ease-standard hover:bg-surface-2 hover:text-ink-2 not-aria-disabled:not-aria-pressed:not-aria-expanded:hover:bg-surface-2-hover not-aria-disabled:not-aria-pressed:not-aria-expanded:hover:text-ink-1 focus-visible:border-line-2 focus-visible:ring-0 focus-visible:focus-ring active:not-aria-[haspopup]:translate-y-0 disabled:opacity-100 aria-disabled:dashed-disabled data-[state=on]:bg-brand-tint aria-pressed:bg-brand-tint aria-pressed:text-brand-ink aria-pressed:border-brand-ring aria-expanded:bg-brand-tint aria-expanded:text-brand-ink aria-expanded:border-brand-ring";
 
 const SIZES = {
   md: "",
-  sm: "h-(--size-chip-sm) px-2 text-(length:--text-micro) leading-(--leading-micro)",
+  sm: "h-(--size-chip-sm) px-(--space-2) text-(length:--text-micro) leading-(--leading-micro)",
 } as const;
 
 /**
@@ -132,7 +131,7 @@ export function Chip({
           <span className="font-normal text-ink-3">· unavailable</span>
         </>
       )}
-      {kind === "menu" && <Icon icon={ChevronDown} size="xs" />}
+      {kind === "menu" && <Icon icon={ICONS.expanded} size="xs" />}
     </>
   );
 
@@ -169,7 +168,7 @@ export function Chip({
 
   if (onRemove !== undefined) {
     chip = (
-      <span className="inline-flex items-center gap-0.5">
+      <span className="inline-flex items-center gap-(--space-0-5)">
         {chip}
         <IconButton
           size="xs"
@@ -183,7 +182,7 @@ export function Chip({
 
   if (!withReason) return chip;
   return (
-    <span className="inline-flex items-center gap-2">
+    <span className="inline-flex items-center gap-(--space-2)">
       {chip}
       <span id={reasonId} className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
         {disabledReason}

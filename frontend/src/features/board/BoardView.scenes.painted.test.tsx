@@ -35,6 +35,12 @@ vi.mock("@/lib/wails", async (importOriginal) => ({
 const WIDE_MAIN = 2180;
 const HALF_MAIN = 978;
 
+/** CUT_TEXTS_TIMEOUT is the time a scene may take to rest the pointer on every text it cuts: a narrow list cuts the title of each row. */
+const CUT_TEXTS_TIMEOUT = 90_000;
+
+/** ALL_ROWS_HEIGHT is the height of an area that shows every row of the board scene: 56 rows of 32px at the most. */
+const ALL_ROWS_HEIGHT = 2400;
+
 /** PANEL_MAIN are the main areas the panel is proved at: beside the list down to 800px. */
 const PANEL_MAIN = [950, NARROW_MAIN];
 
@@ -53,7 +59,7 @@ const CASES = SCENES.flatMap((name) =>
 fixBoardSceneClock();
 
 // draw draws the view of a scene in a main area of a width, and does what the scene has the user do.
-async function draw(name: BoardSceneName, width: number) {
+async function draw(name: BoardSceneName, width: number, height = 800) {
   const { state, location, back, storage, after } = boardScene(name);
   for (const [key, value] of Object.entries(storage)) {
     localStorage.setItem(key, value);
@@ -62,7 +68,7 @@ async function draw(name: BoardSceneName, width: number) {
     throw new Error("the scene is not a board");
   }
   const { container, user } = renderWithStore(
-    <div style={{ ...mainArea(width), height: "800px", display: "flex" }}>
+    <div style={{ ...mainArea(width), height: `${height}px`, display: "flex" }}>
       <BoardView boardId={location.id} />
     </div>,
     { state, ui: { location, back } },
@@ -93,6 +99,15 @@ function innermost(row: HTMLElement, text: string): HTMLElement {
   return found;
 }
 
+// inView keeps what stands inside the area: resting the pointer on a row of the window's overscan scrolls the list, and the rows it holds are others by then.
+function inView(elements: HTMLElement[], area: HTMLElement): HTMLElement[] {
+  const bounds = area.getBoundingClientRect();
+  return elements.filter((element) => {
+    const box = element.getBoundingClientRect();
+    return box.top >= bounds.top && box.bottom <= bounds.bottom;
+  });
+}
+
 /** parts are what a screen draws in a box of its own, that must stand on whole pixels. */
 function parts(area: HTMLElement): Element[] {
   return [
@@ -103,39 +118,44 @@ function parts(area: HTMLElement): Element[] {
 }
 
 describe.each(THEMES)("BoardView, the scenes in the %s theme", (theme) => {
-  it.each(CASES)("draws the %s scene at the main area of %ipx", async (name, width) => {
-    setTheme(theme);
-    const { area } = await draw(name, width);
+  it.each(CASES)(
+    "draws the %s scene at the main area of %ipx",
+    async (name, width) => {
+      setTheme(theme);
+      const { area } = await draw(name, width);
 
-    // Every box of the screen stands on whole pixels.
-    expect(offWholePixels(parts(area))).toEqual([]);
+      // Every box of the screen stands on whole pixels.
+      expect(offWholePixels(parts(area))).toEqual([]);
 
-    // A title is never squeezed under a third of its row, and the keys keep their column.
-    for (const row of area.querySelectorAll<HTMLElement>("[data-row-key]")) {
-      const title = row.children[2];
-      const keys = row.lastElementChild;
-      if (!(title instanceof HTMLElement) || !(keys instanceof HTMLElement)) {
-        throw new Error("a row has no title or keys");
+      // A title is never squeezed under a third of its row, and the keys keep their column.
+      for (const row of area.querySelectorAll<HTMLElement>("[data-row-key]")) {
+        const title = row.children[2];
+        const keys = row.lastElementChild;
+        if (!(title instanceof HTMLElement) || !(keys instanceof HTMLElement)) {
+          throw new Error("a row has no title or keys");
+        }
+        const label = row.getAttribute("aria-label") ?? "";
+        expect(title.getBoundingClientRect().width, `${label} title`).toBeGreaterThanOrEqual(
+          row.getBoundingClientRect().width / 3,
+        );
+        expect(spillsOut(keys), `${label} keys`).toBe(false);
       }
-      const label = row.getAttribute("aria-label") ?? "";
-      expect(title.getBoundingClientRect().width, `${label} title`).toBeGreaterThanOrEqual(
-        row.getBoundingClientRect().width / 3,
-      );
-      expect(spillsOut(keys), `${label} keys`).toBe(false);
-    }
 
-    // What the screen cuts says its whole text in a tooltip.
-    expect(await withoutTooltip(cutTexts(area).slice(0, 8))).toEqual([]);
+      // What the screen cuts says its whole text in a tooltip.
+      expect(await withoutTooltip(inView(cutTexts(area), area))).toEqual([]);
 
-    // The screen has one primary at most.
-    expect(visiblePrimaries().length).toBeLessThanOrEqual(1);
+      // The screen has one primary at most.
+      expect(visiblePrimaries().length).toBeLessThanOrEqual(1);
 
-    await capture(`board-${name}-${width}-${theme}`, area);
-  });
+      await capture(`board-${name}-${width}-${theme}`, area);
+    },
+    CUT_TEXTS_TIMEOUT,
+  );
 
   it("draws the list of the board as the mock counts it: 46 rows with the final sections folded", async () => {
     setTheme(theme);
-    const { area } = await draw("board", WIDE_MAIN);
+    // The list is windowed: an area tall enough for every row mounts them all.
+    const { area } = await draw("board", WIDE_MAIN, ALL_ROWS_HEIGHT);
 
     expect(area.querySelectorAll("[data-row-key]")).toHaveLength(46);
     expect(area.querySelectorAll("[data-section-id]")).toHaveLength(10);
@@ -158,7 +178,7 @@ describe.each(THEMES)("BoardView, the scenes in the %s theme", (theme) => {
       await draw("card", width);
 
       for (const [number, texts] of [
-        [474, ["Usage-based billing", "#461"]],
+        [474, ["Usage-based billing", "#461 +1"]],
         [412, ["API hardening", "Question · Step 3/7"]],
       ] as const) {
         const row = rowOf(number);
@@ -219,5 +239,42 @@ describe.each(THEMES)("BoardView, the scenes in the %s theme", (theme) => {
     expect(list?.getBoundingClientRect().width).toBe(width);
     const row = rowOf(474).getBoundingClientRect();
     expect(row.height > parseFloat(resolve("var(--size-control)", "height"))).toBe(second);
+  });
+  it("keeps the filter bar on one line, folding the chips into Filter · N below 620px of list", async () => {
+    setTheme(theme);
+    const { area } = await draw("filtered", 600);
+
+    const bar = within(area).getByRole("search", { name: "Filter the cards" });
+    const search = within(bar).getByRole("searchbox", { name: "Search cards" });
+    const filter = within(bar).getByRole("button", { name: "Filter · 1" });
+    expect(
+      getComputedStyle(within(bar).getByText("Assignee: tchen").closest("div") as Element).display,
+    ).toBe("none");
+    // Every control of the bar stands on the line of the search, which keeps its minimum width.
+    for (const control of [filter, within(bar).getByRole("button", { name: "Clear filters" })]) {
+      const middle = (element: Element) => {
+        const box = element.getBoundingClientRect();
+        return box.top + box.height / 2;
+      };
+      expect(Math.abs(middle(control) - middle(search))).toBeLessThanOrEqual(1);
+    }
+    expect(
+      (search.parentElement as HTMLElement).getBoundingClientRect().width,
+    ).toBeGreaterThanOrEqual(parseFloat(resolve("calc(var(--space-16) * 3)", "width")));
+    expect(bar.getBoundingClientRect().right).toBeLessThanOrEqual(
+      area.getBoundingClientRect().right,
+    );
+  });
+
+  it("draws the bar of the selection with the fade of the filter bar under it", async () => {
+    setTheme(theme);
+    const { area } = await draw("select", WIDE_MAIN);
+
+    const wrapper = within(area).getByRole("toolbar", { name: "Selected cards" })
+      .parentElement as HTMLElement;
+    const fade = getComputedStyle(wrapper, "::after");
+    expect(fade.height).toBe(resolve("var(--space-3)", "height"));
+    expect(fade.position).toBe("absolute");
+    expect(getComputedStyle(wrapper).position).toBe("sticky");
   });
 });

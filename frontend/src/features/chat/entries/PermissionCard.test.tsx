@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { PermissionCard } from "@/features/chat/entries/PermissionCard";
 import { useFocusRescue } from "@/features/task/request-focus";
 import { api, type PermissionEntry } from "@/lib/wails";
+import { clockTime } from "@/lib/when";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makeEntry } from "@/test/wails-mock";
@@ -218,6 +219,14 @@ describe("PermissionCard settled", () => {
     await user.hover(screen.getByText("Allowed"));
 
     expect(await screen.findByText(/^Allowed at /)).toBeInTheDocument();
+  });
+
+  it("ends its name with the time of the answer", () => {
+    card(permission({ status: "allowed", answeredAt: "2026-09-29T09:19:00Z" }));
+
+    expect(screen.getByRole("article")).toHaveAccessibleName(
+      `Permission, ${clockTime(AT, Date.now())}, answered at ${clockTime("2026-09-29T09:19:00Z", Date.now())}`,
+    );
   });
 
   it("says the message of a denial", () => {

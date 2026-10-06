@@ -11,13 +11,14 @@ A stack do produto e a razão de cada escolha.
 | Frontend | React 19 com TypeScript em modo strict, Vite |
 | Estilo e componentes | Tailwind CSS 4, shadcn/ui sobre Base UI e o design system do MySpec, fontes Fira Sans e Fira Code, ícones Lucide |
 | Markdown e diagramas | Streamdown, com `@streamdown/code` e `@streamdown/mermaid` |
+| Listas longas | `@tanstack/react-virtual`, só como cálculo da janela |
 | Diferenças de texto | jsdiff (`diff`) |
 | Estado da interface | Zustand |
 | Ponte Go e React | Bindings gerados e eventos tipados do Wails |
 | Claude Code | CLI como subprocesso, um processo vivo por sessão, stream-json nos dois sentidos |
 | Permissões e perguntas | Canal de controle do CLI por stdio (`--permission-prompt-tool stdio`) |
 | Git | Binário `git`, com fsnotify observando as worktrees |
-| GitHub | Binário `gh`, somente leitura |
+| GitHub | Binário `gh`: leituras, publicação de reviews, escrita de issues e cards e clones |
 | Artefatos e prompts | Arquivos Markdown no diretório de dados XDG |
 | Estado do app | SQLite via `modernc.org/sqlite`, acessado só pelo Go |
 | Notificações e tema do sistema | D-Bus com godbus: `org.freedesktop.Notifications` e o portal de configurações |
@@ -41,6 +42,8 @@ No Linux o Wails usa WebKitGTK. O padrão desde o v3 é GTK4 com WebKitGTK 6.0, 
 
 **Streamdown** porque o texto do agente chega em streaming e o renderizador precisa lidar com Markdown incompleto sem piscar. Ele já integra mermaid e realce de código. O mesmo renderizador serve o chat, os artefatos e os prompts.
 
+**`@tanstack/react-virtual`** porque uma lista de milhares de linhas, como o board, só pode ter montadas as que aparecem. Ele não tem cabeça: o DOM e o elemento que rola continuam os do app, ele mede depois de montar, rola até um índice, aceita linhas fixadas (`rangeExtractor`) e corrige a rolagem quando uma linha acima da vista muda de altura. Só o hook `useWindowedRows`, de `components/system/`, o importa. Ficaram de fora `react-virtuoso`, que traz o próprio elemento que rola, e `react-window`, que não tem linhas fixadas.
+
 **Zustand** porque os eventos do Go chegam continuamente de várias fontes e várias partes da tela mostram o mesmo dado. Um store único recebe os eventos num ponto só e cada componente assina a fatia que usa. Não há biblioteca de fetch, porque não há HTTP.
 
 ## Ponte entre React e Go
@@ -62,7 +65,7 @@ O app chama o binário `git`, com o mesmo comportamento do terminal do usuário;
 
 Para o progresso do review em tempo real, o app observa a worktree com fsnotify e roda `git status` quando algo muda, em vez de consultar em intervalo.
 
-A pull request é aberta pelo agente, com o `gh`, dentro da sessão dele. O app usa o mesmo binário só em leitura, reaproveitando o login que o `gh` já tem na máquina.
+A pull request é aberta pelo agente, com o `gh`, dentro da sessão dele. O app usa o mesmo binário, com o login que o `gh` já tem na máquina, para ler pull requests e boards, publicar reviews, escrever issues e cards e clonar.
 
 ## Armazenamento
 
@@ -95,6 +98,8 @@ O não perturbe não tem padrão freedesktop. O app pergunta a quem o expõe: o 
 - **Task** orquestra tudo: dev, build, geração de bindings, formatação, lint, typecheck, testes, vulnerabilidades e a checagem completa.
 - **Frontend**: pnpm, Biome para lint e formatação no lugar de ESLint e Prettier, Vitest com Testing Library em dois projetos: `unit`, no jsdom, para o comportamento, a acessibilidade e a cobertura, e `painted`, no modo navegador do Vitest, no Chromium do Playwright (`@vitest/browser-playwright`), para o que os componentes pintam com o CSS real. O Chromium e não o WebKit, porque o que a suíte prova é a cascata, que é do CSS, e o Chromium roda na máquina e no CI; a nitidez do WebKitGTK é conferida por captura.
 - **Go**: golangci-lint v2 com gofumpt e goimports, gotestsum, cobertura com limiares por arquivo, pacote e total.
+- **dom-accessibility-api** calcula o nome acessível de um elemento, o mesmo algoritmo da Testing Library, e a varredura de largura o usa para provar que todo controle de toda cena tem nome. Está pinada à parte porque o teste importa dela direto.
+- **knip** acha o arquivo e a dependência que nada usa. O código sem uso é o que um design antigo deixa para trás, e o knip o pega em todo `task check`, em cerca de 1 s.
 - **lefthook** instala um hook de pre-commit que só formata os arquivos em stage.
 
 Ver [setup.md](../development/setup.md) e [ci.md](../development/ci.md).

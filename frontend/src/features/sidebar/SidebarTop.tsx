@@ -1,6 +1,6 @@
-import { ChevronsLeft } from "lucide-react";
 import { BrandMark } from "@/components/system/BrandMark";
 import { IconButton } from "@/components/system/IconButton";
+import { ICONS } from "@/components/system/icons";
 import { NewMenu } from "@/features/sidebar/NewMenu";
 import { useAppStore } from "@/store/app-store";
 
@@ -26,7 +26,7 @@ export function SidebarTop({ welcome = false }: SidebarTopProps) {
       {!welcome && (
         <IconButton
           label="Collapse the sidebar"
-          icon={ChevronsLeft}
+          icon={ICONS.collapsePanel}
           size="sm"
           onClick={() => toggleSidebarRail()}
         />

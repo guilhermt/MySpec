@@ -82,6 +82,7 @@ export type {
     MigrationCase,
     MigrationTask,
     ModelCatalog,
+    NewerData,
     PRBlock,
     PRCheck,
     PRDraft,

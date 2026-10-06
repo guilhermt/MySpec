@@ -1498,6 +1498,7 @@ type memWorktrees struct {
 	removeErr error
 	block     chan struct{} // when set, Ensure waits on it or on the context
 	linger    chan struct{} // when set, a cancelled Ensure waits on it before it returns
+	hold      chan struct{} // when set, Close waits on it after it recorded the call
 
 	closeResult task.CloseResult // what every closing answers with
 	closeCalls  []closeCall      // the closings the flow asked for, in order
@@ -1681,16 +1682,35 @@ func (m *memWorktrees) Close(
 	_ context.Context, wt worktree.Worktree, base string, policy worktree.BranchPolicy,
 ) task.CloseResult {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	m.calls = append(m.calls, "close:"+wt.TaskID)
 	m.closeCalls = append(m.closeCalls, closeCall{taskID: wt.TaskID, base: base, policy: policy})
+	hold := m.hold
+	m.mu.Unlock()
+
+	// Git goes on after the context is cancelled: what it does is not cut short.
+	if hold != nil {
+		<-hold
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	// The real service forgets the worktree whatever git did, so the fake does
 	// too: nothing there is the app's any more.
 	delete(m.items, wt.TaskID)
 	result := m.closeResult
 	result.WorktreePath, result.BranchName, result.BaseBranch = wt.Path, wt.Branch, base
 	return result
+}
+
+// holdClose keeps every closing running until the returned channel is closed,
+// which is how a test keeps the work of the PR stage under way.
+func (m *memWorktrees) holdClose() chan struct{} {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.hold = make(chan struct{})
+	return m.hold
 }
 
 func (m *memWorktrees) Purge(_ context.Context, taskID string) (worktree.Leftover, bool) {

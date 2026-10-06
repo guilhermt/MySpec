@@ -65,7 +65,10 @@ describe("ArchivedTask", () => {
     const { user } = view();
 
     expect(screen.getByRole("heading", { level: 1, name: "add-login" })).toBeInTheDocument();
-    expect(screen.getByText("Archived", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("Archived", { selector: "span" })).toHaveAttribute(
+      "data-variant",
+      "default",
+    );
     await user.click(screen.getByRole("button", { name: "PR #12" }));
 
     expect(api.openExternal).toHaveBeenCalledWith("https://github.com/dev/web/pull/12");
@@ -265,7 +268,7 @@ describe("ArchivedTask", () => {
       },
     });
 
-    expect(screen.getByRole("status", { name: "Reading the task" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Reading the task" })).toBeInTheDocument();
   });
 });
 

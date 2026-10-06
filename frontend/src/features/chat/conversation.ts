@@ -64,6 +64,10 @@ export interface Stretch {
 /** ConversationModel is the conversation as it is drawn: its stretches, in order. */
 export interface ConversationModel {
   stretches: Stretch[];
+  /** entries, voice and waiting are what the model was built from, to build the next one from it. */
+  entries: readonly Entry[];
+  voice: string;
+  waiting: string | null;
 }
 
 const NO_REPORTS: ReadonlyMap<number, string> = new Map();
@@ -420,23 +424,153 @@ function stretchOf(rows: Row[], voice: string): Stretch {
   };
 }
 
-/**
- * buildConversation is the conversation as it is drawn: the entries it shows
- * as rows, in stretches that start at the messages of the product opening a
- * round. voice is the word of who talks, voiceOf the stage.
- */
-export function buildConversation(entries: readonly Entry[], voice: string): ConversationModel {
-  const rows = rowsOf(keptEntries(entries), voice, waitingToolUseId(entries));
-  const stretches: Row[][] = [];
+// stretchesOf splits the rows at the messages of the product that open a round.
+function stretchesOf(rows: readonly Row[], voice: string): Stretch[] {
+  const parts: Row[][] = [];
   for (const row of rows) {
-    const open = stretches.at(-1);
+    const open = parts.at(-1);
     if (open === undefined || opensStretch(row)) {
-      stretches.push([row]);
+      parts.push([row]);
     } else {
       open.push(row);
     }
   }
-  return { stretches: stretches.map((stretch) => stretchOf(stretch, voice)) };
+  return parts.map((part) => stretchOf(part, voice));
+}
+
+// sameEntries reports whether two lists hold the same entries, one by one by identity.
+function sameEntries(a: readonly Entry[], b: readonly Entry[]): boolean {
+  return a.length === b.length && a.every((entry, index) => entry === b[index]);
+}
+
+// sameRow reports whether two rows with one key draw the same: the same entries and the same
+// words around them.
+function sameRow(a: Row, b: Row): boolean {
+  if (a.kind !== b.kind || !sameEntries(entriesOf(a), entriesOf(b))) {
+    return false;
+  }
+  switch (a.kind) {
+    case "speech":
+      return b.kind === "speech" && a.voice === b.voice;
+    case "product":
+      return b.kind === "product" && a.firstReviewerPass === b.firstReviewerPass;
+    case "group":
+      return b.kind === "group" && a.group.retried === b.group.retried;
+    default:
+      return true;
+  }
+}
+
+// reused is the stretch with the rows of the previous model where they are the same.
+function reused(
+  stretch: Stretch,
+  before: ReadonlyMap<string, Row>,
+  old: ReadonlyMap<string, Stretch>,
+) {
+  const rows = stretch.rows.map((row) => {
+    const prior = before.get(row.key);
+    return prior !== undefined && sameRow(prior, row) ? prior : row;
+  });
+  const prior = old.get(stretch.key);
+  const same =
+    prior !== undefined &&
+    prior.rows.length === rows.length &&
+    prior.rows.every((row, index) => row === rows[index]);
+  return same ? prior : { ...stretch, rows };
+}
+
+// firstChange is the first index where two lists of entries differ, -1 when they are the same.
+function firstChange(entries: readonly Entry[], before: readonly Entry[]): number {
+  const shared = Math.min(entries.length, before.length);
+  for (let index = 0; index < shared; index += 1) {
+    if (entries[index] !== before[index]) {
+      return index;
+    }
+  }
+  return entries.length === before.length ? -1 : shared;
+}
+
+// resumeAt is the last stretch of the previous model that starts at or before the index of the
+// first change, with where it starts in the entries; null when none does and all is rebuilt.
+function resumeAt(
+  entries: readonly Entry[],
+  previous: ConversationModel,
+  change: number,
+): { stretch: number; start: number } | null {
+  for (let stretch = previous.stretches.length - 1; stretch > 0; stretch -= 1) {
+    const first = previous.stretches[stretch]?.rows[0];
+    const opener = first === undefined ? undefined : entriesOf(first)[0];
+    const start = opener === undefined ? -1 : entries.indexOf(opener);
+    if (start !== -1 && start <= change) {
+      return { stretch, start };
+    }
+  }
+  return null;
+}
+
+/**
+ * buildConversation is the conversation as it is drawn: the entries it shows
+ * as rows, in stretches that start at the messages of the product opening a
+ * round. voice is the word of who talks, voiceOf the stage. Given the model built
+ * from the entries before, it rebuilds from the stretch where the first entry
+ * that changed is, and keeps the objects of the stretches and rows that are the same.
+ */
+export function buildConversation(
+  entries: readonly Entry[],
+  voice: string,
+  previous: ConversationModel | null = null,
+): ConversationModel {
+  const waiting = waitingToolUseId(entries);
+  const whole = (): ConversationModel => ({
+    stretches: stretchesOf(rowsOf(keptEntries(entries), voice, waiting), voice),
+    entries,
+    voice,
+    waiting,
+  });
+  if (previous === null || previous.voice !== voice || previous.waiting !== waiting) {
+    return whole();
+  }
+  const change = firstChange(entries, previous.entries);
+  if (change === -1) {
+    return previous;
+  }
+  const resume = resumeAt(entries, previous, change);
+  if (resume === null) {
+    return reuse(whole(), previous, 0);
+  }
+  const kept = previous.stretches.slice(0, resume.stretch);
+  const rebuilt = stretchesOf(
+    rowsOf(keptEntries(entries.slice(resume.start)), voice, waiting),
+    voice,
+  );
+  return reuse(
+    { stretches: [...kept, ...rebuilt], entries, voice, waiting },
+    previous,
+    resume.stretch,
+  );
+}
+
+// reuse swaps the stretches and rows of the model from index on for the ones of the previous
+// model that are the same.
+function reuse(
+  model: ConversationModel,
+  previous: ConversationModel,
+  from: number,
+): ConversationModel {
+  const rows = new Map<string, Row>();
+  const old = new Map<string, Stretch>();
+  for (const stretch of previous.stretches.slice(from)) {
+    old.set(stretch.key, stretch);
+    for (const row of stretch.rows) {
+      rows.set(row.key, row);
+    }
+  }
+  return {
+    ...model,
+    stretches: model.stretches.map((stretch, index) =>
+      index < from ? stretch : reused(stretch, rows, old),
+    ),
+  };
 }
 
 /** foldableStretches are the stretches that fold: not the last, and with at least FOLD_MIN_ROWS rows. */

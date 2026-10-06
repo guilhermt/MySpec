@@ -1,7 +1,9 @@
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PanelLayout } from "@/components/system/AuxPanel";
+import { STICKY_FADE } from "@/components/system/FilterBar";
 import { KeyNotice, useKeyNotice } from "@/components/system/KeyNotice";
 import { isTyping } from "@/components/system/keys";
+import { LIST_COLUMN } from "@/components/system/ListPanel";
 import { ScrollArea } from "@/components/system/ScrollArea";
 import { SelectionBar } from "@/components/system/SelectionBar";
 import { useNow } from "@/features/attention/useNow";
@@ -30,25 +32,19 @@ import {
   readingView,
   sections,
   selectNotice,
-  showsFailureStrip,
   startNotice,
 } from "@/features/board/board-view";
-import { CardTree } from "@/features/board/CardTree";
+import { CardTree, type CardTreeHandle } from "@/features/board/CardTree";
 import { useBoardViewMemory } from "@/features/board/useBoardViewMemory";
 import { useStartCard } from "@/features/board/useStartCard";
+import { FLASH_MS } from "@/lib/situations";
+import { cn } from "@/lib/utils";
 import type { Board, BoardCard } from "@/lib/wails";
 import { refreshBoard } from "@/store/actions";
 import { useAppStore, useBoard, useRepository } from "@/store/app-store";
 
 /** READING_CLOCK_MS is how often the time since the last reading is told again: a minute. */
 const READING_CLOCK_MS = 60_000;
-
-/** FLASH_MS is how long a card a new reading brought stays flagged: its blink, twice (--duration-slow). */
-export const FLASH_MS = 2 * 280;
-
-/** LIST_COLUMN is the reading column of a list: --list-measure on whole pixels, with --space-6 at each side at least. */
-export const LIST_COLUMN =
-  "mx-auto w-[min(round(down,var(--list-measure),1px),100%-2*var(--space-6))] pb-(--space-12)";
 
 /** NO_CARDS stands for a board whose reading brought no cards, always the same array. */
 const NO_CARDS: BoardCard[] = [];
@@ -83,6 +79,11 @@ function BoardScreen({ board }: { board: Board }) {
   const clearBoardCardRequest = useAppStore((state) => state.clearBoardCardRequest);
   const searchRef = useRef<HTMLInputElement>(null);
   const treeRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const treeHandle = useRef<CardTreeHandle>(null);
+  // The list is windowed: the window reads the element that scrolls and the bar that sticks over it.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const now = useNow(READING_CLOCK_MS, board.readAt !== "" || board.failure !== null);
   const notice = useKeyNotice();
   const cards = board.cards ?? NO_CARDS;
@@ -149,9 +150,10 @@ function BoardScreen({ board }: { board: Board }) {
           ? "failed"
           : null;
   const cloneKey = cloneFor?.key ?? null;
-  const models = useMemo(() => {
+  // modelOf makes the model of a row, for the rows the window mounts.
+  const modelOf = useMemo(() => {
     if (app === null) {
-      return new Map();
+      return null;
     }
     const ctx = {
       app,
@@ -161,12 +163,8 @@ function BoardScreen({ board }: { board: Board }) {
       cloneFor:
         cloneKey === null || cloneState === null ? null : { key: cloneKey, state: cloneState },
     };
-    return new Map(
-      rows.flatMap((row) =>
-        row.kind === "card" ? [[row.card.key, cardRowModel(row.card, ctx)]] : [],
-      ),
-    );
-  }, [app, board, now, children, rows, cloneKey, cloneState]);
+    return (card: BoardCard) => cardRowModel(card, ctx);
+  }, [app, board, now, children, cloneKey, cloneState]);
 
   const checkable = (card: BoardCard) => isCheckable(card, app, board.id);
   const setFilters = (filters: BoardFilters) => setMemory((current) => ({ ...current, filters }));
@@ -180,14 +178,13 @@ function BoardScreen({ board }: { board: Board }) {
   const discuss = (cardKeys: string[]) =>
     openNewDiscussion({ boardId: board.id, cardKeys, askBoard: false });
 
+  // focusRow focuses the row of a card, mounting it when the window has not; without a card, or
+  // without its row, the focus goes to the tab stop.
   const focusRow = (key: string | null) => {
-    const row =
-      key === null
-        ? null
-        : Array.from(treeRef.current?.querySelectorAll<HTMLElement>("[data-row-key]") ?? []).find(
-            (element) => element.getAttribute("data-row-key") === key,
-          );
-    (row ?? treeRef.current?.querySelector<HTMLElement>('[tabindex="0"]'))?.focus();
+    if (key !== null && treeHandle.current?.focusKey(key) === true) {
+      return;
+    }
+    treeRef.current?.querySelector<HTMLElement>('[tabindex="0"]')?.focus();
   };
   const openInPanel = (card: BoardCard) => {
     setOpenKey(card.key);
@@ -196,7 +193,7 @@ function BoardScreen({ board }: { board: Board }) {
   // closePanel closes the card; the focus goes back to its row only when it was in the panel, and a
   // focus on the list stays where it is.
   const closePanel = () => {
-    const inPanel = document.activeElement?.closest(".list-panel") != null;
+    const inPanel = panelRef.current?.contains(document.activeElement) === true;
     setOpenKey(null);
     setOpenCard(null);
     if (inPanel) {
@@ -229,13 +226,7 @@ function BoardScreen({ board }: { board: Board }) {
       return;
     }
     reveal.current = null;
-    const row = Array.from(
-      treeRef.current?.querySelectorAll<HTMLElement>("[data-row-key]") ?? [],
-    ).find((element) => element.getAttribute("data-row-key") === target.key);
-    if (row !== undefined) {
-      row.focus();
-      row.scrollIntoView?.({ block: "nearest" });
-    } else if (target.fromRequest) {
+    if (treeHandle.current?.focusKey(target.key) !== true && target.fromRequest) {
       requestAnimationFrame(() => {
         const panel = document.querySelector(".list-panel");
         (
@@ -422,11 +413,14 @@ function BoardScreen({ board }: { board: Board }) {
       <NoMatch board={board} filters={memory.filters} onClear={() => setFilters(EMPTY_FILTERS)} />
     );
   } else {
-    content = (
+    content = modelOf !== null && (
       <CardTree
+        ref={treeHandle}
         board={board}
         rows={rows}
-        models={models}
+        modelOf={modelOf}
+        scrollRef={scrollRef}
+        stickyRef={barRef}
         openKey={openKey}
         selecting={selecting}
         checked={checked}
@@ -446,7 +440,13 @@ function BoardScreen({ board }: { board: Board }) {
   const bar =
     board.readAt !== "" && cards.length > 0 ? (
       selecting ? (
-        <div className="sticky top-0 z-(--z-sticky) bg-surface-1 pt-(--space-4) pb-(--space-3)">
+        <div
+          ref={barRef}
+          className={cn(
+            "sticky top-0 z-(--z-sticky) bg-surface-1 pt-(--space-4) pb-(--space-3)",
+            STICKY_FADE,
+          )}
+        >
           <SelectionBar
             count={checked.length}
             numbers={numbers}
@@ -465,6 +465,7 @@ function BoardScreen({ board }: { board: Board }) {
           filters={memory.filters}
           onChange={setFilters}
           searchRef={searchRef}
+          barRef={barRef}
           onSearchEscape={(event) => {
             event.preventDefault();
             focusRow(null);
@@ -500,13 +501,14 @@ function BoardScreen({ board }: { board: Board }) {
               onClose={closePanel}
               onOpenCard={(key) => revealCard(key, false)}
               onDiscuss={() => discuss([openCard.key])}
+              panelRef={panelRef}
             />
           )
         }
       >
-        <ScrollArea className="list-area min-h-0 flex-1">
+        <ScrollArea className="list-area min-h-0 flex-1" viewportRef={scrollRef}>
           <div className={LIST_COLUMN}>
-            {showsFailureStrip(board) && <FailureStrip board={board} now={now} />}
+            <FailureStrip board={board} now={now} />
             {bar}
             {content}
           </div>

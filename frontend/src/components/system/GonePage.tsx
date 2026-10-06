@@ -40,7 +40,7 @@ export function GonePage({ icon, title, description, children, actions }: GonePa
   }, []);
 
   return (
-    <div className="flex max-w-(--measure-read) flex-col gap-4 px-(--space-6) pt-(--space-12)">
+    <div className="flex max-w-(--measure-read) flex-col gap-(--space-4) px-(--space-6) pt-(--space-12)">
       <Icon icon={icon} tone="muted" size="md" className="self-start" />
       <p className="text-(length:--text-title) leading-(--leading-title) font-semibold text-ink-1">
         {title}
@@ -51,7 +51,7 @@ export function GonePage({ icon, title, description, children, actions }: GonePa
         </p>
       )}
       {children}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-(--space-2)">
         {actions.map((action, index) => {
           const button = (
             <Button

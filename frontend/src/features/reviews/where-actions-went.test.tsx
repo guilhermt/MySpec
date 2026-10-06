@@ -16,6 +16,7 @@ import {
 } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import type { TranscriptState } from "@/store/transcript";
+import { spoken } from "@/test/live";
 import { type RenderWithStoreResult, renderWithStore, type StoreOptions } from "@/test/render";
 import {
   makeBoard,
@@ -298,8 +299,13 @@ async function placeOf(where: Place, holder: RegExp | undefined): Promise<HTMLEl
   switch (where) {
     case "header":
       return screen.getByRole("banner");
-    case "strip":
-      return screen.getByRole("alert");
+    case "strip": {
+      const strip = document.querySelector<HTMLElement>('[data-slot="notice-strip"]');
+      if (strip === null) {
+        throw new Error("no notice strip is drawn");
+      }
+      return strip;
+    }
     case "bar":
       return (
         screen.queryByRole("search", { name: "Filter the pull requests" }) ??
@@ -673,7 +679,7 @@ const ROWS: Row[] = [
     where: "panel",
     name: /^Start review/,
     disabled: true,
-    description: "The clone at /home/dev/projects/web is missing.",
+    description: "The clone at ~/projects/web is missing.",
   },
   {
     origin: "PullRequestRow",
@@ -683,7 +689,7 @@ const ROWS: Row[] = [
     steps: openPanel,
     where: "panel",
     name: /^Change path…$/,
-    text: /The clone at \/home\/dev\/projects\/web is missing\./,
+    text: /The clone at ~\/projects\/web is missing\./,
   },
 
   // The dialog that starts a review.
@@ -1353,8 +1359,10 @@ describe("where the controls of the components that left went", () => {
 
     await user.keyboard("r");
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "No review of web#31 · Pull requests from forks can't be reviewed yet.",
+    await waitFor(() =>
+      expect(spoken()).toEqual([
+        "No review of web#31 · Pull requests from forks can't be reviewed yet.",
+      ]),
     );
     expect(useAppStore.getState().startReview).toBeNull();
   });

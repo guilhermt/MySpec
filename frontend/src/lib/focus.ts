@@ -90,7 +90,7 @@ export function focusRequest(target: RequestFocus): boolean {
   if (target === "draft") {
     // The draft comes into view, also when the target is its Retry: its head first.
     element.focus({ preventScroll: true });
-    revealItem(element.closest<HTMLElement>("[data-card-item]") ?? element);
+    revealItem(element.closest<HTMLElement>("[data-card-item]") ?? element, controlOf(element));
   } else {
     element.focus();
     element.scrollIntoView({ block: target === "finding" ? "center" : "nearest" });
@@ -133,6 +133,15 @@ export function focusFindingToDecide(findings: readonly FindingLike[] | null, by
   return true;
 }
 
+// controlOf is the control the request asks of a target: the target itself when it is a button (the
+// Retry), else the control of the draft that carries data-request-control (the Approve).
+function controlOf(target: HTMLElement): HTMLElement | undefined {
+  if (target.matches("button")) {
+    return target;
+  }
+  return target.querySelector<HTMLElement>("[data-request-control]") ?? undefined;
+}
+
 /** DRAFT is the focusable element of a draft of the drafts card, open or folded. */
 const DRAFT = "[data-decision-card] [data-card-item]";
 
@@ -151,22 +160,29 @@ export function currentDraftId(): string | null {
 /**
  * focusDraft takes the focus to a draft of the drafts card, scrolled to the centre, or by its top
  * when it is taller than the conversation: the draft opens as it takes the focus. With retry, on the next frame it goes on to the Retry of the draft, which
- * only exists once the draft is open. False when the draft is not on screen.
+ * only exists once the draft is open. With arrival, the one the request bar's Show (and Ctrl+J) makes, the scroll goes
+ * on until the control the request asks of the draft is whole. False when the draft is not on screen.
  */
-export function focusDraft(id: string, retry: boolean): boolean {
+export function focusDraft(id: string, retry: boolean, arrival = false): boolean {
   const selector = `[data-decision-card] [data-card-item="${id}"]`;
   const element = document.querySelector<HTMLElement>(selector);
   if (element === null) {
     return false;
   }
   element.focus();
-  revealItem(element);
+  revealItem(
+    element,
+    arrival && element.hasAttribute("data-request-target") ? controlOf(element) : undefined,
+  );
   if (retry) {
-    // The draft stays where it came into view: a Retry below a draft taller than the conversation
-    // takes the focus without scrolling its head away.
+    // The Retry only exists once the draft is open: it takes the focus without a scroll of its own,
+    // and the draft goes on until the Retry is whole.
     requestAnimationFrame(() => {
       const button = document.querySelector<HTMLElement>(`${selector} [data-retry]`);
       button?.focus({ preventScroll: true });
+      if (button !== null) {
+        revealItem(element, button);
+      }
     });
   }
   return true;

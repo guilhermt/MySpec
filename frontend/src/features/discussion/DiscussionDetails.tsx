@@ -125,12 +125,13 @@ export function DiscussionDetails({ discussion }: DiscussionDetailsProps) {
           <ul className="flex flex-col">
             {model.rounds.map((round) => (
               <li key={round.text}>
-                <PanelRow {...(round.time === "" ? {} : { meta: round.time })}>
-                  {round.time === "" && round.text === "No drafts yet" ? (
-                    <span className="text-ink-3">{round.text}</span>
-                  ) : (
-                    round.text
-                  )}
+                <PanelRow
+                  {...(round.time === "" ? {} : { meta: round.time })}
+                  {...(round.time === "" && round.text === "No drafts yet"
+                    ? { className: "text-ink-3" }
+                    : {})}
+                >
+                  {round.text}
                 </PanelRow>
               </li>
             ))}

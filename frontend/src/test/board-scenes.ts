@@ -152,6 +152,8 @@ interface Extra {
   module?: string;
   est?: string;
   dep?: number[];
+  /** name is the name the card suggests for a task, when it is not the one of its title. */
+  name?: string;
   start?: string;
   rich?: "invoice" | "alerts";
   closed?: boolean;
@@ -260,7 +262,8 @@ const RAW: Raw[] = [
     "api",
     {
       epic: 450,
-      dep: [461],
+      dep: [461, 455],
+      name: "474-usage-alerts-at-80-of-the-plan-for-every-workspace-on-a-tier",
       asg: ["gmartins"],
       module: "Billing",
       est: "3hrs - 6hrs",
@@ -811,7 +814,8 @@ function boardCard(spec: Spec, readAt: string): BoardCard {
             }),
     dependencies: (extra.dep ?? []).map(dependencyOf),
     readAt,
-    suggestedName: slug(`${spec.number}-${spec.title}`).slice(0, 64).replace(/-+$/, ""),
+    suggestedName:
+      extra.name ?? slug(`${spec.number}-${spec.title}`).slice(0, 64).replace(/-+$/, ""),
     repositoryId: extra.unmanaged === true ? "" : repositoryId(spec.repository),
     activeTaskId: extra.task === undefined ? "" : (TASK_OF[extra.task] ?? ""),
     archivedTaskId: extra.archived === undefined ? "" : `archived-${extra.archived}`,

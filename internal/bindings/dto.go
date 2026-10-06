@@ -92,9 +92,19 @@ type MigrationCase struct {
 	Tasks      []MigrationTask `json:"tasks"`      // never nil
 }
 
+// NewerData is the data a newer version of the app changed: the schema version
+// it is at and the last one this version reads.
+type NewerData struct {
+	DataVersion int `json:"dataVersion"`
+	AppVersion  int `json:"appVersion"`
+}
+
 // Migration is a migration of the data that was refused, with what to resolve.
 type Migration struct {
-	Cases []MigrationCase `json:"cases"` // never nil
+	Cases []MigrationCase `json:"cases"` // never nil; empty when Newer is set
+	// Newer is set when the data is from a newer version of the app, which
+	// nothing was read from or written to; nil for the cases of Cases.
+	Newer *NewerData `json:"newer"`
 }
 
 // State is everything the interface renders, produced by Go and never derived

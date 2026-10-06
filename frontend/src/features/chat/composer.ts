@@ -51,8 +51,8 @@ export interface ComposerContext {
   choices: QuestionChoices | null;
   /** otherHeader is the header of the question whose Other… is chosen on the card, null without one. */
   otherHeader: string | null;
-  /** permission is a permission pending in the conversation. */
-  permission: boolean;
+  /** permission is the permission pending in the conversation, null without one. */
+  permission: PermissionEntry | null;
   /** chips are the quick replies of the question in text, empty without one. */
   chips: QuickReply[];
   /** findings is the pull request of the task waiting for the findings of a pass in text to be decided. */
@@ -101,6 +101,25 @@ function hasChoice(choice: QuestionChoices[number] | undefined): boolean {
   return choice.labels.length > 0 || (choice.other !== null && choice.other.trim() !== "");
 }
 
+// hasSuggestions tells whether the CLI offered a rule to remember: an empty list means there is
+// nothing "for this session" could save.
+function hasSuggestions(raw: string): boolean {
+  try {
+    const value: unknown = JSON.parse(raw);
+    return Array.isArray(value) && value.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * permissionKeys is how many answers the card of a permission has, one key each: Allow and Deny…,
+ * and Allow for this session between them when the CLI offered a rule to remember.
+ */
+export function permissionKeys(permission: PermissionEntry): 2 | 3 {
+  return !permission.suppressAlwaysAllow && hasSuggestions(permission.suggestions) ? 3 : 2;
+}
+
 // questionPlaceholder is the placeholder with a question pending: the keys of its options, or with
 // several questions, the first one still without a choice.
 function questionPlaceholder(
@@ -139,8 +158,8 @@ export function placeholderOf(c: ComposerContext): string {
   if (questions.length > 0) {
     return questionPlaceholder(questions, c.choices ?? {}, c.who);
   }
-  if (c.permission) {
-    return `Answer with 1–3 above, or queue a message for the ${c.who}…`;
+  if (c.permission !== null) {
+    return `Answer with 1–${permissionKeys(c.permission)} above, or queue a message for the ${c.who}…`;
   }
   if (c.turnRunning) {
     return `Queue a message for the ${c.who}…`;
@@ -367,13 +386,13 @@ export function pendingOf(entries: readonly Entry[]): Pending {
 /** PendingCards are the cards a conversation holds pending: the question, and a permission. */
 export interface PendingCards {
   question: QuestionEntry | null;
-  permission: boolean;
+  permission: PermissionEntry | null;
 }
 
 /** pendingCardsOf are the question and the permission still unanswered in the entries of a conversation. */
 export function pendingCardsOf(entries: readonly Entry[]): PendingCards {
   const { question, permission } = pendingOf(entries);
-  return { question, permission: permission !== null };
+  return { question, permission };
 }
 
 /**

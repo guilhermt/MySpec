@@ -1,4 +1,4 @@
-import { type RefObject, useEffect } from "react";
+import { type RefObject, useEffect, useRef } from "react";
 
 const ITEM = "[data-feed-item]";
 const TOGGLE = "[data-feed-toggle]";
@@ -15,11 +15,132 @@ const ENTRY = "[data-feed-entry]";
 const CONTROL =
   'a[href], button, input, select, textarea, summary, iframe, [tabindex], [contenteditable="true"], [contenteditable=""]';
 
+const STOPS = `${ITEM}, ${ENTRY}, ${CONTROL}`;
+
+/** UNIT marks the element of a unit of a windowed conversation, with its index. */
+const UNIT = "[data-unit-index]";
+
 /** WALK_KEYS are the keys that walk the entries of the feed beyond the arrows. */
 const WALK_KEYS: readonly string[] = ["Home", "End", "PageUp", "PageDown"];
 
 /** PAGE is how many entries Page Up and Page Down move. */
 const PAGE = 10;
+
+/**
+ * FeedUnits is what a windowed feed tells the keyboard: its entries are drawn by units, and only
+ * those that show are in the DOM.
+ */
+export interface FeedUnits {
+  /** count is how many units the conversation has; the tail is not a unit. */
+  count: number;
+  /** reveal brings a unit into view; the feed focuses its first item (or its last, by -1) once it mounts. */
+  reveal: (index: number) => void;
+  /** onCurrent tells which unit holds the tab stop, -1 for the tail, so the window keeps it mounted. */
+  onCurrent: (index: number) => void;
+}
+
+/** FeedControl is what stepFeed reaches of the feed it is called for. */
+interface FeedControl {
+  units: () => FeedUnits | undefined;
+  move: (item: HTMLElement, by: -1 | 1) => void;
+}
+
+const controls = new WeakMap<HTMLElement, FeedControl>();
+
+// unitOf is the index of the unit an element stands in, -1 for the tail after the units.
+function unitOf(element: Element | null): number {
+  const unit = element?.closest<HTMLElement>(UNIT) ?? null;
+  return unit === null ? -1 : Number(unit.dataset.unitIndex);
+}
+
+// unitElement is the element of a unit, null while it is not mounted.
+function unitElement(feed: HTMLElement, index: number): HTMLElement | null {
+  return feed.querySelector<HTMLElement>(`[data-unit-index="${index}"]`);
+}
+
+// holeAfter is the index of the unit a move from item by one entry crosses into when it is not
+// mounted, null when the next item in the DOM is the next one on the screen. An empty unit that is
+// mounted is walked over.
+function holeAfter(
+  feed: HTMLElement,
+  item: HTMLElement,
+  next: HTMLElement | undefined,
+  by: -1 | 1,
+  units: FeedUnits,
+): number | null {
+  const from = unitOf(item);
+  if (next !== undefined && unitOf(next) === from) {
+    return null;
+  }
+  let index = from === -1 ? (by < 0 ? units.count - 1 : units.count) : from + by;
+  while (index >= 0 && index < units.count) {
+    const unit = unitElement(feed, index);
+    if (unit === null) {
+      return index;
+    }
+    if (unit.querySelector(ITEM) !== null) {
+      return null;
+    }
+    index += by;
+  }
+  return null;
+}
+
+/**
+ * PageStop is where Page Up or Page Down lands in a windowed feed: an entry that is mounted, a unit
+ * to bring into view and focus at the end the key comes from, or an end of the feed.
+ */
+type PageStop =
+  | { kind: "item"; item: HTMLElement }
+  | { kind: "unit"; index: number }
+  | { kind: "first" }
+  | { kind: "last" };
+
+// pageStop walks PAGE entries from item, by -1 or 1, over the units of a windowed feed: a mounted
+// unit counts the entries it holds, an open group with each of its commands, and one that is not
+// mounted counts one, as its group mounts folded. The tail after the units is one more unit.
+function pageStop(
+  feed: HTMLElement,
+  items: readonly HTMLElement[],
+  item: HTMLElement,
+  by: -1 | 1,
+  count: number,
+): PageStop {
+  const inUnit = (index: number) =>
+    items.filter((one) => {
+      const unit = unitOf(one);
+      return index === count ? unit === -1 : unit === index;
+    });
+  const from = unitOf(item) === -1 ? count : unitOf(item);
+  const own = inUnit(from);
+  const at = own.indexOf(item);
+  let left = PAGE;
+  let ahead = by > 0 ? own.slice(at + 1) : own.slice(0, at).reverse();
+  for (let index = from; ; index += by) {
+    if (index !== from) {
+      if (index < 0) {
+        return { kind: "first" };
+      }
+      if (index > count) {
+        return { kind: "last" };
+      }
+      if (index < count && unitElement(feed, index) === null) {
+        if (left === 1) {
+          return { kind: "unit", index };
+        }
+        left -= 1;
+        continue;
+      }
+      const entries = inUnit(index);
+      ahead = by > 0 ? entries : [...entries].reverse();
+    }
+    const landing = ahead[left - 1];
+    if (landing !== undefined) {
+      return { kind: "item", item: landing };
+    }
+    left -= ahead.length;
+  }
+}
 
 function itemsOf(feed: HTMLElement): HTMLElement[] {
   return [...feed.querySelectorAll<HTMLElement>(ITEM)].filter((item) => !item.closest("[hidden]"));
@@ -65,6 +186,7 @@ function makeCurrent(
   items: readonly HTMLElement[],
   current: HTMLElement | null,
 ) {
+  controls.get(feed)?.units()?.onCurrent(unitOf(current));
   for (const item of items) {
     setTabIndex(item, item === current && item.dataset.feedStop !== "inner" ? 0 : -1);
   }
@@ -195,6 +317,11 @@ export function stepFeed(entry: HTMLElement, by: -1 | 1): void {
   if (feed === null) {
     return;
   }
+  const control = controls.get(feed);
+  if (control?.units() !== undefined) {
+    control.move(entry, by);
+    return;
+  }
   const items = itemsOf(feed);
   const index = items.indexOf(entry);
   if (index !== -1) {
@@ -210,6 +337,21 @@ export function leaveDecisionCard(by: -1 | 1): void {
   }
 }
 
+// holdsStop reports whether a node is, or holds, an item, an entry or a control.
+function holdsStop(node: Node): boolean {
+  return node instanceof Element && (node.matches(STOPS) || node.querySelector(STOPS) !== null);
+}
+
+// changesStops reports whether the records touch what the feed keeps in Tab: an attribute, or a
+// node that is or holds an item, an entry or a control. Text that grows touches none.
+function changesStops(records: readonly MutationRecord[]): boolean {
+  return records.some(
+    (record) =>
+      record.type === "attributes" ||
+      [...record.addedNodes, ...record.removedNodes].some(holdsStop),
+  );
+}
+
 /**
  * useFeed makes the feed one stop of Tab over its entries, the elements with data-feed-item in the
  * order of the page: arriving, the pending card or the last entry; Tab goes through the controls
@@ -219,12 +361,127 @@ export function leaveDecisionCard(by: -1 | 1): void {
  * one with data-feed-stop="inner" has its stop in a line of its own, never itself; a
  * data-feed-entry is an entry whose toggle is its stop.
  */
-export function useFeed(feedRef: RefObject<HTMLElement | null>): void {
+export function useFeed(feedRef: RefObject<HTMLElement | null>, units?: FeedUnits): void {
+  const unitsRef = useRef(units);
+  unitsRef.current = units;
+  const resyncRef = useRef<(() => void) | null>(null);
+  // A new units value is the window moving: what it mounted is synced at once, without waiting for
+  // the observer.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: units is the signal, not a value read
+  useEffect(() => resyncRef.current?.(), [units]);
   useEffect(() => {
     const feed = feedRef.current;
     if (feed === null) {
       return;
     }
+
+    // pending is the unit the keyboard is going to, and which of its ends takes the focus: by 1 its
+    // first item, by -1 its last. It is tried again each time the feed changes, while the unit mounts.
+    let pending: { index: number; by: -1 | 1 } | null = null;
+
+    // settle focuses the end of the pending unit once it is mounted, and walks over a mounted unit
+    // that holds no item; false while it waits.
+    const settle = (): boolean => {
+      const units = unitsRef.current;
+      if (pending === null || units === undefined) {
+        pending = null;
+        return true;
+      }
+      const unit = unitElement(feed, pending.index);
+      if (unit === null) {
+        return false;
+      }
+      const items = itemsOf(feed);
+      const inside = items.filter((item) => unit.contains(item));
+      const target = pending.by > 0 ? inside[0] : inside.at(-1);
+      if (target !== undefined) {
+        const by = pending.by;
+        pending = null;
+        go(target, items, by);
+        return true;
+      }
+      const index = pending.index + pending.by;
+      if (index < 0 || index >= units.count) {
+        pending = null;
+        return true;
+      }
+      pending = { index, by: pending.by };
+      if (settle()) {
+        return true;
+      }
+      units.reveal(index);
+      return false;
+    };
+
+    // seek goes to an end of a unit: at once when it is mounted, else by bringing it into view.
+    const seek = (index: number, by: -1 | 1) => {
+      pending = { index, by };
+      if (!settle()) {
+        unitsRef.current?.reveal(pending?.index ?? index);
+      }
+    };
+
+    // move goes one entry from item by the arrows, across a hole of unmounted units.
+    const move = (item: HTMLElement, by: -1 | 1) => {
+      const items = itemsOf(feed);
+      const next = items[items.indexOf(item) + by];
+      const current = unitsRef.current;
+      const hole = current === undefined ? null : holeAfter(feed, item, next, by, current);
+      if (hole === null) {
+        go(next, items, by);
+      } else {
+        seek(hole, by);
+      }
+    };
+
+    // page goes PAGE entries from item, by -1 or 1, over the units that are not mounted.
+    const page = (item: HTMLElement, by: -1 | 1, units: FeedUnits) => {
+      const items = itemsOf(feed);
+      const stop = pageStop(feed, items, item, by, units.count);
+      switch (stop.kind) {
+        case "item":
+          go(stop.item, items, by);
+          break;
+        case "unit":
+          seek(stop.index, by);
+          break;
+        case "first":
+          seek(0, 1);
+          break;
+        case "last": {
+          // The last entry, at the end of the last unit when nothing after it is mounted.
+          const last = items.at(-1);
+          const unit = last === undefined ? null : unitOf(last);
+          if (unit === -1 || unit === units.count - 1) {
+            go(last, items, 1);
+          } else {
+            seek(units.count - 1, -1);
+          }
+          break;
+        }
+      }
+    };
+
+    // walk is Page Up, Page Down, Home and End over units, true when the key is one of them.
+    const walk = (key: string, item: HTMLElement, units: FeedUnits): boolean => {
+      switch (key) {
+        case "Home":
+          seek(0, 1);
+          return true;
+        case "End": {
+          const items = itemsOf(feed);
+          go(items.at(-1), items, 1);
+          return true;
+        }
+        case "PageUp":
+        case "PageDown":
+          page(item, key === "PageUp" ? -1 : 1, units);
+          return true;
+        default:
+          return false;
+      }
+    };
+    controls.set(feed, { units: () => unitsRef.current, move });
 
     // sync keeps one stop: the entry holding the focus, else the pending card or the last entry.
     const sync = () => {
@@ -263,6 +520,18 @@ export function useFeed(feedRef: RefObject<HTMLElement | null>): void {
       if (item.dataset.feedKeys === "own" && event.key.startsWith("Arrow")) {
         return;
       }
+      pending = null;
+      const units = unitsRef.current;
+      if (units !== undefined && WALK_KEYS.includes(event.key)) {
+        event.preventDefault();
+        walk(event.key, item, units);
+        return;
+      }
+      if (units !== undefined && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+        event.preventDefault();
+        move(item, event.key === "ArrowUp" ? -1 : 1);
+        return;
+      }
       const items = itemsOf(feed);
       const next = target(event.key, items.indexOf(item), items.length);
       if (next !== null) {
@@ -274,11 +543,22 @@ export function useFeed(feedRef: RefObject<HTMLElement | null>): void {
     };
 
     sync();
+    resyncRef.current = () => {
+      sync();
+      if (pending !== null) {
+        settle();
+      }
+    };
     // What mounts, hides or rewrites a tabindex in the feed is synced: the new controls of an
     // entry that is not the current one leave Tab as they come.
     const observer = new MutationObserver((records) => {
       heldChanges(records);
-      sync();
+      if (changesStops(records)) {
+        sync();
+        if (pending !== null) {
+          settle();
+        }
+      }
     });
     observer.observe(feed, {
       childList: true,
@@ -291,6 +571,8 @@ export function useFeed(feedRef: RefObject<HTMLElement | null>): void {
     feed.addEventListener("focusout", onFocusOut);
     feed.addEventListener("keydown", onKeyDown);
     return () => {
+      controls.delete(feed);
+      resyncRef.current = null;
       observer.disconnect();
       feed.removeEventListener("focusin", onFocusIn);
       feed.removeEventListener("focusout", onFocusOut);

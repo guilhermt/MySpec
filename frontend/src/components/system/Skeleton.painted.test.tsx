@@ -11,7 +11,7 @@ describe.each(THEMES)("Skeleton in the %s theme", (theme) => {
         <SkeletonBar className="w-1/2" />
       </Skeleton>,
     );
-    const bar = screen.getByRole("status", { name: "Reading the board…" }).firstElementChild;
+    const bar = screen.getByRole("group", { name: "Reading the board…" }).firstElementChild;
     expect(bar).not.toBeNull();
     if (bar === null) return;
     const style = getComputedStyle(bar);

@@ -346,7 +346,7 @@ describe("DetailsPanel, reports", () => {
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Couldn't read step-reviews/1-1.mdno such file",
+      "Couldn't read step-reviews/1-1.md no such file",
     );
     vi.mocked(api.readArtifact).mockResolvedValue("# Clean");
     await user.click(screen.getByRole("button", { name: "Try again" }));
@@ -362,7 +362,7 @@ describe("DetailsPanel, reports", () => {
     await user.click(screen.getByRole("button", { name: "Review 1 · clean" }));
 
     expect(
-      screen.getByRole("status", { name: "Reading Implementation · Review 1 · clean" }),
+      screen.getByRole("group", { name: "Reading Implementation · Review 1 · clean" }),
     ).toBeInTheDocument();
   });
 });
@@ -470,7 +470,7 @@ describe("DetailsPanel, Task", () => {
   it("says the clone is missing, with its path in the tooltip", async () => {
     const { user } = details(makeTask(), makeRepository({ missing: true }));
 
-    expect(facts(group("Task")).Repository).toBe("dev/web · ◇ clone missing · ~/projects/web");
+    expect(facts(group("Task")).Repository).toBe("dev/web · clone missing · ~/projects/web");
     await user.hover(screen.getByText("clone missing"));
 
     expect(await screen.findByText("~/projects/web")).toBeInTheDocument();

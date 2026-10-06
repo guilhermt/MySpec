@@ -4,16 +4,18 @@
  * and tasks in the proportion of Platform Roadmap, every section expanded. It measures three things,
  * each once cold and five times warm: the first paint of BoardView, from before the render to the
  * frame after the commit with its layout; a key in the search, from the input to the frame with the
- * new list; and ↓ in the list, from the keydown to the frame after it. The targets are 300 ms, 50 ms
- * and 16 ms.
+ * new list; and ↓ in the list, the frames lost between the keydown and the frame that paints the
+ * focus on the next row (dev/frames.ts). The targets are 300 ms, 50 ms and no frame lost.
  *
  * A tool of the development build: main.tsx mounts it in place of the app only with ?measure=board
  * under the Vite dev server (task dev), and the production bundle never has it. The numbers go to
- * the console and to the page.
+ * the page and to the console as JSON, which the MiniBrowser writes to its output with
+ * --enable-write-console-messages-to-stdout=true.
  */
 
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
+import { countDropped, droppedOf, frameInterval, median } from "@/dev/frames";
 import { BoardView } from "@/features/board/BoardView";
 import { EMPTY_FILTERS } from "@/features/board/board-view";
 import { boardViewKey } from "@/lib/ui-storage";
@@ -34,7 +36,7 @@ const CARDS = 2000;
 /** WARM_RUNS is how many times each measure runs after the cold one. */
 const WARM_RUNS = 5;
 
-const BOARD_ID = "board-measure";
+export const BOARD_ID = "board-measure";
 
 // STATUSES are the ten statuses of Platform Roadmap, with the share of the cards each one has, in
 // percent; the three final ones hold most of the board, as they do there.
@@ -216,8 +218,8 @@ function repository(name: string): Repository {
   };
 }
 
-// The state the measured board lives in: the board, its repositories and the tasks of its cards.
-function measuredState(): State {
+// measuredState is the state the measured board lives in: the board, its repositories and the tasks of its cards.
+export function measuredState(): State {
   const readAt = new Date().toISOString();
   const cards = Array.from({ length: CARDS }, (_, index) => card(index + 1, readAt));
   const board: Board = {
@@ -288,11 +290,6 @@ function nextFrame(): Promise<number> {
   );
 }
 
-function median(values: readonly number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)] ?? 0;
-}
-
 // ms rounds milliseconds to a tenth.
 const ms = (value: number) => Number(value.toFixed(1));
 
@@ -313,11 +310,14 @@ async function type(search: HTMLInputElement, text: string): Promise<number> {
   return (await nextFrame()) - started;
 }
 
-// arrowDown presses ↓ on the row in focus, and returns the milliseconds to the frame after it.
-async function arrowDown(row: HTMLElement): Promise<number> {
-  const started = performance.now();
-  row.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-  return (await nextFrame()) - started;
+// arrowDown presses ↓ on the row in focus, and returns the frames lost before the frame that paints
+// the focus on the next row.
+function arrowDown(interval: number, row: HTMLElement): Promise<number> {
+  return countDropped(
+    interval,
+    () => row.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })),
+    () => document.activeElement !== row,
+  );
 }
 
 /** Measure is what one measure says: the cold run, and the median and the maximum of the warm ones. */
@@ -371,26 +371,30 @@ export async function measureBoard(container: HTMLElement): Promise<void> {
     throw new Error("the list of the board has no row");
   }
   firstRow.focus();
+  const interval = await frameInterval();
   const downs: number[] = [];
   for (let run = 0; run <= WARM_RUNS; run++) {
     const focused = document.activeElement;
-    downs.push(await arrowDown(focused instanceof HTMLElement ? focused : firstRow));
+    downs.push(await arrowDown(interval, focused instanceof HTMLElement ? focused : firstRow));
   }
 
   const [coldKey, ...warmKeys] = keys;
-  const [coldDown, ...warmDowns] = downs;
   const result = {
     cards: CARDS,
     mountedRows,
+    frameMs: ms(interval),
     firstPaint: measureOf(coldPaint, warmPaint),
     searchKey: measureOf(coldKey ?? 0, warmKeys),
-    arrowDown: measureOf(coldDown ?? 0, warmDowns),
-    targetsMs: { firstPaint: 300, searchKey: 50, arrowDown: 16 },
+    arrowDown: droppedOf(downs),
+    targets: { firstPaintMs: 300, searchKeyMs: 50, arrowDownDroppedFrames: 0 },
     userAgent: navigator.userAgent,
   };
-  console.info("measure-board", result);
+  console.info("measure-board", JSON.stringify(result));
   const out = document.createElement("pre");
   out.id = "measure-board";
-  out.textContent = JSON.stringify(result, null, 2);
+  // The numbers cover the page, so a screenshot of a window of any size reads them.
+  out.style.cssText =
+    "position:fixed;inset:0;z-index:99999;margin:0;padding:8px;overflow:auto;background:#fff;color:#000;font:12px monospace;white-space:pre-wrap";
+  out.textContent = JSON.stringify(result);
   document.body.prepend(out);
 }

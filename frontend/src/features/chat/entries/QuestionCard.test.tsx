@@ -2,6 +2,7 @@ import { act, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { QuestionCard } from "@/features/chat/entries/QuestionCard";
 import { api, type QuestionEntry } from "@/lib/wails";
+import { clockTime } from "@/lib/when";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makeEntry } from "@/test/wails-mock";
@@ -130,6 +131,10 @@ describe("QuestionCard pending", () => {
       "aria-disabled",
       "true",
     );
+    // Sending, the options are drawn disabled: dashed and in the faint ink.
+    expect(screen.getByRole("radio", { name: /Postgres/ })).toHaveClass(
+      "aria-disabled:dashed-disabled",
+    );
   });
 
   it("shows the sending of an answer the composer sends, without Answer", () => {
@@ -253,6 +258,20 @@ describe("QuestionCard settled", () => {
     await user.hover(screen.getByText("Which database?"));
 
     expect(await screen.findByText(/^Answered at /)).toBeInTheDocument();
+  });
+
+  it("ends its name with the time of the answer", () => {
+    card(
+      question({
+        status: "allowed",
+        answers: { "Which database?": "SQLite" },
+        answeredAt: "2026-09-29T09:19:00Z",
+      }),
+    );
+
+    expect(screen.getByRole("article")).toHaveAccessibleName(
+      `Question, ${clockTime(AT, Date.now())}, answered at ${clockTime("2026-09-29T09:19:00Z", Date.now())}`,
+    );
   });
 
   it("says a cancelled question", () => {

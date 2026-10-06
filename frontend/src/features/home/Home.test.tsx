@@ -257,7 +257,7 @@ describe("Home", () => {
   it("lists the shortcuts", () => {
     renderWithStore(<Home />, { state: makeState() });
 
-    const shortcuts = screen.getByText("Shortcuts:").parentElement as HTMLElement;
+    const shortcuts = screen.getByRole("group", { name: "Shortcuts" });
     for (const text of ["Next that needs you", "New task", "Back", "Settings"]) {
       expect(within(shortcuts).getByText(text)).toBeInTheDocument();
     }

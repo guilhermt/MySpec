@@ -1,19 +1,29 @@
-import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import {
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { Button } from "@/components/system/Button";
 import { Chip } from "@/components/system/Chip";
 import { EmptyState } from "@/components/system/EmptyState";
 import { FilterBar } from "@/components/system/FilterBar";
 import { isTyping } from "@/components/system/keys";
-import { HistoryRow } from "@/components/system/ListRow";
+import { LIST_COLUMN } from "@/components/system/ListPanel";
+import { HistoryRow, type HistoryRowView } from "@/components/system/ListRow";
 import { DaySectionHeader } from "@/components/system/ListSectionHeader";
+import { LiveRegion } from "@/components/system/LiveRegion";
 import { ScrollArea } from "@/components/system/ScrollArea";
 import { SearchInput } from "@/components/system/SearchInput";
 import { Shimmer } from "@/components/system/Shimmer";
 import { Tooltip } from "@/components/system/Tooltip";
+import { useWindowedRows } from "@/components/system/useWindowedRows";
 import { useNow } from "@/features/attention/useNow";
-import { LIST_COLUMN } from "@/features/board/BoardView";
 import { entryId, type ListTreeEntry, useListTree } from "@/features/board/useListTree";
 import {
+  type HistoryDay,
   type HistoryEntry,
   historyCount,
   historyDays,
@@ -25,7 +35,6 @@ import { historyRow } from "@/features/history/history-rows";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { olderKey } from "@/lib/history";
 import { filterLabel } from "@/lib/repositories";
-import { cn } from "@/lib/utils";
 import { loadOlderHistory, setRepositoryFilter } from "@/store/actions";
 import {
   useAppStore,
@@ -43,12 +52,23 @@ const NO_IDS: readonly string[] = [];
 /** SEARCH_OLDER_DELAY_MS is how long the search waits, once the text stops changing, before it asks the Go for the older items that match. */
 export const SEARCH_OLDER_DELAY_MS = 300;
 
-/**
- * BELOW_THE_BAR keeps a day or a row the keys move to below the bar of the search, which sticks to
- * the top of the list, and its fade: the room it scrolls to is under them, not behind.
- */
-const BELOW_THE_BAR =
-  "[&_[data-row-key]]:scroll-mt-[calc(var(--space-4)+var(--size-control-sm)+var(--space-3)*2)] [&_[data-section-id]]:scroll-mt-[calc(var(--space-4)+var(--size-control-sm)+var(--space-3)*2)]";
+/** HEADER_PX is the height of a day header: --size-node. */
+const HEADER_PX = 28;
+/** SPACED_HEADER_PX is a day header with the room over it, --space-4 more, as every day but the first has. */
+const SPACED_HEADER_PX = 44;
+/** ROW_PX is the height of a row of the History on one line: --size-control. */
+const ROW_PX = 32;
+/** TWO_LINE_ROW_PX is the height of a row on two lines, in a list of up to 860 px (components.md, Linha de lista). */
+const TWO_LINE_ROW_PX = 52;
+/** TWO_LINES_UP_TO_PX is the width of the scroll area (the "list" container of the row's query, @max-[860px]/list) up to which a row takes two lines. */
+const TWO_LINES_UP_TO_PX = 860;
+/** OVERSCAN is how many rows are mounted past each end of what shows. */
+const OVERSCAN = 20;
+
+/** HistoryListRow is a row of the flat list: a day header or an archived item, with its place among its siblings. */
+type HistoryListRow =
+  | { kind: "day"; day: HistoryDay; posInSet: number; setSize: number }
+  | { kind: "entry"; entry: HistoryEntry; dayId: string; posInSet: number; setSize: number };
 
 /** SEARCH_ID names the search in the focus the store asks for. */
 const SEARCH_ID = "search";
@@ -75,6 +95,7 @@ export function HistoryView() {
   const treeRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
 
   const source = useMemo<OlderSource>(
     () => ({ archived: olderArchived, ids: older?.ids ?? NO_IDS }),
@@ -91,16 +112,34 @@ export function HistoryView() {
   const outside = freshEntry !== undefined && !inFilter(freshEntry, filter);
   const uncounted = outside ? freshEntry.id : null;
   const days = useMemo(() => historyDays(entries, now, uncounted), [entries, now, uncounted]);
-  const treeEntries = useMemo(
+  // The list is flat: a header per day and a row per item, as the tree walks them.
+  const rows = useMemo(
     () =>
-      days.flatMap((day): ListTreeEntry[] => [
-        { kind: "section", id: day.id, foldable: false, collapsed: false },
+      days.flatMap((day, at): HistoryListRow[] => [
+        { kind: "day", day, posInSet: at + 1, setSize: days.length },
         ...day.entries.map(
-          (entry): ListTreeEntry => ({ kind: "item", key: entry.id, sectionId: day.id }),
+          (entry, index): HistoryListRow => ({
+            kind: "entry",
+            entry,
+            dayId: day.id,
+            posInSet: index + 1,
+            setSize: day.entries.length,
+          }),
         ),
       ]),
     [days],
   );
+  const treeEntries = useMemo(
+    () =>
+      rows.map(
+        (row): ListTreeEntry =>
+          row.kind === "day"
+            ? { kind: "section", id: row.day.id, foldable: false, collapsed: false }
+            : { kind: "item", key: row.entry.id, sectionId: row.dayId },
+      ),
+    [rows],
+  );
+  const ids = useMemo(() => treeEntries.map(entryId), [treeEntries]);
 
   const open = (entry: HistoryEntry) => {
     if (entry.kind === "task") {
@@ -111,6 +150,9 @@ export function HistoryView() {
       openArchivedDiscussion(entry.id);
     }
   };
+  // The tree walks by index and the window mounts by index: each is told of the other by a ref,
+  // since the window pins the tab stop the tree names and the tree scrolls through the window.
+  const scrollTo = useRef<(index: number, align?: "auto" | "center") => void>(undefined);
   const tree = useListTree({
     entries: treeEntries,
     openKey: null,
@@ -122,13 +164,48 @@ export function HistoryView() {
         open(entry);
       }
     },
+    scrollToIndex: (index, align) => scrollTo.current?.(index, align),
   });
+  const freshId = fresh?.id;
+  const freshIndex = freshId === undefined ? -1 : ids.indexOf(`item:${freshId}`);
+  const keyOf = useCallback((index: number) => ids[index] ?? "", [ids]);
+  const estimate = useCallback(
+    (index: number) => {
+      const row = rows[index];
+      if (row?.kind === "day") {
+        return index === 0 ? HEADER_PX : SPACED_HEADER_PX;
+      }
+      // The viewport fills the area the container query measures, not the narrower list column.
+      const width = viewportRef.current?.clientWidth ?? 0;
+      return width > TWO_LINES_UP_TO_PX || width <= 0 ? ROW_PX : TWO_LINE_ROW_PX;
+    },
+    [rows],
+  );
+  const windowed = useWindowedRows({
+    count: rows.length,
+    keyOf,
+    estimate,
+    pinned: [tree.tabStopIndex, freshIndex],
+    scrollRef: viewportRef,
+    listRef: treeRef,
+    stickyRef: barRef,
+    overscan: OVERSCAN,
+  });
+  useLayoutEffect(() => {
+    scrollTo.current = windowed.scrollToIndex;
+  }, [windowed.scrollToIndex]);
 
   // The focus starts on the row a deletion left in the place of the item, on the row just archived
-  // (rolled to the middle when it is out of view), or on the search.
-  const freshId = fresh?.id;
+  // (rolled to the middle when it is out of view), or on the search. It waits for the window to
+  // have mounted its rows.
   const opened = useRef(false);
+  const arrivedFor = useRef<string | undefined | null>(null);
+  const ready = windowed.parts.length > 0 || rows.length === 0;
   useLayoutEffect(() => {
+    if (!ready || arrivedFor.current === (freshId ?? undefined)) {
+      return;
+    }
+    arrivedFor.current = freshId;
     // A later arrival without a row to show leaves the focus where it is.
     if (opened.current && freshId === undefined) {
       return;
@@ -136,22 +213,29 @@ export function HistoryView() {
     opened.current = true;
     const { historyFocus } = useAppStore.getState();
     clearHistoryFocus();
-    const rowOf = (key: string | null) =>
-      key === null || key === SEARCH_ID
-        ? undefined
-        : Array.from(treeRef.current?.querySelectorAll<HTMLElement>("[data-row-key]") ?? []).find(
-            (element) => element.getAttribute("data-row-key") === key,
-          );
-    const row = rowOf(historyFocus) ?? rowOf(freshId ?? null);
-    if (row !== undefined && row.getAttribute("data-row-key") === freshId) {
+    const indexOf = (key: string | null) =>
+      key === null || key === SEARCH_ID ? -1 : ids.indexOf(`item:${key}`);
+    const fromFocus = indexOf(historyFocus);
+    const index = fromFocus >= 0 ? fromFocus : indexOf(freshId ?? null);
+    if (index < 0) {
+      searchRef.current?.focus();
+      return;
+    }
+    if (index === indexOf(freshId ?? null)) {
       const view = viewportRef.current?.getBoundingClientRect();
-      const box = row.getBoundingClientRect();
-      if (view !== undefined && (box.top < view.top || box.bottom > view.bottom)) {
-        row.scrollIntoView({ block: "center" });
+      const box = treeRef.current
+        ?.querySelector<HTMLElement>(`[data-index="${index}"]`)
+        ?.getBoundingClientRect();
+      if (
+        view !== undefined &&
+        (box === undefined || box.top < view.top || box.bottom > view.bottom)
+      ) {
+        tree.focusIndex(index, "center");
+        return;
       }
     }
-    (row ?? searchRef.current)?.focus();
-  }, [clearHistoryFocus, freshId]);
+    tree.focusIndex(index);
+  });
 
   const query = historyQuery.trim();
   const total = summary.tasks + summary.reviews + summary.discussions;
@@ -218,13 +302,57 @@ export function HistoryView() {
   }, [query, filter, total]);
 
   // ↓ and End that reach the last row ask for the next page too.
-  const lastEntry = treeEntries.at(-1);
-  const lastId = lastEntry === undefined ? null : entryId(lastEntry);
-  const onEntryFocus = (id: string) => {
-    tree.onEntryFocus(id);
+  const lastId = ids.at(-1) ?? null;
+  // The rows get the same functions whatever the render, so a row that did not change is not drawn
+  // again; they read the latest of what the view holds.
+  const latest = useRef({
+    onEntryFocus: tree.onEntryFocus,
+    lastId,
+    hasOlder,
+    requestOlder,
+    open,
+    byId,
+  });
+  useLayoutEffect(() => {
+    latest.current = {
+      onEntryFocus: tree.onEntryFocus,
+      lastId,
+      hasOlder,
+      requestOlder,
+      open,
+      byId,
+    };
+  });
+  const focusEntry = useCallback((id: string) => {
+    const { onEntryFocus, lastId, hasOlder, requestOlder } = latest.current;
+    onEntryFocus(id);
     if (id === lastId && hasOlder) {
       requestOlder();
     }
+  }, []);
+  const focusDay = useCallback((id: string) => focusEntry(`section:${id}`), [focusEntry]);
+  const focusRow = useCallback((key: string) => focusEntry(`item:${key}`), [focusEntry]);
+  const openRow = useCallback((key: string) => {
+    const { open, byId } = latest.current;
+    const entry = byId.get(key);
+    if (entry !== undefined) {
+      open(entry);
+    }
+  }, []);
+
+  // The model of a row is made when the row mounts, and kept while what it tells stays the same.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new list, state, clock or arrival makes every model again
+  const models = useMemo(
+    () => new Map<HistoryEntry, HistoryRowView>(),
+    [entries, app, now, freshId],
+  );
+  const modelOf = (entry: HistoryEntry, isFresh: boolean): HistoryRowView | null => {
+    let model = models.get(entry);
+    if (model === undefined && app !== null) {
+      model = historyRow(entry, app, now, isFresh);
+      models.set(entry, model);
+    }
+    return model ?? null;
   };
 
   const focusSearch = () => searchRef.current?.focus();
@@ -289,7 +417,7 @@ export function HistoryView() {
       <LocationHeader />
       <ScrollArea viewportRef={viewportRef} className="list-area min-h-0 flex-1">
         <div className={LIST_COLUMN}>
-          <FilterBar label="Search History">
+          <FilterBar ref={barRef} label="Search History">
             <SearchInput
               landmark={false}
               inputRef={searchRef}
@@ -298,12 +426,7 @@ export function HistoryView() {
               shortcut="/"
               value={historyQuery}
               onValueChange={setHistoryQuery}
-              onArrowDown={() => {
-                // The first day comes into view as the keys of the list bring an entry, below the bar.
-                const first = treeRef.current?.querySelector<HTMLElement>("[data-section-id]");
-                first?.focus();
-                first?.scrollIntoView?.({ block: "nearest" });
-              }}
+              onArrowDown={() => tree.focusIndex(0)}
               className="w-[calc(var(--space-16)*4)] @max-[620px]/list:w-[calc(var(--space-16)*3)]"
             />
             {filter !== "" && (
@@ -334,46 +457,69 @@ export function HistoryView() {
               role="tree"
               aria-label="History"
               onKeyDown={tree.onKeyDown}
-              className={cn("flex flex-col", BELOW_THE_BAR)}
+              className="flex flex-col"
             >
-              {days.map((day) => {
-                const sectionId = entryId({
-                  kind: "section",
-                  id: day.id,
-                  foldable: false,
-                  collapsed: false,
-                });
-                return (
-                  <div key={day.id} role="none" className="mt-(--space-4) first:mt-0">
-                    <DaySectionHeader
-                      id={day.id}
-                      name={day.name}
-                      count={day.count}
-                      label={day.label}
-                      tabStop={sectionId === tree.tabStop}
-                      onFocus={() => onEntryFocus(sectionId)}
+              {windowed.parts.map((part) => {
+                if (part.kind === "spacer") {
+                  return (
+                    <div
+                      key={part.key}
+                      aria-hidden="true"
+                      role="none"
+                      style={{ height: part.height }}
                     />
-                    {app !== null &&
-                      day.entries.map((entry) => {
-                        const id = entryId({ kind: "item", key: entry.id, sectionId: day.id });
-                        const isFresh = entry.id === freshId;
-                        return (
-                          <HistoryRow
-                            key={id}
-                            model={historyRow(entry, app, now, isFresh)}
-                            fresh={isFresh}
-                            tabStop={id === tree.tabStop}
-                            onActivate={() => open(entry)}
-                            onFocus={() => onEntryFocus(id)}
-                          />
-                        );
-                      })}
-                  </div>
+                  );
+                }
+                const row = rows[part.index];
+                if (row === undefined) {
+                  return null;
+                }
+                if (row.kind === "day") {
+                  return (
+                    <DaySectionHeader
+                      key={part.key}
+                      ref={windowed.measureRef}
+                      index={part.index}
+                      id={row.day.id}
+                      name={row.day.name}
+                      count={row.day.count}
+                      label={row.day.label}
+                      tabStop={part.key === tree.tabStop}
+                      setSize={row.setSize}
+                      posInSet={row.posInSet}
+                      spaced={part.index > 0}
+                      onFocus={focusDay}
+                    />
+                  );
+                }
+                const isFresh = row.entry.id === freshId;
+                const model = modelOf(row.entry, isFresh);
+                if (model === null) {
+                  return null;
+                }
+                return (
+                  <HistoryRow
+                    key={part.key}
+                    ref={windowed.measureRef}
+                    index={part.index}
+                    model={model}
+                    fresh={isFresh}
+                    tabStop={part.key === tree.tabStop}
+                    setSize={row.setSize}
+                    posInSet={row.posInSet}
+                    onActivate={openRow}
+                    onFocus={focusRow}
+                  />
                 );
               })}
             </div>
           )}
           <div ref={sentinelRef} data-older-sentinel="" aria-hidden="true" />
+          <LiveRegion kind="status" className="sr-only">
+            {status !== "error" &&
+              (status === "loading" || (query !== "" && waiting)) &&
+              (query === "" ? "Loading older items…" : "Searching older items…")}
+          </LiveRegion>
           {status === "error" ? (
             <p
               role="alert"
@@ -390,10 +536,7 @@ export function HistoryView() {
             </p>
           ) : (
             (status === "loading" || (query !== "" && waiting)) && (
-              <p
-                role="status"
-                className="px-(--space-4) py-(--space-3) text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
-              >
+              <p className="px-(--space-4) py-(--space-3) text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
                 <Shimmer>
                   {query === "" ? "Loading older items…" : "Searching older items…"}
                 </Shimmer>

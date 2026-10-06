@@ -8,7 +8,7 @@ import {
   stepSituation,
 } from "@/lib/situations";
 import type { Situation, Step, TaskSummary } from "@/lib/wails";
-import { asSessionStatus, asSituationGroup, asStepStatus } from "@/lib/wails";
+import { asSessionStatus, asSituationGroup, asSituationKind, asStepStatus } from "@/lib/wails";
 import type { StepTab } from "@/store/app-store";
 
 export { firstTab } from "@/store/step-tab";
@@ -88,6 +88,14 @@ function tabOf(
   };
 }
 
+// implementerSituation is the situation of the step that the implementer's conversation holds: the
+// step in review by the user, or without changes, belongs to the step and not to a conversation.
+function implementerSituation(task: TaskSummary, step: Step): Situation | null {
+  const situation = stepSituation(task, step.number);
+  const kind = situation === null ? null : asSituationKind(situation.kind);
+  return kind === "step_review" || kind === "step_empty" ? null : situation;
+}
+
 /**
  * agentTabsOf is the two tabs of a step: they exist with a reviewer, or in agent_review before its
  * session (the Reviewer tab disabled), until the commit. null when the step has no tabs.
@@ -105,7 +113,7 @@ export function agentTabsOf(
   if (step.reviewer === null && status !== "agent_review") {
     return null;
   }
-  const implementer = tabOf("implementer", task, stepSituation(task, step.number), chosen, now);
+  const implementer = tabOf("implementer", task, implementerSituation(task, step), chosen, now);
   const reviewer =
     step.reviewer === null
       ? {

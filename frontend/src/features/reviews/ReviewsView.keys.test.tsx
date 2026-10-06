@@ -4,6 +4,7 @@ import { ReviewsView } from "@/features/reviews/ReviewsView";
 import { REVIEWS_SECTIONS_KEY } from "@/lib/ui-storage";
 import { api, type PullRequestRow } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
+import { spoken } from "@/test/live";
 import { renderWithStore } from "@/test/render";
 import {
   makePullRequestRow,
@@ -315,8 +316,10 @@ describe("the keyboard of Reviews", () => {
 
       await user.keyboard("r");
 
-      expect(await screen.findByRole("status")).toHaveTextContent(
-        "No review of web#12 · Pull requests from forks can't be reviewed yet.",
+      await waitFor(() =>
+        expect(spoken()).toEqual([
+          "No review of web#12 · Pull requests from forks can't be reviewed yet.",
+        ]),
       );
       expect(useAppStore.getState().startReview).toBeNull();
     });
@@ -329,8 +332,8 @@ describe("the keyboard of Reviews", () => {
 
       await user.keyboard("r");
 
-      expect(await screen.findByRole("status")).toHaveTextContent("No review of web#12 · ");
-      expect(screen.getByRole("status")).toHaveTextContent("/home/dev/projects/web");
+      await waitFor(() => expect(spoken()[0]).toContain("No review of web#12 · "));
+      expect(spoken()[0]).toContain("~/projects/web");
       expect(useAppStore.getState().startReview).toBeNull();
     });
 
@@ -341,7 +344,7 @@ describe("the keyboard of Reviews", () => {
       await user.keyboard("r");
 
       expect(useAppStore.getState().startReview).toBeNull();
-      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      expect(spoken()).toEqual([]);
     });
 
     it("does nothing with a modifier", async () => {
@@ -392,11 +395,11 @@ describe("the keyboard of Reviews", () => {
       const { user } = view([pull(12, { action: "fork" })]);
       row(12).focus();
       await user.keyboard("{Enter}r");
-      expect(await screen.findByRole("status")).toBeInTheDocument();
+      await waitFor(() => expect(spoken()).toHaveLength(1));
 
       await user.keyboard("{Escape}");
 
-      await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+      await waitFor(() => expect(spoken()).toEqual([]));
       expect(screen.getByRole("complementary")).toBeInTheDocument();
       expect(row(12)).toHaveFocus();
     });

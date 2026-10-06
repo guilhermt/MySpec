@@ -16,13 +16,8 @@ const TONES = {
 /** Spinner is the one loop of the product; the caller writes the gerund next to it. */
 export function Spinner({ tone = "work", className }: SpinnerProps) {
   const { arc, track } = TONES[tone];
-  // --spin-arc lets spin-glyph draw the three-quarter ring when motion is reduced.
-  const style = {
-    "--spin-arc": arc,
-    borderColor: track,
-    borderTopColor: arc,
-    borderRightColor: arc,
-  } as CSSProperties;
+  // spin-glyph draws the ring from these two: a quarter of it in the arc, or three when motion is reduced.
+  const style = { "--spin-arc": arc, "--spin-track": track } as CSSProperties;
   return (
     <span
       aria-hidden="true"

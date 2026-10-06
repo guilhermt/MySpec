@@ -8,6 +8,15 @@ import { makeReviewSummary, makeState } from "@/test/wails-mock";
 const MINUTE = 60_000;
 const FAILURE = "GitHub's rate limit was reached. It resets at 14:32.";
 
+// stripDrawn is the strip on screen, which has no role when its failure was there at the first draw.
+function stripDrawn(): HTMLElement {
+  const notice = document.querySelector<HTMLElement>('[data-slot="notice-strip"]');
+  if (notice === null) {
+    throw new Error("the strip is not drawn");
+  }
+  return notice;
+}
+
 function strip(overrides: Partial<ReviewSummary> = {}) {
   const review = makeReviewSummary({
     checkError: FAILURE,
@@ -23,12 +32,28 @@ describe("CheckStrip", () => {
   it("says when the failures began and why, and what shows after the next reading", () => {
     strip();
 
-    const alert = screen.getByRole("alert");
-    expect(alert).toHaveTextContent("Couldn't check GitHub · 3m ago");
-    expect(alert).toHaveTextContent(FAILURE);
-    expect(alert).toHaveTextContent(
+    const notice = stripDrawn();
+    expect(notice).toHaveTextContent("Couldn't check GitHub · 3m ago");
+    expect(notice).toHaveTextContent(FAILURE);
+    expect(notice).toHaveTextContent(
       "New commits, checks and the merge show after the next reading.",
     );
+  });
+
+  it("is no alert when the failure was there at the first draw, and is one when it arrives later", () => {
+    const { rerender } = strip();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    const healthy = makeReviewSummary({ checkError: "", checkErrorAt: "" });
+    rerender(<CheckStrip review={healthy} />);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    rerender(
+      <CheckStrip
+        review={{ ...healthy, checkError: FAILURE, checkErrorAt: new Date().toISOString() }}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't check GitHub");
   });
 
   it("is not there without a failure", () => {

@@ -1,11 +1,12 @@
 import { Combobox } from "@base-ui/react/combobox";
-import { ChevronDown, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { useId } from "react";
 import { cn } from "@/lib/utils";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons";
-import { MENU_ITEM, MenuMessage, UNAVAILABLE } from "./Menu";
+import { MENU_ITEM, MenuMessage } from "./Menu";
 import { ChosenText, choiceName, type ListMessage, SELECT_TRIGGER } from "./Select";
+import { StateGlyph } from "./StateGlyph";
 
 export interface ListboxItem {
   value: string;
@@ -69,7 +70,7 @@ export function Listbox({
           )}
         </Combobox.Value>
       </span>
-      <Icon icon={ChevronDown} size="sm" tone="muted" />
+      <Icon icon={ICONS.expanded} size="sm" tone="muted" />
     </Combobox.Trigger>
   );
 
@@ -83,7 +84,7 @@ export function Listbox({
       {...(disabled ? { open: false } : {})}
     >
       {withReason ? (
-        <span className="inline-flex items-center gap-2">
+        <span className="inline-flex items-center gap-(--space-2)">
           {trigger}
           <span
             id={reasonId}
@@ -101,7 +102,7 @@ export function Listbox({
           sideOffset={LIST_OFFSET_PX}
           className="isolate z-(--z-overlay) outline-none"
         >
-          <Combobox.Popup className="flex max-h-(--available-height) min-w-(--size-menu-min) flex-col gap-0.5 overflow-y-auto rounded-lg bg-surface-3 p-1 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-float outline-none">
+          <Combobox.Popup className="flex max-h-(--available-height) min-w-(--size-menu-min) flex-col gap-(--space-0-5) overflow-y-auto rounded-lg bg-surface-3 p-(--space-1) text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-float outline-none">
             {message !== undefined ? (
               <MenuMessage
                 tone={message.tone ?? "neutral"}
@@ -111,17 +112,17 @@ export function Listbox({
               </MenuMessage>
             ) : (
               <>
-                <div className="flex h-(--size-control-sm) items-center gap-1.5 rounded-sm border border-line-3 bg-surface-input pr-1 pl-2 not-focus-within:hover:border-ink-3 focus-within:field-focus">
+                <div className="flex h-(--size-control-sm) items-center gap-(--space-1-5) rounded-sm border border-line-3 bg-surface-input pr-(--space-1) pl-(--space-2) not-focus-within:hover:border-ink-3 focus-within:field-focus">
                   <Icon icon={Search} size="sm" tone="muted" />
                   <Combobox.Input
                     aria-label={searchLabel}
                     className="min-w-0 flex-1 border-0 bg-transparent text-(length:--text-meta) leading-(--leading-meta) text-ink-1 placeholder:text-ink-4 outline-none"
                   />
                 </div>
-                <Combobox.Empty className="px-2 py-1.5 text-(length:--text-meta) leading-(--leading-meta) text-ink-3 empty:hidden">
+                <Combobox.Empty className="px-(--space-2) py-(--space-1-5) text-(length:--text-meta) leading-(--leading-meta) text-ink-3 empty:hidden">
                   {emptyText}
                 </Combobox.Empty>
-                <Combobox.List className="flex flex-col gap-0.5">
+                <Combobox.List className="flex flex-col gap-(--space-0-5)">
                   {(item: ListboxItem) => (
                     <Combobox.Item
                       key={item.value}
@@ -140,7 +141,9 @@ export function Listbox({
                         <Icon icon={ICONS.done} />
                       </Combobox.ItemIndicator>
                       <span>
-                        {item.unavailable && `${UNAVAILABLE} `}
+                        {item.unavailable && (
+                          <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />
+                        )}
                         {item.label}
                         {item.unavailable && " · unavailable"}
                       </span>

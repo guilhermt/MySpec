@@ -121,6 +121,17 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 		})})
 		return nil
 	}
+	// Data a newer version changed is neither read nor written, and the interface
+	// opens on the same page.
+	var newer *store.NewerError
+	if errors.As(err, &newer) {
+		log.Warn("data from a newer version", "data", newer.Data, "known", newer.Known)
+		p.finish(stepData)
+		a.services.Bind(bindings.Services{State: bindings.NewStateService(func() bindings.State {
+			return bindings.NewerState(newer, a.systemDark)
+		})})
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}

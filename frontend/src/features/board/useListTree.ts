@@ -55,14 +55,20 @@ export interface UseListTreeOptions<S extends string> {
   onToggleSection: (id: S) => void;
   /** onActivateItem runs on Enter on an item. */
   onActivateItem: (key: string) => void;
+  /** scrollToIndex brings an entry into view; absent, the entry's element scrolls itself into view. */
+  scrollToIndex?: (index: number, align?: "auto" | "center") => void;
 }
 
 export interface ListTree {
   /** tabStop is the entry the list's one tab stop sits on, as entryId names it. */
   tabStop: string | null;
+  /** tabStopIndex is the index of the tab stop in the entries, -1 without one: a window pins it. */
+  tabStopIndex: number;
   /** onEntryFocus records where the focus is: the tab stop follows it. */
   onEntryFocus: (id: string) => void;
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
+  /** focusIndex focuses an entry by its index, bringing it into view and waiting for it to mount. */
+  focusIndex: (index: number, align?: "auto" | "center") => void;
 }
 
 /**
@@ -70,7 +76,8 @@ export interface ListTree {
  * one tab stop, the arrows, Home and End walking the entries, ← and → folding the sections (on a
  * header that never folds, → goes to its first item), Enter on a header folding it and on an item
  * acting on it, and the focus of a row that leaves the list going
- * to the next item, the one before, or its header. The view handles the letters.
+ * to the next item, the one before, or its header. It walks the entries by index, so a window that
+ * mounts only some of them still gets the focus where the key goes. The view handles the letters.
  */
 export function useListTree<S extends string>({
   entries: flat,
@@ -78,8 +85,11 @@ export function useListTree<S extends string>({
   treeRef,
   onToggleSection,
   onActivateItem,
+  scrollToIndex,
 }: UseListTreeOptions<S>): ListTree {
   const [focused, setFocused] = useState<string | null>(null);
+  // pending is the entry the focus is going to, which may mount only after the scroll that shows it.
+  const pending = useRef<string | null>(null);
   const previous = useRef<readonly ListTreeEntry<S>[]>(flat);
   const entries = useMemo(() => flat.map(entryId), [flat]);
 
@@ -97,8 +107,43 @@ export function useListTree<S extends string>({
       null
     );
   }, [entries, flat, focused, openKey]);
+  const tabStopIndex = tabStop === null ? -1 : entries.indexOf(tabStop);
+
+  const focusIndex = (index: number, align: "auto" | "center" = "auto") => {
+    const id = entries[index];
+    if (id === undefined) {
+      return;
+    }
+    pending.current = id;
+    if (scrollToIndex !== undefined) {
+      scrollToIndex(index, align);
+    } else {
+      const element = treeRef.current === null ? null : entryElement(treeRef.current, id);
+      element?.scrollIntoView?.({ block: align === "center" ? "center" : "nearest" });
+    }
+    focusPending();
+  };
+
+  // focusPending focuses the entry the focus is going to once its element is in the tree, and then
+  // forgets it.
+  const focusPending = () => {
+    const id = pending.current;
+    if (id !== null && !entries.includes(id)) {
+      pending.current = null;
+      return;
+    }
+    const element =
+      id === null || treeRef.current === null ? null : entryElement(treeRef.current, id);
+    if (element !== null) {
+      pending.current = null;
+      element.focus();
+    }
+  };
+  // A row that mounts only after the scroll gets the focus in the commit that mounts it.
+  useLayoutEffect(focusPending);
 
   // An item that leaves takes the focus with it: it goes to the next item, the one before, or the header.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: focusIndex reads the entries it runs with, which the dependencies name
   useLayoutEffect(() => {
     const before = previous.current;
     previous.current = flat;
@@ -118,17 +163,12 @@ export function useListTree<S extends string>({
     const isKept = (entry: ListTreeEntry<S>) => entry.kind === "item" && alive.has(entryId(entry));
     const target =
       before.slice(index + 1).find(isKept) ?? before.slice(0, index).reverse().find(isKept);
-    const id = target !== undefined ? entryId(target) : `section:${lost.sectionId}`;
-    const element = treeRef.current === null ? null : entryElement(treeRef.current, id);
-    element?.focus();
+    const at =
+      target !== undefined
+        ? entries.indexOf(entryId(target))
+        : entries.indexOf(`section:${lost.sectionId}`);
+    focusIndex(at);
   }, [flat, entries, focused, treeRef]);
-
-  const focusEntry = (id: string | undefined) => {
-    const element =
-      id === undefined || treeRef.current === null ? null : entryElement(treeRef.current, id);
-    element?.focus();
-    element?.scrollIntoView?.({ block: "nearest" });
-  };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!(event.target instanceof Element) || event.altKey || event.ctrlKey || event.metaKey) {
@@ -148,16 +188,16 @@ export function useListTree<S extends string>({
 
     switch (event.key) {
       case "ArrowDown":
-        focusEntry(entries[Math.min(index + 1, entries.length - 1)]);
+        focusIndex(Math.min(index + 1, entries.length - 1));
         break;
       case "ArrowUp":
-        focusEntry(entries[Math.max(index - 1, 0)]);
+        focusIndex(Math.max(index - 1, 0));
         break;
       case "Home":
-        focusEntry(entries[0]);
+        focusIndex(0);
         break;
       case "End":
-        focusEntry(entries.at(-1));
+        focusIndex(entries.length - 1);
         break;
       case "ArrowLeft":
         if (header !== null) {
@@ -166,7 +206,7 @@ export function useListTree<S extends string>({
           }
           onToggleSection(header.id);
         } else if (entry.kind === "item") {
-          focusEntry(`section:${entry.sectionId}`);
+          focusIndex(entries.indexOf(`section:${entry.sectionId}`));
           onToggleSection(entry.sectionId);
         }
         break;
@@ -183,7 +223,7 @@ export function useListTree<S extends string>({
         if (header.foldable || next?.kind !== "item" || next.sectionId !== header.id) {
           return;
         }
-        focusEntry(entries[index + 1]);
+        focusIndex(index + 1);
         break;
       }
       case "Enter":
@@ -204,5 +244,5 @@ export function useListTree<S extends string>({
 
   const onEntryFocus = useCallback((id: string) => setFocused(id), []);
 
-  return { tabStop, onEntryFocus, onKeyDown };
+  return { tabStop, tabStopIndex, onEntryFocus, onKeyDown, focusIndex };
 }

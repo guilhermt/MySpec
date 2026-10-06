@@ -1,4 +1,5 @@
 import type { Ref } from "react";
+import { CutText } from "./CutText";
 import { Icon } from "./Icon";
 import {
   ITEM_ICONS,
@@ -58,7 +59,7 @@ export function Continue({ model, buttonRef, onOpen }: ContinueProps) {
         </span>
         <span className="flex min-w-0 items-center gap-(--space-2) text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
           <StateGlyph state={TONE_GLYPHS[row.tone]} size="sm" />
-          <span className="shrink-0 whitespace-nowrap">{row.line2.long}</span>
+          <CutText text={row.line2.long} />
           {row.clock !== null && <ItemClockView clock={row.clock} />}
           {crumbs !== "" && (
             <Tooltip content={crumbs}>

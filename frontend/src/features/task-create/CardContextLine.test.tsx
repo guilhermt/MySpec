@@ -110,10 +110,12 @@ describe("CardContextLine", () => {
 
     line(STALE());
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "◇ Couldn't refresh the card: GitHub rate limit reached. The task will use the last reading.",
-    );
-    expect(screen.getByRole("status")).toHaveTextContent("From the card: #12");
+    expect(
+      await screen.findByText(
+        /Couldn't refresh the card: GitHub rate limit reached\. The task will use the last reading\./,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/From the card: #12/)).toBeInTheDocument();
   });
 
   it("counts nothing and keeps Show out of reach when the context could not be read", async () => {

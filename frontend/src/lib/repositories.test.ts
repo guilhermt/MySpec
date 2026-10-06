@@ -60,7 +60,7 @@ describe("findRepository", () => {
 
 describe("cloneMissingText", () => {
   it("names the path the clone is not at", () => {
-    expect(cloneMissingText(web)).toBe("The clone at /home/dev/projects/web is missing.");
+    expect(cloneMissingText(web)).toBe("The clone at ~/projects/web is missing.");
   });
 });
 
@@ -148,6 +148,13 @@ describe("defaultRepositoryId", () => {
     const app = makeState({ repositories: [uncloned, api], repositoryFilter: "repo-1" });
 
     expect(defaultRepositoryId(app, null, "repo-2")).toBe("repo-2");
+  });
+
+  it("is the first repository the dialog can use when nothing else says", () => {
+    const gone = makeRepository({ missing: true });
+    const app = makeState({ repositories: [gone, api, web] });
+
+    expect(defaultRepositoryId(app, null, null)).toBe("repo-2");
   });
 
   it("is empty with no repository the dialog can use", () => {

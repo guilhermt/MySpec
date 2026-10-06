@@ -52,6 +52,7 @@ export function DiscussionHeader({ discussion }: DiscussionHeaderProps) {
 
   return (
     <LocationHeader
+      hasStepper
       progress={
         <Stepper
           steps={stepper.steps}
@@ -67,6 +68,7 @@ export function DiscussionHeader({ discussion }: DiscussionHeaderProps) {
           percent={discussion.contextPercent === 0 ? null : discussion.contextPercent}
           paused={asSessionStatus(discussion.sessionStatus) === "paused"}
           compact="narrow"
+          reading={discussion.lastError === ""}
           detail={`Context used by the discussion: ${discussion.contextPercent === 0 ? "…" : `${Math.round(discussion.contextPercent)}%`}`}
         />
       )}

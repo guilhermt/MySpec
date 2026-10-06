@@ -29,9 +29,20 @@ type migration struct {
 	sql     string
 }
 
+// NewerError is a database a newer version of the app changed: its schema
+// version, Data, is past the last migration this version knows, Known. Nothing
+// was read or written.
+type NewerError struct{ Data, Known int }
+
+func (e *NewerError) Error() string {
+	return fmt.Sprintf("store: the data is at version %d, newer than this app knows (%d)", e.Data, e.Known)
+}
+
 // migrate applies every migration newer than PRAGMA user_version, one
 // transaction per file. upgrade carries the tasks of a version with workspaces
-// over, in the transaction of the migration that registers the repositories.
+// over, in the transaction of the migration that registers the repositories. A
+// database past the last migration is refused with a *NewerError before
+// anything is written.
 func migrate(ctx context.Context, db *sql.DB, log *slog.Logger, upgrade Upgrade) error {
 	current, err := schemaVersion(ctx, db)
 	if err != nil {
@@ -41,6 +52,9 @@ func migrate(ctx context.Context, db *sql.DB, log *slog.Logger, upgrade Upgrade)
 	migrations, err := loadMigrations(migrationsFS)
 	if err != nil {
 		return err
+	}
+	if last := migrations[len(migrations)-1].version; current > last {
+		return &NewerError{Data: current, Known: last}
 	}
 
 	for _, m := range migrations {

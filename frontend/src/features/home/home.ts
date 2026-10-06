@@ -131,20 +131,24 @@ export type BlockerModel =
       repositoryId: string;
       /** text is the sentence, or the message of gh for a clone that failed, or Cloning… while it runs. */
       text: string;
+      /** blocked puts the blocked glyph before the sentence: the repository is not cloned and nothing is cloning it. */
+      blocked?: boolean;
       cloning: boolean;
       error: string;
     }
-  | { kind: "clone-missing"; repositoryId: string; text: string };
+  | { kind: "clone-missing"; repositoryId: string; text: string; blocked: boolean };
 
 /** BoardLineModel is a board of the Boards section. */
 export interface BoardLineModel {
   boardId: string;
   title: string;
-  /** summary is "46 open cards · api, billing", "Not read yet · api" or "No open cards · api". */
+  /** summary is "46 open cards · api, billing", "No open cards · api", or "api" for a board never read. */
   summary: string;
-  /** reading is what the right edge says: "read 2m ago", "◇ Read failed 18m ago" or "reading…"; failure is the failed one's times, for its tooltip. */
+  /** reading is what the right edge says: "read 2m ago", "Read failed 18m ago" (blocked) or "reading…"; failure is the failed one's times, for its tooltip. */
   reading: {
     text: string;
+    /** blocked puts the blocked glyph before the text. */
+    blocked?: boolean;
     tone: "quiet" | "failed";
     shimmer: boolean;
     failure?: { failedAt: string; readAt: string };
@@ -166,35 +170,40 @@ function repositoriesOf(app: State, ids: readonly string[]): Repository[] {
   return ids.flatMap((id) => findRepository(app, id) ?? []);
 }
 
-// cloneBlockers are the lines of the repositories without a clone, by name, then those whose clone is gone.
+// cloneBlockers are the lines of the repositories that cannot start a task, one per repository, by name.
 function cloneBlockers(repositories: readonly Repository[]): BlockerModel[] {
-  const sorted = [...repositories].sort((a, b) => a.fullName.localeCompare(b.fullName));
-  const notCloned = sorted
-    .filter((repository) => !repository.cloned)
-    .map((repository): BlockerModel => {
-      const failed = !repository.cloning && repository.cloneError !== "";
-      return {
-        kind: "not-cloned",
-        repositoryId: repository.id,
-        text: repository.cloning
-          ? `Cloning ${repository.fullName}…`
-          : failed
-            ? repository.cloneError
-            : `◇ ${repository.fullName} isn't cloned. Its cards can't start a task yet.`,
-        cloning: repository.cloning,
-        error: repository.cloneError,
-      };
+  return [...repositories]
+    .sort((a, b) => a.fullName.localeCompare(b.fullName))
+    .flatMap((repository): BlockerModel[] => {
+      if (!repository.cloned) {
+        const failed = !repository.cloning && repository.cloneError !== "";
+        return [
+          {
+            kind: "not-cloned",
+            repositoryId: repository.id,
+            text: repository.cloning
+              ? `Cloning ${repository.fullName}…`
+              : failed
+                ? repository.cloneError
+                : `${repository.fullName} isn't cloned. Its cards can't start a task yet.`,
+            ...(!repository.cloning && !failed ? { blocked: true } : {}),
+            cloning: repository.cloning,
+            error: repository.cloneError,
+          },
+        ];
+      }
+      if (repository.missing) {
+        return [
+          {
+            kind: "clone-missing",
+            repositoryId: repository.id,
+            text: cloneMissingText(repository),
+            blocked: true,
+          },
+        ];
+      }
+      return [];
     });
-  const missing = sorted
-    .filter((repository) => repository.cloned && repository.missing)
-    .map(
-      (repository): BlockerModel => ({
-        kind: "clone-missing",
-        repositoryId: repository.id,
-        text: `◇ ${cloneMissingText(repository)}`,
-      }),
-    );
-  return [...notCloned, ...missing];
 }
 
 // namesOf are the short names of repositories, alphabetically.
@@ -213,7 +222,8 @@ function readingOf(board: Board, now: number): BoardLineModel["reading"] {
   }
   if (board.failure !== null) {
     return {
-      text: `◇ Read failed ${age(board.failure.failedAt, now)}`,
+      text: `Read failed ${age(board.failure.failedAt, now)}`,
+      blocked: true,
       tone: "failed",
       shimmer,
       failure: { failedAt: board.failure.failedAt, readAt: board.readAt },
@@ -222,7 +232,7 @@ function readingOf(board: Board, now: number): BoardLineModel["reading"] {
   if (board.readAt !== "") {
     return { text: `read ${age(board.readAt, now)}`, tone: "quiet", shimmer };
   }
-  return { text: "reading…", tone: "quiet", shimmer };
+  return { text: "Not read yet", tone: "quiet", shimmer: false };
 }
 
 /** boardLines are the boards of the Boards section, in the order of the state. */
@@ -232,7 +242,7 @@ export function boardLines(app: State, now: number): BoardLineModel[] {
     const count = openCards(board);
     const cards =
       board.readAt === ""
-        ? "Not read yet"
+        ? ""
         : count === 0
           ? "No open cards"
           : `${count} open ${plural(count, "card", "cards")}`;
@@ -241,9 +251,9 @@ export function boardLines(app: State, now: number): BoardLineModel[] {
     return {
       boardId: board.id,
       title: board.title,
-      summary: names === "" ? cards : `${cards} · ${names}`,
+      summary: [cards, names].filter((part) => part !== "").join(" · "),
       reading,
-      label: `${board.title}, ${cards}, ${reading.text.replace("◇ ", "")}`,
+      label: [board.title, cards, reading.text].filter((part) => part !== "").join(", "),
       blockers: [
         ...(board.failure === null
           ? []

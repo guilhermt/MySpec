@@ -180,9 +180,13 @@ const px = (name: `--${string}`) => parseFloat(resolve(`var(${name})`, "width"))
 // scene draws the task screen at a moment of the reference task, in the main area of the mock.
 function scene(
   name: SceneName,
-  { width = SCENE_MAIN, earlier = null }: { width?: number; earlier?: string | null } = {},
+  {
+    width = SCENE_MAIN,
+    earlier = null,
+    longName = false,
+  }: { width?: number; earlier?: string | null; longName?: boolean } = {},
 ) {
-  return drawScene(sceneTask(name), { width, earlier });
+  return drawScene(sceneTask(name, { longName }), { width, earlier });
 }
 
 // drawScene draws the task screen of a scene in a main area of a width.
@@ -403,9 +407,10 @@ describe.each(THEMES)("TaskView, the nine scenes in the %s theme", (theme) => {
       },
     );
 
+    // The longest name a task can have is what makes the headers and the lines cut.
     it.each(SCENE_WIDTHS)("gives every cut text a tooltip at %ipx", async (width) => {
       setTheme(theme);
-      const { area } = scene(name, { width });
+      const { area } = scene(name, { width, longName: true });
       await prepare(name);
       await settle();
       expect(await withoutTooltip(cutTexts(area))).toEqual([]);

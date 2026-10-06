@@ -1,7 +1,9 @@
 package store_test
 
 import (
+	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -149,5 +151,65 @@ func TestOpenFailsWhenTheDirectoryCannotBeCreated(t *testing.T) {
 
 	if _, err := store.Open(t.Context(), filepath.Join(blocked, "myspec.db"), newLogCapture().log, nil); err == nil {
 		t.Fatal("Open() = nil, want error")
+	}
+}
+
+func TestOpenRefusesADatabaseOfANewerVersionWithoutWritingToIt(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "myspec.db")
+	newer := schemaVersionNow + 3
+
+	seeded, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatalf("sql.Open() = %v, want nil", err)
+	}
+	for _, statement := range []string{
+		"CREATE TABLE keep (name TEXT)",
+		"INSERT INTO keep (name) VALUES ('from the newer version')",
+		fmt.Sprintf("PRAGMA user_version = %d", newer),
+	} {
+		if _, err = seeded.ExecContext(t.Context(), statement); err != nil {
+			t.Fatalf("Exec(%q) = %v, want nil", statement, err)
+		}
+	}
+	if err = seeded.Close(); err != nil {
+		t.Fatalf("Close() = %v, want nil", err)
+	}
+
+	st, err := store.Open(t.Context(), path, newLogCapture().log, nil)
+	var refused *store.NewerError
+	if !errors.As(err, &refused) {
+		t.Fatalf("Open() = %v, want a *NewerError", err)
+	}
+	if st != nil {
+		t.Errorf("Open() store = %v, want nil", st)
+	}
+	if refused.Data != newer || refused.Known != schemaVersionNow {
+		t.Errorf("NewerError = %+v, want Data %d and Known %d", refused, newer, schemaVersionNow)
+	}
+
+	after, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatalf("sql.Open() = %v, want nil", err)
+	}
+	defer func() {
+		if closeErr := after.Close(); closeErr != nil {
+			t.Errorf("Close() = %v, want nil", closeErr)
+		}
+	}()
+	var version int
+	if err = after.QueryRowContext(t.Context(), "PRAGMA user_version").Scan(&version); err != nil {
+		t.Fatalf("user_version = %v, want nil", err)
+	}
+	if version != newer {
+		t.Errorf("user_version = %d, want %d, untouched", version, newer)
+	}
+	var name string
+	if err = after.QueryRowContext(t.Context(), "SELECT name FROM keep").Scan(&name); err != nil || name != "from the newer version" {
+		t.Errorf("keep = %q, %v, want the row untouched", name, err)
+	}
+	var tables int
+	if err = after.QueryRowContext(t.Context(), "SELECT count(*) FROM sqlite_master WHERE type = 'table'").Scan(&tables); err != nil || tables != 1 {
+		t.Errorf("tables = %d, %v, want 1: no migration ran", tables, err)
 	}
 }

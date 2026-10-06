@@ -354,7 +354,8 @@ describe("the Board field", () => {
         {
           value: "beta",
           label: "Beta",
-          sub: "web · ◇ read failed 18m ago · uses the last reading · last used",
+          sub: "web · read failed 18m ago · uses the last reading · last used",
+          blocked: true,
         },
         { value: "gamma", label: "Gamma", sub: "not read yet", disabled: true },
       ]);

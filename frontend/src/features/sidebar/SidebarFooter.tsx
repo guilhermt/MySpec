@@ -1,7 +1,7 @@
-import { History, Settings } from "lucide-react";
 import { useId } from "react";
 import { Button } from "@/components/system/Button";
 import { IconButton } from "@/components/system/IconButton";
+import { ICONS } from "@/components/system/icons";
 import { Tooltip } from "@/components/system/Tooltip";
 import { ThemeButton } from "@/features/sidebar/ThemeButton";
 import { cn } from "@/lib/utils";
@@ -58,7 +58,7 @@ export function SidebarFooter({ rail = false, welcome = false }: SidebarFooterPr
       <div className="flex shrink-0 flex-col items-center gap-(--space-1) py-(--space-2) shadow-[inset_0_var(--border)_0_var(--sidebar-line)]">
         <IconButton
           label={archived === null ? "History" : `History · ${archived}`}
-          icon={History}
+          icon={ICONS.history}
           size="sm"
           {...current(historyOpen)}
           onClick={() => openHistory()}
@@ -67,7 +67,7 @@ export function SidebarFooter({ rail = false, welcome = false }: SidebarFooterPr
         <ThemeButton />
         <IconButton
           label="Settings"
-          icon={Settings}
+          icon={ICONS.settings}
           size="sm"
           shortcut={SETTINGS_SHORTCUT}
           {...current(settingsOpen)}
@@ -83,7 +83,7 @@ export function SidebarFooter({ rail = false, welcome = false }: SidebarFooterPr
       <Button
         variant="ghost"
         size="sm"
-        icon={Settings}
+        icon={ICONS.settings}
         {...current(settingsOpen)}
         onClick={toggleSettings}
         className={cn(settingsOpen && CURRENT)}
@@ -97,7 +97,7 @@ export function SidebarFooter({ rail = false, welcome = false }: SidebarFooterPr
     <Button
       variant="ghost"
       size="sm"
-      icon={History}
+      icon={ICONS.history}
       {...current(historyOpen)}
       onClick={() => openHistory()}
       className={cn("group/history", historyOpen && CURRENT)}
@@ -121,7 +121,7 @@ export function SidebarFooter({ rail = false, welcome = false }: SidebarFooterPr
         <Button
           variant="ghost"
           size="sm"
-          icon={History}
+          icon={ICONS.history}
           aria-disabled
           aria-describedby={nothingId}
           onClick={() => undefined}

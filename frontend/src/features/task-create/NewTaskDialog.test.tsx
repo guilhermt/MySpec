@@ -78,7 +78,7 @@ describe("NewTaskDialog", () => {
 
     const item = await screen.findByRole("menuitemradio", { name: /dev\/api/ });
     expect(item).toHaveAttribute("aria-disabled", "true");
-    expect(item).toHaveTextContent("The clone at /home/dev/projects/api is missing.");
+    expect(item).toHaveTextContent("The clone at ~/projects/api is missing.");
   });
 
   it("changes the repository the task will belong to", async () => {
@@ -665,7 +665,7 @@ describe("NewTaskDialog", () => {
       open({ boards: [makeBoard()] }, { newTaskCard: CARD_REF });
 
       expect(
-        screen.getByText("◇ This card isn't in the last reading of the board."),
+        screen.getByText("This card isn't in the last reading of the board."),
       ).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Create" })).not.toBeInTheDocument();
@@ -682,7 +682,7 @@ describe("NewTaskDialog", () => {
       });
 
       expect(
-        screen.getByText("◇ This card isn't in the last reading of the board."),
+        screen.getByText("This card isn't in the last reading of the board."),
       ).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Create" })).not.toBeInTheDocument();

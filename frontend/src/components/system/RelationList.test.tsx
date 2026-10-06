@@ -44,7 +44,7 @@ describe("RelationList", () => {
     renderWithStore(<RelationList groups={GROUPS} onOpen={() => {}} />);
     const group = screen.getByRole("region", { name: "Dependencies" });
     expect(within(group).getByRole("link", { name: "#398 Key store" })).toBeInTheDocument();
-    expect(within(group).getByRole("listitem")).toHaveTextContent("open◇ Not satisfied");
+    expect(within(group).getByRole("listitem")).toHaveTextContent("openNot satisfied");
   });
 
   it("opens a relation through the caller", async () => {

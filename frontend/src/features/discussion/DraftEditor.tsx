@@ -296,6 +296,7 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
       </Field>
       <Field
         label="Body"
+        complement="Markdown"
         {...(bodyRequired && body.value.trim() === "" ? { error: "Write the body." } : {})}
       >
         <Textarea
@@ -313,7 +314,7 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
         {isUpdate ? (
           <Field label="Repository">
             <p
-              className={`${META} py-1 text-ink-2`}
+              className={`${META} py-(--space-1) text-ink-2`}
             >{`${draft.repository} · the card's repository`}</p>
           </Field>
         ) : (

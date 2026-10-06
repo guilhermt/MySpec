@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { createRef } from "react";
 import { describe, expect, it } from "vitest";
 import { mainArea, paintOf, resolve, setTheme, THEMES, token } from "@/test/painted";
@@ -6,7 +6,7 @@ import { PlaceHeader } from "./PlaceHeader";
 
 // header draws the header inside a main area of a fixed width, the container its
 // queries measure.
-function header(width: number) {
+function header(width: number, options: { hasStepper?: boolean; title?: string } = {}) {
   render(
     <div style={mainArea(width)}>
       <PlaceHeader
@@ -16,10 +16,11 @@ function header(width: number) {
           { label: "Platform Roadmap", onOpen: () => undefined },
           { label: "API hardening" },
         ]}
-        title="Rotate API keys without downtime"
+        title={options.title ?? "Rotate API keys without downtime"}
         titleRef={createRef()}
         backRef={createRef()}
         forwardRef={createRef()}
+        hasStepper={options.hasStepper ?? true}
       />
     </div>,
   );
@@ -73,6 +74,22 @@ describe.each(THEMES)("PlaceHeader in the %s theme", (theme) => {
     setTheme(theme);
     header(1600);
     expect(screen.getByRole("list", { hidden: true })).not.toBeVisible();
+    expect(
+      screen.getByRole("button", {
+        name: "Show the hidden levels: Platform Roadmap / API hardening",
+      }),
+    ).toBeVisible();
+  });
+
+  it("folds the levels of a header with no stepper only when the title doesn't fit", () => {
+    setTheme(theme);
+    const title = "Rotate API keys without downtime across every region we run in production";
+    header(1500, { hasStepper: false });
+    expect(screen.getByRole("list")).toBeVisible();
+    cleanup();
+
+    header(560, { hasStepper: false, title });
+    expect(screen.queryByRole("list")).toBeNull();
     expect(
       screen.getByRole("button", {
         name: "Show the hidden levels: Platform Roadmap / API hardening",

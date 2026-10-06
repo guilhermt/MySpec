@@ -1,6 +1,6 @@
 import type { ReviewFallback, ReviewMode, StepReport } from "@/lib/wails";
 
-/** REVIEW_MODES are the review modes, in the order the pickers list them. */
+/** REVIEW_MODES are the review modes in the order Settings › Defaults and the stage chips list them. */
 export const REVIEW_MODES: readonly ReviewMode[] = ["manual", "agent"];
 
 /** MAX_REVIEW_ROUNDS mirrors flow.MaxReviewRounds: the reports with changes the implementer gets before the step goes to the user. */

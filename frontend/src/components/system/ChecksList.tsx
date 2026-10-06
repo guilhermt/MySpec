@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { CutText } from "./CutText";
 import { Icon } from "./Icon";
 import { ICONS } from "./icons";
 import { Link } from "./Link";
@@ -46,7 +47,7 @@ export interface ChecksListProps {
    * trailing is what the summary line says at its right: the age of the reading ("read 2m ago"), or
    * the failure of the reading in the error ink. It has the exact time in the tooltip when it has one.
    */
-  trailing?: { text: string; tooltip?: string; error?: boolean };
+  trailing?: { text: string; tooltip?: string; error?: boolean; blocked?: boolean };
   /** onOpen opens the url of a check in the browser, since nothing navigates inside the webview. */
   onOpen: (url: string) => void;
 }
@@ -58,7 +59,7 @@ const WORDS: Partial<Record<CheckGlyph, string>> = {
 };
 
 /** Trailing is the age of the reading, or its failure, at the right of the summary. */
-function Trailing({ text, tooltip, error }: NonNullable<ChecksListProps["trailing"]>) {
+function Trailing({ text, tooltip, error, blocked }: NonNullable<ChecksListProps["trailing"]>) {
   const span = (
     <span
       className={cn(
@@ -66,6 +67,9 @@ function Trailing({ text, tooltip, error }: NonNullable<ChecksListProps["trailin
         error === true ? "text-state-error" : "text-ink-4",
       )}
     >
+      {blocked === true && (
+        <StateGlyph state="blocked" size="sm" className="mr-(--space-1-5) align-middle" />
+      )}
       {text}
     </span>
   );
@@ -137,14 +141,15 @@ export function ChecksList({ summary, rows, onOpen, live, trailing }: ChecksList
                     event.preventDefault();
                     onOpen(row.url);
                   }}
-                  className="min-w-0 truncate font-mono text-(length:--text-micro)"
+                  className="flex min-w-0 font-mono text-(length:--text-micro)"
                 >
-                  {row.name}
+                  <CutText text={row.name} />
                 </Link>
               ) : (
-                <span className="truncate font-mono text-(length:--text-micro) text-ink-1">
-                  {row.name}
-                </span>
+                <CutText
+                  text={row.name}
+                  className="font-mono text-(length:--text-micro) text-ink-1"
+                />
               );
             return (
               <li

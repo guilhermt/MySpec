@@ -27,5 +27,5 @@
   "include": ["src", "bindings", "vite.config.ts", "vitest.config.ts"],
   // The computed-style suite reads the matchers of the Vitest browser mode, whose types would narrow
   // the jest-dom ones of the jsdom suite; tsconfig.painted.json checks it on its own.
-  "exclude": ["src/**/*.painted.test.tsx", "src/test/painted.ts", "src/test/painted-setup.ts"]
+  "exclude": ["src/**/*.painted.test.tsx", "src/test/painted.ts", "src/test/painted-setup.ts", "src/test/widths.ts"]
 }

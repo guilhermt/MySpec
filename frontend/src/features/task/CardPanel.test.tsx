@@ -100,7 +100,7 @@ describe("CardPanel", () => {
       screen.getByRole("heading", { level: 3, name: "Add the login screen" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Email and password.")).toBeInTheDocument();
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it("opens the card on GitHub", async () => {
@@ -119,7 +119,7 @@ describe("CardPanel", () => {
       "#13 Reset the passwordIn progress",
       "#14 Sign outClosed",
     ]);
-    expect(texts("Dependencies")).toEqual(["dev/api#7 Session tokensOpen◇ Not satisfied"]);
+    expect(texts("Dependencies")).toEqual(["dev/api#7 Session tokensOpenNot satisfied"]);
     expect(texts("Pull requests")).toEqual(["#21 Open", "dev/api#8 Merged"]);
   });
 

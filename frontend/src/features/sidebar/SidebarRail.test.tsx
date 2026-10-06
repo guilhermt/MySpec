@@ -79,6 +79,29 @@ describe("SidebarRail", () => {
     expect(waiting).not.toHaveTextContent("idle");
   });
 
+  it("draws the error rail on the block of an item that failed, and on no other", () => {
+    const app = state();
+    app.tasks = [
+      makeTask({
+        id: "task-1",
+        name: "add-login",
+        repositoryId: "repo-1",
+        situations: [
+          makeSituation({ id: "s1", taskId: "task-1", kind: "session_error", group: "error" }),
+        ],
+      }),
+      ...(app.tasks ?? []).slice(1),
+    ];
+    renderWithStore(<SidebarRail />, { state: app });
+
+    expect(screen.getByRole("treeitem", { name: /^task add-login\./ })).toHaveClass(
+      "error-rail-bar",
+    );
+    expect(screen.getByRole("treeitem", { name: /^task fix-header\./ })).not.toHaveClass(
+      "error-rail-bar",
+    );
+  });
+
   it("shows the item on screen open", () => {
     rail({ location: { kind: "task", id: "task-1" } });
 

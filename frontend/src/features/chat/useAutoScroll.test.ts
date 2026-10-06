@@ -40,6 +40,50 @@ function makeScroller(): Scroller {
   };
 }
 
+interface LiveScroller {
+  element: HTMLDivElement;
+  top: () => number;
+  grow: (height: number) => void;
+  scrollTop: (top: number) => void;
+}
+
+// makeLiveScroller is a scroller whose conversation grows and whose scrollTo moves the scroll,
+// clamped to the end as an engine does.
+function makeLiveScroller(): LiveScroller {
+  const element = document.createElement("div");
+  let height = HEIGHT;
+  let top = END;
+  const clamp = (value: number) => Math.max(0, Math.min(value, height - VIEWPORT));
+  Object.defineProperty(element, "scrollHeight", { get: () => height, configurable: true });
+  Object.defineProperty(element, "clientHeight", { value: VIEWPORT, configurable: true });
+  Object.defineProperty(element, "scrollTop", {
+    get: () => top,
+    set: (value: number) => {
+      top = clamp(value);
+    },
+    configurable: true,
+  });
+  Object.defineProperty(element, "scrollTo", {
+    value: (options: ScrollToOptions) => {
+      top = clamp(options.top ?? top);
+    },
+    configurable: true,
+  });
+  return {
+    element,
+    top: () => top,
+    grow: (value) => {
+      height = value;
+    },
+    scrollTop: (value) => {
+      element.scrollTop = value;
+      act(() => {
+        element.dispatchEvent(new Event("scroll"));
+      });
+    },
+  };
+}
+
 function mount(
   element: HTMLElement,
   content: HTMLElement = document.createElement("div"),
@@ -226,6 +270,42 @@ describe("useAutoScroll", () => {
     } finally {
       restore();
     }
+  });
+
+  it("keeps following when the engine reports its own scroll to the end a little above where it went", () => {
+    const scroller = makeLiveScroller();
+    const { result, rerender } = mount(scroller.element);
+
+    scroller.grow(2000);
+    rerender({ deps: [1], keys: ["a", "b"] });
+    expect(scroller.top()).toBe(1900);
+    // WebKitGTK lands 14px above the end it was asked for, of a list a commit measured shorter for
+    // a moment, and the list grows again before the scroll event arrives.
+    scroller.grow(2100);
+    scroller.scrollTop(1886);
+
+    expect(scroller.top()).toBe(2000);
+    expect(result.current.atBottom).toBe(true);
+  });
+
+  it("stops following at the first turn of the wheel up from an end the reader scrolled back to", () => {
+    const scroller = makeLiveScroller();
+    const { result, rerender } = mount(scroller.element);
+
+    rerender({ deps: [1], keys: ["a", "b"] });
+    scroller.scrollTop(0);
+    scroller.grow(3000);
+    rerender({ deps: [2], keys: ["a", "b", "c"] });
+    // The bar dragged to the end of the conversation that grew while the reader was away.
+    scroller.scrollTop(2900);
+    expect(result.current.atBottom).toBe(true);
+    scroller.scrollTop(2811);
+    scroller.grow(3200);
+    rerender({ deps: [3], keys: ["a", "b", "c", "d"] });
+
+    expect(scroller.top()).toBe(2811);
+    expect(result.current.atBottom).toBe(false);
+    expect(result.current.newCount).toBe(1);
   });
 
   it("does nothing without an element to scroll", () => {

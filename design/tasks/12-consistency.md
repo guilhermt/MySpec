@@ -21,10 +21,10 @@ O que o passe do crítico apontou é corrigido, área por área; o que restou do
 **Pronto quando** (`implementation.md`, task 12, Pronto), cada item provado como diz:
 
 1. **O relatório fechado.** Cada item de `design/research/critique-task-12-pass.md` tem, escrito no próprio relatório, o commit que o resolveu ou a decisão que o fecha. Antes do merge, o `design-critic` revisa a branch (`implementation.md:21`) e acrescenta ao relatório a seção `Revisão da branch`, sem inconsistência aberta contra `principles.md` e `components.md`.
-2. **As verificações.** As onze da §4.2 (As verificações que fecham a porta), cada uma rodando em todo `task check` e na CI, cada uma com um caso de teste que a viola e prova que ela morde. O comando de cada uma na tabela devolve vazio.
+2. **As verificações.** As onze da §4.2 (As verificações que fecham a porta), V1 a V8 em todo `task check`, V10 no `task check` que a alcança, a varredura (V9 e V11) fora dele, e todas na CI, cada uma com um caso de teste que a viola e prova que ela morde. O comando de cada uma na tabela devolve vazio.
 3. **A remoção.** O que a §4.2 (O que sai) lista não existe na branch: os comandos da tabela devolvem vazio, e `knip` não acha arquivo nem dependência sem uso.
 4. **A virtualização.** As metas da §4.2 (As metas e a medição), medidas no WebKitGTK 6.0 da máquina alvo pelo backend Broadway do GTK, com o React de desenvolvimento e o de produção, registradas em `docs/development/target-machine.md` e no corpo da pull request; o comportamento da janela provado por testes pintados e de teclado (§4.2, A janela do board e A janela da conversa).
-5. **A varredura.** Os testes pintados da §4.2 (A varredura de largura) passam em todas as cenas, nas cinco janelas e nos dois temas, e as capturas das telas de referência vão à pull request por `task captures:push`.
+5. **A varredura.** Os testes pintados da §4.2 (A varredura de largura) passam em todas as cenas, na matriz da §4.2 (o claro nas cinco janelas, o escuro a 1100 e a 2560, as 26 telas de referência nas cinco janelas e nos dois temas), e as capturas das telas de referência vão à pull request por `task captures:push`.
 6. **O movimento reduzido** provado pela §4.2 (O movimento reduzido).
 7. **Os nomes acessíveis** provados pela §4.2 (Os nomes acessíveis).
 8. **As pautas.** Cada item da pauta de polimento e da pauta das críticas (§4.2) tem, na seção `Pautas` do relatório, o commit que o resolveu ou a decisão que o fecha.
@@ -147,7 +147,7 @@ Onde moram: as regras de importação no Biome, que `lint:web` (`biome ci .`, `T
 
 Nas expressões da tabela, `\|` é o `|` da alternância, escapado para a tabela.
 
-V9 a V11 rodam no `task check` quando um arquivo que alcançam muda, como toda suíte pintada, e inteiras na CI (`ci.yml:97`).
+V9 e V11 são a varredura de largura (`*.widths.painted.test.tsx`), que roda fora do `task check`: `test:web` define `MYSPEC_SKIP_SWEEP=1`, que o projeto `painted` lê para deixá-la de fora, porque o `--changed` a alcança por qualquer mudança em componente e ela leva uns 3 a 4 min. A CI a roda inteira, nos jobs `Painted`, em três partes lado a lado. V10, o teste do movimento, roda no `task check` quando um arquivo que alcança muda, como toda suíte pintada, e inteiro na CI.
 
 #### O que sai
 
@@ -207,19 +207,21 @@ V9 a V11 rodam no `task check` quando um arquivo que alcançam muda, como toda s
 
 As ferramentas são as de hoje, `dev/measure-conversation.tsx` e `dev/measure-board.tsx` (`docs/development/setup.md:73–75`), rodadas no WebKitGTK 6.0 da máquina alvo (o `MiniBrowser` do pacote `webkitgtk-6.0`) sem janela, pelo backend Broadway, como nas tasks 4 e 5, uma vez fria e cinco quentes, e uma vez no Chromium do Playwright, para comparar. Cada uma roda com o React de desenvolvimento (o servidor de dev, a medida de partida da task 5) e com o de produção (a comparação da task 4, `implementation.md:184`); a via do React de produção, que `setup.md` não descreve, passa a estar escrita lá (§4.4). O step do board começa medindo a linha de base do React de produção do board, que falta (`critique-task-05.md:190`).
 
-**Passa** quando o máximo das quentes com o React de produção e a mediana das quentes com o de desenvolvimento ficam dentro da meta:
+**Passa**, numa meta em milissegundos, quando o máximo das quentes com o React de produção e a mediana das quentes com o de desenvolvimento ficam dentro dela; numa meta de quadro, quando, em cada rodada e nas duas builds, a mediana das quentes é zero e o máximo das quentes é no máximo um quadro:
 
 | Lista | Medida | Meta |
 |---|---|---|
 | Board, 2.000 cards em dez status, todas as seções abertas | Primeira pintura, do render ao quadro seguinte ao commit | 300 ms |
 | | Uma tecla na busca, até o quadro com a lista nova | 50 ms |
-| | `↓` na lista, do `keydown` ao quadro seguinte | 16 ms |
+| | `↓` na lista, do `keydown` à pintura | Nenhum quadro perdido |
 | Conversa, 1.500 entradas, três trechos dobrados (a de hoje) | Primeira pintura | 300 ms |
-| | Uma atualização de streaming no fim (commit e layout) | 16 ms |
+| | Uma atualização de streaming no fim (commit e layout) | Nenhum quadro perdido |
 | Conversa, as mesmas 1.500 entradas com todos os trechos abertos (nova no script) | Primeira pintura | 300 ms |
-| | Uma atualização de streaming no fim | 16 ms |
-| | `↓` no `feed`, do `keydown` ao quadro seguinte | 16 ms |
+| | Uma atualização de streaming no fim | Nenhum quadro perdido |
+| | `↓` no `feed`, do `keydown` à pintura | Nenhum quadro perdido |
 | | `Home` no `feed`, até o quadro com a primeira entrada focada | 100 ms |
+
+As metas de quadro contam os quadros perdidos entre o evento e a pintura da resposta, e a meta é zero: a resposta pinta no quadro seguinte ao evento. O tempo do evento ao quadro seguinte não é a medida, porque nunca fica abaixo do que falta para o próximo quadro, cerca de 16,7 ms a 60 Hz, por menor que seja o trabalho; e dois quadros, 33,3 ms, aceitariam um quadro perdido. A mediana zero prova que a resposta pinta no quadro seguinte no caso comum; o máximo de um aceita um evento que de vez em quando perde uma única atualização da tela, e recusa o que perde duas ou mais, o sinal de uma lista que deixou de ser janela ou de um trabalho por quadro que cresceu.
 
 Não é teste da suíte: um limiar de tempo no Chromium da CI seria instável e não mede o WebKitGTK (`tasks/04-task-conversation.md:335`). O resultado, com o motor, a versão e as duas builds, vai a `docs/development/target-machine.md` e ao corpo da pull request. Uma meta perdida não é aceita: o step volta ao custo por quadro (o modelo, a `memo`, a altura estimada, o `overscan`) até ela passar.
 
@@ -233,7 +235,9 @@ Não é teste da suíte: um limiar de tempo no Chromium da CI seria instável e 
 
 #### A varredura de largura
 
-**As cinco janelas:** 1100, 1250, 1450, 2000 e 2560 px de largura e 1080 de altura, que dão 812, 950, 1134, 1640 e 2180 px de área principal com a lateral em `clamp` (288, 300, 316, 360 e 380 px); com a lateral recolhida (60 px) a 1100 e a 2560. Nos dois temas.
+**As cinco janelas:** 1100, 1250, 1450, 2000 e 2560 px de largura e 1080 de altura, que dão 812, 950, 1134, 1640 e 2180 px de área principal com a lateral em `clamp` (288, 300, 316, 360 e 380 px); com a lateral recolhida (60 px) a 1100 e a 2560.
+
+**A matriz dos temas é enxuta** (`windowsIn` de `test/widths.ts`): o claro nas cinco janelas, o escuro só a 1100 e a 2560, onde o layout aperta e folga mais. O tema muda cores e não caixas, e o contraste dos dois temas é provado à parte, nos tokens (O passe do crítico). As telas de referência, abaixo, rodam as cinco janelas nos dois temas.
 
 **Os testes:** um por área, `features/<área>/<Vista>.widths.painted.test.tsx` (o de hoje, `features/task/TaskView.widths.painted.test.tsx`, é o primeiro deles e passa a usar o mesmo apoio), sobre um apoio novo em `test/widths.ts`, que desenha o shell inteiro (`AppShell`, com a lateral) com o estado da cena e a viewport do navegador do Vitest na janela. Assim o `--sidebar-width` em `vw` vale como no app, o que a área principal fixa de hoje (`test/painted.ts`, `mainArea`) não mostra.
 
@@ -241,7 +245,7 @@ Não é teste da suíte: um limiar de tempo no Chromium da CI seria instável e 
 
 **As cenas provadas** são todas as das fixtures, com as variações: as nove da task (`task.md` §11, `test/task-scenes.ts`) e as sete da conversa (`lab/16-conversation-wide`: `planning`, `running`, `ask`, `long`, `error`, `retrying`, `review`; `test/conversation-scenes.ts`); as treze do board e `?home=none` (`board.md` §5; `test/board-scenes.ts`); as onze de Reviews e do review com `?own`, `?stale`, `?apply` e `?checkerr` (`lab/12-screen-review/README.md:76–90`; `test/review-scenes.ts`); as treze da discussão com as flags (`lab/13-screen-discussion/README.md:119–135`; as fixtures da task 9); as dezoito de `lab/14-screen-rest` com as variações (`README.md:68–90`; as fixtures das tasks 10 e 11).
 
-**As capturas**, gravadas com `MYSPEC_CAPTURES=1` e publicadas por `task captures:push`, são uma por tela de referência (a cena, e a variação quando a linha a diz), nas cinco janelas e nos dois temas, 260 imagens, e as de `run` e `card` com a lateral recolhida, mais 8:
+**As capturas**, gravadas com `MYSPEC_CAPTURES=1` e publicadas por `task captures:push`, são uma por tela de referência, as 26 da tabela, cada uma uma cena da varredura marcada como referência (a cena, e a variação quando a linha a diz), nas cinco janelas e nos dois temas, 260 imagens, e as de `run` e `card` com a lateral recolhida, mais 8:
 
 | Tela | Cena | Tela | Cena |
 |---|---|---|---|
@@ -452,7 +456,7 @@ Cada uma acrescenta as cenas dela às fixtures (`test/discussion-scenes.ts`, `te
 | **O meio pixel da janela** | Espaçadores em pixel inteiro, sem `transform`; a varredura e as capturas ampliadas conferem |
 | **O tamanho dos steps de remoção** | V1 a V7 tocam dezenas de arquivos. O step 1 fica com a cor, o texto e o movimento, o 2 com as importações e os órfãos; cada um se divide por pasta se passar de 1,5 mil linhas |
 | **Uma área grande no relatório** | O plano é feito com o relatório na mão: uma área que passa de 1,5 mil linhas se divide em dois steps, até o total de 14; passar de 14 vai ao usuário antes de `Ready` (§1) |
-| **O tempo da varredura** | Cerca de 70 cenas, cinco janelas, dois temas. Um arquivo por área, para `test:web --changed` rodar só o que a mudança alcança; inteira na CI. As capturas só com `MYSPEC_CAPTURES=1` |
+| **O tempo da varredura** | Cerca de 70 cenas, cinco janelas, a matriz enxuta dos temas. Um arquivo por área; fora do `task check` (`MYSPEC_SKIP_SWEEP=1`) e inteira na CI, nos jobs `Painted`. As capturas só com `MYSPEC_CAPTURES=1` |
 | **`task check` mais lento** | `design-rules.test.ts` e `knip` rodam sempre; os steps 1 e 2 medem o `task check` antes e depois e registram em `docs/development/` |
 
 **As outras tasks.** A 12 começa depois do merge da 11 e do passe, e não corre em paralelo com nenhuma; nenhuma outra task toca a branch dela. As tasks 9 a 11 mudam o inventário (§5.6), por isso o tech spec o refaz.
@@ -480,7 +484,7 @@ Treze commits, G, pelo relatório (`design/research/critique-task-12-pass.md`; `
 1. **A cor, o texto e o movimento.** V3 a V7 em `styles/design-rules.test.ts`, rodado sempre por `lint:web`, com a varredura de cor de hoje movida para lá; os `--status-*` e os leitores; as classes de cor do shadcn, a escala de tipo e os laços soltos trocados pelos do system; a camada base de `globals.css`. A medida do `task check` antes e depois. Do relatório: H3 (o `bg-background` dos arquivados, por V4).
 2. **As importações e os órfãos.** V1 e V2 no Biome; V8 com `knip`; o `ModelChip` nos diálogos de review e de discussão; saem `ModelPicker`, `ReviewModePicker`, `ContextGauge` e `RepositoryFilter` se ainda existirem, `useFindingText`, `react-resizable-panels`, os primitivos sem uso e o que as tasks 9 a 11 deixaram órfão; `FLASH_MS` e `LIST_COLUMN`. Nada muda na tela além do chip nos dois diálogos, que é o decidido. Do relatório: S5 (o `ModelChip` nos dois diálogos), S28 (o comentário de `REVIEW_MODES`) e H3 (o `ui/collapsible` dos arquivados, por V1).
 3. **A janela do board.** `@tanstack/react-virtual`, `useWindowedRows`, `useListTree` por índice, `CardRow` com `memo`, o modelo por linha montada, `aria-level`, `aria-setsize`, `aria-posinset`; a linha de base de produção e a medida depois; `BoardView.window.painted.test.tsx`. Do relatório: B1 (a linha trazida à vista abaixo da barra de filtros fixa, pelo `scrollToIndex`, como o `BELOW_THE_BAR` do History).
-4. **A janela do History.** H1: a medida da task 11 passou das metas (`docs/development/target-machine.md`, A lista do History), e a condição que a deixava fora está cumprida. `HistoryView` ganha uma janela como a do board (§4.2, A janela do board): `useWindowedRows`, o teclado por índice de `useListTree`, a linha com a parada de Tab fixada, `aria-setsize` e `aria-posinset`; as metas são as do board para o History, 300 ms a primeira pintura e 16 ms o `↓` com 400 itens, medidas por `HistoryView.measure.painted.test.tsx` e no WebKitGTK da máquina alvo, com o resultado em `target-machine.md`; e H6, a frase em inglês dessa seção. É um step próprio porque o 3 já leva a dependência, o hook, o teclado por índice e as duas medidas do board; se juntos ficarem abaixo de 1,5 mil linhas, viram um só. `structure.md` §7, que diz o History sem janela, é do coordenador.
+4. **A janela do History.** H1: a medida da task 11 passou das metas (`docs/development/target-machine.md`, A lista do History), e a condição que a deixava fora está cumprida. `HistoryView` ganha uma janela como a do board (§4.2, A janela do board): `useWindowedRows`, o teclado por índice de `useListTree`, a linha com a parada de Tab fixada, `aria-setsize` e `aria-posinset`; as metas são as do board para o History, 300 ms a primeira pintura e nenhum quadro perdido no `↓` com 400 itens, medidas por `HistoryView.measure.painted.test.tsx` e no WebKitGTK da máquina alvo, com o resultado em `target-machine.md`; e H6, a frase em inglês dessa seção. É um step próprio porque o 3 já leva a dependência, o hook, o teclado por índice e as duas medidas do board; se juntos ficarem abaixo de 1,5 mil linhas, viram um só. `structure.md` §7, que diz o History sem janela, é do coordenador.
 5. **A conversa: o custo por quadro.** O modelo que reaproveita as linhas, `RowView` com `memo`, `useFeed` que ignora o texto que cresce; o cenário dos trechos abertos no script; a medida.
 6. **A conversa: a janela.** As unidades, a cauda, as fixadas, a âncora do fim, a correção acima da vista, o `feed` por índice com `aria-posinset`; `Conversation.window.painted.test.tsx`; a medida final das duas listas em `target-machine.md`.
 7. **O system, o shell e a árvore.** S1 a S4, S6 a S9 e S11 a S27, e a lacuna L2 (o breadcrumb do arquivado): o anel de foco no WebKitGTK, a tecla em caixa em todo botão, a barra de rolagem global, o **Copy** em todo bloco de código, os títulos do Markdown sob um título próprio e os itens "System" da pauta das críticas. Se passar de 1,5 mil linhas, divide-se em dois: os componentes (S1 a S4, S12 a S16, S21 a S27) e as telas que os usam (S6 a S9, S11, S17 a S20, L2).

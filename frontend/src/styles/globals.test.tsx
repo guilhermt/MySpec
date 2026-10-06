@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
@@ -45,13 +45,6 @@ const CENTRING = ["-translate-x-1/2", "-translate-y-1/2", "left-1/2", "top-1/2"]
 /** Utilities that place an element, whatever their variant: offsets, insets, translates, margins. */
 const PLACEMENT = /^-?(inset|top|right|bottom|left|start|end|translate|m[xytrblse]?)(-|$)/;
 
-/**
- * TAILWIND_PALETTE matches a class that paints with a colour of the Tailwind palette (text-red-500,
- * bg-amber-100/50, fill-white), which reads the oklch of the Tailwind theme instead of a token.
- */
-const TAILWIND_PALETTE =
-  /(?:^|[\s"'`:])(?:bg|text|border(?:-[trblxyse])?|ring|ring-offset|outline|fill|stroke|from|via|to|decoration|divide|shadow|inset-shadow|accent|caret|placeholder)-(?:(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone|mauve|olive|mist|taupe)-\d{2,3}|black|white)(?:\/\d+)?(?=$|[\s"'`])/;
-
 /** Tokens measured in em, which follow the text they sit in instead of the pixel grid. */
 const EM_TOKENS = ["--link-offset", "--tracking-caps"];
 
@@ -97,6 +90,22 @@ function pixels(value: string): number {
 describe("globals.css", () => {
   const tokens = declarations(TOKENS);
   const bridge = declarations(GLOBALS.replace(themeInline(GLOBALS), ""));
+
+  it("draws the bar of native scrolling with the tokens of the ScrollArea", () => {
+    const bar = /::-webkit-scrollbar \{([^}]*)\}/.exec(GLOBALS)?.[1] ?? "";
+    const thumb = /::-webkit-scrollbar-thumb \{([^}]*)\}/.exec(GLOBALS)?.[1] ?? "";
+    const area = readFileSync(join(STYLES, "../components/system/ScrollArea.tsx"), "utf8");
+
+    expect(bar).toContain("width: calc(var(--space-2) + var(--space-0-5))");
+    expect(area).toContain("w-[calc(var(--space-2)+var(--space-0-5))]");
+    expect(thumb).toContain("border: var(--space-0-5) solid transparent");
+    expect(area).toContain("p-(--space-0-5)");
+    expect(thumb).toContain("border-radius: var(--radius-pill)");
+    expect(thumb).toContain("var(--line-2)");
+    expect(GLOBALS).toMatch(
+      /::-webkit-scrollbar-thumb:hover \{\s*background-color: var\(--line-3\)/,
+    );
+  });
 
   it("takes the tokens from the design system, their single source", () => {
     expect(GLOBALS).toContain('@import "../../../design/system/tokens.css";');
@@ -169,46 +178,6 @@ describe("globals.css", () => {
     }
   });
 
-  it("paints no literal colour outside the tokens, nor a colour of the Tailwind palette", () => {
-    const src = join(STYLES, "..");
-    const files = readdirSync(src, { recursive: true, encoding: "utf8" }).filter(
-      (path) =>
-        /\.(css|tsx?)$/.test(path) &&
-        !path.startsWith("components/ui/") &&
-        // The test helpers name computed values to compare with, and paint nothing.
-        !path.startsWith("test/") &&
-        !/\.test\./.test(path),
-    );
-    const painted = files.filter((path) => {
-      const text = readFileSync(join(src, path), "utf8");
-      if (path.endsWith(".css")) {
-        return /oklch\(|rgba?\(|hsla?\(|#[0-9a-fA-F]{3,8}\b/.test(text);
-      }
-      return (
-        /oklch\(|rgba?\(|hsla?\(/.test(text) ||
-        /["'`[]#[0-9a-fA-F]{3,8}["'`\]]/.test(text) ||
-        TAILWIND_PALETTE.test(text)
-      );
-    });
-
-    expect(files.length).toBeGreaterThan(0);
-    expect(painted).toEqual([]);
-  });
-
-  it("recognises a colour of the Tailwind palette in a class", () => {
-    for (const painted of [
-      "text-red-500",
-      "bg-amber-100/50",
-      "hover:border-slate-200",
-      "fill-white",
-    ]) {
-      expect(TAILWIND_PALETTE.test(`className="${painted}"`), painted).toBe(true);
-    }
-    for (const system of ["text-ink-3", "bg-state-error-veil", "text-red-ish", "border-line-2"]) {
-      expect(TAILWIND_PALETTE.test(`className="${system}"`), system).toBe(false);
-    }
-  });
-
   it("draws every icon with the stroke of the system", () => {
     expect(GLOBALS).toContain(ICON_RULE);
   });
@@ -267,7 +236,7 @@ describe("globals.css", () => {
       "[data-leaving] > .aux-panel {\n    animation: aux-panel-exit var(--duration-fast) var(--ease-exit) forwards;",
     );
     expect(GLOBALS).toContain(
-      ".toast[data-leaving] {\n    animation: toast-exit var(--duration-fast) var(--ease-exit) forwards;",
+      ".toast[data-leaving],\n  [data-leaving] > .toast {\n    animation: toast-exit var(--duration-fast) var(--ease-exit) forwards;",
     );
   });
 

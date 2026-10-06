@@ -82,9 +82,9 @@ function DocumentBody({ taskId, file, artifactVersion, title, step, onRetry }: D
   if (artifact.status === "error") {
     return (
       <NoticeStrip
+        role="alert"
         title={`Couldn't read ${file}`}
         reason={artifact.error}
-        className="bg-state-error-veil"
         action={
           <Button variant="ghost" size="sm" onClick={onRetry}>
             Try again
@@ -98,7 +98,7 @@ function DocumentBody({ taskId, file, artifactVersion, title, step, onRetry }: D
       <StepDocument content={artifact.content} />
     ) : (
       <div className="select-text">
-        <Markdown>{artifact.content}</Markdown>
+        <Markdown className="ui-headings">{artifact.content}</Markdown>
       </div>
     );
   }

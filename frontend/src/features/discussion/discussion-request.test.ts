@@ -96,7 +96,7 @@ describe("discussionRequestOf, the situations of the drafts", () => {
       actions: [NEXT_TO_DECIDE],
       situationId: "s-drafts",
       focus: "draft",
-      target: { draft: "d3", retry: false },
+      target: { draft: "d3", retry: false, approve: false },
     });
   });
 
@@ -112,7 +112,7 @@ describe("discussionRequestOf, the situations of the drafts", () => {
     expect(bar).toMatchObject({
       place: "round 2",
       progress: "1 of 2 decided",
-      target: { draft: "d2", retry: false },
+      target: { draft: "d2", retry: false, approve: false },
     });
   });
 
@@ -150,7 +150,7 @@ describe("discussionRequestOf, the situations of the drafts", () => {
       actions: [{ ...SHOW, tooltip: "Go to the epic" }],
       situationId: "s-epic_cant_publish",
       focus: "draft",
-      target: { draft: "d1", retry: false },
+      target: { draft: "d1", retry: false, approve: false },
     });
   });
 
@@ -185,7 +185,7 @@ describe("discussionRequestOf, the situations of the drafts", () => {
       actions: [SHOW],
       situationId: "s-epic_discarded",
       focus: "draft",
-      target: { draft: "d1", retry: false },
+      target: { draft: "d1", retry: false, approve: true },
     });
   });
 
@@ -204,7 +204,7 @@ describe("discussionRequestOf, the situations of the drafts", () => {
       null,
     );
 
-    expect(bar?.target).toEqual({ draft: "d2", retry: false });
+    expect(bar?.target).toEqual({ draft: "d2", retry: false, approve: true });
   });
 
   it("says where the publication stopped, the first that failed in the order of the card, and goes to its Retry", () => {
@@ -240,7 +240,7 @@ describe("discussionRequestOf, the situations of the drafts", () => {
       ],
       situationId: "s-publish_failed",
       focus: "draft",
-      target: { draft: "d2", retry: true },
+      target: { draft: "d2", retry: true, approve: false },
     });
   });
 
@@ -459,7 +459,7 @@ describe("discussionRequestOf, paused and at rest", () => {
       actions: [NEXT_TO_DECIDE],
       situationId: null,
       focus: "draft",
-      target: { draft: "d2", retry: false },
+      target: { draft: "d2", retry: false, approve: false },
     });
   });
 

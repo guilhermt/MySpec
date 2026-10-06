@@ -1,7 +1,7 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Icon } from "./Icon";
-import { DiscussionIcon, GoIcon, MarkIcon, OneShotIcon, ReviewIcon, TaskIcon } from "./type-icons";
+import { DiscussionIcon, MarkIcon, OneShotIcon, ReviewIcon, TaskIcon } from "./type-icons";
 
 describe("type icons", () => {
   it.each([
@@ -9,7 +9,6 @@ describe("type icons", () => {
     ["OneShotIcon", OneShotIcon],
     ["ReviewIcon", ReviewIcon],
     ["DiscussionIcon", DiscussionIcon],
-    ["GoIcon", GoIcon],
     ["MarkIcon", MarkIcon],
   ])("renders %s hidden from assistive technology", (_, glyph) => {
     const { container } = render(<Icon icon={glyph} />);

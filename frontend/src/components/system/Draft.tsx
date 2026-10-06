@@ -14,6 +14,7 @@ import { DraftGlyph, RevisedBadge } from "./FoldedDraft";
 import { GestureLine } from "./GestureLine";
 import { ICONS } from "./icons";
 import { Link } from "./Link";
+import { LiveRegion } from "./LiveRegion";
 import { SegmentedControl } from "./SegmentedControl";
 import { Shimmer } from "./Shimmer";
 import { StateGlyph } from "./StateGlyph";
@@ -25,8 +26,8 @@ export interface DraftProps {
   /** name and current: the accessible name and the ring of the current one. */
   name: string;
   current: boolean;
-  /** requestTarget marks the draft, or its Retry, as what the request bar names: data-request-target. */
-  requestTarget: "draft" | "retry" | null;
+  /** requestTarget marks the draft, or its Retry, as what the request bar names: data-request-target; the Approve it asks for carries data-request-control. */
+  requestTarget: "draft" | "approve" | "retry" | null;
   kind: string;
   /** cardLink is the card of an update: "gateway#461", opened on GitHub. */
   cardLink: { label: string; url: string } | null;
@@ -183,8 +184,8 @@ export function Draft({
   const decided = decision.value !== "";
 
   const stateLine = (
-    <span
-      {...(state.glyph === "spinner" ? { role: "status" } : {})}
+    <LiveRegion
+      kind="status"
       className={cn(
         "inline-flex min-w-0 items-center gap-(--space-1-5)",
         META,
@@ -192,7 +193,7 @@ export function Draft({
       )}
     >
       <StateText state={state} onOpenLink={onOpenLink} />
-    </span>
+    </LiveRegion>
   );
 
   return (
@@ -205,7 +206,9 @@ export function Draft({
       tabIndex={current ? 0 : -1}
       data-card-item={id}
       data-current={current ? "" : undefined}
-      data-request-target={requestTarget === "draft" ? "" : undefined}
+      data-request-target={
+        requestTarget === "draft" || requestTarget === "approve" ? "" : undefined
+      }
       className={cn(
         // The scroll margin keeps the head of a tall draft below the fade at the top of a conversation.
         "relative grid scroll-mt-(--fade) grid-cols-[var(--key-size)_minmax(0,1fr)] gap-x-(--space-2) rounded-md bg-surface-2 p-(--space-3) outline-none focus-visible:focus-ring",
@@ -291,13 +294,9 @@ export function Draft({
                   <span className="inline-flex h-(--leading-meta) shrink-0 items-center">
                     <StateGlyph state="blocked" size="sm" />
                   </span>
-                  {live ? (
-                    <span role="status">
-                      <Shimmer>{warning}</Shimmer>
-                    </span>
-                  ) : (
-                    <span>{warning}</span>
-                  )}
+                  <LiveRegion kind="status">
+                    {live ? <Shimmer>{warning}</Shimmer> : warning}
+                  </LiveRegion>
                 </p>
               );
             })}
@@ -338,6 +337,7 @@ export function Draft({
                 icon={ICONS.done}
                 shortcut="A"
                 pressed={decision.value === "approved"}
+                data-request-control={requestTarget === "approve" ? "" : undefined}
                 disabled={decision.approveReason !== null}
                 {...(approveDescription !== undefined ? { reasonId: approveDescription } : {})}
                 onClick={() => onDecide("approve")}

@@ -76,7 +76,7 @@ describe("BoardView", () => {
     const { container } = view({ readAt: "", reading: true, cards: [] });
 
     expect(screen.queryByRole("tree")).not.toBeInTheDocument();
-    expect(screen.getByRole("status", { name: "Reading the board…" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Reading the board…" })).toBeInTheDocument();
     expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(SKELETON_BARS);
     // The header says the reading too, and the filters wait for the cards.
     expect(screen.getByText("Reading…")).toBeInTheDocument();
@@ -105,14 +105,14 @@ describe("BoardView", () => {
       failure: { reason: "not_found", message: "The board wasn't found.", failedAt: "" },
     });
 
-    expect(screen.getByRole("status", { name: "Reading the board…" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Reading the board…" })).toBeInTheDocument();
     expect(screen.queryByText("The board wasn't found.")).not.toBeInTheDocument();
   });
 
   it("shows the skeleton for a board never read that is neither reading nor failed", () => {
     view({ readAt: "", cards: [] });
 
-    expect(screen.getByRole("status", { name: "Reading the board…" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Reading the board…" })).toBeInTheDocument();
   });
 
   it("says when the board has no issues", () => {
@@ -378,6 +378,16 @@ describe("BoardView", () => {
   });
 
   describe("the failure of a later reading", () => {
+    // stripOf is the strip that says a reason, which carries no role when it was there at the first draw.
+    const stripOf = (reason: string) => {
+      const strip = screen.getByText(reason).closest("div");
+      if (strip === null) {
+        throw new Error("the strip is not drawn");
+      }
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      return strip;
+    };
+
     const failure = {
       reason: "rate_limited",
       message: "GitHub limits.",
@@ -387,7 +397,7 @@ describe("BoardView", () => {
     it("shows a strip over the stored cards, with the age of the stored reading", () => {
       view({ failure });
 
-      const strip = screen.getByRole("alert");
+      const strip = stripOf("GitHub limits.");
       expect(strip).toHaveTextContent("Couldn't read the board");
       expect(strip).toHaveTextContent("GitHub limits.");
       expect(screen.getByRole("treeitem", { name: /#12/ })).toBeInTheDocument();
@@ -397,7 +407,7 @@ describe("BoardView", () => {
     it("keeps the strip with the empty board", async () => {
       view({ failure, cards: [] });
 
-      expect(screen.getByRole("alert")).toHaveTextContent("GitHub limits.");
+      expect(stripOf("GitHub limits.")).toBeInTheDocument();
       expect(screen.getByText("This board has no issues.")).toBeInTheDocument();
     });
 
@@ -411,10 +421,7 @@ describe("BoardView", () => {
         useAppStore.getState().applyState(stateWith({ failure, reading: true }));
       });
       expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
-      expect(screen.getByRole("alert")).toHaveTextContent("Reading…");
-      expect(screen.getAllByRole("status").some((node) => node.textContent === "Reading…")).toBe(
-        true,
-      );
+      expect(stripOf("GitHub limits.")).toHaveTextContent("Reading…");
       expect(screen.getByRole("treeitem", { name: /#12/ })).toBeInTheDocument();
     });
   });

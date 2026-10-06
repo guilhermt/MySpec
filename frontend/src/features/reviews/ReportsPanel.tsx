@@ -93,11 +93,13 @@ export function ReportsPanel({ review }: ReportsPanelProps) {
   // A report the review no longer has falls back to the list it came from.
   const view: Selection = isPass(selection) && open === null ? "list" : selection;
   const name = view === "list" ? null : open === null ? CONTEXT_FILE : open.file;
+  // A new attempt reads the document again, as a new revision does.
+  const [attempt, setAttempt] = useState(0);
   // The context is written again with every pass asked for, before its report.
   const artifact = useReviewArtifact(
     review.id,
     name,
-    open?.revision ?? (review.passes ?? []).length,
+    (open?.revision ?? (review.passes ?? []).length) + attempt,
   );
 
   // The way back takes the focus as a document opens.
@@ -160,15 +162,24 @@ export function ReportsPanel({ review }: ReportsPanelProps) {
             )}
             {artifact.status === "error" && (
               <NoticeStrip
+                role="alert"
                 title="Couldn't read the report"
                 reason={artifact.error}
-                className="bg-state-error-veil"
+                action={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setAttempt((count) => count + 1)}
+                  >
+                    Try again
+                  </Button>
+                }
               />
             )}
             {artifact.status === "ready" && (
               <div className="select-text">
                 {open?.published === true && <Published pass={open} />}
-                <Markdown>{artifact.content}</Markdown>
+                <Markdown className="ui-headings">{artifact.content}</Markdown>
               </div>
             )}
           </>

@@ -3,9 +3,9 @@ import type { StepperStepView } from "@/components/system/Stepper";
 import { currentStepOf } from "@/features/task/step-status";
 import { isPaused, waitingSession } from "@/features/task/task-session";
 import { checkCounts, prChecks } from "@/lib/pull-requests";
-import { situationFragment } from "@/lib/situations";
+import { situationPillState } from "@/lib/situations";
 import { type LifecycleStage, lifecycleOf, stageLabel, stageState } from "@/lib/stages";
-import type { PullRequest, Situation, SituationGroup, Step, TaskSummary } from "@/lib/wails";
+import type { PullRequest, SituationGroup, Step, TaskSummary } from "@/lib/wails";
 import {
   asPRStatus,
   asReviewMode,
@@ -52,12 +52,6 @@ const SITUATION_GLYPHS: Record<SituationGroup, StepperGlyph> = {
   error: "error",
   waiting: "wait",
   closing: "close",
-};
-
-const SITUATION_TONES: Record<SituationGroup, string> = {
-  error: "error",
-  waiting: "waiting for you",
-  closing: "ready to close",
 };
 
 // The states the pull request reaches once its pass wrote the report: the pass counts the reports.
@@ -227,13 +221,6 @@ function momentOf(task: TaskSummary, id: LifecycleStage): Moment {
   }
 }
 
-// situationState is the state of a pill with a situation: the tone and what the most urgent one asks, with how many more.
-function situationState(situation: Situation, count: number): string {
-  const tone = SITUATION_TONES[asSituationGroup(situation.group)];
-  const more = count > 1 ? `, and ${count - 1} more` : "";
-  return `${tone}: ${situationFragment(situation)}${more}`;
-}
-
 function pillOf(task: TaskSummary, id: LifecycleStage, now: number): PillModel {
   const { shimmer, glyph, word, state, ...place } = momentOf(task, id);
   if (isPaused(task)) {
@@ -256,7 +243,7 @@ function pillOf(task: TaskSummary, id: LifecycleStage, now: number): PillModel {
       word: "",
       shimmer: false,
       paused: false,
-      state: situationState(situation, situations.length),
+      state: situationPillState(situation, situations.length),
     };
   }
   return { ...place, glyph, word, shimmer, paused: false, state };

@@ -126,10 +126,11 @@ describe("Listbox", () => {
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
-  it("says a neutral message as a status", async () => {
+  it("says a neutral message in the list, with no role of its own", async () => {
     const { user } = renderWithStore(<Subject message={{ text: "Reading the branches…" }} />);
     await user.click(screen.getByRole("combobox", { name: "Base branch: main" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Reading the branches…");
+    expect(await screen.findByText("Reading the branches…")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("marks a choice no longer offered without letting it be chosen", async () => {
@@ -138,7 +139,7 @@ describe("Listbox", () => {
       items: [...ITEMS, { value: "old", label: "old", unavailable: true }],
       onValueChange,
     });
-    const old = screen.getByRole("option", { name: "◇ old · unavailable" });
+    const old = screen.getByRole("option", { name: "old · unavailable" });
     expect(old).toHaveAttribute("aria-disabled", "true");
     await user.click(old);
     expect(onValueChange).not.toHaveBeenCalled();
@@ -150,6 +151,6 @@ describe("Listbox", () => {
     );
     expect(
       screen.getByRole("combobox", { name: "Base branch: old · unavailable" }),
-    ).toHaveTextContent("◇ old · unavailable");
+    ).toHaveTextContent("old · unavailable");
   });
 });

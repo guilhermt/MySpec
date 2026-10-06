@@ -142,12 +142,17 @@ describe("ReportsPanel", () => {
     );
   });
 
-  it("shows a read that failed", async () => {
+  it("shows a read that failed and reads again with Try again", async () => {
     vi.mocked(api.readReviewArtifact).mockRejectedValueOnce(new Error("No such file."));
     const { user } = panel();
 
     await user.click(screen.getByRole("button", { name: "Review 1 · changes" }));
 
     expect(await screen.findByText("No such file.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByTestId("markdown")).toHaveTextContent("Findings");
+    expect(api.readReviewArtifact).toHaveBeenCalledTimes(2);
   });
 });

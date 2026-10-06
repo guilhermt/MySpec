@@ -1,7 +1,16 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
-import { focusRing, paintOf, resolve, setTheme, spillsOut, THEMES, token } from "@/test/painted";
+import {
+  focusRing,
+  paintOf,
+  resolve,
+  scriptFocused,
+  setTheme,
+  spillsOut,
+  THEMES,
+  token,
+} from "@/test/painted";
 import {
   CardRow,
   type CardRowProps,
@@ -45,6 +54,10 @@ function draw(width: number, model: Partial<CardRowView> = {}, props: Partial<Ca
         selection={null}
         tabStop
         flash={false}
+        level={2}
+        setSize={1}
+        posInSet={1}
+        index={0}
         onActivate={() => {}}
         onFocus={() => {}}
         {...props}
@@ -120,12 +133,31 @@ describe.each(THEMES)("CardRow in the %s theme", (theme) => {
     expect(getComputedStyle(keys).visibility).toBe("visible");
   });
 
+  it("shows the keys on a script focus that follows a click", async () => {
+    setTheme(theme);
+    const row = draw(1200);
+    const keys = screen.getByText("start").parentElement as HTMLElement;
+    expect(await scriptFocused(row, () => getComputedStyle(keys).visibility)).toBe("visible");
+  });
+
   it("shows the focus ring", async () => {
     setTheme(theme);
     const row = draw(1200);
     await userEvent.tab();
     const want = focusRing();
     expect(paintOf(row, want)).toEqual(want);
+  });
+
+  it("shows the focus ring on a script focus that follows a click", async () => {
+    setTheme(theme);
+    const row = draw(1200);
+    await userEvent.click(row);
+    row.blur();
+    document.documentElement.dataset.input = "keyboard";
+    row.focus();
+    const want = focusRing();
+    expect(paintOf(row, want)).toEqual(want);
+    delete document.documentElement.dataset.input;
   });
 
   it("paints the open row on the brand plane with its ring", () => {

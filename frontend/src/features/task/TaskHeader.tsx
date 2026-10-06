@@ -90,6 +90,7 @@ export function TaskHeader({ task }: TaskHeaderProps) {
   if (task === null) {
     return (
       <LocationHeader
+        hasStepper
         progress={
           <Stepper
             steps={LOADING_STEPS}
@@ -105,6 +106,7 @@ export function TaskHeader({ task }: TaskHeaderProps) {
   const stepper = stepperOf(task, now);
   return (
     <LocationHeader
+      hasStepper
       progress={
         <Stepper
           steps={stepper.steps}
@@ -136,6 +138,7 @@ function TaskTools({ task, now }: { task: TaskSummary; now: number }) {
           percent={onScreen.contextPercent === 0 ? null : onScreen.contextPercent}
           paused={asSessionStatus(onScreen.sessionStatus) === "paused"}
           compact="narrow"
+          reading={onScreen.lastError === ""}
           detail={contextDetail(onScreen)}
         />
       )}

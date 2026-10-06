@@ -652,6 +652,44 @@ func TestSendDuringATurnQueues(t *testing.T) {
 	}
 }
 
+func TestRemovePendingRefusesTheProductPrompt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixtureWith(t, &fakeLauncher{scenario: "echo", preflightErr: errors.New("exec: permission denied")}, 0)
+	f.start(t, taskInfo(t, "t1"))
+
+	pending := f.transcript(t, prd("t1")).Pending
+	if len(pending) != 1 || !pending[0].User.Prompt {
+		t.Fatalf("pending = %+v, want the product's prompt alone", pending)
+	}
+	wantErrIs(t, f.service.RemovePending(t.Context(), prd("t1"), pending[0].ID), session.ErrProductMessage)
+	if sum := f.summary(t, prd("t1")); sum.PendingCount != 1 {
+		t.Errorf("PendingCount = %d, want the prompt kept", sum.PendingCount)
+	}
+}
+
+func TestRemovePendingRefusesTheProductMessage(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	f.start(t, taskInfo(t, "t1"))
+	waitStreaming(t, f, prd("t1"))
+
+	if err := f.service.SendFromApp(t.Context(), prd("t1"), session.AppMessage{
+		Text: "Review the step again.", Kind: session.AppPass, Pass: 2,
+	}); err != nil {
+		t.Fatalf("SendFromApp() = %v, want nil", err)
+	}
+	pending := f.transcript(t, prd("t1")).Pending
+	if len(pending) != 1 || !pending[0].User.App {
+		t.Fatalf("pending = %+v, want the product's message alone", pending)
+	}
+	wantErrIs(t, f.service.RemovePending(t.Context(), prd("t1"), pending[0].ID), session.ErrProductMessage)
+	if sum := f.summary(t, prd("t1")); sum.PendingCount != 1 {
+		t.Errorf("PendingCount = %d, want the message kept", sum.PendingCount)
+	}
+}
+
 func TestCrashIsReportedAndRetried(t *testing.T) {
 	t.Parallel()
 

@@ -1,8 +1,8 @@
-import { ChevronDown } from "lucide-react";
-import { Fragment, useId } from "react";
+import { Fragment, useId, useState } from "react";
 import { cn } from "@/lib/utils";
 import { CutText } from "./CutText";
 import { Icon } from "./Icon";
+import { ICONS } from "./icons";
 import {
   type ItemAction,
   Menu,
@@ -15,9 +15,9 @@ import {
   MenuRadioItem,
   MenuSeparator,
   MenuTrigger,
-  UNAVAILABLE,
 } from "./Menu";
 import { Shimmer } from "./Shimmer";
+import { StateGlyph } from "./StateGlyph";
 
 export interface SelectOption {
   value: string;
@@ -25,6 +25,8 @@ export interface SelectOption {
   sub?: string;
   /** subTone paints the sub as an error: the clone that failed. */
   subTone?: "error";
+  /** blocked puts the blocked glyph before the sub. */
+  blocked?: boolean;
   unavailable?: boolean;
   /** disabled is an option that can't be chosen, its reason in sub. */
   disabled?: boolean;
@@ -67,12 +69,16 @@ export function choiceName(choice: { label: string; unavailable?: boolean }): st
   return choice.unavailable ? `${choice.label} · unavailable` : choice.label;
 }
 
+// The menu of a Select is --size-menu-max wide at most, or as wide as its trigger when that is wider, and never past the window; MenuContent keeps it from being narrower than the trigger.
+const SELECT_MENU =
+  "max-w-[min(max(var(--size-menu-max),var(--anchor-width)),var(--available-width))]";
+
 /**
  * SELECT_TRIGGER is the look of a field that opens a list, shared with Listbox. Disabled rides on
  * aria-disabled, whose variant outweighs the plain classes; focused, it keeps the focus border and halo.
  */
 export const SELECT_TRIGGER =
-  "flex h-(--size-control) w-full items-center justify-between gap-2 rounded-sm border border-line-3 bg-surface-input px-2.5 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard hover:border-ink-3 aria-expanded:border-focus focus-visible:field-focus aria-disabled:dashed-disabled aria-disabled:focus-visible:field-focus";
+  "flex h-(--size-control) w-full items-center justify-between gap-(--space-2) rounded-sm border border-line-3 bg-surface-input px-(--space-2-5) text-(length:--text-ui) leading-(--leading-ui) text-ink-1 transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard hover:border-ink-3 aria-expanded:border-focus focus-visible:field-focus aria-disabled:dashed-disabled aria-disabled:focus-visible:field-focus";
 
 /**
  * SIDEBAR_TRIGGER is the trigger in the tone of the sidebar: smaller, on the sidebar's own input
@@ -97,6 +103,9 @@ export function Select({
   disabledReason,
 }: SelectProps) {
   const reasonId = useId();
+  const [open, setOpen] = useState(false);
+  // A disabled select keeps its menu shut; the state follows, so it does not open when enabled again.
+  if (open && disabled === true) setOpen(false);
   const withReason = disabled === true && disabledReason !== undefined;
   const all = [...(options ?? []), ...(groups ?? []).flatMap((group) => group.options)];
   const chosen = all.find((option) => option.value === value);
@@ -123,14 +132,14 @@ export function Select({
           <ChosenText choice={chosen} loading={loading === true} />
         )}
       </CutText>
-      <Icon icon={ChevronDown} size="sm" tone="muted" />
+      <Icon icon={ICONS.expanded} size="sm" tone="muted" />
     </MenuTrigger>
   );
 
   return (
-    <Menu {...(disabled ? { open: false } : {})}>
+    <Menu open={open} onOpenChange={setOpen}>
       {withReason ? (
-        <span className="inline-flex items-center gap-2">
+        <span className="inline-flex items-center gap-(--space-2)">
           {trigger}
           <span
             id={reasonId}
@@ -142,7 +151,7 @@ export function Select({
       ) : (
         trigger
       )}
-      <MenuContent>
+      <MenuContent className={SELECT_MENU}>
         {message !== undefined ? (
           <MenuMessage
             tone={message.tone ?? "neutral"}
@@ -175,7 +184,7 @@ export function Select({
   );
 }
 
-/** ChosenText is the choice written on a trigger: ◇ and · unavailable when it is no longer offered, shimmering while the choices are read. */
+/** ChosenText is the choice written on a trigger: the blocked glyph and · unavailable when it is no longer offered, shimmering while the choices are read. */
 export function ChosenText({
   choice,
   loading,
@@ -183,8 +192,15 @@ export function ChosenText({
   choice: { label: string; unavailable?: boolean };
   loading: boolean;
 }) {
-  const text = `${choice.unavailable ? `${UNAVAILABLE} ` : ""}${choiceName(choice)}`;
-  return loading ? <Shimmer>{text}</Shimmer> : text;
+  const name = choiceName(choice);
+  return (
+    <>
+      {choice.unavailable === true && (
+        <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />
+      )}
+      {loading ? <Shimmer>{name}</Shimmer> : name}
+    </>
+  );
 }
 
 /** SelectItem is a choice of the menu of a Select: one with an action runs it instead of being chosen. */
@@ -192,6 +208,7 @@ function SelectItem({ option }: { option: SelectOption }) {
   const sub = {
     ...(option.sub !== undefined ? { sub: option.sub } : {}),
     ...(option.subTone !== undefined ? { subTone: option.subTone } : {}),
+    ...(option.blocked ? { subBlocked: true } : {}),
   };
   if (option.action !== undefined) {
     return (

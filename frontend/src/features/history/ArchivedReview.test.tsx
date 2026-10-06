@@ -49,7 +49,10 @@ describe("ArchivedReview", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "Add the login screen" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Closed", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("Closed", { selector: "span" })).toHaveAttribute(
+      "data-variant",
+      "default",
+    );
     await user.click(screen.getByRole("button", { name: "Open on GitHub" }));
 
     expect(api.openExternal).toHaveBeenCalledWith("https://github.com/dev/web/pull/31");
@@ -148,7 +151,7 @@ describe("ArchivedReview", () => {
       },
     });
 
-    expect(screen.getByRole("status", { name: "Reading the review" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Reading the review" })).toBeInTheDocument();
   });
 });
 

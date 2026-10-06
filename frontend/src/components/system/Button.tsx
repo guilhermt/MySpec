@@ -35,7 +35,7 @@ export type ButtonProps = ButtonBaseProps & ButtonLoading;
  * not-aria-disabled: ones keep hover and press off while disabled.
  */
 const button = cva(
-  "h-(--size-control) gap-1.5 px-3 rounded-sm border border-line-2 bg-surface-2 text-ink-2 text-(length:--text-ui) leading-(--leading-ui) font-medium shadow-button transition-[background-color,border-color,color,box-shadow] duration-(--duration-fast) ease-standard focus-visible:ring-0 focus-visible:focus-ring active:not-aria-[haspopup]:translate-y-0 disabled:opacity-100 aria-disabled:dashed-disabled",
+  "h-(--size-control) gap-(--space-1-5) px-(--space-3) rounded-sm border border-line-2 bg-surface-2 text-ink-2 text-(length:--text-ui) leading-(--leading-ui) font-medium shadow-button transition-[background-color,border-color,color,box-shadow] duration-(--duration-fast) ease-standard focus-visible:ring-0 focus-visible:focus-ring active:not-aria-[haspopup]:translate-y-0 disabled:opacity-100 aria-disabled:dashed-disabled",
   {
     variants: {
       variant: {
@@ -51,8 +51,8 @@ const button = cva(
       },
       size: {
         md: "",
-        sm: "h-(--size-control-sm) px-2.5 gap-1 text-(length:--text-meta) leading-(--leading-meta)",
-        xs: "h-(--size-control-xs) px-2 gap-1 text-(length:--text-micro) leading-(--leading-micro)",
+        sm: "h-(--size-control-sm) px-(--space-2-5) gap-(--space-1) text-(length:--text-meta) leading-(--leading-meta)",
+        xs: "h-(--size-control-xs) px-(--space-2) gap-(--space-1) text-(length:--text-micro) leading-(--leading-micro)",
       },
     },
   },
@@ -121,17 +121,11 @@ export function Button({
           {icon !== undefined && <Icon icon={icon} size={size === "xs" ? "sm" : "md"} />}
           {children}
           {shortcut !== undefined && (
-            <span aria-hidden="true">
-              {/* The key of the action has no border and no body; on a solid button it keeps the ring of on-primary. A
-                  dashed solid button keeps the padding of that key, so the button is as wide in both states. */}
-              <Kbd
-                variant={keyOnSolid ? "on-primary" : "default"}
-                className={cn(
-                  "h-auto",
-                  !keyOnSolid && "border-0 bg-transparent shadow-none",
-                  !solid && "px-0",
-                )}
-              >
+            <span aria-hidden="true" className="inline-flex">
+              {/* The key of the action is always boxed: on a solid button it keeps the ring of on-primary, on a
+                  dashed one the line and ink of the disabled. A dashed solid button keeps the padding of that
+                  key, so the button is as wide in both states. */}
+              <Kbd variant={keyOnSolid ? "on-primary" : disabled ? "disabled" : "default"}>
                 {shortcut}
               </Kbd>
             </span>
@@ -144,7 +138,7 @@ export function Button({
   if (!disabled || disabledReason === undefined || reasonId !== undefined) return control;
   // What is missing reads before the button it holds back: Decide 2 more, then Publish review….
   return (
-    <span className="inline-flex items-center gap-2">
+    <span className="inline-flex items-center gap-(--space-2)">
       <span
         id={ownReasonId}
         className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3"

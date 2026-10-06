@@ -27,10 +27,13 @@ export function noticeDetail(message: string, remedy: Remedy | null): string {
   return /[.!?]$/.test(said) ? `${said} ${remedy}` : `${said}. ${remedy}`;
 }
 
+/** ARTIFACT_MISSING is how the Go starts the message of an artifact that was never written (ErrArtifactMissing). */
+export const ARTIFACT_MISSING = "artifact missing";
+
 /**
- * isMissingFile says whether a failure to read a file is the file not being there, which Go words
- * as "no such file or directory" (os.ErrNotExist), rather than a read that failed.
+ * isMissingFile says whether a failure to read an artifact is the artifact not being there,
+ * which the Go says as "artifact missing: <name>", rather than a read that failed.
  */
 export function isMissingFile(message: string): boolean {
-  return message.includes("no such file or directory");
+  return message.startsWith(ARTIFACT_MISSING);
 }

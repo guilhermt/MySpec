@@ -56,4 +56,17 @@ describe("revealItem", () => {
 
     expect(scroll).toHaveBeenCalledWith({ block: "center" });
   });
+
+  it("goes on until a control of the item is whole above the scroll padding", () => {
+    const { scroller, item } = box(700, "24px");
+    scroller.style.scrollPaddingBottom = "60px";
+    const control = document.createElement("button");
+    // The box ends at 600; the control ends at 580, inside the 60px kept for what floats over it.
+    vi.spyOn(control, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 550, 80, 30));
+    item.append(control);
+
+    revealItem(item, control);
+
+    expect(scroller.scrollTop).toBe(1276 + 40);
+  });
 });

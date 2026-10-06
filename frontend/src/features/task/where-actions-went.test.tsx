@@ -15,6 +15,7 @@ import {
   makeSituation,
   makeState,
   makeStep,
+  makeStepReviewer,
   makeTask,
   makeTextPRReport,
 } from "@/test/wails-mock";
@@ -141,11 +142,11 @@ const QUEUED: Record<string, TranscriptState> = {
   },
 };
 
-function permissionEntry(suggestions: string): Entry {
+function permissionEntry(suggestions: string, defaultToNo = false): Entry {
   const entry = makeEntry("permission");
   return entry.permission === null
     ? entry
-    : { ...entry, permission: { ...entry.permission, suggestions } };
+    : { ...entry, permission: { ...entry.permission, suggestions, defaultToNo } };
 }
 
 // DELETED is a review of the step with a file that was deleted.
@@ -404,6 +405,34 @@ const ROWS: Row[] = [
     }),
     where: "bar",
     name: /^Retry PRD agent$/,
+  },
+  {
+    origin: "ErrorCard",
+    button: "Retry",
+    state: "the session of the reviewer stopped",
+    task: inStep(
+      {
+        status: "agent_review",
+        reviewMode: "agent",
+        reviewPass: 1,
+        reviewer: makeStepReviewer({
+          sessionStage: "step_review:1",
+          sessionStatus: "error",
+          lastError: "claude exited",
+        }),
+      },
+      {
+        situations: [
+          makeSituation({
+            kind: "session_error",
+            group: "error",
+            place: { kind: "step_review", stage: "", step: 1 },
+          }),
+        ],
+      },
+    ),
+    where: "bar",
+    name: /^Retry reviewer$/,
   },
   {
     origin: "StepBlocked",
@@ -907,6 +936,15 @@ const ROWS: Row[] = [
     state: "a permission pending",
     task: inStep({ status: "implementing" }, { situations: [stepSituation("permission")] }),
     transcripts: withCard(permissionEntry("")),
+    where: "card",
+    name: /^Deny…/,
+  },
+  {
+    origin: "PermissionCard",
+    button: "Deny",
+    state: "a permission pending that defaults to no",
+    task: inStep({ status: "implementing" }, { situations: [stepSituation("permission")] }),
+    transcripts: withCard(permissionEntry("", true)),
     where: "card",
     name: /^Deny…/,
   },

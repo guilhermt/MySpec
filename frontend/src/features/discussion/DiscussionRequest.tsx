@@ -49,7 +49,7 @@ export function DiscussionRequest({ discussion }: DiscussionRequestProps) {
         if (request.target === null) {
           focusRequest(request.focus);
         } else {
-          focusDraft(request.target.draft, request.target.retry);
+          focusDraft(request.target.draft, request.target.retry, true);
         }
         return;
       case "nextToDecide": {

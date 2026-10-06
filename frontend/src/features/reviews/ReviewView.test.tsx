@@ -561,7 +561,9 @@ describe("ReviewView, the apply mode and the strip", () => {
       checkErrorAt: new Date().toISOString(),
     });
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't check GitHub");
+    expect(document.querySelector('[data-slot="notice-strip"]')).toHaveTextContent(
+      "Couldn't check GitHub",
+    );
   });
 
   it("leaves the failure to the bar of a blocked pass, without the strip", () => {

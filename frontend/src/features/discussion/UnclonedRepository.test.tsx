@@ -24,7 +24,7 @@ describe("UnclonedRepository", () => {
   it("changes the path of a clone that is gone, saying where it was", async () => {
     const { user } = repository({ missing: true });
 
-    expect(screen.getByText("The clone at /home/dev/projects/web is missing.")).toBeInTheDocument();
+    expect(screen.getByText("The clone at ~/projects/web is missing.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Change path…" }));
 
     expect(api.changeRepositoryPath).toHaveBeenCalledWith("repo-1");
@@ -40,7 +40,8 @@ describe("UnclonedRepository", () => {
   it("shows the failure of the last clone", () => {
     repository({ cloneError: "no space left" });
 
-    expect(screen.getByRole("alert")).toHaveTextContent("no space left");
+    expect(screen.getByText("no space left")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   describe("as a strip", () => {
@@ -75,7 +76,7 @@ describe("UnclonedRepository", () => {
     it("shows the failure and offers to try the clone again", () => {
       strip({ cloneError: "no space left" });
 
-      expect(screen.getByRole("alert")).toHaveTextContent("no space left");
+      expect(screen.getByText("no space left")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Try the clone again" })).toBeInTheDocument();
     });
 

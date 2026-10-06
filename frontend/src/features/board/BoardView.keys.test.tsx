@@ -1,10 +1,12 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BOARD_ID, measuredState } from "@/dev/measure-board";
 import { BoardView } from "@/features/board/BoardView";
 import { EMPTY_FILTERS } from "@/features/board/board-view";
 import { boardViewKey } from "@/lib/ui-storage";
 import { api, type Board, type BoardCard, type State } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
+import { spoken } from "@/test/live";
 import { renderWithStore } from "@/test/render";
 import {
   makeBoard,
@@ -57,6 +59,37 @@ function header(name: string) {
 afterEach(() => {
   localStorage.clear();
 });
+
+/** statusText is what every status of the screen says: the panel's strip and the key notice. */
+function statusText(): string {
+  return screen
+    .getAllByRole("status")
+    .map((status) => status.textContent)
+    .join("\n");
+}
+
+/** openOutOfReading opens a card in the panel and takes it out of the reading, with the focus on the panel's Discuss. */
+async function openOutOfReading(number: number) {
+  const { user } = view();
+  await user.click(row(number));
+  act(() => {
+    const { app } = useAppStore.getState();
+    const board = app?.boards?.[0];
+    if (app === null || board === undefined) {
+      throw new Error("the state has no board");
+    }
+    useAppStore.setState({
+      app: {
+        ...app,
+        boards: [{ ...board, cards: (board.cards ?? []).filter((c) => c.number !== number) }],
+      },
+    });
+  });
+  within(screen.getByRole("complementary", { name: `Card #${number}` }))
+    .getByRole("button", { name: /^Discuss/ })
+    .focus();
+  return user;
+}
 
 describe("the keyboard of the board", () => {
   describe("the tree", () => {
@@ -262,7 +295,7 @@ describe("the keyboard of the board", () => {
         "a card whose clone is missing",
         card(12, { action: "clone_missing" }),
         "No task from #12",
-        "The clone at /home/dev/projects/web is missing.",
+        "The clone at ~/projects/web is missing.",
       ],
     ])("says why it does nothing for %s", async (_name, target, title, reason) => {
       const { user } = view({ cards: [target] }, { tasks: [makeTask()] });
@@ -270,8 +303,7 @@ describe("the keyboard of the board", () => {
 
       await user.keyboard("s");
 
-      const notice = await screen.findByRole("status");
-      expect(notice).toHaveTextContent(`${title} · ${reason}`);
+      await waitFor(() => expect(spoken()).toEqual([`${title} · ${reason}`]));
       expect(useAppStore.getState().newTaskOpen).toBe(false);
       expect(row(12)).toHaveFocus();
     });
@@ -283,7 +315,7 @@ describe("the keyboard of the board", () => {
       await user.keyboard("s");
 
       expect(useAppStore.getState().newTaskOpen).toBe(false);
-      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      expect(spoken()).toEqual([]);
     });
 
     it("acts on the card of the panel when the focus is in it", async () => {
@@ -297,6 +329,34 @@ describe("the keyboard of the board", () => {
       await user.keyboard("s");
 
       expect(useAppStore.getState().newTaskCard).toEqual({ boardId: "board-1", key: "dev/web#7" });
+    });
+  });
+
+  describe("a card of the panel that the reading no longer has", () => {
+    it("says why S does nothing", async () => {
+      const user = await openOutOfReading(7);
+
+      await user.keyboard("s");
+
+      await waitFor(() =>
+        expect(statusText()).toContain(
+          "No task from #7 · The card isn't in the last reading of the board.",
+        ),
+      );
+      expect(useAppStore.getState().newTaskOpen).toBe(false);
+    });
+
+    it("says why D does nothing", async () => {
+      const user = await openOutOfReading(7);
+
+      await user.keyboard("d");
+
+      await waitFor(() =>
+        expect(statusText()).toContain(
+          "#7 can't go into a discussion · The card isn't in the last reading of the board.",
+        ),
+      );
+      expect(useAppStore.getState().newDiscussion).toBeNull();
     });
   });
 
@@ -322,8 +382,10 @@ describe("the keyboard of the board", () => {
 
       await user.keyboard("d");
 
-      expect(await screen.findByRole("status")).toHaveTextContent(
-        "#1 can't go into a discussion · dev/api isn't a repository of this board.",
+      await waitFor(() =>
+        expect(spoken()).toEqual([
+          "#1 can't go into a discussion · dev/api isn't a repository of this board.",
+        ]),
       );
       expect(useAppStore.getState().newDiscussion).toBeNull();
     });
@@ -406,7 +468,7 @@ describe("the keyboard of the board", () => {
 
       await user.keyboard(" ");
 
-      expect(await screen.findByRole("status")).toHaveTextContent("#1 can't go into a discussion");
+      await waitFor(() => expect(spoken()[0]).toContain("#1 can't go into a discussion"));
       expect(screen.queryByRole("toolbar", { name: "Selected cards" })).not.toBeInTheDocument();
     });
 
@@ -493,8 +555,8 @@ describe("the keyboard of the board", () => {
 
       await user.keyboard("n");
 
-      expect(await screen.findByRole("status", { name: "" })).toHaveTextContent(
-        "No discussion yet · The board hasn't been read yet.",
+      await waitFor(() =>
+        expect(spoken()).toEqual(["No discussion yet · The board hasn't been read yet."]),
       );
       expect(useAppStore.getState().newDiscussion).toBeNull();
     });
@@ -589,5 +651,36 @@ describe("the keyboard of the board", () => {
 
       expect(seen).toHaveReturnedWith(false);
     });
+  });
+});
+
+describe("a board longer than its window", () => {
+  const tall = () => {
+    localStorage.setItem(
+      boardViewKey(BOARD_ID),
+      JSON.stringify({ filters: EMPTY_FILTERS, collapsed: [] }),
+    );
+    return renderWithStore(<BoardView boardId={BOARD_ID} />, {
+      state: measuredState(),
+      ui: { location: { kind: "board", id: BOARD_ID } },
+    });
+  };
+
+  it("mounts a window of the rows, and End reaches the last one by the keys", async () => {
+    const { user } = tall();
+    const rows = () => screen.getAllByRole("treeitem");
+    // 600px of 40px rows, the overscan of 20 past each end and the two pinned rows, at the most.
+    expect(rows().length).toBeLessThanOrEqual(15 + 2 * 20 + 2);
+    expect(rows()[0]).toHaveAttribute("aria-posinset", "1");
+
+    act(() => rows()[1]?.focus());
+    await user.keyboard("{End}");
+
+    await waitFor(() => {
+      const last = rows().at(-1);
+      expect(last).toHaveFocus();
+      expect(last).toHaveAttribute("aria-posinset", last?.getAttribute("aria-setsize") ?? "");
+    });
+    expect(rows().length).toBeLessThanOrEqual(15 + 2 * 20 + 2);
   });
 });

@@ -1,6 +1,6 @@
 import { screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { NewTaskDialog } from "@/features/task-create/NewTaskDialog";
 import { type BoardSceneName, boardScene, fixBoardSceneClock } from "@/test/board-scenes";
 import {
@@ -79,5 +79,44 @@ describe.each(THEMES)("NewTaskDialog, the scenes in the %s theme", (theme) => {
     );
 
     await capture(`${name}-${width}-${theme}`, dialog);
+  });
+  it("draws the rule between two rows of Models inside the lower one, on whole pixels", async () => {
+    setTheme(theme);
+    const dialog = await draw("create", WIDE_WINDOW);
+
+    const toggle = within(dialog).getByRole("button", { name: /^Models/ });
+    if (toggle.getAttribute("aria-expanded") !== "true") {
+      await userEvent.click(toggle);
+    }
+    const rows = [...(toggle.parentElement as HTMLElement).querySelectorAll("ul > li")];
+    expect(rows.length).toBeGreaterThan(1);
+    expect(offWholePixels(rows)).toEqual([]);
+    const height = parseFloat(resolve("var(--size-control)", "height"));
+    for (const [index, row] of rows.entries()) {
+      expect(row.getBoundingClientRect().height).toBe(height);
+      // The first row has no rule above it: the list is bordered.
+      expect(getComputedStyle(row).boxShadow === "none").toBe(index === 0);
+    }
+  });
+
+  it("draws the warning of a dependency without an outline: the dialog is not sunken", async () => {
+    setTheme(theme);
+    const dialog = await draw("create-card", WIDE_WINDOW);
+
+    const warning = within(dialog)
+      .getAllByText(/^Depends on /)[0]
+      ?.closest("div");
+    expect(warning).toBeInstanceOf(HTMLElement);
+    expect(getComputedStyle(warning as HTMLElement).boxShadow).toBe("none");
+    expect(getComputedStyle(warning as HTMLElement).borderTopWidth).toBe("0px");
+  });
+
+  it("fills the Name field with a name of 64 characters, which the field holds whole", async () => {
+    setTheme(theme);
+    const dialog = await draw("create-card", HALF_WINDOW);
+
+    const name = within(dialog).getByRole("textbox", { name: "Name" });
+    expect((name as HTMLInputElement).value).toHaveLength(64);
+    expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
   });
 });

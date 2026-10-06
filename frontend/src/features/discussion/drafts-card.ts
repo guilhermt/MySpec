@@ -495,7 +495,11 @@ export function decisionOf(
   if (isStarted(draft)) {
     return { shown: false, approveReason: null, discardReason: null, editReason: null };
   }
-  const editReason = discussion.publishing ? "A publication is running" : null;
+  const editReason = discussion.publishing
+    ? "A publication is running"
+    : editing
+      ? "Finish editing first"
+      : null;
   const both = discussion.publishing
     ? "A publication is running · the decision waits for it"
     : editing

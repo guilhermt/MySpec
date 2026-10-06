@@ -196,7 +196,7 @@ describe("PullRequestPanel", () => {
 
         const start = screen.getByRole("button", { name: /^Start review/ });
         expect(start).toHaveAttribute("aria-disabled", "true");
-        expect(start).toHaveAccessibleDescription("The clone at /home/dev/code/api is missing.");
+        expect(start).toHaveAccessibleDescription("The clone at ~/code/api is missing.");
         expect(screen.getByRole("button", { name: "Change path…" })).toBeInTheDocument();
       });
 
@@ -443,7 +443,7 @@ describe("PullRequestPanel", () => {
         },
       });
 
-      expect(screen.getByText("◇ acme/api couldn't be read · 4m ago")).toBeInTheDocument();
+      expect(screen.getByText("acme/api couldn't be read · 4m ago")).toBeInTheDocument();
       expect(screen.queryByText("read 2m ago")).not.toBeInTheDocument();
     });
   });
@@ -542,7 +542,7 @@ describe("PullRequestPanel", () => {
 
       const description = screen.getByTestId("markdown");
       expect(description).toHaveTextContent("Adds a key per charge.");
-      expect(description).toHaveClass("card-body");
+      expect(description).toHaveClass("card-body", "ui-headings");
       expect(screen.queryByText("No description.")).not.toBeInTheDocument();
     });
 

@@ -5,6 +5,7 @@ import { olderKey } from "@/lib/history";
 import { api } from "@/lib/wails";
 import { type AppStore, useAppStore } from "@/store/app-store";
 import { intersect, observed } from "@/test/intersection";
+import { spoken } from "@/test/live";
 import { renderWithStore } from "@/test/render";
 import {
   makeArchivedDiscussion,
@@ -237,20 +238,20 @@ describe("HistoryView, older items", () => {
   it("says it is loading the older items, as a status", () => {
     view(MORE, "", list("", "", { status: "loading" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("Loading older items…");
+    expect(spoken()).toEqual(["Loading older items…"]);
   });
 
   it("says it is searching the older items while a search waits for the answer", () => {
     view(MORE, "refund");
 
-    expect(screen.getByRole("status")).toHaveTextContent("Searching older items…");
+    expect(spoken()).toEqual(["Searching older items…"]);
     expect(screen.queryByText(/Nothing matches/)).toBeNull();
   });
 
   it("shows nothing at the foot when everything came", () => {
     view({}, "", list("", "", { matched: 3 }));
 
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(spoken()).toEqual([]);
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
@@ -366,6 +367,36 @@ describe("HistoryView, older items", () => {
   });
 });
 
+describe("HistoryView with 400 items", () => {
+  it("mounts a window of the rows, focuses the last one with End, and tells every row its place", async () => {
+    const tasks = Array.from({ length: 400 }, (_, i) =>
+      makeArchivedTask({
+        id: `bulk-${String(i).padStart(3, "0")}`,
+        name: `Bulk task ${i}`,
+        archivedAt: new Date(2026, 5, 1 + Math.floor(i / 5), 12, i % 5).toISOString(),
+      }),
+    );
+    const { user } = view({
+      history: tasks,
+      historySummary: makeHistorySummary({ tasks: 400 }),
+    });
+    const items = () => screen.getAllByRole("treeitem");
+    expect(items().length).toBeLessThan(100);
+
+    screen.getAllByRole("treeitem")[0]?.focus();
+    await user.keyboard("{End}");
+
+    const rows = items().filter((item) => item.getAttribute("aria-level") === "2");
+    const last = rows.at(-1) as HTMLElement;
+    expect(last).toHaveFocus();
+    expect(last).toHaveAccessibleName(/^Task Bulk task 0\b/);
+    for (const item of items()) {
+      expect(item).toHaveAttribute("aria-posinset");
+      expect(item).toHaveAttribute("aria-setsize");
+    }
+  });
+});
+
 describe("HistoryView, the row just archived", () => {
   const fresh = (id: string, kind: "task" | "review" | "discussion") =>
     ({ location: { kind: "history", fresh: { kind, id } } }) as Partial<AppStore>;
@@ -434,29 +465,31 @@ describe("HistoryView, the row just archived", () => {
     ]);
   });
 
-  it("scrolls it to the middle when it is out of view", () => {
-    const scrolled = vi.spyOn(Element.prototype, "scrollIntoView");
-    const rect = vi
-      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
-      .mockImplementation(function (this: HTMLElement) {
-        const row = this.getAttribute("data-row-key") !== null;
-        return { top: row ? 4000 : 0, bottom: row ? 4040 : 600 } as DOMRect;
-      });
+  // A hundred tasks of earlier months, the oldest the row just archived: the window cannot have it in view.
+  const deep = () => {
+    const tasks = Array.from({ length: 100 }, (_, i) =>
+      makeArchivedTask({
+        id: `old-${String(i).padStart(3, "0")}`,
+        name: `Old task ${i}`,
+        archivedAt: new Date(2026, 5, 1 + Math.floor(i / 10), 12, i % 10).toISOString(),
+      }),
+    );
+    return { history: [TODAY, ...tasks], historySummary: makeHistorySummary({ tasks: 101 }) };
+  };
+  const viewport = () =>
+    document.querySelector<HTMLElement>("[data-window-viewport]") as HTMLElement;
 
-    view({}, "", fresh("discussion-1", "discussion"));
+  it("scrolls it into the window when it is out of view", () => {
+    view(deep(), "", fresh("old-040", "task"));
 
-    expect(scrolled).toHaveBeenCalledWith({ block: "center" });
-    scrolled.mockRestore();
-    rect.mockRestore();
+    expect(screen.getByRole("treeitem", { name: /^Task Old task 40/ })).toHaveFocus();
+    expect(viewport().scrollTop).toBeGreaterThan(0);
   });
 
   it("does not scroll it when it is in view", () => {
-    const scrolled = vi.spyOn(Element.prototype, "scrollIntoView");
-
     view({}, "", fresh("discussion-1", "discussion"));
 
-    expect(scrolled).not.toHaveBeenCalledWith({ block: "center" });
-    scrolled.mockRestore();
+    expect(viewport().scrollTop).toBe(0);
   });
 
   it("takes the focus again when the History is already open and another row arrives", () => {

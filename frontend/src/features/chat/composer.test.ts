@@ -8,12 +8,13 @@ import {
   lastBlockOf,
   otherHeaderOf,
   pendingCardsOf,
+  permissionKeys,
   placeholderOf,
   type QuestionChoices,
   quickRepliesOf,
   sendIsPrimary,
 } from "@/features/chat/composer";
-import type { Entry, Question, QuestionEntry } from "@/lib/wails";
+import type { Entry, PermissionEntry, Question, QuestionEntry } from "@/lib/wails";
 import { makeEntry } from "@/test/wails-mock";
 
 function question(header: string, options: string[], multiSelect = false): Question {
@@ -36,6 +37,8 @@ function pending(...questions: Question[]): QuestionEntry {
   };
 }
 
+const PERMISSION = makeEntry("permission").permission as PermissionEntry;
+
 const LIMITS = question("Limits", ["Per key", "Per plan"]);
 const STORE = question("Store", ["Redis", "Memory"]);
 const HEADERS = question("Headers", ["Retry-After", "X-RateLimit-*"], true);
@@ -49,7 +52,7 @@ const REST: ComposerContext = {
   question: null,
   choices: null,
   otherHeader: null,
-  permission: false,
+  permission: null,
   chips: [],
   findings: false,
   askForChange: false,
@@ -83,12 +86,15 @@ describe("placeholderOf", () => {
     ],
     [
       "a turn that failed",
-      { turnFailed: true, permission: true },
+      { turnFailed: true, permission: PERMISSION },
       "Reply to the implementer to go on…",
     ],
     [
       "a question pending",
-      { question: pending(question("Store", ["Redis", "Memory", "Postgres"])), permission: true },
+      {
+        question: pending(question("Store", ["Redis", "Memory", "Postgres"])),
+        permission: PERMISSION,
+      },
       "Answer with 1–4, or reply to the implementer…",
     ],
     [
@@ -127,8 +133,25 @@ describe("placeholderOf", () => {
     ],
     [
       "a permission pending",
-      { permission: true, turnRunning: true },
+      { permission: PERMISSION, turnRunning: true },
+      "Answer with 1–2 above, or queue a message for the implementer…",
+    ],
+    [
+      "a permission pending with a rule to remember",
+      { permission: { ...PERMISSION, suggestions: '[{"type":"addRules"}]' }, turnRunning: true },
       "Answer with 1–3 above, or queue a message for the implementer…",
+    ],
+    [
+      "a permission pending that offers no rule",
+      {
+        permission: {
+          ...PERMISSION,
+          suggestions: '[{"type":"addRules"}]',
+          suppressAlwaysAllow: true,
+        },
+        turnRunning: true,
+      },
+      "Answer with 1–2 above, or queue a message for the implementer…",
     ],
     ["a turn running", { turnRunning: true, chips: CHIPS }, "Queue a message for the implementer…"],
     [
@@ -494,7 +517,7 @@ describe("pendingCardsOf", () => {
   ])("reads %s", (_name, entries, question, perm) => {
     const cards = pendingCardsOf(entries);
     expect(cards.question !== null).toBe(question);
-    expect(cards.permission).toBe(perm);
+    expect(cards.permission !== null).toBe(perm);
   });
 });
 
@@ -526,5 +549,21 @@ describe("otherHeaderOf", () => {
 
   it("has no header without a question", () => {
     expect(otherHeaderOf(null, { 0: { labels: [], other: "" } })).toBeNull();
+  });
+});
+
+describe("permissionKeys", () => {
+  it.each<[string, Partial<PermissionEntry>, number]>([
+    ["no rule offered", { suggestions: "" }, 2],
+    ["an empty list of rules", { suggestions: "[]" }, 2],
+    ["a rule that can't be read", { suggestions: "{" }, 2],
+    ["a rule to remember", { suggestions: '[{"type":"addRules"}]' }, 3],
+    [
+      "a rule the CLI forbids",
+      { suggestions: '[{"type":"addRules"}]', suppressAlwaysAllow: true },
+      2,
+    ],
+  ])("counts %s", (_name, overrides, keys) => {
+    expect(permissionKeys({ ...PERMISSION, ...overrides })).toBe(keys);
   });
 });

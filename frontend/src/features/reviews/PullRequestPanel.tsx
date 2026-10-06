@@ -109,7 +109,7 @@ export function PullRequestPanel({
           trailing={
             model.checks.failed === null
               ? { text: model.checks.age, tooltip: model.checks.ageTooltip }
-              : { text: model.checks.failed, error: true }
+              : { text: model.checks.failed, error: true, blocked: model.checks.blocked }
           }
         />
         <dl className={FACTS}>
@@ -143,7 +143,7 @@ export function PullRequestPanel({
               No description.
             </p>
           ) : (
-            <Markdown className="card-body">{model.body}</Markdown>
+            <Markdown className="card-body ui-headings">{model.body}</Markdown>
           )}
         </div>
       </div>

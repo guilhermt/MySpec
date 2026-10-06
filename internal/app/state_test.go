@@ -10,6 +10,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/app"
 	"github.com/guilhermt/myspec/internal/bindings"
+	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/models"
@@ -127,5 +128,85 @@ func TestTheStateCarriesTheHistoryFromTheStartOfTheWindowAndCountsTheWholeOfIt(t
 	// window or not.
 	if len(state.Repositories) != 1 || state.Repositories[0].ArchivedDiscussions != 2 {
 		t.Errorf("Repositories = %+v, want acme/web with its 2 archived discussions", state.Repositories)
+	}
+}
+
+func TestTheStateCarriesTheTaskAndTheDiscussionThatWroteACardOfABoard(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 9, 24, 14, 0, 0, 0, time.UTC)
+	dataDir := t.TempDir()
+	seed(t, dataDir, func(st *store.Store) {
+		ctx := t.Context()
+		b := board.Board{
+			ID: "board-1", Owner: "acme", OwnerType: board.OwnerOrganization, Number: 1, Title: "Roadmap",
+			URL: "https://github.com/orgs/acme/projects/1", FinalStatuses: []string{}, CreatedAt: at,
+		}
+		if err := st.Boards.InsertBoard(ctx, b, nil); err != nil {
+			t.Fatalf("insert the board: %v", err)
+		}
+		repo := repository.Repository{
+			ID: "repo-1", Owner: "acme", Name: "web", Path: "/nowhere/web", BoardID: "board-1", CreatedAt: at,
+		}
+		if err := st.Repositories.Insert(ctx, repo); err != nil {
+			t.Fatalf("insert the repository: %v", err)
+		}
+		card := func(number int) board.Card {
+			return board.Card{
+				Issue: board.Issue{
+					Owner: "acme", Name: "web", Number: number, Title: "Card",
+					URL: "https://github.com/acme/web/issues/1", State: task.IssueOpen,
+				},
+				ReadAt: at,
+			}
+		}
+		reading := board.Reading{Title: "Roadmap", Cards: []board.Card{card(7), card(8), card(9)}}
+		if err := st.Boards.SaveReading(ctx, b.ID, reading.Title, reading, at); err != nil {
+			t.Fatalf("save the reading: %v", err)
+		}
+		fromCard := task.Task{
+			ID: "task-1", RepositoryID: repo.ID, Name: "card-7", Stage: task.StagePRD, Mode: task.ModeStructured,
+			Card: &task.Card{
+				BoardID: b.ID, Owner: "acme", Name: "web", Number: 7, Title: "Card", State: task.IssueOpen, ReadAt: at,
+			},
+			CreatedAt: at, UpdatedAt: at,
+		}
+		if err := st.Tasks.Insert(ctx, fromCard); err != nil {
+			t.Fatalf("insert the task: %v", err)
+		}
+		writer := discussion.Discussion{ID: "discussion-1", Title: "Pricing", CreatedAt: at, UpdatedAt: at}
+		if err := st.Discussions.Insert(ctx, writer); err != nil {
+			t.Fatalf("insert the discussion: %v", err)
+		}
+		draft := discussion.Draft{
+			DiscussionID: writer.ID, ID: "draft-1", Kind: discussion.KindNew, Source: discussion.SourceAgent,
+			Owner: "acme", Name: "web", Title: "Card",
+			Published: discussion.Publication{Outcome: discussion.OutcomeCreated, Number: 8, At: at},
+		}
+		if err := st.Discussions.WriteDrafts(ctx, writer.ID, []discussion.Draft{draft}, nil); err != nil {
+			t.Fatalf("write the draft: %v", err)
+		}
+	})
+	a, published := newApp(t, app.AppOptions{DataDir: dataDir})
+
+	a.Start()
+	waitFor(t, published, phaseIs("ready"))
+	state := a.State()
+
+	if len(state.Boards) != 1 || len(state.Boards[0].Cards) != 3 {
+		t.Fatalf("Boards = %+v, want the one board with its 3 cards", state.Boards)
+	}
+	cards := state.Boards[0].Cards
+	if got := cards[0].ActiveTaskID; got != "task-1" {
+		t.Errorf("card 7 ActiveTaskID = %q, want the task created from it", got)
+	}
+	if cards[0].WrittenBy != nil {
+		t.Errorf("card 7 WrittenBy = %+v, want nil: no discussion wrote it", cards[0].WrittenBy)
+	}
+	want := &bindings.WritingDiscussion{ID: "discussion-1", Title: "Pricing"}
+	if diff := cmp.Diff(want, cards[1].WrittenBy); diff != "" {
+		t.Errorf("card 8 WrittenBy (-want +got):\n%s", diff)
+	}
+	if cards[1].ActiveTaskID != "" || cards[2].ActiveTaskID != "" || cards[2].WrittenBy != nil {
+		t.Errorf("cards 8 and 9 = %+v and %+v, want neither a task nor a writer beyond card 8's", cards[1], cards[2])
 	}
 }

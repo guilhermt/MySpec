@@ -1,4 +1,4 @@
-import { type Ref, useId } from "react";
+import { type Ref, useId, useState } from "react";
 import { Chip } from "@/components/system/Chip";
 import {
   Menu,
@@ -75,10 +75,14 @@ export function ModelChip({
   ref,
 }: ModelChipProps) {
   const noteId = useId();
+  const [open, setOpen] = useState(false);
   const catalog = useModelCatalog();
   const models = catalogModels(catalog);
   const failure = asCatalogFailure(catalog.failure);
   const reading = models.length === 0 && failure === "";
+  // A chip that saves or reads keeps its menu shut; the state follows, so the menu does not come
+  // back open when the saving ends.
+  if (open && (saving || reading)) setOpen(false);
   const unavailable = models.length > 0 && choiceUnavailable(catalog, value);
   const text = choiceLabel(catalog, value);
   const current = catalogModel(catalog, value.model);
@@ -120,7 +124,7 @@ export function ModelChip({
 
   return (
     <>
-      <Menu {...(saving || reading ? { open: false } : {})}>
+      <Menu open={open} onOpenChange={setOpen}>
         {/* A choice that follows another, and the chip that reads, have their note here. */}
         {!chipNote && note !== "" ? <Tooltip content={note}>{trigger}</Tooltip> : trigger}
         <MenuContent align="end">

@@ -33,6 +33,21 @@ export type PlaceView =
   /** closedReview is the conversation of the review of the pull request, read-only, with the line of its end. */
   | { kind: "closedReview"; endLine: MarkerView | null };
 
+/** placeTitleOf is what a place says it is, as the screen reader hears it; null for a conversation, which says itself. */
+export function placeTitleOf(view: PlaceView): string | null {
+  switch (view.kind) {
+    case "activity":
+      return view.text;
+    case "blocked":
+      return view.line.text;
+    case "empty":
+      return view.title;
+    case "conversation":
+    case "closedReview":
+      return null;
+  }
+}
+
 // listed is names in a sentence: "a", "a and b", "a, b and c".
 function listed(names: readonly string[]): string {
   const last = names.at(-1) ?? "";
@@ -150,6 +165,7 @@ export function prPlaceOf(
     case "preparing":
       return { kind: "activity", text: "Preparing the pull request…" };
     case "blocked":
+      if (hasReviewConversation) return { kind: "conversation" };
       return {
         kind: "empty",
         title: "The pull request stage stopped",

@@ -51,6 +51,7 @@ const TASK = makeArchivedTask({
 
 describe("archivedDate", () => {
   it.each([
+    ["today", local(2026, 8, 27, 14, 51), "14:51"],
     ["this year", local(2026, 8, 24, 14, 51), "Sep 24 at 14:51"],
     ["another year", local(2025, 8, 24, 14, 51), "Sep 24, 2025 at 14:51"],
     ["no moment", "", ""],

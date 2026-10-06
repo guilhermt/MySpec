@@ -16,9 +16,9 @@ describe("DependencyNotice", () => {
     expect(screen.getByText(MODEL.meta)).toBeInTheDocument();
   });
 
-  it("hides the diamond from the reader", () => {
-    render(<DependencyNotice model={MODEL} />);
-    expect(screen.getByText("◇", { exact: false, selector: "span" })).toHaveAttribute(
+  it("hides the blocked glyph from the reader", () => {
+    const { container } = render(<DependencyNotice model={MODEL} />);
+    expect(container.querySelector('[data-state="blocked"]')).toHaveAttribute(
       "aria-hidden",
       "true",
     );

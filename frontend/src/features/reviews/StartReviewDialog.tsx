@@ -7,11 +7,11 @@ import { ICONS } from "@/components/system/icons";
 import { SegmentedControl } from "@/components/system/SegmentedControl";
 import { SunkenLine } from "@/components/system/SunkenLine";
 import { Textarea } from "@/components/system/Textarea";
-import { ModelPicker } from "@/features/models/ModelPicker";
+import { ModelChip } from "@/features/models/ModelChip";
 import { panelReason, prPanelModel } from "@/features/reviews/pr-panel";
 import { rowReference } from "@/features/reviews/review-list";
 import { messageOf } from "@/lib/errors";
-import { choiceOf, type ModelChoice } from "@/lib/models";
+import { choiceOf, type ModelChoice, sameChoice } from "@/lib/models";
 import { type ChecksReading, checkCounts, unfinishedChecks } from "@/lib/pull-requests";
 import { findRepository, shortName } from "@/lib/repositories";
 import type { PullRequestRow, PullReviewMode, StageModel } from "@/lib/wails";
@@ -95,6 +95,7 @@ function StartReviewFields({ pull, row, gone }: StartReviewFieldsProps) {
   const [instructions, setInstructions] = useState("");
   const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [choice, setChoice] = useState<ModelChoice>(() => choiceOf(defaults, "pr_review"));
+  const byDefault = sameChoice(choice, choiceOf(defaults, "pr_review"));
   // Every review starts in publish mode: applying is a choice made for the pull request at hand,
   // and only the user's own can be applied to.
   const [mode, setMode] = useState<PullReviewMode>("publish");
@@ -190,13 +191,21 @@ function StartReviewFields({ pull, row, gone }: StartReviewFieldsProps) {
 
         {waiting !== null && <SunkenLine icon="github">{waiting}</SunkenLine>}
 
-        <div inert={starting} className="flex flex-col gap-1">
+        <div inert={starting} className="flex flex-col gap-(--space-1)">
           <span className="text-(length:--text-meta) leading-(--leading-meta) font-medium text-ink-2">
             Model
           </span>
           <div className="flex flex-wrap items-center gap-(--space-3)">
-            <ModelPicker label="Review" value={choice} onChange={setChoice} />
-            <span className={HINT}>From Defaults. It can change in the conversation.</span>
+            <ModelChip
+              label="Review"
+              value={choice}
+              own={!byDefault}
+              followNote=""
+              onChange={setChoice}
+            />
+            <span className={HINT}>
+              {byDefault ? "From Defaults. " : ""}It can change in the conversation.
+            </span>
           </div>
         </div>
 

@@ -5,11 +5,19 @@ import { Button } from "./Button";
 import { NoticeStrip } from "./NoticeStrip";
 
 describe("NoticeStrip", () => {
-  it("is an alert with its title and reason", () => {
-    renderWithStore(<NoticeStrip title="Couldn't read the PR" reason="gh is not signed in." />);
+  it("is an alert, when it says so, with its title and reason", () => {
+    renderWithStore(
+      <NoticeStrip role="alert" title="Couldn't read the PR" reason="gh is not signed in." />,
+    );
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent("Couldn't read the PR");
     expect(alert).toHaveTextContent("gh is not signed in.");
+  });
+
+  it("has no role unless it is given one", () => {
+    renderWithStore(<NoticeStrip title="Couldn't read the PR" reason="gh is not signed in." />);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("is a status while it retries", () => {
@@ -41,7 +49,7 @@ describe("NoticeStrip", () => {
   });
 
   it("draws a border when outlined", () => {
-    renderWithStore(<NoticeStrip title="Couldn't read the PR" outlined />);
+    renderWithStore(<NoticeStrip role="alert" title="Couldn't read the PR" outlined />);
     expect(screen.getByRole("alert")).toHaveClass("border-line-2");
   });
 });

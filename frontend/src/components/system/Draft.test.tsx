@@ -2,6 +2,7 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { DraftStateView, GestureLineView } from "@/components/system/draft-views";
+import { spoken } from "@/test/live";
 import { renderWithStore } from "@/test/render";
 import { Draft, type DraftProps } from "./Draft";
 
@@ -367,7 +368,7 @@ describe("Draft", () => {
     expect(
       screen.getByText("The module Billing is no longer an option of the board."),
     ).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Refreshing the card…");
+    expect(spoken()).toContain("Refreshing the card…");
   });
 
   it("reads the body or the changes of an update", async () => {

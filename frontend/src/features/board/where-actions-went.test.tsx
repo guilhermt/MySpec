@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import type { UserEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import { BoardView } from "@/features/board/BoardView";
@@ -47,6 +47,18 @@ const click =
   async (user: UserEvent) => {
     await user.click(await screen.findByRole(role, { name }));
   };
+
+// clickCard opens the card of a number: the list is windowed, so it walks down by the keys, as the
+// user does, until the row is drawn.
+async function clickCard(user: UserEvent, number: number) {
+  const name = new RegExp(`^#${number} `);
+  act(() => screen.getAllByRole("treeitem")[0]?.focus());
+  for (let steps = 0; screen.queryByRole("treeitem", { name }) === null; steps++) {
+    expect(steps).toBeLessThan(500);
+    await user.keyboard("{ArrowDown}");
+  }
+  await user.click(screen.getByRole("treeitem", { name }));
+}
 
 const filterMenu = click("button", "Filter");
 
@@ -192,7 +204,7 @@ const ROWS: Row[] = [
     control: "the button of the active task",
     scene: "board",
     screen: "board",
-    steps: click("treeitem", /^#412 /),
+    steps: (user) => clickCard(user, 412),
     role: "button",
     name: "Open the task",
   },
@@ -201,9 +213,9 @@ const ROWS: Row[] = [
     scene: "board",
     screen: "board",
     storage: EXPANDED,
-    steps: click("treeitem", /^#409 /),
+    steps: (user) => clickCard(user, 409),
     role: "link",
-    name: "Archived task: 409-hash-api-keys-at-rest",
+    name: "409-hash-api-keys-at-rest",
   },
   {
     control: "the sibling that selects the card",
@@ -415,7 +427,7 @@ describe("the panel of a card", () => {
       const state = change === undefined ? setup.state : change(setup.state);
       const user = await draw("board", "board", { ...setup, state, storage: EXPANDED });
       if (name !== CASES[0]?.name) {
-        await user.click(screen.getByRole("treeitem", { name: new RegExp(`^#${number} `) }));
+        await clickCard(user, number);
       }
 
       const panel = screen.getByRole("complementary");

@@ -90,11 +90,11 @@ export function DocumentsPanel({ discussion }: DocumentsPanelProps) {
         )}
         {artifact.status === "error" && (
           <NoticeStrip
+            role="alert"
             title="Couldn't read the document"
             reason={artifact.error}
-            className="bg-state-error-veil"
             action={
-              <Button size="xs" onClick={() => setAttempt((count) => count + 1)}>
+              <Button variant="ghost" size="sm" onClick={() => setAttempt((count) => count + 1)}>
                 Try again
               </Button>
             }
@@ -102,7 +102,7 @@ export function DocumentsPanel({ discussion }: DocumentsPanelProps) {
         )}
         {artifact.status === "ready" && (
           <div className="select-text">
-            <Markdown>{artifact.content}</Markdown>
+            <Markdown className="ui-headings">{artifact.content}</Markdown>
           </div>
         )}
       </div>

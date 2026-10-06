@@ -242,11 +242,15 @@ describe("BoardDialog, adding", () => {
     await readBoard(user);
 
     const field = await screen.findByRole("textbox", { name: "Add a repository" });
+    // The focus lands on the first repository a frame after the step renders: typing earlier loses keys to it.
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: /dev\/web/ })).toHaveFocus());
     const add = screen.getByRole("button", { name: "Add" });
     expect(add).toHaveAttribute("aria-disabled", "true");
     expect(add).toHaveAccessibleDescription("Type a repository as owner/name.");
     await user.type(field, "dev/nope");
-    expect(add).not.toHaveAttribute("aria-describedby");
+    await waitFor(() => {
+      expect(add).not.toHaveAttribute("aria-describedby");
+    });
     await user.click(add);
 
     expect(api.checkBoardRepository).toHaveBeenCalledWith("", "dev/nope");

@@ -199,6 +199,34 @@ func TestARefusedMigrationEndsTheFirstStepWithWhatToResolve(t *testing.T) {
 	}
 }
 
+func TestDataFromANewerVersionEndsTheFirstStepWithTheVersionsAndNothingOpened(t *testing.T) {
+	t.Parallel()
+	newer := &store.NewerError{Data: 40, Known: 25}
+	a, published := newApp(t, app.AppOptions{
+		SystemDark: true,
+		OpenStore: func(context.Context, string, *slog.Logger, store.Upgrade) (*store.Store, error) {
+			return nil, fmt.Errorf("open database: %w", newer)
+		},
+	})
+
+	a.Start()
+	got := waitFor(t, published, phaseIs("ready"))
+
+	if diff := cmp.Diff([]string{"data done 0"}, stepsOf(got)); diff != "" {
+		t.Errorf("steps mismatch (-want +got):\n%s", diff)
+	}
+	state := a.State()
+	if diff := cmp.Diff(&bindings.NewerData{DataVersion: 40, AppVersion: 25}, state.Migration.Newer); diff != "" {
+		t.Errorf("Migration.Newer mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(bindings.NewerState(newer, true), state); diff != "" {
+		t.Errorf("State() mismatch (-want +got):\n%s", diff)
+	}
+	if a.IsReady() {
+		t.Error("IsReady() = true for data from a newer version, want false")
+	}
+}
+
 func TestTheStepOfTheClonesRunsOnlyWithARepositoryThatHasAPath(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

@@ -3,10 +3,21 @@
  * CSS and compare what an element paints with the token it should paint, resolved in the same theme.
  */
 
-import { within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import type { CSSProperties } from "react";
 import { inject, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
+
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    /** emulateReducedMotion is the command of test/browser-commands.ts, which the config registers. */
+    emulateReducedMotion: (value: "reduce" | "no-preference") => Promise<void>;
+    /** pressPointer holds the main button down where the pointer rests: what is under it is :active. */
+    pressPointer: () => Promise<void>;
+    /** releasePointer lets go of the button pressPointer holds. */
+    releasePointer: () => Promise<void>;
+  }
+}
 
 declare module "vitest" {
   export interface ProvidedContext {
@@ -318,6 +329,22 @@ export async function settle(): Promise<void> {
   await Promise.allSettled(ending.map((animation) => animation.finished));
 }
 
+/**
+ * layoutInCommits lays a windowed list out in the middle of every commit that takes a row or a
+ * spacer out of it, as WebKitGTK does: the scroll is read after each one leaves, which lays the
+ * page out, so a list that got shorter there pulls the scroll up to the end of what is left.
+ * Chromium alone lays out only after the commit. It returns what undoes it.
+ */
+export function layoutInCommits(list: HTMLElement, scroll: HTMLElement): () => void {
+  const remove = list.removeChild.bind(list);
+  list.removeChild = <T extends Node>(child: T): T => {
+    const removed = remove(child);
+    void scroll.scrollTop;
+    return removed;
+  };
+  return () => Reflect.deleteProperty(list, "removeChild");
+}
+
 /** nameOf is what names an element in a failure: its label, else the start of its text. */
 function nameOf(element: Element): string {
   return element.getAttribute("aria-label") ?? element.textContent?.trim().slice(0, 48) ?? "";
@@ -358,12 +385,34 @@ export function cutTexts(root: ParentNode = document): HTMLElement[] {
 }
 
 /**
+ * reachable tells whether the pointer can rest on an element: nothing stands over its middle, and no
+ * popup holds the page inert around it. What lies out of the window is reachable, since resting the
+ * pointer scrolls to it.
+ */
+function reachable(element: Element): boolean {
+  if (document.querySelector("[data-base-ui-inert]") !== null) {
+    return element.closest("[data-base-ui-portal]") !== null;
+  }
+  const box = element.getBoundingClientRect();
+  const x = box.left + box.width / 2;
+  const y = box.top + box.height / 2;
+  if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) {
+    return true;
+  }
+  const hit = document.elementFromPoint(x, y);
+  return hit !== null && element.contains(hit);
+}
+
+/**
  * withoutTooltip are the names of the elements that say nothing when the pointer rests on them:
  * a text the screen cuts must have its whole text in a tooltip.
  */
 export async function withoutTooltip(elements: readonly HTMLElement[]): Promise<string[]> {
   const missing: string[] = [];
   for (const element of elements) {
+    // Resting the pointer on a row scrolls its list, and a windowed list lets go of the rows that
+    // left: what is no longer on the page is not a text the screen cuts.
+    if (!element.isConnected || !reachable(element)) continue;
     await userEvent.hover(element);
     const shown = await vi
       .waitFor(
@@ -529,4 +578,61 @@ export function centeredInWindow(dialog: HTMLElement, area: HTMLElement): boolea
     box.left >= main.left &&
     box.right <= main.right
   );
+}
+
+/** HEADED is a document with a heading of each level the documents of the product use. */
+export const HEADED = "# Wire the API\n\n## Context\n\nThe invoice.\n\n### Notes\n\nNone.";
+
+/**
+ * uiHeadings reads the size, the line and the weight of each heading of HEADED once it is drawn,
+ * with what each must have under a title of its own: the size of the UI, in 600.
+ */
+export async function uiHeadings(): Promise<{ got: string[][]; want: string[][] }> {
+  await screen.findByRole("heading", { name: "Context" });
+  const headings = ["Wire the API", "Context", "Notes"].map((name) =>
+    screen.getByRole("heading", { name }),
+  );
+  const ui = [
+    resolve("var(--text-ui)", "font-size"),
+    resolve("var(--leading-ui)", "line-height"),
+    "600",
+  ];
+  return {
+    got: headings.map((heading) => {
+      const style = getComputedStyle(heading);
+      return [style.fontSize, style.lineHeight, style.fontWeight];
+    }),
+    want: headings.map(() => ui),
+  };
+}
+
+/**
+ * pressed reads what an element paints while the pointer holds it down: the pointer rests on it, the
+ * main button goes down, read runs, and the button is let go, also when read throws.
+ */
+export async function pressed<T>(element: Element, read: () => T): Promise<T> {
+  await userEvent.hover(element);
+  await commands.pressPointer();
+  try {
+    return read();
+  } finally {
+    await commands.releasePointer();
+  }
+}
+
+/**
+ * scriptFocused reads what an element paints when a script focuses it after a click, the last input
+ * being a key: WebKitGTK gives no :focus-visible to that focus, and Chromium, after the click, gives
+ * none either, so the ring can only come from data-input, the modality the app keeps on the root.
+ */
+export async function scriptFocused<T>(element: HTMLElement, read: () => T): Promise<T> {
+  await userEvent.click(element);
+  element.blur();
+  document.documentElement.dataset.input = "keyboard";
+  try {
+    element.focus();
+    return read();
+  } finally {
+    delete document.documentElement.dataset.input;
+  }
 }

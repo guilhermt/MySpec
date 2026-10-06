@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { AuxPanel } from "@/components/system/AuxPanel";
 import { Link } from "@/components/system/Link";
+import { LiveRegion } from "@/components/system/LiveRegion";
 import { NoticeStrip } from "@/components/system/NoticeStrip";
 import { RelationList } from "@/components/system/RelationList";
 import { Markdown } from "@/features/chat/Markdown";
@@ -39,7 +40,9 @@ export function CardPanel({ task }: CardPanelProps) {
   return (
     <AuxPanel id="card" title={`Card #${task.card.number}`} onClose={() => openPanel(null)}>
       <div className="flex flex-col gap-(--space-4) px-(--space-4) pt-(--space-3) pb-(--space-6)">
-        {notice !== null && <NoticeStrip title={notice} role="status" outlined />}
+        <LiveRegion kind="status" as="div" className="empty:absolute">
+          {notice !== null && <NoticeStrip title={notice} outlined />}
+        </LiveRegion>
         <div className="flex flex-col gap-(--space-1)">
           <div className="flex min-w-0 flex-wrap items-center gap-x-(--space-2)">
             <span className="font-mono text-ink-2">{`${card.repository}#${card.number}`}</span>
@@ -62,7 +65,7 @@ export function CardPanel({ task }: CardPanelProps) {
         </div>
         {card.body !== "" && (
           <div className="select-text">
-            <Markdown>{card.body}</Markdown>
+            <Markdown className="ui-headings">{card.body}</Markdown>
           </div>
         )}
         <RelationList

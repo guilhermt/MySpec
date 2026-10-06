@@ -27,7 +27,7 @@ export function useTaskComposer(
   return {
     question: cards.question,
     permissionPending: cards.permission,
-    otherPrimary: barPrimary || cards.question !== null || cards.permission,
+    otherPrimary: barPrimary || cards.question !== null || cards.permission !== null,
     chips: kind === "reply" ? cards.chips : [],
     context: {
       ...(asTaskStage(task.stage) === "pr"

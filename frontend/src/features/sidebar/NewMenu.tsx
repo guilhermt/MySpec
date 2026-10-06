@@ -1,8 +1,8 @@
-import { ChevronDown, Plus } from "lucide-react";
 import { useId } from "react";
 import { Button } from "@/components/system/Button";
 import { Icon } from "@/components/system/Icon";
 import { IconButton } from "@/components/system/IconButton";
+import { ICONS } from "@/components/system/icons";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/system/Menu";
 import { Tooltip } from "@/components/system/Tooltip";
 import { discussionTarget } from "@/features/sidebar/new-discussion-board";
@@ -41,13 +41,13 @@ export function NewMenu({ rail = false, disabledReason }: NewMenuProps) {
           <Button
             variant="new"
             size="sm"
-            icon={Plus}
+            icon={ICONS.plus}
             aria-disabled
             aria-describedby={reasonId}
             onClick={() => undefined}
           >
             New
-            <Icon icon={ChevronDown} size="sm" />
+            <Icon icon={ICONS.expanded} size="sm" />
           </Button>
         </Tooltip>
         <span id={reasonId} className="sr-only">
@@ -64,7 +64,7 @@ export function NewMenu({ rail = false, disabledReason }: NewMenuProps) {
           render={
             <IconButton
               label={NEW_TOOLTIP}
-              icon={Plus}
+              icon={ICONS.plus}
               shortcut={NEW_SHORTCUT}
               size="sm"
               className="text-brand-ink not-aria-disabled:not-aria-pressed:hover:text-brand-ink"
@@ -73,9 +73,9 @@ export function NewMenu({ rail = false, disabledReason }: NewMenuProps) {
         />
       ) : (
         <Tooltip content={NEW_TOOLTIP} shortcut={NEW_SHORTCUT}>
-          <MenuTrigger render={<Button variant="new" size="sm" icon={Plus} />}>
+          <MenuTrigger render={<Button variant="new" size="sm" icon={ICONS.plus} />}>
             New
-            <Icon icon={ChevronDown} size="sm" />
+            <Icon icon={ICONS.expanded} size="sm" />
           </MenuTrigger>
         </Tooltip>
       )}

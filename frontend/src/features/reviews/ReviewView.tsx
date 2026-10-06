@@ -96,7 +96,7 @@ export function ReviewView({ reviewId }: ReviewViewProps) {
   }, [reviewId]);
 
   if (review === null) {
-    return <section ref={rescue} className="min-h-0 flex-1 bg-background" />;
+    return <section ref={rescue} className="min-h-0 flex-1 bg-surface-1" />;
   }
 
   // Alt+↓ and Alt+↑ go to the next and the previous finding to decide from anywhere on the screen,
@@ -145,7 +145,7 @@ export function ReviewView({ reviewId }: ReviewViewProps) {
       ref={rescue}
       aria-label={review.title}
       onKeyDown={onKeyDown}
-      className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
+      className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-1"
     >
       <ReviewHeader review={review} />
       <ReviewArrival review={review} ready={transcriptSettled} />

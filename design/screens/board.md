@@ -53,11 +53,13 @@ O item de **Continue** é o primeiro item ativo que ainda existe entre o lugar n
 - **Review a pull request** · `4 pending in 3 repositories`. Vai a Reviews;
 - **New discussion** · `About the demand of one board`. Abre o diálogo de discussão (seção 2.3).
 
-**Boards.** Uma linha por board, em ordem alfabética. Cada linha tem o ícone, o título e, em `--ink-3`, os cards abertos fora dos status finais (o que ainda se escolhe; num board sem campo de status, todos os abertos) e os repositórios (`46 open cards · api, billing, docs, gateway, web`, os nomes curtos em ordem alfabética; `No open cards`; num board nunca lido, `Not read yet`). À direita fica a idade da leitura (`read 2m ago`) ou `◇ Read failed 18m ago`, e, num board nunca lido, `reading…` durante a primeira leitura; durante qualquer leitura, o texto da direita brilha. A linha abre a visão do board. Sob ela, recuadas, ficam as linhas do que bloqueia sem ser situação:
+**Boards.** Uma linha por board, em ordem alfabética. Cada linha tem o ícone, o título e, em `--ink-3`, os cards abertos fora dos status finais (o que ainda se escolhe; num board sem campo de status, todos os abertos) e os repositórios (`46 open cards · api, billing, docs, gateway, web`, os nomes curtos em ordem alfabética; `No open cards`; num board nunca lido, só os repositórios). À direita fica a idade da leitura (`read 2m ago`) ou `◇ Read failed 18m ago`, e, num board nunca lido, `reading…` durante a primeira leitura; durante qualquer leitura, o texto da direita brilha. A linha abre a visão do board. Sob ela, recuadas, ficam as linhas do que bloqueia sem ser situação:
 
 - a razão da falha, com **Try again** (`GitHub's rate limit was reached. It resets at 14:32.`);
 - `◇ acme/billing isn't cloned. Its cards can't start a task yet.`, com **Clone**;
 - `◇ The clone at ~/code/infra is missing.`, com **Change path…**.
+
+O texto de uma linha de bloqueio ocupa uma linha só: um caminho ou uma razão longa corta com reticências, e o ponteiro sobre o texto cortado abre o texto inteiro num tooltip. A linha nunca quebra, e a ação à direita mantém o lugar.
 
 A falha da leitura vem primeiro; depois, uma linha por repositório do board, em ordem alfabética, com o caso dele (sem clone ou clone inexistente), e não agrupadas por caso.
 
@@ -101,7 +103,7 @@ Da esquerda para a direita:
 
 - **`←`**, com o destino no tooltip (`Back to Rate limit per API key · Alt+←`). **`→`** aparece só com destino;
 - **o título** do board, em `--text-body` e peso 600;
-- à direita, **a idade da lista na tela** (`Read 2m ago`, em `--text-micro` e `--ink-4`, com a hora exata no tooltip). Durante uma leitura ela diz `Reading…` com o spinner (`role="status"`);
+- à direita, **a idade da lista na tela** (`Read 2m ago`, em `--text-micro` e `--ink-4`, com a hora exata no tooltip). Durante uma leitura ela diz `Reading…` com o spinner, numa região `role="status"` que já estava na tela, vazia, antes do texto;
 - **Refresh**, fantasma de ícone, tracejado durante uma leitura;
 - um divisor e **New discussion** `N`, secundário, que abre o diálogo de discussão com o board fixo e sem cards;
 - **`⋯`**, com **Select cards to discuss** `Space`, **Open on GitHub** e, depois de um separador, **Edit the board in Settings…**.
@@ -118,7 +120,7 @@ A barra fica fixa acima da lista e tem, da esquerda para a direita:
 - **Filter**, um chip que abre o menu com três grupos de escolha: **Repository** (os do board), **Assignee** (o usuário marcado `· you`) e **Status** (as opções do board e `No status`, só num board com campo de status);
 - **Clear filters**, fantasma, só com algum filtro ativo.
 
-Os filtros combinam entre si e são lembrados por board entre execuções. Um filtro de um repositório que saiu do board, ou de um status que saiu das opções, vira um chip com `◇` e a razão no tooltip, continua filtrando, e o `×` o remove. Abaixo de 620 px de lista, a busca encolhe para `--space-16` vezes 3.
+Os filtros combinam entre si e são lembrados por board entre execuções. Um filtro de um repositório que saiu do board, ou de um status que saiu das opções, vira um chip com `◇` e a razão no tooltip, continua filtrando, e o `×` o remove. A barra fica numa linha só, em qualquer largura de lista: abaixo de 620 px de lista, os chips dos filtros ativos se dobram no `Filter`, que passa a dizer `Filter · N` com o número de filtros ativos, e a busca encolhe para `--space-16` vezes 3, a largura mínima dela.
 
 ### 3.4 As seções por status e a linha do card
 
@@ -239,7 +241,7 @@ Uma leitura nunca apaga a lista: a visão mostra a leitura guardada enquanto lê
 | Lida | `Read 2m ago` | A lista | — |
 | Lendo sobre a última | `Reading…` com o spinner; **Refresh** tracejado | A lista guardada | `reading…` com brilho no nó |
 | A última leitura falhou | `Read 2h ago`, a idade da lista na tela | Uma faixa afundada no alto da lista, nunca vermelha: `◇ Couldn't read the board · 4m ago`, a mensagem de `features.md` (Falhas) e **Try again**. Tentando: **Try again** vira `Reading…` com o spinner | `◇ Read failed`, com a razão no tooltip |
-| Nunca lida, lendo | `Reading…` | O esqueleto de quatro linhas com brilho (`role="status"`) | `reading…` |
+| Nunca lida, lendo | `Reading…` | O esqueleto de quatro linhas com brilho (um grupo ocupado, `aria-busy`, com o nome `Reading the board…`) | `reading…` |
 | Nunca lida, falhou | — | No lugar da lista: `Couldn't read the board`, a mensagem e **Try again** | `◇ Read failed` |
 | Board que saiu do estado com a visão aberta | — | A página do lugar que saiu (`structure.md` §1): `This board was removed.`, com a volta ao lugar anterior | — |
 
@@ -270,7 +272,7 @@ A falha nunca é situação, nunca notifica e nunca é vermelha.
 
 | Campo | Livre | De card | Padrão |
 |---|---|---|---|
-| **O topo** | **Repository**, um seletor (seção 4.4) | O card num bloco afundado: `#474`, o título em peso 500, e `acme/api · Ready · Usage-based billing` em `--ink-3`. Sem seletor | Livre: o primeiro utilizável entre o repositório do filtro da lateral, o da task aberta, o último usado e o primeiro da lista |
+| **O topo** | **Repository**, um seletor (seção 4.4) | O card num bloco afundado: `#474`, o título em peso 500, e `acme/api · Ready · Usage-based billing` em `--ink-3`. Sem seletor | Livre: o primeiro utilizável entre o repositório do filtro da lateral, o da task aberta, o último usado e o primeiro utilizável da lista; utilizável é o repositório clonado, com o clone no lugar. Sem nenhum, o campo abre vazio |
 | **Name** | Vazio | Sugerido, `<número>-<slug>` até 64 (`474-usage-alerts-at-80-of-the-plan`) | Em mono, `--text-meta`. A ajuda: `Lowercase letters, digits and hyphens. It names the branch and the worktree.` |
 | **Context** | Obrigatório: uma área de texto de quatro linhas, com `What you want to build, in your own words. High level or detailed.` | A linha do contexto montado (seção 4.3) | — |
 | **A dependência** | — | Um aviso por dependência não satisfeita, neutro: `◇ Depends on #461 Metering events from the gateway` e `acme/gateway · Open · Backlog · no pull request. A warning only: the task can start.` | Nunca bloqueia |
@@ -401,7 +403,7 @@ A ordem de Tab é: cabeçalho (navegação, **Refresh**, **New discussion**, `�
 
 - A lista é um `tree` com uma parada de Tab (roving tabindex): os cabeçalhos de seção são `treeitem` de nível 1 com `aria-expanded`, e os cards são `treeitem` de nível 2 com `aria-selected` no aberto. O card abre fora da árvore, no painel.
 - O painel é `aside` com o nome `Card #474`. A barra de filtros é `role="search"`, e a barra da seleção é `role="toolbar"`, com a contagem em `role="status"`.
-- A idade da leitura durante uma leitura, o esqueleto e o aviso de uma tecla que não age são `role="status"`. A faixa da falha é `role="alert"`.
+- A idade da leitura durante uma leitura e o aviso de uma tecla que não age são `role="status"`, regiões que existem antes do texto: o texto chega depois. O esqueleto é um grupo ocupado com nome. A faixa da falha é `role="alert"` só quando a falha chega depois da tela; uma falha que já estava lá ao abrir não tem papel.
 - Todo botão desabilitado é tracejado, com a razão ligada por `aria-describedby`.
 
 ## 9. Os componentes que entram em `system/components.md`

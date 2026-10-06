@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 
 	"github.com/guilhermt/myspec/internal/board"
@@ -12,6 +13,11 @@ import (
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/repository"
 )
+
+// ErrArtifactMissing is an artifact that was never written: what the frontend
+// reads as the file not being there, as opposed to a read that failed. Its
+// message starts the one the binding returns, which lib/errors.ts matches.
+var ErrArtifactMissing = errors.New("artifact missing")
 
 // DiscussionService is the discussion API the frontend calls. The conversation
 // of a discussion goes through TaskService, like the one of a task: the id of
@@ -285,6 +291,9 @@ func (s *DiscussionService) ReadDiscussionArtifact(id, name string) (string, err
 		return "", err
 	}
 	content, err := s.discussions.ReadArtifact(id, name)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", fmt.Errorf("%w: %s", ErrArtifactMissing, name)
+	}
 	if err != nil {
 		return "", s.fail("ReadDiscussionArtifact", err)
 	}

@@ -34,7 +34,7 @@ const ISSUE_REF = /^[\w.-]+\/[\w.-]+#\d+$/;
 
 /** GROUP_LABEL is the caps heading of a group, as MenuGroupLabel draws it. */
 const GROUP_LABEL =
-  "px-2 pt-1 pb-0.5 text-(length:--text-caps) leading-(--leading-caps) font-bold tracking-(--tracking-caps) uppercase text-ink-3";
+  "px-(--space-2) pt-(--space-1) pb-(--space-0-5) text-(length:--text-caps) leading-(--leading-caps) font-bold tracking-(--tracking-caps) uppercase text-ink-3";
 
 interface Group {
   label: string;
@@ -82,7 +82,7 @@ export function DependencyPicker({
   const pending = useRef(false);
 
   useEffect(() => {
-    search.current?.focus();
+    search.current?.focus({ preventScroll: true });
   }, []);
 
   const { groups, typed } = pickerModel(query, drafts, cards);
@@ -160,8 +160,8 @@ export function DependencyPicker({
   };
 
   return (
-    <div className="flex max-h-full w-(--size-popover) max-w-full flex-col gap-0.5 rounded-lg bg-surface-3 p-1 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-float">
-      <div className="flex h-(--size-control-sm) shrink-0 items-center gap-1.5 rounded-sm border border-line-3 bg-surface-input pr-1 pl-2 not-focus-within:hover:border-ink-3 focus-within:field-focus">
+    <div className="flex max-h-full w-(--size-popover) max-w-full flex-col gap-(--space-0-5) rounded-lg bg-surface-3 p-(--space-1) text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-float">
+      <div className="flex h-(--size-control-sm) shrink-0 items-center gap-(--space-1-5) rounded-sm border border-line-3 bg-surface-input pr-(--space-1) pl-(--space-2) not-focus-within:hover:border-ink-3 focus-within:field-focus">
         <Icon icon={Search} size="sm" tone="muted" />
         <input
           ref={search}
@@ -191,13 +191,13 @@ export function DependencyPicker({
         <div
           id={`${id}-refusal`}
           role="alert"
-          className="px-2 py-0.5 text-(length:--text-meta) leading-(--leading-meta) text-state-error"
+          className="px-(--space-2) py-(--space-0-5) text-(length:--text-meta) leading-(--leading-meta) text-state-error"
         >
           {refusal}
         </div>
       )}
       {options.length === 0 && (
-        <div className="px-2 py-1.5 text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
+        <div className="px-(--space-2) py-(--space-1-5) text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
           No card matches.
         </div>
       )}
@@ -206,7 +206,7 @@ export function DependencyPicker({
         role="listbox"
         aria-label="Depend on"
         aria-multiselectable="true"
-        className="relative flex min-h-0 flex-col gap-0.5 overflow-y-auto"
+        className="relative flex min-h-0 flex-col gap-(--space-0-5) overflow-y-auto"
       >
         {groups.map((group, index) => (
           // biome-ignore lint/a11y/useSemanticElements: a fieldset can't sit in a listbox, whose groups are role group
@@ -214,7 +214,7 @@ export function DependencyPicker({
             key={group.label}
             role="group"
             aria-labelledby={`${id}-group-${index}`}
-            className="flex flex-col gap-0.5"
+            className="flex flex-col gap-(--space-0-5)"
           >
             <div id={`${id}-group-${index}`} className={GROUP_LABEL}>
               {group.label}

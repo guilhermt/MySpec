@@ -195,11 +195,16 @@ export function boardOptions(app: State, now: number): SelectOption[] {
     const reading =
       board.failure === null
         ? `read ${age(board.readAt, now)}`
-        : `◇ read failed ${age(board.failure.failedAt, now)} · uses the last reading`;
+        : `read failed ${age(board.failure.failedAt, now)} · uses the last reading`;
     const parts = [repositoryNames(app, board), reading];
     if (board.id === last) {
       parts.push("last used");
     }
-    return { value: board.id, label: board.title, sub: parts.join(" · ") };
+    return {
+      value: board.id,
+      label: board.title,
+      sub: parts.join(" · "),
+      ...(board.failure === null ? {} : { blocked: true }),
+    };
   });
 }

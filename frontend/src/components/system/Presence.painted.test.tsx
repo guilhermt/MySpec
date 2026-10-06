@@ -7,6 +7,7 @@ import { renderWithStore } from "@/test/render";
 import { makeArchivedTask } from "@/test/wails-mock";
 import { AuxPanel, PanelLayout } from "./AuxPanel";
 import { ICONS } from "./icons";
+import { Presence } from "./Presence";
 import { Toast } from "./Toast";
 
 function Place({ open, looping = false }: { open: boolean; looping?: boolean }) {
@@ -70,6 +71,66 @@ describe.each(THEMES)("Exits in the %s theme", (theme) => {
     await waitFor(() => expect(panel).not.toBeInTheDocument());
   });
 
+  it("does not wait on a loop of the element it holds", async () => {
+    setTheme(theme);
+    let gone = false;
+    const Held = ({ on }: { on: boolean }) => (
+      <Presence
+        onGone={() => {
+          gone = true;
+        }}
+      >
+        {on && <p className="animate-pulse">Reading…</p>}
+      </Presence>
+    );
+    const { rerender } = render(<Held on />);
+    const held = screen.getByText("Reading…");
+
+    rerender(<Held on={false} />);
+
+    await waitFor(() => expect(held).not.toBeInTheDocument(), { timeout: 500 });
+    expect(gone).toBe(true);
+  });
+
+  it("lets go at the end of an exit that never says it is over", async () => {
+    setTheme(theme);
+    const Held = ({ on }: { on: boolean }) => (
+      <Presence>
+        {on && (
+          <p
+            // The exit lasts 200ms and its finished promise never settles.
+            ref={(element) => {
+              if (element === null) return;
+              const original = element.getAnimations.bind(element);
+              element.getAnimations = () =>
+                original().map((animation) =>
+                  Object.defineProperty(animation, "finished", { value: new Promise(() => {}) }),
+                );
+            }}
+            className="exits"
+          >
+            Held
+          </p>
+        )}
+      </Presence>
+    );
+    const style = document.createElement("style");
+    style.textContent =
+      "[data-leaving] > .exits { animation: exits-out 200ms linear forwards; } @keyframes exits-out { to { opacity: 0; } }";
+    document.head.append(style);
+    try {
+      const { rerender } = render(<Held on />);
+      const held = screen.getByText("Held");
+
+      rerender(<Held on={false} />);
+
+      expect(held).toBeInTheDocument();
+      await waitFor(() => expect(held).not.toBeInTheDocument(), { timeout: 2000 });
+    } finally {
+      style.remove();
+    }
+  });
+
   it("plays the exit of a toast before it tells it is gone", async () => {
     setTheme(theme);
     let gone = false;
@@ -116,7 +177,7 @@ describe.each(THEMES)("Exits in the %s theme", (theme) => {
 
     const leaving = screen.getByText("“1” was archived").closest(".toast");
     if (leaving === null) throw new Error("the oldest toast, leaving");
-    expect(leaving).toHaveAttribute("data-leaving");
+    expect(leaving.parentElement).toHaveAttribute("data-leaving");
     expect(exit(leaving)).toEqual(expected("toast-exit"));
     await waitFor(() => expect(screen.queryByText("“1” was archived")).not.toBeInTheDocument());
   });

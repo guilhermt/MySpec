@@ -14,7 +14,7 @@ export interface ToastRegionProps {
  */
 export function ToastRegion({ announcement, children }: ToastRegionProps) {
   return (
-    <div className="toasts" role="status" aria-live="polite">
+    <div className="toasts" role="status" aria-live="polite" data-live-region="">
       {children}
       {announcement !== null && (
         <span key={announcement.id} className="sr-only">

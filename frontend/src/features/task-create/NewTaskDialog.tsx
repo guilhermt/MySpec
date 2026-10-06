@@ -13,6 +13,7 @@ import { ICONS } from "@/components/system/icons";
 import { Link } from "@/components/system/Link";
 import { SegmentedControl } from "@/components/system/SegmentedControl";
 import { Select } from "@/components/system/Select";
+import { StateGlyph } from "@/components/system/StateGlyph";
 import { SunkenLine } from "@/components/system/SunkenLine";
 import { Textarea } from "@/components/system/Textarea";
 import { unsatisfied } from "@/features/board/board-view";
@@ -101,7 +102,10 @@ function NewTaskForm() {
         title="New task"
       >
         <DialogBody>
-          <SunkenLine>◇ This card isn't in the last reading of the board.</SunkenLine>
+          <SunkenLine>
+            <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />
+            This card isn't in the last reading of the board.
+          </SunkenLine>
         </DialogBody>
         <DialogFooter>
           <DialogCancel />
@@ -278,7 +282,7 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
           </SunkenLine>
         )}
 
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-(--space-1)">
           <Field
             label="Name"
             {...(problem === null || problem === "empty"
@@ -372,10 +376,14 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
           </Field>
         </div>
 
-        <Collapsible open={modelsOpen} onOpenChange={setModelsOpen} className="flex flex-col gap-2">
+        <Collapsible
+          open={modelsOpen}
+          onOpenChange={setModelsOpen}
+          className="flex flex-col gap-(--space-2)"
+        >
           <CollapsibleTrigger
             chevronSize="xs"
-            className="flex h-(--size-control) items-center gap-2 rounded-sm text-left text-(length:--text-body) leading-(--leading-body) outline-none focus-visible:focus-ring"
+            className="flex h-(--size-control) items-center gap-(--space-2) rounded-sm text-left text-(length:--text-body) leading-(--leading-body) outline-none focus-visible:focus-ring"
           >
             <span className="font-medium text-ink-1">Models</span>
             <span className="ml-auto min-w-0 truncate text-(length:--text-meta) text-ink-3">
@@ -391,7 +399,7 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
                 return (
                   <li
                     key={stage}
-                    className="flex h-(--size-control) items-center justify-between gap-4 px-3 text-(length:--text-body)"
+                    className="flex h-(--size-control) items-center justify-between gap-(--space-4) px-(--space-3) text-(length:--text-body)"
                   >
                     <span>{modelStageLabel(stage)}</span>
                     <ModelChip

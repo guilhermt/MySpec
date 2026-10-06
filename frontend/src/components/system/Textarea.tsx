@@ -37,7 +37,7 @@ export function Textarea({
       style={rows !== undefined ? ({ ...style, "--rows": rows } as CSSProperties) : style}
       className={cn(
         FIELD,
-        "py-2 resize-y text-(length:--text-body) leading-(--leading-body) md:text-(length:--text-body)",
+        "py-(--space-2) resize-y text-(length:--text-body) leading-(--leading-body) md:text-(length:--text-body)",
         rows === undefined
           ? "min-h-(--size-composer-min)"
           : "min-h-[calc(var(--rows)*1lh+var(--space-2)*2+var(--border)*2)]",

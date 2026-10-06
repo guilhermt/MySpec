@@ -78,7 +78,7 @@ describe("ReviewsFilterBar", () => {
       filters: makeReviewFilters({ boardId: "board-9", boardName: "Old Board" }),
     });
 
-    expect(screen.getByText("◇ Board: Old Board")).toBeVisible();
+    expect(screen.getByText("Board: Old Board")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Remove the filter Board: Old Board" }));
 
     expect(api.setReviewFilters).toHaveBeenCalledWith(

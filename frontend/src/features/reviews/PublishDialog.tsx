@@ -8,6 +8,8 @@ import { OptionGroup } from "@/components/system/OptionGroup";
 import { SunkenLine } from "@/components/system/SunkenLine";
 import { Textarea } from "@/components/system/Textarea";
 import { Tooltip } from "@/components/system/Tooltip";
+import { textKey, useEditedText } from "@/components/useEditedText";
+import { passRevision } from "@/features/reviews/pass-revision";
 import {
   allowedVerdicts,
   goesLine,
@@ -19,7 +21,6 @@ import {
   VERDICTS,
 } from "@/features/reviews/publish";
 import { lastRecordedPass } from "@/features/reviews/review-status";
-import { useFindingText } from "@/features/reviews/useFindingText";
 import { messageOf } from "@/lib/errors";
 import { counted, reviewName } from "@/lib/situations";
 import {
@@ -76,13 +77,13 @@ function PublishForm({ review, pass, onOpenChange, onReviewAgain }: PublishFormP
   const attempt = usePublishAttempt(review.id);
   const setPublishAttempt = useAppStore((state) => state.setPublishAttempt);
 
-  const text = useFindingText(
-    review.id,
-    pass.pass,
-    "summary",
+  const text = useEditedText(
+    textKey(review.id, pass.pass, "summary"),
     pass.summary,
     pass.revision,
     (next) => void saveReviewSummary(review.id, pass.pass, next),
+    false,
+    () => passRevision(review.id, pass.pass),
   );
   // The rules read the summary as it is typed, before the save reaches the pass.
   const live: ReviewPass = { ...pass, summary: text.value };

@@ -74,7 +74,7 @@ describe("PromptPage", () => {
       ui: { location: { kind: "settings", section: "prd" } },
     });
 
-    expect(screen.getByRole("status", { name: "Reading the prompt…" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Reading the prompt…" })).toBeInTheDocument();
     const edit = screen.getByRole("button", { name: "Edit" });
     expect(edit).toHaveAttribute("aria-disabled", "true");
     expect(edit).toHaveAccessibleDescription("Reading the prompt…");

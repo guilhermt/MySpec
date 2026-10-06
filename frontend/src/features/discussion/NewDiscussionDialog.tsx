@@ -1,15 +1,18 @@
 import { useId, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
+import { CutText } from "@/components/system/CutText";
 import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
 import { Field } from "@/components/system/Field";
 import { IconButton } from "@/components/system/IconButton";
 import { Input } from "@/components/system/Input";
 import { ICONS } from "@/components/system/icons";
+import { LiveRegion } from "@/components/system/LiveRegion";
 import { Select } from "@/components/system/Select";
 import { Shimmer } from "@/components/system/Shimmer";
+import { StateGlyph } from "@/components/system/StateGlyph";
 import { SunkenLine } from "@/components/system/SunkenLine";
 import { Textarea } from "@/components/system/Textarea";
-import { Tooltip } from "@/components/system/Tooltip";
+import { useArrivedLater } from "@/components/system/useArrivedLater";
 import { useNow } from "@/features/attention/useNow";
 import { Markdown } from "@/features/chat/Markdown";
 import {
@@ -26,11 +29,11 @@ import {
 } from "@/features/discussion/new-discussion";
 import { UnclonedRepository } from "@/features/discussion/UnclonedRepository";
 import { useDiscussionContext } from "@/features/discussion/useDiscussionContext";
-import { ModelPicker } from "@/features/models/ModelPicker";
+import { ModelChip } from "@/features/models/ModelChip";
 import { issueLabel } from "@/lib/boards";
 import { messageOf } from "@/lib/errors";
 import { choiceOf, type ModelChoice } from "@/lib/models";
-import { shortName } from "@/lib/repositories";
+import { sharedAmong, shortName } from "@/lib/repositories";
 import type { Board, BoardCard, StageModel } from "@/lib/wails";
 import { startDiscussion } from "@/store/actions";
 import {
@@ -122,6 +125,12 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
   const defaults = useAppStore((state) => state.app?.modelDefaults ?? NO_MODELS);
   const app = useAppStore((state) => state.app);
   const repositories = useRepositories();
+  // Only the repositories of the board decide whether a short name is ambiguous.
+  const shared = sharedAmong(
+    (board.repositoryIds ?? []).flatMap(
+      (id) => repositories.find((repository) => repository.id === id)?.fullName ?? [],
+    ),
+  );
   const now = useNow(60_000, askBoard);
   const boardTrigger = useRef<HTMLElement | null>(null);
 
@@ -139,6 +148,7 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
   const [starting, setStarting] = useState(false);
   const [showContext, setShowContext] = useState(false);
   const context = useDiscussionContext(board.id, text, cards);
+  const failureArrived = useArrivedLater(context.failure !== null);
 
   const reason = startReason({ board: board.id, title, text, cards: cards.length });
   const uncloned = unclonedRepositories(board, repositories);
@@ -211,11 +221,7 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
           <SunkenLine icon={ICONS.board}>
             <span className="flex min-w-0 gap-(--space-2)">
               <span className="shrink-0 font-medium text-ink-1">{board.title}</span>
-              <Tooltip content={boardLine(board, repositories)}>
-                <span className="min-w-0 truncate text-ink-3">
-                  {boardLine(board, repositories)}
-                </span>
-              </Tooltip>
+              <CutText text={boardLine(board, repositories)} className="text-ink-3" />
             </span>
           </SunkenLine>
         )}
@@ -258,10 +264,12 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
                   <span className="shrink-0 font-mono text-(length:--text-meta) text-ink-3">
                     {issueLabel(card)}
                   </span>
-                  <Tooltip content={card.title}>
-                    <span className="min-w-0 flex-1 truncate text-ink-1">{card.title}</span>
-                  </Tooltip>
-                  <span className="shrink-0 text-ink-3">{shortName(card.repository)}</span>
+                  <CutText text={card.title} className="flex-1 text-ink-1" />
+                  <span className="shrink-0 text-ink-3">
+                    {shared.has(shortName(card.repository).toLowerCase())
+                      ? card.repository
+                      : shortName(card.repository)}
+                  </span>
                   <IconButton
                     size="xs"
                     icon={ICONS.close}
@@ -278,6 +286,9 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
         )}
 
         <div className="flex flex-col gap-(--space-2)">
+          <LiveRegion kind="status" className="sr-only">
+            {context.refreshing && "Refreshing the cards…"}
+          </LiveRegion>
           {context.refreshing ? (
             <SunkenLine
               action={
@@ -291,16 +302,15 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
                 </Button>
               }
             >
-              <span role="status">
-                <Shimmer>Refreshing the cards…</Shimmer>
-              </span>
+              <Shimmer>Refreshing the cards…</Shimmer>
             </SunkenLine>
           ) : (
             <>
               {context.failure !== null && (
                 <SunkenLine>
-                  <span role="alert">
-                    {`◇ Couldn't refresh the cards: ${context.failure}. The discussion will use the last reading.`}
+                  <span {...(failureArrived ? { role: "alert" } : {})}>
+                    <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />
+                    {`Couldn't refresh the cards: ${context.failure}. The discussion will use the last reading.`}
                   </span>
                 </SunkenLine>
               )}
@@ -340,7 +350,15 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
 
         <div className="flex items-center gap-(--space-3)">
           <span className={SECTION_LABEL}>Model</span>
-          <ModelPicker label="Discussion" value={choice} disabled={starting} onChange={setChoice} />
+          <span inert={starting}>
+            <ModelChip
+              label="Discussion"
+              value={choice}
+              own={!byDefault}
+              followNote=""
+              onChange={setChoice}
+            />
+          </span>
           {byDefault && (
             <span className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
               From Defaults

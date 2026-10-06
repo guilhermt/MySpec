@@ -1,4 +1,4 @@
-import { type MouseEvent, useEffect, useMemo, useRef } from "react";
+import { type MouseEvent, type Ref, useEffect, useMemo, useRef } from "react";
 import { DependencyNotice } from "@/components/system/DependencyNotice";
 import { Icon } from "@/components/system/Icon";
 import { ItemBlock } from "@/components/system/ItemBlock";
@@ -29,6 +29,8 @@ export interface BoardCardPanelProps {
   onOpenCard: (key: string) => void;
   /** onDiscuss opens a discussion of this card alone. */
   onDiscuss: () => void;
+  /** panelRef is the panel, which the board reads to tell whether the focus is inside it. */
+  panelRef?: Ref<HTMLElement>;
 }
 
 const STRIP_ID = "card-out-of-reading";
@@ -58,6 +60,7 @@ export function BoardCardPanel({
   onClose,
   onOpenCard,
   onDiscuss,
+  panelRef,
 }: BoardCardPanelProps) {
   const app = useAppStore((state) => state.app);
   const openTask = useAppStore((state) => state.openTask);
@@ -109,13 +112,13 @@ export function BoardCardPanel({
       onOpenExternal={(url) => void openExternal(url)}
       onClose={onClose}
       scrollKey={card.key}
+      {...(panelRef === undefined ? {} : { panelRef })}
     >
       <div className="flex flex-col gap-(--space-4) px-(--space-4) pt-(--space-3) pb-(--space-6)">
         {outOfReading && (
           <NoticeStrip
             id={STRIP_ID}
             outlined
-            role="status"
             title="This card isn't in the last reading of the board."
             reason={outOfReadingText(board, now)}
           />
@@ -156,9 +159,8 @@ export function BoardCardPanel({
         )}
         {model.task?.kind === "archived" && (
           <div>
-            <Link {...asLink(() => openArchived(model.task?.taskId ?? ""))}>
-              {`Archived task: ${model.task.name}`}
-            </Link>
+            {"Archived task: "}
+            <Link {...asLink(() => openArchived(model.task?.taskId ?? ""))}>{model.task.name}</Link>
           </div>
         )}
         {model.discussions.length > 0 && (
@@ -196,7 +198,7 @@ export function BoardCardPanel({
               No description.
             </p>
           ) : (
-            <Markdown className="card-body">{model.body}</Markdown>
+            <Markdown className="card-body ui-headings">{model.body}</Markdown>
           )}
         </div>
         <RelationList

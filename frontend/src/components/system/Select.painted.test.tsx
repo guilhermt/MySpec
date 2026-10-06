@@ -151,3 +151,51 @@ describe("Select, the width of its menu", () => {
     expect(menu.offsetWidth).toBeGreaterThanOrEqual(trigger.offsetWidth);
   });
 });
+
+describe("Select, a menu with a long reason and an action", () => {
+  const LONG =
+    "The clone at ~/projects/some/deeply/nested/folder/of/a/very/long/path/to/api is missing.";
+
+  function Repositories() {
+    return (
+      <div style={{ width: "var(--size-menu-min)" }}>
+        <Select
+          label="Repository"
+          value=""
+          placeholder="Choose a repository"
+          options={[
+            { value: "web", label: "dev/web" },
+            { value: "api", label: "dev/api", sub: LONG, disabled: true },
+            {
+              value: "infra",
+              label: "dev/infra",
+              sub: "Not cloned",
+              disabled: true,
+              action: { label: "Clone", onAction: () => {} },
+            },
+          ]}
+          onValueChange={() => {}}
+        />
+      </div>
+    );
+  }
+
+  it("stops at --size-menu-max, cuts the reason and lines the labels up", async () => {
+    render(<Repositories />);
+    await userEvent.click(screen.getByRole("button", { name: /^Repository/ }));
+    const menu = await screen.findByRole("menu");
+
+    // offsetWidth is the width of the layout, before the scale the menu opens with.
+    const max = parseFloat(resolve("var(--size-menu-max)", "width"));
+    expect(max).toBe(320);
+    expect(menu.offsetWidth).toBeLessThanOrEqual(max);
+    expect(menu.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
+
+    const left = (name: string) => screen.getByText(name).getBoundingClientRect().left;
+    expect(left("dev/api")).toBe(left("dev/web"));
+    expect(left("dev/infra")).toBe(left("dev/web"));
+
+    const reason = screen.getByText(LONG);
+    expect(reason.scrollWidth).toBeGreaterThan(reason.clientWidth);
+  });
+});

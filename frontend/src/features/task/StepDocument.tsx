@@ -6,8 +6,8 @@ export function StepDocument({ content }: { content: string }) {
   const { body } = splitFrontMatter(content);
 
   return (
-    <div className="flex max-w-[58.5rem] flex-col gap-2 select-text">
-      <Markdown>{body}</Markdown>
+    <div className="flex max-w-(--measure-conversation) flex-col gap-(--space-2) select-text">
+      <Markdown className="ui-headings">{body}</Markdown>
     </div>
   );
 }

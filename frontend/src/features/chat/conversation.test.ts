@@ -12,6 +12,7 @@ import {
 import type { MarkerContext } from "@/features/chat/markers";
 import type { ActionEntry, Entry, MarkerEntry, UserEntry } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
+import { conversationScene } from "@/test/conversation-scenes";
 import { makeAction, makeEntry, makeStep, makeTask } from "@/test/wails-mock";
 
 // A marker and a message as an old transcript keeps them: every field at its zero.
@@ -115,7 +116,7 @@ const voices = (model: ConversationModel) =>
 
 describe("buildConversation", () => {
   it("draws nothing for an empty conversation", () => {
-    expect(buildConversation([], "Implementer")).toEqual({ stretches: [] });
+    expect(buildConversation([], "Implementer").stretches).toEqual([]);
   });
 
   it("joins the start marker and the prompt after it in one line", () => {
@@ -533,6 +534,57 @@ describe("buildConversation stretches", () => {
       "Implementer",
     );
     expect(model.stretches).toHaveLength(1);
+  });
+});
+
+// whole is the model without the entries it was built from.
+const whole = ({ stretches }: ConversationModel) => stretches;
+
+describe("buildConversation from the previous model", () => {
+  const long = conversationScene("long").transcripts["task-1|step:6"]?.entries ?? [];
+
+  it("is the whole model for every prefix of the long conversation", () => {
+    expect(long.length).toBeGreaterThan(50);
+    let previous: ConversationModel | null = null;
+    for (let count = 0; count <= long.length; count += 1) {
+      const entries = long.slice(0, count);
+      previous = buildConversation(entries, "Implementer", previous);
+      expect(whole(previous)).toEqual(whole(buildConversation(entries, "Implementer")));
+    }
+  });
+
+  it("keeps every row but the last after a text that changes the last entry", () => {
+    const before = buildConversation(long, "Implementer");
+    const index = long.map((entry) => entry.kind).lastIndexOf("assistant");
+    const grown = long.map((entry, at) =>
+      at === index && entry.assistant !== null
+        ? { ...entry, assistant: { ...entry.assistant, text: `${entry.assistant.text} more` } }
+        : entry,
+    );
+    const after = buildConversation(grown, "Implementer", before);
+    expect(whole(after)).toEqual(whole(buildConversation(grown, "Implementer")));
+    const changed = grown[index]?.id;
+    const old = new Map(rowsOf(before).map((row) => [row.key, row]));
+    for (const row of rowsOf(after)) {
+      if (row.key === changed) {
+        expect(row).not.toBe(old.get(row.key));
+      } else {
+        expect(row).toBe(old.get(row.key));
+      }
+    }
+    expect(after.stretches.slice(0, -1).every((s, i) => s === before.stretches[i])).toBe(true);
+  });
+
+  it("returns the previous model when nothing changed", () => {
+    const before = buildConversation(long, "Implementer");
+    expect(buildConversation([...long], "Implementer", before)).toBe(before);
+  });
+
+  it("builds it all again when the voice changes", () => {
+    const before = buildConversation(long, "Implementer");
+    const after = buildConversation(long, "Reviewer", before);
+    expect(whole(after)).toEqual(whole(buildConversation(long, "Reviewer")));
+    expect(after.voice).toBe("Reviewer");
   });
 });
 

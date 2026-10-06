@@ -315,7 +315,7 @@ O foco começa na busca.
 - `Nothing matches "refund"` / `Try another name, title or #number, or clear the search.`, com **Clear the search**;
 - com o filtro da lateral e nada dele: `Nothing archived in <repo>` / `Choose another repository, or all of them.`
 
-**Muitos itens.** O History cresce cerca de 4 itens por dia. A lista carrega os últimos 90 dias e busca os mais antigos quando a busca pede ou quando a rolagem chega ao fim. O dado é local.
+**Muitos itens.** O History cresce cerca de 4 itens por dia. A lista carrega os últimos 90 dias e busca os mais antigos quando a busca pede ou quando a rolagem chega ao fim. O dado é local. A lista é virtualizada, como a do board (`structure.md` §7): monta os dias e as linhas à vista, a linha com a parada de Tab e a linha a que se chega por **Open in History**; o teclado anda por toda linha, montada ou não, e cada `treeitem` diz `aria-setsize` e `aria-posinset` entre os seus irmãos.
 
 ## 4. Os arquivados
 
@@ -326,6 +326,8 @@ Um arquivado abre como lugar, com `← History`. O cabeçalho tem:
 - à direita, o link do GitHub (`PR #1279 ↗`, `Open on GitHub ↗`) ou do board, e **`⋯`** com **Delete…**.
 
 O corpo fica na medida `--measure`, centrado. Nada roda.
+
+**Os momentos e a falha de leitura.** Os fatos escrevem um momento de hoje só com a hora (`15:02`), como a linha do History e o toast, e o de outro dia com a data (`Sep 24 at 15:02`; com o ano, o de outro ano). Um documento que não pôde ser lido diz `Couldn't read <arquivo>` numa faixa afundada, sem o vermelho, porque ler um arquivo não é uma ação do usuário que falhou, com **Try again** fantasma `sm`, como a falha de leitura de um prompt (§2.9). Um documento que a discussão nunca escreveu não é uma falha: a linha `No document was written.`
 
 **A task.**
 
@@ -430,6 +432,14 @@ Depois do primeiro cadastro, a tela dá lugar à Home com `Nothing in progress` 
 3. **um bloco afundado por tipo de caso,** com os textos de `research/rest.md` §4. Cada bloco tem o título, o que fazer e, separados por fios, os lugares (repositório ou caminho em mono), o detalhe (`The origin remote is not on GitHub: git@gitlab.com:acme/legacy-portal.git`) e as tasks recuadas, em mono, com a área de trabalho ou o caminho (o que a migração sabe de cada task);
 4. `Once they're resolved, open this version again and the update runs again.`;
 5. **Copy the list**, secundário, que copia os casos como texto: o título, e por tipo o título, o que fazer, `- <lugar>` com o detalhe e `  - <task> · <área ou caminho>`. Copiado, diz `Copied` por 2 s; sem acesso à área de transferência, `Can't copy · select the text`.
+
+**O caso "dados de uma versão mais nova".** Um banco cuja versão do schema passa da última que esta versão conhece, porque uma versão mais nova do MySpec o abriu e o mudou, abre na mesma página, com a marca e o título trocado, e nada é lido nem escrito. De cima para baixo:
+
+1. a marca e o título **`This data is from a newer MySpec`**, em `--text-display`;
+2. o texto `A newer version of MySpec opened your data and changed it in ways this version doesn't know. To keep it safe, nothing was read or changed. Open the newer version, or a later one, to keep working.`;
+3. um bloco afundado com uma linha em mono, em `--text-meta`: `Data version 40 · this version reads up to 25`.
+
+Sem blocos por tipo de caso, sem **Copy the list** e sem a frase `Once they're resolved…`: não há o que resolver nesta versão.
 
 ## 8. O aviso do app e os toasts
 
@@ -630,7 +640,7 @@ São 61 textos. Esta seção é a fonte única dos textos das notificações; as
 | **Aguardando o usuário** | Nenhuma destas telas cria situação. As notificações (seção 11) levam às situações das outras telas |
 | **Agente trabalhando** | Os diálogos da task dizem que a resposta em curso é interrompida. A pausa |
 | **Pausado e ocioso** | A pausa: a pílula neutra, **Resume**, o marco e o compositor. O implementador ocioso na aba |
-| **Muitos itens** | History carrega 90 dias e busca os mais antigos sob demanda, com os dias como seções. Repositories agrupa por board, com o que precisa de clone no topo. A lista da varredura rola, com os registrados dobrados. A tabela de status do board e a lista de repositórios do diálogo rolam dentro do diálogo |
+| **Muitos itens** | History carrega 90 dias e busca os mais antigos sob demanda, com os dias como seções, numa lista em janela (§3). Repositories agrupa por board, com o que precisa de clone no topo. A lista da varredura rola, com os registrados dobrados. A tabela de status do board e a lista de repositórios do diálogo rolam dentro do diálogo |
 | **Item que sumiu** | A página do item que saiu (seção 9). O arquivado apagado volta ao History. O board removido segue `screens/board.md` §3.8 |
 
 ## 13. Atalhos
@@ -672,7 +682,7 @@ São 61 textos. Esta seção é a fonte única dos textos das notificações; as
 
 - **O aviso do app** tem como rótulo a ação que falhou e é só para uma ação sem lugar próprio.
 - **`Some files stayed on disk`** sai da faixa e vai para a página da task apagada.
-- **Muitos itens no History:** 90 dias carregados e os mais antigos sob demanda.
+- **Muitos itens no History:** 90 dias carregados, numa lista em janela, e os mais antigos sob demanda.
 - **O início** lista só os passos que bloqueiam a primeira tela.
 
 **`features.md`, Configurações e aparência.**
@@ -721,7 +731,7 @@ São 61 textos. Esta seção é a fonte única dos textos das notificações; as
 - A lista é agrupada por dia, com o tipo, onde, o resultado e a hora.
 - O resultado de uma task é a PR, os steps e o que o encerramento pulou.
 - O filtro da lateral aparece como chip removível.
-- A lista carrega 90 dias.
+- A lista carrega 90 dias, em janela: monta só o que está à vista.
 - A task arquivada mostra o resultado do encerramento e a aba **Pull request**, com o rascunho e os relatórios do review da PR. É o que `features.md` já promete.
 - A discussão arquivada mostra primeiro o que publicou.
 - Apagar um arquivado volta ao History.

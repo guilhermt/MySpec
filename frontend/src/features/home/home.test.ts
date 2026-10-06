@@ -319,10 +319,18 @@ describe("boardLines", () => {
     const [line] = linesOf(board({ readAt: "", reading: true, cards: [] }));
 
     expect(line).toMatchObject({
-      summary: "Not read yet · api, web",
+      summary: "api, web",
       reading: { text: "reading…", tone: "quiet", shimmer: true },
-      label: "Platform Roadmap, Not read yet, reading…",
+      label: "Platform Roadmap, reading…",
     });
+  });
+
+  it("says Not read yet for a board never read with nothing reading it", () => {
+    const [line] = linesOf(board({ readAt: "", reading: false, cards: [] }));
+
+    expect(line?.reading).toEqual({ text: "Not read yet", tone: "quiet", shimmer: false });
+    expect(line?.summary).toBe("api, web");
+    expect(line?.label).toBe("Platform Roadmap, Not read yet");
   });
 
   it("shimmers the reading age while a read board is read again", () => {
@@ -342,7 +350,8 @@ describe("boardLines", () => {
     const [line] = linesOf(board({ failure }));
 
     expect(line?.reading).toEqual({
-      text: "◇ Read failed 18m ago",
+      text: "Read failed 18m ago",
+      blocked: true,
       tone: "failed",
       shimmer: false,
       failure: { failedAt: "2026-09-24T13:52:00Z", readAt: read },
@@ -360,19 +369,21 @@ describe("boardLines", () => {
       {
         kind: "not-cloned",
         repositoryId: "billing",
-        text: "◇ acme/billing isn't cloned. Its cards can't start a task yet.",
+        text: "acme/billing isn't cloned. Its cards can't start a task yet.",
+        blocked: true,
         cloning: false,
         error: "",
       },
       {
         kind: "clone-missing",
         repositoryId: "infra",
-        text: "◇ The clone at ~/code/infra is missing.",
+        text: "The clone at ~/code/infra is missing.",
+        blocked: true,
       },
     ]);
   });
 
-  it("lists the clones not made before the clones gone, whatever their names", () => {
+  it("lists the repositories that cannot start a task by name, whichever the case", () => {
     const state = [
       makeRepository({
         id: "a",
@@ -385,7 +396,7 @@ describe("boardLines", () => {
     ];
     const [line] = linesOf(board({ repositoryIds: ["a", "b"] }), state);
 
-    expect(line?.blockers.map((blocker) => blocker.kind)).toEqual(["not-cloned", "clone-missing"]);
+    expect(line?.blockers.map((blocker) => blocker.kind)).toEqual(["clone-missing", "not-cloned"]);
   });
 
   it("says the clone that runs, and the clone that failed", () => {
@@ -449,7 +460,8 @@ describe("noBoardLine", () => {
         {
           kind: "not-cloned",
           repositoryId: "b",
-          text: "◇ acme/b isn't cloned. Its cards can't start a task yet.",
+          text: "acme/b isn't cloned. Its cards can't start a task yet.",
+          blocked: true,
           cloning: false,
           error: "",
         },

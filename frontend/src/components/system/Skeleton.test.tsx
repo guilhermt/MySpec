@@ -10,6 +10,6 @@ describe("Skeleton", () => {
         <SkeletonBar className="w-1/2" />
       </Skeleton>,
     );
-    expect(screen.getByRole("status", { name: "Reading the board…" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Reading the board…" })).toBeInTheDocument();
   });
 });

@@ -154,7 +154,7 @@ interface BlockLineProps {
 function BlockLine({ block, announced, onClone, onChangePath }: BlockLineProps) {
   if (block.kind === "cloning") {
     return (
-      <p role="status" className={`flex items-center gap-(--space-1-5) text-ink-3 ${META}`}>
+      <p className={`flex items-center gap-(--space-1-5) text-ink-3 ${META}`}>
         <Spinner />
         {block.text}
       </p>
@@ -164,7 +164,7 @@ function BlockLine({ block, announced, onClone, onChangePath }: BlockLineProps) 
     return (
       // Try again stands at the right, where Clone and Change path… stand on the sunken lines.
       <div
-        role="alert"
+        {...(announced ? { role: "alert" } : {})}
         className={`flex items-center gap-(--space-2) pr-(--space-3) text-state-error ${META}`}
       >
         <span className="min-w-0 flex-1 break-words">{block.text}</span>

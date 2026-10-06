@@ -1,4 +1,5 @@
 import { Button } from "./Button";
+import { LiveRegion } from "./LiveRegion";
 import { Tooltip } from "./Tooltip";
 
 export interface SelectionBarProps {
@@ -27,12 +28,12 @@ export function SelectionBar({
       aria-label="Selected cards"
       className="flex min-h-(--size-control-sm) items-center gap-(--space-2) rounded-md bg-surface-0 py-(--space-1) pr-(--space-1) pl-(--space-3) ring-1 ring-line-2"
     >
-      <span
-        role="status"
+      <LiveRegion
+        kind="status"
         className="text-(length:--text-ui) leading-(--leading-ui) font-semibold whitespace-nowrap text-ink-1"
       >
         {`${count} selected`}
-      </span>
+      </LiveRegion>
       <span className="flex min-w-0 flex-1 items-baseline gap-(--space-2) text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
         {numbers !== "" && (
           <Tooltip content={numbers}>

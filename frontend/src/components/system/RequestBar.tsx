@@ -1,9 +1,11 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "./Button";
+import { LiveRegion } from "./LiveRegion";
 import { type GlyphState, StateGlyph } from "./StateGlyph";
 import { TimeChip } from "./TimeChip";
 import { Tooltip } from "./Tooltip";
+import { useToastLift } from "./toast-lift";
 
 /** RequestForm is each form of the request bar (components.md, Barra do pedido). */
 export type RequestForm = "quiet" | "tinted" | "decision" | "error" | "closing";
@@ -88,10 +90,10 @@ export interface OtherConversationBarProps {
  * least --size-ask high, and wrapping to two lines before an action would be hidden.
  */
 const BAR =
-  "relative flex min-h-(--size-ask) w-full max-w-(--measure-conversation) ml-[max(0px,round(down,calc((100%_-_var(--measure-conversation))/2),1px))] flex-wrap items-center gap-2 rounded-md py-1.5 pr-1.5 pl-4 text-(length:--text-ui) leading-(--leading-ui) text-ink-1";
+  "relative flex min-h-(--size-ask) w-full max-w-(--measure-conversation) ml-[max(0px,round(down,calc((100%_-_var(--measure-conversation))/2),1px))] flex-wrap items-center gap-(--space-2) rounded-md py-(--space-1-5) pr-(--space-1-5) pl-(--space-4) text-(length:--text-ui) leading-(--leading-ui) text-ink-1";
 
 /** RAIL is the error rail on the left edge of a bar that failed. */
-const RAIL = "pl-5 shadow-[inset_var(--error-rail)_0_0_var(--state-error)]";
+const RAIL = "pl-(--space-5) shadow-[inset_var(--error-rail)_0_0_var(--state-error)]";
 
 /** BACKGROUNDS are the ground of each form: quiet where the card holds the answer, tinted where the bar does. */
 const BACKGROUNDS: Record<RequestForm, string> = {
@@ -127,6 +129,8 @@ export function RequestBar({
   status,
   actions,
 }: RequestBarProps) {
+  const bar = useRef<HTMLElement>(null);
+  useToastLift(bar);
   const middle = progress !== undefined && (
     <span
       className="text-(length:--text-meta) leading-(--leading-meta) text-ink-2"
@@ -137,16 +141,17 @@ export function RequestBar({
   );
   return (
     <section
+      ref={bar}
       aria-label="Request"
       data-form={form}
       tabIndex={-1}
       {...(flash !== undefined ? { "data-flash": flash } : {})}
       className={cn(BAR, BACKGROUNDS[form], "situation-flash outline-none")}
     >
-      <span role="status" className="sr-only">
+      <LiveRegion kind="status" className="sr-only">
         {status}
-      </span>
-      <span className="inline-flex items-center gap-2 whitespace-nowrap">
+      </LiveRegion>
+      <span className="inline-flex items-center gap-(--space-2) whitespace-nowrap">
         <StateGlyph state={glyph} />
         <span className={cn("font-bold", LABELS[form])}>{label}</span>
         {place !== undefined && <span className="text-ink-2">· {place}</span>}
@@ -158,7 +163,7 @@ export function RequestBar({
         ) : (
           <Tooltip content={progressTooltip}>{middle}</Tooltip>
         ))}
-      <div className="ml-auto flex flex-wrap items-center gap-1.5">{actions}</div>
+      <div className="ml-auto flex flex-wrap items-center gap-(--space-1-5)">{actions}</div>
     </section>
   );
 }
@@ -177,6 +182,8 @@ export function OtherConversationBar({
   flash,
   status = label,
 }: OtherConversationBarProps) {
+  const bar = useRef<HTMLElement>(null);
+  useToastLift(bar);
   const go = (
     <Button size="sm" onClick={onGo}>
       {goLabel}
@@ -184,23 +191,24 @@ export function OtherConversationBar({
   );
   return (
     <section
+      ref={bar}
       aria-label="Request"
       data-form={failed ? "other-failed" : "other-waits"}
       tabIndex={-1}
       {...(flash !== undefined ? { "data-flash": flash } : {})}
       className={cn(BAR, "bg-surface-0 situation-flash outline-none", failed && RAIL)}
     >
-      <span role="status" className="sr-only">
+      <LiveRegion kind="status" className="sr-only">
         {status}
-      </span>
-      <span className="inline-flex items-center gap-2 whitespace-nowrap">
+      </LiveRegion>
+      <span className="inline-flex items-center gap-(--space-2) whitespace-nowrap">
         <StateGlyph state={failed ? "error" : "wait"} />
         <span className={failed ? "font-bold text-state-error" : "text-ink-2"}>{label}</span>
         {time !== undefined && (
           <TimeChip tone={failed ? "error" : "wait"} time={time.short} longTime={time.long} />
         )}
       </span>
-      <div className="ml-auto flex items-center gap-1.5">
+      <div className="ml-auto flex items-center gap-(--space-1-5)">
         {goTooltip === undefined ? go : <Tooltip content={goTooltip}>{go}</Tooltip>}
       </div>
     </section>

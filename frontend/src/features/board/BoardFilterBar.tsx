@@ -25,6 +25,8 @@ export interface BoardFilterBarProps {
   /** onSearchEscape and onSearchDown take the focus from the search to the list. */
   onSearchEscape: (event: KeyboardEvent<HTMLInputElement>) => void;
   onSearchDown: () => void;
+  /** barRef is the bar, which the windowed list scrolls its rows below. */
+  barRef?: Ref<HTMLDivElement>;
 }
 
 /** BoardFilterBar narrows the cards of a board view: the search, Assigned to me, the chosen filters and the Filter menu. */
@@ -35,6 +37,7 @@ export function BoardFilterBar({
   searchRef,
   onSearchEscape,
   onSearchDown,
+  barRef,
 }: BoardFilterBarProps) {
   const app = useAppStore((state) => state.app);
   const set = (change: Partial<BoardFilters>) => onChange({ ...filters, ...change });
@@ -96,6 +99,8 @@ export function BoardFilterBar({
     status: () => set({ status: "", statusName: "" }),
   };
 
+  const chips = filterChips(filters, board);
+
   const mine = (
     <Chip
       kind="toggle"
@@ -110,7 +115,7 @@ export function BoardFilterBar({
   );
 
   return (
-    <FilterBar label="Filter the cards">
+    <FilterBar label="Filter the cards" nowrap ref={barRef}>
       <SearchInput
         landmark={false}
         inputRef={searchRef}
@@ -121,17 +126,26 @@ export function BoardFilterBar({
         onValueChange={(query) => set({ query })}
         onEscape={onSearchEscape}
         onArrowDown={onSearchDown}
-        className="w-[calc(var(--space-16)*4)] @max-[620px]/list:w-[calc(var(--space-16)*3)]"
+        className="w-[calc(var(--space-16)*4)] min-w-[calc(var(--space-16)*3)] shrink @max-[620px]/list:w-[calc(var(--space-16)*3)]"
       />
       {board.viewer === "" ? (
         mine
       ) : (
         <Tooltip content={`Only the cards assigned to ${board.viewer}`}>{mine}</Tooltip>
       )}
-      {filterChips(filters, board, app).map((chip) => (
-        <FilterChip key={chip.kind} model={chip} onRemove={clear[chip.kind]} />
-      ))}
-      <FilterMenu tooltip="Repository, assignee, status" groups={groups} onPick={pick} />
+      {chips.length > 0 && (
+        <div className="flex items-center gap-(--space-2) @max-[620px]/list:hidden">
+          {chips.map((chip) => (
+            <FilterChip key={chip.kind} model={chip} onRemove={clear[chip.kind]} />
+          ))}
+        </div>
+      )}
+      <FilterMenu
+        tooltip="Repository, assignee, status"
+        groups={groups}
+        onPick={pick}
+        active={chips.length}
+      />
       {filtersActive(filters) && (
         <Button variant="ghost" size="sm" onClick={() => onChange(EMPTY_FILTERS)}>
           Clear filters

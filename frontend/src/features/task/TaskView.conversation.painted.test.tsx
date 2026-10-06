@@ -55,7 +55,7 @@ const FINDING = "[data-finding] > div";
  */
 const BLOCKS = [
   ".markdown",
-  "[data-code-cut]",
+  "[data-code-block]",
   '[data-streamdown="code-block"]',
   '[data-streamdown="table-wrapper"]',
   '[data-streamdown="mermaid-block"]',
@@ -156,7 +156,7 @@ function nameOf(block: Element): string {
   const what =
     block.getAttribute("data-slot") ??
     block.getAttribute("data-streamdown") ??
-    (block.hasAttribute("data-code-cut") ? "cut code" : "text");
+    (block.hasAttribute("data-code-block") ? "code" : "text");
   return `${what} in ${entry}`;
 }
 

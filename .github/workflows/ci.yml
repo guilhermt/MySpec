@@ -85,6 +85,37 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: task lint:web
       - run: pnpm typecheck
+      - run: pnpm exec vitest run --project unit
+
+  # The painted suite, the width sweep included, is more than one runner gets through in the time
+  # of a job, so it runs in shards side by side; a shard takes a third of the files.
+  painted:
+    name: Painted (${{ matrix.shard }}/3)
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v4
+        with:
+          cache: true
+      - name: Resolve pnpm store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+      - run: pnpm install --frozen-lockfile
       - name: Resolve the Playwright version
         id: playwright
         run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
@@ -94,7 +125,7 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
       - name: Install the Chromium of Playwright
         run: pnpm exec playwright install --with-deps --only-shell chromium
-      - run: pnpm test
+      - run: pnpm exec vitest run --project painted --shard=${{ matrix.shard }}/3
 
   # Go also runs on every push to main, which writes the cache the pull requests start from, the
   # test results included: a package a pull request does not reach comes from the cache.

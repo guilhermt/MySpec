@@ -37,7 +37,10 @@ describe("Icon", () => {
   });
 
   it("maps each meaning to a different icon", () => {
-    expect(new Set(Object.values(ICONS)).size).toBe(Object.keys(ICONS).length);
+    // go is the chevron: the arrow that goes to a place and the one that opens a row are one drawing.
+    const { go, ...others } = ICONS;
+    expect(go).toBe(ICONS.chevron);
+    expect(new Set(Object.values(others)).size).toBe(Object.keys(others).length);
   });
 
   it.each([

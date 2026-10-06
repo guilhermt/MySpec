@@ -1,4 +1,12 @@
-import { type ReactElement, type RefObject, useLayoutEffect, useRef, useState } from "react";
+import {
+  memo,
+  type ReactElement,
+  type Ref,
+  type RefObject,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { cn } from "@/lib/utils";
 import { CheckboxSign } from "./Checkbox";
 import { CutText } from "./CutText";
@@ -89,8 +97,16 @@ export interface CardRowProps {
   tabStop: boolean;
   /** flash is a card a new reading brought: it blinks twice. */
   flash: boolean;
-  onActivate: () => void;
-  onFocus: () => void;
+  /** level, setSize and posInSet say where the row is among its siblings: the list is windowed, so the DOM does not. */
+  level: number;
+  setSize: number;
+  posInSet: number;
+  /** index is the position in the windowed list (data-index), and ref its measure. */
+  index: number;
+  ref?: Ref<HTMLDivElement>;
+  /** onActivate and onFocus are the same functions for every row, and say which one by its key. */
+  onActivate: (key: string) => void;
+  onFocus: (key: string) => void;
 }
 
 // The classes of the narrow form (@max-[1041px]/list:, which Tailwind reads as a container under
@@ -117,7 +133,7 @@ const ROW_DASHED =
 const KEYS =
   "row-start-1 invisible inline-flex items-center justify-end gap-(--space-2) whitespace-nowrap text-(length:--text-micro) leading-(--leading-micro) text-ink-3 group-focus-visible/row:visible";
 
-/** Cell is a truncated text of the row with its whole text in the tooltip. */
+/** Cell is a truncated text of the row with its whole text in the tooltip, once it is cut. */
 function Cell({
   text,
   tooltip,
@@ -128,9 +144,7 @@ function Cell({
   className?: string;
 }): ReactElement {
   return (
-    <Tooltip content={tooltip}>
-      <span className={cn("min-w-0 truncate", className)}>{text}</span>
-    </Tooltip>
+    <CutText text={text} tooltip={tooltip} {...(className !== undefined ? { className } : {})} />
   );
 }
 
@@ -203,13 +217,18 @@ function KeysCell({
   );
 }
 
-/** CardRow is the row of a card in the list of a board: a treeitem of level 2 on a fixed grid of columns. */
-export function CardRow({
+/** CardRow is the row of a card in the list of a board: a treeitem on a fixed grid of columns. A memo, so a key that moves the focus draws only the rows it touches. */
+export const CardRow = memo(function CardRow({
   model,
   open,
   selection,
   tabStop,
   flash,
+  level,
+  setSize,
+  posInSet,
+  index,
+  ref,
   onActivate,
   onFocus,
 }: CardRowProps): ReactElement {
@@ -225,14 +244,18 @@ export function CardRow({
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the list owns the keyboard of its rows
     <div
+      ref={ref}
+      data-index={index}
       role="treeitem"
-      aria-level={2}
+      aria-level={level}
+      aria-setsize={setSize}
+      aria-posinset={posInSet}
       aria-label={model.label}
       {...selectionAria}
       tabIndex={tabStop ? 0 : -1}
       data-row-key={model.key}
-      onClick={onActivate}
-      onFocus={onFocus}
+      onClick={() => onActivate(model.key)}
+      onFocus={() => onFocus(model.key)}
       className={cn(
         ROW,
         "grid-cols-[var(--icon)_var(--col-num)_minmax(0,1fr)_var(--col-epic)_var(--col-dep)_var(--col-task)_var(--col-keys)]",
@@ -311,7 +334,7 @@ export function CardRow({
       <KeysCell model={model} selection={selection} />
     </div>
   );
-}
+});
 
 export interface PullRequestRowProps {
   model: PullRequestRowView;
@@ -575,19 +598,30 @@ export interface HistoryRowProps {
   fresh: boolean;
   /** tabStop is the row the list's one tab stop sits on. */
   tabStop: boolean;
-  onActivate: () => void;
-  onFocus: () => void;
+  /** setSize and posInSet say where the row is among the rows of its day: a windowed list, whose DOM does not, gives them. */
+  setSize?: number;
+  posInSet?: number;
+  /** index is the position in a windowed list (data-index), and ref its measure. */
+  index?: number;
+  ref?: Ref<HTMLDivElement>;
+  /** onActivate and onFocus get the key of the row, so one function serves every row and a memo holds. */
+  onActivate: (key: string) => void;
+  onFocus: (key: string) => void;
 }
 
 /**
  * HistoryRow is the row of an archived item in the History: a treeitem of level 2 on the columns
  * --col-where, --col-result and --col-time. Under 860px of the list, where and result go to a second
- * line under the name, whole.
+ * line under the name, whole. A memo, so a key that moves the focus draws only the rows it touches.
  */
-export function HistoryRow({
+export const HistoryRow = memo(function HistoryRow({
   model,
   fresh,
   tabStop,
+  setSize,
+  posInSet,
+  index,
+  ref,
   onActivate,
   onFocus,
 }: HistoryRowProps): ReactElement {
@@ -599,14 +633,18 @@ export function HistoryRow({
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the list owns the keyboard of its rows
     <div
+      ref={ref}
+      data-index={index}
       role="treeitem"
       aria-level={2}
+      aria-setsize={setSize}
+      aria-posinset={posInSet}
       aria-label={model.label}
       {...(fresh ? { "aria-selected": true } : {})}
       tabIndex={tabStop ? 0 : -1}
       data-row-key={model.key}
-      onClick={onActivate}
-      onFocus={onFocus}
+      onClick={() => onActivate(model.key)}
+      onFocus={() => onFocus(model.key)}
       className={cn(
         ROW,
         "gap-x-(--space-3) grid-cols-[var(--icon)_minmax(0,1fr)_var(--col-where)_var(--col-result)_var(--col-time)]",
@@ -663,4 +701,4 @@ export function HistoryRow({
       </span>
     </div>
   );
-}
+});

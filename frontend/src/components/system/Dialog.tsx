@@ -1,5 +1,12 @@
 import { AlertDialog as BaseAlertDialog } from "@base-ui/react/alert-dialog";
-import { type KeyboardEvent, type ReactNode, type RefObject, useRef } from "react";
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useRef,
+  useState,
+} from "react";
 import { AlertDialog, AlertDialogContent, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   Dialog as UIDialog,
@@ -12,13 +19,14 @@ import { Button, type ButtonBaseProps, type ButtonLoading } from "./Button";
 import { CutText } from "./CutText";
 import { IconButton } from "./IconButton";
 import { ICONS } from "./icons";
+import { Tooltip } from "./Tooltip";
 
 export interface DialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   subtitle?: string;
-  size?: "default" | "wide";
+  size?: "default" | "wide" | "full";
   alert?: boolean;
   onConfirm?: () => void;
   initialFocus?: RefObject<HTMLElement | null>;
@@ -36,6 +44,8 @@ const WIDTHS = {
   default:
     "max-w-(--size-dialog) sm:max-w-(--size-dialog) data-[size=default]:max-w-(--size-dialog) data-[size=default]:sm:max-w-(--size-dialog)",
   wide: "max-w-(--size-dialog-wide) sm:max-w-(--size-dialog-wide) data-[size=default]:max-w-(--size-dialog-wide) data-[size=default]:sm:max-w-(--size-dialog-wide)",
+  /* The window less --space-8 around, rounded to the pixel so the sheet lands on whole pixels. */
+  full: "h-[round(calc(100dvh-2*var(--space-8)),1px)] max-h-[round(calc(100dvh-2*var(--space-8)),1px)] w-[round(calc(100vw-2*var(--space-8)),1px)] max-w-[round(calc(100vw-2*var(--space-8)),1px)] sm:max-w-[round(calc(100vw-2*var(--space-8)),1px)] data-[size=default]:max-w-[round(calc(100vw-2*var(--space-8)),1px)] data-[size=default]:sm:max-w-[round(calc(100vw-2*var(--space-8)),1px)]",
 } as const;
 
 const TITLE =
@@ -46,6 +56,7 @@ const TITLE =
  * Its variants are compositions:
  * - minimal: size="default", with alert on a confirmation;
  * - wide: size="wide";
+ * - full: size="full", the size of the window less --space-8 around;
  * - in steps: subtitle with the step, a DialogFooter with back from the second step and refusal;
  * - destructive: alert, with the confirmation as a danger Button.
  * While the dialog waits for a call, closeDisabled and a disabled DialogCancel draw the ways out
@@ -83,6 +94,8 @@ export function Dialog({
     // Base UI makes the rest of the page inert without saying so; aria-modal says it.
     "aria-modal": true,
     onKeyDown: handleKeyDown,
+    // globals.css reads it: the full sheet opens --space-8 from the top, not at 8vh.
+    "data-dialog-size": size,
     className: cn(CONTENT, WIDTHS[size]),
   };
   const heading = (
@@ -129,7 +142,7 @@ function DialogHeading({
   const Title = alert ? AlertDialogTitle : UIDialogTitle;
   const Close = alert ? BaseAlertDialog.Close : UIDialogClose;
   return (
-    <div className="flex items-start gap-3 px-5 pt-5 pb-2">
+    <div className="flex items-start gap-(--space-3) px-(--space-5) pt-(--space-5) pb-(--space-2)">
       <div className="flex flex-1 flex-col">
         <Title className={TITLE}>{title}</Title>
         {subtitle !== undefined && (
@@ -174,7 +187,7 @@ export function DialogBody({ children, className }: DialogBodyProps) {
     <div
       data-dialog-body=""
       className={cn(
-        "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 pb-4 text-(length:--text-body) leading-(--leading-body) text-ink-2",
+        "flex min-h-0 flex-1 flex-col gap-(--space-3) overflow-y-auto px-(--space-5) pb-(--space-4) text-(length:--text-body) leading-(--leading-body) text-ink-2",
         className,
       )}
     >
@@ -197,10 +210,20 @@ export interface DialogFooterProps {
  * space left, on one line or two, and is cut, with its whole text in a tooltip.
  */
 export function DialogFooter({ children, back, reason, refusal }: DialogFooterProps) {
+  const [reasonCut, setReasonCut] = useState(false);
+  const reasonId = reason?.id;
+  // A reason the line cuts is whole in a tooltip when the keyboard reaches the confirmation it holds back.
+  const holdsBack = useCallback(
+    (target: Element) =>
+      reasonCut &&
+      reasonId !== undefined &&
+      (target.getAttribute("aria-describedby") ?? "").split(" ").includes(reasonId),
+    [reasonCut, reasonId],
+  );
   return (
     <div
       data-dialog-footer=""
-      className="flex flex-col gap-2 bg-surface-0 px-5 py-3 shadow-[inset_0_var(--border)_0_var(--line-1)]"
+      className="flex flex-col gap-(--space-2) bg-surface-0 px-(--space-5) py-(--space-3) shadow-[inset_0_var(--border)_0_var(--line-1)]"
     >
       {refusal !== undefined && (
         <p
@@ -210,17 +233,20 @@ export function DialogFooter({ children, back, reason, refusal }: DialogFooterPr
           {refusal}
         </p>
       )}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-(--space-2)">
         {back !== undefined && <div className="shrink-0">{back}</div>}
         {reason !== undefined && (
           <CutText
             id={reason.id}
             text={reason.text}
             lines={reason.lines ?? 1}
+            onCut={setReasonCut}
             className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3"
           />
         )}
-        <div className="ml-auto flex shrink-0 items-center gap-2">{children}</div>
+        <Tooltip content={reason?.text ?? ""} hover={false} focusOn={holdsBack}>
+          <div className="ml-auto flex shrink-0 items-center gap-(--space-2)">{children}</div>
+        </Tooltip>
       </div>
     </div>
   );

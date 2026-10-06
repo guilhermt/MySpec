@@ -12,8 +12,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { Button } from "./Button";
+import { CutText } from "./CutText";
 import { Icon } from "./Icon";
 import { ICONS, type IconGlyph } from "./icons";
+import { StateGlyph } from "./StateGlyph";
 
 /** Menu is the root of a system menu. */
 export const Menu = DropdownMenu;
@@ -37,7 +39,7 @@ export function MenuContent({ className, ...props }: MenuContentProps) {
     <DropdownMenuContent
       {...props}
       className={cn(
-        "flex w-max max-w-(--available-width) min-w-[max(var(--size-menu-min),var(--anchor-width))] flex-col gap-0.5 rounded-lg bg-surface-3 p-1 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-(--shadow-float) ring-0 duration-(--duration-base)",
+        "flex w-max max-w-(--available-width) min-w-[max(var(--size-menu-min),var(--anchor-width))] flex-col gap-(--space-0-5) rounded-lg bg-surface-3 p-(--space-1) text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-(--shadow-float) ring-0 duration-(--duration-base)",
         className,
       )}
     />
@@ -55,7 +57,7 @@ export interface MenuGroupLabelProps {
  */
 export function MenuGroupLabel({ children, note }: MenuGroupLabelProps) {
   return (
-    <DropdownMenuLabel className="px-2 pt-1 pb-0.5 text-(length:--text-caps) leading-(--leading-caps) font-bold tracking-(--tracking-caps) uppercase text-ink-3">
+    <DropdownMenuLabel className="px-(--space-2) pt-(--space-1) pb-(--space-0-5) text-(length:--text-caps) leading-(--leading-caps) font-bold tracking-(--tracking-caps) uppercase text-ink-3">
       {children}
       {note !== undefined && (
         <span className="normal-case font-normal tracking-normal text-ink-4"> {note}</span>
@@ -66,7 +68,7 @@ export function MenuGroupLabel({ children, note }: MenuGroupLabelProps) {
 
 /** MENU_ITEM holds the look of a menu row, shared with the items of Select and Listbox. */
 export const MENU_ITEM =
-  "min-h-(--size-control) gap-2 rounded-sm px-2 py-0 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 focus:bg-veil-hover focus:text-ink-1 not-data-[variant=destructive]:focus:**:text-ink-1 active:bg-veil-press data-disabled:opacity-100 data-disabled:text-ink-4";
+  "min-h-(--size-control) gap-(--space-2) rounded-sm px-(--space-2) py-0 text-(length:--text-ui) leading-(--leading-ui) text-ink-1 focus:bg-veil-hover focus:text-ink-1 not-data-[variant=destructive]:focus:**:text-ink-1 active:bg-veil-press data-disabled:opacity-100 data-disabled:text-ink-4";
 
 export interface MenuItemProps
   extends Omit<ComponentProps<typeof DropdownMenuItem>, "variant" | "className"> {
@@ -106,7 +108,7 @@ export function MenuItem({
       variant={danger ? "destructive" : "default"}
       className={cn(
         MENU_ITEM,
-        reason !== undefined && "h-auto py-1",
+        reason !== undefined && "h-auto py-(--space-1)",
         danger &&
           "text-state-error data-[variant=destructive]:text-state-error data-[variant=destructive]:focus:bg-state-error-veil dark:data-[variant=destructive]:focus:bg-state-error-veil data-[variant=destructive]:focus:text-state-error data-[variant=destructive]:*:[svg]:text-state-error",
       )}
@@ -140,9 +142,6 @@ export function MenuItem({
   );
 }
 
-/** UNAVAILABLE marks a choice that is no longer offered. */
-export const UNAVAILABLE = "◇";
-
 /** MenuRadioGroup holds the choices of a menu, one of them checked. */
 export function MenuRadioGroup(props: ComponentProps<typeof DropdownMenuRadioGroup>) {
   return <DropdownMenuRadioGroup {...props} />;
@@ -155,6 +154,8 @@ export interface MenuRadioItemProps {
   sub?: string;
   /** subTone paints the sub as an error: the clone that failed. */
   subTone?: "error";
+  /** subBlocked puts the blocked glyph before the sub. */
+  subBlocked?: boolean;
   /** unavailable is a choice that is no longer offered: kept, marked with ◇, and not chosen again. */
   unavailable?: boolean;
   /** disabled is a choice that can't be made, its reason in sub. */
@@ -164,16 +165,26 @@ export interface MenuRadioItemProps {
 }
 
 /** MenuSub is the small text after the label of an item: its sub, or the reason a choice is off. */
-function MenuSub({ children, tone }: { children: ReactNode; tone?: "error" | undefined }) {
+function MenuSub({
+  children,
+  tone,
+  blocked,
+}: {
+  children: string;
+  tone?: "error" | undefined;
+  blocked?: boolean | undefined;
+}) {
   return (
-    <span
+    <CutText
+      text={children}
       className={cn(
         "text-(length:--text-meta) leading-(--leading-meta) text-ink-3",
         tone === "error" && "text-state-error",
       )}
     >
+      {blocked === true && <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />}
       {children}
-    </span>
+    </CutText>
   );
 }
 
@@ -187,6 +198,7 @@ export function MenuRadioItem({
   icon,
   sub,
   subTone,
+  subBlocked,
   unavailable,
   disabled,
   trailing,
@@ -208,12 +220,16 @@ export function MenuRadioItem({
       </BaseMenu.RadioItemIndicator>
       {icon !== undefined && <Icon icon={icon} size="md" tone="muted" />}
       <span>
-        {unavailable && `${UNAVAILABLE} `}
+        {unavailable && <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />}
         {children}
         {unavailable && " · unavailable"}
       </span>
       {sub !== undefined && " "}
-      {sub !== undefined && <MenuSub tone={subTone}>{sub}</MenuSub>}
+      {sub !== undefined && (
+        <MenuSub tone={subTone} blocked={subBlocked}>
+          {sub}
+        </MenuSub>
+      )}
       {trailing !== undefined && " "}
       {trailing !== undefined && (
         <span className="ml-auto pl-(--space-3) text-(length:--text-micro) leading-(--leading-micro) text-ink-3">
@@ -247,18 +263,27 @@ export interface MenuActionItemProps {
   label: string;
   sub?: string;
   subTone?: "error";
+  subBlocked?: boolean;
   action: ItemAction;
   /** disabled is a choice that can't be made, offering the action in its place: Clone. Absent, the item is the action itself: Existing issue…. */
   disabled?: boolean;
 }
 
 /**
- * MenuActionItem is an item that runs an action instead of being chosen: the label, the sub, and
+ * MenuActionItem is an item that runs an action instead of being chosen: an empty column where the
+ * choices have their check, so the labels line up, the label, the sub, and
  * the action as ghost text on the right. Disabled, it is a choice that can't be made, in the fourth
  * ink with aria-disabled; otherwise it is in the ink of any item. It stays on the path of the arrows
  * and keeps the menu open, so the action shows its own progress, unless the action closes it.
  */
-export function MenuActionItem({ label, sub, subTone, action, disabled }: MenuActionItemProps) {
+export function MenuActionItem({
+  label,
+  sub,
+  subTone,
+  subBlocked,
+  action,
+  disabled,
+}: MenuActionItemProps) {
   return (
     <BaseMenu.Item
       closeOnClick={action.closes === true}
@@ -268,11 +293,16 @@ export function MenuActionItem({ label, sub, subTone, action, disabled }: MenuAc
       className={cn(
         "relative flex cursor-default items-center outline-hidden select-none",
         MENU_ITEM,
-        disabled && "text-ink-4 focus:text-ink-4",
+        disabled && "text-ink-4 focus:text-ink-3",
       )}
     >
+      <span aria-hidden="true" className="size-(--icon) shrink-0" />
       <span>{label}</span>
-      {sub !== undefined && <MenuSub tone={subTone}>{sub}</MenuSub>}
+      {sub !== undefined && (
+        <MenuSub tone={subTone} blocked={subBlocked}>
+          {sub}
+        </MenuSub>
+      )}
       <span
         aria-hidden="true"
         className="ml-auto text-(length:--text-micro) leading-(--leading-micro) text-ink-3"
@@ -332,16 +362,17 @@ const SPOKEN: Record<FilterCycle, string> = {
   only: "only this",
 };
 
-/** MenuCycleItem cycles a filter through any, hidden and only, and keeps the menu open. */
+/** MenuCycleItem cycles a filter through any, hidden and only, and keeps the menu open, with the check column of the other filter items. */
 export function MenuCycleItem({ label, state, onStateChange }: MenuCycleItemProps) {
   return (
     <DropdownMenuItem
       closeOnClick={false}
       aria-label={`${label}: ${SPOKEN[state]}. Click to cycle.`}
       onClick={() => onStateChange(NEXT[state])}
-      className={MENU_ITEM}
+      className={cn("flex items-center", MENU_ITEM)}
     >
-      {`${PREFIX[state]}${label}`}
+      <span aria-hidden="true" className="size-(--icon) shrink-0" />
+      <span>{`${PREFIX[state]}${label}`}</span>
     </DropdownMenuItem>
   );
 }
@@ -357,9 +388,9 @@ export interface MenuMessageProps {
 export function MenuMessage({ children, tone = "neutral", onRetry }: MenuMessageProps) {
   const error = tone === "error";
   return (
-    <div className="flex flex-col items-start gap-1 px-2 py-1.5">
+    <div className="flex flex-col items-start gap-(--space-1) px-(--space-2) py-(--space-1-5)">
       <div
-        role={error ? "alert" : "status"}
+        {...(error ? { role: "alert" } : {})}
         className={cn(
           "max-w-(--size-tooltip-max) text-(length:--text-meta) leading-(--leading-meta) text-ink-3",
           tone === "notice" && "text-ink-2",
@@ -392,7 +423,7 @@ export function MenuText({ children, micro = false }: MenuTextProps) {
   return (
     <div
       className={cn(
-        "flex min-h-(--size-control) items-center px-2 text-ink-3",
+        "flex min-h-(--size-control) items-center px-(--space-2) text-ink-3",
         micro
           ? "text-(length:--text-micro) leading-(--leading-micro)"
           : "text-(length:--text-ui) leading-(--leading-ui)",
@@ -407,7 +438,12 @@ export function MenuText({ children, micro = false }: MenuTextProps) {
 export function MenuSeparator(
   props: Omit<ComponentProps<typeof DropdownMenuSeparator>, "className">,
 ) {
-  return <DropdownMenuSeparator {...props} className="-mx-1 my-1 h-(--border) bg-line-1" />;
+  return (
+    <DropdownMenuSeparator
+      {...props}
+      className="-mx-(--space-1) my-(--space-1) h-(--border) bg-line-1"
+    />
+  );
 }
 
 /** MenuGroup groups items under a MenuGroupLabel. */

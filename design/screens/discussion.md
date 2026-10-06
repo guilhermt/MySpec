@@ -35,7 +35,7 @@ A tela é mínima, como as outras três (`decisions.md`, 2026-09-24). Cada eleme
 1. **O board.** Na Home é o seletor. A partir do board é um bloco afundado, com o ícone do board, o título e `acme · project 7 · api, billing, docs, gateway, web`.
 2. **Title**, obrigatório, até 120 caracteres contados por ponto de código, com o contador a partir de 100 (`104 of 120`); acima, `Use at most 120 characters.`, sem cortar o que foi escrito. Vem sugerido com o título do card quando há um card só.
 3. **What to discuss**, uma área de texto. O rótulo complementar diz `optional with cards`, ou `or pick cards on the board` sem cards.
-4. **Cards**, uma linha por card: o número, o título, o repositório e `×`, que tira o card da discussão.
+4. **Cards**, uma linha por card: o número, o título, o repositório (curto, ou `dono/nome` quando outro repositório do board tem o mesmo nome curto) e `×`, que tira o card da discussão.
 5. **A linha do contexto**, afundada: `From the cards: #455, #461, the epic Usage-based billing, 4 cards of the epic and 1 dependency · 5,690 characters`, com **Show**, que abre o contexto montado. Durante a releitura dos cards, a linha diz `Refreshing the cards…` com brilho, e **Show** fica tracejado. Se a releitura falha, a linha diz `◇ Couldn't refresh the cards: <motivo>. The discussion will use the last reading.`
 6. **O aviso de repositório sem clone:** `◇ acme/billing isn't cloned. The conversation reads the code of the cloned repositories only.`, com **Clone** (`Cloning acme/billing…`, e a falha do `gh` com **Try the clone again**); com o clone inexistente, `◇ The clone of acme/api at ~/code/api is missing. The conversation reads the code of the cloned repositories only.`, com **Change path…**.
 7. **Model**, o chip de modelo e esforço, com `From Defaults`.
@@ -171,6 +171,8 @@ A cadeia é derivada da regra da seção 6: com a decisão aplicada, tudo o que 
 
 Aprovar é uma escrita no GitHub e não tem confirmação. Por isso:
 
+- **A chegada com um botão pedido.** Quando a barra leva a um botão do rascunho (o **Retry** de `Publish failed`, o **Approve** do épico descartado), **Show** e `Ctrl+J` rolam até o botão ficar inteiro acima do respiro do fim da coluna (`--space-4` + `--size-control-sm`, o `scroll-padding-bottom` dela). A pílula `↓` não se desenha enquanto o rascunho atual cruza a faixa de baixo da coluna.
+
 - **Um gesto que publica algo mantém o foco no próprio rascunho.** O usuário vê o `Publishing…` e o `Created`. Um segundo `A` cai num rascunho que já não decide.
 - **Um gesto que não publica nada** (esperar, descartar sem soltar cadeia) avança ao próximo por decidir, que abre no lugar. Ali, `A` e `D` só agem depois de 900 ms.
 - **`A` segurado** (a repetição do teclado) é ignorado. A trava de 900 ms vale depois de qualquer decisão, para as teclas e os cliques de decisão de todos os rascunhos: um duplo clique em **Approve** é uma decisão só.
@@ -182,7 +184,7 @@ Aprovar é uma escrita no GitHub e não tem confirmação. Por isso:
 **Edit** ou `E` abre, no lugar do corpo, os campos de hoje:
 
 - **Title**;
-- **Body**, em Markdown cru, numa área de texto em mono;
+- **Body** (`Markdown` no complemento do rótulo), em Markdown cru, numa área de texto em mono;
 - **Repository**, **Module** e **Epic**, como seletores lado a lado. O valor corta com reticências e tooltip. Numa atualização, o repositório é o do card, fixo. **Epic** tem, depois de um separador, **Existing issue…**, que abre o campo `owner/name#N`;
 - **Depends on**, com as dependências como chips com `×` (uma já registrada no GitHub não sai), e **Add a dependency**. Esse botão abre um `listbox` com os rascunhos da rodada pelo título, e com os cards do board por número ou título, com busca; uma busca que é um `dono/nome#N` fora deles oferece `Depend on <dono/nome#N>`. O `listbox` abre sobre a edição, embaixo da linha quando cabe, e em cima quando há mais espaço acima, sem passar da borda da conversa.
 

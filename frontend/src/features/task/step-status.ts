@@ -226,6 +226,6 @@ export function blockHint(step: Step, task: TaskSummary): string {
     case "git_failed":
       return "Fix what git reports, then try again.";
     case "clone_missing":
-      return "Change the path of the repository in Settings › Repositories, then try again.";
+      return "The clone of the repository isn't there. Change its path, or clone it again.";
   }
 }

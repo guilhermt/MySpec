@@ -1,11 +1,11 @@
 import { useId, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { Checkbox } from "@/components/system/Checkbox";
+import { CutText } from "@/components/system/CutText";
 import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
 import { Field } from "@/components/system/Field";
 import { Input } from "@/components/system/Input";
 import { Select } from "@/components/system/Select";
-import { Tooltip } from "@/components/system/Tooltip";
 import { epicRepositoryOf } from "@/features/discussion/discussion-status";
 import { EPIC_TITLE_MAX, groupable, groupReason } from "@/features/discussion/drafts-card";
 import { draftTitle } from "@/lib/drafts";
@@ -134,9 +134,7 @@ export function GroupEpicDialog({ discussion, open, onOpenChange }: GroupEpicDia
               checked={picked.has(draft.id)}
               onCheckedChange={(checked) => toggle(draft.id, checked)}
             >
-              <Tooltip content={draftTitle(draft)}>
-                <span className="min-w-0 truncate">{draftTitle(draft)}</span>
-              </Tooltip>
+              <CutText text={draftTitle(draft)} />
               <span className="shrink-0 text-ink-3">{draft.repository}</span>
             </Checkbox>
           ))}

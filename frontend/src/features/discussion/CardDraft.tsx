@@ -34,7 +34,7 @@ export interface CardDraftProps {
   total: number;
   now: number;
   /** target is the draft the request bar names, and whether it is its Retry. */
-  target: { draft: string; retry: boolean } | null;
+  target: { draft: string; retry: boolean; approve: boolean } | null;
   editing: boolean;
   /** decide is the click of Approve or Discard, through the lock and the advance of the card. */
   decide: (key: "approve" | "discard") => void;
@@ -137,7 +137,15 @@ export function CardDraft({
         number={entry.number}
         name={accessibleName(entry, total, draft, discussion, now)}
         current
-        requestTarget={requested === null ? null : requested.retry ? "retry" : "draft"}
+        requestTarget={
+          requested === null
+            ? null
+            : requested.retry
+              ? "retry"
+              : requested.approve
+                ? "approve"
+                : "draft"
+        }
         kind={kindLabel(draft)}
         cardLink={
           kind === "update" && card !== null

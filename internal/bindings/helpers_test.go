@@ -658,6 +658,23 @@ func (f *fixture) correctionCount(id string) int {
 	return f.corrections[id]
 }
 
+// waitCorrected waits for the correction of a plan to be on record: the count
+// the session reached and the message of the app that asked for it. The stage
+// moves on once the agent fixed the plan, which can be before the fixture saw
+// the count change, so the stage is not the point to read them at.
+func (f *fixture) waitCorrected(t *testing.T, id, file string) {
+	t.Helper()
+
+	deadline := time.Now().Add(pollTimeout)
+	for time.Now().Before(deadline) {
+		if f.correctionCount(id) >= 1 && hasAppMessage(f.entries(), file) {
+			return
+		}
+		time.Sleep(pollStep)
+	}
+	t.Fatalf("correction of %s on record: count %d, message %v; want both", id, f.correctionCount(id), hasAppMessage(f.entries(), file))
+}
+
 // env is what the fixture adds to the environment of the fake CLI.
 func (f *fixture) env() []string {
 	f.mu.Lock()

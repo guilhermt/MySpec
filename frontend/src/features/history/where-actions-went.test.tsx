@@ -10,6 +10,7 @@ import { ShellToasts } from "@/features/notice/ShellToasts";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { DiscardStepDialog } from "@/features/task/DiscardStepDialog";
 import { StageActionDialog } from "@/features/task/StageActionDialog";
+import { ARTIFACT_MISSING } from "@/lib/errors";
 import { olderKey } from "@/lib/history";
 import { api, type State } from "@/lib/wails";
 import type { AppStore } from "@/store/app-store";
@@ -434,7 +435,7 @@ const ARCHIVED_TASK: Row[] = [
           archivedLookups: { "task-9": "loading" },
         },
       });
-      expect(screen.getByRole("status", { name: "Reading the task" })).toBeInTheDocument();
+      expect(screen.getByRole("group", { name: "Reading the task" })).toBeInTheDocument();
     },
   },
 ];
@@ -593,7 +594,7 @@ const ARCHIVED_DISCUSSION: Row[] = [
     state: "no document",
     draw: async () => {
       vi.mocked(api.readDiscussionArtifact).mockRejectedValue(
-        new Error("open /d/discussion-1/discussion.md: no such file or directory"),
+        new Error(`${ARTIFACT_MISSING}: discussion.md`),
       );
       archivedDiscussion();
       expect(await screen.findByText("No document was written.")).toBeInTheDocument();

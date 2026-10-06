@@ -18,7 +18,7 @@ import type {
   StepReport,
 } from "@/lib/wails";
 import { asDraftKind, asDraftOutcome } from "@/lib/wails";
-import { dateAt } from "@/lib/when";
+import { clockOrDateAt } from "@/lib/when";
 
 /** stepsOf are the steps of an archived task; the Go sends none as null. */
 export function stepsOf(task: ArchivedTask): readonly ArchivedStep[] {
@@ -39,11 +39,12 @@ export function prReportsOf(task: ArchivedTask): readonly ArchivedPRReport[] {
 const SHORT_SHA = 7;
 
 /**
- * archivedDate is a moment of an archived item as the History writes it: "Sep 24 at 14:51", with
- * the year of another one, "Sep 24, 2025 at 14:51". "" for a moment the item doesn't have.
+ * archivedDate is a moment of an archived item as the History writes it: the clock of a time
+ * today, "14:51", and the date of another day, "Sep 24 at 14:51", with the year of another one,
+ * "Sep 24, 2025 at 14:51". "" for a moment the item doesn't have.
  */
 export function archivedDate(iso: string, now: number): string {
-  return dateAt(iso, now);
+  return clockOrDateAt(iso, now);
 }
 
 /** FactLink is a part of the value of a fact that is a link: its text, where it goes and what the tooltip says. */

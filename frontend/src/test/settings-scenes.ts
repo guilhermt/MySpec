@@ -9,6 +9,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import type { UserEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, vi } from "vitest";
+import { SCANNING_TEXT } from "@/features/repositories/add-repository";
 import type { Location, SettingsSection } from "@/lib/locations";
 import type {
   Board,
@@ -86,6 +87,7 @@ export const SETTINGS_VARIATIONS: Record<SettingsSceneName, readonly string[]> =
     "remove",
     "empty",
     "add-failed",
+    "clone-failed",
   ],
   "settings-prompts": ["", "view", "edit", "reset", "discard", "list-failed", "view-failed"],
 };
@@ -223,6 +225,8 @@ interface SceneRepository {
   /** path is where the clone is, null when there is none. */
   path: string | null;
   missing?: boolean;
+  /** cloneError is why the last clone failed, kept with the repository. */
+  cloneError?: string;
   active: number;
   activeReviews?: number;
 }
@@ -302,6 +306,7 @@ const repositoryOf = (entry: SceneRepository): Repository => {
     path: entry.path === null ? "" : `${HOME}/${entry.path}`,
     cloned: entry.path !== null,
     missing: entry.missing === true,
+    cloneError: entry.cloneError ?? "",
     activeTasks: entry.active,
     archivedTasks: mine.filter(([kind]) => kind !== "r").length,
     activeReviews: entry.activeReviews ?? 0,
@@ -782,6 +787,20 @@ function repositoriesScene(variation: string): SettingsSceneSetup {
       return base;
     case "empty":
       return { ...base, state: sceneState({ repositories: [] }) };
+    case "clone-failed":
+      // The failure was kept with the repository: the page opens with it, and no one is alerted.
+      return {
+        ...base,
+        state: sceneState({
+          repositories: REPOSITORIES.map((entry) =>
+            repositoryOf(
+              entry.fullName === "acme/billing"
+                ? { ...entry, cloneError: "gh: repository not found" }
+                : entry,
+            ),
+          ),
+        }),
+      };
     case "add":
       return {
         ...base,
@@ -796,7 +815,7 @@ function repositoriesScene(variation: string): SettingsSceneSetup {
         after: async (user) => {
           api.scanRepositories.mockImplementation(() => forever<RepositoryCandidate[]>());
           await user.click(button("Add repository"));
-          await screen.findByRole("status");
+          await screen.findAllByText(SCANNING_TEXT);
         },
       };
     case "add-refused":
@@ -1064,6 +1083,17 @@ export function welcomeScene(variation: (typeof WELCOME_VARIATIONS)[number]): Se
         machine: makeMachine(),
       };
   }
+}
+
+/** newerScene is the data from a newer MySpec: the page with the two versions and no list. */
+export function newerScene(): SettingsSceneSetup {
+  return {
+    state: makeState({
+      migration: makeMigration({ cases: [], newer: { dataVersion: 40, appVersion: 25 } }),
+    }),
+    location: { kind: "home" },
+    storage: {},
+  };
 }
 
 /** migrationScene is the refused migration: one case of each kind, with the tasks. */

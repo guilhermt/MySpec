@@ -2,7 +2,7 @@ import { act, fireEvent, screen } from "@testing-library/react";
 import { useRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { useGlobalShortcuts } from "@/app/useGlobalShortcuts";
-import { stepFeed, useFeed } from "@/features/chat/useFeed";
+import { type FeedUnits, stepFeed, useFeed } from "@/features/chat/useFeed";
 import { renderWithStore } from "@/test/render";
 
 // Feed is a conversation of three entries: a speech with a link, a group whose line opens a
@@ -78,6 +78,50 @@ const control = (name: string) => screen.getByRole("button", { name, hidden: tru
 
 function key(target: Element, name: string) {
   fireEvent.keyDown(target, { key: name });
+}
+
+const ENTRY_NUMBERS = Array.from({ length: 30 }, (_, at) => at + 1);
+
+// LongFeed is thirty entries, for the keys that walk by ten.
+function LongFeed() {
+  const ref = useRef<HTMLDivElement>(null);
+  useFeed(ref);
+  return (
+    <div ref={ref} role="feed" aria-label="Long conversation">
+      {ENTRY_NUMBERS.map((number) => (
+        <article key={number} data-feed-item tabIndex={-1} aria-label={`Entry ${number}`} />
+      ))}
+    </div>
+  );
+}
+
+// Windowed is a feed of twelve units of two entries each, of which only the ones in mounted are in
+// the DOM, as the window of the conversation has it. The reveal is a spy: the test mounts the unit.
+function Windowed({
+  mounted,
+  reveal,
+  onCurrent,
+  tail = false,
+}: {
+  mounted: readonly number[];
+  reveal: (index: number) => void;
+  onCurrent?: (index: number) => void;
+  tail?: boolean;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useFeed(ref, { count: 12, reveal, onCurrent: onCurrent ?? (() => {}) } satisfies FeedUnits);
+  return (
+    <div ref={ref} role="feed" aria-label="Windowed conversation">
+      {mounted.map((unit) => (
+        <div key={unit} role="none" data-unit-index={unit}>
+          {["a", "b"].map((part) => (
+            <article key={part} data-feed-item tabIndex={-1} aria-label={`Unit ${unit}${part}`} />
+          ))}
+        </div>
+      ))}
+      {tail ? <article data-feed-item tabIndex={-1} aria-label="Tail" /> : null}
+    </div>
+  );
 }
 
 // synced waits for the feed to see what changed in it.
@@ -264,5 +308,151 @@ describe("useFeed", () => {
     key(entry("Speech"), "Escape");
 
     expect(entry("Speech")).toHaveFocus();
+  });
+
+  it("syncs when a control arrives, not when the text of an entry grows", async () => {
+    renderWithStore(<Feed />);
+    const feed = screen.getByRole("feed");
+    const scan = vi.spyOn(feed, "querySelectorAll");
+    const speech = entry("Speech");
+
+    await act(async () => {
+      speech.append(document.createTextNode(" and more words"));
+      speech.append(document.createElement("span"));
+    });
+    expect(scan).not.toHaveBeenCalled();
+
+    await act(async () => {
+      const link = document.createElement("a");
+      link.href = "#y";
+      speech.append(link);
+    });
+    expect(scan).toHaveBeenCalled();
+    expect(speech.querySelector('a[href="#y"]')).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("walks ten entries with Page Down and Page Up", () => {
+    renderWithStore(<LongFeed />);
+    entry("Entry 1").focus();
+
+    key(entry("Entry 1"), "PageDown");
+    expect(entry("Entry 11")).toHaveFocus();
+    key(entry("Entry 11"), "PageDown");
+    expect(entry("Entry 21")).toHaveFocus();
+    key(entry("Entry 21"), "PageDown");
+    expect(entry("Entry 30")).toHaveFocus();
+
+    key(entry("Entry 30"), "PageUp");
+    expect(entry("Entry 20")).toHaveFocus();
+    key(entry("Entry 20"), "PageUp");
+    expect(entry("Entry 10")).toHaveFocus();
+    key(entry("Entry 10"), "PageUp");
+    expect(entry("Entry 1")).toHaveFocus();
+  });
+
+  it("brings an unmounted unit into view on Home, and focuses its first entry once it mounts", async () => {
+    const reveal = vi.fn();
+    const { rerender } = renderWithStore(<Windowed mounted={[5, 6]} reveal={reveal} />);
+    entry("Unit 5a").focus();
+
+    key(entry("Unit 5a"), "Home");
+
+    expect(reveal).toHaveBeenCalledWith(0);
+    expect(entry("Unit 5a")).toHaveFocus();
+
+    rerender(<Windowed mounted={[0, 5, 6]} reveal={reveal} />);
+    await synced();
+
+    expect(entry("Unit 0a")).toHaveFocus();
+  });
+
+  it("goes over a hole of units with the arrows, to the last entry of the unit above", async () => {
+    const reveal = vi.fn();
+    const { rerender } = renderWithStore(<Windowed mounted={[5, 6]} reveal={reveal} />);
+    entry("Unit 5a").focus();
+
+    key(entry("Unit 5a"), "ArrowUp");
+
+    expect(reveal).toHaveBeenCalledWith(4);
+    rerender(<Windowed mounted={[4, 5, 6]} reveal={reveal} />);
+    await synced();
+    expect(entry("Unit 4b")).toHaveFocus();
+
+    key(entry("Unit 4b"), "ArrowDown");
+    expect(entry("Unit 5a")).toHaveFocus();
+    expect(reveal).toHaveBeenCalledTimes(1);
+  });
+
+  it("walks ten entries with Page Down and Page Up, a unit counting its entries and one not mounted one", async () => {
+    const reveal = vi.fn();
+    const { rerender } = renderWithStore(<Windowed mounted={[0, 1]} reveal={reveal} />);
+    entry("Unit 0a").focus();
+
+    // 0b, 1a and 1b are three entries; the units 2 to 8 are not mounted, one entry each.
+    key(entry("Unit 0a"), "PageDown");
+
+    expect(reveal).toHaveBeenCalledWith(8);
+    rerender(<Windowed mounted={[1, 8, 9]} reveal={reveal} />);
+    await synced();
+    expect(entry("Unit 8a")).toHaveFocus();
+
+    // 7 to 2 are six, 1b and 1a two more, 0 the ninth: the first entry of the feed.
+    key(entry("Unit 8a"), "PageUp");
+    expect(reveal).toHaveBeenLastCalledWith(0);
+  });
+
+  it("counts each entry a mounted unit holds, as an open group holds its commands", () => {
+    renderWithStore(<Windowed mounted={[0, 1, 2, 3, 4, 5, 6]} reveal={vi.fn()} />);
+    entry("Unit 6b").focus();
+
+    key(entry("Unit 6b"), "PageUp");
+    expect(entry("Unit 1b")).toHaveFocus();
+
+    key(entry("Unit 1b"), "PageDown");
+    expect(entry("Unit 6b")).toHaveFocus();
+  });
+
+  it("goes to the last entry of the feed with Page Down near the end", async () => {
+    const reveal = vi.fn();
+    const { rerender } = renderWithStore(<Windowed mounted={[5, 6]} reveal={reveal} />);
+    entry("Unit 6b").focus();
+
+    key(entry("Unit 6b"), "PageDown");
+
+    expect(reveal).toHaveBeenCalledWith(11);
+    rerender(<Windowed mounted={[5, 6, 11]} reveal={reveal} />);
+    await synced();
+    expect(entry("Unit 11b")).toHaveFocus();
+  });
+
+  it("goes to the last entry with Page Down from inside the last unit", () => {
+    const reveal = vi.fn();
+    renderWithStore(<Windowed mounted={[10, 11]} reveal={reveal} />);
+    entry("Unit 11a").focus();
+
+    key(entry("Unit 11a"), "PageDown");
+
+    expect(entry("Unit 11b")).toHaveFocus();
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it("keeps focus at the end with Page Down from the tail", () => {
+    const reveal = vi.fn();
+    renderWithStore(<Windowed mounted={[10, 11]} reveal={reveal} tail />);
+    entry("Tail").focus();
+
+    key(entry("Tail"), "PageDown");
+
+    expect(entry("Tail")).toHaveFocus();
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it("tells which unit holds the stop of Tab", () => {
+    const onCurrent = vi.fn();
+    renderWithStore(<Windowed mounted={[2, 3]} reveal={vi.fn()} onCurrent={onCurrent} />);
+
+    entry("Unit 2b").focus();
+
+    expect(onCurrent).toHaveBeenLastCalledWith(2);
   });
 });

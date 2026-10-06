@@ -12,6 +12,7 @@ import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/sys
 import { Field } from "@/components/system/Field";
 import { Input } from "@/components/system/Input";
 import { ICONS } from "@/components/system/icons";
+import { LiveRegion } from "@/components/system/LiveRegion";
 import { Spinner } from "@/components/system/Spinner";
 import { SunkenLine } from "@/components/system/SunkenLine";
 import { BoardRepositoryRow } from "@/features/boards/BoardRepositoryRow";
@@ -326,13 +327,16 @@ function BoardForm({ boardId, onOpenChange }: BoardFormProps) {
       {...(waiting ? { initialFocus: cancelRef } : {})}
     >
       <DialogBody>
+        <LiveRegion kind="status" className="sr-only">
+          {waiting && !failedEdit && READING_TEXT}
+        </LiveRegion>
         {waiting ? (
           failedEdit ? (
             <p role="alert" className="text-state-error">
               {readError}
             </p>
           ) : (
-            <p role="status" className="flex items-center gap-(--space-2)">
+            <p className="flex items-center gap-(--space-2)">
               <Spinner tone="current" />
               {READING_TEXT}
             </p>

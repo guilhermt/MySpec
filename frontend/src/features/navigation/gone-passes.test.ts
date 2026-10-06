@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { gonePassLines, goneReviewText } from "@/features/navigation/gone-passes";
 import type { ArchivedReview, ReviewPass } from "@/lib/wails";
-import { clockTime } from "@/lib/when";
+import { atMoment, clockTime } from "@/lib/when";
 import { makeArchivedReview, makeReviewFinding, makeReviewPass } from "@/test/wails-mock";
 
 const NOW = Date.parse("2026-09-30T18:00:00Z");
 const WHEN = "2026-09-30T16:20:00Z";
 const CLOCK = clockTime(WHEN, NOW);
+const MOMENT = atMoment(WHEN, NOW).trim();
 const TAIL =
   "MySpec stopped the session and removed the worktree. The reports and the verdicts are in History; the conversation isn't kept.";
 
@@ -72,27 +73,27 @@ describe("gonePassLines", () => {
     {
       name: "inline comments",
       pass: published({ findings: [placed("inline"), placed("inline"), placed("")] }),
-      want: { text: "Pass 1 · Request changes · 2 inline comments", time: CLOCK },
+      want: { text: "Pass 1 · Request changes · 2 inline comments", time: MOMENT },
     },
     {
       name: "inline comments and the body",
       pass: published({ findings: [placed("inline"), placed("body")], summaryPublished: true }),
-      want: { text: "Pass 1 · Request changes · 1 inline comment, 1 in the body", time: CLOCK },
+      want: { text: "Pass 1 · Request changes · 1 inline comment, 1 in the body", time: MOMENT },
     },
     {
       name: "findings in the body",
       pass: published({ verdict: "comment", findings: [placed("body"), placed("body")] }),
-      want: { text: "Pass 1 · Comment · 2 findings in the body", time: CLOCK },
+      want: { text: "Pass 1 · Comment · 2 findings in the body", time: MOMENT },
     },
     {
       name: "the summary",
       pass: published({ verdict: "approve", findings: [placed("")], summaryPublished: true }),
-      want: { text: "Pass 1 · Approve · the summary", time: CLOCK },
+      want: { text: "Pass 1 · Approve · the summary", time: MOMENT },
     },
     {
       name: "the verdict only",
       pass: published({ verdict: "approve", findings: [placed("")] }),
-      want: { text: "Pass 1 · Approve · the verdict only", time: CLOCK },
+      want: { text: "Pass 1 · Approve · the verdict only", time: MOMENT },
     },
     {
       name: "a clean pass",
@@ -103,7 +104,7 @@ describe("gonePassLines", () => {
         findings: [],
         summaryPublished: true,
       }),
-      want: { text: "Pass 2 · Approve · a clean pass", time: CLOCK },
+      want: { text: "Pass 2 · Approve · a clean pass", time: MOMENT },
     },
     {
       name: "a pass not published",
@@ -124,7 +125,7 @@ describe("gonePassLines", () => {
         sentAt: WHEN,
         findings: [placed("inline"), placed("body"), placed("")],
       }),
-      want: { text: "Pass 1 · 2 findings sent to the agent", time: CLOCK },
+      want: { text: "Pass 1 · 2 findings sent to the agent", time: MOMENT },
     },
     {
       name: "a sending whose hour wasn't kept",

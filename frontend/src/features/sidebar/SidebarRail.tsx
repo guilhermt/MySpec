@@ -1,7 +1,7 @@
-import { ChevronsRight } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Icon } from "@/components/system/Icon";
 import { IconButton } from "@/components/system/IconButton";
+import { ICONS } from "@/components/system/icons";
 import { ITEM_ICONS, TONE_GLYPHS } from "@/components/system/item-parts";
 import { ScrollArea } from "@/components/system/ScrollArea";
 import { StateGlyph } from "@/components/system/StateGlyph";
@@ -40,7 +40,7 @@ const MICRO = "text-(length:--text-micro) leading-(--leading-micro)";
 interface RailGroup {
   id: string;
   rows: ItemRow[];
-  /** blocked is a failed reading or a missing clone in the node: the ◇ of its separator. */
+  /** blocked is a failed reading or a missing clone in the node: the blocked glyph of its separator. */
   blocked: boolean;
   /** pending is how many pull requests wait for a review, on the separator of Reviews. */
   pending: number;
@@ -233,7 +233,7 @@ export function SidebarRail() {
       <div className="flex shrink-0 flex-col items-center gap-(--space-1) py-(--space-2)">
         <IconButton
           label="Expand the sidebar"
-          icon={ChevronsRight}
+          icon={ICONS.expandPanel}
           size="sm"
           onClick={() => toggleSidebarRail()}
         />

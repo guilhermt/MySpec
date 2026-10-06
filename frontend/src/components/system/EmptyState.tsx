@@ -12,7 +12,7 @@ export interface EmptyStateProps {
 /** EmptyState says what a place shows once it has something, and how to get there. */
 export function EmptyState({ title, children, action, className }: EmptyStateProps) {
   return (
-    <div className={cn("flex flex-col items-start gap-2", className)}>
+    <div className={cn("flex flex-col items-start gap-(--space-2)", className)}>
       <p className="text-(length:--text-ui) leading-(--leading-ui) font-semibold text-ink-1">
         {title}
       </p>
@@ -21,7 +21,7 @@ export function EmptyState({ title, children, action, className }: EmptyStatePro
           {children}
         </div>
       )}
-      {action !== undefined && <div className="mt-1">{action}</div>}
+      {action !== undefined && <div className="mt-(--space-1)">{action}</div>}
     </div>
   );
 }

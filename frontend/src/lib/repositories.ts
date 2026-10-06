@@ -1,3 +1,4 @@
+import { displayPath } from "@/lib/paths";
 import type { Repository, State } from "@/lib/wails";
 
 /** ALL_REPOSITORIES is the filter that shows the tasks of every repository. */
@@ -15,6 +16,37 @@ export function shortName(fullName: string): string {
   return slash === -1 ? fullName : fullName.slice(slash + 1);
 }
 
+// SHARED is, for each state, the short names more than one repository answers to.
+const SHARED = new WeakMap<State, ReadonlySet<string>>();
+
+/**
+ * sharedNames are the short names, in lower case, of the repositories the state knows, registered or
+ * named by an archived item of the window, that two or more of them answer to: acme/api and globex/api.
+ */
+export function sharedNames(app: State): ReadonlySet<string> {
+  const known = SHARED.get(app);
+  if (known !== undefined) {
+    return known;
+  }
+  const shared = sharedAmong([
+    ...(app.repositories ?? []).map((repository) => repository.fullName),
+    ...(app.history ?? []).map((task) => task.repository),
+    ...(app.reviewHistory ?? []).map((review) => review.repository),
+  ]);
+  SHARED.set(app, shared);
+  return shared;
+}
+
+/** sharedAmong are the short names, in lower case, that two or more of the full names answer to. */
+export function sharedAmong(fullNames: readonly string[]): ReadonlySet<string> {
+  const owners = new Map<string, Set<string>>();
+  for (const fullName of fullNames) {
+    const name = shortName(fullName).toLowerCase();
+    owners.set(name, (owners.get(name) ?? new Set()).add(fullName.toLowerCase()));
+  }
+  return new Set([...owners].filter(([, full]) => full.size > 1).map(([name]) => name));
+}
+
 /** shortRef is an issue as the screen writes it, "billing#479" for "acme/billing#479". */
 export function shortRef(reference: string): string {
   const hash = reference.lastIndexOf("#");
@@ -28,7 +60,7 @@ export function findRepository(app: State | null, id: string): Repository | null
 
 /** cloneMissingText is the warning of a repository whose clone is gone. */
 export function cloneMissingText(repository: Repository): string {
-  return `The clone at ${repository.path} is missing.`;
+  return `The clone at ${displayPath(repository.path)} is missing.`;
 }
 
 /** taskCount reads a number of tasks of a kind: "1 active task", "3 archived tasks". */
@@ -67,8 +99,8 @@ function usable(app: State, id: string): boolean {
 
 /**
  * defaultRepositoryId is the repository the creation dialog opens on: the one of
- * the filter, of the open task, of the last task created, or the first; the
- * first of those that is registered, cloned, and whose clone is there. "" when
+ * the filter, of the open task, of the last task created, or the first usable of
+ * the list; the first of those that is registered, cloned, and whose clone is there. "" when
  * none is.
  */
 export function defaultRepositoryId(
@@ -81,7 +113,7 @@ export function defaultRepositoryId(
     app.repositoryFilter,
     openTask?.repositoryId ?? "",
     lastRepositoryId ?? "",
-    repositoriesOf(app)[0]?.id ?? "",
+    repositoriesOf(app).find((repository) => usable(app, repository.id))?.id ?? "",
   ];
   return candidates.find((id) => id !== "" && usable(app, id)) ?? "";
 }

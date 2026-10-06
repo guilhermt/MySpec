@@ -130,9 +130,7 @@ describe("ChangedFilesCard", () => {
 
     expect(card()).toHaveAccessibleName("Changed files");
     expect(card()).toHaveAttribute("aria-busy", "true");
-    expect(
-      within(card()).getByRole("status", { name: "Reading the worktree" }),
-    ).toBeInTheDocument();
+    expect(within(card()).getByRole("group", { name: "Reading the worktree" })).toBeInTheDocument();
   });
 
   it("says the worktree couldn't be read, with what git said", () => {

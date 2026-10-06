@@ -35,7 +35,7 @@ export function ScrollArea({
       </BaseScrollArea.Viewport>
       <BaseScrollArea.Scrollbar
         orientation="vertical"
-        className="flex w-2.5 touch-none p-0.5 select-none"
+        className="flex w-[calc(var(--space-2)+var(--space-0-5))] touch-none p-(--space-0-5) select-none"
       >
         <BaseScrollArea.Thumb className="flex-1 rounded-(--radius-pill) bg-line-2 hover:bg-line-3" />
       </BaseScrollArea.Scrollbar>

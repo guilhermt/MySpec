@@ -4,21 +4,22 @@ import { Kbd as UiKbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 
 export interface KbdProps {
-  variant?: "default" | "on-primary" | "jump";
+  variant?: "default" | "on-primary" | "jump" | "disabled";
   size?: "md" | "sm";
   children: ReactNode;
   className?: string;
 }
 
 const kbd = cva(
-  "min-w-0 gap-0 rounded-xs border border-line-2 border-b-(length:--border-2) bg-surface-2 px-1 font-mono text-(length:--text-micro) leading-(--leading-micro) font-normal text-ink-3",
+  "min-w-0 gap-0 rounded-xs border border-line-2 border-b-(length:--border-2) bg-surface-2 px-(--space-1) font-mono text-(length:--text-micro) leading-(--leading-micro) font-normal text-ink-3",
   {
     variants: {
       variant: {
         default: "",
         "on-primary":
-          "border-0 bg-transparent text-brand-on shadow-[inset_0_0_0_var(--border)_var(--brand-key-ring)]",
+          "border-0 bg-transparent px-[calc(var(--space-1)+var(--border))] text-brand-on shadow-[inset_0_0_0_var(--border)_var(--brand-key-ring)]",
         jump: "border-brand-ring bg-brand-tint text-brand-ink",
+        disabled: "border-line-1 text-ink-4",
       },
       size: { md: "h-(--size-kbd)", sm: "h-(--size-kbd-sm)" },
     },
@@ -40,7 +41,7 @@ function keys(children: ReactNode): ReactNode {
   );
 }
 
-/** Kbd is a key of a shortcut, on a surface, on the primary button, or as the jump key. */
+/** Kbd is a key of a shortcut, on a surface, on the primary button, as the jump key, or on a disabled button. */
 export function Kbd({ variant = "default", size = "md", children, className }: KbdProps) {
   return <UiKbd className={cn(kbd({ variant, size }), className)}>{keys(children)}</UiKbd>;
 }

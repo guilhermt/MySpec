@@ -1,4 +1,3 @@
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { Icon } from "@/components/system/Icon";
 import { IconButton } from "@/components/system/IconButton";
 import { ICONS } from "@/components/system/icons";
@@ -169,7 +168,7 @@ export function TreeNodeRow({
     >
       <IconButton
         label={expanded ? "Collapse" : "Expand"}
-        icon={expanded ? ChevronDown : ChevronRight}
+        icon={expanded ? ICONS.expanded : ICONS.chevron}
         size="xs"
         tabIndex={-1}
         onClick={() => toggleSidebarNode(node.id)}

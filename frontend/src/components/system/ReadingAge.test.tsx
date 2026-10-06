@@ -31,8 +31,9 @@ describe("ReadingAge", () => {
   });
 
   it("says nothing for a list never read", () => {
-    const { container } = renderWithStore(<ReadingAge readAt="" reading={false} now={NOW} />);
-    expect(container).toBeEmptyDOMElement();
+    renderWithStore(<ReadingAge readAt="" reading={false} now={NOW} />);
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    expect(screen.queryByText(/Read/)).not.toBeInTheDocument();
   });
 
   it("says Not read yet for a list never read, when asked", () => {

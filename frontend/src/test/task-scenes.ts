@@ -83,6 +83,17 @@ export const LONGEST_NAME = "rotate-the-api-keys-of-every-service-without-downti
 /** TASK_ID is the id of the reference task. */
 export const TASK_ID = "task-1";
 
+// STEP_FILES are the step files of the plan, by the names the mock gives them.
+const STEP_FILES = [
+  "01-config",
+  "02-key-cache",
+  "03-token-bucket",
+  "04-retry-after",
+  "05-per-plan-limits",
+  "06-throttle-metrics",
+  "07-docs",
+];
+
 const TITLES = [
   "Add the limits table",
   "Read the limits of a key",
@@ -168,7 +179,7 @@ function steps(n: number, current: Partial<Step> = {}): Step[] {
     const base = makeStep({
       number,
       title,
-      file: `${number}-${title.toLowerCase().replaceAll(" ", "-")}.md`,
+      file: `${STEP_FILES[index]}.md`,
       reviewMode: manual ? "manual" : "agent",
       reviewModeAdjusted: manual,
     });

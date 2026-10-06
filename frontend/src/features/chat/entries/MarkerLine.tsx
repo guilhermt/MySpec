@@ -7,9 +7,9 @@ import { DraftGlyph } from "@/components/system/FoldedDraft";
 import { Icon } from "@/components/system/Icon";
 import { ICONS, type IconMeaning } from "@/components/system/icons";
 import { Link } from "@/components/system/Link";
+import { NoticeStrip } from "@/components/system/NoticeStrip";
 import { Shimmer } from "@/components/system/Shimmer";
 import { StateGlyph } from "@/components/system/StateGlyph";
-import { Tooltip } from "@/components/system/Tooltip";
 import type { DraftRowView } from "@/features/chat/discussion-markers";
 import { Chevron } from "@/features/chat/entries/Chevron";
 import { Markdown } from "@/features/chat/Markdown";
@@ -171,9 +171,7 @@ function DraftsBody({ rows }: { rows: readonly DraftRowView[] }) {
         >
           <DraftGlyph glyph={row.glyph} spacer />
           {row.prefix !== "" && <span className="shrink-0 text-ink-3">{row.prefix}</span>}
-          <Tooltip content={row.title}>
-            <span className="min-w-0 truncate">{row.title}</span>
-          </Tooltip>
+          <CutText text={row.title} />
           <CutText
             text={row.status}
             className={cn(
@@ -209,6 +207,29 @@ function CommitsBody({ body }: { body: Extract<MarkerView["body"], { kind: "comm
       ))}
       {body.more > 0 && <li className="text-ink-3">{`and ${body.more} more`}</li>}
     </ul>
+  );
+}
+
+interface ReadFailedProps {
+  name: string;
+  reason: string;
+  onRetry: () => void;
+}
+
+// ReadFailed is a document of the line that couldn't be read: reading a file is not an action of the
+// user that failed, so it is the sunken strip, with Try again.
+function ReadFailed({ name, reason, onRetry }: ReadFailedProps) {
+  return (
+    <NoticeStrip
+      title={`Couldn't read ${name}`}
+      reason={reason}
+      className="mt-(--space-1)"
+      action={
+        <Button variant="ghost" size="sm" onClick={onRetry}>
+          Try again
+        </Button>
+      }
+    />
   );
 }
 
@@ -385,7 +406,9 @@ export function MarkerLine({
     case "markdown":
       content = (
         <div data-slot="marker-body" className={cn(SUNKEN, "select-text")}>
-          <Markdown cutCode>{body.text}</Markdown>
+          <Markdown cutCode className="ui-headings">
+            {body.text}
+          </Markdown>
         </div>
       );
       break;
@@ -409,20 +432,14 @@ export function MarkerLine({
         body.text ?? (discussionArtifact.status === "ready" ? discussionArtifact.content : null);
       content =
         body.text === null && discussionArtifact.status === "error" ? (
-          <p className="mt-(--space-1) flex items-center gap-(--space-2) rounded-md bg-state-error-veil px-(--space-4) py-(--space-1) text-(length:--text-meta) leading-(--leading-meta) text-state-error">
-            {`Couldn't read ${body.name}`}
-            <span aria-hidden="true">·</span>
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={() => {
-                toggleRef.current?.focus();
-                setAttempt(attempt + 1);
-              }}
-            >
-              Try again
-            </Button>
-          </p>
+          <ReadFailed
+            name={body.name}
+            reason={discussionArtifact.error}
+            onRetry={() => {
+              toggleRef.current?.focus();
+              setAttempt(attempt + 1);
+            }}
+          />
         ) : text === null ? (
           <div data-slot="marker-body" className={SUNKEN}>
             <Shimmer>Reading…</Shimmer>
@@ -430,7 +447,9 @@ export function MarkerLine({
         ) : (
           <div data-slot="marker-body" className={SUNKEN}>
             <div className="select-text">
-              <Markdown cutCode>{text}</Markdown>
+              <Markdown cutCode className="ui-headings">
+                {text}
+              </Markdown>
             </div>
             <div className="mt-(--space-2) flex items-center gap-(--space-3)">
               <span className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
@@ -455,25 +474,21 @@ export function MarkerLine({
       const foot = FOOTS[body.openIn];
       content =
         artifact.status === "error" ? (
-          <p className="mt-(--space-1) flex items-center gap-(--space-2) rounded-md bg-state-error-veil px-(--space-4) py-(--space-1) text-(length:--text-meta) leading-(--leading-meta) text-state-error">
-            {`Couldn't read ${body.name}`}
-            <span aria-hidden="true">·</span>
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={() => {
-                // Try again goes while the document reloads: the line keeps the focus.
-                toggleRef.current?.focus();
-                setAttempt(attempt + 1);
-              }}
-            >
-              Try again
-            </Button>
-          </p>
+          <ReadFailed
+            name={body.name}
+            reason={artifact.error}
+            onRetry={() => {
+              // Try again goes while the document reloads: the line keeps the focus.
+              toggleRef.current?.focus();
+              setAttempt(attempt + 1);
+            }}
+          />
         ) : artifact.status === "ready" ? (
           <div data-slot="marker-body" className={SUNKEN}>
             <div className="select-text">
-              <Markdown cutCode>{documentText(body.name, artifact.content)}</Markdown>
+              <Markdown cutCode className="ui-headings">
+                {documentText(body.name, artifact.content)}
+              </Markdown>
             </div>
             {archived === null && (
               <div className="mt-(--space-2)">

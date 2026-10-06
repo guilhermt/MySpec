@@ -7,11 +7,22 @@ export interface ContextMeterProps {
   paused?: boolean;
   /** compact drops the track; "narrow" drops it only below 1300px of main area. */
   compact?: boolean | "narrow";
+  /**
+   * reading is whether a reading is on its way: the session is open and has no numbers yet. Without
+   * one, a meter with no percentage says … and does not shimmer. True by default.
+   */
+  reading?: boolean;
   detail: string;
 }
 
 /** ContextMeter shows how much of the session's context is used; it never changes colour as it fills. */
-export function ContextMeter({ percent, paused, compact, detail }: ContextMeterProps) {
+export function ContextMeter({
+  percent,
+  paused,
+  compact,
+  reading = true,
+  detail,
+}: ContextMeterProps) {
   const clamped = percent === null ? 0 : Math.min(Math.max(percent, 0), 100);
   const rounded = Math.round(clamped);
   const label = paused ? "—" : percent === null ? "…" : `${rounded}%`;
@@ -29,7 +40,7 @@ export function ContextMeter({ percent, paused, compact, detail }: ContextMeterP
         {...(valueText !== undefined ? { "aria-valuetext": valueText } : {})}
         // biome-ignore lint/a11y/noNoninteractiveTabindex: the meter takes focus to show its detail.
         tabIndex={0}
-        className="inline-flex items-center gap-1.5 rounded-xs text-(length:--text-micro) leading-(--leading-micro) text-ink-3 tabular-nums hover:text-ink-1 focus-visible:focus-ring"
+        className="inline-flex items-center gap-(--space-1-5) rounded-xs text-(length:--text-micro) leading-(--leading-micro) text-ink-3 tabular-nums hover:text-ink-1 focus-visible:focus-ring"
       >
         {compact !== true && (
           <span
@@ -37,7 +48,7 @@ export function ContextMeter({ percent, paused, compact, detail }: ContextMeterP
             className={cn(
               compact === "narrow" && "@max-[1300px]/main:hidden",
               "block h-(--meter-h) w-(--meter-w) shrink-0 overflow-hidden rounded-(--radius-pill)",
-              percent === null && !paused ? "shimmer-track" : "bg-brand-track",
+              percent === null && !paused && reading ? "shimmer-track" : "bg-brand-track",
             )}
           >
             {percent !== null && (

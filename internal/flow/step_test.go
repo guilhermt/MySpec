@@ -319,6 +319,40 @@ func TestCloseWaitsForThePreparationItCancels(t *testing.T) {
 	}
 }
 
+func TestCloseWaitsForSpawnPRWork(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRDone, PR: mergedPR()})
+	hold := f.worktrees.holdClose()
+
+	if err := f.service.CloseTask(t.Context(), "task-1"); err != nil {
+		t.Fatalf("CloseTask() = %v, want nil", err)
+	}
+	f.waitWorktreeCalls(t, "close:task-1")
+
+	closed := make(chan struct{})
+	go func() {
+		f.service.Close()
+		close(closed)
+	}()
+	select {
+	case <-closed:
+		t.Fatal("Close returned while the work of the PR stage was still running")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(hold)
+	select {
+	case <-closed:
+	case <-time.After(pollTimeout):
+		t.Fatal("Close did not return once the work of the PR stage ended")
+	}
+	if run, _ := f.tasks.prRun("task-1"); run.Status != task.PRClosed {
+		t.Errorf("status = %q, want the closing recorded before Close returned", run.Status)
+	}
+}
+
 func TestSyncReportsThePhasesOfAPreparation(t *testing.T) {
 	t.Parallel()
 

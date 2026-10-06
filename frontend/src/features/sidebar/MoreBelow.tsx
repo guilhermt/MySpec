@@ -1,7 +1,7 @@
-import { ArrowDown } from "lucide-react";
 import { type RefObject, useEffect, useState } from "react";
 import { observeSize } from "@/components/system/fits";
 import { Icon } from "@/components/system/Icon";
+import { ICONS } from "@/components/system/icons";
 import { ENTRY_ATTRIBUTE } from "@/features/sidebar/useTreeKeyboard";
 
 export interface MoreBelowProps {
@@ -58,7 +58,7 @@ export function MoreBelow({ viewport }: MoreBelowProps) {
   return (
     <div
       role="none"
-      className="pointer-events-none sticky bottom-0 -mt-(--size-more-below) flex h-(--size-more-below) items-end bg-linear-to-b from-transparent to-surface-sidebar to-70% pr-(--space-2) pb-(--space-1) pl-[calc(var(--space-2)+var(--tree-pad)+var(--icon)+var(--space-2-5))]"
+      className="pointer-events-none sticky bottom-0 -mt-(--size-more-below) flex h-(--size-more-below) items-end bg-linear-to-b from-transparent to-surface-sidebar to-50% pr-(--space-2) pb-(--space-1) pl-[calc(var(--space-2)+var(--tree-pad)+var(--icon)+var(--space-2-5))]"
     >
       <button
         type="button"
@@ -71,7 +71,7 @@ export function MoreBelow({ viewport }: MoreBelowProps) {
         }}
         className="pointer-events-auto inline-flex items-center gap-(--space-1) rounded-xs text-(length:--text-micro) leading-(--leading-micro) text-ink-3 transition-colors duration-(--duration-fast) ease-standard hover:text-ink-1"
       >
-        <Icon icon={ArrowDown} size="xs" />
+        <Icon icon={ICONS.toEnd} size="xs" />
         {count} more below
       </button>
     </div>

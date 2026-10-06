@@ -110,7 +110,7 @@ describe("PRPane, the place without a conversation", () => {
       .getByText("The pull request stage stopped")
       .closest("[data-slot=place-empty]") as HTMLElement;
     const block = within(empty).getByRole("article", {
-      name: "Run `gh auth login` in a terminal, then try again.",
+      name: "Run gh auth login in a terminal, then try again.",
     });
     expect(block).toHaveTextContent("gh: not logged in");
     const bar = screen.getByRole("region", { name: "Request" });

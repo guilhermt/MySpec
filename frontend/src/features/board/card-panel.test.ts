@@ -122,7 +122,7 @@ describe("the actions of the panel", () => {
         primary: { kind: "cloning", repository: "acme/api" },
         changePath: false,
         discuss: { disabled: false },
-        reason: { text: "The clone is running.", tone: "neutral" },
+        reason: null,
         discussReason: null,
       },
     },

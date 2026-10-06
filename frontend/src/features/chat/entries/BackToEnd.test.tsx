@@ -24,7 +24,12 @@ describe("BackToEnd", () => {
 
     const button = screen.getByRole("button", { name: "Go to the end." });
     expect(button).toHaveTextContent("");
-    expect(button).toHaveClass("min-w-(--newmsg-w)", "shadow-float");
+    expect(button).toHaveClass(
+      "min-w-(--newmsg-w)",
+      "shadow-float",
+      "bg-surface-3",
+      "hover:bg-surface-2",
+    );
   });
 
   it("says the work of an agent with an acronym as written", () => {

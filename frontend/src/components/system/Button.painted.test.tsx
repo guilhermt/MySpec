@@ -131,6 +131,51 @@ describe.each(THEMES)("Button in the %s theme", (theme) => {
     expect(paintOf(keyOf("Create"), want)).toEqual(want);
   });
 
+  it("boxes the key of every button, in the line of its variant", () => {
+    setTheme(theme);
+    render(
+      <>
+        <Button shortcut="Esc">Close</Button>
+        <Button variant="ghost" shortcut="N">
+          New discussion
+        </Button>
+        <Button variant="primary" shortcut="Ctrl ↵">
+          Send
+        </Button>
+        <Button shortcut="Esc" disabled disabledReason="Creating the task">
+          Cancel
+        </Button>
+      </>,
+    );
+    const keyOf = (name: string) =>
+      screen.getByRole("button", { name }).querySelector("kbd") as Element;
+    for (const name of ["Close", "New discussion"]) {
+      const want = { border: token("--line-2"), borderStyle: "solid" };
+      expect(paintOf(keyOf(name), want)).toEqual(want);
+    }
+    expect(getComputedStyle(keyOf("Send")).boxShadow).toContain(token("--brand-key-ring"));
+    const dashed = { border: token("--line-1"), color: token("--ink-4"), borderStyle: "solid" };
+    expect(paintOf(keyOf("Cancel"), dashed)).toEqual(dashed);
+  });
+
+  it("keeps the width of a primary button whether it is dashed or not", () => {
+    setTheme(theme);
+    const { rerender } = render(
+      <Button variant="primary" shortcut="Ctrl ↵">
+        Create
+      </Button>,
+    );
+    const width = () =>
+      screen.getByRole("button", { name: "Create" }).getBoundingClientRect().width;
+    const active = width();
+    rerender(
+      <Button variant="primary" shortcut="Ctrl ↵" disabled disabledReason="Name the task">
+        Create
+      </Button>,
+    );
+    expect(width()).toBe(active);
+  });
+
   it("paints the error in the error ink on its veil", () => {
     setTheme(theme);
     render(<Button error>Try again</Button>);
