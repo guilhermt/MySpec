@@ -10,13 +10,13 @@ MySpec é a mesa de trabalho de um desenvolvedor que conduz o Claude Code por um
 
 O padrão da experiência:
 
-- **Produto profissional de gerenciamento de agentes e workflows de IA**, com estrutura, navegação, hierarquia e linguagem visual pensadas com o todo em mente, não componentes encaixados um a um (`docs/roadmap/redesign/README.md`, O problema).
+- **Produto profissional de gerenciamento de agentes e workflows de IA**, com estrutura, navegação, hierarquia e linguagem visual pensadas com o todo em mente, não componentes encaixados um a um (`research/origin.md`, O problema).
 - **Sóbrio, nada extravagante.** É a ferramenta em que o usuário passa o dia, não uma vitrine.
 - **"A experiência é o produto"** e **"'Depende de mim' é um estado de primeira classe"** são princípios escritos do produto (`overview`, Princípios); o redesenho é o produto cumprindo-os.
 
 ## 2. Quem usa e como
 
-Uma pessoa: o desenvolvedor dono da máquina, com a própria conta do `gh` e o Claude Code instalado, num desktop Linux (`features §Boards`; `docs/architecture/stack.md`). Uma instância do app por vez (`features §Repositórios`). O app é o centro do trabalho diário (`docs/roadmap/redesign/README.md`).
+Uma pessoa: o desenvolvedor dono da máquina, com a própria conta do `gh` e o Claude Code instalado, num desktop Linux (`features §Boards`; `docs/architecture/stack.md`). Uma instância do app por vez (`features §Repositórios`). O app é o centro do trabalho diário (`research/origin.md`).
 
 | Aspecto | Fato | Fonte |
 |---|---|---|
@@ -289,7 +289,7 @@ Fora do filtro, registrados para não serem esquecidos: a lista completa de chec
 | Teclado | `Ctrl+N`, `Ctrl+J`, `Ctrl+,` com o foco em qualquer lugar, inertes com os diálogos de criação abertos; setas na árvore; atalhos do board (`↑↓ ←→ Enter Esc / S Space D`) | `features §Atalhos`; `screens §1.5` |
 | Acessibilidade | Cor nunca é o único portador de um estado: todo ponto tem rótulo em texto, também na árvore por cor; papel e nome acessível em toda superfície interativa; foco visível; `role="status"` no que muda sozinho; `prefers-reduced-motion` zera animações | `docs/guidelines/frontend.md` §Acessibilidade |
 | Tema | Claro e escuro, seguindo o sistema, com a opção de fixar | `features §Configurações e aparência` |
-| Features preservadas | Todas as de `features.md`, inclusive as que perdem o lugar atual (tempo de espera, `Ctrl+J`). Features novas ficam fora da frente | `docs/roadmap/redesign/README.md`, Fora do escopo |
+| Features preservadas | Todas as de `features.md`, inclusive as que perdem o lugar atual (tempo de espera, `Ctrl+J`). Features novas ficam fora da frente | `research/origin.md`, Fora do escopo |
 | Textos | Em inglês, curtos, `·` entre partes da mesma linha, o usuário é "you" e o agente "the agent". `features.md` nomeia alguns botões em português (`Tentar de novo`, `Limpar e iniciar`, `Aprovar`, `Descartar step`, `Abrir no VS Code`); na interface eles são `Try again`, `Clean and start`, `Approve`, `Discard step`, `Open in VS Code` | `docs/guidelines/frontend.md` §Componentes; `screens §2.4` |
 | Implementação | Primitivos do shadcn gerados em `components/ui`, nunca editados; comportamento diferente é wrapper. Tamanhos em `rem`; cores e durações como tokens | `CLAUDE.md`; `docs/guidelines/frontend.md` |
 
