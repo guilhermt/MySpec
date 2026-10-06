@@ -1084,17 +1084,6 @@ export function welcomeScene(variation: (typeof WELCOME_VARIATIONS)[number]): Se
   }
 }
 
-/** newerScene is the data from a newer MySpec: the page with the two versions and no list. */
-export function newerScene(): SettingsSceneSetup {
-  return {
-    state: makeState({
-      migration: makeMigration({ cases: [], newer: { dataVersion: 40, appVersion: 25 } }),
-    }),
-    location: { kind: "home" },
-    storage: {},
-  };
-}
-
 /** migrationScene is the refused migration: one case of each kind, with the tasks. */
 export function migrationScene(): SettingsSceneSetup {
   return {

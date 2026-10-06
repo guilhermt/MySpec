@@ -3,7 +3,6 @@
  * moment of each scene. The conversation test draws TaskView from them.
  */
 
-import { afterEach, beforeEach, vi } from "vitest";
 import type {
   ActionEntry,
   ActionStatus,
@@ -29,7 +28,7 @@ import {
 import { makeEntry, makeStepReviewer, makeTranscript } from "@/test/wails-mock";
 
 /** CONVERSATION_SCENES are the seven scenes of the conversation mock. */
-export const CONVERSATION_SCENES = [
+const CONVERSATION_SCENES = [
   "planning",
   "running",
   "ask",
@@ -67,21 +66,6 @@ export const CONVERSATION_NOW: Record<ConversationSceneName, string> = {
   retrying: clock("14:41"),
   review: clock("18:02"),
 };
-
-/**
- * fixConversationClock stops the clock of the page at the moment of a scene for each test that runs
- * next in the describe it is called in, and gives it back after; only Date is faked, so the timers
- * of the page still run.
- */
-export function fixConversationClock(name: ConversationSceneName): void {
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date(CONVERSATION_NOW[name]));
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-}
 
 // ---------------- The entries ----------------
 
@@ -320,18 +304,6 @@ const CARD_CONTEXT = lines(
   "**Epic.** API hardening · **Siblings.** #413 Rotate API keys without downtime, #415 Audit log for key changes.",
 );
 
-const STEP_FILE_3 = lines(
-  "#### Step 3: Token bucket middleware",
-  "",
-  "**Scope.** A token bucket per API key in `internal/ratelimit`, checked in the API key middleware. Burst and refill come from the plan config of step 1.",
-  "",
-  "- One bucket per key, created on first use.",
-  "- Refill computed on read from the time elapsed; no ticker.",
-  "- 429 with `Retry-After` when the bucket is empty.",
-  "",
-  "**Completion checklist.** `go test ./... -race`, `golangci-lint run`, a burst test with 50 concurrent requests on one key.",
-);
-
 const REVIEW_1 = lines(
   "#### Review 1 · changes",
   "",
@@ -362,33 +334,6 @@ const PASSED_TESTS = lines(
   "PASS",
   "ok  \tgithub.com/acme/api/internal/ratelimit\t7.912s",
 );
-
-/**
- * CONVERSATION_ARTIFACTS are the documents of the reference task the lines of the scenes open: the
- * step files and the reports, by the name ReadArtifact takes.
- */
-export const CONVERSATION_ARTIFACTS: Record<string, string> = {
-  "steps/03-token-bucket.md": STEP_FILE_3,
-  "steps/06-throttle-metrics.md": lines(
-    "#### Step 6: Count throttled requests per plan",
-    "",
-    "A counter of 429 answers labelled by plan, exported to Prometheus, and a panel in the gateway dashboard.",
-  ),
-  "step-reviews/3-review-1.md": REVIEW_1,
-  "step-reviews/6-review-2.md": lines(
-    "#### Review 2 · changes",
-    "",
-    "1. `internal/metrics/throttle.go:18` · Read the plan from the bucket.",
-  ),
-  "pr/1.md": lines(
-    "#### Review 1 · changes",
-    "",
-    "1. `internal/ratelimit/bucket.go:31` · **e2e / rate-limit-burst failed.** A new bucket refills from the zero time on its first read, so a burst of 20 lets 21 requests through. Start `last` at creation.",
-    "2. `internal/http/middleware/ratelimit.go:58` · `Retry-After` rounds down: a client told to wait 0 s retries at once and gets another 429. Round up to whole seconds.",
-    "3. No migration sets `plans.burst` for the 14 existing Enterprise rows; they fall back to the Free burst of 20.",
-    "4. `docs/rate-limits.md:12` · The table says 600 requests per minute for Pro; `config/plans.yaml` ships 500.",
-  ),
-};
 
 // ---------------- Step 3: the implementer and the reviewer ----------------
 

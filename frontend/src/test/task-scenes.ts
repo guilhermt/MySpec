@@ -1,7 +1,7 @@
 /**
  * The scenes of the task screen: the reference task, Rate limit per API
- * key, at its moments, with the conversations on screen already read. The scene tests and the width
- * tests draw TaskView from them.
+ * key, at its moments, with the conversations on screen already read. The scene tests draw
+ * TaskView from them.
  */
 
 import { afterEach, beforeEach, vi } from "vitest";
@@ -75,10 +75,10 @@ export interface Scene {
 }
 
 /** REFERENCE_NAME is the name of the reference task. */
-export const REFERENCE_NAME = "Rate limit per API key";
+const REFERENCE_NAME = "Rate limit per API key";
 
 /** LONGEST_NAME is a task name as long as a name can be, the longest title a task place has. */
-export const LONGEST_NAME = "rotate-the-api-keys-of-every-service-without-downtime-for-client";
+const LONGEST_NAME = "rotate-the-api-keys-of-every-service-without-downtime-for-client";
 
 /** TASK_ID is the id of the reference task. */
 export const TASK_ID = "task-1";
@@ -148,7 +148,7 @@ const STEP_REPORTS: Record<number, number> = { 1: 1, 2: 1, 3: 2, 5: 2, 6: 1, 7: 
  * stepReports are the reports of the agent review of a step, one per pass: the ones before the last
  * ask for changes, and the last is clean once the step is done. count is the reports the step has.
  */
-export function stepReports(number: number, count: number, done: boolean): StepReport[] {
+function stepReports(number: number, count: number, done: boolean): StepReport[] {
   return Array.from({ length: count }, (_, index) => {
     const clean = done && index === count - 1;
     return {
@@ -936,61 +936,6 @@ export function sceneTask(name: SceneName, { longName = false } = {}): Scene {
   return sceneOf(taskOf(name, longName), transcripts, tab);
 }
 
-/** FixedCardName is a moment of the pull request that ends its conversation in a fixed card. */
-export type FixedCardName = "draft" | "checks-after-a-pass";
-
-/**
- * fixedCardScene is the reference task at a moment of its pull request that no scene of the mock
- * draws, whose conversation ends in a fixed card: the draft the agent wrote, or the live checks the
- * second pass of the review waits for.
- */
-export function fixedCardScene(name: FixedCardName): Scene {
-  const running = CHECKS.map((check, index) =>
-    index < 3 ? check : { ...check, state: "running", conclusion: "", completedAt: "" },
-  );
-  const task =
-    name === "draft"
-      ? inPR(
-          {
-            status: "draft_ready",
-            prNumber: 0,
-            prUrl: "",
-            prState: "",
-            sessionStage: "pr",
-            draft: DRAFT,
-          },
-          { situations: [situation("draft", "waiting", prPlace, 3)] },
-          false,
-        )
-      : inPR(
-          {
-            status: "waiting_checks",
-            sessionStage: "pr_review",
-            reports: [
-              makePRReport({
-                pass: 1,
-                file: "1.md",
-                clean: false,
-                structured: false,
-                recorded: false,
-                findings: [],
-                revision: 0,
-                recordedAt: "",
-              }),
-            ],
-            checks: running,
-          },
-          {},
-          false,
-        );
-  const stage = name === "draft" ? "pr" : "pr_review";
-  const entries =
-    name === "draft"
-      ? talk("Write the pull request of the task.", "The draft is ready: title and description.")
-      : talk("Review the pull request #1284.", "Report 1 written · 4 findings.");
-  return sceneOf(task, [makeTranscript({ taskId: TASK_ID, stage, entries })], "implementer");
-}
-
 /**
  * sceneOf is what the store holds to draw a moment of the reference task: the task, among the
  * repository and the board it belongs to, the conversations on screen already read, and the tab of
@@ -1044,14 +989,4 @@ export function fixSceneClock(): void {
   afterEach(() => {
     vi.useRealTimers();
   });
-}
-
-/** taskInLoop is the task with a step in the loop of the implementer and the reviewer: the run scene. */
-export function taskInLoop(options: { longName?: boolean } = {}): Scene {
-  return sceneTask("run", options);
-}
-
-/** taskInPRReview is the task whose pull request waits for its checks: the checks scene. */
-export function taskInPRReview(options: { longName?: boolean } = {}): Scene {
-  return sceneTask("checks", options);
 }

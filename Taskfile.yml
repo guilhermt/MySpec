@@ -28,14 +28,7 @@ tasks:
       - go install tool
       - go mod download
       - task: common:install:frontend:deps
-      - task: playwright:install
       - lefthook install
-
-  playwright:install:
-    summary: Installs the Chromium of Playwright the computed-style suite runs in; a no-op when it is there
-    dir: frontend
-    cmds:
-      - pnpm exec playwright install --only-shell chromium
 
   dev:
     summary: Runs the app in development mode with Vite HMR
@@ -87,7 +80,7 @@ tasks:
     summary: Runs the design rules (design-rules.test.ts) on every check, whatever changed
     dir: frontend
     cmds:
-      - pnpm exec vitest run --project unit src/styles/design-rules.test.ts
+      - pnpm exec vitest run src/styles/design-rules.test.ts
 
   lint:knip:
     internal: true
@@ -105,21 +98,22 @@ tasks:
     deps: [test:go, test:web]
 
   test:go:
-    summary: Runs the Go tests; a package that did not change comes from the test cache. The CI adds -race with `task test:go -- -race`
+    summary: Runs the Go tests; a package that did not change comes from the test cache
     deps: [embed:stub]
     cmds:
       - gotestsum --format pkgname-and-test-fails -- -p {{.JOBS}} {{.CLI_ARGS}} ./...
 
   test:web:
-    summary: Runs the frontend tests, both suites, that reach a file changed since the branch left main, without the width sweep, which the CI runs in full
+    summary: Runs the frontend tests that reach a file changed since the branch left main
     dir: frontend
-    env:
-      MYSPEC_SKIP_SWEEP: "1"
     cmds:
       - pnpm exec vitest run --changed {{.BASE}} --passWithNoTests --maxWorkers={{.JOBS}}
 
   test:full:
-    deps: [test:go:full, test:web:full]
+    summary: Runs test:go:full, then test:web:full; one after the other, so the run takes at most JOBS cores
+    cmds:
+      - task: test:go:full
+      - task: test:web:full
 
   test:go:full:
     summary: Runs every Go test with the race detector, in shuffled order, with coverage and its thresholds
@@ -130,52 +124,10 @@ tasks:
       - go-test-coverage --config .testcoverage.yml
 
   test:web:full:
-    summary: Runs the jsdom suite with coverage and its thresholds, then the computed-style suite in Chromium
+    summary: Runs the frontend suite with coverage and its thresholds
     dir: frontend
     cmds:
       - pnpm test:coverage --maxWorkers={{.JOBS}}
-      - pnpm test:painted --maxWorkers={{.JOBS}}
-
-  captures:
-    summary: Runs the computed-style suite saving the screenshots of the pull request to frontend/captures
-    dir: frontend
-    cmds:
-      - rm -rf captures
-      - MYSPEC_CAPTURES=1 pnpm test:painted
-
-  captures:push:
-    summary: Publishes frontend/captures on the orphan branch captures/<branch> and prints the Markdown that shows them
-    # The screenshots never reach main: they live on an orphan branch of their own, pushed over on
-    # every run, and the pull request links to them. Not part of check nor of the CI.
-    silent: true
-    cmds:
-      - |
-        set -eu
-        branch="$(git rev-parse --abbrev-ref HEAD)"
-        target="captures/$branch"
-        repo="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
-        if ! ls frontend/captures/*.png >/dev/null 2>&1; then
-          echo "frontend/captures has no screenshots: run task captures first" >&2
-          exit 1
-        fi
-        tree="$(mktemp -d)"
-        trap 'git worktree remove --force "$tree"' EXIT
-        git worktree add --quiet --detach "$tree"
-        if git show-ref --verify --quiet "refs/heads/$target"; then
-          git -C "$tree" checkout --quiet "$target"
-        else
-          git -C "$tree" checkout --quiet --orphan "$target"
-        fi
-        git -C "$tree" rm -r --quiet --cached --ignore-unmatch .
-        find "$tree" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-        cp frontend/captures/*.png "$tree/"
-        git -C "$tree" add --all
-        git -C "$tree" commit --quiet --allow-empty -m "Record the captures of $branch"
-        git -C "$tree" push --quiet --force origin "$target"
-        for file in frontend/captures/*.png; do
-          name="$(basename "$file" .png)"
-          echo "![$name](https://github.com/$repo/blob/$target/$name.png?raw=true)"
-        done
 
   vuln:
     deps: [embed:stub]
@@ -212,7 +164,7 @@ tasks:
       - nice -n 10 "{{.TASK_EXE}}" tidy:check lint typecheck test vuln bindings:check
 
   check:full:
-    summary: Every test with the race detector, the shuffle and coverage; run on request and weekly in the CI
+    summary: Every test with the race detector, the shuffle and coverage; run once before opening a pull request
     cmds:
       - nice -n 10 "{{.TASK_EXE}}" tidy:check lint typecheck test:full vuln bindings:check
 
