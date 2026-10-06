@@ -1,3 +1,7 @@
+# A origem da frente de redesenho
+
+Este é o documento de roadmap que deu origem à frente de redesenho, guardado aqui como pesquisa: o problema, o escopo e as decisões que o brief (`../brief.md`) cita. A frente está concluída; o que ele descreve como futuro é o produto de hoje.
+
 # Redesenho da experiência
 
 ## O problema

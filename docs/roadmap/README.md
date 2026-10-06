@@ -23,4 +23,3 @@ O `README.md` de uma ideia é escrito como visão de produto, em português, sem
 
 ## Ideias
 
-- [redesign/](./redesign/README.md): repensar a experiência inteira do produto, com estrutura, linguagem visual e design system profissionais sobre as features atuais. Conduzida em `design/`.
