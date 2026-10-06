@@ -800,3 +800,111 @@ func TestCheckoutDetachedFailsOnARefThatIsNotThere(t *testing.T) {
 		t.Fatalf("CheckoutDetached(origin/nope) = %v, want *git.Error", err)
 	}
 }
+
+func TestRemoteTagExistsFindsATagOnlyTheRemoteHas(t *testing.T) {
+	t.Parallel()
+	origin := gittest.Origin(t, false)
+	runner := git.New(git.Deps{Env: gittest.Env(t)})
+	dir := gittest.Clone(t, origin, filepath.Join(t.TempDir(), "api"))
+	other := gittest.Clone(t, origin, filepath.Join(t.TempDir(), "other"))
+	gittest.Run(t, other, "tag", "v1.0.0")
+	gittest.Run(t, other, "push", "--quiet", "origin", "v1.0.0")
+
+	got, err := runner.RemoteTagExists(t.Context(), dir, "origin", "v1.0.0")
+	if err != nil {
+		t.Fatalf("RemoteTagExists(v1.0.0) = %v, want nil", err)
+	}
+	if !got {
+		t.Errorf("RemoteTagExists(v1.0.0) = false, want true for a tag the clone never fetched")
+	}
+}
+
+func TestRemoteTagExistsIsFalseForATagTheRemoteDoesNotHave(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+	gittest.Run(t, dir, "tag", "v1.0.0")
+
+	got, err := runner.RemoteTagExists(t.Context(), dir, "origin", "v1.0.0")
+	if err != nil {
+		t.Fatalf("RemoteTagExists(v1.0.0) = %v, want nil", err)
+	}
+	if got {
+		t.Errorf("RemoteTagExists(v1.0.0) = true, want false for a tag that is only local")
+	}
+}
+
+func TestCommitPathCommitsOnlyThatPath(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+	write(t, dir, "VERSION", "1.0.0\n")
+	write(t, dir, "README.md", "# changed\n")
+
+	if err := runner.CommitPath(t.Context(), dir, "VERSION", "Release 1.0.0"); err != nil {
+		t.Fatalf("CommitPath(VERSION) = %v, want nil", err)
+	}
+
+	if got, want := gittest.Run(t, dir, "show", "--name-only", "--format=", "HEAD"), "VERSION"; got != want {
+		t.Errorf("files in the commit = %q, want %q", got, want)
+	}
+	if got, want := gittest.Run(t, dir, "status", "--porcelain"), "M README.md"; got != want {
+		t.Errorf("status = %q, want %q", got, want)
+	}
+}
+
+func TestAnnotatedTagCreatesATagObjectAtHead(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+
+	if err := runner.AnnotatedTag(t.Context(), dir, "v1.0.0", "Release 1.0.0"); err != nil {
+		t.Fatalf("AnnotatedTag(v1.0.0) = %v, want nil", err)
+	}
+
+	if got, want := gittest.Run(t, dir, "cat-file", "-t", "v1.0.0"), "tag"; got != want {
+		t.Errorf("type of v1.0.0 = %q, want %q", got, want)
+	}
+	if got, want := gittest.Run(t, dir, "rev-parse", "v1.0.0^{commit}"), headOf(t, dir); got != want {
+		t.Errorf("v1.0.0 points at %s, want HEAD %s", got, want)
+	}
+}
+
+func TestPushAtomicPushesTheBranchAndTheTagTogether(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+	origin := gittest.Run(t, dir, "remote", "get-url", "origin")
+	gittest.Commit(t, dir, "VERSION", "1.0.0\n", "Release 1.0.0")
+	gittest.Run(t, dir, "tag", "--annotate", "-m", "Release 1.0.0", "v1.0.0")
+
+	if err := runner.PushAtomic(t.Context(), dir, "origin", "main", "v1.0.0"); err != nil {
+		t.Fatalf("PushAtomic(main, v1.0.0) = %v, want nil", err)
+	}
+
+	if got, want := gittest.Run(t, origin, "rev-parse", "main"), headOf(t, dir); got != want {
+		t.Errorf("origin main = %s, want %s", got, want)
+	}
+	if got := gittest.Run(t, origin, "tag", "--list", "v1.0.0"); got != "v1.0.0" {
+		t.Errorf("tags on origin = %q, want v1.0.0", got)
+	}
+}
+
+func TestPushAtomicUpdatesNothingWhenTheRemoteRefusesThePush(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+	origin := gittest.Run(t, dir, "remote", "get-url", "origin")
+	before := gittest.Run(t, origin, "rev-parse", "main")
+	gittest.Run(t, origin, "config", "receive.maxInputSize", "1")
+	gittest.Commit(t, dir, "VERSION", "1.0.0\n", "Release 1.0.0")
+	gittest.Run(t, dir, "tag", "--annotate", "-m", "Release 1.0.0", "v1.0.0")
+
+	err := runner.PushAtomic(t.Context(), dir, "origin", "main", "v1.0.0")
+	var gitErr *git.Error
+	if !errors.As(err, &gitErr) {
+		t.Fatalf("PushAtomic(main, v1.0.0) = %v, want *git.Error", err)
+	}
+
+	if got := gittest.Run(t, origin, "rev-parse", "main"); got != before {
+		t.Errorf("origin main = %s, want it left at %s", got, before)
+	}
+	if got := gittest.Run(t, origin, "tag", "--list", "v1.0.0"); got != "" {
+		t.Errorf("tags on origin = %q, want none", got)
+	}
+}
