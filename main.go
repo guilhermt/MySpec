@@ -14,11 +14,16 @@ var assets embed.FS
 //go:embed build/appicon.png
 var icon []byte
 
+// version is the release this binary is: dev for a local build, and the
+// version of VERSION for the release build, which sets it with
+// -ldflags "-X main.version=X.Y.Z" (task package).
+var version = "dev"
+
 func main() {
 	os.Exit(app.Run(app.Config{
 		Assets:  assets,
 		Icon:    icon,
 		Args:    os.Args[1:],
-		Version: "0.1.0",
+		Version: version,
 	}))
 }

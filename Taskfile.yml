@@ -7,6 +7,10 @@ vars:
   PACKAGE_MANAGER: pnpm
   VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
   MODULE: github.com/guilhermt/myspec
+  # The version of the latest release, from VERSION. Only package writes it into the binary; every
+  # other build is a dev build.
+  RELEASE_VERSION:
+    sh: cat VERSION
   # JOBS caps the parallelism of each tool in a run. Agents run the checks side by side and every
   # tool defaults to all the cores, so an uncapped run takes the machine. MYSPEC_JOBS overrides it;
   # the default is 4, or the cores there are when there are fewer.
@@ -210,3 +214,29 @@ tasks:
         ignore_error: true
       - cmd: gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor"
         ignore_error: true
+
+  package:
+    summary: Builds the release package, bin/myspec-linux-amd64.tar.gz, with the version in VERSION
+    vars:
+      PACKAGE_DIR: '{{.BIN_DIR}}/package'
+      PACKAGE: '{{.BIN_DIR}}/{{.APP_NAME}}-linux-amd64.tar.gz'
+      # Every entry of the archive gets the date of the commit, so the same commit packs into the
+      # same bytes.
+      SOURCE_DATE_EPOCH:
+        sh: git log -1 --format=%ct HEAD
+    cmds:
+      - rm -rf {{.PACKAGE_DIR}} {{.PACKAGE}}
+      - task: linux:build
+        vars:
+          ARCH: amd64
+          APP_VERSION: '{{.RELEASE_VERSION}}'
+          OUTPUT: '{{.PACKAGE_DIR}}/{{.APP_NAME}}'
+      - chmod 0755 {{.PACKAGE_DIR}}/{{.APP_NAME}}
+      - install -Dm644 build/linux/{{.APP_ID}}.desktop {{.PACKAGE_DIR}}/{{.APP_ID}}.desktop
+      - install -Dm644 build/linux/icon.svg {{.PACKAGE_DIR}}/{{.APP_ID}}.svg
+      - install -Dm644 build/appicon.png {{.PACKAGE_DIR}}/{{.APP_ID}}.png
+      - >-
+        tar --create --file=- --directory={{.PACKAGE_DIR}} --format=gnu --sort=name
+        --mtime=@{{.SOURCE_DATE_EPOCH}} --owner=0 --group=0 --numeric-owner
+        {{.APP_NAME}} {{.APP_ID}}.desktop {{.APP_ID}}.png {{.APP_ID}}.svg
+        | gzip -9 --no-name > {{.PACKAGE}}
