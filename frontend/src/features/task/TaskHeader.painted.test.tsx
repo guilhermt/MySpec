@@ -49,7 +49,7 @@ function pieces() {
   };
 }
 
-/** LIMITS are the main area widths from which each piece shows (design/tasks/03-task-header.md §4.2). */
+/** LIMITS are the main area widths from which each piece shows (docs/design/components.md, Cabeçalho do lugar). */
 const LIMITS = {
   levels: 1660,
   panelName: 1440,

@@ -1,9 +1,8 @@
 /**
- * The scenes of Settings (design/lab/14-screen-rest): the acme world of the board scenes with the
- * volume of the real database, 3 boards, 12 repositories, 9 models with 6 changed from the factory and
- * 9 prompts, at the same moment as the other scenes. The data is the one of the mock
- * (design/lab/14-screen-rest/src/data.js), with the corrections of the material of the task: Mobile App
- * is read at 11:30, and Internal Tools yesterday at noon. The scene tests draw the screens from them.
+ * The scenes of Settings: the acme world of the board scenes with the volume of the real database,
+ * 3 boards, 12 repositories, 9 models with 6 changed from the factory and 9 prompts, at the same moment
+ * as the other scenes. Mobile App is read at 11:30, and Internal Tools yesterday at noon. The scene
+ * tests draw the screens from them.
  */
 
 import { screen, waitFor, within } from "@testing-library/react";

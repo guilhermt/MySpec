@@ -83,6 +83,10 @@
     {
       "includes": ["frontend/src/components/system/**", "frontend/src/styles/globals.test.tsx"],
       "linter": { "rules": { "style": { "noRestrictedImports": "off" } } }
+    },
+    {
+      "includes": ["frontend/src/styles/tokens.css"],
+      "formatter": { "enabled": false }
     }
   ],
   "assist": {

@@ -4,10 +4,7 @@ import { describe, expect, it } from "vitest";
 import { CODE_THEMES } from "@/features/chat/code-theme";
 
 // Vitest runs with css: false, so the tokens are read as text.
-const TOKENS = readFileSync(
-  join(import.meta.dirname, "../../../../design/system/tokens.css"),
-  "utf8",
-);
+const TOKENS = readFileSync(join(import.meta.dirname, "../../styles/tokens.css"), "utf8");
 
 interface TokenColor {
   settings: { foreground: string; fontStyle?: string };

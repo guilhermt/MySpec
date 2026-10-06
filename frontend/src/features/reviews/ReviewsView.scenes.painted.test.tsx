@@ -265,7 +265,7 @@ describe.each(THEMES)("ReviewsView, the scenes in the %s theme", (theme) => {
     });
 
     // The long form, 287px beside dependabot, passes the 284px of the second line. Published has no
-    // shorter form (design/structure.md: the tree says the same), so the short one cuts, with the tooltip.
+    // shorter form (docs/design/structure.md: the tree says the same), so the short one cuts, with the tooltip.
     it("gives the state that doesn't fit beside dependabot at 812px its short form, cut with a tooltip", async () => {
       setTheme(theme);
       const test = withTestRow(scene);

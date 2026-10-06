@@ -15,6 +15,13 @@ A documentação é escrita em português; a interface, o código, os identifica
 - [sessions.md](./architecture/sessions.md): o processo do Claude Code por trás de cada sessão: flags, protocolo, ciclo de vida, prompts e correções.
 - [storage.md](./architecture/storage.md): o diretório de dados, o banco e as migrations, os artefatos, as worktrees e o log.
 
+## Design
+
+- [README.md](./design/README.md): a identidade visual do MySpec e como usar esta pasta antes de criar ou mudar uma tela.
+- [principles.md](./design/principles.md): os dez princípios que toda tela segue.
+- [structure.md](./design/structure.md): a navegação, a barra lateral, o item aberto, os outros lugares, os atalhos, as larguras e os estados de toda tela.
+- [components.md](./design/components.md): o catálogo dos componentes, com anatomia, estados, tokens, teclado e acessibilidade.
+
 ## Guidelines
 
 - [README.md](./guidelines/README.md): como trabalhar neste repositório: o que ler, como uma mudança acontece, o que nunca fazer, commits e pull requests.
@@ -31,4 +38,4 @@ A documentação é escrita em português; a interface, o código, os identifica
 - [setup.md](./development/setup.md): pré-requisitos, setup, comandos, instalação, VS Code e variáveis de ambiente.
 - [ci.md](./development/ci.md): a verificação de todo dia, a completa com cobertura e o Dependabot.
 - [troubleshooting.md](./development/troubleshooting.md): o log, o que cada linha significa e os problemas conhecidos.
-- [target-machine.md](./development/target-machine.md): as verificações feitas na máquina alvo e os comportamentos do Wails que exigiram contorno.
+- [target-machine.md](./development/target-machine.md): o que vale na máquina alvo: o WebKitGTK, as fontes, a rolagem das listas em janela, o início, as notificações e os comportamentos do Wails que exigiram contorno.

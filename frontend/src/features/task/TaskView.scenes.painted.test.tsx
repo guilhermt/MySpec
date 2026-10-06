@@ -45,7 +45,7 @@ vi.mock("@/lib/wails", async (importOriginal) => ({
 /** SCENE_MAIN is the main area the scenes are drawn in, the one of the mock. */
 const SCENE_MAIN = 1566;
 
-// The nine scenes of the mock (design/screens/task.md §11): what the stepper shows, and its glyph.
+// The nine scenes of the mock: what the stepper shows, and its glyph.
 const STEPPERS: [SceneName, string, string][] = [
   ["plan", "PRD ○ Tech spec ○ Plan ○ Implementation ○ PR ○ PR review ○ Closing", "wait"],
   [

@@ -1,11 +1,11 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BOARD_ID, measuredState } from "@/dev/measure-board";
 import { BoardView } from "@/features/board/BoardView";
 import { EMPTY_FILTERS } from "@/features/board/board-view";
 import { boardViewKey } from "@/lib/ui-storage";
 import { api, type Board, type BoardCard, type State } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
+import { BOARD_ID, largeBoardState } from "@/test/large-board";
 import { spoken } from "@/test/live";
 import { renderWithStore } from "@/test/render";
 import {
@@ -661,7 +661,7 @@ describe("a board longer than its window", () => {
       JSON.stringify({ filters: EMPTY_FILTERS, collapsed: [] }),
     );
     return renderWithStore(<BoardView boardId={BOARD_ID} />, {
-      state: measuredState(),
+      state: largeBoardState(),
       ui: { location: { kind: "board", id: BOARD_ID } },
     });
   };

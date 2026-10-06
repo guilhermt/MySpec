@@ -1,19 +1,19 @@
 import { act, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import {
-  measuredConversation,
-  OPEN_STRETCHES,
-  SESSION,
-  STAGE,
-  TASK_ID,
-} from "@/dev/measure-conversation";
 import { Conversation } from "@/features/chat/Conversation";
 import { roundLineOf } from "@/features/chat/discussion-markers";
 import { MarkerLine } from "@/features/chat/entries/MarkerLine";
 import { type Entry, sessionKey } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { fromTranscript } from "@/store/transcript";
+import {
+  longConversation,
+  OPEN_STRETCHES,
+  SESSION,
+  STAGE,
+  TASK_ID,
+} from "@/test/long-conversation";
 import { mainArea, settle } from "@/test/painted";
 import { renderWithStore } from "@/test/render";
 import { makeEntry, makeState, makeTask } from "@/test/wails-mock";
@@ -45,10 +45,10 @@ function speechAt(all: readonly Entry[], from: number): number {
   return all.findIndex((entry, at) => at >= from && entry.kind === "assistant");
 }
 
-// entries are the measured conversation with a pending question and a marker in its middle, each
+// entries are the long conversation with a pending question and a marker in its middle, each
 // in the place of a speech, so that no stretch gets long enough to fold.
 function entries(): Entry[] {
-  const all = measuredConversation(OPEN_STRETCHES);
+  const all = longConversation(OPEN_STRETCHES);
   const questionAt = speechAt(all, QUESTION_AT);
   const markerAt = speechAt(all, MARKER_AT);
   const question = makeEntry("question", { ...entryOf(all, questionAt), id: QUESTION_ID });

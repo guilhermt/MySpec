@@ -1,9 +1,7 @@
 /**
- * The scenes of the discussion screen and of the dialog that starts a discussion
- * (design/tasks/09-discussion.md §1, pronto 1): the discussion Usage-based pricing tiers of the board
- * Platform Roadmap, over #455 and #461, at the thirteen moments of the mock, with its flags. The data
- * is the one of the mock (design/lab/13-screen-discussion/src/disc.js and pub.js). The scene tests
- * draw DiscussionView and NewDiscussionDialog from them.
+ * The scenes of the discussion screen and of the dialog that starts a discussion: the discussion
+ * Usage-based pricing tiers of the board Platform Roadmap, over #455 and #461, at the thirteen moments
+ * of the mock, with its flags. The scene tests draw DiscussionView and NewDiscussionDialog from them.
  */
 
 import { act, screen, within } from "@testing-library/react";

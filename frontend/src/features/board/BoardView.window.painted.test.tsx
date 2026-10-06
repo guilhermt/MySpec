@@ -1,9 +1,9 @@
 import { screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { BOARD_ID, measuredState } from "@/dev/measure-board";
 import { BoardView } from "@/features/board/BoardView";
 import { EMPTY_FILTERS } from "@/features/board/board-view";
 import { boardViewKey } from "@/lib/ui-storage";
+import { BOARD_ID, largeBoardState } from "@/test/large-board";
 import { layoutInCommits, mainArea, NARROW_MAIN, settle } from "@/test/painted";
 import { renderWithStore } from "@/test/render";
 
@@ -21,7 +21,7 @@ vi.mock("@/lib/wails", async (importOriginal) => ({
  */
 const MAIN_WIDTH = 1134;
 const MAIN_HEIGHT = 1080;
-// SECTIONS are the statuses of the measured board, each a header.
+// SECTIONS are the statuses of the large board, each a header.
 const SECTIONS = 10;
 // OVERSCAN is the rows CardTree mounts past each end of what shows.
 const OVERSCAN = 20;
@@ -38,7 +38,7 @@ async function draw(width = MAIN_WIDTH) {
     <div style={{ ...mainArea(width), height: `${MAIN_HEIGHT}px`, display: "flex" }}>
       <BoardView boardId={BOARD_ID} />
     </div>,
-    { state: measuredState(), ui: { location: { kind: "board", id: BOARD_ID } } },
+    { state: largeBoardState(), ui: { location: { kind: "board", id: BOARD_ID } } },
   );
   await settle();
   const list = screen.getByRole("tree");

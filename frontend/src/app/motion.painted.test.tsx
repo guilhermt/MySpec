@@ -11,14 +11,6 @@ import { SkeletonBar } from "@/components/system/Skeleton";
 import { Spinner } from "@/components/system/Spinner";
 import { Toast } from "@/components/system/Toast";
 import { Tooltip } from "@/components/system/Tooltip";
-import { BOARD_ID, measuredState } from "@/dev/measure-board";
-import {
-  measuredConversation,
-  OPEN_STRETCHES,
-  SESSION,
-  STAGE,
-  TASK_ID,
-} from "@/dev/measure-conversation";
 import { BoardView } from "@/features/board/BoardView";
 import { EMPTY_FILTERS } from "@/features/board/board-view";
 import { Conversation } from "@/features/chat/Conversation";
@@ -28,6 +20,14 @@ import { boardViewKey } from "@/lib/ui-storage";
 import { sessionKey } from "@/lib/wails";
 import { type Toast as ToastEntry, useAppStore } from "@/store/app-store";
 import { fromTranscript } from "@/store/transcript";
+import { BOARD_ID, largeBoardState } from "@/test/large-board";
+import {
+  longConversation,
+  OPEN_STRETCHES,
+  SESSION,
+  STAGE,
+  TASK_ID,
+} from "@/test/long-conversation";
 import { mainArea, resolve, settle, token } from "@/test/painted";
 import { renderWithStore } from "@/test/render";
 import { makeArchivedTask, makeState, makeTask } from "@/test/wails-mock";
@@ -249,7 +249,7 @@ describe("with reduced motion", () => {
       <div style={{ ...mainArea(1134), height: "1080px", display: "flex" }}>
         <BoardView boardId={BOARD_ID} />
       </div>,
-      { state: measuredState(), ui: { location: { kind: "board", id: BOARD_ID } } },
+      { state: largeBoardState(), ui: { location: { kind: "board", id: BOARD_ID } } },
     );
     await settle();
     within(screen.getByRole("tree")).getAllByRole("treeitem")[1]?.focus();
@@ -273,7 +273,7 @@ describe("with reduced motion", () => {
               taskId: TASK_ID,
               sessionId: "measure",
               stage: STAGE,
-              entries: measuredConversation(OPEN_STRETCHES),
+              entries: longConversation(OPEN_STRETCHES),
               pending: [],
             }),
           },

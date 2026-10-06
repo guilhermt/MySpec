@@ -1,10 +1,10 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { measuredConversation, OPEN_STRETCHES } from "@/dev/measure-conversation";
 import { TaskView } from "@/features/task/TaskView";
 import { sessionKey } from "@/lib/wails";
 import { fromTranscript } from "@/store/transcript";
 import { conversationScene } from "@/test/conversation-scenes";
+import { longConversation, OPEN_STRETCHES } from "@/test/long-conversation";
 import { layoutInCommits, mainArea } from "@/test/painted";
 import { renderWithStore } from "@/test/render";
 import { TASK_ID } from "@/test/task-scenes";
@@ -33,7 +33,7 @@ function draw() {
       taskId: TASK_ID,
       sessionId: "long",
       stage: STAGE,
-      entries: measuredConversation(OPEN_STRETCHES),
+      entries: longConversation(OPEN_STRETCHES),
       pending: [],
     }),
   };

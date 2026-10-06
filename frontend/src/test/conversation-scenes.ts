@@ -1,7 +1,6 @@
 /**
- * The scenes of the conversation (design/tasks/04-task-conversation.md §4.2, As cenas): the
- * conversations of design/lab/16-conversation-wide/src/conv-data.js on the reference task of
- * task-scenes.ts, at the moment of each scene. The conversation test draws TaskView from them.
+ * The scenes of the conversation: the conversations on the reference task of task-scenes.ts, at the
+ * moment of each scene. The conversation test draws TaskView from them.
  */
 
 import { afterEach, beforeEach, vi } from "vitest";
