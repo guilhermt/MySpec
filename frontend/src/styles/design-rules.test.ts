@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 // Vitest runs with css: false, so the stylesheets are read as text.
 const SRC = join(import.meta.dirname, "..");
 const GLOBALS = readFileSync(join(SRC, "styles/globals.css"), "utf8");
-const TOKENS = readFileSync(join(SRC, "../../design/system/tokens.css"), "utf8");
+const TOKENS = readFileSync(join(SRC, "styles/tokens.css"), "utf8");
 
 /**
  * TAILWIND_PALETTE matches a class that paints with a colour of the Tailwind palette (text-red-500,
@@ -110,11 +110,15 @@ function violations(rule: Rule, path: string, text: string): string[] {
   );
 }
 
-/** Every source file the rules read: the generated components, the test helpers and the tests are out. */
+/**
+ * Every source file the rules read: the tokens, where every value is declared, the generated
+ * components, the test helpers and the tests are out.
+ */
 function scope(): string[] {
   return readdirSync(SRC, { recursive: true, encoding: "utf8" }).filter(
     (path) =>
       /\.(css|tsx?)$/.test(path) &&
+      path !== "styles/tokens.css" &&
       !path.startsWith("components/ui/") &&
       !path.startsWith("test/") &&
       !/\.test\./.test(path),

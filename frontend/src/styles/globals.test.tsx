@@ -10,7 +10,7 @@ import { renderWithStore } from "@/test/render";
 // Vitest runs with css: false, so the stylesheets are read as text.
 const STYLES = import.meta.dirname;
 const GLOBALS = readFileSync(join(STYLES, "globals.css"), "utf8");
-const TOKENS_PATH = join(STYLES, "../../../design/system/tokens.css");
+const TOKENS_PATH = join(STYLES, "tokens.css");
 const TOKENS = readFileSync(TOKENS_PATH, "utf8");
 
 /** The rule that opens dialogs 8vh from the top on whole pixels, at the top level of globals.css. */
@@ -108,7 +108,7 @@ describe("globals.css", () => {
   });
 
   it("takes the tokens from the design system, their single source", () => {
-    expect(GLOBALS).toContain('@import "../../../design/system/tokens.css";');
+    expect(GLOBALS).toContain('@import "./tokens.css";');
     expect(existsSync(TOKENS_PATH)).toBe(true);
   });
 

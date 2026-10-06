@@ -42,7 +42,6 @@ frontend/
   src/components/system/   componentes do design system, os wrappers dos primitivos e os próprios
   src/styles/            Tailwind, a ponte dos tokens do design system e fontes
   src/test/              setup do Vitest, render com store, mock do Go e as cenas das telas
-  src/dev/               ferramentas do servidor de dev, fora do build de produção
   bindings/              gerados por `task generate`; nunca editados à mão
 build/                   config do Wails, ícones e entrada .desktop
 .github/                 CI e Dependabot
@@ -192,7 +191,7 @@ Cada diretório de `features/` cobre uma área: `sidebar` para a barra lateral e
 
 ### Estilo
 
-`styles/globals.css` importa os tokens de `design/system/tokens.css`, a fonte única de cores, fontes, tamanhos, durações e curvas nos dois temas, faz a ponte deles com as variáveis que o shadcn lê e os registra como utilitários do Tailwind; as regras sem camada no fim do arquivo mantêm no pixel inteiro o que o WebKitGTK borraria. Os componentes do produto são os de `components/system/`, e uma cor nunca é o único portador de um estado: todo ponto colorido tem um rótulo. Os detalhes estão em [design-system.md](./design-system.md).
+`styles/globals.css` importa os tokens de `styles/tokens.css`, a fonte única de cores, fontes, tamanhos, durações e curvas nos dois temas, faz a ponte deles com as variáveis que o shadcn lê e os registra como utilitários do Tailwind; as regras sem camada no fim do arquivo mantêm no pixel inteiro o que o WebKitGTK borraria. Os componentes do produto são os de `components/system/`, e uma cor nunca é o único portador de um estado: todo ponto colorido tem um rótulo. Os detalhes estão em [design-system.md](./design-system.md).
 
 ## Build
 

@@ -1,9 +1,7 @@
 /**
- * The scenes of Reviews and of the screen of a review (design/tasks/06-review.md §1): the nine open
- * pull requests of the twelve repositories of acme, and the review of web#2291 at the eleven moments
- * of the mock, with the flags own, stale, apply and checkerr. The data is the one of the mock
- * (design/lab/12-screen-review/src/review.js). The scene tests draw ReviewsView and ReviewView from
- * them.
+ * The scenes of Reviews and of the screen of a review: the nine open pull requests of the twelve
+ * repositories of acme, and the review of web#2291 at the eleven moments of the mock, with the flags
+ * own, stale, apply and checkerr. The scene tests draw ReviewsView and ReviewView from them.
  */
 
 import { act, screen } from "@testing-library/react";

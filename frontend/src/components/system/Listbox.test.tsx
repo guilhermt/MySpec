@@ -34,10 +34,7 @@ async function open(props: Partial<ListboxProps> = {}, name = "Base branch: main
   return rendered;
 }
 
-const TOKENS = readFileSync(
-  join(import.meta.dirname, "../../../../design/system/tokens.css"),
-  "utf8",
-);
+const TOKENS = readFileSync(join(import.meta.dirname, "../../styles/tokens.css"), "utf8");
 
 describe("Listbox", () => {
   it("keeps the gap of tokens.css", () => {

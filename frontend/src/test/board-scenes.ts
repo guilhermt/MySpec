@@ -1,8 +1,7 @@
 /**
- * The scenes of the board, the Home and the creation dialog (design/lab/11-screen-board): the board
- * Platform Roadmap at the size of the real one, with the two boards beside it, at fourteen moments.
- * The data is the one of the mock (design/lab/11-screen-board/src/data.js). The scene tests and the
- * measurement draw the screens from them.
+ * The scenes of the board, the Home and the creation dialog: the board Platform Roadmap at the size
+ * of the real one, with the two boards beside it, at fourteen moments. The scene tests draw the
+ * screens from them.
  */
 
 import { act, screen } from "@testing-library/react";

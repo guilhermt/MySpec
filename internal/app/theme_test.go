@@ -16,7 +16,7 @@ import (
 )
 
 // tokensPath is the single source of the design tokens, which the frontend imports.
-const tokensPath = "../../design/system/tokens.css"
+const tokensPath = "../../frontend/src/styles/tokens.css"
 
 // darkBlock opens the block that the fixed dark theme reads its tokens from.
 const darkBlock = `[data-theme="dark"] {`

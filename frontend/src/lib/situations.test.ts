@@ -55,10 +55,7 @@ const ids = (situations: readonly { id: string }[]) => situations.map((situation
 
 describe("FLASH_MS", () => {
   it("lasts the two blinks of --duration-slow", () => {
-    const tokens = readFileSync(
-      join(import.meta.dirname, "../../../design/system/tokens.css"),
-      "utf8",
-    );
+    const tokens = readFileSync(join(import.meta.dirname, "../styles/tokens.css"), "utf8");
 
     expect(tokens).toContain(`--duration-slow: ${DURATION_SLOW_MS}ms`);
     expect(FLASH_MS).toBe(2 * DURATION_SLOW_MS);

@@ -5,6 +5,7 @@ MySpec é uma aplicação desktop que conduz um workflow de desenvolvimento com 
 ## Leia antes de planejar ou implementar
 
 - [docs/guidelines/README.md](./docs/guidelines/README.md): como trabalhar neste repositório. O que ler, como uma mudança acontece, o que nunca fazer, commits. Com as convenções de [Go](./docs/guidelines/go.md), do [frontend](./docs/guidelines/frontend.md) e dos [testes](./docs/guidelines/testing.md).
+- [docs/design/README.md](./docs/design/README.md): o design do MySpec e o que seguir antes de criar ou mudar uma tela.
 - [docs/product/features.md](./docs/product/features.md): o que o produto faz, como ele é hoje.
 - [docs/architecture/overview.md](./docs/architecture/overview.md): onde cada coisa está no código e como as partes se falam. Com [stack.md](./docs/architecture/stack.md), [sessions.md](./docs/architecture/sessions.md) e [storage.md](./docs/architecture/storage.md).
 

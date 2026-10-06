@@ -6,10 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
 import { TOOLTIP_DELAY_MS, TOOLTIP_OFFSET_PX, Tooltip } from "./Tooltip";
 
-const TOKENS = readFileSync(
-  join(import.meta.dirname, "../../../../design/system/tokens.css"),
-  "utf8",
-);
+const TOKENS = readFileSync(join(import.meta.dirname, "../../styles/tokens.css"), "utf8");
 
 function Subject() {
   return (

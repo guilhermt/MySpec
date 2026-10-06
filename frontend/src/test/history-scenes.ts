@@ -1,8 +1,6 @@
 /**
- * The scenes of the History and of the archived items (design/tasks/11-history-dialogs.md §1, pronto
- * 1): the list of 44 archived items in 12 days, and the archived task, review and discussion the mock
- * opens. The data is the one of the mock (design/lab/14-screen-rest/src/data.js:103–151 and
- * src/history.js:53–98) without its contradictions (§4.3 #27): the pull request of the typo in the
+ * The scenes of the History and of the archived items: the list of 44 archived items in 12 days, and
+ * the archived task, review and discussion the mock opens. The pull request of the typo in the
  * password reset email is #2275, not the #2279 that is the card of the flaky login. The scene tests
  * draw HistoryView and the archived screens from them.
  */

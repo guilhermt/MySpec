@@ -1,12 +1,12 @@
 # Design system
 
-Como o design system do MySpec, definido em `design/system/`, chega ao frontend: os tokens, o tema, a ponte com o shadcn, os utilitários, as fontes, as regras do WebKitGTK, o código e os componentes de `frontend/src/components/system/`.
+Como o design system do MySpec, descrito em [docs/design/](../design/README.md), chega ao frontend: os tokens, o tema, a ponte com o shadcn, os utilitários, as fontes, as regras do WebKitGTK, o código e os componentes de `frontend/src/components/system/`.
 
 ## Fonte dos tokens
 
-`design/system/tokens.css` é a fonte única dos valores: cores em oklch nos dois temas, fontes, tamanhos de texto e de controle, espaços, raios, sombras, durações e curvas. `frontend/src/styles/globals.css` o importa direto (`@import "../../../design/system/tokens.css"`), sem cópia. Como o arquivo está fora de `frontend/`, o `build:frontend` de `build/Taskfile.yml` o lista nos `sources`, e uma mudança só nele reconstrói o frontend. Os tokens de medida e de layout de cada lugar, como `--measure-conversation` e a altura da caixa do compositor, de `--size-composer-min` a `--size-composer-max` (cerca de dez linhas, e depois ela rola), estão listados com o uso em `design/system/components.md`.
+`frontend/src/styles/tokens.css` é a fonte única dos valores: cores em oklch nos dois temas, fontes, tamanhos de texto e de controle, espaços, raios, sombras, durações e curvas. `styles/globals.css` o importa (`@import "./tokens.css"`). O Biome não o formata (um `override` em `biome.json`), para os tokens de um mesmo papel ficarem numa linha só, lidos como uma tabela. Os tokens de medida e de layout de cada lugar, como `--measure-conversation` e a altura da caixa do compositor, de `--size-composer-min` a `--size-composer-max` (cerca de dez linhas, e depois ela rola), estão listados com o uso em [components.md](../design/components.md), Tamanhos de layout.
 
-O arquivo tem o tema escuro escrito duas vezes: num bloco `@media (prefers-color-scheme: dark)`, para os mocks de `design/`, e em `[data-theme="dark"]`. No app o bloco da media query é inerte, porque o `documentElement` sempre tem `data-theme` (a seção seguinte).
+As cores claras estão em `:root, [data-theme="light"]` e as escuras em `[data-theme="dark"]`, uma vez só: o `documentElement` sempre tem `data-theme` (a seção seguinte).
 
 ## Tema
 
@@ -37,7 +37,7 @@ Os primitivos de `components/ui/` leem as variáveis do shadcn (`--background`, 
 
 O `--border` do shadcn não é declarado: `--border` é a espessura de `1px` do system, e a cor das bordas é o utilitário `--color-border`, que aponta para `--line-2`.
 
-Não há aliases de cor de status de sessão: as telas leem os tokens de estado (`--state-work`, `--state-wait`, `--state-wait-glyph`, `--state-close`, `--state-paused`) direto, e a espera tem dois, o texto em `--state-wait` e o preenchimento em `--state-wait-glyph`, a regra Cor da espera de `components.md`.
+Não há aliases de cor de status de sessão: as telas leem os tokens de estado (`--state-work`, `--state-wait`, `--state-wait-glyph`, `--state-close`, `--state-paused`) direto, e a espera tem dois, o texto em `--state-wait` e o preenchimento em `--state-wait-glyph`, a regra Cor da espera de [components.md](../design/components.md).
 
 A ponte é o único lugar dos nomes do shadcn (`@theme inline` e o bloco `[data-theme]`); a camada base de `globals.css` usa os tokens (`var(--line-2)`, `var(--surface-1)`, `var(--ink-1)`) e a tabela do Markdown, o tamanho `--text-ui`. `styles/design-rules.test.ts` recusa um nome da ponte, um tamanho de texto do Tailwind e uma classe de movimento do Tailwind em todo arquivo fora de `components/ui/`.
 

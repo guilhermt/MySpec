@@ -16,7 +16,7 @@ function scene(name: SceneName) {
 
 const stepper = () => screen.getByRole("list", { name: /^Progress/ });
 
-// The nine scenes of the mock (design/screens/task.md §11), as the stepper and the bar say them.
+// The nine scenes of the mock, as the stepper and the bar say them.
 // The scenes are drawn at the moment of the mock, whatever the day the suite runs.
 fixSceneClock();
 

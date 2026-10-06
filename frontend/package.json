@@ -7,8 +7,6 @@
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.json && vite build --mode production",
     "build:dev": "vite build --minify false --mode development",
-    "measure:build": "vite build --mode measure --outDir dist-measure",
-    "measure:serve": "vite preview --mode measure --outDir dist-measure --host 127.0.0.1 --port 9246 --strictPort",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.painted.json",
     "lint": "biome ci .",
     "format": "biome check --write .",

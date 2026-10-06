@@ -1,5 +1,5 @@
 /**
- * The scenes of the task screen (design/screens/task.md §11): the reference task, Rate limit per API
+ * The scenes of the task screen: the reference task, Rate limit per API
  * key, at its moments, with the conversations on screen already read. The scene tests and the width
  * tests draw TaskView from them.
  */
