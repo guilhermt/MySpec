@@ -240,3 +240,8 @@ tasks:
         --mtime=@{{.SOURCE_DATE_EPOCH}} --owner=0 --group=0 --numeric-owner
         {{.APP_NAME}} {{.APP_ID}}.desktop {{.APP_ID}}.png {{.APP_ID}}.svg
         | gzip -9 --no-name > {{.PACKAGE}}
+
+  release:
+    summary: Publishes a release; task release -- <patch|minor|major>
+    cmds:
+      - go run ./cmd/release {{.CLI_ARGS}}
