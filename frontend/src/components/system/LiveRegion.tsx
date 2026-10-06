@@ -12,11 +12,11 @@ export interface LiveRegionProps {
 /**
  * LiveRegion is a status or an alert that is always on screen and holds the text only while there is
  * something to say: a reader announces a text that arrives in a region it already knows, never one
- * that is born with its text. A region never takes display: contents, which WebKit drops from the accessibility tree with its role. The data-live-region attribute is what the width sweep recognises it by.
+ * that is born with its text. A region never takes display: contents, which WebKit drops from the accessibility tree with its role.
  */
 export function LiveRegion({ kind, as: Tag = "span", className, children }: LiveRegionProps) {
   return (
-    <Tag role={kind} data-live-region="" {...(className !== undefined ? { className } : {})}>
+    <Tag role={kind} {...(className !== undefined ? { className } : {})}>
       {children}
     </Tag>
   );

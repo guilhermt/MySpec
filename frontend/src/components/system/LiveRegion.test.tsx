@@ -15,7 +15,6 @@ describe("LiveRegion", () => {
     const { rerender } = render(<LiveRegion kind="status" />);
     const region = screen.getByRole("status");
     expect(region).toBeEmptyDOMElement();
-    expect(region).toHaveAttribute("data-live-region");
 
     rerender(<LiveRegion kind="status">Cloning…</LiveRegion>);
     expect(screen.getByRole("status")).toBe(region);
