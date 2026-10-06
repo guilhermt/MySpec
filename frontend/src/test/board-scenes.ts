@@ -44,7 +44,7 @@ import {
 } from "@/test/wails-mock";
 
 /** BOARD_SCENES are the fourteen moments of the board, the Home and the creation dialog. */
-export const BOARD_SCENES = [
+const BOARD_SCENES = [
   "home",
   "home-disc",
   "home-none",

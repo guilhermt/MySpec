@@ -15,7 +15,7 @@ task dev        # roda em desenvolvimento
 task install    # ou instala para o usuário atual
 ```
 
-`task check` roda tudo que o CI roda. Os pré-requisitos completos, os comandos e as variáveis de ambiente estão em [docs/development/setup.md](./docs/development/setup.md).
+`task check` roda tudo que o CI roda. Antes de abrir uma pull request, `task check:full` roda uma vez ([ci.md](./docs/development/ci.md)). Os pré-requisitos completos, os comandos e as variáveis de ambiente estão em [docs/development/setup.md](./docs/development/setup.md).
 
 ## Documentação
 

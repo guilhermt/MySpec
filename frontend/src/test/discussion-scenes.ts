@@ -6,7 +6,7 @@
 
 import { act, screen, within } from "@testing-library/react";
 import type { UserEvent } from "@testing-library/user-event";
-import { afterEach, beforeEach, vi } from "vitest";
+import { vi } from "vitest";
 import { focusDraft, focusRequest } from "@/lib/focus";
 import type { Location } from "@/lib/locations";
 import type {
@@ -50,7 +50,7 @@ import {
 } from "@/test/wails-mock";
 
 /** DISCUSSION_SCENES are the thirteen moments of the mock: the dialog that starts the discussion, and twelve of its screen. */
-export const DISCUSSION_SCENES = [
+const DISCUSSION_SCENES = [
   "start",
   "talk",
   "unreadable",
@@ -139,22 +139,6 @@ const SCENE_NOW: Record<DiscussionSceneName, string> = {
   done: local("15:53"),
   "archive-blocked": local("14:40"),
 };
-
-/**
- * fixDiscussionSceneClock stops the clock of the page at the moment of a scene for each test that
- * runs next in the describe it is called in, and gives it back after, with what the screen
- * remembered; only Date is faked, so the timers of the page still run.
- */
-export function fixDiscussionSceneClock(scene: DiscussionScene): void {
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date(scene.now));
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-    localStorage.clear();
-  });
-}
 
 // ---------------- The repositories and the boards ----------------
 

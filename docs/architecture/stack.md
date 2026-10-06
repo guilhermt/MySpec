@@ -24,7 +24,7 @@ A stack do produto e a razão de cada escolha.
 | Notificações e tema do sistema | D-Bus com godbus: `org.freedesktop.Notifications` e o portal de configurações |
 | Som das notificações | WAV próprio embutido, tocado por `pw-play`, `paplay` ou `aplay` |
 | Logs | `slog` em JSON no diretório de estado XDG |
-| Ferramentas | mise, Task, pnpm, Biome, Vitest (jsdom e o Chromium do Playwright), golangci-lint, gotestsum, govulncheck, go-test-coverage, lefthook |
+| Ferramentas | mise, Task, pnpm, Biome, Vitest com jsdom, golangci-lint, gotestsum, govulncheck, go-test-coverage, lefthook |
 
 ## Desktop com Wails v3
 
@@ -94,11 +94,10 @@ O não perturbe não tem padrão freedesktop. O app pergunta a quem o expõe: o 
 
 ## Ferramentas de desenvolvimento
 
-- **mise** pina, em `mise.toml`, as versões de Go, Node, pnpm, Task, golangci-lint, gotestsum, lefthook, Biome, govulncheck e go-test-coverage. O CI instala o mesmo arquivo. O CLI `wails3` é uma diretiva `tool` do `go.mod`, instalada por `go install tool` no setup e no CI. A versão dele é a mesma da biblioteca Wails que o app importa, então os bindings são gerados pelo CLI que corresponde ao runtime, e o Dependabot atualiza os dois juntos.
+- **mise** pina, em `mise.toml`, as versões de Go, Node, pnpm, Task, golangci-lint, gotestsum, lefthook, Biome, govulncheck e go-test-coverage. O CI instala dele as ferramentas que usa. O CLI `wails3` é uma diretiva `tool` do `go.mod`, instalada por `go install tool` no setup. A versão dele é a mesma da biblioteca Wails que o app importa, então os bindings são gerados pelo CLI que corresponde ao runtime, e o Dependabot atualiza os dois juntos.
 - **Task** orquestra tudo: dev, build, geração de bindings, formatação, lint, typecheck, testes, vulnerabilidades e a checagem completa.
-- **Frontend**: pnpm, Biome para lint e formatação no lugar de ESLint e Prettier, Vitest com Testing Library em dois projetos: `unit`, no jsdom, para o comportamento, a acessibilidade e a cobertura, e `painted`, no modo navegador do Vitest, no Chromium do Playwright (`@vitest/browser-playwright`), para o que os componentes pintam com o CSS real. O Chromium e não o WebKit, porque o que a suíte prova é a cascata, que é do CSS, e o Chromium roda na máquina e no CI; a nitidez do WebKitGTK é conferida por captura.
+- **Frontend**: pnpm, Biome para lint e formatação no lugar de ESLint e Prettier, Vitest com Testing Library no jsdom, para o comportamento, a acessibilidade e a cobertura.
 - **Go**: golangci-lint v2 com gofumpt e goimports, gotestsum, cobertura com limiares por arquivo, pacote e total.
-- **dom-accessibility-api** calcula o nome acessível de um elemento, o mesmo algoritmo da Testing Library, e a varredura de largura o usa para provar que todo controle de toda cena tem nome. Está pinada à parte porque o teste importa dela direto.
 - **knip** acha o arquivo e a dependência que nada usa. O código sem uso é o que um design antigo deixa para trás, e o knip o pega em todo `task check`, em cerca de 1 s.
 - **lefthook** instala um hook de pre-commit que só formata os arquivos em stage.
 

@@ -1,205 +1,52 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
 
+# A new push to a pull request cancels the run still going on it.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 env:
   GOFLAGS: -mod=readonly
 
 jobs:
-  # A pull request runs only the jobs its files reach. Filtering here, and not with on.paths,
-  # keeps every job reporting a status: a job skipped by its if counts as passed.
-  changes:
-    name: Changes
-    if: github.event_name == 'pull_request'
+  check:
+    name: Check
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read
-    outputs:
-      frontend: ${{ steps.filter.outputs.frontend }}
-      go: ${{ steps.filter.outputs.go }}
-      build: ${{ steps.filter.outputs.build }}
-    steps:
-      - uses: dorny/paths-filter@v4
-        id: filter
-        with:
-          filters: |
-            shared: &shared
-              - Taskfile.yml
-              - mise.toml
-              - .github/workflows/ci.yml
-            frontend:
-              - *shared
-              - frontend/**
-              - biome.json
-            go:
-              - *shared
-              - '**/*.go'
-              - go.mod
-              - go.sum
-              - internal/**
-              - .golangci.yml
-            build:
-              - *shared
-              - build/**
-              - go.mod
-              - go.sum
-              - frontend/package.json
-              - frontend/pnpm-lock.yaml
-              - frontend/vite.config.ts
-
-  web:
-    name: Frontend
-    needs: changes
-    if: needs.changes.outputs.frontend == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: frontend
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+      # Only the tools the job runs: govulncheck, go-test-coverage and lefthook stay on the machine.
       - uses: jdx/mise-action@v4
         with:
+          install_args: go node pnpm task golangci-lint gotestsum npm:@biomejs/biome
           cache: true
       - name: Resolve pnpm store
         id: pnpm-store
+        working-directory: frontend
         run: echo "path=$(pnpm store path)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v6
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: pnpm-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
           restore-keys: pnpm-${{ runner.os }}-
-      - run: pnpm install --frozen-lockfile
-      - run: task lint:web
-      - run: pnpm typecheck
-      - run: pnpm exec vitest run --project unit
-
-  # The painted suite, the width sweep included, is more than one runner gets through in the time
-  # of a job, so it runs in shards side by side; a shard takes a third of the files.
-  painted:
-    name: Painted (${{ matrix.shard }}/3)
-    needs: changes
-    if: needs.changes.outputs.frontend == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v4
-        with:
-          cache: true
-      - name: Resolve pnpm store
-        id: pnpm-store
-        run: echo "path=$(pnpm store path)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v6
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
-          restore-keys: pnpm-${{ runner.os }}-
-      - run: pnpm install --frozen-lockfile
-      - name: Resolve the Playwright version
-        id: playwright
-        run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-      - name: Install the Chromium of Playwright
-        run: pnpm exec playwright install --with-deps --only-shell chromium
-      - run: pnpm exec vitest run --project painted --shard=${{ matrix.shard }}/3
-
-  # Go also runs on every push to main, which writes the cache the pull requests start from, the
-  # test results included: a package a pull request does not reach comes from the cache.
-  go:
-    name: Go
-    needs: changes
-    if: ${{ !cancelled() && (github.event_name == 'push' || needs.changes.outputs.go == 'true') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v4
-        with:
-          cache: true
-      - name: Install GTK and WebKitGTK headers
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-4-dev libwebkitgtk-6.0-dev pkg-config
-      # A cache key is written once, so the key carries the commit and only main writes one.
-      - uses: actions/cache/restore@v6
         with:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: go-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
-          restore-keys: |
-            go-${{ runner.os }}-${{ hashFiles('go.sum') }}-
-            go-${{ runner.os }}-
-      - name: Install wails3
-        run: |
-          go install tool
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+            ~/.cache/golangci-lint
+          key: go-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: go-${{ runner.os }}-
+      - run: pnpm install --frozen-lockfile
+        working-directory: frontend
       - run: task tidy:check
-      - run: task lint:go
-      - run: task vuln
-      - run: task bindings:check
-      - run: task test:go -- -race
-      - uses: actions/cache/save@v6
-        if: github.event_name == 'push'
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: go-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
-
-  build:
-    name: Build
-    needs: changes
-    if: needs.changes.outputs.build == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v4
-        with:
-          cache: true
-      - name: Install GTK and WebKitGTK headers
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-4-dev libwebkitgtk-6.0-dev pkg-config
-      - uses: actions/cache/restore@v6
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: go-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
-          restore-keys: |
-            go-${{ runner.os }}-${{ hashFiles('go.sum') }}-
-            go-${{ runner.os }}-
-      - name: Install wails3
-        run: |
-          go install tool
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - run: pnpm install --frozen-lockfile
-        working-directory: frontend
-      - run: task build
-      - uses: actions/upload-artifact@v7
-        with:
-          name: myspec-linux-amd64
-          path: bin/myspec
-          retention-days: 7
+      - run: task lint:web
+      - run: task typecheck
+      - run: task lint:go:ci
+      - run: task test:go:ci

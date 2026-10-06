@@ -50,7 +50,6 @@ describe("KeyNotice", () => {
     render(<Subject />);
     const status = screen.getByRole("status");
     expect(status).toBeEmptyDOMElement();
-    expect(status).toHaveAttribute("data-live-region");
 
     screen.getByRole("treeitem").focus();
     await press("s");

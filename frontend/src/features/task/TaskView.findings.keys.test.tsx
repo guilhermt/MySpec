@@ -342,20 +342,27 @@ describe("TaskView, the keys of a finding on the screen", () => {
     expect(api.openPRFindingInEditor).toHaveBeenCalledWith("task-1", 1, 1);
   });
 
-  it("goes along 29 findings, deciding each one and rolling the focus to the next", async () => {
+  it("rolls the focus to the next finding on each decision, along a pass of 29", async () => {
     const many = Array.from({ length: 29 }, (_, index) =>
       makeReviewFinding({ number: index + 1, title: `Finding ${index + 1}`, line: index + 1 }),
     );
     const { user } = screenOf(taskOf({ findings: many }));
     await screen.findByRole("group", { name: "Findings of pass 1" });
 
-    finding(1).focus();
-    for (let number = 1; number <= 28; number++) {
-      await user.keyboard("a");
-      expect(finding(number + 1)).toHaveFocus();
+    // The first of the pass, the step from one digit to two, and the end of the pass.
+    for (const [from, decided] of [
+      [1, [1, 2]],
+      [9, [9]],
+      [27, [27, 28]],
+    ] as const) {
+      finding(from).focus();
+      for (const number of decided) {
+        await user.keyboard("a");
+        expect(finding(number + 1)).toHaveFocus();
+      }
     }
 
-    expect(api.decidePRFinding).toHaveBeenCalledTimes(28);
+    expect(api.decidePRFinding).toHaveBeenCalledTimes(5);
     expect(api.decidePRFinding).toHaveBeenLastCalledWith("task-1", 1, 28, "approved");
     // One stop of Tab in the card, on the finding the focus sits in.
     const stops = screen

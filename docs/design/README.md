@@ -23,10 +23,10 @@ Os valores estão em `frontend/src/styles/tokens.css`, a fonte única. Como os t
 3. **Tokens pelo nome.** Cor, tamanho de texto, espaço, raio, sombra, duração e curva vêm dos tokens, pelo nome (`bg-surface-2`, `text-(length:--text-meta) leading-(--leading-meta)`, `duration-(--duration-fast)`). Um valor que não existe é um token novo em `tokens.css`, nunca um número solto.
 4. **Todo estado com glifo, cor e rótulo.** Nenhum estado depende só da cor, e só o que está em curso se move. O que bloqueia sem ser uma situação é `◇`, nunca vermelho.
 5. **Os estados de tela.** Um estado novo de tela (início, vazio, primeira leitura, falha de leitura, muitos itens, item que saiu) segue [structure.md](./structure.md) §7, Estados de toda tela.
-6. **Prova e nome.** O que é novo tem prova pintada (`*.painted.test.tsx`: os estados, os tokens resolvidos, o pixel inteiro, a primária única) e nome acessível encontrado por `getByRole`; uma tela nova entra na varredura de largura com a sua cena ([testing.md](../guidelines/testing.md)).
+6. **Teste e nome.** O que é novo tem teste de comportamento no jsdom e nome acessível encontrado por `getByRole` ([testing.md](../guidelines/testing.md)); o layout, o pixel inteiro, o tooltip do que corta e a primária única se conferem no app instalado ([target-machine.md](../development/target-machine.md)).
 
 ## O que fecha a porta
 
-Em todo `task check`, o Biome recusa uma tela que importa de `components/ui/` ou um ícone fora de `ICONS` (`noRestrictedImports`), e `frontend/src/styles/design-rules.test.ts` recusa uma cor literal ou da paleta do Tailwind, uma classe de cor do shadcn fora da ponte, um tamanho de texto do Tailwind e uma classe de movimento do Tailwind. `styles/globals.test.tsx` falha quando um token deixa de ser um pixel inteiro. O `knip` recusa o componente que nada usa. A varredura de largura, na CI, desenha cada tela nas janelas do app e nos dois temas e confere o pixel inteiro, os tooltips do que corta, a primária única e os nomes.
+Em todo `task check`, o Biome recusa uma tela que importa de `components/ui/` ou um ícone fora de `ICONS` (`noRestrictedImports`), e `frontend/src/styles/design-rules.test.ts` recusa uma cor literal ou da paleta do Tailwind, uma classe de cor do shadcn fora da ponte, um tamanho de texto do Tailwind e uma classe de movimento do Tailwind. `styles/globals.test.tsx` falha quando um token deixa de ser um pixel inteiro. O `knip` recusa o componente que nada usa.
 
 Uma revisão de design, quando pedida, é do agente `design-critic`, que confere uma mudança contra esta pasta.
