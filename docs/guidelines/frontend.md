@@ -1,6 +1,6 @@
 # Frontend
 
-React 19, TypeScript em modo strict, Vite, Tailwind CSS 4, shadcn/ui sobre Base UI, Zustand. Biome aplica a parte mecânica com `biome.json`; `tsc` aplica os tipos com `tsconfig.json`, que liga `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` e `verbatimModuleSyntax`, e com `tsconfig.painted.json`, que o estende para a suíte de estilo computado ([testing.md](./testing.md)).
+React 19, TypeScript em modo strict, Vite, Tailwind CSS 4, shadcn/ui sobre Base UI, Zustand. Biome aplica a parte mecânica com `biome.json`; `tsc` aplica os tipos com `tsconfig.json`, que liga `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` e `verbatimModuleSyntax`.
 
 ## Fronteira com o Go
 
@@ -23,7 +23,7 @@ React 19, TypeScript em modo strict, Vite, Tailwind CSS 4, shadcn/ui sobre Base 
 - Todo valor vem de um token pelo nome; um valor novo é um token novo em `styles/tokens.css`, nunca um número solto.
 - Todo estado tem glifo, cor e rótulo, e o nome acessível o diz em texto. Uma ação primária por tela.
 - Um estado de tela novo (início, vazio, leitura, falha, item que saiu) segue [structure.md](../design/structure.md) §7, Estados de toda tela.
-- O que é novo tem prova pintada (`*.painted.test.tsx`, com os estados, os tokens resolvidos e o pixel inteiro) e nome acessível, encontrado por `getByRole`; uma tela nova entra na varredura de largura com a sua cena ([testing.md](./testing.md)).
+- O que é novo tem teste de comportamento no jsdom e nome acessível, encontrado por `getByRole` ([testing.md](./testing.md)); o que só o motor mostra se confere no app instalado ([target-machine.md](../development/target-machine.md)).
 - O Biome (`noRestrictedImports`) e `styles/design-rules.test.ts` recusam o que foge disso em todo `task check`.
 
 ## Componentes

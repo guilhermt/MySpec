@@ -19,10 +19,18 @@ O índice completo está em [docs/README.md](./docs/README.md).
 ## Convenções
 
 - Interface do produto em inglês. Código, identificadores e commits em inglês. Documentação em português.
-- Enquanto itera, rode só os testes que a mudança toca: `go test -run 'TestNome' ./internal/pacote/` para Go e `pnpm vitest run <arquivo>` a partir de `frontend/` para o frontend. Não rode a suíte inteira com `go test ./...` nem `pnpm test`.
 - `task fmt` formata Go (gofumpt e goimports) e frontend (Biome). Rode antes de `task check`, cujo lint recusa código mal formatado. O hook de pre-commit também formata os arquivos em stage.
-- `task check` passa por inteiro antes de uma mudança estar pronta: tidy, lint, typecheck, os testes Go e web que a mudança alcança, vulnerabilidades e bindings, em uns 20 segundos. Nunca rode `task check:full`, `task test:full` nem a cobertura, a não ser que seja pedido.
 - `frontend/src/components/ui` e `frontend/bindings` são gerados e nunca editados à mão. Mudou um service ou um DTO: `task generate`.
+
+## Verificação
+
+Três níveis, cada um no seu momento:
+
+1. **Enquanto mexe em arquivos:** rode só os testes ligados aos arquivos alterados, `go test -run 'TestNome' ./internal/pacote/` para Go e `pnpm vitest run <arquivo>` a partir de `frontend/` para o frontend. Nunca a suíte inteira, nem com `go test ./...` nem com `pnpm test`.
+2. **Ao verificar um step:** rode `task fmt` e depois `task check`, a verificação curta: tidy, lint, typecheck, os testes Go e web que a mudança alcança, vulnerabilidades e bindings, em uns 25 s. Ele passa por inteiro antes de um step estar pronto e antes de cada push numa PR já aberta.
+3. **Antes de abrir a PR:** com todos os steps prontos, rode `task check:full` uma vez: todos os testes, com race, embaralhamento e cobertura com os limiares, em uns 3 min 30 s. A PR só abre com ele verde. Se falhar, corrija, rode `task check` e rode `task check:full` de novo antes de abrir.
+
+O `task check:full` roda só nesse momento: nunca a cada step, nunca a cada push numa PR aberta, nunca em outro momento sem pedido explícito. `task test:full` e a cobertura avulsa só rodam quando pedidos. O CI roda só em pull request, uma verificação mínima ([ci.md](./docs/development/ci.md)).
 
 ## Documentação
 

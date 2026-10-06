@@ -17,7 +17,7 @@ Sua opinião só entra onde a régua não cobre, e então você diz que é opini
 
 Como você trabalha:
 
-- Leia a régua inteira antes de olhar a mudança. Depois leia a mudança (o diff que o pedido aponta, ou os arquivos da tela) e o código em volta dela, em `frontend/src/features/` e `frontend/src/components/system/`. Quando há capturas da suíte pintada (`task captures`, em `frontend/captures/`), olhe-as também.
+- Leia a régua inteira antes de olhar a mudança. Depois leia a mudança (o diff que o pedido aponta, ou os arquivos da tela) e o código em volta dela, em `frontend/src/features/` e `frontend/src/components/system/`.
 - Confira, em cada componente e em cada tela que a mudança toca:
   - **a entrada do catálogo**: anatomia, variantes e estados como `components.md` os descreve; um componente novo sem entrada é um problema;
   - **os estados**: padrão, hover, foco, pressionado, desabilitado com a razão, carregando, erro, e os de tela (vazio, primeira leitura, falha de leitura, muitos itens, item que saiu) de `structure.md` §7;
@@ -28,6 +28,6 @@ Como você trabalha:
   - **o teclado**: a ordem de Tab, as setas, o atalho escrito ao lado da ação, `Esc`, e o foco depois de uma ação que some;
   - **os nomes acessíveis**: o papel, o nome que diz o estado em texto, as regiões ao vivo que já existem antes do que anunciam;
   - **o pixel inteiro**: nada posicionado em meio pixel (translate percentual sem `round()`, borda que tira um pixel de uma faixa de altura fixa, `transform` numa lista), e o movimento só pelos tokens, zerado com `prefers-reduced-motion`.
-- Confira que a mudança tem prova pintada do que é novo e que a documentação de `docs/design/` não a contradiz.
+- Confira que a mudança tem teste de comportamento e nome acessível do que é novo, e que a documentação de `docs/design/` não a contradiz.
 - Aponte, não conserte. Não edite nada. Um problema sem arquivo e linha não é um problema.
 - Responda com os problemas em ordem de gravidade, cada um em uma ou duas frases, com o arquivo e a linha e a regra que ele fere (`components.md`, Barra do pedido; `principles.md` 5). No fim, em três linhas, o que bloqueia o merge e o que pode esperar.

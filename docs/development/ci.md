@@ -1,33 +1,41 @@
-# Integração contínua
+# Verificações e integração contínua
 
-Dois workflows. `.github/workflows/ci.yml` é a verificação de todo dia: roda a cada pull request para `main` e a cada push em `main`, e uma execução nova no mesmo ref cancela a anterior. `.github/workflows/full.yml` é a verificação completa, com cobertura: roda toda segunda-feira e sob demanda, pelo **Run workflow** da aba Actions. O repositório só usa `main`; não há branch `dev`.
+As verificações rodam em três lugares, cada um no seu momento ([guidelines](../guidelines/README.md), passo 5).
 
-O runner de um repositório privado tem 2 vCPUs e 8 GB, e cada job é cobrado em minutos inteiros, arredondados para cima. Por isso o `ci.yml` roda só o que uma mudança alcança, sem cobertura, e os jobs rodam lado a lado.
+| Onde | Quando | O que roda | Tempo |
+|---|---|---|---|
+| `task check` | Ao verificar um step e antes de cada push numa PR aberta | tidy, lint Go e web (Biome, as regras do design, o `knip`), typecheck, os testes Go (os que não mudaram vêm do cache), os testes do frontend que a branch alcança, `govulncheck` e a checagem dos bindings, com `nice` | uns 25 s numa branch sem mudança; uns 1 min 30 s com uma mudança em `src/test/setup.ts`, que leva à suíte inteira do frontend |
+| `task check:full` | Uma vez, antes de abrir a PR | O mesmo, com `test:full` no lugar de `test`: todos os testes Go com race, embaralhamento e `-count=1`, e a suíte do frontend inteira, os dois com cobertura e os limiares, um depois do outro | uns 3 min 30 s |
+| CI (`.github/workflows/ci.yml`) | Em cada pull request: na abertura e em cada push | tidy, lint web, typecheck, lint Go e testes Go sem race, sem a raiz, `internal/app` e `internal/bindings` | ~3 min |
 
-## Verificação de todo dia
+## CI
 
-| Job | O que roda | Quando |
-|---|---|---|
-| `Changes` | `dorny/paths-filter`, que diz quais áreas a pull request toca | Pull request |
-| `Frontend` | `pnpm install --frozen-lockfile`, `task lint:web`, `pnpm typecheck` e a suíte do jsdom inteira, sem cobertura | Pull request que toca o frontend |
-| `Painted (1/3)`, `(2/3)`, `(3/3)` | A instalação do Chromium do Playwright e a suíte de estilo computado inteira, a varredura de largura incluída, partida em três (`--shard`), um terço dos arquivos em cada job | Pull request que toca o frontend |
-| `Go` | `task tidy:check`, `task lint:go`, `task vuln`, `task bindings:check` e `task test:go -- -race` | Pull request que toca o Go; todo push em `main` |
-| `Build` | `task build`, que envia o binário como `myspec-linux-amd64`, guardado por sete dias | Pull request que toca `build/`, as dependências do Go ou do frontend, ou `vite.config.ts` |
+Um workflow, um job, `Check`. Os passos, na ordem: `pnpm install --frozen-lockfile`, `task tidy:check`, `task lint:web`, `task typecheck`, `task lint:go:ci` e `task test:go:ci`. Dispara só em `pull_request`, e um push novo cancela a execução em andamento da mesma PR. Nada roda em push na `main` nem por agenda. O repositório só usa `main`; não há branch `dev`.
 
-O frontend é `frontend/**` e `biome.json`; o Go é `*.go`, `go.mod`, `go.sum`, `internal/**` e `.golangci.yml`; `Taskfile.yml`, `mise.toml` e o workflow contam para todas as áreas. Uma pull request só de documentação roda só `Changes`. O filtro fica num job, e não em `on.paths`, para que cada job sempre reporte um status: um job pulado pelo `if` conta como aprovado, e um workflow que não roda deixa o check pendente.
+O CI é mínimo porque o repositório é privado, no plano free do GitHub Actions: o runner tem 2 vCPUs e 8 GB e cada job é cobrado em minutos inteiros. O job não instala GTK, WebKit nem navegador. Os três pacotes que importam o Wails (a raiz, `internal/app` e `internal/bindings`) precisam dos headers do GTK e do WebKit para compilar, então o lint e os testes Go do CI deixam esses três de fora, por `task lint:go:ci` e `task test:go:ci`. Os demais compilam sem nenhuma biblioteca de sistema.
 
-O frontend roda as suítes inteiras, e não só o que a mudança alcança como `task check` faz na máquina, porque o `--changed` do Vitest não segue imports dinâmicos nem o CSS. A suíte de estilo computado roda em três jobs lado a lado porque, com a varredura de largura, ela passa do tempo de um job num runner só. O Go roda com o detector de corrida e sai barato mesmo assim: o push em `main` grava o cache do Go com os resultados dos testes, e numa pull request um pacote que ela não alcança vem desse cache.
+A toolchain vem de `mise.toml` pelo `jdx/mise-action`, só com as ferramentas que o job usa, o que mantém o CI e a máquina nas mesmas versões. O store do pnpm, os módulos e o build do Go e o cache do golangci-lint ficam em cache, com a chave no lockfile e no `go.sum`.
 
-A toolchain vem de `mise.toml` pelo `jdx/mise-action`, o que mantém o CI e a máquina nas mesmas versões. Os jobs `Go` e `Build` instalam `libgtk-4-dev` e `libwebkitgtk-6.0-dev`, que o cgo precisa e a imagem do runner não traz, e o `wails3` por `go install tool`. Os jobs `Painted` instalam o Chromium do Playwright com as bibliotecas de sistema dele, com o `~/.cache/ms-playwright` em cache pela versão do `playwright`. O store do pnpm e o cache de módulos e de build do Go são preservados entre execuções. O do Go é gravado só em `main`, com o commit na chave, porque uma chave de cache nunca é reescrita: toda execução parte do cache do último `main`.
+## Onde fica cada garantia
 
-## Verificação completa
+O que o CI não roda e onde roda:
 
-Um job só roda `task check:full`, com o detector de corrida, o embaralhamento, a cobertura e os limiares, e as duas suítes do frontend inteiras, e depois `task build`. É onde a cobertura é medida: os limiares estão em `.testcoverage.yml` para o Go (60% por arquivo, 70% por pacote, 80% no total, excluindo `internal/app`, `main.go` e os pacotes de fakes) e em `frontend/vitest.config.ts` para o frontend (80% de linhas, funções e statements, 70% de branches, excluindo `components/ui`, `test/` e `main.tsx`), medidos só na suíte do jsdom.
+- a suíte do frontend: `task check`, só o que a branch alcança, e `task check:full`, inteira e com cobertura;
+- o detector de corrida, o embaralhamento e a cobertura: `task check:full`;
+- `govulncheck` e a checagem dos bindings: `task check` e `task check:full`;
+- o lint e os testes da raiz, de `internal/app` e de `internal/bindings`: `task check` e `task check:full`.
+
+O build do binário não é verificado por nenhuma verificação automática: `task build` e `task install` rodam à mão.
+
+## Limiares
+
+`.testcoverage.yml` para o Go (60% por arquivo, 70% por pacote, 80% no total, excluindo `internal/app`, `main.go` e os pacotes de fakes) e `frontend/vitest.config.ts` para o frontend (80% de linhas, funções e statements, 70% de branches, excluindo `components/ui`, `test/` e `main.tsx`), medidos por `task check:full`.
 
 ## Dependabot
 
-`.github/dependabot.yml` observa os módulos Go, os pacotes npm do frontend e as próprias actions, semanalmente, com atualizações minor e patch agrupadas numa pull request por ecossistema.
+`.github/dependabot.yml` observa os módulos Go, os pacotes npm do frontend e as próprias actions, semanalmente, com atualizações minor e patch agrupadas numa pull request por ecossistema. Uma PR do Dependabot passa só pelo CI; nenhuma verificação local é exigida dela.
 
 ## Notas
 
-- As actions são pinadas na major atual (`checkout@v7`, `mise-action@v4`, `cache@v6`, `upload-artifact@v7`, `paths-filter@v4`).
+- As actions são pinadas na major atual (`checkout@v7`, `mise-action@v4`, `cache@v6`).
+- Nada roda na `main` depois do merge.

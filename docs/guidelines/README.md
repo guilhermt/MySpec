@@ -13,8 +13,13 @@ Este é o ponto de entrada para quem vai mudar o código, pessoa ou agente. Ele 
 1. **Uma coisa por vez.** Cada step de um plano é um commit, num único repositório, que deixa o código compilando e os testes verdes.
 2. **Do domínio para fora.** Uma feature nova costuma atravessar as camadas na ordem: migration e `store`, pacote de domínio, `flow`, `bindings` e DTOs, `task generate`, `lib/wails.ts` e o mock, store e ações do frontend, componentes. Cada camada tem os seus testes.
 3. **Estado derivado.** Antes de guardar um estado novo no banco, pergunte se ele não é derivável do que já existe: dos artefatos no disco, do git, das sessões. O produto deriva tudo que pode.
-4. **Regenerar o que é gerado.** Mudou um service, um DTO ou um evento em `internal/bindings`: rode `task generate`. `task bindings:check` falha no CI quando `frontend/bindings` está desatualizado.
-5. **Verificar.** `task check` verifica em segundos: tidy, lint, typecheck, os testes Go (os que não mudaram vêm do cache) e os do frontend que a branch alcança, vulnerabilidades e a checagem dos bindings. Uma mudança está pronta quando `task check` passa por inteiro. `task check:full`, com race, embaralhamento, cobertura e as suítes inteiras, roda só quando pedido; ver [setup.md](../development/setup.md).
+4. **Regenerar o que é gerado.** Mudou um service, um DTO ou um evento em `internal/bindings`: rode `task generate`. `task bindings:check`, no `task check`, falha quando `frontend/bindings` está desatualizado.
+5. **Verificar.** Três níveis, cada um no seu momento:
+   1. **Enquanto mexe em arquivos:** rode só os testes ligados aos arquivos alterados, `go test -run 'TestNome' ./internal/pacote/` para Go e `pnpm vitest run <arquivo>` a partir de `frontend/` para o frontend. Nunca a suíte inteira, nem com `go test ./...` nem com `pnpm test`.
+   2. **Ao verificar um step:** rode `task fmt` e depois `task check`, a verificação curta: tidy, lint, typecheck, os testes Go e web que a mudança alcança, vulnerabilidades e bindings, em uns 25 s. Ele passa por inteiro antes de um step estar pronto e antes de cada push numa PR já aberta.
+   3. **Antes de abrir a PR:** com todos os steps prontos, rode `task check:full` uma vez: todos os testes, com race, embaralhamento e cobertura com os limiares, em uns 3 min 30 s. A PR só abre com ele verde. Se falhar, corrija, rode `task check` e rode `task check:full` de novo antes de abrir.
+
+   O `task check:full` roda só nesse momento: nunca a cada step, nunca a cada push numa PR aberta, nunca em outro momento sem pedido explícito. `task test:full` e a cobertura avulsa só rodam quando pedidos. O que cada um roda e quanto leva está em [ci.md](../development/ci.md).
 6. **Documentar.** Todo trabalho atualiza a documentação em `docs/` quando o que ela descreve muda: uma feature nova ou um comportamento diferente entra em [features.md](../product/features.md), uma decisão de arquitetura, um pacote novo ou uma mudança na stack entra em `architecture/`, uma convenção nova entra nestas guidelines, um comando ou uma variável nova entra em `development/`. A documentação descreve o estado atual, de forma simples e clara, e nunca a alteração: ao mudar algo, reescreva o trecho para refletir o projeto como ele é agora, sem dizer o que era antes nem o que mudou. Uma mudança não está pronta enquanto a documentação a contradiz. A exceção é [roadmap/](../roadmap/README.md), que guarda as ideias de evolução do produto e é o único lugar que descreve o que ele ainda não é. Documentação em português; interface, código, identificadores e commits em inglês.
 
 ## O que nunca fazer
@@ -36,7 +41,7 @@ Este é o ponto de entrada para quem vai mudar o código, pessoa ou agente. Ele 
 
 ## Pull requests
 
-Uma branch por task, pull request para `main`, CI verde. O título é uma linha no imperativo; o corpo diz, em poucas linhas, o que a pull request muda no projeto. Sem lista de commits, sem walkthrough arquivo a arquivo, sem seção de testes.
+Uma branch por task, pull request para `main`, aberta depois de um `task check:full` verde (passo 5), com o CI verde. O título é uma linha no imperativo; o corpo diz, em poucas linhas, o que a pull request muda no projeto. Sem lista de commits, sem walkthrough arquivo a arquivo, sem seção de testes.
 
 ## Quando parar e perguntar
 
