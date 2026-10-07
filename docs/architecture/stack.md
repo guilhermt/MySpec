@@ -57,7 +57,7 @@ O Agent SDK oficial exige API key e não permite o login de assinatura do claude
 
 Um processo vivo por sessão ativa, parado depois de dez minutos ocioso e retomado na próxima mensagem. Uma troca de modelo ou de esforço numa conversa não mexe no processo vivo: na mensagem seguinte o app o para, ocioso, e sobe outro com `--resume` e as flags novas. O canal de controle aceita `apply_flag_settings`, que faria a troca no processo vivo, mas ele não está documentado no `--help` e exigiria um pedido em voo com confirmação e timeout só para poupar a subida de um processo. O detalhe das flags e do protocolo está em [sessions.md](./sessions.md).
 
-Ponto a acompanhar: a documentação do CLI diz que `--bare` vai virar o padrão do `-p`, e o modo bare não lê credenciais OAuth. Quando isso acontecer, o app precisa da flag de opt-out. O `system/init` do stream traz um array `capabilities` para detectar mudanças de protocolo sem comparar versões.
+Ponto a acompanhar: a documentação do CLI diz que `--bare` vai virar o padrão do `-p`, e o modo bare não lê credenciais OAuth. Quando isso acontecer, o app precisa da flag de opt-out. O `system/init` do stream traz um array `capabilities` para detectar mudanças de protocolo; a versão mínima do CLI (`claude.MinVersion`) garante os recursos que o app usa.
 
 ## Git e GitHub
 

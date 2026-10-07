@@ -449,7 +449,7 @@ A seção de um painel tem a legenda em caixa alta de `--text-caps`, que a nomei
 
 | | |
 |---|---|
-| Aviso do app | Faixa no topo da área principal, sobre o cabeçalho, `--state-error-veil` com trilho, o rótulo em vermelho e 700, que é a ação que falhou (`Couldn't pause Rate limit per API key`), o detalhe com o que aconteceu e o que fazer (`<mensagem do erro>. <o que fazer>`, e só a mensagem quando a ação não tem saída conhecida), e **Dismiss**. Fica até ser dispensado; a próxima falha substitui a anterior. Só para uma ação sem lugar próprio: a falha que tem lugar (a linha do modelo, o rodapé do diálogo, a linha do repositório) fica nele |
+| Aviso do app | Faixa no topo da área principal, sobre o cabeçalho (o aviso da máquina fica sob ele), `--state-error-veil` com trilho, o rótulo em vermelho e 700, que é a ação que falhou (`Couldn't pause Rate limit per API key`), o detalhe com o que aconteceu e o que fazer (`<mensagem do erro>. <o que fazer>`, e só a mensagem quando a ação não tem saída conhecida), e **Dismiss**. Fica até ser dispensado; a próxima falha substitui a anterior. Só para uma ação sem lugar próprio: a falha que tem lugar (a linha do modelo, o rodapé do diálogo, a linha do repositório) fica nele |
 | Toast | Flutuante, `--surface-3` com `--shadow-float`, até `--size-toast`: ícone, texto (`“Idempotency keys for payment intents” was archived`), detalhe (o resultado curto), **Open in History** sob o texto, e `×`. Só para uma task, um review ou uma discussão que saiu sem estar aberta. Fica 10 segundos, contados só enquanto ele não tem o ponteiro nem o foco; até três empilhados. O quarto que chega não espera: o mais antigo sai no mesmo instante, com a saída de `--duration-fast` |
 | Estados | O toast entra em `--duration-base` com `--ease-enter` e sai em `--duration-fast` com `--ease-exit`; mora na região `.toasts`, embaixo à esquerda da área principal (`--z-toast`), que é também a região `aria-live` do app |
 | Tokens | `--surface-3`, `--shadow-float`, `--state-error-veil`, `--state-error`, `--error-rail`, `--notice-detail-min`, `--size-toast`, `--z-toast` |
@@ -830,7 +830,7 @@ O board, o History e a conversa montam só as linhas que aparecem, as fixadas (a
 
 | | |
 |---|---|
-| Anatomia | À esquerda da página, fixa ao rolar, com largura `--snav-w`: **Defaults**, **Boards**, **Repositories**, **Prompts**, cada item com o ícone e o nome em `--text-ui`, `--size-control` de altura. **Repositories** leva `◇ N` com o número de clones inexistentes (um repositório sem clone não conta), com os repositórios no tooltip e na descrição |
+| Anatomia | À esquerda da página, fixa ao rolar, com largura `--snav-w`: **Defaults**, **Boards**, **Repositories**, **Prompts**, **Machine**, cada item com o ícone e o nome em `--text-ui`, `--size-control` de altura. **Repositories** leva `◇ N` com o número de clones inexistentes (um repositório sem clone não conta), com os repositórios no tooltip e na descrição; **Machine** leva `◇ N` com o número de itens que faltam (um não conferido não conta), com o item, ou a contagem, no tooltip e na descrição |
 | Estados | Padrão (`--ink-2`), hover, foco, pressionado, página aberta (`--brand-tint-plane`, anel `--brand-ring`, ícone `--brand-ink`, o nome em `--ink-1` e peso 500, `aria-current="page"`) |
 | Largura | Abaixo de 820 px de área principal, vira uma linha acima da página, sem ficar fixa |
 | Teclado | Uma parada de Tab. ↑↓ trocam de página, `Home` e `End` vão às pontas; em linha, ←→ também. Uma seta com modificador (`Alt+←`) não é da navegação. Aberto por `Ctrl+,` ou por um link, o foco começa no item da página |
@@ -880,7 +880,18 @@ O board, o History e a conversa montam só as linhas que aparecem, as fixadas (a
 | | |
 |---|---|
 | Passos | Lista dos passos que bloqueiam a primeira tela, sob `Starting MySpec…`: feito (visto, `--ink-1`), rodando (spinner, peso 500, e, acima de 3 s, o tempo e a razão de um passo lento em `--ink-3`: `12s · ~/code/infra doesn't answer`), a fazer (círculo, `--ink-3`). A falha: `MySpec couldn't start` com o losango, o que aconteceu e o que fazer, o erro num bloco de código copiável, e **Try again** `Enter`, primária, com o foco; a lateral em esqueleto parado, sem brilho. A lateral em esqueleto aparece na hora (a faixa, quando ela está guardada), e a área principal só depois de 400 ms sem o fim do início; a falha aparece na hora |
-| Checagens | Nas boas-vindas, o bloco `This machine` só quando falta algo: cada item com `◇`, o que falta em peso 500 (`The GitHub CLI isn't signed in`), o que fazer, e o comando em mono com **Copy** (`gh auth login`) |
+| Checagens | Cada item tem um resultado e um glifo: ok, o visto em `--ink-3`; falta, `◇`; não conferido, o círculo vazio. O título vem em peso 500 (`The GitHub CLI isn't signed in`), com um texto oculto que diz o resultado (`OK`, `Missing`, `Not checked`), o que fazer ou o que se sabe, o detalhe do que a ferramenta disse em mono e o comando em mono com **Copy** (`gh auth login`). Nas boas-vindas, o bloco `This machine` lista só as faltas, com **Check again**; em Settings › Machine, todos os itens |
+
+### Aviso da máquina · `MachineNotice`
+
+| | |
+|---|---|
+| Anatomia | Faixa no topo da área principal, empilhada sob o `AppNotice`, com a mesma geometria: `--surface-0` com a linha de baixo, o losango da falta, o título em 600 (`Claude Code isn't logged in`, ou `2 things on this machine need attention`), o texto curto da consequência em `--text-meta` e `--ink-2`, **Open Settings** e **Dismiss**, fantasmas |
+| Faça | Use para o que falta na máquina e deixa parte do produto sem funcionar. Neutra e nunca vermelha: não é a falha de uma ação |
+| Não faça | Não use nas boas-vindas, que têm o bloco `This machine`, nem na página Machine, que mostra o que falta |
+| Estados | Fica até **Dismiss** ou até uma conferência não achar falta; dispensada, só volta na próxima abertura do app |
+| Tokens | `--surface-0`, `--line-1`, `--ink-1`, `--ink-2`, `--notice-detail-min`, `--size-ask` |
+| Acessibilidade | `role="status"`: ela chega depois da tela e não é uma falha. **Open Settings** tem o nome acessível `Open Settings › Machine` |
 
 ### Marca e cópia · `BrandMark`, `CopyButton`, `CopyBlock`
 

@@ -21,11 +21,11 @@ curl -fsSL https://raw.githubusercontent.com/guilhermt/MySpec/main/install.sh | 
 
 O mesmo comando atualiza para a última release, sem tocar nos dados do app, e não usa `sudo`. Se faltar uma biblioteca, ele diz qual e como instalá-la.
 
-O app também precisa do Claude Code (`claude`) instalado e logado, do `gh` instalado e logado e do `git` com acesso aos repositórios. O script lista os que não encontrou.
+O app também precisa do Claude Code (`claude`) 2.1.291 ou mais novo e logado, do `gh` logado com os escopos `project` e `repo` e do `git` com acesso aos repositórios. O script lista os que não encontrou, e a página **Machine** das configurações mostra o que falta.
 
 ## Começar
 
-Para desenvolver, com `gtk4`, `webkitgtk-6.0`, [mise](https://mise.jdx.dev), `git`, `gh` e o `claude` logado na máquina:
+Para desenvolver, com `gtk4`, `webkitgtk-6.0`, [mise](https://mise.jdx.dev), `git`, o `gh` logado com os escopos `project` e `repo` e o `claude` 2.1.291 ou mais novo e logado na máquina:
 
 ```sh
 mise install
