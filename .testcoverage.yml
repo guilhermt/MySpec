@@ -8,6 +8,7 @@ exclude:
   paths:
     - ^internal/app/
     - ^main\.go$
+    - ^cmd/release/
     - ^internal/claude/claudetest/
     - ^internal/git/gittest/
     - ^internal/gh/ghtest/

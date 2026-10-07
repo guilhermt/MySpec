@@ -3,7 +3,8 @@
 Um repositório só, no layout do Wails v3: o módulo Go na raiz, o frontend em `frontend/`. Este documento diz onde cada coisa está e como as partes se falam. As convenções de escrita estão em [guidelines](../guidelines/README.md).
 
 ```
-main.go                  ponto de entrada; embute frontend/dist e o ícone
+main.go                  ponto de entrada; embute frontend/dist e o ícone e guarda a versão
+cmd/release/             o comando de `task release`
 internal/                todo o código Go
   app/                   compõe o app Wails a partir dos services; sabe de Wails
   bindings/              services expostos ao frontend, DTOs e eventos; sabe de Wails
@@ -26,6 +27,7 @@ internal/                todo o código Go
   repository/            os repositórios cadastrados: identidade no GitHub, clone, board, filtro, a varredura da home e a clonagem
   board/                 os boards cadastrados, a leitura dos cards pelo gh e o contexto de uma task criada de um card
   upgrade/               leva as tasks de um banco com áreas de trabalho para os repositórios
+  release/               publica uma versão: as conferências, o bump de VERSION, o commit, a tag e o push
   frontmatter/           lê o cabeçalho --- dos documentos que os agentes escrevem
   git/, gh/              rodam os binários; nada sabem de tasks
   editor/                abre o VS Code
@@ -44,7 +46,8 @@ frontend/
   src/test/              setup do Vitest, render com store, mock do Go e as cenas das telas
   bindings/              gerados por `task generate`; nunca editados à mão
 build/                   config do Wails, ícones e entrada .desktop
-.github/                 CI e Dependabot
+VERSION                  a versão da última release
+.github/                 CI, release e Dependabot
 ```
 
 ## Backend em Go
@@ -196,3 +199,5 @@ Cada diretório de `features/` cobre uma área: `sidebar` para a barra lateral e
 ## Build
 
 `main.go` embute `frontend/dist`. Como esse diretório é saída de build e `//go:embed` recusa um diretório vazio, as tarefas Go criam um placeholder quando não há build, para que lint, testes e vulnerabilidades rodem num clone limpo. A tag de build `production` diferencia o binário instalado do de desenvolvimento: só o de desenvolvimento escreve o log também no stderr.
+
+A versão vem de `VERSION`, a única fonte do número. `main.version` vale `dev`, e só `task package`, o build da release, a troca pelo conteúdo de `VERSION` com `-ldflags -X main.version`. `app.Config.Version` a leva ao log `app starting`. O processo de release está em [release.md](../development/release.md).

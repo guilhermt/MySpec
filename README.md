@@ -24,4 +24,4 @@ O índice está em [docs/README.md](./docs/README.md).
 - [O que o produto faz](./docs/product/features.md) e os [princípios e conceitos](./docs/product/overview.md) por trás dele.
 - [Stack](./docs/architecture/stack.md), [organização do código](./docs/architecture/overview.md), [sessões com o Claude Code](./docs/architecture/sessions.md) e [armazenamento](./docs/architecture/storage.md).
 - [Guidelines](./docs/guidelines/README.md) para trabalhar no código, com as convenções de [Go](./docs/guidelines/go.md), do [frontend](./docs/guidelines/frontend.md) e dos [testes](./docs/guidelines/testing.md).
-- [Ambiente](./docs/development/setup.md), [CI](./docs/development/ci.md), [diagnóstico](./docs/development/troubleshooting.md) e as [notas da máquina alvo](./docs/development/target-machine.md).
+- [Ambiente](./docs/development/setup.md), [CI](./docs/development/ci.md), [releases](./docs/development/release.md), [diagnóstico](./docs/development/troubleshooting.md) e as [notas da máquina alvo](./docs/development/target-machine.md).

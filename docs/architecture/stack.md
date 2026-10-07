@@ -96,6 +96,7 @@ O não perturbe não tem padrão freedesktop. O app pergunta a quem o expõe: o 
 
 - **mise** pina, em `mise.toml`, as versões de Go, Node, pnpm, Task, golangci-lint, gotestsum, lefthook, Biome, govulncheck e go-test-coverage. O CI instala dele as ferramentas que usa. O CLI `wails3` é uma diretiva `tool` do `go.mod`, instalada por `go install tool` no setup. A versão dele é a mesma da biblioteca Wails que o app importa, então os bindings são gerados pelo CLI que corresponde ao runtime, e o Dependabot atualiza os dois juntos.
 - **Task** orquestra tudo: dev, build, geração de bindings, formatação, lint, typecheck, testes, vulnerabilidades e a checagem completa.
+- **Releases**: `task release` é um programa Go, `cmd/release`, testado contra repositórios git reais como o resto do código, e o workflow `release.yml` builda e publica a partir da tag no Ubuntu 24.04, com o `gh` do runner e sem action de terceiros. Ver [release.md](../development/release.md).
 - **Frontend**: pnpm, Biome para lint e formatação no lugar de ESLint e Prettier, Vitest com Testing Library no jsdom, para o comportamento, a acessibilidade e a cobertura.
 - **Go**: golangci-lint v2 com gofumpt e goimports, gotestsum, cobertura com limiares por arquivo, pacote e total.
 - **knip** acha o arquivo e a dependência que nada usa. O código sem uso é o que um design antigo deixa para trás, e o knip o pega em todo `task check`, em cerca de 1 s.

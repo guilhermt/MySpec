@@ -37,5 +37,6 @@ A documentação é escrita em português; a interface, o código, os identifica
 
 - [setup.md](./development/setup.md): pré-requisitos, setup, comandos, instalação, VS Code e variáveis de ambiente.
 - [ci.md](./development/ci.md): o que roda onde (`task check`, `task check:full` e o CI), quando e quanto leva, onde fica cada garantia e o Dependabot.
+- [release.md](./development/release.md): a versão, `task release`, o workflow de release, o pacote e a URL estável, as bibliotecas que o binário precisa e o que fazer quando uma release falha.
 - [troubleshooting.md](./development/troubleshooting.md): o log, o que cada linha significa e os problemas conhecidos.
 - [target-machine.md](./development/target-machine.md): o que vale na máquina alvo: o WebKitGTK, as fontes, a rolagem das listas em janela, o início, as notificações e os comportamentos do Wails que exigiram contorno.

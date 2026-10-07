@@ -26,6 +26,9 @@ const (
 	// noSuchRemote is what remote get-url uses for a remote the repository does
 	// not have.
 	noSuchRemote = 2
+	// noMatchingRefs is what ls-remote --exit-code uses when the remote has
+	// none of the refs asked for.
+	noMatchingRefs = 2
 )
 
 // ErrNoRemote reports that the repository has no remote of the name asked for.
@@ -447,5 +450,44 @@ func (r *Runner) IsAncestor(ctx context.Context, dir, commit, ref string) (bool,
 // that is a fast-forward: nothing is merged, rebased or rewritten.
 func (r *Runner) MergeFastForward(ctx context.Context, dir, ref string) error {
 	_, err := r.Run(ctx, dir, "merge", "--ff-only", "--quiet", ref)
+	return err
+}
+
+// RemoteTagExists reports whether remote has the tag, asking the remote itself
+// rather than the tags fetched from it.
+func (r *Runner) RemoteTagExists(ctx context.Context, dir, remote, tag string) (bool, error) {
+	_, err := r.Run(ctx, dir, "ls-remote", "--exit-code", "--tags", remote, "refs/tags/"+tag)
+	if err == nil {
+		return true, nil
+	}
+
+	var gitErr *Error
+	if errors.As(err, &gitErr) && gitErr.ExitCode == noMatchingRefs {
+		return false, nil
+	}
+	return false, err
+}
+
+// CommitPath commits the current content of path, and only of path, on the
+// branch checked out at dir.
+func (r *Runner) CommitPath(ctx context.Context, dir, path, message string) error {
+	if _, err := r.Run(ctx, dir, "add", "--", path); err != nil {
+		return err
+	}
+	_, err := r.Run(ctx, dir, "commit", "--quiet", "-m", message, "--", path)
+	return err
+}
+
+// AnnotatedTag creates the annotated tag name at HEAD.
+func (r *Runner) AnnotatedTag(ctx context.Context, dir, name, message string) error {
+	_, err := r.Run(ctx, dir, "tag", "--annotate", "-m", message, name)
+	return err
+}
+
+// PushAtomic pushes refs to remote all at once: either every ref is updated on
+// the remote or none is.
+func (r *Runner) PushAtomic(ctx context.Context, dir, remote string, refs ...string) error {
+	args := append([]string{"push", "--atomic", "--quiet", remote}, refs...)
+	_, err := r.Run(ctx, dir, args...)
 	return err
 }

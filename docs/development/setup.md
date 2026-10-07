@@ -53,6 +53,8 @@ O hook, definido em `lefthook.yml`, é de pre-commit e só formata: Biome nos ar
 | `task check:full` | A verificação completa, com `test:full` no lugar de `test`, em uns 3 min 30 s; roda uma vez, antes de abrir a pull request ([ci.md](./ci.md)) |
 | `task install` | Instala o app para o usuário atual |
 | `task uninstall` | Remove o que `install` colocou; nunca toca os dados do app |
+| `task package` | Monta o pacote da release, `bin/myspec-linux-amd64.tar.gz`, com a versão de `VERSION` ([release.md](./release.md)) |
+| `task release -- <patch\|minor\|major>` | Publica uma release: confere o clone, faz o bump de `VERSION`, commita, cria a tag e envia ([release.md](./release.md)) |
 
 `main.go` embute `frontend/dist`, que é saída de build e não existe num clone limpo, e `//go:embed` recusa um diretório vazio. As tarefas Go colocam um placeholder lá quando não encontram nada, então `task check` funciona antes do primeiro `task build`, e um build real o substitui.
 
@@ -69,7 +71,7 @@ Um teste só, em Go: `go test -run 'TestNome' ./internal/pacote/`. No frontend: 
 - `.local/share/icons/hicolor/scalable/apps/org.wails.myspec.svg`
 - `.local/share/icons/hicolor/512x512/apps/org.wails.myspec.png`
 
-`task uninstall` remove exatamente esses quatro arquivos. O diretório de dados nunca é tocado.
+`task uninstall` remove exatamente esses quatro arquivos. O diretório de dados nunca é tocado. O binário de `task install` se identifica como `dev` no log.
 
 ## VS Code
 
