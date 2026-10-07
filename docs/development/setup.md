@@ -12,7 +12,7 @@ Cinco coisas são instaladas à mão; tudo o mais vem delas.
 
    Em Debian e Ubuntu os equivalentes são `libgtk-4-dev`, `libwebkitgtk-6.0-dev`, `build-essential` e `pkg-config`.
 
-2. **[mise](https://mise.jdx.dev).** Com `mise activate` no shell, entrar na pasta do projeto ativa as versões pinadas em `mise.toml`: Go, Node, pnpm, Task, golangci-lint, gotestsum, lefthook, Biome, govulncheck e go-test-coverage. O CI instala as ferramentas que usa a partir do mesmo arquivo, então máquina e pipeline rodam as mesmas versões.
+2. **[mise](https://mise.jdx.dev).** Com `mise activate` no shell, entrar na pasta do projeto ativa as versões pinadas em `mise.toml`: Go, Node, pnpm, Task, golangci-lint, gotestsum, lefthook, shellcheck, Biome, govulncheck e go-test-coverage. O CI instala as ferramentas que usa a partir do mesmo arquivo, então máquina e pipeline rodam as mesmas versões.
 
 3. **Claude Code.** O `claude` no `PATH` ou em `~/.local/bin`, logado uma vez com `claude` num terminal. `MYSPEC_CLAUDE_PATH` fixa outro caminho.
 
@@ -41,7 +41,7 @@ O hook, definido em `lefthook.yml`, é de pre-commit e só formata: Biome nos ar
 | `task run` | Roda `bin/myspec` |
 | `task generate` | Regenera `frontend/bindings` a partir dos services Go |
 | `task fmt` | Formata Go e frontend |
-| `task lint` | `lint:go` (golangci-lint) e `lint:web` (Biome, as regras do design e o `knip`) |
+| `task lint` | `lint:go` (golangci-lint), `lint:web` (Biome, as regras do design e o `knip`) e `lint:sh` (`shellcheck` no `install.sh`) |
 | `task lint:go:ci` / `task test:go:ci` | O lint e os testes Go sem race de todo pacote menos os três que importam o Wails; o que o CI roda ([ci.md](./ci.md)) |
 | `task typecheck` | `tsc --noEmit` no frontend |
 | `task test` | `test:go` (os testes Go, com o cache de testes) e `test:web` (os testes do frontend que a branch alcança), sem cobertura ([testing.md](../guidelines/testing.md)) |

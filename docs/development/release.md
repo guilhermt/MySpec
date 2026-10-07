@@ -99,6 +99,8 @@ Nada muda no disco antes de tudo estar conferido, baixado e extraído. Ele nunca
 
 **A regra do formato:** o script da `main` precisa sempre entender o pacote da última release publicada. Uma mudança na estrutura do pacote chega à `main` com um script que aceita as duas estruturas, e o suporte à antiga sai só depois da release com a nova. Uma correção no script chega ao time no merge, sem release.
 
+A verificação é o `shellcheck` (`task lint:sh`, dentro de `task lint` e no CI). O comportamento se confere à mão no Arch e no Pop!_OS 24.04.
+
 ## Quando uma release falha
 
 - Uma recusa do comando não muda nada: corrija o que a mensagem diz e rode de novo.
