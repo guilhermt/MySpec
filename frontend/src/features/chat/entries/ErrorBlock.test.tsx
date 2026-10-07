@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ErrorBlock } from "@/features/chat/entries/ErrorBlock";
 import { clockTime } from "@/lib/when";
 import { renderWithStore } from "@/test/render";
+import { makeMachine, makeState, withMachineItems } from "@/test/wails-mock";
 
 const AT = "2026-09-05T10:00:00Z";
 
@@ -37,5 +38,36 @@ describe("ErrorBlock", () => {
     const block = screen.getByRole("article", { name: "The worktree folder already exists." });
     expect(block).toHaveTextContent("fatal: exists");
     expect(block).not.toHaveAttribute("data-feed-item");
+  });
+
+  describe("the hint of the version", () => {
+    const old = makeState({
+      machine: withMachineItems(makeMachine({ claudeVersion: "2.0.14" }), {
+        claude_version: { result: "missing" },
+      }),
+    });
+    const failure = (kind: string) => (
+      <ErrorBlock error={{ kind, message: "exit status 1", retryable: true }} createdAt={AT} />
+    );
+
+    it("names the versions and offers claude update when a start fails with an old Claude Code", () => {
+      renderWithStore(failure("start_failed"), { state: old });
+
+      expect(screen.getByText(/Claude Code 2\.0\.14 is older than 2\.1\.291/)).toBeInTheDocument();
+      expect(screen.getByText("claude update")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Copy claude update" })).toBeInTheDocument();
+    });
+
+    it("is absent when the version is right", () => {
+      renderWithStore(failure("start_failed"), { state: makeState({ machine: makeMachine() }) });
+
+      expect(screen.queryByText("claude update")).not.toBeInTheDocument();
+    });
+
+    it("is absent when the cause is known", () => {
+      renderWithStore(failure("not_logged_in"), { state: old });
+
+      expect(screen.queryByText("claude update")).not.toBeInTheDocument();
+    });
   });
 });

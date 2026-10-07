@@ -17,7 +17,8 @@ export function CheckAgainButton({ onChecked }: { onChecked?: (machine: Machine 
     }
     setPending(true);
     try {
-      onChecked?.(await checkMachineAgain());
+      const machine = await checkMachineAgain();
+      onChecked?.(machine);
     } finally {
       setPending(false);
     }

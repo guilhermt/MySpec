@@ -2,6 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Defaults } from "@/features/settings/Defaults";
 import { api, type ModelCatalog, type StageModel } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makeModelCatalog, makeModelDefaults, makeState } from "@/test/wails-mock";
 
@@ -93,9 +94,13 @@ describe("Defaults", () => {
     [
       "unsupported",
       "The installed Claude Code doesn't list its models",
-      /Update it, then reopen MySpec/,
+      /Update it, then check again in Settings › Machine/,
     ],
-    ["failed", "Couldn't read the models of Claude Code", /Reopen MySpec to try again/],
+    [
+      "failed",
+      "Couldn't read the models of Claude Code",
+      /Check again in Settings › Machine to read them again/,
+    ],
   ] as const)(
     "says why there are no models for %s, in a notice that is never an alert",
     (failure, title, text) => {
@@ -109,6 +114,14 @@ describe("Defaults", () => {
       expect(screen.queryByText("Reading the models of Claude Code…")).not.toBeInTheDocument();
     },
   );
+
+  it("opens Settings › Machine from the notice", async () => {
+    const { user } = defaults({ catalog: makeModelCatalog({ models: [], failure: "not_found" }) });
+
+    await user.click(screen.getByRole("button", { name: "Open Machine" }));
+
+    expect(useAppStore.getState().location).toEqual({ kind: "settings", section: "machine" });
+  });
 
   it("says nothing of the catalog when there is one", () => {
     defaults();

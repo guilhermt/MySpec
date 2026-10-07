@@ -96,17 +96,17 @@ describe("catalogNotice", () => {
     [
       "not_found",
       "Claude Code was not found",
-      "Install it or point MYSPEC_CLAUDE_PATH at the executable, then reopen MySpec. The choices below stay as they are.",
+      "Install it or point MYSPEC_CLAUDE_PATH at the executable, then check again in Settings › Machine. The choices below stay as they are.",
     ],
     [
       "unsupported",
       "The installed Claude Code doesn't list its models",
-      "Update it, then reopen MySpec. The choices below stay as they are.",
+      "Update it, then check again in Settings › Machine. The choices below stay as they are.",
     ],
     [
       "failed",
       "Couldn't read the models of Claude Code",
-      "Reopen MySpec to try again. The choices below stay as they are.",
+      "Check again in Settings › Machine to read them again. The choices below stay as they are.",
     ],
   ] as const)("says why for %s", (failure, title, text) => {
     expect(catalogNotice(failure)).toEqual({ title, text });

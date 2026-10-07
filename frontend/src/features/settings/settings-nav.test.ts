@@ -10,12 +10,13 @@ import {
 } from "./settings-nav";
 
 describe("SETTINGS_PAGES", () => {
-  it("lists the four pages in the order of the navigation", () => {
+  it("lists the five pages in the order of the navigation", () => {
     expect(SETTINGS_PAGES.map(({ label }) => label)).toEqual([
       "Defaults",
       "Boards",
       "Repositories",
       "Prompts",
+      "Machine",
     ]);
   });
 });
@@ -26,6 +27,7 @@ describe("pageOf", () => {
     ["boards", "boards"],
     ["repositories", "repositories"],
     ["prompts", "prompts"],
+    ["machine", "machine"],
     ["prd", "prompts"],
     ["commit", "prompts"],
     ["discussion", "prompts"],
@@ -67,18 +69,19 @@ describe("nextPage", () => {
   it.each<[SettingsPage, string, boolean, SettingsPage | null]>([
     ["defaults", "ArrowDown", false, "boards"],
     ["boards", "ArrowDown", false, "repositories"],
-    ["prompts", "ArrowDown", false, null],
+    ["prompts", "ArrowDown", false, "machine"],
+    ["machine", "ArrowDown", false, null],
     ["boards", "ArrowUp", false, "defaults"],
     ["defaults", "ArrowUp", false, null],
     ["repositories", "Home", false, "defaults"],
     ["defaults", "Home", false, null],
-    ["boards", "End", false, "prompts"],
-    ["prompts", "End", false, null],
+    ["boards", "End", false, "machine"],
+    ["machine", "End", false, null],
     ["boards", "ArrowRight", false, null],
     ["boards", "ArrowLeft", false, null],
     ["boards", "ArrowRight", true, "repositories"],
     ["boards", "ArrowLeft", true, "defaults"],
-    ["prompts", "ArrowRight", true, null],
+    ["machine", "ArrowRight", true, null],
     ["defaults", "ArrowLeft", true, null],
     ["boards", "Enter", true, null],
   ])("from %s with %s (inline %s) opens %s", (page, key, inline, expected) => {

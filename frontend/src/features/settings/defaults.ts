@@ -103,17 +103,17 @@ export function catalogNotice(failure: CatalogFailure): { title: string; text: s
     case "not_found":
       return {
         title: "Claude Code was not found",
-        text: `Install it or point MYSPEC_CLAUDE_PATH at the executable, then reopen MySpec. ${stay}`,
+        text: `Install it or point MYSPEC_CLAUDE_PATH at the executable, then check again in Settings › Machine. ${stay}`,
       };
     case "unsupported":
       return {
         title: "The installed Claude Code doesn't list its models",
-        text: `Update it, then reopen MySpec. ${stay}`,
+        text: `Update it, then check again in Settings › Machine. ${stay}`,
       };
     case "failed":
       return {
         title: "Couldn't read the models of Claude Code",
-        text: `Reopen MySpec to try again. ${stay}`,
+        text: `Check again in Settings › Machine to read them again. ${stay}`,
       };
     default:
       return null;

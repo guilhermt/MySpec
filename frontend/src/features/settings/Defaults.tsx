@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Button } from "@/components/system/Button";
 import { LiveRegion } from "@/components/system/LiveRegion";
 import { NoticeStrip } from "@/components/system/NoticeStrip";
 import { Shimmer } from "@/components/system/Shimmer";
@@ -20,6 +21,7 @@ export function Defaults() {
   const models = useAppStore((state) => state.app?.modelDefaults ?? NO_MODELS);
   const factory = useAppStore((state) => state.app?.modelFactory ?? NO_MODELS);
   const catalog = useModelCatalog();
+  const openSettings = useAppStore((state) => state.openSettings);
   const failure = asCatalogFailure(catalog.failure);
   const reading = catalogModels(catalog).length === 0 && failure === "";
   const notice = catalogModels(catalog).length === 0 ? catalogNotice(failure) : null;
@@ -70,7 +72,17 @@ export function Defaults() {
         }
       >
         <LiveRegion kind="status" as="div" className="empty:absolute">
-          {notice !== null && <NoticeStrip title={notice.title} reason={notice.text} />}
+          {notice !== null && (
+            <NoticeStrip
+              title={notice.title}
+              reason={notice.text}
+              action={
+                <Button variant="ghost" size="sm" onClick={() => openSettings("machine")}>
+                  Open Machine
+                </Button>
+              }
+            />
+          )}
         </LiveRegion>
         <div className="flex flex-col gap-(--space-4)">
           {MODEL_GROUPS.map((group) => (

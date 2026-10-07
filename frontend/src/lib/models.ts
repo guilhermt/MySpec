@@ -146,11 +146,11 @@ export function choiceLabel(catalog: ModelCatalog, choice: ModelChoice): string 
 export function catalogFailureMessage(failure: CatalogFailure): string {
   switch (failure) {
     case "not_found":
-      return "Claude Code was not found. Install it or point MYSPEC_CLAUDE_PATH at the executable.";
+      return "Claude Code was not found. Install it or point MYSPEC_CLAUDE_PATH at the executable, then check again in Settings › Machine.";
     case "unsupported":
-      return "The installed Claude Code doesn't list its models. Update it and reopen the app.";
+      return "The installed Claude Code doesn't list its models. Update it, then check again in Settings › Machine.";
     case "failed":
-      return "Reading the models of Claude Code failed. Reopen the app to try again.";
+      return "Reading the models of Claude Code failed. Check again in Settings › Machine to read them again.";
     default:
       return "";
   }

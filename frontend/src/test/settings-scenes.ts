@@ -45,12 +45,13 @@ import {
   withMachineItems,
 } from "@/test/wails-mock";
 
-/** SETTINGS_SCENES are the four pages of Settings. */
+/** SETTINGS_SCENES are the five pages of Settings. */
 export const SETTINGS_SCENES = [
   "settings-defaults",
   "settings-boards",
   "settings-repos",
   "settings-prompts",
+  "settings-machine",
 ] as const;
 
 /** SettingsSceneName is one page of Settings. */
@@ -89,6 +90,7 @@ export const SETTINGS_VARIATIONS: Record<SettingsSceneName, readonly string[]> =
     "clone-failed",
   ],
   "settings-prompts": ["", "view", "edit", "reset", "discard", "list-failed", "view-failed"],
+  "settings-machine": ["", "missing", "unchecked", "checking"],
 };
 
 /** SettingsSceneSetup is what a test needs to draw a scene: the state, the place, and what the user did. */
@@ -957,6 +959,41 @@ function promptsScene(variation: string): SettingsSceneSetup {
   }
 }
 
+function machineScene(variation: string): SettingsSceneSetup {
+  const base = { location: settingsAt("machine"), storage: {} };
+  const depends = { result: "unchecked", reason: "depends" } as const;
+  switch (variation) {
+    case "":
+      return { ...base, state: sceneState() };
+    case "missing":
+      return {
+        ...base,
+        state: sceneState({
+          machine: withMachineItems(makeMachine({ missingScopes: ["project", "repo"] }), {
+            claude_version: { result: "missing" },
+            gh_scopes: { result: "missing" },
+          }),
+        }),
+      };
+    case "unchecked":
+      return {
+        ...base,
+        state: sceneState({
+          machine: withMachineItems(makeMachine(), {
+            claude_found: { result: "missing" },
+            claude_login: depends,
+            claude_version: depends,
+            gh_scopes: { result: "unchecked", reason: "failed" },
+          }),
+        }),
+      };
+    case "checking":
+      return { ...base, state: sceneState({ machine: makeMachine({ checked: false }) }) };
+    default:
+      throw new Error(`settings-machine has no variation ${variation}`);
+  }
+}
+
 /**
  * settingsScene is the setup of a page of Settings at a moment ("" for the page at rest). The
  * variation's after is what the user does to reach it, and the test reads the answers of the
@@ -972,6 +1009,8 @@ export function settingsScene(name: SettingsSceneName, variation: string): Setti
       return repositoriesScene(variation);
     case "settings-prompts":
       return promptsScene(variation);
+    case "settings-machine":
+      return machineScene(variation);
   }
 }
 
