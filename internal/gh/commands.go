@@ -71,6 +71,79 @@ func (r *Runner) SignedIn(ctx context.Context) error {
 	return nil
 }
 
+// githubHost is the host the app reads boards and pull requests from.
+const githubHost = "github.com"
+
+// Account is the login of gh on github.com, as GitHub confirms it.
+type Account struct {
+	Login  string   // "" when gh does not say it
+	Scopes []string // the scopes of the token, as GitHub reports them; nil when it reports none, as for a fine-grained token
+}
+
+// hostEntry is one login of a host in the JSON of gh auth status.
+type hostEntry struct {
+	State  string `json:"state"`
+	Error  string `json:"error"`
+	Login  string `json:"login"`
+	Scopes string `json:"scopes"`
+	Active bool   `json:"active"`
+}
+
+// Account asks GitHub, through gh auth status, which account gh is logged in
+// to on github.com and with which scopes. It is ErrNotAuthenticated without a
+// login or when GitHub refuses the token, and ErrUnverified when GitHub was
+// not reached or did not answer. gh exits 0 with --json whatever the state of
+// the login, so the state comes from the JSON.
+func (r *Runner) Account(ctx context.Context) (Account, error) {
+	out, err := r.Run(ctx, "", "auth", "status", "--json", "hosts", "--active", "--hostname", githubHost)
+	if err != nil {
+		return Account{}, err
+	}
+
+	var body struct {
+		Hosts map[string][]hostEntry `json:"hosts"`
+	}
+	if err := json.Unmarshal([]byte(out), &body); err != nil {
+		return Account{}, fmt.Errorf("gh auth status: %w", err)
+	}
+
+	var entry *hostEntry
+	for i := range body.Hosts[githubHost] {
+		if body.Hosts[githubHost][i].Active {
+			entry = &body.Hosts[githubHost][i]
+			break
+		}
+	}
+	if entry == nil {
+		return Account{}, fmt.Errorf("%w: no login on %s", ErrNotAuthenticated, githubHost)
+	}
+
+	switch entry.State {
+	case "success":
+		return Account{Login: entry.Login, Scopes: splitScopes(entry.Scopes)}, nil
+	case "error":
+		if strings.Contains(entry.Error, "401") {
+			return Account{}, fmt.Errorf("%w: GitHub refused the token: %s", ErrNotAuthenticated, entry.Error)
+		}
+		return Account{}, fmt.Errorf("%w: %s", ErrUnverified, entry.Error)
+	case "timeout":
+		return Account{}, fmt.Errorf("%w: GitHub did not answer in time", ErrUnverified)
+	default:
+		return Account{}, fmt.Errorf("gh auth status: unknown state %q", entry.State)
+	}
+}
+
+// splitScopes splits the scopes gh prints, separated by commas; nil when there is none.
+func splitScopes(s string) []string {
+	var scopes []string
+	for part := range strings.SplitSeq(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			scopes = append(scopes, part)
+		}
+	}
+	return scopes
+}
+
 // ViewPR reads the pull request of a branch, ErrNoPR when it has none. dir is
 // the worktree, which is what tells gh the repository to ask about.
 func (r *Runner) ViewPR(ctx context.Context, dir, branch string) (PR, error) {

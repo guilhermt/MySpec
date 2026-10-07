@@ -21,6 +21,9 @@ var (
 	ErrNotFound         = errors.New("gh: executable not found")
 	ErrNotAuthenticated = errors.New("gh: not authenticated")
 	ErrNoPR             = errors.New("gh: no pull request for this branch")
+	// ErrUnverified is a login GitHub did not confirm: gh could not reach it,
+	// or it did not answer in time.
+	ErrUnverified = errors.New("gh: GitHub did not confirm the login")
 )
 
 // waitDelay is how long a killed command has to release its pipes.
