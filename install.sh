@@ -124,8 +124,10 @@ place() {
   mv -f "$2.new" "$2"
 }
 
+# Prints one line of the external requirements. The optional third argument is
+# another path where the command also counts as found.
 report_requirement() {
-  if has "$1"; then
+  if has "$1" || { [ -n "${3:-}" ] && [ -x "$3" ]; }; then
     state=found
   else
     state="not found"
@@ -150,11 +152,7 @@ print_summary() {
   esac
   printf '\nMySpec also needs:\n'
   # claude is also looked up in ~/.local/bin, where the app finds it.
-  if has claude || [ -x "$HOME/.local/bin/claude" ]; then
-    printf '  %-7s %-10s %s\n' claude found "Claude Code, installed and logged in"
-  else
-    printf '  %-7s %-10s %s\n' claude "not found" "Claude Code, installed and logged in"
-  fi
+  report_requirement claude "Claude Code, installed and logged in" "$HOME/.local/bin/claude"
   report_requirement gh "GitHub CLI, installed and logged in"
   report_requirement git "git with access to your repositories"
 }
