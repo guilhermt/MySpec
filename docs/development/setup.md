@@ -71,7 +71,9 @@ Um teste só, em Go: `go test -run 'TestNome' ./internal/pacote/`. No frontend: 
 - `.local/share/icons/hicolor/scalable/apps/org.wails.myspec.svg`
 - `.local/share/icons/hicolor/512x512/apps/org.wails.myspec.png`
 
-`task uninstall` remove exatamente esses quatro arquivos. O diretório de dados nunca é tocado. O binário de `task install` se identifica como `dev` no log.
+O time instala a release com `install.sh` ([release.md](./release.md#instalação-pelo-time)), nos mesmos quatro caminhos, e vale a última instalação que rodou, das duas.
+
+`task uninstall` remove esses quatro arquivos, seja qual for a instalação que os colocou. O diretório de dados nunca é tocado. O binário de `task install` se identifica como `dev` no log.
 
 ## VS Code
 
