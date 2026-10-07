@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	"github.com/google/go-cmp/cmp"
 
@@ -405,39 +405,40 @@ func TestCheckGitHubChain(t *testing.T) {
 func TestCheckJoinsACheckThatRuns(t *testing.T) {
 	t.Parallel()
 
-	c := goodClaude()
-	c.block = make(chan struct{})
-	c.locateEntered = make(chan struct{}, 4)
-	s := newService(t, c, goodGitHub())
+	synctest.Test(t, func(t *testing.T) {
+		c := goodClaude()
+		c.locateBlock = make(chan struct{})
+		s := newService(t, c, goodGitHub())
 
-	reports := make(chan machine.Report, 2)
-	check := func() { reports <- s.Check(context.Background()) }
-	go check()
-	<-c.locateEntered
-	go check()
-	// The second call has no signal to wait for; it only has to arrive while
-	// the first still waits on Locate.
-	time.Sleep(50 * time.Millisecond)
-	close(c.block)
+		reports := make(chan machine.Report, 2)
+		check := func() { reports <- s.Check(context.Background()) }
+		go check()
+		// The first call waits on Locate, and the second, started only then,
+		// waits on the check of the first.
+		synctest.Wait()
+		go check()
+		synctest.Wait()
+		close(c.locateBlock)
 
-	first, second := <-reports, <-reports
+		first, second := <-reports, <-reports
 
-	if locates, _, _ := c.calls(); locates != 1 {
-		t.Errorf("Locate called %d times, want 1", locates)
-	}
-	if diff := cmp.Diff(first, second); diff != "" {
-		t.Errorf("the two reports differ (-first +second):\n%s", diff)
-	}
-	if got := s.changeCount(); got != 2 {
-		t.Errorf("OnChange called %d times, want 2", got)
-	}
+		if locates, _, _ := c.calls(); locates != 1 {
+			t.Errorf("Locate called %d times, want 1", locates)
+		}
+		if diff := cmp.Diff(first, second); diff != "" {
+			t.Errorf("the two reports differ (-first +second):\n%s", diff)
+		}
+		if got := s.changeCount(); got != 2 {
+			t.Errorf("OnChange called %d times, want 2", got)
+		}
+	})
 }
 
 func TestStatusFollowsTheCheck(t *testing.T) {
 	t.Parallel()
 
 	c := goodClaude()
-	c.block = make(chan struct{})
+	c.locateBlock = make(chan struct{})
 	c.locateEntered = make(chan struct{}, 1)
 	s := newService(t, c, goodGitHub())
 
@@ -459,7 +460,7 @@ func TestStatusFollowsTheCheck(t *testing.T) {
 		t.Errorf("OnChange called %d times at the start, want 1", got)
 	}
 
-	close(c.block)
+	close(c.locateBlock)
 	<-done
 
 	got := s.Status()

@@ -39,15 +39,12 @@ type fakeClaude struct {
 	version      claude.Version
 	versionErr   error
 
-	// block, when set, makes every call wait for it to close, or for its
-	// context to end.
-	block chan struct{}
-
 	mu             sync.Mutex
 	locates        int
 	preflights     int
 	versionReads   int
 	locateEntered  chan struct{} // receives one value per Locate call, when set
+	locateBlock    chan struct{} // makes only Locate wait for it to close
 	preflightBlock chan struct{} // makes only Preflight wait
 }
 
@@ -60,8 +57,8 @@ func (f *fakeClaude) Locate() (string, error) {
 	if entered != nil {
 		entered <- struct{}{}
 	}
-	if f.block != nil {
-		<-f.block
+	if f.locateBlock != nil {
+		<-f.locateBlock
 	}
 	return f.path, f.locateErr
 }
