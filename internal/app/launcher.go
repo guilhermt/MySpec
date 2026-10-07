@@ -27,6 +27,11 @@ func (l claudeLauncher) Preflight(ctx context.Context, binary string) error {
 	return claude.Preflight(ctx, binary)
 }
 
+// ReadVersion reads the version of the CLI.
+func (l claudeLauncher) ReadVersion(ctx context.Context, binary string) (claude.Version, error) {
+	return claude.ReadVersion(ctx, binary)
+}
+
 // Start runs a session process.
 func (l claudeLauncher) Start(ctx context.Context, cfg claude.Config) (session.Process, error) {
 	// The catalog says whether the model takes an effort; a model that takes none

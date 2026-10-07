@@ -2,8 +2,14 @@ import { boardOfRepository, findBoard } from "@/lib/boards";
 import type { PromptStage, State } from "@/lib/wails";
 import type { OlderArchived } from "@/store/app-store";
 
-/** SettingsSection is what the settings screen shows: the defaults of a new task, the boards, the repositories, the list of prompts or one prompt. */
-export type SettingsSection = "defaults" | "boards" | "repositories" | "prompts" | PromptStage;
+/** SettingsSection is what the settings screen shows: the defaults of a new task, the boards, the repositories, the list of prompts, the machine or one prompt. */
+export type SettingsSection =
+  | "defaults"
+  | "boards"
+  | "repositories"
+  | "prompts"
+  | "machine"
+  | PromptStage;
 
 /** GoneItem is what left the state while its place was open. */
 export type GoneItem = "task" | "review" | "discussion" | "board";
@@ -61,6 +67,7 @@ const SETTINGS_SECTIONS: readonly string[] = [
   "boards",
   "repositories",
   "prompts",
+  "machine",
   "prd",
   "tech_spec",
   "plan",

@@ -153,15 +153,21 @@ describe("choiceLabel", () => {
 
 describe("catalogFailureMessage", () => {
   it("says the CLI was not found", () => {
-    expect(catalogFailureMessage("not_found")).toContain("Claude Code was not found");
+    expect(catalogFailureMessage("not_found")).toBe(
+      "Claude Code was not found. Install it or point MYSPEC_CLAUDE_PATH at the executable, then check again in Settings › Machine.",
+    );
   });
 
   it("says the CLI does not list its models", () => {
-    expect(catalogFailureMessage("unsupported")).toContain("doesn't list its models");
+    expect(catalogFailureMessage("unsupported")).toBe(
+      "The installed Claude Code doesn't list its models. Update it, then check again in Settings › Machine.",
+    );
   });
 
   it("says the reading failed", () => {
-    expect(catalogFailureMessage("failed")).toContain("failed");
+    expect(catalogFailureMessage("failed")).toBe(
+      "Reading the models of Claude Code failed. Check again in Settings › Machine to read them again.",
+    );
   });
 
   it("says nothing when there is a catalog", () => {

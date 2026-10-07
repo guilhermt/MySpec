@@ -4,11 +4,12 @@ import { ICONS } from "@/components/system/icons";
 import { MachineChecks } from "@/components/system/MachineChecks";
 import { StartRow } from "@/components/system/StartRow";
 import { BoardDialog } from "@/features/boards/BoardDialog";
+import { CheckAgainButton } from "@/features/machine/CheckAgainButton";
+import { missingViews } from "@/features/machine/machine";
 import { AddRepositoryDialog } from "@/features/repositories/AddRepositoryDialog";
-import { machineItems } from "@/features/welcome/machine";
 import type { Machine } from "@/lib/wails";
 import { checkMachine } from "@/store/actions";
-import { useAppStore, useModelCatalog } from "@/store/app-store";
+import { useAppStore, useMachine } from "@/store/app-store";
 
 const TITLE =
   "m-0 text-(length:--text-display) leading-(--leading-display) font-semibold text-ink-1 outline-none";
@@ -35,33 +36,20 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 export function Welcome() {
   const pendingFocus = useAppStore((state) => state.pendingFocus);
   const clearPendingFocus = useAppStore((state) => state.clearPendingFocus);
-  const catalog = useModelCatalog();
-  const [machine, setMachine] = useState<Machine | null>(null);
+  const machine = useMachine();
   const [addingBoard, setAddingBoard] = useState(false);
   const [addingRepository, setAddingRepository] = useState(false);
   const title = useRef<HTMLHeadingElement>(null);
   const start = useRef<HTMLDivElement>(null);
 
-  // The machine is read when the welcome shows, when the reading of the models ends (it runs in the
-  // background after the start) and whenever the window comes back, since the user fixes what is
-  // missing in a terminal.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the reading of the models restarts the check
+  // The machine is checked when the welcome shows and whenever the window comes back, since the
+  // user fixes what is missing in a terminal; the result arrives with the state.
   useEffect(() => {
-    let live = true;
-    const check = () => {
-      void checkMachine().then((found) => {
-        if (live && found !== null) {
-          setMachine(found);
-        }
-      });
-    };
+    const check = () => void checkMachine();
     check();
     window.addEventListener("focus", check);
-    return () => {
-      live = false;
-      window.removeEventListener("focus", check);
-    };
-  }, [catalog.models?.length, catalog.failure]);
+    return () => window.removeEventListener("focus", check);
+  }, []);
 
   // Add board takes the focus when the welcome appears, unless a navigation asked for another place.
   // biome-ignore lint/correctness/useExhaustiveDependencies: only when the welcome opens
@@ -79,7 +67,14 @@ export function Welcome() {
     }
   }, [pendingFocus, clearPendingFocus]);
 
-  const items = machine === null ? [] : machineItems(machine);
+  const items = missingViews(machine);
+
+  // When Check again clears the last lack, the block leaves, and the focus goes to Add board.
+  const afterCheck = (found: Machine | null) => {
+    if (found !== null && missingViews(found).length === 0) {
+      start.current?.querySelector("button")?.focus();
+    }
+  };
 
   return (
     <section className="relative min-h-0 flex-1 overflow-y-auto bg-surface-1 text-ink-1">
@@ -97,6 +92,9 @@ export function Welcome() {
         {items.length > 0 && (
           <Section title="This machine">
             <MachineChecks items={items} />
+            <div className="flex">
+              <CheckAgainButton onChecked={afterCheck} />
+            </div>
           </Section>
         )}
         <Section title="Start">

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"crypto/sha256"
 	"fmt"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,10 +12,12 @@ import (
 
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/machine"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreport"
@@ -123,6 +126,7 @@ func unopenedState(migration *Migration, systemDark bool) State {
 		ModelDefaults: []StageModel{},
 		ModelFactory:  FromModelSet(models.Factory()),
 		ModelCatalog:  ModelCatalog{Models: []CatalogModel{}},
+		Machine:       FromMachine(machine.Status{}),
 		Tasks:         []TaskSummary{},
 		History:       []ArchivedTask{},
 	}
@@ -2456,4 +2460,32 @@ func ArchivedDiscussionRepositories(
 		}
 	}
 	return counts
+}
+
+// FromMachine converts where the check of the machine stands; every list is
+// never nil.
+func FromMachine(status machine.Status) Machine {
+	report := status.Report
+	items := make([]MachineItem, 0, len(report.Items))
+	for _, item := range report.Items {
+		items = append(items, MachineItem{
+			ID:     string(item.ID),
+			Result: string(item.Result),
+			Reason: string(item.Reason),
+			Detail: item.Detail,
+		})
+	}
+	return Machine{
+		Checked:        status.Checked,
+		Running:        status.Running,
+		Notice:         status.Notice,
+		Items:          items,
+		ClaudePath:     report.ClaudePath,
+		ClaudeOverride: os.Getenv(claude.EnvPath),
+		ClaudeVersion:  report.ClaudeVersion,
+		MinVersion:     claude.MinVersion,
+		GHAccount:      report.GHAccount,
+		GHScopes:       append([]string{}, report.GHScopes...),
+		MissingScopes:  append([]string{}, report.MissingScopes...),
+	}
 }

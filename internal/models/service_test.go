@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -319,34 +320,81 @@ func TestCatalogIsACopy(t *testing.T) {
 	}
 }
 
-func TestDiscoveryTellsHowTheReadingOfThisRunWent(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name    string
-		read    models.Reader // nil: no reading ran
-		done    bool
-		failure models.CatalogFailure
-	}{
-		{"before the reading", nil, false, ""},
-		{"after a success", reading(claudetest.Catalog, nil), true, ""},
-		{"without a CLI", reading(nil, fmt.Errorf("x: %w", claude.ErrNotFound)), true, models.CatalogNotFound},
-		{"with a CLI that does not know the request", reading(nil, fmt.Errorf("x: %w", claude.ErrCatalogUnsupported)), true, models.CatalogUnsupported},
-		{"with a reading that errored", reading(nil, errors.New("boom")), true, models.CatalogFailed},
+// countingReader is a Reader that counts its calls.
+func countingReader(entries []claude.ModelEntry, err error, calls *atomic.Int32) models.Reader {
+	return func(context.Context) ([]claude.ModelEntry, error) {
+		calls.Add(1)
+		return entries, err
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+}
 
-			service, _ := newService(t, newSettings(nil))
-			if tc.read != nil {
-				service.Discover(t.Context(), tc.read)
-			}
+func TestRetryReadsAgainAfterAFailedReading(t *testing.T) {
+	t.Parallel()
+	service, _ := newService(t, newSettings(nil))
+	service.Discover(t.Context(), reading(nil, errors.New("boom")))
 
-			done, failure := service.Discovery()
-			if done != tc.done || failure != tc.failure {
-				t.Errorf("Discovery() = (%v, %q), want (%v, %q)", done, failure, tc.done, tc.failure)
-			}
-		})
+	var calls atomic.Int32
+	service.Retry(t.Context(), countingReader(claudetest.Catalog, nil, &calls))
+
+	if calls.Load() != 1 {
+		t.Errorf("reader calls = %d, want 1", calls.Load())
+	}
+	if len(service.Catalog().Models) == 0 {
+		t.Error("Catalog() is empty, want the catalog of the retry")
+	}
+	if failure := service.CatalogFailure(); failure != "" {
+		t.Errorf("CatalogFailure() = %q, want none", failure)
+	}
+}
+
+func TestRetryDoesNothingAfterASuccessfulReading(t *testing.T) {
+	t.Parallel()
+	service, _ := newService(t, newSettings(nil))
+	service.Discover(t.Context(), reading(claudetest.Catalog, nil))
+
+	var calls atomic.Int32
+	service.Retry(t.Context(), countingReader(nil, errors.New("boom"), &calls))
+
+	if calls.Load() != 0 {
+		t.Errorf("reader calls = %d, want 0", calls.Load())
+	}
+}
+
+func TestRetryDoesNothingBeforeTheFirstReadingEnds(t *testing.T) {
+	t.Parallel()
+	service, _ := newService(t, newSettings(nil))
+
+	var calls atomic.Int32
+	service.Retry(t.Context(), countingReader(claudetest.Catalog, nil, &calls))
+
+	if calls.Load() != 0 {
+		t.Errorf("reader calls = %d, want 0", calls.Load())
+	}
+}
+
+func TestConcurrentRetriesReadOnce(t *testing.T) {
+	t.Parallel()
+	service, _ := newService(t, newSettings(nil))
+	service.Discover(t.Context(), reading(nil, errors.New("boom")))
+
+	var calls atomic.Int32
+	started := make(chan struct{})
+	release := make(chan struct{})
+	blocked := func(context.Context) ([]claude.ModelEntry, error) {
+		calls.Add(1)
+		close(started)
+		<-release
+		return claudetest.Catalog, nil
+	}
+
+	var wg sync.WaitGroup
+	wg.Go(func() { service.Retry(t.Context(), blocked) })
+	<-started
+	service.Retry(t.Context(), blocked)
+	close(release)
+	wg.Wait()
+
+	if calls.Load() != 1 {
+		t.Errorf("reader calls = %d, want 1", calls.Load())
 	}
 }

@@ -15,9 +15,9 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as $models from "./models.js";
 
 /**
- * CheckMachine looks at what the app needs of the machine: the claude CLI, from
- * the reading of the catalog of this run, and gh with a login. What it can't
- * tell is unknown.
+ * CheckMachine checks the machine again, or waits for the check that runs,
+ * and returns where the check stands after it; the state carries the same
+ * with state:changed.
  */
 export function CheckMachine(): $CancellablePromise<$models.Machine> {
     return $Call.ByID(3164437063);

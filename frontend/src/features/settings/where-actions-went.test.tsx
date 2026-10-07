@@ -82,7 +82,7 @@ const withRepository = (fullName: string, change: Partial<Repository>) => async 
 const SETTINGS_ROWS: Row[] = [
   // The place.
   { control: "Close (Settings)", scene: "settings-defaults", role: "button", name: /^Close/ },
-  ...(["Defaults", "Boards", "Repositories", "Prompts"] as const).map(
+  ...(["Defaults", "Boards", "Repositories", "Prompts", "Machine"] as const).map(
     (name): Row => ({
       control: `${name} (navigation)`,
       scene: "settings-defaults",
@@ -531,9 +531,6 @@ async function draw(setup: SettingsSceneSetup, kind: Screen = "settings") {
   } else if (prompt !== undefined) {
     api.getPrompt.mockResolvedValue(prompt);
   }
-  if (setup.machine !== undefined) {
-    api.checkMachine.mockResolvedValue(setup.machine);
-  }
   const migration = setup.state.migration;
   const element =
     kind === "settings" ? (
@@ -652,6 +649,9 @@ describe("the one primary of each scene", () => {
     ["settings-prompts", "view"],
     ["settings-prompts", "list-failed"],
     ["settings-prompts", "view-failed"],
+    ["settings-machine", ""],
+    ["settings-machine", "missing"],
+    ["settings-machine", "checking"],
   ];
 
   it.each(PAGES)("has no primary on the page in %s %s", async (name, variation) => {

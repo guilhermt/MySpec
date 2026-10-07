@@ -171,7 +171,7 @@ describe("ModelChip", () => {
     await user.click(chip);
     expect(
       await screen.findByText(
-        "Claude Code was not found. Install it or point MYSPEC_CLAUDE_PATH at the executable.",
+        "Claude Code was not found. Install it or point MYSPEC_CLAUDE_PATH at the executable, then check again in Settings › Machine.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();

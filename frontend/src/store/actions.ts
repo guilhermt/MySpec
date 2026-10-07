@@ -1,3 +1,4 @@
+import { checkAnnouncement } from "@/features/machine/machine";
 import type { PreviewReading } from "@/features/task/deletion";
 import { draftTitle } from "@/lib/drafts";
 import { messageOf, noticeDetail, type Remedy } from "@/lib/errors";
@@ -369,11 +370,29 @@ export function getPrompt(stage: PromptStage): Promise<Prompt> {
   return api.getPrompt(stage);
 }
 
-/** checkMachine reads what the machine lacks; a call that fails says nothing, and null is "unknown". */
+/**
+ * checkMachine checks the machine without a word: the welcome runs it when it shows and when the
+ * window comes back. A call that fails says nothing; the state carries the result.
+ */
 export async function checkMachine(): Promise<Machine | null> {
   try {
     return await api.checkMachine();
   } catch {
+    return null;
+  }
+}
+
+/**
+ * checkMachineAgain is Check again: it checks the machine and announces what the check found; it
+ * answers the machine, or null when the call failed.
+ */
+export async function checkMachineAgain(): Promise<Machine | null> {
+  try {
+    const machine = await api.checkMachine();
+    useAppStore.getState().announce(checkAnnouncement(machine));
+    return machine;
+  } catch {
+    useAppStore.getState().announce("Couldn't check this machine. Try again.");
     return null;
   }
 }

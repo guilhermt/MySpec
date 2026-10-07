@@ -12,6 +12,8 @@ Cada sessão guarda a sua conversa. Voltar a uma etapa retoma a sessão dela de 
 
 O app procura `claude` no `PATH` e depois em `~/.local/bin`. A variável `MYSPEC_CLAUDE_PATH` fixa o caminho. Antes da primeira sessão o app confere que o binário existe e que há um login; sem um dos dois a sessão fica em erro com a razão, e **Tentar de novo** repete a verificação.
 
+A versão mínima suportada é `claude.MinVersion` (2.1.291). Ela é a versão em que o app foi verificado, com tudo o que ele usa do CLI (as flags, o protocolo com `interrupt` e `list_models`, as respostas de permissão, `claude auth status`), e sobe quando o app passa a usar um recurso que versões anteriores não têm. O app a confere na conferência da máquina (`internal/machine`, que lê `claude --version`) e não bloqueia uma sessão por ela: a sessão que falha com um CLI antigo demais diz que a versão é a causa provável.
+
 ## Flags
 
 Todo processo sobe com as flags fixas:
@@ -27,7 +29,7 @@ O modo `-p` sem `--bare` usa as credenciais do login interativo, ou seja, a assi
 
 ## Protocolo
 
-O app escreve as mensagens do usuário no stdin como JSON, uma por linha, e lê o stream de eventos do stdout linha a linha. Do stream ele monta o transcript: mensagens do assistente com texto em streaming, chamadas de ferramenta com o resultado, e o `result` que fecha cada turno. O `system/init` traz o id da sessão, o modelo e as `capabilities`, que servem para detectar mudanças de protocolo sem comparar versões.
+O app escreve as mensagens do usuário no stdin como JSON, uma por linha, e lê o stream de eventos do stdout linha a linha. Do stream ele monta o transcript: mensagens do assistente com texto em streaming, chamadas de ferramenta com o resultado, e o `result` que fecha cada turno. O `system/init` traz o id da sessão, o modelo e as `capabilities`, que detectam mudanças de protocolo; a versão mínima garante os recursos que o app usa.
 
 Um subagente, lançado pelas ferramentas `Agent` ou `Task`, fala pelo mesmo stdout: os eventos dele trazem em `parent_tool_use_id` o id da chamada que o lançou, nulo no fio principal. Os `stream_event` de um subagente são ignorados, porque subagentes paralelos se intercalam e nada do que eles transmitem aos pedaços é desenhado; as chamadas e a fala dele entram no transcript pelo `assistant` completo, com o pai gravado. O resultado de uma ferramenta chega num `tool_result`, cujo `content` é um texto ou uma lista de blocos de texto; um `Bash` que falha traz `is_error` e a primeira linha `Exit code N`, às vezes precedida de `Error: `, de onde sai o código de saída. O evento `user` que leva os resultados do fio principal traz também `tool_use_result`, o resultado estruturado da ferramenta: num `Bash` que passa, `stdout` e `stderr` separados, enquanto o `content` de um comando que não imprime nada é o texto `(Bash completed with no output)`; num que falha, o mesmo texto do erro; num `Agent` ou `Task`, em `content`, os blocos de texto do relatório do subagente sozinhos, enquanto o `content` do `tool_result` embrulha o relatório numa moldura do harness, com o aviso de devolução, o id do agente e o uso. Os resultados das ferramentas de um subagente não trazem `tool_use_result`: deles só há o `content`. O CLI corta a saída de um comando em cerca de 30.000 caracteres antes de entregá-la, então é esse o máximo que o app recebe.
 

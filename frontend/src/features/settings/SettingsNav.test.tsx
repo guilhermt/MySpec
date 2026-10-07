@@ -2,9 +2,10 @@ import { act, fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { SettingsNav } from "@/features/settings/SettingsNav";
 import type { SettingsSection } from "@/lib/locations";
+import type { Machine } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeRepository, makeState } from "@/test/wails-mock";
+import { makeMachine, makeRepository, makeState, withMachineItems } from "@/test/wails-mock";
 
 // Place is the nav where Settings keeps it: there while the place is Settings, so a test can open it.
 function Place() {
@@ -14,9 +15,10 @@ function Place() {
 
 function nav(
   section: SettingsSection = "defaults",
-  options: { pendingFocus?: "nav" | null; missing?: boolean } = {},
+  options: { pendingFocus?: "nav" | null; missing?: boolean; machine?: Machine } = {},
 ) {
   const state = makeState({
+    ...(options.machine !== undefined ? { machine: options.machine } : {}),
     repositories: [
       makeRepository({ id: "r1", fullName: "acme/api" }),
       makeRepository({ id: "r2", fullName: "acme/infra", missing: options.missing === true }),
@@ -38,7 +40,7 @@ const section = () => {
 };
 
 describe("SettingsNav", () => {
-  it("lists the four pages as links and marks the open one as the current page", () => {
+  it("lists the five pages as links and marks the open one as the current page", () => {
     nav("boards");
 
     const list = screen.getByRole("navigation", { name: "Settings" });
@@ -48,6 +50,7 @@ describe("SettingsNav", () => {
       "Boards",
       "Repositories",
       "Prompts",
+      "Machine",
     ]);
     expect(link("Boards")).toHaveAttribute("aria-current", "page");
     expect(link("Defaults")).not.toHaveAttribute("aria-current");
@@ -100,12 +103,12 @@ describe("SettingsNav", () => {
 
     await user.keyboard("{End}");
 
-    expect(section()).toBe("prompts");
-    expect(link("Prompts")).toHaveFocus();
+    expect(section()).toBe("machine");
+    expect(link("Machine")).toHaveFocus();
 
     await user.keyboard("{ArrowDown}");
 
-    expect(section()).toBe("prompts");
+    expect(section()).toBe("machine");
 
     await user.keyboard("{Home}");
 
@@ -191,5 +194,31 @@ describe("SettingsNav", () => {
 
     expect(link("Repositories")).not.toHaveAccessibleDescription();
     expect(link("Repositories")).toHaveTextContent(/^Repositories$/);
+  });
+
+  it("marks Machine with the number of missing items, described for a screen reader", () => {
+    const machine = withMachineItems(makeMachine(), {
+      claude_login: { result: "missing" },
+      gh_login: { result: "missing" },
+    });
+    nav("defaults", { machine });
+
+    expect(link("Machine")).toHaveAccessibleDescription("2 things are missing on this machine");
+    expect(link("Machine")).toHaveTextContent("Machine2");
+  });
+
+  it("names the missing item on Machine when only one is", () => {
+    nav("defaults", {
+      machine: withMachineItems(makeMachine(), { gh_found: { result: "missing" } }),
+    });
+
+    expect(link("Machine")).toHaveAccessibleDescription("The GitHub CLI isn't installed");
+  });
+
+  it("says nothing on Machine when nothing is missing", () => {
+    nav("defaults", { machine: makeMachine() });
+
+    expect(link("Machine")).not.toHaveAccessibleDescription();
+    expect(link("Machine")).toHaveTextContent(/^Machine$/);
   });
 });

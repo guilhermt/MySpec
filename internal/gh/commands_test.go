@@ -414,3 +414,108 @@ func TestSignedInFailsWithoutGhOnThePath(t *testing.T) {
 		t.Errorf("SignedIn() = %v, want a missing gh told apart from a missing login", err)
 	}
 }
+
+// accountJSON is the answer of gh auth status --json for one login.
+func accountJSON(entries string) string {
+	return `{"hosts":{"github.com":[` + entries + `]}}`
+}
+
+func TestAccountReadsTheLoginAndItsScopes(t *testing.T) {
+	t.Parallel()
+	r, fake := runner(t, map[string]ghtest.Reply{"auth status": {Stdout: accountJSON(
+		`{"state":"success","active":true,"login":"octocat","scopes":"gist, project, read:org, repo, workflow"}`)}})
+
+	got, err := r.Account(t.Context())
+	if err != nil {
+		t.Fatalf("Account() = %v, want nil", err)
+	}
+	want := gh.Account{Login: "octocat", Scopes: []string{"gist", "project", "read:org", "repo", "workflow"}}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Account() mismatch (-want +got):\n%s", diff)
+	}
+	calls := fake.Calls(t)
+	if len(calls) != 1 || calls[0].Args != "auth status --json hosts --active --hostname github.com" {
+		t.Errorf("calls = %+v, want gh auth status --json hosts --active --hostname github.com", calls)
+	}
+}
+
+func TestAccountWithoutScopesHasNone(t *testing.T) {
+	t.Parallel()
+	r, _ := runner(t, map[string]ghtest.Reply{"auth status": {Stdout: accountJSON(
+		`{"state":"success","active":true,"login":"octocat"}`)}})
+
+	got, err := r.Account(t.Context())
+	if err != nil {
+		t.Fatalf("Account() = %v, want nil", err)
+	}
+	if got.Scopes != nil {
+		t.Errorf("Scopes = %#v, want nil", got.Scopes)
+	}
+}
+
+func TestAccountTellsTheStatesOfTheLoginApart(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		stdout    string
+		want      error // nil: an error that is neither of the two
+		wantOther bool
+	}{
+		{"no login", `{"hosts":{}}`, gh.ErrNotAuthenticated, false},
+		{"a token GitHub refused", accountJSON(
+			`{"state":"error","active":true,"error":"non-200 OK status code: 401 Unauthorized body: \"Bad credentials\""}`), gh.ErrNotAuthenticated, false},
+		{"no network", accountJSON(
+			`{"state":"error","active":true,"error":"Post \"https://api.github.com/graphql\": dial tcp: connection refused"}`), gh.ErrUnverified, false},
+		{"a timeout", accountJSON(`{"state":"timeout","active":true}`), gh.ErrUnverified, false},
+		{"only an inactive login", accountJSON(`{"state":"success","active":false,"login":"other"}`), gh.ErrNotAuthenticated, false},
+		{"not JSON", "not json", nil, true},
+		{"an unknown state", accountJSON(`{"state":"weird","active":true}`), nil, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			r, _ := runner(t, map[string]ghtest.Reply{"auth status": {Stdout: tc.stdout}})
+
+			_, err := r.Account(t.Context())
+			if err == nil {
+				t.Fatal("Account() = nil, want an error")
+			}
+			if tc.wantOther {
+				if errors.Is(err, gh.ErrNotAuthenticated) || errors.Is(err, gh.ErrUnverified) {
+					t.Errorf("Account() = %v, want neither ErrNotAuthenticated nor ErrUnverified", err)
+				}
+				return
+			}
+			if !errors.Is(err, tc.want) {
+				t.Errorf("Account() = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestAccountIgnoresAnInactiveEntry(t *testing.T) {
+	t.Parallel()
+	r, _ := runner(t, map[string]ghtest.Reply{"auth status": {Stdout: accountJSON(
+		`{"state":"success","active":false,"login":"other","scopes":"repo"},` +
+			`{"state":"success","active":true,"login":"octocat","scopes":"project"}`)}})
+
+	got, err := r.Account(t.Context())
+	if err != nil {
+		t.Fatalf("Account() = %v, want nil", err)
+	}
+	if got.Login != "octocat" {
+		t.Errorf("Login = %q, want octocat", got.Login)
+	}
+}
+
+func TestAccountReturnsTheErrorOfAGhThatFails(t *testing.T) {
+	t.Parallel()
+	r, _ := runner(t, map[string]ghtest.Reply{"auth status": {Stderr: "unknown flag: --json", Exit: 1}})
+
+	_, err := r.Account(t.Context())
+	var ghErr *gh.Error
+	if !errors.As(err, &ghErr) {
+		t.Errorf("Account() = %v, want the gh error", err)
+	}
+}

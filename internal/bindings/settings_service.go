@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"time"
 
-	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/reviewmode"
@@ -14,43 +12,35 @@ import (
 	"github.com/guilhermt/myspec/internal/theme"
 )
 
-// machineTimeout is how long the check of the machine waits for gh.
-const machineTimeout = 5 * time.Second
-
-// GHLogin tells whether gh is installed and holds a login.
-type GHLogin interface {
-	SignedIn(ctx context.Context) error
-}
-
 // SettingsService is the settings API the frontend calls.
 type SettingsService struct {
-	late        late[SettingsService]
-	theme       *theme.Service
-	defaults    *models.Service
-	reviewModes *reviewmode.Service
-	login       GHLogin
-	dataDir     string
-	log         *slog.Logger
+	late         late[SettingsService]
+	theme        *theme.Service
+	defaults     *models.Service
+	reviewModes  *reviewmode.Service
+	checkMachine func() Machine
+	dataDir      string
+	log          *slog.Logger
 }
 
 // NewSettingsService builds the service over the theme domain, the model and
-// review mode defaults of the app, the login of gh and the prompts of the data
-// directory.
+// review mode defaults of the app, the check of the machine and the prompts of
+// the data directory.
 func NewSettingsService(
 	t *theme.Service,
 	defaults *models.Service,
 	reviewModes *reviewmode.Service,
-	login GHLogin,
+	checkMachine func() Machine,
 	dataDir string,
 	log *slog.Logger,
 ) *SettingsService {
 	return &SettingsService{
-		theme:       t,
-		defaults:    defaults,
-		reviewModes: reviewModes,
-		login:       login,
-		dataDir:     dataDir,
-		log:         log,
+		theme:        t,
+		defaults:     defaults,
+		reviewModes:  reviewModes,
+		checkMachine: checkMachine,
+		dataDir:      dataDir,
+		log:          log,
 	}
 }
 
@@ -134,41 +124,15 @@ func (s *SettingsService) ListPrompts() ([]PromptListing, error) {
 	return FromListed(listed), nil
 }
 
-// CheckMachine looks at what the app needs of the machine: the claude CLI, from
-// the reading of the catalog of this run, and gh with a login. What it can't
-// tell is unknown.
-func (s *SettingsService) CheckMachine() Machine {
+// CheckMachine checks the machine again, or waits for the check that runs,
+// and returns where the check stands after it; the state carries the same
+// with state:changed.
+func (s *SettingsService) CheckMachine() (Machine, error) {
 	s, err := s.late.resolve(s)
 	if err != nil {
-		return Machine{}
+		return Machine{}, err
 	}
-	machine := Machine{Claude: "unknown", GH: "unknown"}
-
-	if done, failure := s.defaults.Discovery(); done {
-		switch failure {
-		case "", models.CatalogUnsupported:
-			machine.Claude = "found"
-		case models.CatalogNotFound:
-			machine.Claude = "not_found"
-		case models.CatalogFailed:
-			// A reading that failed for another reason says nothing of the CLI.
-		}
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), machineTimeout)
-	defer cancel()
-
-	switch err := s.login.SignedIn(ctx); {
-	case err == nil:
-		machine.GH = "ready"
-	case errors.Is(err, gh.ErrNotFound):
-		machine.GH = "not_installed"
-	case errors.Is(err, gh.ErrNotAuthenticated):
-		machine.GH = "signed_out"
-	default:
-		s.log.Warn("machine check failed", "error", err)
-	}
-	return machine
+	return s.checkMachine(), nil
 }
 
 // GetPrompt reads a prompt as the settings show it.

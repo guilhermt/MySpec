@@ -54,6 +54,7 @@ import type {
   LeftoverBranch,
   LeftoverWorktree,
   Machine,
+  MachineItem,
   MarkerCommit,
   MarkerEntry,
   Migration,
@@ -175,6 +176,7 @@ export type {
   LeftoverBranch,
   LeftoverWorktree,
   Machine,
+  MachineItem,
   MarkerCommit,
   MarkerEntry,
   Migration,
@@ -657,30 +659,49 @@ export function asReleaseKind(value: string): ReleaseKind {
   }
 }
 
-/** ClaudeCheck is what the check of the machine found of the claude CLI. */
-export type ClaudeCheck = "found" | "not_found" | "unknown";
+/** MachineItemId names an item of the check of the machine, in the order of the check. */
+export type MachineItemId =
+  | "claude_found"
+  | "claude_login"
+  | "claude_version"
+  | "gh_found"
+  | "gh_login"
+  | "gh_scopes";
 
-export function asClaudeCheck(value: string): ClaudeCheck {
+/** MachineResult is how an item of the check ended. */
+export type MachineResult = "ok" | "missing" | "unchecked";
+
+export function asMachineResult(value: string): MachineResult {
   switch (value) {
-    case "found":
-    case "not_found":
+    case "ok":
+    case "missing":
       return value;
     default:
-      return "unknown";
+      return "unchecked";
   }
 }
 
-/** GHCheck is what the check of the machine found of gh and its login. */
-export type GHCheck = "ready" | "not_installed" | "signed_out" | "unknown";
+/** MachineReason is why an item is unchecked, or a missing gh_login whose token GitHub refused. */
+export type MachineReason =
+  | ""
+  | "depends"
+  | "timeout"
+  | "unreadable"
+  | "no_scopes"
+  | "failed"
+  | "invalid_token";
 
-export function asGHCheck(value: string): GHCheck {
+export function asMachineReason(value: string): MachineReason {
   switch (value) {
-    case "ready":
-    case "not_installed":
-    case "signed_out":
+    case "":
+    case "depends":
+    case "timeout":
+    case "unreadable":
+    case "no_scopes":
+    case "invalid_token":
       return value;
     default:
-      return "unknown";
+      return "failed";
   }
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { Tooltip } from "@/components/system/Tooltip";
 import { BoardsPage } from "@/features/boards/BoardsPage";
+import { MachinePage } from "@/features/machine/MachinePage";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { RepositoriesPage } from "@/features/repositories/RepositoriesPage";
 import { Defaults } from "@/features/settings/Defaults";
@@ -39,7 +40,7 @@ function PromptOfStage({ stage }: { stage: PromptStage }) {
   );
 }
 
-/** SettingsView is the settings of the app: the defaults of a new task, the boards, the repositories and the prompts, one page at a time beside their navigation. */
+/** SettingsView is the settings of the app: the defaults of a new task, the boards, the repositories, the prompts and the machine, one page at a time beside their navigation. */
 export function SettingsView() {
   const { settingsSection } = useSettingsUi();
   const app = useAppStore((state) => state.app);
@@ -79,6 +80,8 @@ export function SettingsView() {
             <BoardsPage />
           ) : settingsSection === "repositories" ? (
             <RepositoriesPage />
+          ) : settingsSection === "machine" ? (
+            <MachinePage />
           ) : settingsSection === "prompts" ? (
             <PromptsPage />
           ) : (

@@ -2,7 +2,6 @@ package bindings_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -16,9 +15,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/bindings"
-	"github.com/guilhermt/myspec/internal/claude"
-	"github.com/guilhermt/myspec/internal/claude/claudetest"
-	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/reviewmode"
@@ -294,64 +290,23 @@ func TestGetPromptCarriesTheLinesAndTheTimeOfTheEdit(t *testing.T) {
 	}
 }
 
-func TestCheckMachineSaysWhatTheMachineHas(t *testing.T) {
-	t.Parallel()
-
-	read := func(entries []claude.ModelEntry, err error) models.Reader {
-		return func(context.Context) ([]claude.ModelEntry, error) { return entries, err }
-	}
-	tests := []struct {
-		name      string
-		discovery models.Reader // nil: the reading has not ended
-		login     error
-		want      bindings.Machine
-	}{
-		{"all there", read(claudetest.Catalog, nil), nil, bindings.Machine{Claude: "found", GH: "ready"}},
-		{"reading still running", nil, nil, bindings.Machine{Claude: "unknown", GH: "ready"}},
-		{
-			"a CLI without the catalog request", read(nil, claude.ErrCatalogUnsupported), nil,
-			bindings.Machine{Claude: "found", GH: "ready"},
-		},
-		{
-			"no CLI", read(nil, claude.ErrNotFound), gh.ErrNotFound,
-			bindings.Machine{Claude: "not_found", GH: "not_installed"},
-		},
-		{
-			"a reading that failed", read(nil, errors.New("boom")), fmt.Errorf("%w: no login", gh.ErrNotAuthenticated),
-			bindings.Machine{Claude: "unknown", GH: "signed_out"},
-		},
-		{"gh that answered something else", nil, errors.New("timed out"), bindings.Machine{Claude: "unknown", GH: "unknown"}},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			f := newFixture(t)
-			if test.discovery != nil {
-				f.models.Discover(t.Context(), test.discovery)
-			}
-			service := bindings.NewSettingsService(
-				f.theme, f.models, f.reviewModes, fakeLogin{err: test.login}, f.dataDir, slog.New(slog.DiscardHandler),
-			)
-
-			if got := service.CheckMachine(); got != test.want {
-				t.Errorf("CheckMachine() = %+v, want %+v", got, test.want)
-			}
-		})
-	}
-}
-
-func TestCheckMachineLogsAGhItCouldNotTell(t *testing.T) {
+func TestCheckMachineReturnsWhereTheCheckStands(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
+	want := bindings.Machine{
+		Checked: true,
+		Items:   []bindings.MachineItem{{ID: "claude_found", Result: "missing"}},
+	}
 	service := bindings.NewSettingsService(
-		f.theme, f.models, f.reviewModes, fakeLogin{err: errors.New("timed out")}, f.dataDir,
-		slog.New(slog.NewJSONHandler(f.logs, nil)),
+		f.theme, f.models, f.reviewModes, func() bindings.Machine { return want }, f.dataDir, slog.New(slog.DiscardHandler),
 	)
 
-	service.CheckMachine()
-
-	if !f.logged(t, "machine check failed") {
-		t.Error("the failure was not logged as machine check failed")
+	got, err := service.CheckMachine()
+	if err != nil {
+		t.Fatalf("CheckMachine() = %v, want nil", err)
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("CheckMachine() mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -394,7 +349,7 @@ func TestTheSettersOfADefaultSayWhenTheDiskIsFull(t *testing.T) {
 			}
 			dataDir, shown := test.dirs(f)
 			service := bindings.NewSettingsService(
-				f.theme, fullModels, fullModes, fakeLogin{}, dataDir, slog.New(slog.NewJSONHandler(f.logs, nil)),
+				f.theme, fullModels, fullModes, nil, dataDir, slog.New(slog.NewJSONHandler(f.logs, nil)),
 			)
 			want := "no space left on the disk of " + shown + ". Free some space, then try again."
 

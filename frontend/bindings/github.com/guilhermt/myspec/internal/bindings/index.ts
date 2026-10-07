@@ -76,6 +76,7 @@ export type {
     LeftoverBranch,
     LeftoverWorktree,
     Machine,
+    MachineItem,
     MarkerCommit,
     MarkerEntry,
     Migration,

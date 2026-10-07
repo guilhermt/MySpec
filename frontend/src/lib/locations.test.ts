@@ -211,6 +211,7 @@ describe("isLocation", () => {
     ["Home", { kind: "home" }, true],
     ["a task", { kind: "task", id: "task-1" }, true],
     ["a page of Settings", { kind: "settings", section: "pr_review" }, true],
+    ["the Machine page of Settings", { kind: "settings", section: "machine" }, true],
     ["an item that left", GONE, true],
     ["the History", { kind: "history" }, true],
     ["the History on a fresh row", { kind: "history", fresh: { kind: "review", id: "r" } }, true],

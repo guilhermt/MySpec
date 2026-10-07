@@ -33,6 +33,7 @@ import {
   useHistory,
   useHistoryUi,
   useLeftoverOf,
+  useMachine,
   useMigration,
   useModelCatalog,
   useNewDiscussion,
@@ -326,6 +327,27 @@ describe("applyState", () => {
     useAppStore.getState().applyState(withTasks());
 
     expect(useAppStore.getState().lastRepositoryId).toBe("repo-2");
+  });
+});
+
+describe("the notice of the machine", () => {
+  it("is dismissed until the next opening", () => {
+    expect(useAppStore.getState().machineNoticeDismissed).toBe(false);
+
+    useAppStore.getState().dismissMachineNotice();
+
+    expect(useAppStore.getState().machineNoticeDismissed).toBe(true);
+  });
+
+  it("reads nothing checked before the first state", () => {
+    const { result } = renderHook(() => useMachine());
+
+    expect(result.current).toMatchObject({
+      checked: false,
+      running: false,
+      notice: false,
+      items: [],
+    });
   });
 });
 

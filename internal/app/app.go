@@ -19,6 +19,7 @@ import (
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/machine"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/platform/chime"
 	"github.com/guilhermt/myspec/internal/platform/logging"
@@ -68,6 +69,7 @@ type App struct {
 	repositories   *repository.Service
 	theme          *theme.Service
 	models         *models.Service
+	machine        *machine.Service
 	reviewModes    *reviewmode.Service
 	tasks          *task.Service
 	boards         *board.Service

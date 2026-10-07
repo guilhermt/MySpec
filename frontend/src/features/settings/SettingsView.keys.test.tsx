@@ -40,9 +40,6 @@ function setup(scene: SettingsSceneSetup, element = <SettingsView />) {
   } else if (prompt !== undefined) {
     api.getPrompt.mockResolvedValue(prompt);
   }
-  if (scene.machine !== undefined) {
-    api.checkMachine.mockResolvedValue(scene.machine);
-  }
   return renderWithStore(
     <>
       <Shortcuts />
@@ -173,10 +170,10 @@ describe("the keyboard of Settings", () => {
       expect(link("Boards")).toHaveFocus();
 
       await user.keyboard("{End}");
-      expect(place()).toEqual({ kind: "settings", section: "prompts" });
+      expect(place()).toEqual({ kind: "settings", section: "machine" });
 
       await user.keyboard("{ArrowDown}");
-      expect(place()).toEqual({ kind: "settings", section: "prompts" });
+      expect(place()).toEqual({ kind: "settings", section: "machine" });
 
       await user.keyboard("{Home}{ArrowUp}");
       expect(place()).toEqual({ kind: "settings", section: "defaults" });

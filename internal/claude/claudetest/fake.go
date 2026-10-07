@@ -28,6 +28,9 @@ const (
 	EnvScenario = "MYSPEC_FAKE_SCENARIO"
 	// EnvAuth set to "out" makes `auth status` report a logged out user.
 	EnvAuth = "MYSPEC_FAKE_AUTH"
+	// EnvVersion is what `--version` prints; empty prints MinVersion as the CLI
+	// writes it, "2.1.291 (Claude Code)".
+	EnvVersion = "MYSPEC_FAKE_VERSION"
 	// EnvWriterFix names the step file the writer scenario rewrites from its
 	// second turn on, which is how a test drives the correction of a plan.
 	EnvWriterFix = "MYSPEC_FAKE_WRITER_FIX"
@@ -114,6 +117,9 @@ const maxLine = 16 << 20
 // returns the exit code the fake CLI should end with.
 func Run() int {
 	args := os.Args[1:]
+	if len(args) >= 1 && args[0] == "--version" {
+		return version()
+	}
 	if len(args) >= 2 && args[0] == "auth" && args[1] == "status" {
 		return authStatus()
 	}
@@ -125,6 +131,16 @@ func Run() int {
 	fake := newFake(sessionID(args))
 	go fake.read(os.Stdin)
 	return fake.play(os.Getenv(EnvScenario))
+}
+
+// version answers `--version`.
+func version() int {
+	out := os.Getenv(EnvVersion)
+	if out == "" {
+		out = claude.MinVersion + " (Claude Code)"
+	}
+	_, _ = fmt.Fprintln(os.Stdout, out)
+	return exitOK
 }
 
 // authStatus answers the preflight check.

@@ -3,6 +3,7 @@ import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import { StateGlyph } from "@/components/system/StateGlyph";
 import { Tooltip } from "@/components/system/Tooltip";
+import { missingItems, navMissingText } from "@/features/machine/machine";
 import {
   missingClones,
   missingText,
@@ -12,15 +13,15 @@ import {
   type SettingsPage,
 } from "@/features/settings/settings-nav";
 import { cn } from "@/lib/utils";
-import { useAppStore, useSettingsUi } from "@/store/app-store";
+import { useAppStore, useMachine, useSettingsUi } from "@/store/app-store";
 
 const NO_REPOSITORIES: never[] = [];
 
 /**
- * SettingsNav is the navigation of Settings: the four pages as links, the open one the stop of Tab.
+ * SettingsNav is the navigation of Settings: the five pages as links, the open one the stop of Tab.
  * The arrows open the page they reach, as the tabs do, and Home and End the ends of the list; with the
  * list in a row, as it is in a narrow window, the side arrows too. Repositories carries ◇ N when
- * the clone of a repository is missing.
+ * the clone of a repository is missing, and Machine when something on the machine is.
  */
 export function SettingsNav() {
   const { settingsSection } = useSettingsUi();
@@ -28,8 +29,10 @@ export function SettingsNav() {
   const pendingFocus = useAppStore((state) => state.pendingFocus);
   const clearPendingFocus = useAppStore((state) => state.clearPendingFocus);
   const selectSettingsSection = useAppStore((state) => state.selectSettingsSection);
+  const machine = useMachine();
   const open = pageOf(settingsSection);
   const missing = missingClones(repositories);
+  const lacking = missingItems(machine).length;
   const missingId = useId();
 
   const list = useRef<HTMLUListElement>(null);
@@ -75,7 +78,9 @@ export function SettingsNav() {
       >
         {SETTINGS_PAGES.map(({ page, label, icon }) => {
           const current = page === open;
-          const withMissing = page === "repositories" && missing.length > 0;
+          const count = page === "repositories" ? missing.length : page === "machine" ? lacking : 0;
+          const withMissing = count > 0;
+          const description = page === "machine" ? navMissingText(machine) : missingText(missing);
           const link = (
             // biome-ignore lint/a11y/useValidAnchor: a page link of Settings, which has no URL of its own; the click is the navigation.
             <a
@@ -88,7 +93,7 @@ export function SettingsNav() {
               }}
               href="#"
               {...(current ? { "aria-current": "page" as const } : {})}
-              {...(withMissing ? { "aria-describedby": missingId } : {})}
+              {...(withMissing ? { "aria-describedby": `${missingId}-${page}` } : {})}
               tabIndex={current ? 0 : -1}
               onClick={(event: MouseEvent) => {
                 event.preventDefault();
@@ -111,17 +116,17 @@ export function SettingsNav() {
                   )}
                 >
                   <StateGlyph state="blocked" size="sm" />
-                  {missing.length}
+                  {count}
                 </span>
               )}
             </a>
           );
           return (
             <li key={page}>
-              {withMissing ? <Tooltip content={missingText(missing)}>{link}</Tooltip> : link}
+              {withMissing ? <Tooltip content={description}>{link}</Tooltip> : link}
               {withMissing && (
-                <span id={missingId} className="sr-only">
-                  {missingText(missing)}
+                <span id={`${missingId}-${page}`} className="sr-only">
+                  {description}
                 </span>
               )}
             </li>

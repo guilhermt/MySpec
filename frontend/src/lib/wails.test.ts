@@ -7,7 +7,6 @@ import {
   asBoardFailureReason,
   asCardAction,
   asCatalogFailure,
-  asClaudeCheck,
   asCloseOutcome,
   asCloseSkipReason,
   asDependencyDrop,
@@ -20,10 +19,11 @@ import {
   asErrorKind,
   asFindingDecision,
   asFindingPlacement,
-  asGHCheck,
   asHoldReason,
   asInterruptedBy,
   asIssueState,
+  asMachineReason,
+  asMachineResult,
   asMarkerType,
   asMergeable,
   asMigrationCaseKind,
@@ -121,17 +121,22 @@ describe("asReleaseKind", () => {
   });
 });
 
-describe("asClaudeCheck and asGHCheck", () => {
-  it("keep the values Go sends and turn anything else into unknown", () => {
-    expect(asClaudeCheck("found")).toBe("found");
-    expect(asClaudeCheck("not_found")).toBe("not_found");
-    expect(asClaudeCheck("unknown")).toBe("unknown");
-    expect(asClaudeCheck("broken")).toBe("unknown");
-    expect(asGHCheck("ready")).toBe("ready");
-    expect(asGHCheck("not_installed")).toBe("not_installed");
-    expect(asGHCheck("signed_out")).toBe("signed_out");
-    expect(asGHCheck("unknown")).toBe("unknown");
-    expect(asGHCheck("broken")).toBe("unknown");
+describe("asMachineResult", () => {
+  it("keeps the values Go sends and turns anything else into unchecked", () => {
+    expect(asMachineResult("ok")).toBe("ok");
+    expect(asMachineResult("missing")).toBe("missing");
+    expect(asMachineResult("unchecked")).toBe("unchecked");
+    expect(asMachineResult("broken")).toBe("unchecked");
+  });
+});
+
+describe("asMachineReason", () => {
+  it("keeps the values Go sends and turns anything else into failed", () => {
+    for (const reason of ["", "depends", "timeout", "unreadable", "no_scopes", "invalid_token"]) {
+      expect(asMachineReason(reason)).toBe(reason);
+    }
+    expect(asMachineReason("failed")).toBe("failed");
+    expect(asMachineReason("broken")).toBe("failed");
   });
 });
 

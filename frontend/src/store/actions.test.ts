@@ -21,6 +21,7 @@ import {
   changeRepositoryPath,
   checkBoardRepository,
   checkMachine,
+  checkMachineAgain,
   chooseCloneFolder,
   cleanAndStartStep,
   cloneRepository,
@@ -117,6 +118,7 @@ import {
   makeHistoryPage,
   makeHistorySummary,
   makeLeftover,
+  makeMachine,
   makeRepository,
   makeReviewFilters,
   makeReviewSummary,
@@ -836,12 +838,27 @@ describe("task actions", () => {
   });
 
   it("checks the machine and gives null when the call fails", async () => {
-    expect(await checkMachine()).toEqual({ claude: "found", gh: "ready" });
+    expect(await checkMachine()).toEqual(makeMachine());
 
     vi.mocked(api.checkMachine).mockRejectedValueOnce(new Error("no answer"));
 
     expect(await checkMachine()).toBeNull();
     expect(useAppStore.getState().error).toBeNull();
+    expect(useAppStore.getState().announcement).toBeNull();
+  });
+
+  it("announces what Check again found, and its failure", async () => {
+    expect(await checkMachineAgain()).toEqual(makeMachine());
+    expect(useAppStore.getState().announcement?.text).toBe(
+      "Checked this machine: nothing is missing.",
+    );
+
+    vi.mocked(api.checkMachine).mockRejectedValueOnce(new Error("no answer"));
+
+    expect(await checkMachineAgain()).toBeNull();
+    expect(useAppStore.getState().announcement?.text).toBe(
+      "Couldn't check this machine. Try again.",
+    );
   });
 
   it("lists the prompts and lets the failure through", async () => {
