@@ -56,7 +56,7 @@ O workflow usa só o `GITHUB_TOKEN`, com `contents: write`, e só uma release ro
 | `org.wails.myspec.svg` | o ícone vetorial | 0644 |
 | `org.wails.myspec.png` | o ícone de 512x512 | 0644 |
 
-Os nomes são os de instalação. `@EXEC@` no `.desktop` é trocado pelo caminho do binário, como faz `task install`. A estrutura é estável: mudá-la exige mudar o script de instalação junto.
+Os nomes são os de instalação. `@EXEC@` no `.desktop` é trocado pelo caminho do binário, como faz `task install`. A estrutura é estável, e o script de instalação depende dela ([Instalação pelo time](#instalação-pelo-time)).
 
 `task package` monta o pacote na máquina, em `bin/`, sem publicar.
 
@@ -66,7 +66,7 @@ O mesmo commit, com a mesma toolchain do `mise.toml` e as mesmas bibliotecas do 
 
 ## URL estável
 
-`https://github.com/guilhermt/MySpec/releases/latest/download/myspec-linux-amd64.tar.gz` entrega sempre o pacote da última release publicada. O repositório precisa ser público para o download sem autenticação.
+`https://github.com/guilhermt/MySpec/releases/latest/download/myspec-linux-amd64.tar.gz` entrega sempre o pacote da última release publicada. O repositório precisa ser público para o download sem autenticação. O script de instalação parte dessa URL.
 
 ## Bibliotecas em tempo de execução
 
@@ -78,6 +78,28 @@ O binário precisa de dois pacotes do sistema; o resto (GLib, libsoup, libX11, C
 | WebKitGTK 6.0 | `webkitgtk-6.0` | `libwebkitgtk-6.0-4` |
 
 Cada biblioteca ligada diretamente pelo binário (`readelf -d` de `task package`) pertence a um desses dois pacotes ou às dependências deles no Arch.
+
+## Instalação pelo time
+
+`install.sh`, na raiz, é servido pelo raw da `main`. O comando do time é o do README:
+
+```
+curl -fsSL https://raw.githubusercontent.com/guilhermt/MySpec/main/install.sh | sh
+```
+
+O script, em `sh` POSIX:
+
+- confere o usuário (recusa root), `curl` e `tar`, o Linux `amd64` e as duas bibliotecas por `ldconfig -p`, e mostra o comando de instalação da distro de `/etc/os-release`;
+- lê a versão do redirect da URL estável e baixa o pacote da tag dessa versão;
+- instala nos caminhos do `task install` por rename atômico, o que deixa um app aberto na versão antiga;
+- atualiza os caches do launcher e dos ícones;
+- imprime a versão, o aviso de `PATH` e os pré-requisitos externos (`claude`, `gh` e `git`).
+
+Nada muda no disco antes de tudo estar conferido, baixado e extraído. Ele nunca usa `sudo` e nunca toca nos dados do app.
+
+**A regra do formato:** o script da `main` precisa sempre entender o pacote da última release publicada. Uma mudança na estrutura do pacote chega à `main` com um script que aceita as duas estruturas, e o suporte à antiga sai só depois da release com a nova. Uma correção no script chega ao time no merge, sem release.
+
+A verificação é o `shellcheck` (`task lint:sh`, dentro de `task lint` e no CI). O comportamento se confere à mão no Arch e no Pop!_OS 24.04.
 
 ## Quando uma release falha
 

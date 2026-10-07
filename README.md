@@ -4,9 +4,28 @@ Aplicação desktop que conduz um workflow de desenvolvimento com o Claude Code:
 
 Wails v3 com Go no backend, React com TypeScript na interface, Linux.
 
+## Instalar
+
+Os sistemas suportados são Arch, com ou sem Omarchy, e Pop!_OS 24.04, em `amd64`. O app precisa de duas bibliotecas de sistema, GTK 4 e WebKitGTK 6.0:
+
+```sh
+sudo pacman -S gtk4 webkitgtk-6.0                 # Arch
+sudo apt install libgtk-4-1 libwebkitgtk-6.0-4    # Ubuntu e Pop!_OS
+```
+
+Então, um único comando instala o MySpec:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/guilhermt/MySpec/main/install.sh | sh
+```
+
+O mesmo comando atualiza para a última release, sem tocar nos dados do app, e não usa `sudo`. Se faltar uma biblioteca, ele diz qual e como instalá-la.
+
+O app também precisa do Claude Code (`claude`) instalado e logado, do `gh` instalado e logado e do `git` com acesso aos repositórios. O script lista os que não encontrou.
+
 ## Começar
 
-Com `gtk4`, `webkitgtk-6.0`, [mise](https://mise.jdx.dev), `git`, `gh` e o `claude` logado na máquina:
+Para desenvolver, com `gtk4`, `webkitgtk-6.0`, [mise](https://mise.jdx.dev), `git`, `gh` e o `claude` logado na máquina:
 
 ```sh
 mise install

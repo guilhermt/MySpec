@@ -24,7 +24,7 @@ jobs:
       # Only the tools the job runs: govulncheck, go-test-coverage and lefthook stay on the machine.
       - uses: jdx/mise-action@v4
         with:
-          install_args: go node pnpm task golangci-lint gotestsum npm:@biomejs/biome
+          install_args: go node pnpm task golangci-lint gotestsum shellcheck npm:@biomejs/biome
           cache: true
       - name: Resolve pnpm store
         id: pnpm-store
@@ -47,6 +47,7 @@ jobs:
         working-directory: frontend
       - run: task tidy:check
       - run: task lint:web
+      - run: task lint:sh
       - run: task typecheck
       - run: task lint:go:ci
       - run: task test:go:ci

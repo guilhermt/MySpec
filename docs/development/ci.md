@@ -4,14 +4,14 @@ As verificações rodam em três lugares, cada um no seu momento ([guidelines](.
 
 | Onde | Quando | O que roda | Tempo |
 |---|---|---|---|
-| `task check` | Ao verificar um step e antes de cada push numa PR aberta | tidy, lint Go e web (Biome, as regras do design, o `knip`), typecheck, os testes Go (os que não mudaram vêm do cache), os testes do frontend que a branch alcança, `govulncheck` e a checagem dos bindings, com `nice` | uns 25 s numa branch sem mudança; uns 1 min 30 s com uma mudança em `src/test/setup.ts`, que leva à suíte inteira do frontend |
+| `task check` | Ao verificar um step e antes de cada push numa PR aberta | tidy, lint Go, web (Biome, as regras do design, o `knip`) e do script de instalação (`shellcheck`), typecheck, os testes Go (os que não mudaram vêm do cache), os testes do frontend que a branch alcança, `govulncheck` e a checagem dos bindings, com `nice` | uns 25 s numa branch sem mudança; uns 1 min 30 s com uma mudança em `src/test/setup.ts`, que leva à suíte inteira do frontend |
 | `task check:full` | Uma vez, antes de abrir a PR | O mesmo, com `test:full` no lugar de `test`: todos os testes Go com race, embaralhamento e `-count=1`, e a suíte do frontend inteira, os dois com cobertura e os limiares, um depois do outro | uns 3 min 30 s |
-| CI (`.github/workflows/ci.yml`) | Em cada pull request: na abertura e em cada push | tidy, lint web, typecheck, lint Go e testes Go sem race, sem a raiz, `internal/app` e `internal/bindings` | ~3 min |
+| CI (`.github/workflows/ci.yml`) | Em cada pull request: na abertura e em cada push | tidy, lint web, lint do script de instalação, typecheck, lint Go e testes Go sem race, sem a raiz, `internal/app` e `internal/bindings` | ~3 min |
 | Release (`.github/workflows/release.yml`) | Em cada push de tag `v*`, que `task release` faz | as conferências da tag, `task package` no Ubuntu 24.04 e a publicação da release ([release.md](./release.md)) | poucos minutos |
 
 ## CI
 
-Um workflow, um job, `Check`. Os passos, na ordem: `pnpm install --frozen-lockfile`, `task tidy:check`, `task lint:web`, `task typecheck`, `task lint:go:ci` e `task test:go:ci`. Dispara só em `pull_request`, e um push novo cancela a execução em andamento da mesma PR. Nada roda em push na `main` nem por agenda. O repositório só usa `main`; não há branch `dev`.
+Um workflow, um job, `Check`. Os passos, na ordem: `pnpm install --frozen-lockfile`, `task tidy:check`, `task lint:web`, `task lint:sh`, `task typecheck`, `task lint:go:ci` e `task test:go:ci`. Dispara só em `pull_request`, e um push novo cancela a execução em andamento da mesma PR. Nada roda em push na `main` nem por agenda. O repositório só usa `main`; não há branch `dev`.
 
 O CI é mínimo porque o repositório é privado, no plano free do GitHub Actions: o runner tem 2 vCPUs e 8 GB e cada job é cobrado em minutos inteiros. O job não instala GTK, WebKit nem navegador. Os três pacotes que importam o Wails (a raiz, `internal/app` e `internal/bindings`) precisam dos headers do GTK e do WebKit para compilar, então o lint e os testes Go do CI deixam esses três de fora, por `task lint:go:ci` e `task test:go:ci`. Os demais compilam sem nenhuma biblioteca de sistema.
 

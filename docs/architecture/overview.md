@@ -46,6 +46,7 @@ frontend/
   src/test/              setup do Vitest, render com store, mock do Go e as cenas das telas
   bindings/              gerados por `task generate`; nunca editados à mão
 build/                   config do Wails, ícones e entrada .desktop
+install.sh               instala ou atualiza o app a partir da última release
 VERSION                  a versão da última release
 .github/                 CI, release e Dependabot
 ```
