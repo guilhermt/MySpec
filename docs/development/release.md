@@ -28,7 +28,7 @@ O comando confere, nesta ordem, e recusa sem mudar nada quando algo está errado
 | A sincronia | `release: main is not the same as origin/main (<N> behind, <M> ahead)` | `git pull`, e mover para uma branch qualquer commit que só a `main` local tem. A conferência vem depois de um fetch. |
 | A tag | `release: the tag already exists: vX.Y.Z, in this clone` ou `on origin` | Conferir `VERSION` e as tags; a tag existente não é tocada. |
 
-Passando, o comando faz o bump de `VERSION`, commita `Release vX.Y.Z` com só esse arquivo, cria a tag anotada, envia o commit e a tag num `git push --atomic` e imprime os links da tag e da release. O git precisa alcançar a `origin` sem pedir senha, porque o comando roda com `GIT_TERMINAL_PROMPT=0`. O comando não usa o `gh`.
+Passando, o comando faz o bump de `VERSION`, commita `Release vX.Y.Z` com só esse arquivo, cria a tag anotada, envia o commit e a tag num `git push --atomic` e imprime os links do workflow e da release. O git precisa alcançar a `origin` sem pedir senha, porque o comando roda com `GIT_TERMINAL_PROMPT=0`. O comando não usa o `gh`.
 
 Esse commit é a única mudança que chega à `main` sem pull request ([guidelines](../guidelines/README.md#pull-requests)).
 

@@ -254,6 +254,18 @@ func TestAReleaseIsRefusedWithACommitOnlyMainHas(t *testing.T) {
 	if !strings.Contains(err.Error(), "0 behind, 1 ahead") {
 		t.Errorf("Run() error = %q, want it to count 0 behind, 1 ahead", err)
 	}
+	if got := versionOf(t, f.clone); got != "0.3.0\n" {
+		t.Errorf("VERSION = %q, want %q", got, "0.3.0\n")
+	}
+	if got := gittest.Run(t, f.clone, "log", "-1", "--format=%s"); got != "Add a local commit" {
+		t.Errorf("HEAD subject = %q, want %q", got, "Add a local commit")
+	}
+	if got := gittest.Run(t, f.clone, "tag", "--list"); got != "" {
+		t.Errorf("clone tags = %q, want none", got)
+	}
+	if got := gittest.Run(t, f.origin, "log", "-1", "--format=%s", "refs/heads/main"); got != "Add VERSION" {
+		t.Errorf("origin main subject = %q, want %q", got, "Add VERSION")
+	}
 	if got := gittest.Run(t, f.origin, "tag", "--list"); got != "" {
 		t.Errorf("origin tags = %q, want none", got)
 	}
