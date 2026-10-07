@@ -1470,21 +1470,81 @@ export interface LeftoverWorktree {
 }
 
 /**
- * Machine is what the app found out about the machine it runs on.
+ * Machine is where the check of the machine stands: the six items in order,
+ * with what the settings show of each tool. It is checked at every opening
+ * and on Check again; nothing of it is persisted.
  */
 export interface Machine {
     /**
-     * Claude is found, not_found or unknown, a string for the same reason as
-     * State.Theme: unknown is a catalog read that has not finished or failed
-     * for another reason.
+     * a check ended in this run; until then Items is empty
      */
-    "claude": string;
+    "checked": boolean;
 
     /**
-     * GH is ready, not_installed, signed_out or unknown, a string for the same
-     * reason as State.Theme: unknown is a gh that answered something else.
+     * a check runs now
      */
-    "gh": string;
+    "running": boolean;
+
+    /**
+     * Notice is whether the notice at the top of the app shows: the check of
+     * the opening found something missing, and no check since found nothing
+     * missing. The frontend hides it in welcome mode and once dismissed.
+     */
+    "notice": boolean;
+
+    /**
+     * in the order of the check; never nil
+     */
+    "items": MachineItem[] | null;
+
+    /**
+     * ClaudePath is where claude was found, and ClaudeOverride the value of
+     * MYSPEC_CLAUDE_PATH; "" when it was not found and when the variable is unset.
+     */
+    "claudePath": string;
+    "claudeOverride": string;
+
+    /**
+     * as "2.1.291"; "" when it was not read
+     */
+    "claudeVersion": string;
+
+    /**
+     * the oldest Claude Code the app supports
+     */
+    "minVersion": string;
+
+    /**
+     * "" when unknown
+     */
+    "ghAccount": string;
+
+    /**
+     * GHScopes are the scopes of the login of gh and MissingScopes the ones
+     * the app needs that it lacks, project then repo; never nil.
+     */
+    "ghScopes": string[] | null;
+    "missingScopes": string[] | null;
+}
+
+/**
+ * MachineItem is one item of the check of the machine.
+ */
+export interface MachineItem {
+    /**
+     * ID is claude_found, claude_login, claude_version, gh_found, gh_login or
+     * gh_scopes; Result is ok, missing or unchecked; Reason is "", depends,
+     * timeout, unreadable, no_scopes, failed or invalid_token. Strings for the
+     * same reason as State.Theme.
+     */
+    "id": string;
+    "result": string;
+    "reason": string;
+
+    /**
+     * what the tool said; "" when there is nothing to show
+     */
+    "detail": string;
 }
 
 /**
@@ -3121,6 +3181,11 @@ export interface State {
      * lists.
      */
     "modelCatalog": ModelCatalog;
+
+    /**
+     * Machine is what the last check of the machine found.
+     */
+    "machine": Machine;
 
     /**
      * ReviewModeDefault is manual or agent: who reviews the steps of a new

@@ -16,6 +16,7 @@ import (
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/machine"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/platform/chime"
 	"github.com/guilhermt/myspec/internal/platform/notify"
@@ -210,6 +211,12 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 		return fmt.Errorf("read sessions: %w", err)
 	}
 	ghRunner := gh.New(gh.Deps{Log: log, Binary: a.deps.ghBinary})
+	machineSvc := machine.New(machine.Deps{
+		Claude:   claudeLauncher{log: log, effort: modelsSvc.ProcessEffort},
+		GitHub:   ghRunner,
+		Log:      log,
+		OnChange: a.publish,
+	})
 	repositories := repository.New(repository.Deps{
 		Store:         st.Repositories,
 		Settings:      st.Settings,
@@ -307,7 +314,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 		OnChange:     func(string) { a.publish() },
 	})
 	a.theme, a.repositories, a.tasks, a.sessions, a.flow = themeSvc, repositories, tasks, sessions, flowSvc
-	a.worktrees, a.review, a.models = worktrees, reviews, modelsSvc
+	a.worktrees, a.review, a.models, a.machine = worktrees, reviews, modelsSvc, machineSvc
 	a.reviewModes, a.boards = reviewModesSvc, boards
 	a.pulls, a.prReviews, a.reviewFlow = pullRequests, prReviews, reviewFlow
 	a.discussions, a.discussionFlow = discussions, discussionFlow
@@ -329,7 +336,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	a.resume(ctx)
 
 	a.services.Bind(a.bound(
-		repositories, boards, themeSvc, modelsSvc, reviewModesSvc, ghRunner, tasks, sessions, flowSvc,
+		repositories, boards, themeSvc, modelsSvc, reviewModesSvc, tasks, sessions, flowSvc,
 		a.dirs.Data, log,
 	))
 	a.markReady()
@@ -341,6 +348,9 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 // runInBackground starts what reads the machine and GitHub for as long as the
 // app runs.
 func (a *App) runInBackground() {
+	// What the machine lacks is checked at every opening, in the background:
+	// it reaches the interface with the state and never holds the window.
+	go a.machine.Check(a.pollCtx)
 	// The catalog of models comes from the CLI on the machine and must not hold
 	// the interface: it is read in the background and reaches it with the state.
 	go a.discoverModels(a.pollCtx, a.dirs.Data)
@@ -358,7 +368,6 @@ func (a *App) bound(
 	themeSvc *theme.Service,
 	modelsSvc *models.Service,
 	reviewModesSvc *reviewmode.Service,
-	login bindings.GHLogin,
 	tasks *task.Service,
 	sessions *session.Service,
 	flowSvc *flow.Service,
@@ -368,7 +377,7 @@ func (a *App) bound(
 	return bindings.Services{
 		State:      bindings.NewStateService(a.state),
 		Repository: bindings.NewRepositoryService(repositories, a, log),
-		Settings:   bindings.NewSettingsService(themeSvc, modelsSvc, reviewModesSvc, login, dataDir, log),
+		Settings:   bindings.NewSettingsService(themeSvc, modelsSvc, reviewModesSvc, a.checkMachine, dataDir, log),
 		Task: bindings.NewTaskService(
 			tasks, sessions, flowSvc, modelsSvc, reviewModesSvc, repositories, boards, editor.Open,
 			a.discussions.DocumentOfCard, a.hasConversation, log,

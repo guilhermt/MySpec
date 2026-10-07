@@ -58,7 +58,10 @@ func (a *App) snapshot() bindings.State {
 		ModelFactory:  bindings.FromModelSet(models.Factory()),
 		// ModelCatalog is what the installed CLI offers; like the defaults, it
 		// is the app's own.
-		ModelCatalog:      bindings.FromCatalog(a.models.Catalog(), a.models.CatalogFailure()),
+		ModelCatalog: bindings.FromCatalog(a.models.Catalog(), a.models.CatalogFailure()),
+		// Machine is what the last check of the machine found; like the
+		// catalog, it is the app's own.
+		Machine:           a.machineState(),
 		ReviewModeDefault: string(a.reviewModes.Default()),
 		Tasks: bindings.FromTasks(
 			tasks,

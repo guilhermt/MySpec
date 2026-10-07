@@ -23,6 +23,7 @@ export interface StoreOptions {
       | "toasts"
       | "announcement"
       | "expectGone"
+      | "machineNoticeDismissed"
       | "transcripts"
       | "drafts"
       | "markerRequest"
@@ -79,6 +80,7 @@ export function resetAppStore(options: StoreOptions = {}): void {
     toasts: options.ui?.toasts ?? [],
     announcement: options.ui?.announcement ?? null,
     expectGone: options.ui?.expectGone ?? null,
+    machineNoticeDismissed: options.ui?.machineNoticeDismissed ?? false,
     transcripts: options.ui?.transcripts ?? {},
     drafts: options.ui?.drafts ?? {},
     markerRequest: options.ui?.markerRequest ?? null,

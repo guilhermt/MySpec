@@ -14,7 +14,6 @@ import type {
   Board,
   BoardPreview,
   BoardRepositoryOption,
-  Machine,
   Prompt,
   PromptListing,
   Repository,
@@ -43,6 +42,7 @@ import {
   makeStartupFailure,
   makeStartupStep,
   makeState,
+  withMachineItems,
 } from "@/test/wails-mock";
 
 /** SETTINGS_SCENES are the four pages of Settings. */
@@ -99,8 +99,6 @@ export interface SettingsSceneSetup {
   storage: Record<string, string>;
   /** startup is the start of the app, for the scenes of the start. */
   startup?: Startup;
-  /** machine is what the check of the machine answers. */
-  machine?: Machine;
   /** listings is what the list of prompts answers: the failure of its reading when it is an error. */
   listings?: PromptListing[] | Error;
   /** prompt is what the reading of the prompt of the page answers: the failure of its reading when it is an error. */
@@ -1056,15 +1054,32 @@ export function welcomeScene(variation: (typeof WELCOME_VARIATIONS)[number]): Se
       ...overrides,
     });
   const base = { state: empty(), location: { kind: "home" } as Location, storage: {} };
+  const lacking = (changes: Parameters<typeof withMachineItems>[1]) =>
+    empty({ machine: withMachineItems(makeMachine(), changes) });
+  const depends = { result: "unchecked", reason: "depends" } as const;
   switch (variation) {
     case "":
-      return { ...base, machine: makeMachine() };
+      return base;
     case "no-login":
-      return { ...base, machine: makeMachine({ gh: "signed_out" }) };
+      return { ...base, state: lacking({ gh_login: { result: "missing" }, gh_scopes: depends }) };
     case "no-gh":
-      return { ...base, machine: makeMachine({ gh: "not_installed" }) };
+      return {
+        ...base,
+        state: lacking({
+          gh_found: { result: "missing" },
+          gh_login: depends,
+          gh_scopes: depends,
+        }),
+      };
     case "no-claude":
-      return { ...base, machine: makeMachine({ claude: "not_found" }) };
+      return {
+        ...base,
+        state: lacking({
+          claude_found: { result: "missing" },
+          claude_login: depends,
+          claude_version: depends,
+        }),
+      };
     case "history":
       return {
         ...base,
@@ -1079,7 +1094,6 @@ export function welcomeScene(variation: (typeof WELCOME_VARIATIONS)[number]): Se
             }),
           ],
         }),
-        machine: makeMachine(),
       };
   }
 }

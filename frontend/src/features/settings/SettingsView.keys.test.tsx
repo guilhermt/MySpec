@@ -40,9 +40,6 @@ function setup(scene: SettingsSceneSetup, element = <SettingsView />) {
   } else if (prompt !== undefined) {
     api.getPrompt.mockResolvedValue(prompt);
   }
-  if (scene.machine !== undefined) {
-    api.checkMachine.mockResolvedValue(scene.machine);
-  }
   return renderWithStore(
     <>
       <Shortcuts />

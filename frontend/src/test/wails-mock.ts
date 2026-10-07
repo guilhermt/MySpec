@@ -31,6 +31,8 @@ import type {
   HistorySummary,
   Leftover,
   Machine,
+  MachineItem,
+  MachineItemId,
   MarkerCommit,
   Migration,
   ModelCatalog,
@@ -445,6 +447,7 @@ export function makeState(overrides: Partial<State> = {}): State {
     modelDefaults: makeModelDefaults(),
     modelFactory: makeModelDefaults(),
     modelCatalog: makeModelCatalog(),
+    machine: makeMachine(),
     reviewModeDefault: "manual",
     tasks: [],
     history: [],
@@ -1033,9 +1036,51 @@ export function makePromptListings(): PromptListing[] {
   ].map((stage) => ({ stage, modified: false, editedAt: "" }));
 }
 
-/** makeMachine is a machine that has claude and a gh signed in. */
+/** MACHINE_ITEM_IDS are the six items of the check, in its order. */
+const MACHINE_ITEM_IDS: readonly MachineItemId[] = [
+  "claude_found",
+  "claude_login",
+  "claude_version",
+  "gh_found",
+  "gh_login",
+  "gh_scopes",
+];
+
+/** makeMachineItem is an item of the check that ended ok. */
+export function makeMachineItem(
+  id: MachineItemId,
+  overrides: Partial<MachineItem> = {},
+): MachineItem {
+  return { id, result: "ok", reason: "", detail: "", ...overrides };
+}
+
+/** makeMachine is a machine that was checked and has everything the app needs. */
 export function makeMachine(overrides: Partial<Machine> = {}): Machine {
-  return { claude: "found", gh: "ready", ...overrides };
+  return {
+    checked: true,
+    running: false,
+    notice: false,
+    items: MACHINE_ITEM_IDS.map((id) => makeMachineItem(id)),
+    claudePath: "/home/user/.local/bin/claude",
+    claudeOverride: "",
+    claudeVersion: "2.1.291",
+    minVersion: "2.1.291",
+    ghAccount: "octocat",
+    ghScopes: ["gist", "project", "read:org", "repo", "workflow"],
+    missingScopes: [],
+    ...overrides,
+  };
+}
+
+/** withMachineItems swaps the named items of a machine, keeping the order. */
+export function withMachineItems(
+  machine: Machine,
+  changes: Partial<Record<MachineItemId, Partial<MachineItem>>>,
+): Machine {
+  return {
+    ...machine,
+    items: (machine.items ?? []).map((item) => ({ ...item, ...changes[item.id as MachineItemId] })),
+  };
 }
 
 export function makeReview(overrides: Partial<Review> = {}): Review {

@@ -12,12 +12,14 @@ import (
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/claude/claudetest"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/machine"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreport"
@@ -1902,6 +1904,7 @@ func TestRefusedStateCarriesTheCasesAndNothingElse(t *testing.T) {
 		ModelDefaults: []bindings.StageModel{},
 		ModelFactory:  bindings.FromModelSet(models.Factory()),
 		ModelCatalog:  bindings.ModelCatalog{Models: []bindings.CatalogModel{}},
+		Machine:       bindings.FromMachine(machine.Status{}),
 		Tasks:         []bindings.TaskSummary{},
 		History:       []bindings.ArchivedTask{},
 	}
@@ -3921,5 +3924,72 @@ func TestFromRemovalCountsAndNamesTheRepositories(t *testing.T) {
 	want := bindings.BoardRemoval{ToNoBoard: 1, ToNoBoardNames: []string{"acme/web"}, RemovedNames: []string{}}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("FromRemoval() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromMachineOfNothingCheckedHasEmptyLists(t *testing.T) {
+	t.Parallel()
+
+	got := bindings.FromMachine(machine.Status{})
+
+	if got.Checked || got.Running || got.Notice {
+		t.Errorf("FromMachine(empty) = %+v, want nothing set", got)
+	}
+	if got.Items == nil || got.GHScopes == nil || got.MissingScopes == nil {
+		t.Errorf("FromMachine(empty) has a nil list: %+v", got)
+	}
+	if got.MinVersion != claude.MinVersion {
+		t.Errorf("MinVersion = %q, want %q", got.MinVersion, claude.MinVersion)
+	}
+}
+
+func TestFromMachineCarriesTheItemsInOrderAndCopiesTheLists(t *testing.T) {
+	t.Parallel()
+	scopes := []string{"gist", "repo"}
+	status := machine.Status{
+		Checked: true,
+		Running: true,
+		Notice:  true,
+		Report: machine.Report{
+			Items: []machine.Item{
+				{ID: machine.ClaudeFound, Result: machine.OK},
+				{ID: machine.ClaudeLogin, Result: machine.Unchecked, Reason: machine.ReasonTimeout},
+				{ID: machine.GHLogin, Result: machine.Missing, Reason: machine.ReasonInvalidToken, Detail: "401"},
+			},
+			ClaudePath:    "/bin/claude",
+			ClaudeVersion: "2.1.291",
+			GHAccount:     "octocat",
+			GHScopes:      scopes,
+			MissingScopes: []string{"project"},
+		},
+	}
+
+	got := bindings.FromMachine(status)
+	scopes[0] = "changed"
+
+	want := bindings.Machine{
+		Checked: true, Running: true, Notice: true,
+		Items: []bindings.MachineItem{
+			{ID: "claude_found", Result: "ok"},
+			{ID: "claude_login", Result: "unchecked", Reason: "timeout"},
+			{ID: "gh_login", Result: "missing", Reason: "invalid_token", Detail: "401"},
+		},
+		ClaudePath:    "/bin/claude",
+		ClaudeVersion: "2.1.291",
+		MinVersion:    claude.MinVersion,
+		GHAccount:     "octocat",
+		GHScopes:      []string{"gist", "repo"},
+		MissingScopes: []string{"project"},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("FromMachine() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromMachineCarriesTheClaudeOverride(t *testing.T) {
+	t.Setenv(claude.EnvPath, "/opt/claude")
+
+	if got := bindings.FromMachine(machine.Status{}).ClaudeOverride; got != "/opt/claude" {
+		t.Errorf("ClaudeOverride = %q, want /opt/claude", got)
 	}
 }

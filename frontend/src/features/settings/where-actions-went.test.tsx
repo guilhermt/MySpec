@@ -531,9 +531,6 @@ async function draw(setup: SettingsSceneSetup, kind: Screen = "settings") {
   } else if (prompt !== undefined) {
     api.getPrompt.mockResolvedValue(prompt);
   }
-  if (setup.machine !== undefined) {
-    api.checkMachine.mockResolvedValue(setup.machine);
-  }
   const migration = setup.state.migration;
   const element =
     kind === "settings" ? (

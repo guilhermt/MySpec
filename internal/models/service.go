@@ -185,15 +185,6 @@ func (s *Service) Retry(ctx context.Context, read Reader) {
 	s.Discover(ctx, read)
 }
 
-// Discovery is how the reading of the catalog of this run went: done is false
-// while it runs, and failure is "" when it succeeded.
-func (s *Service) Discovery() (done bool, failure CatalogFailure) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.discovered, s.failure
-}
-
 // catalogFailureOf tells apart the ways a reading fails, as the interface
 // tells them apart.
 func catalogFailureOf(err error) CatalogFailure {

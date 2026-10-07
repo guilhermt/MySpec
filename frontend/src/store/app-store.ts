@@ -47,6 +47,7 @@ import type {
   Entry,
   HistorySummary,
   Leftover,
+  Machine,
   MarkerType,
   Migration,
   ModelCatalog,
@@ -220,6 +221,8 @@ export interface AppStore {
   announcement: { id: number; text: string } | null;
   /** expectGone is the item the user just asked to remove, whose page is not announced. */
   expectGone: string | null;
+  /** machineNoticeDismissed is the notice of the machine dismissed; it holds until the next opening and is never stored. */
+  machineNoticeDismissed: boolean;
   /** transcripts and drafts are keyed by sessionKey: a task has one per stage. */
   transcripts: Record<string, TranscriptState>;
   drafts: Record<string, string>;
@@ -414,6 +417,8 @@ export interface AppStore {
   clearHistoryFocus: () => void;
   /** dismissToast takes a toast off the screen. */
   dismissToast: (id: string) => void;
+  /** dismissMachineNotice hides the notice of the machine until the next opening. */
+  dismissMachineNotice: () => void;
 
   flashSituation: (id: string) => void;
   unflashSituation: (id: string) => void;
@@ -1002,6 +1007,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
     toasts: [],
     announcement: null,
     expectGone: null,
+    machineNoticeDismissed: false,
     promptEdit: null,
     pendingLeave: null,
     promptReturn: null,
@@ -1346,6 +1352,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     clearHistoryFocus: () => set({ historyFocus: null }),
 
+    dismissMachineNotice: () => set({ machineNoticeDismissed: true }),
+
     dismissToast: (id) =>
       set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
 
@@ -1457,6 +1465,21 @@ const NO_BOARDS: readonly Board[] = [];
 
 /** NO_CATALOG is what the pickers offer before the state arrives: nothing, for no known reason. */
 const NO_CATALOG: ModelCatalog = { models: [], failure: "" };
+
+/** NO_MACHINE is the check of the machine before the state arrives: nothing checked, nothing known. */
+const NO_MACHINE: Machine = {
+  checked: false,
+  running: false,
+  notice: false,
+  items: [],
+  claudePath: "",
+  claudeOverride: "",
+  claudeVersion: "",
+  minVersion: "",
+  ghAccount: "",
+  ghScopes: [],
+  missingScopes: [],
+};
 
 /** useBoards is every registered board, by title. */
 export function useBoards(): readonly Board[] {
@@ -1588,6 +1611,11 @@ export function useMigration(): Migration | null {
 /** useModelCatalog is what the installed Claude Code offers, as the state carries it. */
 export function useModelCatalog(): ModelCatalog {
   return useAppStore((state) => state.app?.modelCatalog ?? NO_CATALOG);
+}
+
+/** useMachine is what the last check of the machine found, as the state carries it. */
+export function useMachine(): Machine {
+  return useAppStore((state) => state.app?.machine ?? NO_MACHINE);
 }
 
 /** useError is the failure the app notice shows, if any. */
