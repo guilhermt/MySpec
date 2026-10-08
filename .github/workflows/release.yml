@@ -44,14 +44,15 @@ jobs:
         with:
           install_args: go node pnpm task
           cache: false
-      - name: Install wails3
-        run: |
-          go install tool
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      # wails3 compiles against the GTK and WebKitGTK headers, so they are installed before it.
       - name: Install GTK and WebKitGTK
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
+      - name: Install wails3
+        run: |
+          go install tool
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - run: pnpm install --frozen-lockfile
         working-directory: frontend
       - run: task package

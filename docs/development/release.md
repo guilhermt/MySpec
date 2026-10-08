@@ -38,7 +38,7 @@ Esse commit é a única mudança que chega à `main` sem pull request ([guidelin
 
 1. confere que o commit da tag está na `main` e que a tag é igual a `VERSION`;
 2. instala a toolchain do `mise.toml`, sem cache, para que nada de outra execução chegue ao binário;
-3. instala o `wails3` por `go install tool` e os pacotes `-dev` do GTK4 e do WebKitGTK pelo apt;
+3. instala os pacotes `-dev` do GTK4 e do WebKitGTK pelo apt e, depois deles, o `wails3` por `go install tool`, que compila contra eles;
 4. roda `pnpm install --frozen-lockfile` e `task package`;
 5. confere que o build não mudou nenhum arquivo rastreado e que o binário não carrega caminhos do runner;
 6. publica com `gh release create`: título e tag `vX.Y.Z`, notas geradas pelo GitHub a partir das pull requests desde a tag anterior, marcada como `latest`, com o pacote anexado.
