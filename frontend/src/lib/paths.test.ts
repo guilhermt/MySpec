@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { displayPath, displayPaths } from "@/lib/paths";
+import { displayPath, displayPaths, isWindowsPath, joinPath } from "@/lib/paths";
 
 describe("displayPath", () => {
   it("replaces the home directory with a tilde", () => {
@@ -16,6 +16,12 @@ describe("displayPath", () => {
 
   it("does not match a directory that merely starts with home", () => {
     expect(displayPath("/homework/api")).toBe("/homework/api");
+  });
+
+  it("replaces the home directory of Windows", () => {
+    expect(displayPath("C:\\Users\\dev\\code\\infra")).toBe("~\\code\\infra");
+    expect(displayPath("C:\\Users\\dev")).toBe("~");
+    expect(displayPath("D:\\work")).toBe("D:\\work");
   });
 });
 
@@ -36,7 +42,25 @@ describe("displayPaths", () => {
     ["/srv/home/code/api is a clone", "/srv/home/code/api is a clone"],
     ["Can't open /tmp/scratchpad/app/home/dev/web", "Can't open /tmp/scratchpad/app/home/dev/web"],
     ["/mnt/home/dev and /home/dev", "/mnt/home/dev and ~"],
+    ["clone C:/Users/dev/code failed", "clone ~/code failed"],
   ])("writes %j as %j", (text, want) => {
     expect(displayPaths(text)).toBe(want);
+  });
+});
+
+describe("isWindowsPath", () => {
+  it.each([
+    ["C:\\x", true],
+    ["c:/x", true],
+    ["/home/x", false],
+  ])("says %j is %j", (path, want) => {
+    expect(isWindowsPath(path)).toBe(want);
+  });
+});
+
+describe("joinPath", () => {
+  it("joins with the separator of the folder's system", () => {
+    expect(joinPath("C:\\code", "api")).toBe("C:\\code\\api");
+    expect(joinPath("/home/dev/code", "api")).toBe("/home/dev/code/api");
   });
 });

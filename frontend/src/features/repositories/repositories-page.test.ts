@@ -155,6 +155,10 @@ describe("blockLine", () => {
       kind: "cloning",
       text: "Cloning into ~/code/android…",
     });
+    expect(blockLine(cloning, "C:\\Users\\dev\\code")).toEqual({
+      kind: "cloning",
+      text: "Cloning into ~\\code\\android…",
+    });
     expect(blockLine(cloning, "")).toEqual({ kind: "cloning", text: "Cloning…" });
   });
 
