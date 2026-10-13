@@ -36,3 +36,19 @@ func backgroundFor(mode theme.Mode) application.RGBA {
 	}
 	return application.NewRGB(254, 253, 253)
 }
+
+// onThemeChanged publishes the new theme and paints the title bar in it.
+func (a *App) onThemeChanged() {
+	a.publish()
+	a.paintTitleBar(a.theme.Effective())
+}
+
+// windowTheme is the theme the native title bar of Windows opens in for a
+// mode. It is always a fixed one: SystemDefault would let Wails repaint the
+// bar with the system even when the user fixed the theme of the app.
+func windowTheme(mode theme.Mode) application.Theme {
+	if mode == theme.ModeDark {
+		return application.Dark
+	}
+	return application.Light
+}

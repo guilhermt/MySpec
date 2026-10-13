@@ -22,7 +22,7 @@ A stack do produto e a razão de cada escolha.
 | Artefatos e prompts | Arquivos Markdown no diretório de dados do app (`~/.local/share/myspec/` no Linux, `%LOCALAPPDATA%\MySpec\data\` no Windows) |
 | Estado do app | SQLite via `modernc.org/sqlite`, acessado só pelo Go |
 | Notificações e tema do sistema (Linux) | D-Bus com godbus: `org.freedesktop.Notifications` e o portal de configurações |
-| Notificações (Windows) | Toasts do WinRT por COM (`golang.org/x/sys/windows`) e o registro do usuário |
+| Notificações e tema do sistema (Windows) | Toasts do WinRT por COM (`golang.org/x/sys/windows`), o registro do usuário e o evento de tema do Wails |
 | Som das notificações | WAV próprio embutido, tocado por `pw-play`, `paplay` ou `aplay` no Linux e por `PlaySoundW` no Windows |
 | Logs | `slog` em JSON no diretório de estado do app (`~/.local/state/myspec/` no Linux, `%LOCALAPPDATA%\MySpec\state\` no Windows) |
 | Ferramentas | mise, Task, pnpm, Biome, Vitest com jsdom, golangci-lint, gotestsum, govulncheck, go-test-coverage, lefthook, shellcheck |
@@ -87,9 +87,10 @@ No Linux, o app fala direto com o barramento de sessão pelo godbus, que o Wails
 
 ## Windows
 
-No Windows o app fala com a plataforma do sistema por `golang.org/x/sys/windows`, que já é dependência direta, para duas coisas:
+No Windows o app fala com a plataforma do sistema por `golang.org/x/sys/windows`, que já é dependência direta, para três coisas:
 
 - **Notificações**, por toasts do WinRT. O service de notificações do Wails grava `LocalServer32` no registro, o que faria um clique abrir o app fechado, e não retira um toast já entregue. O WinRT direto, chamado por COM pelo `x/sys/windows`, cobre a identidade, o `Tag` e o `Group`, o clique pelo activator, a retirada e a leitura do modo de notificação, sem dependência nova.
+- **Tema do sistema**, pelo modo de app (`AppsUseLightTheme`) no registro, lido antes de a janela ser criada, e pelo evento `SystemThemeChanged` do Wails, que no Windows funciona: ele sai do broadcast `ImmersiveColorSet` na hora da troca. A barra de título é pintada por `w32.SetTheme`, para seguir o tema do app mesmo quando o usuário o fixa.
 - **Não perturbe**, lendo o `NotificationMode` do Windows e as configurações de banner e de som do MySpec no registro. A lista de prioritários o Windows não expõe, e por isso não é seguida: todo modo diferente de Unrestricted silencia o carrilhão, e um Windows que não informa o modo o deixa tocar.
 
 ## Som das notificações

@@ -106,3 +106,22 @@ func TestTheWindowOpensInTheThemeTheDesktopAskedFor(t *testing.T) {
 		t.Errorf("ModeFor(light) = %q, want %q", got, theme.ModeLight)
 	}
 }
+
+func TestTheTitleBarOpensInTheThemeOfTheMode(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		mode theme.Mode
+		want application.Theme
+	}{
+		{theme.ModeDark, application.Dark},
+		{theme.ModeLight, application.Light},
+	} {
+		t.Run(string(tc.mode), func(t *testing.T) {
+			t.Parallel()
+			if got := app.WindowTheme(tc.mode); got != tc.want {
+				t.Errorf("WindowTheme(%s) = %v, want %v", tc.mode, got, tc.want)
+			}
+		})
+	}
+}
