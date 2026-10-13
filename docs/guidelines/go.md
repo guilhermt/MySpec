@@ -8,6 +8,7 @@ Go 1.27, módulo `github.com/guilhermt/myspec`. O que está aqui é o que o cód
 - Pacotes de domínio não conhecem o Wails. Só `internal/app` e `internal/bindings` importam `wailsapp/wails`.
 - O que difere entre Linux e Windows fica em arquivos `_linux.go` e `_windows.go` com a mesma API, e o resto do pacote é portável.
 - Um processo externo sobe por `internal/platform/procgroup`: `Run` para um comando que o app espera, `New` para um processo longo e `Hide` para um comando curto.
+- Uma pasta é observada por `internal/platform/fswatch`, nunca pelo fsnotify direto: no Windows só fechar um watcher inteiro para de observar com segurança.
 - Um pacote que roda um binário (`git`, `gh`) nada sabe do produto; a política fica num pacote acima (`worktree`, `flow`).
 - Dependências entram por uma struct `Deps` no construtor `New`, com o `*slog.Logger` junto. Sem variáveis globais, sem logger global. Um logger ausente vira `slog.DiscardHandler`.
 - O que um pacote descobre ele reporta por callback (`OnChange`, `OnDue`); decidir o que fazer com isso é de quem o compôs.

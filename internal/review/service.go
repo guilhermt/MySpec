@@ -9,9 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
-
 	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/platform/fswatch"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
 
@@ -34,19 +33,18 @@ type Deps struct {
 }
 
 // Service keeps every worktree under review under watch and holds the last
-// reading of each of them.
+// reading of each of them. The directories of each task are a group of fs.
 type Service struct {
 	worktrees Worktrees
 	log       *slog.Logger
 	onChange  func(taskID string)
 
-	fs *fsnotify.Watcher
+	fs *fswatch.Watcher
 
 	mu     sync.Mutex
 	items  map[string]*tracked
 	owners map[string]string // watched directory -> the task that watches it
 	closed bool
-	calls  sync.WaitGroup // the calls to fs in flight, which Close waits for
 }
 
 // tracked is one worktree under watch.
@@ -63,11 +61,6 @@ type tracked struct {
 
 // New builds a Service with its watcher running.
 func New(deps Deps) (*Service, error) {
-	fsw, err := fsnotify.NewWatcher()
-	if err != nil {
-		return nil, fmt.Errorf("create review watcher: %w", err)
-	}
-
 	log := deps.Log
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
@@ -76,11 +69,14 @@ func New(deps Deps) (*Service, error) {
 		worktrees: deps.Worktrees,
 		log:       log,
 		onChange:  deps.OnChange,
-		fs:        fsw,
 		items:     map[string]*tracked{},
 		owners:    map[string]string{},
 	}
-	go s.run()
+	fsw, err := fswatch.New(s.handle, func(err error) { s.log.Warn("review watcher failed", "error", err) })
+	if err != nil {
+		return nil, fmt.Errorf("create review watcher: %w", err)
+	}
+	s.fs = fsw
 	return s, nil
 }
 
@@ -118,7 +114,9 @@ func (s *Service) Track(taskID string, wt worktree.Worktree, active bool) {
 	item.active = active
 	s.mu.Unlock()
 
-	s.remove(taskID, dropped)
+	if moved {
+		s.remove(taskID, dropped)
+	}
 	if !found || moved {
 		s.watch(taskID, wt)
 	}
@@ -181,7 +179,6 @@ func (s *Service) Close() error {
 	s.owners = map[string]string{}
 	s.mu.Unlock()
 
-	s.calls.Wait()
 	if err := s.fs.Close(); err != nil {
 		return fmt.Errorf("close review watcher: %w", err)
 	}

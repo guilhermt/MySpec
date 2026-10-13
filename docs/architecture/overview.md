@@ -34,7 +34,7 @@ internal/                todo o código Go
   editor/                abre o VS Code
   theme/                 preferência de tema
   store/                 SQLite e migrations
-  platform/              logging, notify (D-Bus), chime, dnd, xdg, procgroup
+  platform/              logging, notify (D-Bus), chime, dnd, xdg, procgroup, fswatch
 frontend/
   src/app/               App, shell, bootstrap e atalhos globais
   src/store/             o store Zustand, as ações, o transcript e o relógio compartilhado
@@ -72,7 +72,9 @@ Dois pares merecem nota. `git` roda o binário e não sabe o que é uma task; `w
 
 ### Linux e Windows
 
-O código é um só para os dois sistemas. O que difere fica em arquivos `_linux.go` e `_windows.go` do mesmo pacote, com a mesma API: os diretórios do app, a localização do `claude`, o grupo de processos, o D-Bus e o tema, a classificação dos erros do sistema e o WebKit. O resto do pacote é portável.
+O código é um só para os dois sistemas. O que difere fica em arquivos `_linux.go` e `_windows.go` do mesmo pacote, com a mesma API: os diretórios do app, a localização do `claude`, o grupo de processos, a observação de pastas, o D-Bus e o tema, a classificação dos erros do sistema e o WebKit. O resto do pacote é portável.
+
+`task` e `review` observam pastas por `internal/platform/fswatch`, em grupos: as pastas de artefatos de uma task, as pastas de uma worktree em review. No Linux todos os grupos dividem um watcher do fsnotify, porque as instâncias do inotify são limitadas por usuário, e uma pasta sai dele sozinha. No Windows cada grupo tem um watcher próprio, e parar de observar um grupo fecha o watcher dele: lá o fsnotify pode fechar duas vezes o handle de uma pasta removida sozinha enquanto ela ainda tem eventos a caminho, o que derruba o processo (fsnotify/fsnotify#768). Fechar o watcher inteiro solta cada pasta uma vez só, antes de voltar, e a pasta pode ser apagada logo depois, como uma worktree ao fechar.
 
 No Windows ficam inativos, sem log, as notificações, o som, o "não perturbe" e o tema do sistema; o tema **System** é claro. Nenhum comando externo abre janela de console.
 
