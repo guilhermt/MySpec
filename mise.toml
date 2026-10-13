@@ -1,9 +1,9 @@
 [tools]
-go = "1.27.1"
+go = "1.27.2"
 node = "26.7.0"
 pnpm = "12.3.2"
 task = "3.53.1"
-golangci-lint = "2.13.2"
+golangci-lint = "2.14.0"
 gotestsum = "1.13.0"
 lefthook = "2.1.12"
 shellcheck = "0.11.0"
