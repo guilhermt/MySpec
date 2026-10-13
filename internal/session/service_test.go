@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -111,7 +112,7 @@ func TestToolCallBecomesAnAction(t *testing.T) {
 		ToolUseID:  "toolu_fake_3",
 		Tool:       "Read",
 		Label:      "Reading",
-		Target:     claudetest.ReadPath,
+		Target:     filepath.FromSlash(claudetest.ReadPath),
 		Status:     session.ActionDone,
 		StartedAt:  &base,
 		FinishedAt: &base,
@@ -159,7 +160,7 @@ func TestSubagentActionsAndTextCarryTheirParent(t *testing.T) {
 			Kind: session.KindAction, Tool: "Agent", Target: claudetest.SubagentType, Description: claudetest.SubagentDescription,
 			OutputTail: claudetest.SubagentReport,
 		},
-		{Kind: session.KindAction, Tool: "Read", Target: claudetest.ReadPath, Parent: agentID},
+		{Kind: session.KindAction, Tool: "Read", Target: filepath.FromSlash(claudetest.ReadPath), Parent: agentID},
 		{
 			Kind: session.KindAction, Tool: "Bash", Target: "ls -1", Parent: agentID, Description: "List the files", CommandLines: 1,
 			OutputTail: "hello.txt",
@@ -2520,6 +2521,8 @@ var readLabel = session.For("Read", nil, "").Label
 func waitAction(t *testing.T, f *fixture, k session.Key, target string) session.Summary {
 	t.Helper()
 
+	// The target is shown in the form of the system: with backslashes on Windows.
+	target = filepath.FromSlash(target)
 	return f.waitStatus(t, k, "the action on "+target, func(s session.Summary) bool {
 		return s.ActionTarget == target
 	})
@@ -2540,7 +2543,7 @@ func TestATurnStartsWhenItsMessageGoesToTheCLI(t *testing.T) {
 	open("1-1", "1-2", "1-3", "1-4")
 
 	sum := f.waitStatus(t, prd("t1"), "the queued message to go out", func(s session.Summary) bool {
-		return s.PendingCount == 0 && s.ActionTarget == claudetest.ReadPath
+		return s.PendingCount == 0 && s.ActionTarget == filepath.FromSlash(claudetest.ReadPath)
 	})
 	if want := base.Add(2 * time.Minute); !sum.TurnStartedAt.Equal(want) {
 		t.Errorf("TurnStartedAt = %v, want %v, when the queued message went out", sum.TurnStartedAt, want)

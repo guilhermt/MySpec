@@ -66,7 +66,7 @@ Cada pacote tem um `helpers_test.go` com o que os testes dele compartilham: um `
 
 Os pacotes que rodam binários testam contra o binário real ou contra um fake que é o próprio binário de teste reexecutado, declarado num `TestMain` de uma linha:
 
-- `internal/claude/claudetest`: um CLI do Claude Code falso que fala stream-json. O teste escreve um roteiro do que o fake responde, e `EnvArgv`, `EnvSleep` e `EnvPidFile` fazem o fake gravar os argumentos que recebeu, demorar a responder e gravar o pid do filho que o cenário `spawn` deixa rodando; `internal/claude/testdata/*.jsonl` são streams reais gravados.
+- `internal/claude/claudetest`: um CLI do Claude Code falso que fala stream-json. O teste escreve um roteiro do que o fake responde, e `EnvArgv` faz o fake imprimir no stderr os argumentos que recebeu e sair, `EnvSleep` faz o processo dormir até ser morto (o filho que o cenário `spawn` sobe) e `EnvPidFile` é o arquivo em que o `spawn` grava o pid desse filho; `internal/claude/testdata/*.jsonl` são streams reais gravados.
 - `internal/git/gittest`: constrói repositórios de verdade em diretórios temporários com o `git` real. O git não é dublado.
 - `internal/gh/ghtest`: um `gh` falso que responde o que o teste escreveu, porque falar com o GitHub não é opção. É o binário reexecutado, não um script, porque escrever um executável enquanto outros testes fazem fork falha com "text file busy".
 - `internal/platform/chime` e `internal/platform/dnd`: um player de áudio e um `omarchy-shell` falsos, o binário de teste reexecutado, declarados no `TestMain` do próprio pacote porque só ele os usa. O comportamento do fake (tocar, falhar, travar; responder `on`, `off`, falhar, travar) vem no argumento ou numa variável de ambiente.

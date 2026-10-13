@@ -47,7 +47,8 @@ func TestLabel(t *testing.T) {
 func TestFor(t *testing.T) {
 	t.Parallel()
 
-	const dir = "/work/api"
+	// Paths are shown in the form of the system: with backslashes on Windows.
+	dir := filepath.FromSlash("/work/api")
 	longCommand := strings.Repeat("x", 1010)
 
 	cases := map[string]struct {
@@ -61,11 +62,11 @@ func TestFor(t *testing.T) {
 		},
 		"write outside the session directory": {
 			tool: "Write", input: `{"file_path":"/etc/hosts"}`,
-			want: session.Described{Label: "Writing", Target: "/etc/hosts"},
+			want: session.Described{Label: "Writing", Target: filepath.FromSlash("/etc/hosts")},
 		},
 		"edit": {
 			tool: "Edit", input: `{"file_path":"/work/api/pkg/a.go","old_string":"a"}`,
-			want: session.Described{Label: "Editing", Target: "pkg/a.go"},
+			want: session.Described{Label: "Editing", Target: filepath.Join("pkg", "a.go")},
 		},
 		"multi edit": {
 			tool: "MultiEdit", input: `{"file_path":"/work/api/b.go"}`,
