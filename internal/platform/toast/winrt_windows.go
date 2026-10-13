@@ -41,8 +41,6 @@ var (
 	iidToastManagerStatics2 = mustGUID("{7AB93C52-0E48-4750-BA9D-1A4113981847}")
 	iidToastManagerStatics5 = mustGUID("{D6F5F569-D40D-407C-8989-88CAB42CFD14}")
 	iidToastManagerForUser3 = mustGUID("{3EFCB176-6CC1-56DC-973B-251F7AACB1C5}")
-	iidToastHistory         = mustGUID("{5CADDC63-01D3-4C97-986F-0533483FEE14}")
-	iidToastNotifier        = mustGUID("{75927B93-03F3-41EC-91D3-6E5BAC1B38E7}")
 	iidToastFactory         = mustGUID("{04124B20-82C6-4229-B109-FD9ED4662B53}")
 	iidToast2               = mustGUID("{9DFB9FD1-143A-490E-90BF-B9FBA7132DE7}")
 	iidXMLDocumentIO        = mustGUID("{6CD0E74E-EE65-4489-9EBF-CA43E87BA637}")
@@ -63,7 +61,7 @@ var (
 	roActivateInstance           = combase.NewProc("RoActivateInstance")
 	windowsCreateString          = combase.NewProc("WindowsCreateString")
 	windowsDeleteString          = combase.NewProc("WindowsDeleteString")
-	errNoInterface         error = hresultError(0x80004002) // E_NOINTERFACE
+	errNoInterface         error = hresultError(eNoInterface)
 )
 
 // hresultError is a failed HRESULT.

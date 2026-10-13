@@ -16,6 +16,9 @@ import (
 // app may show.
 const notificationSettingEnabled = 0
 
+// errClosed is what a call gets once the Toaster is closed.
+var errClosed = errors.New("toasts closed")
+
 // Deps are what a Toaster needs from the outside.
 type Deps struct {
 	AppID       string          // the AppUserModelID the toasts carry
@@ -31,7 +34,8 @@ type Deps struct {
 type Toaster struct {
 	appID     string
 	log       *slog.Logger
-	calls     chan func()   // what runs on the apartment thread
+	calls     chan func()   // what runs on the apartment thread; never closed, so a late call never panics
+	quit      chan struct{} // closed to end the apartment thread
 	done      chan struct{} // closed once the apartment thread is gone
 	closeOnce sync.Once
 	closeErr  error
@@ -54,6 +58,7 @@ func New(deps Deps) (*Toaster, error) {
 		appID: deps.AppID,
 		log:   log,
 		calls: make(chan func()),
+		quit:  make(chan struct{}),
 		done:  make(chan struct{}),
 	}
 
@@ -73,7 +78,7 @@ func New(deps Deps) (*Toaster, error) {
 }
 
 // run is the apartment thread: it enters the multithreaded apartment, runs what
-// arrives in calls until the channel closes, and leaves. It never unlocks its
+// arrives in calls until quit closes, and leaves. It never unlocks its
 // thread, which dies with it.
 func (t *Toaster) run(ready chan<- error) {
 	runtime.LockOSThread()
@@ -86,22 +91,30 @@ func (t *Toaster) run(ready chan<- error) {
 	defer windows.CoUninitialize()
 	ready <- nil
 
-	for f := range t.calls {
-		f()
+	for {
+		select {
+		case f := <-t.calls:
+			f()
+		case <-t.quit:
+			return
+		}
 	}
 }
 
 // stop ends the apartment thread and waits for it.
 func (t *Toaster) stop() {
-	close(t.calls)
+	close(t.quit)
 	<-t.done
 }
 
-// do runs f on the apartment thread and waits for it, or for ctx.
+// do runs f on the apartment thread and waits for it, or for ctx. Once the
+// Toaster is closed, f does not run and the call fails with errClosed.
 func (t *Toaster) do(ctx context.Context, f func() error) error {
 	res := make(chan error, 1)
 	select {
 	case t.calls <- func() { res <- f() }:
+	case <-t.quit:
+		return errClosed
 	case <-ctx.Done():
 		return ctx.Err()
 	}
