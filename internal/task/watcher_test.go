@@ -23,9 +23,10 @@ func kinds(call artifactCall) []task.ArtifactKind {
 	return out
 }
 
+// TestWatcherReportsThePRDOnceForABurstOfWrites waits for a second report that
+// must not come, and a stall between two writes longer than the debounce would
+// make one, so it runs alone.
 func TestWatcherReportsThePRDOnceForABurstOfWrites(t *testing.T) {
-	t.Parallel()
-
 	f := newFixture(t)
 	created := f.create(t, "add-login")
 
