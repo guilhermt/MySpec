@@ -9,24 +9,14 @@ import (
 	"github.com/guilhermt/myspec/internal/claude"
 )
 
-// writeExecutable creates an executable file named claude under dir.
-func writeExecutable(t *testing.T, dir string) string {
-	t.Helper()
-
-	path := filepath.Join(dir, "claude")
-	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o700); err != nil {
-		t.Fatalf("WriteFile(%s) = %v, want nil", path, err)
-	}
-	return path
-}
-
-// isolate points HOME and PATH at empty directories, so nothing installed on
+// isolate points HOME, USERPROFILE and PATH at empty directories, so nothing installed on
 // the machine running the tests can be found.
 func isolate(t *testing.T) (home, path string) {
 	t.Helper()
 
 	home, path = t.TempDir(), t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("PATH", path)
 	t.Setenv(claude.EnvPath, "")
 	return home, path
@@ -77,6 +67,7 @@ func TestLocateFallsBackToLocalBin(t *testing.T) {
 func TestLocateFailsWithoutAHomeDirectory(t *testing.T) {
 	isolate(t)
 	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
 
 	if _, err := claude.Locate(); err == nil {
 		t.Error("Locate() = nil, want an error")

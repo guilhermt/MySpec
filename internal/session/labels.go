@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"unicode/utf8"
 )
@@ -129,19 +130,22 @@ func firstLine(command string) string {
 }
 
 // shortenPath makes a path relative to dir when it is inside it, and replaces
-// the home directory with ~ otherwise.
+// the home directory with ~ otherwise. A path with slashes is read in the form
+// of the system first: Claude Code on Windows may write either.
 func shortenPath(path, dir string) string {
 	if path == "" {
 		return ""
 	}
-	if dir != "" && strings.HasPrefix(path, dir+"/") {
-		return strings.TrimPrefix(path, dir+"/")
+	path = filepath.FromSlash(path)
+	sep := string(filepath.Separator)
+	if dir != "" && strings.HasPrefix(path, dir+sep) {
+		return strings.TrimPrefix(path, dir+sep)
 	}
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		if path == home {
 			return "~"
 		}
-		if strings.HasPrefix(path, home+"/") {
+		if strings.HasPrefix(path, home+sep) {
 			return "~" + strings.TrimPrefix(path, home)
 		}
 	}

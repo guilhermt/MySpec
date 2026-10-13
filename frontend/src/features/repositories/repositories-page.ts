@@ -1,4 +1,4 @@
-import { displayPath, displayPaths } from "@/lib/paths";
+import { displayPath, displayPaths, joinPath } from "@/lib/paths";
 import { reviewCount, taskCount } from "@/lib/repositories";
 import type { Board, Repository } from "@/lib/wails";
 
@@ -133,7 +133,7 @@ export type BlockLineView =
 export function blockLine(repository: Repository, cloneFolder: string): BlockLineView | null {
   if (repository.cloning) {
     const into =
-      cloneFolder === "" ? "" : ` into ${displayPath(`${cloneFolder}/${repository.name}`)}`;
+      cloneFolder === "" ? "" : ` into ${displayPath(joinPath(cloneFolder, repository.name))}`;
     return { kind: "cloning", text: `Cloning${into}…` };
   }
   if (!repository.cloned) {

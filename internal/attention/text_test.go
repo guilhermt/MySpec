@@ -188,6 +188,8 @@ func TestReasonOf(t *testing.T) {
 		{"worktree prefix", "worktree: fetch failed: exit status 128", "fetch failed: exit status 128"},
 		{"a raw error without punctuation", "Exit status 128", "Exit status 128"},
 		{"a home path in a raw error", "worktree: fatal: '/home/dev/code/app' is not a repository", "fatal: '~/code/app' is not a repository"},
+		{"a Windows home path in a raw error", `worktree: open C:\Users\dev\code\api: denied`, `open ~\code\api: denied`},
+		{"a Windows home path written with slashes", "worktree: fatal: 'C:/Users/dev/code' is not a repository", "fatal: '~/code' is not a repository"},
 		{"a path deep in another stays", "worktree: open /srv/home/dev/x: denied", "open /srv/home/dev/x: denied"},
 	}
 

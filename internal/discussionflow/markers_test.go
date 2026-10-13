@@ -47,8 +47,18 @@ func (f *fixture) replace(id, name, content string) {
 	if err := os.WriteFile(path+".tmp", []byte(content), 0o600); err != nil {
 		f.t.Fatalf("write %s: %v", name, err)
 	}
-	if err := os.Rename(path+".tmp", path); err != nil {
-		f.t.Fatalf("replace %s: %v", name, err)
+	// Windows refuses to replace a file another handle holds open, as an
+	// evaluation still reading it does: the rename waits for it to let go.
+	deadline := time.Now().Add(pollTimeout)
+	for {
+		err := os.Rename(path+".tmp", path)
+		if err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			f.t.Fatalf("replace %s: %v", name, err)
+		}
+		time.Sleep(pollStep)
 	}
 }
 

@@ -1060,7 +1060,7 @@ func TestSetCloneFolderPersists(t *testing.T) {
 		t.Fatalf("SetCloneFolder() = %v, want nil", err)
 	}
 
-	const want = "/home/dev/code"
+	want := filepath.FromSlash("/home/dev/code")
 	if got := f.service.CloneFolder(); got != want {
 		t.Errorf("CloneFolder() = %q, want %q", got, want)
 	}

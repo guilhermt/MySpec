@@ -155,6 +155,18 @@ tasks:
     cmds:
       - gotestsum --format pkgname-and-test-fails -- -p {{.JOBS}} {{catLines .NO_WAILS_PKGS}}
 
+  check:windows:
+    summary: Compiles the app and its Go tests for Windows, without running them
+    deps: [embed:stub]
+    env:
+      GOOS: windows
+      GOARCH: amd64
+    cmds:
+      # vet type-checks every package with its tests, the _windows_test.go files among them. On
+      # Windows the Wails packages build without cgo, so neither needs GTK or WebKit.
+      - go vet ./...
+      - go build -tags production -trimpath -ldflags=-H=windowsgui -o /dev/null .
+
   vuln:
     deps: [embed:stub]
     cmds:

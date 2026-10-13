@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -95,7 +96,7 @@ func (r *Runner) PruneWorktrees(ctx context.Context, dir string) error {
 
 // ListedWorktree is a worktree as git worktree list reports it.
 type ListedWorktree struct {
-	Path string
+	Path string // in the form of the system: git writes it with slashes on Windows
 	// Prunable is a worktree git forgets on the next prune: its folder or the
 	// .git file in it is gone.
 	Prunable bool
@@ -114,7 +115,7 @@ func (r *Runner) Worktrees(ctx context.Context, dir string) ([]ListedWorktree, e
 	var listed []ListedWorktree
 	for field := range strings.SplitSeq(out, "\x00") {
 		if path, ok := strings.CutPrefix(field, "worktree "); ok {
-			listed = append(listed, ListedWorktree{Path: path})
+			listed = append(listed, ListedWorktree{Path: filepath.Clean(path)})
 			continue
 		}
 		if len(listed) == 0 {
@@ -307,8 +308,13 @@ func parseChange(record string, fields int) (Change, error) {
 
 // GitDir is the absolute git directory of the working tree at dir. For a
 // linked worktree it is <repo>/.git/worktrees/<name>, where its index lives.
+// The path is in the form of the system: git writes it with slashes on Windows.
 func (r *Runner) GitDir(ctx context.Context, dir string) (string, error) {
-	return r.Run(ctx, dir, "rev-parse", "--absolute-git-dir")
+	out, err := r.Run(ctx, dir, "rev-parse", "--absolute-git-dir")
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(out), nil
 }
 
 // TrackedFiles lists the paths git tracks in the working tree at dir,

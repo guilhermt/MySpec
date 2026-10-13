@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+
+	"github.com/guilhermt/myspec/internal/platform/procgroup"
 )
 
 // ErrNotLoggedIn reports that the CLI has no login the app can use.
@@ -15,6 +17,7 @@ var ErrNotLoggedIn = errors.New("claude: not logged in")
 // returns any other failure as is. The caller owns the timeout.
 func Preflight(ctx context.Context, binary string) error {
 	cmd := exec.CommandContext(ctx, binary, "auth", "status")
+	procgroup.Hide(cmd)
 	// Both streams stay nil, which sends them to the null device: only the
 	// exit code says whether the user is logged in.
 

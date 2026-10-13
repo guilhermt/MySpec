@@ -3,6 +3,7 @@ package session_test
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -46,7 +47,8 @@ func TestLabel(t *testing.T) {
 func TestFor(t *testing.T) {
 	t.Parallel()
 
-	const dir = "/work/api"
+	// Paths are shown in the form of the system: with backslashes on Windows.
+	dir := filepath.FromSlash("/work/api")
 	longCommand := strings.Repeat("x", 1010)
 
 	cases := map[string]struct {
@@ -60,11 +62,11 @@ func TestFor(t *testing.T) {
 		},
 		"write outside the session directory": {
 			tool: "Write", input: `{"file_path":"/etc/hosts"}`,
-			want: session.Described{Label: "Writing", Target: "/etc/hosts"},
+			want: session.Described{Label: "Writing", Target: filepath.FromSlash("/etc/hosts")},
 		},
 		"edit": {
 			tool: "Edit", input: `{"file_path":"/work/api/pkg/a.go","old_string":"a"}`,
-			want: session.Described{Label: "Editing", Target: "pkg/a.go"},
+			want: session.Described{Label: "Editing", Target: filepath.Join("pkg", "a.go")},
 		},
 		"multi edit": {
 			tool: "MultiEdit", input: `{"file_path":"/work/api/b.go"}`,
@@ -163,11 +165,18 @@ func TestForShortensHome(t *testing.T) {
 		t.Skipf("no home directory: %v", err)
 	}
 
-	input := json.RawMessage(`{"file_path":"` + home + `/notes/todo.md"}`)
-	if target := session.For("Read", input, "/work/api").Target; target != "~/notes/todo.md" {
-		t.Errorf("target = %q, want ~/notes/todo.md", target)
+	file, err := json.Marshal(map[string]string{"file_path": filepath.Join(home, "notes", "todo.md")})
+	if err != nil {
+		t.Fatalf("marshal input: %v", err)
 	}
-	input = json.RawMessage(`{"file_path":"` + home + `"}`)
+	want := "~" + string(filepath.Separator) + filepath.Join("notes", "todo.md")
+	if target := session.For("Read", file, "/work/api").Target; target != want {
+		t.Errorf("target = %q, want %q", target, want)
+	}
+	input, err := json.Marshal(map[string]string{"file_path": home})
+	if err != nil {
+		t.Fatalf("marshal input: %v", err)
+	}
 	if target := session.For("Read", input, "/work/api").Target; target != "~" {
 		t.Errorf("target = %q, want ~", target)
 	}

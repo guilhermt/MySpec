@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/guilhermt/myspec/internal/platform/procgroup"
 )
 
 // ErrCatalogUnsupported reports a CLI that does not answer list_models: one
@@ -32,6 +34,7 @@ const catalogWaitDelay = 2 * time.Second
 // know the request.
 func ListModels(ctx context.Context, binary, dir string) ([]ModelEntry, error) {
 	cmd := exec.CommandContext(ctx, binary, Args...)
+	procgroup.Hide(cmd)
 	cmd.Dir = dir
 	cmd.WaitDelay = catalogWaitDelay
 

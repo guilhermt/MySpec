@@ -59,7 +59,7 @@ func TestTaskPRDPathIsInTheArtifactsDir(t *testing.T) {
 	t.Parallel()
 
 	tk := task.Task{ArtifactsDir: "/data/tasks/add-login"}
-	if want := "/data/tasks/add-login/PRD.md"; tk.PRDPath() != want {
+	if want := filepath.FromSlash("/data/tasks/add-login/PRD.md"); tk.PRDPath() != want {
 		t.Errorf("PRDPath() = %q, want %q", tk.PRDPath(), want)
 	}
 }

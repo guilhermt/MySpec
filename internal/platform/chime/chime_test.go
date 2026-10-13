@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -174,6 +175,10 @@ func wantPerm(t *testing.T, path string, want os.FileMode) {
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatalf("Stat(%s) = %v, want nil", path, err)
+	}
+	// Windows has no permission bits.
+	if runtime.GOOS == "windows" {
+		return
 	}
 	if got := info.Mode().Perm(); got != want {
 		t.Errorf("%s has permissions %v, want %v", path, got, want)

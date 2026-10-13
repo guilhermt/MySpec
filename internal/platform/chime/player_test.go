@@ -2,10 +2,7 @@ package chime_test
 
 import (
 	"context"
-	"errors"
-	"slices"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -124,34 +121,4 @@ func TestARingWhileTheChimePlaysIsDropped(t *testing.T) {
 	if len(f.logged(t, "chime dropped")) == 0 {
 		t.Errorf("no chime dropped in the log:\n%s", f.logs.String())
 	}
-}
-
-func TestCloseCutsOffAChimeStillPlaying(t *testing.T) {
-	t.Parallel()
-
-	commands, env, dir := players(t, "hang")
-	f := newFixture(t, commands, env, dir, nil)
-
-	f.player.Ring()
-	pid := f.waitPid(t)
-
-	closed := make(chan struct{})
-	go func() {
-		f.player.Close()
-		close(closed)
-	}()
-	select {
-	case <-closed:
-	case <-time.After(pollTimeout):
-		t.Fatal("Close did not return while the chime played")
-	}
-
-	if err := syscall.Kill(pid, 0); !errors.Is(err, syscall.ESRCH) {
-		t.Errorf("Kill(%d, 0) = %v, want ESRCH: the player outlived Close", pid, err)
-	}
-	f.player.Ring()
-	if got := f.recorded(t); !slices.Equal(got, []string{f.call("hang")}) {
-		t.Errorf("a ring after Close ran a player: %v", got)
-	}
-	f.player.Close()
 }

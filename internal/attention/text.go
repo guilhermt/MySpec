@@ -337,8 +337,9 @@ var knownPrefixes = []string{
 	"worktree: ",
 }
 
-// homePath matches /home/<user> where a path starts, as the frontend does.
-var homePath = regexp.MustCompile("(^|[\\s'\"\x60(])/home/[\\w-]+(?:\\.[\\w-]+)*([/\\s.,:;)'\"\x60]|$)")
+// homePath matches a home directory where a path starts, as the frontend does:
+// /home/<user> on Linux, C:\Users\<user> on Windows, with either separator.
+var homePath = regexp.MustCompile("(^|[\\s'\"\x60(])(?:/home/|[A-Za-z]:[\\\\/]Users[\\\\/])[\\w-]+(?:\\.[\\w-]+)*([/\\\\\\s.,:;)'\"\x60]|$)")
 
 // homeTilde writes the home paths of a text as ~.
 func homeTilde(text string) string {

@@ -1,6 +1,6 @@
 # Diagnóstico
 
-Quando algo parece errado, o log é o primeiro lugar: `~/.local/state/myspec/myspec.log`, em JSON, uma linha por registro. `MYSPEC_LOG_LEVEL=debug` aumenta o detalhe; o binário de desenvolvimento (`task dev`) escreve também no stderr.
+Quando algo parece errado, o log é o primeiro lugar: `~/.local/state/myspec/myspec.log` no Linux e `%LOCALAPPDATA%\MySpec\state\myspec.log` no Windows, em JSON, uma linha por registro. `MYSPEC_LOG_LEVEL=debug` aumenta o detalhe; o binário de desenvolvimento (`task dev`) escreve também no stderr.
 
 Cada mensagem é uma frase fixa, e o que varia vai em atributos: `task`, `review`, `discussion`, `draft`, `stage`, `step`, `pass`, `repository`, `board`, `path`, `error`. Filtrar por `msg` com `jq` ou `grep` é a forma mais rápida de seguir uma task:
 

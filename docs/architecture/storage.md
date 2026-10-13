@@ -1,10 +1,10 @@
 # Armazenamento
 
-Tudo que o app guarda fica em dois lugares, seguindo a especificação XDG: o diretório de dados para o estado, os artefatos e as worktrees, e o diretório de estado para o log.
+Tudo que o app guarda fica em dois lugares: o diretório de dados para o estado, os artefatos e as worktrees, e o diretório de estado para o log. No Linux são os diretórios da especificação XDG; no Windows ficam em `%LOCALAPPDATA%\MySpec`, local e não roaming, porque o banco, as worktrees e os caminhos valem só naquela máquina.
 
 ## Diretório de dados
 
-`~/.local/share/myspec/`:
+`~/.local/share/myspec/` no Linux e `%LOCALAPPDATA%\MySpec\data\` no Windows:
 
 ```
 myspec.db                              o banco SQLite
@@ -116,13 +116,15 @@ Os clones que o app faz ficam na pasta de clones que o usuário escolheu, em `<p
 
 ## Worktrees
 
-As worktrees vivem no diretório de dados, em `~/.local/share/myspec/worktrees/<dono>/<nome>/<task>/`, uma por task, longe dos clones que o usuário mantém. A de um review de pull request fica em `worktrees/<dono>/<nome>/pr_<número>/`, em detached HEAD em `origin/<branch da pull request>`, sem branch local: uma branch local com o nome da branch da pull request falharia quando o usuário a tem em checkout no clone. Cada nova passada busca o remote e move a worktree para o head atual; ela é removida quando o review termina ou é apagado. O banco registra cada worktree antes de o `git worktree add` rodar, e o app só remove o que registrou.
+As worktrees vivem no diretório de dados, em `worktrees/<dono>/<nome>/<task>/` dele (`~/.local/share/myspec/worktrees/...` no Linux), uma por task, longe dos clones que o usuário mantém. A de um review de pull request fica em `worktrees/<dono>/<nome>/pr_<número>/`, em detached HEAD em `origin/<branch da pull request>`, sem branch local: uma branch local com o nome da branch da pull request falharia quando o usuário a tem em checkout no clone. Cada nova passada busca o remote e move a worktree para o head atual; ela é removida quando o review termina ou é apagado. O banco registra cada worktree antes de o `git worktree add` rodar, e o app só remove o que registrou.
+
+No Windows o `git` do app roda com `core.longpaths=true`, porque o caminho de uma worktree passa fácil de 260 caracteres.
 
 O registro guarda o caminho da worktree e o clone em que o git roda para ela, que é o clone atual do repositório: trocar o caminho do repositório leva junto o das worktrees das suas tasks e dos seus reviews, porque é lá que a branch vive. Uma worktree registrada em outro caminho continua sendo usada onde está e é removida de lá; o app nunca move uma worktree.
 
 ## Log
 
-`~/.local/state/myspec/myspec.log`, em JSON, uma linha por registro, com nível `info` por padrão. `MYSPEC_LOG_LEVEL` aceita `debug`, `warn` e `error`. O binário de desenvolvimento escreve também no stderr. O que cada linha significa está em [troubleshooting.md](../development/troubleshooting.md).
+`~/.local/state/myspec/myspec.log` no Linux e `%LOCALAPPDATA%\MySpec\state\myspec.log` no Windows, em JSON, uma linha por registro, com nível `info` por padrão. `MYSPEC_LOG_LEVEL` aceita `debug`, `warn` e `error`. O binário de desenvolvimento escreve também no stderr. O que cada linha significa está em [troubleshooting.md](../development/troubleshooting.md).
 
 ## O que o WebKitGTK cria
 

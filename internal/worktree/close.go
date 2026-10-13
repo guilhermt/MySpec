@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -289,12 +290,21 @@ func (s *Service) Registration(ctx context.Context, repoPath, path string) Regis
 	}
 	path = filepath.Clean(path)
 	i := slices.IndexFunc(listed, func(wt git.ListedWorktree) bool {
-		return !wt.Prunable && filepath.Clean(wt.Path) == path
+		return !wt.Prunable && samePath(wt.Path, path)
 	})
 	if i < 0 {
 		return Registration{}
 	}
 	return Registration{Registered: true, Locked: listed[i].Locked}
+}
+
+// samePath says whether two clean paths name the same folder: as they are on
+// Linux, and regardless of case on Windows, whose file system ignores it.
+func samePath(a, b string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
 }
 
 // deleteBranch deletes the branch of a worktree when it is still there,

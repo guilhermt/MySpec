@@ -10,10 +10,12 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
+
+	"github.com/guilhermt/myspec/internal/platform/procgroup"
 )
 
 // ErrNotFound reports that no git executable is on the PATH.
@@ -86,19 +88,17 @@ func (r *Runner) Run(ctx context.Context, dir string, args ...string) (string, e
 	}
 
 	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, binary, args...)
+	cmd := exec.CommandContext(ctx, binary, append(slices.Clone(platformArgs), args...)...)
 	cmd.Dir = dir
 	cmd.Env = r.env
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	// Its own process group, so a cancellation also reaches the ssh or the
-	// credential helper git opened.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.WaitDelay = waitDelay
 
 	started := time.Now()
-	runErr := cmd.Run()
+	// Its own group, so a cancellation also reaches the ssh or the credential
+	// helper git opened.
+	runErr := procgroup.Run(cmd)
 	exitCode := -1
 	if cmd.ProcessState != nil {
 		exitCode = cmd.ProcessState.ExitCode()

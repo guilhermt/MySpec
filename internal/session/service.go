@@ -174,7 +174,7 @@ const (
 	TextFlushInterval = 40 * time.Millisecond
 	// graceInputClose is how long a process has to exit after its input closes.
 	graceInputClose = 5 * time.Second
-	// graceTerminate is how long a process has to exit after SIGTERM.
+	// graceTerminate is how long a process has to exit after Terminate.
 	graceTerminate = 2 * time.Second
 	// preflightTimeout bounds the login check before the first start.
 	preflightTimeout = 10 * time.Second

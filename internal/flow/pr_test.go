@@ -124,7 +124,7 @@ func TestThePRStageOfATaskOpensOneDraftConversation(t *testing.T) {
 	if info.Repository != "dev/web" || info.Branch != "task-1" || info.BaseBranch != "origin/dev" {
 		t.Errorf("session = %+v, want the repository, the branch and the base of the worktree", info)
 	}
-	if want := "/data/task-1/pr/draft.md"; info.DraftPath != want {
+	if want := filepath.FromSlash("/data/task-1/pr/draft.md"); info.DraftPath != want {
 		t.Errorf("draft path = %q, want %q", info.DraftPath, want)
 	}
 	// The review of the steps is over: what is watched now is a pull request.
@@ -512,7 +512,7 @@ func TestResumingThePRStageOpensTheSessionItWasLeftIn(t *testing.T) {
 	if !ok {
 		t.Fatal("the review session was not opened")
 	}
-	if want := "/data/task-1/pr/review-2.md"; info.ReviewPath != want {
+	if want := filepath.FromSlash("/data/task-1/pr/review-2.md"); info.ReviewPath != want {
 		t.Errorf("review path = %q, want %q", info.ReviewPath, want)
 	}
 	if info.PRNumber != "7" || info.PRURL != samePR.URL {

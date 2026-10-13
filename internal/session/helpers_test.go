@@ -475,6 +475,10 @@ func (f *fixture) build(t *testing.T, idle time.Duration) {
 		OnState:      f.onState,
 		OnTranscript: f.onTranscript,
 	})
+	// The first TempDir of a test registers the removal of every later one; made
+	// here, it runs after Shutdown, once no process works in them. Windows
+	// refuses to remove the folder a live process works in.
+	_ = t.TempDir()
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()

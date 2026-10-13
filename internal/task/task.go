@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"time"
 )
@@ -121,9 +122,20 @@ const NameMaxLen = 64
 // namePattern is the branch-safe name rule: lowercase words joined by hyphens.
 var namePattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
-// ValidateName enforces the branch-safe name rule.
+// reservedOnWindows are the device names Windows refuses as a folder name.
+var reservedOnWindows = []string{
+	"con", "prn", "aux", "nul",
+	"com0", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
+	"lpt0", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+}
+
+// ValidateName enforces the branch-safe name rule, and on Windows refuses the
+// names the system keeps for its devices, which can't name a folder.
 func ValidateName(name string) error {
 	if len(name) > NameMaxLen || !namePattern.MatchString(name) {
+		return ErrInvalidName
+	}
+	if runtime.GOOS == "windows" && slices.Contains(reservedOnWindows, name) {
 		return ErrInvalidName
 	}
 	return nil

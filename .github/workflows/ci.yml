@@ -50,4 +50,6 @@ jobs:
       - run: task lint:sh
       - run: task typecheck
       - run: task lint:go:ci
+      - run: task check:windows
       - run: task test:go:ci
+

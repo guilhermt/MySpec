@@ -14,7 +14,7 @@ Cinco coisas são instaladas à mão; tudo o mais vem delas.
 
 2. **[mise](https://mise.jdx.dev).** Com `mise activate` no shell, entrar na pasta do projeto ativa as versões pinadas em `mise.toml`: Go, Node, pnpm, Task, golangci-lint, gotestsum, lefthook, shellcheck, Biome, govulncheck e go-test-coverage. O CI instala as ferramentas que usa a partir do mesmo arquivo, então máquina e pipeline rodam as mesmas versões.
 
-3. **Claude Code.** O `claude` 2.1.291 ou mais novo (`claude update` atualiza), no `PATH` ou em `~/.local/bin`, logado uma vez com `claude` num terminal. `MYSPEC_CLAUDE_PATH` fixa outro caminho. Essa versão é `claude.MinVersion`, a em que o app foi verificado, e sobe quando o app passa a usar um recurso novo do CLI.
+3. **Claude Code.** O `claude` 2.1.291 ou mais novo (`claude update` atualiza), no `PATH` ou em `~/.local/bin` (no Windows, `%USERPROFILE%\.local\bin\claude.exe`), logado uma vez com `claude` num terminal. `MYSPEC_CLAUDE_PATH` fixa outro caminho. Essa versão é `claude.MinVersion`, a em que o app foi verificado, e sobe quando o app passa a usar um recurso novo do CLI.
 
 4. **git, gh e VS Code.** `git` no `PATH`, capaz de alcançar o `origin` dos repositórios sem pedir senha: o app roda com `GIT_TERMINAL_PROMPT=0`, e um fetch que peça senha falha em vez de pendurar. `gh` logado com os escopos `project` e `repo` (`gh auth refresh -s project,repo`), para os boards e para a etapa de PR. **Settings › Machine** mostra o que falta. `code` no `PATH` é o que **Abrir no VS Code** roda; sem ele o app avisa e o resto funciona.
 
@@ -43,6 +43,7 @@ O hook, definido em `lefthook.yml`, é de pre-commit e só formata: Biome nos ar
 | `task fmt` | Formata Go e frontend |
 | `task lint` | `lint:go` (golangci-lint), `lint:web` (Biome, as regras do design e o `knip`) e `lint:sh` (`shellcheck` no `install.sh`) |
 | `task lint:go:ci` / `task test:go:ci` | O lint e os testes Go sem race de todo pacote menos os três que importam o Wails; o que o CI roda ([ci.md](./ci.md)) |
+| `task check:windows` | Compila para Windows o app e os testes Go, sem rodá-los, com `go vet` e `go build`; o CI roda ([ci.md](./ci.md)) |
 | `task typecheck` | `tsc --noEmit` no frontend |
 | `task test` | `test:go` (os testes Go, com o cache de testes) e `test:web` (os testes do frontend que a branch alcança), sem cobertura ([testing.md](../guidelines/testing.md)) |
 | `task test:full` | `test:go:full` e depois `test:web:full`: todos os testes, com race, embaralhamento, cobertura e os limiares |

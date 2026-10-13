@@ -160,6 +160,40 @@ describe("what stayed on disk", () => {
     expect(leftoverCommands(onlyBranch)).toBe("git branch -D rate-limit");
   });
 
+  describe("on Windows", () => {
+    const windows = {
+      ...worktree,
+      path: "C:\\Users\\dev\\AppData\\Local\\MySpec\\data\\worktrees\\acme\\api\\login",
+    };
+    const branch = { name: "login", kept: true, error: "" };
+    const path = `"${windows.path}"`;
+
+    it("removes a folder git forgot with Remove-Item", () => {
+      const leftover = makeLeftover({ worktree: { ...windows, registered: false }, branch });
+
+      expect(leftoverCommands(leftover)).toBe(
+        `Remove-Item -Recurse -Force ${path}\ngit branch -D login`,
+      );
+      expect(forceWarning(leftover)).toBe(
+        "Remove-Item deletes the modified and untracked files in it too.",
+      );
+    });
+
+    it("removes a registered worktree with git, the path whole and quoted", () => {
+      expect(leftoverCommands(makeLeftover({ worktree: windows, branch }))).toBe(
+        `git worktree remove --force ${path}\ngit branch -D login`,
+      );
+    });
+
+    it("removes a locked worktree with --force twice", () => {
+      const leftover = makeLeftover({ worktree: { ...windows, locked: true }, branch });
+
+      expect(leftoverCommands(leftover)).toBe(
+        `git worktree remove --force --force ${path}\ngit branch -D login`,
+      );
+    });
+  });
+
   it("names the clone the commands run in", () => {
     expect(leftoverHeading(both)).toBe("To remove it yourself, in ~/code/api");
     expect(leftoverHeading(makeLeftover({ repoPath: "" }))).toBe("To remove it yourself");

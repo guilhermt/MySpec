@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -111,9 +112,10 @@ func newFixture(t *testing.T, stored board.Stored) *fixture {
 	return f
 }
 
-// identify is the identity of the clone at path, as clones holds it.
+// identify is the identity of the clone at path, as clones holds it: by the
+// path with slashes, whatever the system writes it with.
 func (f *fixture) identify(_ context.Context, path string) (repository.Identity, error) {
-	identity, ok := f.clones[path]
+	identity, ok := f.clones[filepath.ToSlash(path)]
 	if !ok {
 		return repository.Identity{}, &repository.Refusal{Reason: repository.ReasonNotGitRoot, Path: path}
 	}

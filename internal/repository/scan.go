@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -21,6 +22,15 @@ const scanWorkers = 8
 
 // skippedFolder is the one folder name the scan skips besides the hidden ones.
 const skippedFolder = "node_modules"
+
+// windowsAppData is the hidden folder of the programs in the home on Windows:
+// deep, full of folders the user can't read, and never where a clone is.
+const windowsAppData = "AppData"
+
+// skippedOnWindows says whether the scan leaves a folder out on Windows only.
+func skippedOnWindows(name string) bool {
+	return runtime.GOOS == "windows" && name == windowsAppData
+}
 
 // Candidate is a clone of a GitHub repository the scan found under the root,
 // and whether its repository is already registered with a clone, at this path
@@ -86,7 +96,7 @@ func (s *Service) collectRoots(ctx context.Context) ([]string, error) {
 		if !entry.IsDir() || path == root {
 			return nil
 		}
-		if name := entry.Name(); strings.HasPrefix(name, ".") || name == skippedFolder {
+		if name := entry.Name(); strings.HasPrefix(name, ".") || name == skippedFolder || skippedOnWindows(name) {
 			return fs.SkipDir
 		}
 		if _, err := os.Lstat(filepath.Join(path, ".git")); err == nil {

@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+
+	"github.com/guilhermt/myspec/internal/platform/fswatch"
 )
 
 // artifactDebounce is how long a folder must stay quiet before the artifact in
@@ -42,34 +44,34 @@ type watched struct {
 }
 
 // watcher turns the filesystem noise of the artifact folders into one settled
-// call per task.
+// call per task. The folders of each task are a group of fs.
 type watcher struct {
-	fs      *fsnotify.Watcher
+	fs      *fswatch.Watcher
 	log     *slog.Logger
 	settled func(taskID string, kinds []ArtifactKind)
 
 	mu      sync.Mutex
-	dirs    map[string]watched  // watched folder -> what it is
-	pending map[string]debounce // task id -> wait in flight
+	groups  map[string]*fswatch.Group // task id -> the group of its folders
+	dirs    map[string]watched        // watched folder -> what it is
+	pending map[string]debounce       // task id -> wait in flight
 	closed  bool
 }
 
 // newWatcher starts a watcher that calls settled for every task whose artifact
 // folder went quiet.
 func newWatcher(log *slog.Logger, settled func(taskID string, kinds []ArtifactKind)) (*watcher, error) {
-	fsw, err := fsnotify.NewWatcher()
-	if err != nil {
-		return nil, fmt.Errorf("create artifact watcher: %w", err)
-	}
-
 	w := &watcher{
-		fs:      fsw,
 		log:     log,
 		settled: settled,
+		groups:  map[string]*fswatch.Group{},
 		dirs:    map[string]watched{},
 		pending: map[string]debounce{},
 	}
-	go w.run()
+	fsw, err := fswatch.New(w.handle, func(err error) { w.log.Warn("artifact watcher failed", "error", err) })
+	if err != nil {
+		return nil, fmt.Errorf("create artifact watcher: %w", err)
+	}
+	w.fs = fsw
 	return w, nil
 }
 
@@ -81,10 +83,15 @@ func (w *watcher) watch(taskID, dir string) error {
 	}
 
 	w.mu.Lock()
+	group, ok := w.groups[taskID]
+	if !ok {
+		group = w.fs.Open()
+		w.groups[taskID] = group
+	}
 	w.dirs[dir] = watched{taskID: taskID}
 	w.mu.Unlock()
 
-	if err := w.fs.Add(dir); err != nil {
+	if err := group.Add(dir); err != nil {
 		return fmt.Errorf("watch artifacts directory %s: %w", dir, err)
 	}
 
@@ -109,43 +116,55 @@ var subFolders = []struct {
 }
 
 // unwatch stops following the folders of a task and drops its pending wait.
+// The task is out of the watcher before its group is forgotten, so a folder
+// that appears meanwhile is not added to it.
 func (w *watcher) unwatch(taskID, dir string) {
-	paths := make([]string, 0, 1+len(subFolders))
-	paths = append(paths, dir)
-	for _, sub := range subFolders {
-		paths = append(paths, filepath.Join(dir, sub.name))
-	}
-	for _, path := range paths {
-		if err := w.fs.Remove(path); err != nil && !errors.Is(err, fsnotify.ErrNonExistentWatch) {
-			w.log.Warn("unwatch artifacts directory failed", "path", path, "error", err)
-		}
-	}
-
 	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	for _, path := range paths {
-		delete(w.dirs, path)
+	group := w.groups[taskID]
+	delete(w.groups, taskID)
+	delete(w.dirs, dir)
+	for _, sub := range subFolders {
+		delete(w.dirs, filepath.Join(dir, sub.name))
 	}
 	if p, ok := w.pending[taskID]; ok {
 		p.timer.Stop()
 		delete(w.pending, taskID)
 	}
+	w.mu.Unlock()
+
+	if group == nil {
+		return
+	}
+	if err := group.Forget(); err != nil {
+		w.log.Warn("unwatch artifacts directory failed", "task", taskID, "error", err)
+	}
 }
 
-// addFolder follows a folder of artifacts inside the folder of a task. A
-// folder the watcher cannot follow only costs the automatic detection of what
-// is written into it.
+// addFolder follows a folder of artifacts inside the folder of a task, unless
+// the task is no longer watched. A folder the watcher cannot follow only costs
+// the automatic detection of what is written into it.
 func (w *watcher) addFolder(taskID, dir string, kind ArtifactKind) {
-	if err := w.fs.Add(dir); err != nil {
-		w.log.Warn("watch artifact directory failed", "task", taskID, "path", dir, "error", err)
+	w.mu.Lock()
+	group, ok := w.groups[taskID]
+	w.mu.Unlock()
+	if !ok {
+		return
+	}
+
+	if err := group.Add(dir); err != nil {
+		// A group forgotten meanwhile is a task no longer watched.
+		if !errors.Is(err, fsnotify.ErrClosed) {
+			w.log.Warn("watch artifact directory failed", "task", taskID, "path", dir, "error", err)
+		}
 		return
 	}
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	w.dirs[dir] = watched{taskID: taskID, kind: kind}
+	if w.groups[taskID] == group {
+		w.dirs[dir] = watched{taskID: taskID, kind: kind}
+	}
 }
 
 // close stops the goroutine and every wait in flight.
@@ -162,24 +181,6 @@ func (w *watcher) close() error {
 		return fmt.Errorf("close artifact watcher: %w", err)
 	}
 	return nil
-}
-
-// run drains the watcher until close shuts its channels.
-func (w *watcher) run() {
-	for {
-		select {
-		case ev, ok := <-w.fs.Events:
-			if !ok {
-				return
-			}
-			w.handle(ev)
-		case err, ok := <-w.fs.Errors:
-			if !ok {
-				return
-			}
-			w.log.Warn("artifact watcher failed", "error", err)
-		}
-	}
 }
 
 // handle arms the wait of the task the event belongs to, recording which

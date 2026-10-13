@@ -1,6 +1,6 @@
 import type { CloseResultLine } from "@/components/system/CloseResult";
 import type { GoneLocation } from "@/lib/locations";
-import { displayPath, displayPaths } from "@/lib/paths";
+import { displayPath, displayPaths, isWindowsPath } from "@/lib/paths";
 import { isOneShot } from "@/lib/task-modes";
 import { type ArchivedTask, asPRState, type Leftover } from "@/lib/wails";
 import { atMoment } from "@/lib/when";
@@ -74,10 +74,11 @@ function detailOf(error: string): Pick<CloseResultLine, "detail"> {
 }
 
 // removal is how what stayed of a worktree goes: a locked worktree git still lists takes --force twice,
-// which also unlocks it, an unlocked one --force, and a folder git forgot, rm -rf.
+// which also unlocks it, an unlocked one --force, and a folder git forgot, rm -rf, or Remove-Item in the
+// PowerShell of Windows.
 function removal(worktree: NonNullable<Leftover["worktree"]>): string {
   if (!worktree.registered) {
-    return "rm -rf";
+    return isWindowsPath(worktree.path) ? "Remove-Item -Recurse -Force" : "rm -rf";
   }
   return worktree.locked ? "git worktree remove --force --force" : "git worktree remove --force";
 }
@@ -85,13 +86,15 @@ function removal(worktree: NonNullable<Leftover["worktree"]>): string {
 /**
  * leftoverCommands are the commands that remove what stayed, one per line, in the clone: a worktree git
  * still lists goes with git worktree remove, with --force twice when it is locked, and a folder git
- * forgot, with rm -rf.
+ * forgot, with rm -rf. On Windows the path goes whole, in double quotes: PowerShell does not expand a
+ * tilde in quotes for a native program, and the folder git forgot goes with Remove-Item.
  */
 export function leftoverCommands(leftover: Leftover): string {
   const commands: string[] = [];
   const { worktree } = leftover;
   if (worktree?.kept === true) {
-    commands.push(`${removal(worktree)} ${displayPath(worktree.path)}`);
+    const path = isWindowsPath(worktree.path) ? `"${worktree.path}"` : displayPath(worktree.path);
+    commands.push(`${removal(worktree)} ${path}`);
   }
   if (leftover.branch?.kept === true) {
     commands.push(`git branch -D ${leftover.branch.name}`);
@@ -109,7 +112,7 @@ export function leftoverHeading(leftover: Leftover): string {
 /**
  * forceWarning is the warning over the command that deletes a worktree that stayed, with whatever work it
  * still holds: --force, --force twice for a locked worktree, which also unlocks it, or rm -rf for a folder
- * git forgot; null when no worktree stayed.
+ * git forgot (Remove-Item on Windows); null when no worktree stayed.
  */
 export function forceWarning(leftover: Leftover): string | null {
   const { worktree } = leftover;
@@ -117,7 +120,7 @@ export function forceWarning(leftover: Leftover): string | null {
     return null;
   }
   if (!worktree.registered) {
-    return "rm -rf deletes the modified and untracked files in it too.";
+    return `${isWindowsPath(worktree.path) ? "Remove-Item" : "rm -rf"} deletes the modified and untracked files in it too.`;
   }
   return worktree.locked
     ? "--force --force unlocks the worktree and deletes the modified and untracked files in it too."

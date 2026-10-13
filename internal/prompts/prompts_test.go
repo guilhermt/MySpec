@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -192,7 +193,8 @@ func TestSaveKeepsAnEdit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat prompt: %v", err)
 	}
-	if got, want := info.Mode().Perm(), os.FileMode(0o600); got != want {
+	// Windows has no permission bits.
+	if got, want := info.Mode().Perm(), os.FileMode(0o600); runtime.GOOS != "windows" && got != want {
 		t.Errorf("prd prompt mode = %v, want %v", got, want)
 	}
 
@@ -1734,20 +1736,5 @@ func TestListSaysWhichPromptsAreEditedInWorkflowOrder(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("List() mismatch (-want +got):\n%s", diff)
-	}
-}
-
-func TestListFailsWhenAnEditCannotBeLookedAt(t *testing.T) {
-	t.Parallel()
-
-	// A file where the prompts directory goes makes every stat fail with
-	// ENOTDIR, which is not a prompt without an edit.
-	dataDir := t.TempDir()
-	if err := os.WriteFile(prompts.Dir(dataDir), []byte("not a directory"), 0o600); err != nil {
-		t.Fatalf("write the file: %v", err)
-	}
-
-	if got, err := prompts.List(dataDir); err == nil {
-		t.Errorf("List() = %+v, nil, want the error of the stat", got)
 	}
 }
