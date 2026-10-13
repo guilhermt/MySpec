@@ -137,6 +137,22 @@ func (s *fakeServer) recorded() []string {
 	return slices.Clone(s.calls)
 }
 
+// closingServer is a fakeServer that is also an io.Closer: Close is recorded as
+// close, and fails with closeErr when it is set.
+type closingServer struct {
+	*fakeServer
+
+	closeErr error
+}
+
+func (s *closingServer) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.calls = append(s.calls, "close")
+	return s.closeErr
+}
+
 // fakeChime is a notify.Chime that counts its rings.
 type fakeChime struct {
 	mu    sync.Mutex
@@ -426,7 +442,16 @@ func notificationClosed(serverID, reason uint32) *dbus.Signal {
 	return signal("NotificationClosed", serverID, reason)
 }
 
-func TestSendShowsTheNotificationWithItsBodyEscaped(t *testing.T) {
+func TestSendHandsTheTextOverAsWritten(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	f.notifier.Send("s1", "R&D <login>", "R&D has a question in <api>.")
+
+	f.waitCalls(t, "notify:R&D <login>:R&D has a question in <api>.")
+}
+
+func TestEscapeMarkupKeepsTheBodyAsWritten(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -443,12 +468,10 @@ func TestSendShowsTheNotificationWithItsBodyEscaped(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			f := newFixture(t)
 
-			// The title is plain text, and goes as it is.
-			f.notifier.Send("s1", "R&D <login>", test.body)
-
-			f.waitCalls(t, "notify:R&D <login>:"+test.want)
+			if got := notify.EscapeMarkup(test.body); got != test.want {
+				t.Errorf("EscapeMarkup(%q) = %q, want %q", test.body, got, test.want)
+			}
 		})
 	}
 }
@@ -504,6 +527,34 @@ func TestAClickReachesTheAppOnce(t *testing.T) {
 	f.notifier.Close()
 	f.wantClicks(t, "s1")
 	f.wantCalls(t, notified(body))
+}
+
+func TestAnActivationReachesTheAppOnce(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	body := "The agent is waiting for your reply in tech spec."
+
+	f.notifier.Send("s1", title, body)
+	f.waitCalls(t, notified(body))
+
+	f.notifier.Activate(1)
+	f.notifier.Activate(1)
+	f.waitClicks(t, "s1")
+
+	f.notifier.Close()
+	f.wantClicks(t, "s1")
+	f.wantCalls(t, notified(body))
+}
+
+func TestAnActivationOfAnUnknownNotificationDoesNothing(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	f.notifier.Activate(9)
+	f.notifier.Close()
+
+	f.wantClicks(t)
+	f.wantCalls(t)
 }
 
 func TestADismissedNotificationIsOnlyForgotten(t *testing.T) {
@@ -674,6 +725,47 @@ func TestCloseWithdrawsEverythingAndStops(t *testing.T) {
 	f.wantClicks(t)
 	if diff := cmp.Diff(calls, f.server.recorded()); diff != "" {
 		t.Errorf("server calls after a second Close mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestCloseClosesAServerThatCloses(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		closeErr error
+		wantLog  bool
+	}{
+		{"a close that works", nil, false},
+		{"a close that fails", errServer, true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			f := bareFixture()
+			server := &closingServer{fakeServer: f.server, closeErr: test.closeErr}
+			f.notifier = notify.New(notify.Deps{
+				Server:  server,
+				OnClick: f.click,
+				Log:     slog.New(slog.NewJSONHandler(f.logs, nil)),
+				Now:     f.clock.Now,
+			})
+			t.Cleanup(f.notifier.Close)
+			review := notified("Step 2 is ready for review.")
+
+			f.notifier.Send("s1", title, "Step 2 is ready for review.")
+			f.waitCalls(t, review)
+			f.notifier.Close()
+
+			// The notifications go away first, and the server is closed last.
+			f.wantCalls(t, review, "close:1", "close")
+			if test.wantLog {
+				f.waitLogged(t, "close notification server failed")
+			} else if logs := f.logs.String(); logs != "" {
+				t.Errorf("log = %q, want nothing", logs)
+			}
+		})
 	}
 }
 
