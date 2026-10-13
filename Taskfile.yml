@@ -7,6 +7,8 @@ vars:
   PACKAGE_MANAGER: pnpm
   VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
   MODULE: github.com/guilhermt/myspec
+  # The version of PSScriptAnalyzer that lint:ps installs and runs.
+  PSSCRIPTANALYZER_VERSION: 1.25.0
   # The version of the latest release, from VERSION. Only package writes it into the binary; every
   # other build is a dev build.
   RELEASE_VERSION:
@@ -37,6 +39,7 @@ tasks:
       - go install tool
       - go mod download
       - task: common:install:frontend:deps
+      - task: lint:ps:deps
       - lefthook install
 
   dev:
@@ -71,7 +74,7 @@ tasks:
       - biome check --write .
 
   lint:
-    deps: [lint:go, lint:web, lint:sh]
+    deps: [lint:go, lint:web, lint:sh, lint:ps]
 
   lint:go:
     deps: [embed:stub]
@@ -99,9 +102,33 @@ tasks:
       - pnpm exec knip --include files,dependencies
 
   lint:sh:
-    summary: Lints the install script with shellcheck
+    summary: Lints the Linux install script with shellcheck
     cmds:
       - shellcheck install.sh
+
+  lint:ps:
+    summary: Lints the Windows install script with PSScriptAnalyzer, for Windows PowerShell 5.1 and PowerShell 7
+    deps: [lint:ps:deps]
+    env: &pwsh_env
+      POWERSHELL_TELEMETRY_OPTOUT: '1'
+      POWERSHELL_UPDATECHECK: 'Off'
+    cmds:
+      - >-
+        pwsh -NoProfile -NonInteractive -Command
+        "Import-Module PSScriptAnalyzer -RequiredVersion {{.PSSCRIPTANALYZER_VERSION}};
+        Invoke-ScriptAnalyzer -Path install.ps1 -Settings ./PSScriptAnalyzerSettings.psd1 -EnableExit"
+
+  lint:ps:deps:
+    summary: Installs PSScriptAnalyzer for the current user, from the PowerShell Gallery
+    internal: true
+    run: once
+    env: *pwsh_env
+    status:
+      - test -d "$HOME/.local/share/powershell/Modules/PSScriptAnalyzer/{{.PSSCRIPTANALYZER_VERSION}}"
+    cmds:
+      - >-
+        pwsh -NoProfile -NonInteractive -Command
+        "Install-PSResource -Name PSScriptAnalyzer -Version {{.PSSCRIPTANALYZER_VERSION}} -Scope CurrentUser -TrustRepository"
 
   typecheck:
     dir: frontend
