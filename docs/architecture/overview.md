@@ -5,6 +5,7 @@ Um repositório só, no layout do Wails v3: o módulo Go na raiz, o frontend em 
 ```
 main.go                  ponto de entrada; embute frontend/dist e o ícone e guarda a versão
 cmd/release/             o comando de `task release`
+cmd/zip/                 o zip reprodutível do pacote Windows, de `task package`
 internal/                todo o código Go
   app/                   compõe o app Wails a partir dos services; sabe de Wails
   bindings/              services expostos ao frontend, DTOs e eventos; sabe de Wails
@@ -46,7 +47,7 @@ frontend/
   src/styles/            Tailwind, a ponte dos tokens do design system e fontes
   src/test/              setup do Vitest, render com store, mock do Go e as cenas das telas
   bindings/              gerados por `task generate`; nunca editados à mão
-build/                   config do Wails, ícones e entrada .desktop
+build/                   config do Wails, ícones, entrada .desktop e os recursos do executável do Windows
 install.sh               instala ou atualiza o app a partir da última release
 VERSION                  a versão da última release
 .github/                 CI, release e Dependabot
