@@ -55,6 +55,8 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - run: pnpm install --frozen-lockfile
         working-directory: frontend
+      # task package builds both packages. The Windows one is cross-compiled from here, without cgo, so it
+      # needs neither GTK nor a Windows runner.
       - run: task package
       - name: Check the build left the tree as committed
         run: |
@@ -63,15 +65,17 @@ jobs:
             echo "::error::the build changed tracked files; the tag does not build as committed"
             exit 1
           fi
-      - name: Check the binary holds no path of the runner
+      - name: Check the binaries hold no path of the runner
         run: |
-          if strings bin/package/myspec | grep -F "$HOME"; then
-            echo "::error::the binary holds paths of the build machine"
-            exit 1
-          fi
+          for binary in bin/package/linux/myspec bin/package/windows/myspec.exe; do
+            if strings "$binary" | grep -F "$HOME"; then
+              echo "::error::$binary holds paths of the build machine"
+              exit 1
+            fi
+          done
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          gh release create "$GITHUB_REF_NAME" bin/myspec-linux-amd64.tar.gz
+          gh release create "$GITHUB_REF_NAME" bin/myspec-linux-amd64.tar.gz bin/myspec-windows-amd64.zip
           --title "$GITHUB_REF_NAME" --generate-notes --latest --verify-tag

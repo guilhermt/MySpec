@@ -47,7 +47,7 @@ frontend/
   src/styles/            Tailwind, a ponte dos tokens do design system e fontes
   src/test/              setup do Vitest, render com store, mock do Go e as cenas das telas
   bindings/              gerados por `task generate`; nunca editados à mão
-build/                   config do Wails, ícones e entrada .desktop
+build/                   config do Wails, ícones, entrada .desktop e os recursos do executável do Windows
 install.sh               instala ou atualiza o app a partir da última release
 VERSION                  a versão da última release
 .github/                 CI, release e Dependabot

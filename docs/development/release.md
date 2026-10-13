@@ -1,6 +1,6 @@
 # Releases
 
-O MySpec é publicado como uma release versionada no GitHub: um pacote `.tar.gz` para Linux `amd64`, montado pelo workflow de release a partir de uma tag.
+O MySpec é publicado como uma release versionada no GitHub: dois pacotes, `myspec-linux-amd64.tar.gz` para Linux `amd64` e `myspec-windows-amd64.zip` para Windows 11 `x64`, montados pelo workflow de release a partir de uma tag.
 
 ## Versão
 
@@ -8,7 +8,7 @@ O arquivo `VERSION`, na raiz, guarda a versão da última release, em semver `MA
 
 Em `0.x`, `minor` é para features e `patch` para correções.
 
-Os builds locais (`task build`, `task dev`, `task install`) se identificam como `dev`. O binário da release leva a versão no log `app starting`, no atributo `version`, gravada por `-X main.version` em `task package`.
+Os builds locais (`task build`, `task dev`, `task install`) se identificam como `dev`. O binário Linux e o `.exe` da release levam a versão no log `app starting`, no atributo `version`, gravada por `-X main.version` em `task package`; no `.exe` ela também está nas propriedades do arquivo.
 
 ## Publicar
 
@@ -39,13 +39,15 @@ Esse commit é a única mudança que chega à `main` sem pull request ([guidelin
 1. confere que o commit da tag está na `main` e que a tag é igual a `VERSION`;
 2. instala a toolchain do `mise.toml`, sem cache, para que nada de outra execução chegue ao binário;
 3. instala os pacotes `-dev` do GTK4 e do WebKitGTK pelo apt e, depois deles, o `wails3` por `go install tool`, que compila contra eles;
-4. roda `pnpm install --frozen-lockfile` e `task package`;
-5. confere que o build não mudou nenhum arquivo rastreado e que o binário não carrega caminhos do runner;
-6. publica com `gh release create`: título e tag `vX.Y.Z`, notas geradas pelo GitHub a partir das pull requests desde a tag anterior, marcada como `latest`, com o pacote anexado.
+4. roda `pnpm install --frozen-lockfile` e `task package`, que monta os dois pacotes; o Windows por compilação cruzada, sem cgo, então sem GTK, WebKit nem runner Windows;
+5. confere, depois dos dois builds, que o build não mudou nenhum arquivo rastreado e que os dois binários não carregam caminhos do runner;
+6. publica com `gh release create`: título e tag `vX.Y.Z`, notas geradas pelo GitHub a partir das pull requests desde a tag anterior, marcada como `latest`, com os dois pacotes anexados. Com anexos, o comando cria a release como rascunho, sobe os arquivos e só então a publica. Uma falha em qualquer pacote para o workflow antes da publicação, e nenhuma release sai, nem com um pacote só.
 
-O workflow usa só o `GITHUB_TOKEN`, com `contents: write`, e só uma release roda por vez. O Ubuntu 24.04 é fixo porque o binário liga nas bibliotecas do sistema em que é construído, e as dele são as mais antigas entre os sistemas do time.
+O workflow usa só o `GITHUB_TOKEN`, com `contents: write`, e só uma release roda por vez. O Ubuntu 24.04 é fixo porque o binário Linux liga nas bibliotecas do sistema em que é construído, e as dele são as mais antigas entre os sistemas do time.
 
-## O pacote
+## Os pacotes
+
+### Linux
 
 `myspec-linux-amd64.tar.gz`, só para `amd64`. É plano, sem diretório interno, com quatro arquivos:
 
@@ -58,17 +60,34 @@ O workflow usa só o `GITHUB_TOKEN`, com `contents: write`, e só uma release ro
 
 Os nomes são os de instalação. `@EXEC@` no `.desktop` é trocado pelo caminho do binário, como faz `task install`. A estrutura é estável, e o script de instalação depende dela ([Instalação pelo time](#instalação-pelo-time)).
 
-`task package` monta o pacote na máquina, em `bin/`, sem publicar.
+### Windows
+
+`myspec-windows-amd64.zip`, só para `amd64` (o `x64` do Windows). É um `.zip` porque o PowerShell do Windows 11 o extrai com `Expand-Archive`, sem ferramenta extra. É plano, sem diretório interno, com dois arquivos:
+
+| Arquivo | O que é |
+|---|---|
+| `myspec.exe` | o executável de produção, um app de janela sem console, com a versão, o ícone, o manifesto e as propriedades do arquivo |
+| `myspec.ico` | o ícone avulso, para um atalho que precise de um ícone explícito |
+
+O `.exe` é montado assim: `wails3 generate icons` converte `build/appicon.png` em `.ico`; `wails3 generate syso` junta o ícone, `build/windows/myspec.exe.manifest` e `build/windows/info.json` (com a versão no lugar de `@VERSION@`) num `.syso`, que o `go build` liga ao executável. As propriedades do arquivo são: produto e descrição `MySpec` (o nome que o Gerenciador de Tarefas mostra), empresa e copyright de `build/config.yml`, a descrição longa nos comentários e a versão da release. Os textos de `info.json` acompanham os de `build/config.yml`: mudou um, muda o outro.
+
+### Comandos
+
+`task package` monta os dois pacotes na máquina, em `bin/`, sem publicar; `task package:linux` e `task package:windows` montam um só.
 
 ## Build reprodutível
 
-O mesmo commit, com a mesma toolchain do `mise.toml` e as mesmas bibliotecas do Ubuntu 24.04, gera o mesmo binário e o mesmo `.tar.gz`. O binário sai de `-tags production -trimpath -buildvcs=false -ldflags="-w -s -X …"`, com o frontend de produção pelo lockfile congelado. No tar, a ordem dos nomes é fixa, o mtime é o do commit, o dono é 0 e o `gzip` roda com `--no-name`.
+O mesmo commit, com a mesma toolchain do `mise.toml` e as mesmas bibliotecas do Ubuntu 24.04, gera o mesmo binário e o mesmo `.tar.gz`. O binário Linux sai de `-tags production -trimpath -buildvcs=false -ldflags="-w -s -X …"`, com o frontend de produção pelo lockfile congelado. No tar, a ordem dos nomes é fixa, o mtime é o do commit, o dono é 0 e o `gzip` roda com `--no-name`.
+
+O `.exe` sai de `CGO_ENABLED=0` e `-tags production -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui -X …"`, com o `.ico` e o `.syso` determinísticos. O zip é montado por `cmd/zip`, com as entradas na ordem fixa, todas com a data do commit em UTC, sem permissões nem dono. O Ubuntu 24.04 é condição só para o binário Linux; o `.exe` não liga em biblioteca do sistema de build.
 
 ## URL estável
 
-`https://github.com/guilhermt/MySpec/releases/latest/download/myspec-linux-amd64.tar.gz` entrega sempre o pacote da última release publicada. O repositório precisa ser público para o download sem autenticação. O script de instalação parte dessa URL.
+`https://github.com/guilhermt/MySpec/releases/latest/download/myspec-linux-amd64.tar.gz` e `https://github.com/guilhermt/MySpec/releases/latest/download/myspec-windows-amd64.zip` entregam sempre o pacote da última release publicada. O repositório precisa ser público para o download sem autenticação. O script de instalação do Linux parte da primeira URL.
 
-## Bibliotecas em tempo de execução
+## O que cada binário precisa em tempo de execução
+
+### Linux
 
 O binário precisa de dois pacotes do sistema; o resto (GLib, libsoup, libX11, Cairo, Pango, Vulkan e as demais) vem como dependência deles.
 
@@ -78,6 +97,12 @@ O binário precisa de dois pacotes do sistema; o resto (GLib, libsoup, libX11, C
 | WebKitGTK 6.0 | `webkitgtk-6.0` | `libwebkitgtk-6.0-4` |
 
 Cada biblioteca ligada diretamente pelo binário (`readelf -d` de `task package`) pertence a um desses dois pacotes ou às dependências deles no Arch.
+
+### Windows
+
+Windows 11 `x64` e mais nada do sistema: o `.exe` é Go puro e usa o WebView2, que o Windows 11 já traz.
+
+Em qualquer sistema, o app ainda confere na abertura o Claude Code e o `gh`, pré-requisitos externos.
 
 ## Instalação pelo time
 
@@ -97,7 +122,7 @@ O script, em `sh` POSIX:
 
 Nada muda no disco antes de tudo estar conferido, baixado e extraído. Ele nunca usa `sudo` e nunca toca nos dados do app.
 
-**A regra do formato:** o script da `main` precisa sempre entender o pacote da última release publicada. Uma mudança na estrutura do pacote chega à `main` com um script que aceita as duas estruturas, e o suporte à antiga sai só depois da release com a nova. Uma correção no script chega ao time no merge, sem release.
+**A regra do formato:** vale para os dois pacotes. Um script de instalação depende da estrutura do pacote que instala, e o script da `main` precisa sempre entender o pacote da última release publicada. Uma mudança na estrutura do pacote chega à `main` com um script que aceita as duas estruturas, e o suporte à antiga sai só depois da release com a nova. Uma correção no script chega ao time no merge, sem release.
 
 A verificação é o `shellcheck` (`task lint:sh`, dentro de `task lint` e no CI). O comportamento se confere à mão no Arch e no Pop!_OS 24.04.
 
@@ -106,6 +131,7 @@ A verificação é o `shellcheck` (`task lint:sh`, dentro de `task lint` e no CI
 - Uma recusa do comando não muda nada: corrija o que a mensagem diz e rode de novo.
 - Um push que falha não envia nada, por ser atômico. O comando imprime `git tag -d vX.Y.Z` e `git reset --hard HEAD~1` para desfazer localmente. Depois disso, `git pull` e rode de novo.
 - Uma falha transitória do workflow (rede, runner) se resolve com **Re-run jobs** no GitHub, que publica a mesma release. Se ficou um rascunho de um upload interrompido, ele é apagado na página de releases antes do re-run.
+- Uma falha no build ou numa conferência de qualquer um dos pacotes não publica nada, e segue o mesmo caminho das outras falhas.
 - Uma falha do código ou do build se resolve com a correção por pull request e `task release -- patch`. A tag que falhou fica sem release.
 - Uma release publicada com bug se resolve da mesma forma, com uma versão nova.
 - Nenhuma tag é movida, apagada nem recriada, e nenhuma release publicada é reescrita.
