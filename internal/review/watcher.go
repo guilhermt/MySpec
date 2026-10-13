@@ -145,7 +145,7 @@ func (s *Service) add(taskID string, wt worktree.Worktree, dirs []string) {
 			continue
 		}
 
-		if err := s.fs.Add(dir); err != nil {
+		if err := s.use(func() error { return s.fs.Add(dir) }); err != nil {
 			s.log.Warn("review watch failed", "task", taskID, "path", dir, "error", err)
 			continue
 		}
@@ -162,10 +162,27 @@ func (s *Service) add(taskID string, wt worktree.Worktree, dirs []string) {
 // remove stops following directories a task no longer owns.
 func (s *Service) remove(taskID string, dirs []string) {
 	for _, dir := range dirs {
-		if err := s.fs.Remove(dir); err != nil && !errors.Is(err, fsnotify.ErrNonExistentWatch) {
+		err := s.use(func() error { return s.fs.Remove(dir) })
+		if err != nil && !errors.Is(err, fsnotify.ErrNonExistentWatch) && !errors.Is(err, fsnotify.ErrClosed) {
 			s.log.Warn("review unwatch failed", "task", taskID, "path", dir, "error", err)
 		}
 	}
+}
+
+// use runs call, a call to fs, unless the service is closed, and keeps Close
+// from closing fs until it returns: on Windows fsnotify fails its Close, and
+// never answers the call, when the two cross.
+func (s *Service) use(call func() error) error {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return fsnotify.ErrClosed
+	}
+	s.calls.Add(1)
+	s.mu.Unlock()
+	defer s.calls.Done()
+
+	return call()
 }
 
 // arm restarts the wait of a task. An event of a task whose numbers do not

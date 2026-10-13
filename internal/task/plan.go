@@ -62,12 +62,20 @@ const (
 // ReadPlan reads the step files of dir. A missing folder is an absent plan,
 // not an error.
 func ReadPlan(dir string) Plan {
-	entries, err := os.ReadDir(dir)
+	// The folder is looked at first: on Windows, reading a file as a folder
+	// finds an empty folder rather than an error.
+	info, err := os.Stat(dir)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		return Plan{}
 	case err != nil:
-		return Plan{Present: true, Problems: []PlanProblem{{Message: unreadableDirProblem + err.Error()}}}
+		return unreadablePlan(err.Error())
+	case !info.IsDir():
+		return unreadablePlan(dir + " is not a folder")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return unreadablePlan(err.Error())
 	}
 
 	var plan Plan
@@ -136,6 +144,11 @@ func ReadPlan(dir string) Plan {
 		return strings.Compare(a.File, b.File)
 	})
 	return plan
+}
+
+// unreadablePlan is a plan whose folder could not be read, with why.
+func unreadablePlan(why string) Plan {
+	return Plan{Present: true, Problems: []PlanProblem{{Message: unreadableDirProblem + why}}}
 }
 
 // problem records one reason the plan is not valid.

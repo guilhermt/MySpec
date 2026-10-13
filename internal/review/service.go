@@ -46,6 +46,7 @@ type Service struct {
 	items  map[string]*tracked
 	owners map[string]string // watched directory -> the task that watches it
 	closed bool
+	calls  sync.WaitGroup // the calls to fs in flight, which Close waits for
 }
 
 // tracked is one worktree under watch.
@@ -180,6 +181,7 @@ func (s *Service) Close() error {
 	s.owners = map[string]string{}
 	s.mu.Unlock()
 
+	s.calls.Wait()
 	if err := s.fs.Close(); err != nil {
 		return fmt.Errorf("close review watcher: %w", err)
 	}

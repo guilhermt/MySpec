@@ -619,7 +619,7 @@ func (s *TaskService) OpenFileInEditor(taskID, path string) error {
 	// The path comes from the frontend, which only ever has paths git reported
 	// inside the worktree; anything else is not this worktree's to open.
 	clean := filepath.Clean(path)
-	if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+	if !filepath.IsLocal(clean) {
 		return s.fail("OpenFileInEditor", fmt.Errorf("open %q of task %s: %w", path, taskID, errPathOutside))
 	}
 	if err := s.editor(worktree, filepath.Join(worktree, clean)); err != nil {
