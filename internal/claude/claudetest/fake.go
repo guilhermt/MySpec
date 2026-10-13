@@ -10,8 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -43,6 +45,16 @@ const (
 	// stages it waits for a file named "<turn>-<stage>" there before going on,
 	// which is how a test holds a turn at a known point.
 	EnvGates = "MYSPEC_FAKE_GATES"
+	// EnvArgv set to "1" makes the fake print its command line on stderr, one
+	// argument per line, and exit, which is how a test sees the flags a process
+	// got.
+	EnvArgv = "MYSPEC_FAKE_ARGV"
+	// EnvSleep set to "1" makes the fake sleep until it is killed, which is the
+	// process the spawn scenario starts.
+	EnvSleep = "MYSPEC_FAKE_SLEEP"
+	// EnvPidFile is the file the spawn scenario writes the pid of the process it
+	// started to.
+	EnvPidFile = "MYSPEC_FAKE_PIDFILE"
 )
 
 // The effort levels every model of Catalog that takes one accepts.
@@ -116,7 +128,17 @@ const maxLine = 16 << 20
 // Run plays the scenario named by EnvScenario against stdin and stdout and
 // returns the exit code the fake CLI should end with.
 func Run() int {
+	if os.Getenv(EnvSleep) == "1" {
+		select {}
+	}
+
 	args := os.Args[1:]
+	if os.Getenv(EnvArgv) == "1" {
+		for _, arg := range args {
+			_, _ = fmt.Fprintln(os.Stderr, arg)
+		}
+		return exitOK
+	}
 	if len(args) >= 1 && args[0] == "--version" {
 		return version()
 	}
@@ -346,6 +368,8 @@ func (f *fake) play(scenario string) int {
 			f.questionTurn()
 		case "slow":
 			f.slowTurn()
+		case "spawn":
+			f.spawnTurn()
 		case "actions":
 			f.actionsTurn(text)
 		case "subagent":
@@ -701,6 +725,31 @@ func (f *fake) slowTurn() {
 			f.textDelta(0, "tick ")
 		}
 	}
+}
+
+// spawnTurn starts a process of its own, as the shells of the real CLI are,
+// records its pid in EnvPidFile and streams a text delta, then waits without
+// ending the turn until it is killed.
+func (f *fake) spawnTurn() {
+	//nolint:gosec // G204: it runs this very binary, as the fake CLI does everywhere
+	child := exec.Command(os.Args[0])
+	child.Env = append(os.Environ(), EnvFlag+"=1", EnvSleep+"=1")
+	if err := child.Start(); err != nil {
+		fail("start the spawned process: %v", err)
+		return
+	}
+	pid := strconv.Itoa(child.Process.Pid)
+	//nolint:gosec // G703: the path is the test's own pid file
+	if err := os.WriteFile(os.Getenv(EnvPidFile), []byte(pid), 0o600); err != nil {
+		fail("write the pid file: %v", err)
+		return
+	}
+
+	f.emitInit()
+	f.messageStart(f.nextID("msg"))
+	f.blockStart(0, map[string]any{"type": "text", "text": ""})
+	f.textDelta(0, "spawned ")
+	select {}
 }
 
 // actionsTurn runs two overlapping reads, stopping at a gate after each stage:

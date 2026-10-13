@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"regexp"
 	"strconv"
+
+	"github.com/guilhermt/myspec/internal/platform/procgroup"
 )
 
 // MinVersion is the oldest Claude Code the app supports: the version the app
@@ -79,7 +81,9 @@ func (v Version) String() string {
 // ReadVersion runs `claude --version` and parses what it prints. The caller
 // owns the timeout.
 func ReadVersion(ctx context.Context, binary string) (Version, error) {
-	out, err := exec.CommandContext(ctx, binary, "--version").Output()
+	cmd := exec.CommandContext(ctx, binary, "--version")
+	procgroup.Hide(cmd)
+	out, err := cmd.Output()
 	if err != nil {
 		return Version{}, fmt.Errorf("claude --version: %w", err)
 	}

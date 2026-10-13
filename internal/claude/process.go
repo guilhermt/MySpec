@@ -15,6 +15,8 @@ import (
 	"syscall"
 
 	"github.com/google/uuid"
+
+	"github.com/guilhermt/myspec/internal/platform/procgroup"
 )
 
 // Config is what Start needs.
@@ -58,8 +60,8 @@ const (
 
 // ExitInfo describes how the process ended.
 type ExitInfo struct {
-	Code   int    // -1 when killed by a signal
-	Signal string // "" when exited normally
+	Code   int    // -1 when killed by a signal; on Windows a killed process has the exit code it was given, 1 when the app killed it
+	Signal string // "" when exited normally, and always on Windows, which has no signals
 	Stderr string // last 4 KiB of stderr
 }
 
@@ -67,6 +69,7 @@ type ExitInfo struct {
 type Process struct {
 	log    *slog.Logger
 	cmd    *exec.Cmd
+	group  *procgroup.Group
 	events chan Event
 	stderr *tailBuffer
 
@@ -91,9 +94,9 @@ func Start(ctx context.Context, cfg Config, log *slog.Logger) (*Process, error) 
 	cmd := exec.Command(cfg.Binary, slices.Concat(Args, sessionArgs(cfg), choiceArgs(cfg), dirArgs(cfg))...)
 	cmd.Dir = cfg.Dir
 	cmd.Env = cfg.Env
-	// Its own process group, so Terminate and Kill also reach the shells the
-	// CLI spawns for the agent.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// Its own group, so Terminate and Kill also reach the shells the CLI
+	// spawns for the agent.
+	group := procgroup.New(cmd)
 
 	stderr := &tailBuffer{limit: stderrTail}
 	cmd.Stderr = stderr
@@ -110,10 +113,17 @@ func Start(ctx context.Context, cfg Config, log *slog.Logger) (*Process, error) 
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start claude %s: %w", cfg.Binary, err)
 	}
+	if err := group.Started(); err != nil {
+		_ = group.Kill()
+		_ = cmd.Wait()
+		_ = group.Close()
+		return nil, fmt.Errorf("start claude %s: %w", cfg.Binary, err)
+	}
 
 	p := &Process{
 		log:    log.With("session", cfg.SessionID),
 		cmd:    cmd,
+		group:  group,
 		events: make(chan Event, eventBuffer),
 		stderr: stderr,
 		stdin:  stdin,
@@ -183,15 +193,12 @@ func (p *Process) CloseInput() error {
 	return nil
 }
 
-// Terminate sends SIGTERM.
-func (p *Process) Terminate() error {
-	return p.signal(syscall.SIGTERM)
-}
+// Terminate asks the CLI and everything it started to stop: SIGTERM on Linux;
+// on Windows, which has no such request, it kills.
+func (p *Process) Terminate() error { return p.stop("terminate", p.group.Terminate) }
 
-// Kill sends SIGKILL.
-func (p *Process) Kill() error {
-	return p.signal(syscall.SIGKILL)
-}
+// Kill stops the CLI and everything it started at once.
+func (p *Process) Kill() error { return p.stop("kill", p.group.Kill) }
 
 // Wait blocks until the process has exited and returns how.
 func (p *Process) Wait() ExitInfo {
@@ -219,18 +226,17 @@ func (p *Process) write(line []byte) error {
 	return nil
 }
 
-// signal reaches the whole process group, so the children of the CLI go with
-// it. A process that has already exited is not an error.
-func (p *Process) signal(sig syscall.Signal) error {
+// stop reaches the whole group, so the children of the CLI go with it. A
+// process that has already exited is not an error.
+func (p *Process) stop(verb string, stop func() error) error {
 	select {
 	case <-p.done:
 		return nil
 	default:
 	}
 
-	err := syscall.Kill(-p.cmd.Process.Pid, sig)
-	if err != nil && !errors.Is(err, syscall.ESRCH) {
-		return fmt.Errorf("signal claude with %s: %w", signalName(sig), err)
+	if err := stop(); err != nil {
+		return fmt.Errorf("%s claude: %w", verb, err)
 	}
 	return nil
 }
@@ -265,6 +271,10 @@ func (p *Process) reap(ended <-chan struct{}) {
 	p.exit = exitInfo(p.cmd.ProcessState, p.stderr.String())
 	if p.cmd.ProcessState == nil {
 		p.log.Warn("claude wait failed", "err", err)
+	}
+	// On Windows this ends whatever the CLI left running.
+	if err := p.group.Close(); err != nil {
+		p.log.Warn("claude group close failed", "err", err)
 	}
 	close(p.done)
 }

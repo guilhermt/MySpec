@@ -1,7 +1,7 @@
 // Package editor opens a folder or a file in the user's editor. In this
-// version the
-// editor is VS Code, found as "code" on the PATH; making it configurable is a
-// later task.
+// version the editor is VS Code, found as "code" on the PATH; making it
+// configurable is a later task. On Windows code is the code.cmd script VS Code
+// puts on the PATH, which runs without a console window.
 package editor
 
 import (
@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/guilhermt/myspec/internal/platform/procgroup"
 )
 
 // ErrNotFound reports that code is not on the PATH.
@@ -27,6 +29,7 @@ func Open(paths ...string) error {
 	}
 
 	cmd := exec.Command(code, paths...)
+	procgroup.Hide(cmd)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("open %s in the editor: %w", strings.Join(paths, " "), err)
 	}

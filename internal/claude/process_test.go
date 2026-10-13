@@ -24,11 +24,6 @@ const sessionID = "3f2b0c62-9b16-4d5c-9a1b-6c9b2c1d0e4f"
 // eventTimeout is how long a test waits for the fake CLI to say something.
 const eventTimeout = 10 * time.Second
 
-// argvReporter is a stand-in CLI that reports its command line and exits.
-const argvReporter = `#!/bin/sh
-for arg in "$@"; do printf '%s\n' "$arg" >&2; done
-`
-
 // discardLog is the logger the driver writes its debug lines to.
 func discardLog() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
@@ -48,6 +43,19 @@ func fakeConfig(t *testing.T, scenario string) claude.Config {
 			claudetest.EnvFlag+"=1",
 			claudetest.EnvScenario+"="+scenario,
 		),
+	}
+}
+
+// argvConfig runs this test binary as the fake CLI that reports its command
+// line on stderr and exits. The model and the effort are left to the test.
+func argvConfig(t *testing.T) claude.Config {
+	t.Helper()
+
+	return claude.Config{
+		Binary:    os.Args[0],
+		Dir:       t.TempDir(),
+		SessionID: sessionID,
+		Env:       append(os.Environ(), claudetest.EnvFlag+"=1", claudetest.EnvArgv+"=1"),
 	}
 }
 
@@ -180,17 +188,6 @@ func toolResults(events []claude.Event) []claude.ToolResult {
 	return collected
 }
 
-// reporterBinary writes the stand-in CLI that reports its command line.
-func reporterBinary(t *testing.T) string {
-	t.Helper()
-
-	path := filepath.Join(t.TempDir(), "argv")
-	if err := os.WriteFile(path, []byte(argvReporter), 0o700); err != nil {
-		t.Fatalf("WriteFile(%s) = %v, want nil", path, err)
-	}
-	return path
-}
-
 func TestStartRunsTheCLIWithTheFixedFlags(t *testing.T) {
 	t.Parallel()
 
@@ -208,14 +205,11 @@ func TestStartRunsTheCLIWithTheFixedFlags(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			p := start(t, claude.Config{
-				Binary:    reporterBinary(t),
-				Dir:       t.TempDir(),
-				SessionID: sessionID,
-				Resume:    tc.resume,
-				Model:     "claude-opus-5",
-				Effort:    "high",
-			})
+			cfg := argvConfig(t)
+			cfg.Resume = tc.resume
+			cfg.Model = "claude-opus-5"
+			cfg.Effort = "high"
+			p := start(t, cfg)
 
 			exit := exitOf(t, p)
 			if exit.Code != 0 {
@@ -232,14 +226,11 @@ func TestStartRunsTheCLIWithTheFixedFlags(t *testing.T) {
 func TestStartOpensEveryExtraDirectory(t *testing.T) {
 	t.Parallel()
 
-	p := start(t, claude.Config{
-		Binary:    reporterBinary(t),
-		Dir:       t.TempDir(),
-		SessionID: sessionID,
-		Model:     "claude-opus-5",
-		Effort:    "high",
-		ExtraDirs: []string{"/clones/acme/api", "/clones/acme/web"},
-	})
+	cfg := argvConfig(t)
+	cfg.Model = "claude-opus-5"
+	cfg.Effort = "high"
+	cfg.ExtraDirs = []string{"/clones/acme/api", "/clones/acme/web"}
+	p := start(t, cfg)
 
 	exit := exitOf(t, p)
 	if exit.Code != 0 {
@@ -257,12 +248,9 @@ func TestStartOpensEveryExtraDirectory(t *testing.T) {
 func TestStartLeavesTheEffortOutForAModelThatTakesNone(t *testing.T) {
 	t.Parallel()
 
-	p := start(t, claude.Config{
-		Binary:    reporterBinary(t),
-		Dir:       t.TempDir(),
-		SessionID: sessionID,
-		Model:     "claude-haiku-4-5-20251001",
-	})
+	cfg := argvConfig(t)
+	cfg.Model = "claude-haiku-4-5-20251001"
+	p := start(t, cfg)
 
 	exit := exitOf(t, p)
 	if exit.Code != 0 {
@@ -638,40 +626,6 @@ func TestRespondAnswersAStructuredQuestion(t *testing.T) {
 	}
 	if diff := cmp.Diff(answers, got); diff != "" {
 		t.Errorf("answers mismatch (-want +got):\n%s", diff)
-	}
-}
-
-func TestTerminateAndKillStopTheProcess(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		stop func(*claude.Process) error
-		want string
-	}{
-		"terminate": {stop: (*claude.Process).Terminate, want: "SIGTERM"},
-		"kill":      {stop: (*claude.Process).Kill, want: "SIGKILL"},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			p := start(t, fakeConfig(t, "slow"))
-
-			send(t, p, "keep going")
-			nextEvent(t, p, "the first text delta", isTextDelta)
-
-			if err := tc.stop(p); err != nil {
-				t.Fatalf("stopping the process = %v, want nil", err)
-			}
-
-			exit := exitOf(t, p)
-			if exit.Signal != tc.want {
-				t.Errorf("Signal = %q, want %q", exit.Signal, tc.want)
-			}
-			if exit.Code != -1 {
-				t.Errorf("Code = %d, want -1 for a signalled process", exit.Code)
-			}
-		})
 	}
 }
 
