@@ -14,7 +14,7 @@ Cinco coisas são instaladas à mão; tudo o mais vem delas.
 
 2. **[mise](https://mise.jdx.dev).** Com `mise activate` no shell, entrar na pasta do projeto ativa as versões pinadas em `mise.toml`: Go, Node, pnpm, Task, golangci-lint, gotestsum, lefthook, shellcheck, Biome, govulncheck e go-test-coverage. O CI instala as ferramentas que usa a partir do mesmo arquivo, então máquina e pipeline rodam as mesmas versões.
 
-3. **Claude Code.** O `claude` 2.1.291 ou mais novo (`claude update` atualiza), no `PATH` ou em `~/.local/bin`, logado uma vez com `claude` num terminal. `MYSPEC_CLAUDE_PATH` fixa outro caminho. Essa versão é `claude.MinVersion`, a em que o app foi verificado, e sobe quando o app passa a usar um recurso novo do CLI.
+3. **Claude Code.** O `claude` 2.1.291 ou mais novo (`claude update` atualiza), no `PATH` ou em `~/.local/bin` (no Windows, `%USERPROFILE%\.local\bin\claude.exe`), logado uma vez com `claude` num terminal. `MYSPEC_CLAUDE_PATH` fixa outro caminho. Essa versão é `claude.MinVersion`, a em que o app foi verificado, e sobe quando o app passa a usar um recurso novo do CLI.
 
 4. **git, gh e VS Code.** `git` no `PATH`, capaz de alcançar o `origin` dos repositórios sem pedir senha: o app roda com `GIT_TERMINAL_PROMPT=0`, e um fetch que peça senha falha em vez de pendurar. `gh` logado com os escopos `project` e `repo` (`gh auth refresh -s project,repo`), para os boards e para a etapa de PR. **Settings › Machine** mostra o que falta. `code` no `PATH` é o que **Abrir no VS Code** roda; sem ele o app avisa e o resto funciona.
 

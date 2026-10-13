@@ -48,6 +48,16 @@ Go: 60% por arquivo, 70% por pacote, 80% no total, excluindo `internal/app`, `ma
 - A espera por um evento que uma tentativa real publica, como a startup do app, que abre o banco e roda as migrations, lê o canal sem prazo próprio: o tempo dela segue a carga da máquina e o `-race`, e o `-timeout` do `go test` é o que pega o evento que nunca chega.
 - `t.Context()` para os contextos, `t.TempDir()` para o disco.
 
+### Linux e Windows
+
+Todo teste Go roda nos dois sistemas.
+
+- Um teste que depende do Unix (sinais, `chmod` numa pasta, bits de permissão, scripts `#!/bin/sh`, `setrlimit`) vai para um arquivo `_linux_test.go`.
+- Uma conferência pontual de permissão fica atrás de `runtime.GOOS != "windows"`.
+- O comportamento próprio do Windows vai em `_windows_test.go`.
+- Caminhos esperados se montam com `filepath`, nunca com literais `/`.
+- Num fixture que mantém processos ou watchers vivos, a primeira chamada de `t.TempDir()` vem antes do `t.Cleanup` que os encerra: o Windows não apaga uma pasta que um processo ainda usa, e os cleanups rodam na ordem inversa.
+
 ### Fixtures e helpers
 
 Cada pacote tem um `helpers_test.go` com o que os testes dele compartilham: um `fixture` montado por `newFixture(t)`, dublês em memória das dependências (`memRepo`, `memTasks`), gravadores de chamadas e os `waitX`. O dublê implementa a interface que o pacote de produção declara, então a fixture diz exatamente o que o pacote precisa. Um `logCapture` captura o `slog` em JSON quando o teste verifica uma linha de log.
@@ -56,11 +66,12 @@ Cada pacote tem um `helpers_test.go` com o que os testes dele compartilham: um `
 
 Os pacotes que rodam binários testam contra o binário real ou contra um fake que é o próprio binário de teste reexecutado, declarado num `TestMain` de uma linha:
 
-- `internal/claude/claudetest`: um CLI do Claude Code falso que fala stream-json. O teste escreve um roteiro do que o fake responde; `internal/claude/testdata/*.jsonl` são streams reais gravados.
+- `internal/claude/claudetest`: um CLI do Claude Code falso que fala stream-json. O teste escreve um roteiro do que o fake responde, e `EnvArgv`, `EnvSleep` e `EnvPidFile` fazem o fake gravar os argumentos que recebeu, demorar a responder e gravar o pid do filho que o cenário `spawn` deixa rodando; `internal/claude/testdata/*.jsonl` são streams reais gravados.
 - `internal/git/gittest`: constrói repositórios de verdade em diretórios temporários com o `git` real. O git não é dublado.
 - `internal/gh/ghtest`: um `gh` falso que responde o que o teste escreveu, porque falar com o GitHub não é opção. É o binário reexecutado, não um script, porque escrever um executável enquanto outros testes fazem fork falha com "text file busy".
 - `internal/platform/chime` e `internal/platform/dnd`: um player de áudio e um `omarchy-shell` falsos, o binário de teste reexecutado, declarados no `TestMain` do próprio pacote porque só ele os usa. O comportamento do fake (tocar, falhar, travar; responder `on`, `off`, falhar, travar) vem no argumento ou numa variável de ambiente.
-- `internal/store`: a sonda do diretório de dados com um limite de tamanho de arquivo zero, o binário de teste reexecutado pelo `TestMain` do pacote, que baixa o limite só para ele. A escrita da sonda falha com `EFBIG`, no lugar do disco cheio, que um teste não consegue fazer.
+- `internal/platform/procgroup`: o binário de teste reexecutado pelo `TestMain` do pacote, com o papel numa variável de ambiente: um pai que sobe um filho e fica vivo ou sai, o filho que nunca termina e os que saem com 0 e com 3. O teste confere pelo pid que o filho deixa num arquivo.
+- `internal/store`: a sonda do diretório de dados com um limite de tamanho de arquivo zero, o binário de teste reexecutado pelo `TestMain` do pacote, que baixa o limite só para ele. A escrita da sonda falha com `EFBIG`, no lugar do disco cheio, que um teste não consegue fazer. É só do Linux, porque o Windows não tem `setrlimit`.
 
 `store.OpenMemory` abre um SQLite em memória com as migrations aplicadas, para os testes do `store` e de quem o usa.
 

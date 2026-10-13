@@ -34,7 +34,7 @@ internal/                todo o código Go
   editor/                abre o VS Code
   theme/                 preferência de tema
   store/                 SQLite e migrations
-  platform/              logging, notify (D-Bus), chime, dnd, xdg
+  platform/              logging, notify (D-Bus), chime, dnd, xdg, procgroup
 frontend/
   src/app/               App, shell, bootstrap e atalhos globais
   src/store/             o store Zustand, as ações, o transcript e o relógio compartilhado
@@ -69,6 +69,12 @@ Os pacotes de domínio se organizam em camadas, de baixo para cima:
 Dois pares merecem nota. `git` roda o binário e não sabe o que é uma task; `worktree` carrega a política do produto: onde as worktrees ficam, como nascem, quando estão limpas, como vão embora. `gh` espelha `git`: roda consultas GraphQL, classificando as falhas (sem `gh`, sem autenticação, sem o escopo de projects, limite de taxa), clona repositórios, lê a pull request de uma branch com os checks do head e se ela merge limpa na base, compara duas dessas leituras para dizer o que deu errado de novo na segunda (`gh.NextTrouble`), lê o diff de uma pull request, publica um review e escreve issues e cards de board — cria e atualiza uma issue, acrescenta um item ao board, define um campo de seleção única, registra uma sub-issue e uma relação de bloqueio, e resolve os node ids de que essas escritas precisam —, com o JSON no stdin de `gh api`, sem saber o que é um board, um review ou uma discussão; quem abre pull requests é o agente.
 
 `board` é dono dos boards cadastrados e da leitura guardada de cada um. Uma leitura faz uma consulta da estrutura do board, as consultas paginadas dos itens, primeiro as issues abertas e depois as fechadas nos últimos 14 dias, e poucas consultas em lote, com aliases, para os épicos com as sub-issues, as dependências fora da leitura e os cards de tasks ativas que ficaram fora dela; nunca uma chamada por card. A montagem em Go junta a convenção do corpo às relações nativas. `board` também sugere o nome de uma task e monta o contexto de uma task criada de um card, e reporta por `OnChange` e `OnRead` sem decidir nada sobre tasks: é `app` que entrega os cards de cada leitura a `task.Service.UpdateCards`. Toda escrita que muda o board de um repositório acontece na transação do board no `store`, seguida de `repository.Service.Sync`. `repository` clona em segundo plano, com o estado do clone em memória, e guarda a pasta de clones e as instruções fixas de review de cada repositório.
+
+### Linux e Windows
+
+O código é um só para os dois sistemas. O que difere fica em arquivos `_linux.go` e `_windows.go` do mesmo pacote, com a mesma API: os diretórios do app, a localização do `claude`, o grupo de processos, o D-Bus e o tema, a classificação dos erros do sistema e o WebKit. O resto do pacote é portável.
+
+No Windows ficam inativos, sem log, as notificações, o som, o "não perturbe" e o tema do sistema; o tema **System** é claro. Nenhum comando externo abre janela de console.
 
 ### Itens
 

@@ -6,8 +6,8 @@ A stack do produto e a razão de cada escolha.
 
 | Camada | Escolha |
 |---|---|
-| Forma do app | Aplicação desktop para Linux |
-| Base desktop | Wails v3 (`v3.0.0-beta.16`), backend em Go 1.27, WebKitGTK 6.0 sobre GTK4 |
+| Forma do app | Aplicação desktop para Linux e Windows 11 x64 |
+| Base desktop | Wails v3 (`v3.0.0-beta.16`), backend em Go 1.27, WebKitGTK 6.0 sobre GTK4 no Linux, WebView2 no Windows |
 | Frontend | React 19 com TypeScript em modo strict, Vite |
 | Estilo e componentes | Tailwind CSS 4, shadcn/ui sobre Base UI e o design system do MySpec, fontes Fira Sans e Fira Code, ícones Lucide |
 | Markdown e diagramas | Streamdown, com `@streamdown/code` e `@streamdown/mermaid` |
@@ -19,11 +19,11 @@ A stack do produto e a razão de cada escolha.
 | Permissões e perguntas | Canal de controle do CLI por stdio (`--permission-prompt-tool stdio`) |
 | Git | Binário `git`, com fsnotify observando as worktrees |
 | GitHub | Binário `gh`: leituras, publicação de reviews, escrita de issues e cards e clones |
-| Artefatos e prompts | Arquivos Markdown no diretório de dados XDG |
+| Artefatos e prompts | Arquivos Markdown no diretório de dados do app (`~/.local/share/myspec/` no Linux, `%LOCALAPPDATA%\MySpec\data\` no Windows) |
 | Estado do app | SQLite via `modernc.org/sqlite`, acessado só pelo Go |
-| Notificações e tema do sistema | D-Bus com godbus: `org.freedesktop.Notifications` e o portal de configurações |
-| Som das notificações | WAV próprio embutido, tocado por `pw-play`, `paplay` ou `aplay` |
-| Logs | `slog` em JSON no diretório de estado XDG |
+| Notificações e tema do sistema (Linux) | D-Bus com godbus: `org.freedesktop.Notifications` e o portal de configurações |
+| Som das notificações (Linux) | WAV próprio embutido, tocado por `pw-play`, `paplay` ou `aplay` |
+| Logs | `slog` em JSON no diretório de estado do app (`~/.local/state/myspec/` no Linux, `%LOCALAPPDATA%\MySpec\state\` no Windows) |
 | Ferramentas | mise, Task, pnpm, Biome, Vitest com jsdom, golangci-lint, gotestsum, govulncheck, go-test-coverage, lefthook, shellcheck |
 
 ## Desktop com Wails v3
@@ -32,7 +32,7 @@ O produto precisa ler clones locais, criar worktrees, iniciar processos e enviar
 
 O v3 é a arquitetura para onde o Wails vai: services com bindings gerados por análise estática, eventos tipados, runtime por métodos e build por Taskfile. Ele ainda é pré-release, e duas partes do seu backend Linux não servem ao produto: o service de notificações e a leitura do tema do sistema. Nos dois casos o app fala com o D-Bus diretamente; ver [D-Bus](#d-bus).
 
-No Linux o Wails usa WebKitGTK. O padrão desde o v3 é GTK4 com WebKitGTK 6.0, que é o que o produto usa, exigindo `gtk4` e `webkitgtk-6.0` na máquina. A renderização foi verificada no Hyprland com GPU AMD sem nenhuma variável de ambiente; ver [target-machine.md](../development/target-machine.md).
+No Windows o Wails usa o WebView2, que o Windows 11 já traz, e o produto roda no Windows 11 x64. No Linux o Wails usa WebKitGTK. O padrão desde o v3 é GTK4 com WebKitGTK 6.0, que é o que o produto usa, exigindo `gtk4` e `webkitgtk-6.0` na máquina. A renderização foi verificada no Hyprland com GPU AMD sem nenhuma variável de ambiente; ver [target-machine.md](../development/target-machine.md).
 
 ## Frontend
 
@@ -71,14 +71,14 @@ A pull request é aberta pelo agente, com o `gh`, dentro da sessão dele. O app 
 
 Dois tipos de dado, cada um com uma única fonte de verdade:
 
-- **Artefatos**: PRD, tech spec, arquivos de step, documentos One-Shot, rascunhos de PR, relatórios de review e prompts editados. Markdown no diretório de dados XDG, uma pasta por task. As sessões os leem por caminho, e como arquivos ficam legíveis e diffáveis fora do app.
+- **Artefatos**: PRD, tech spec, arquivos de step, documentos One-Shot, rascunhos de PR, relatórios de review e prompts editados. Markdown no diretório de dados do app, uma pasta por task. As sessões os leem por caminho, e como arquivos ficam legíveis e diffáveis fora do app.
 - **Estado**: tasks, etapa, status de cada step e da pull request, repositórios cadastrados, sessões, worktrees, situações, modelos e configurações. SQLite com `modernc.org/sqlite`, acessado só pelo Go com `database/sql`, tipado e com transações.
 
 Nada de estado vive nos Markdown. Ver [storage.md](./storage.md).
 
 ## D-Bus
 
-O app fala direto com o barramento de sessão pelo godbus, que o Wails já traz no grafo de módulos, para três coisas:
+No Linux, o app fala direto com o barramento de sessão pelo godbus, que o Wails já traz no grafo de módulos, para três coisas:
 
 - **Notificações**, pelo serviço `org.freedesktop.Notifications`. O service de notificações do Wails v3 entrega, no Linux, uma notificação dispensada pelo usuário como um clique, o que traria a janela para a frente sem o usuário pedir. No serviço direto um clique chega como `ActionInvoked` e dispensar só tira a notificação da lista.
 - **Tema do sistema**, pelo portal `org.freedesktop.portal.Settings`, assinando `SettingChanged`. No backend GTK4 do Wails, `Env.IsDarkMode()` responde falso antes de o loop principal começar e o evento `ThemeChanged` nunca dispara. Ler o portal diretamente também põe a cor certa atrás do webview desde o primeiro frame, porque a leitura acontece antes de a janela ser criada.
@@ -86,7 +86,7 @@ O app fala direto com o barramento de sessão pelo godbus, que o Wails já traz 
 
 ## Som das notificações
 
-O som é do app e é o mesmo em todo sistema: `internal/platform/chime/chime.wav`, gerado por `gen.go` a partir de senoides, sem licença de terceiros a acompanhar. É um WAV PCM de 16 bits, mono, 48 kHz, o formato que os três players leem.
+O som é só do Linux. Ele é do app e é o mesmo em toda distribuição: `internal/platform/chime/chime.wav`, gerado por `gen.go` a partir de senoides, sem licença de terceiros a acompanhar. É um WAV PCM de 16 bits, mono, 48 kHz, o formato que os três players leem.
 
 Quando o servidor de notificações toca sons, anunciando a capacidade `sound`, como o GNOME Shell, quem toca é ele, com o arquivo do app na hint `sound-file`, e o não perturbe e as preferências de som são os dele. Quando não toca, o app roda um player de áudio do sistema: `pw-play` (PipeWire), `paplay` (PulseAudio, que o PipeWire também serve) e `aplay` (ALSA), nessa ordem, passando ao seguinte quando um falta ou falha. Rodar o player cobre as três pilhas de áudio do Linux sem cgo nem módulo novo, do mesmo jeito que o app já roda `git` e `gh`. Um cliente PulseAudio em Go puro cobriria só a primeira pilha, e o ALSA por cgo manteria um dispositivo de áudio aberto enquanto o app roda.
 
