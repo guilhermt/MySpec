@@ -19,6 +19,15 @@ type Watcher struct {
 	calls  sync.WaitGroup // the calls to fs in flight, which Close waits for
 }
 
+// Group is folders followed together, until it is forgotten.
+type Group struct {
+	w *Watcher
+
+	mu        sync.Mutex
+	dirs      []string
+	forgotten bool
+}
+
 // New starts a watcher that hands every event to handle and every error to
 // fail, from a goroutine of its own.
 func New(handle func(fsnotify.Event), fail func(error)) (*Watcher, error) {
@@ -30,18 +39,44 @@ func New(handle func(fsnotify.Event), fail func(error)) (*Watcher, error) {
 	return &Watcher{fs: fsw}, nil
 }
 
-// Add follows dir as a folder of group. After Close it returns
-// fsnotify.ErrClosed.
-func (w *Watcher) Add(_, dir string) error {
-	return w.use(func() error { return w.fs.Add(dir) })
+// Open starts a group with no folder in it.
+func (w *Watcher) Open() *Group {
+	return &Group{w: w}
 }
 
-// Forget stops following group, whose folders are dirs. A folder no longer
-// followed is not an error, nor is a watcher already closed.
-func (w *Watcher) Forget(_ string, dirs []string) error {
+// Add follows dir as a folder of the group. Once the group is forgotten, or
+// the watcher closed, it returns fsnotify.ErrClosed and follows nothing.
+func (g *Group) Add(dir string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if g.forgotten {
+		return fsnotify.ErrClosed
+	}
+	if err := g.w.use(func() error { return g.w.fs.Add(dir) }); err != nil {
+		return err
+	}
+	g.dirs = append(g.dirs, dir)
+	return nil
+}
+
+// Forget stops following every folder of the group, once the Add in flight
+// returned. A folder no longer followed is not an error, nor is a group
+// forgotten twice or a watcher already closed.
+func (g *Group) Forget() error {
+	g.mu.Lock()
+	if g.forgotten {
+		g.mu.Unlock()
+		return nil
+	}
+	g.forgotten = true
+	dirs := g.dirs
+	g.dirs = nil
+	g.mu.Unlock()
+
 	var errs []error
 	for _, dir := range dirs {
-		err := w.use(func() error { return w.fs.Remove(dir) })
+		err := g.w.use(func() error { return g.w.fs.Remove(dir) })
 		if err != nil && !errors.Is(err, fsnotify.ErrNonExistentWatch) && !errors.Is(err, fsnotify.ErrClosed) {
 			errs = append(errs, fmt.Errorf("stop following %s: %w", dir, err))
 		}

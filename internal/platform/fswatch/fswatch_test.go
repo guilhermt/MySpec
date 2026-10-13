@@ -72,12 +72,29 @@ func waitEvent(t *testing.T, events <-chan fsnotify.Event, path string) {
 	}
 }
 
+// wantQuiet fails when an event on path comes within quiet.
+func wantQuiet(t *testing.T, events <-chan fsnotify.Event, path string) {
+	t.Helper()
+
+	timeout := time.After(quiet)
+	for {
+		select {
+		case ev := <-events:
+			if ev.Name == path {
+				t.Fatalf("event on %s, want none", path)
+			}
+		case <-timeout:
+			return
+		}
+	}
+}
+
 func TestAFolderAddedReportsWhatIsWrittenInIt(t *testing.T) {
 	t.Parallel()
 	w, events := start(t)
 	dir := t.TempDir()
 
-	if err := w.Add("a", dir); err != nil {
+	if err := w.Open().Add(dir); err != nil {
 		t.Fatalf("Add() = %v, want nil", err)
 	}
 
@@ -87,49 +104,59 @@ func TestAFolderAddedReportsWhatIsWrittenInIt(t *testing.T) {
 func TestAForgottenGroupReportsNothingAndTheOthersCarryOn(t *testing.T) {
 	t.Parallel()
 	w, events := start(t)
-	forgotten, kept := t.TempDir(), t.TempDir()
-	if err := w.Add("forgotten", forgotten); err != nil {
+	forgotten, kept := w.Open(), w.Open()
+	forgottenDir, keptDir := t.TempDir(), t.TempDir()
+	if err := forgotten.Add(forgottenDir); err != nil {
 		t.Fatalf("Add(forgotten) = %v, want nil", err)
 	}
-	if err := w.Add("kept", kept); err != nil {
+	if err := kept.Add(keptDir); err != nil {
 		t.Fatalf("Add(kept) = %v, want nil", err)
 	}
 
-	if err := w.Forget("forgotten", []string{forgotten}); err != nil {
+	if err := forgotten.Forget(); err != nil {
 		t.Fatalf("Forget() = %v, want nil", err)
 	}
-	gone := writeIn(t, forgotten, "notes.md")
-	waitEvent(t, events, writeIn(t, kept, "notes.md"))
+	gone := writeIn(t, forgottenDir, "notes.md")
+	waitEvent(t, events, writeIn(t, keptDir, "notes.md"))
 
-	timeout := time.After(quiet)
-	for {
-		select {
-		case ev := <-events:
-			if ev.Name == gone {
-				t.Fatalf("event on %s, want none from a forgotten group", gone)
-			}
-		case <-timeout:
-			return
-		}
-	}
+	wantQuiet(t, events, gone)
 }
 
-func TestAGroupForgottenAgainOrNeverFollowedIsNotAnError(t *testing.T) {
+func TestAnAddAfterTheGroupIsForgottenIsRefusedAndReportsNothing(t *testing.T) {
+	t.Parallel()
+	w, events := start(t)
+	group := w.Open()
+	if err := group.Add(t.TempDir()); err != nil {
+		t.Fatalf("Add() = %v, want nil", err)
+	}
+	if err := group.Forget(); err != nil {
+		t.Fatalf("Forget() = %v, want nil", err)
+	}
+
+	late := t.TempDir()
+	if err := group.Add(late); !errors.Is(err, fsnotify.ErrClosed) {
+		t.Fatalf("Add() after Forget = %v, want ErrClosed", err)
+	}
+
+	wantQuiet(t, events, writeIn(t, late, "notes.md"))
+}
+
+func TestAGroupForgottenAgainOrNeverGivenAFolderIsNotAnError(t *testing.T) {
 	t.Parallel()
 	w, _ := start(t)
-	dir := t.TempDir()
-	if err := w.Add("a", dir); err != nil {
+	group := w.Open()
+	if err := group.Add(t.TempDir()); err != nil {
 		t.Fatalf("Add() = %v, want nil", err)
 	}
 
-	if err := w.Forget("a", []string{dir}); err != nil {
+	if err := group.Forget(); err != nil {
 		t.Errorf("Forget() = %v, want nil", err)
 	}
-	if err := w.Forget("a", []string{dir}); err != nil {
+	if err := group.Forget(); err != nil {
 		t.Errorf("Forget() again = %v, want nil", err)
 	}
-	if err := w.Forget("never", []string{t.TempDir()}); err != nil {
-		t.Errorf("Forget() of a group never followed = %v, want nil", err)
+	if err := w.Open().Forget(); err != nil {
+		t.Errorf("Forget() of a group never given a folder = %v, want nil", err)
 	}
 }
 
@@ -139,14 +166,21 @@ func TestAddAfterCloseIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() = %v, want nil", err)
 	}
+	followed := w.Open()
+	if err := followed.Add(t.TempDir()); err != nil {
+		t.Fatalf("Add() = %v, want nil", err)
+	}
 	if err := w.Close(); err != nil {
 		t.Fatalf("Close() = %v, want nil", err)
 	}
 
-	if err := w.Add("a", t.TempDir()); !errors.Is(err, fsnotify.ErrClosed) {
-		t.Errorf("Add() after Close = %v, want ErrClosed", err)
+	if err := w.Open().Add(t.TempDir()); !errors.Is(err, fsnotify.ErrClosed) {
+		t.Errorf("Add() to a new group after Close = %v, want ErrClosed", err)
 	}
-	if err := w.Forget("a", []string{t.TempDir()}); err != nil {
+	if err := followed.Add(t.TempDir()); !errors.Is(err, fsnotify.ErrClosed) {
+		t.Errorf("Add() to a group followed before Close = %v, want ErrClosed", err)
+	}
+	if err := followed.Forget(); err != nil {
 		t.Errorf("Forget() after Close = %v, want nil", err)
 	}
 }

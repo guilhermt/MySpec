@@ -54,18 +54,18 @@ func TestForgettingAGroupWhileItsFolderIsWrittenLetsTheFolderGo(t *testing.T) {
 	root := t.TempDir()
 
 	for round := range 50 {
-		name := strconv.Itoa(round)
-		dir := filepath.Join(root, name)
+		dir := filepath.Join(root, strconv.Itoa(round))
 		if err := os.Mkdir(dir, 0o700); err != nil {
 			t.Fatalf("Mkdir(%s) = %v, want nil", dir, err)
 		}
-		if err := w.Add(name, dir); err != nil {
+		group := w.Open()
+		if err := group.Add(dir); err != nil {
 			t.Fatalf("Add(%s) = %v, want nil", dir, err)
 		}
 
 		stop := writeUntilStopped(t, filepath.Join(dir, "notes.md"))
-		if err := w.Forget(name, []string{dir}); err != nil {
-			t.Fatalf("Forget(%s) = %v, want nil", name, err)
+		if err := group.Forget(); err != nil {
+			t.Fatalf("Forget() of %s = %v, want nil", dir, err)
 		}
 		stop()
 

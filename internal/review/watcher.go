@@ -2,6 +2,7 @@ package review
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 
+	"github.com/guilhermt/myspec/internal/platform/fswatch"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
 
@@ -120,19 +122,24 @@ func (s *Service) add(taskID string, wt worktree.Worktree, dirs []string) {
 			s.mu.Unlock()
 			return
 		}
+		group := item.group
 		_, watched := s.owners[dir]
 		s.mu.Unlock()
 		if watched {
 			continue
 		}
 
-		if err := s.fs.Add(taskID, dir); err != nil {
+		if err := group.Add(dir); err != nil {
+			// A group forgotten meanwhile is a worktree no longer watched.
+			if errors.Is(err, fsnotify.ErrClosed) {
+				return
+			}
 			s.log.Warn("review watch failed", "task", taskID, "path", dir, "error", err)
 			continue
 		}
 
 		s.mu.Lock()
-		if item, ok = s.items[taskID]; ok && !s.closed && item.wt.Path == wt.Path {
+		if item, ok = s.items[taskID]; ok && !s.closed && item.group == group {
 			s.owners[dir] = taskID
 			item.dirs = append(item.dirs, dir)
 		}
@@ -140,9 +147,13 @@ func (s *Service) add(taskID string, wt worktree.Worktree, dirs []string) {
 	}
 }
 
-// remove stops following the directories of a task, every one it owns.
-func (s *Service) remove(taskID string, dirs []string) {
-	if err := s.fs.Forget(taskID, dirs); err != nil {
+// remove stops following the directories of a worktree a task left, every
+// one in its group.
+func (s *Service) remove(taskID string, group *fswatch.Group) {
+	if group == nil {
+		return
+	}
+	if err := group.Forget(); err != nil {
 		s.log.Warn("review unwatch failed", "task", taskID, "error", err)
 	}
 }

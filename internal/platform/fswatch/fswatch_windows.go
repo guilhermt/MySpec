@@ -17,62 +17,101 @@ type Watcher struct {
 	fail   func(error)
 
 	mu     sync.Mutex
-	groups map[string]*group
+	groups map[*Group]struct{} // the groups with a watcher, which Close forgets
 	closed bool
 }
 
-// group is the watcher of one group, with the calls to it in flight, which
-// closing it waits for: fsnotify fails its Close, and never answers the call,
-// when the two cross.
-type group struct {
-	fs    *fsnotify.Watcher
+// Group is folders followed together, until it is forgotten. Its watcher
+// starts with the first folder.
+type Group struct {
+	w *Watcher
+
+	mu        sync.Mutex
+	fs        *fsnotify.Watcher
+	forgotten bool
+	// calls are the calls to fs in flight, which Forget waits for: fsnotify
+	// fails its Close, and never answers the call, when the two cross. An Add
+	// can't hold mu while it waits, because the reader it waits for may be
+	// handing an event over to a handle that adds a folder to this group.
 	calls sync.WaitGroup
 }
 
 // New starts a watcher that hands every event to handle and every error to
 // fail, from a goroutine of each group.
 func New(handle func(fsnotify.Event), fail func(error)) (*Watcher, error) {
-	return &Watcher{handle: handle, fail: fail, groups: map[string]*group{}}, nil
+	return &Watcher{handle: handle, fail: fail, groups: map[*Group]struct{}{}}, nil
 }
 
-// Add follows dir as a folder of group. After Close it returns
-// fsnotify.ErrClosed.
-func (w *Watcher) Add(name, dir string) error {
-	w.mu.Lock()
-	if w.closed {
-		w.mu.Unlock()
+// Open starts a group with no folder in it.
+func (w *Watcher) Open() *Group {
+	return &Group{w: w}
+}
+
+// Add follows dir as a folder of the group. Once the group is forgotten, or
+// the watcher closed, it returns fsnotify.ErrClosed and follows nothing.
+func (g *Group) Add(dir string) error {
+	g.mu.Lock()
+	if g.forgotten {
+		g.mu.Unlock()
 		return fsnotify.ErrClosed
 	}
-	g, ok := w.groups[name]
-	if !ok {
-		fsw, err := fsnotify.NewWatcher()
-		if err != nil {
-			w.mu.Unlock()
-			return fmt.Errorf("create watcher: %w", err)
+	if g.fs == nil {
+		if err := g.start(); err != nil {
+			g.mu.Unlock()
+			return err
 		}
-		go drain(fsw, w.handle, w.fail)
-		g = &group{fs: fsw}
-		w.groups[name] = g
 	}
+	fsw := g.fs
 	g.calls.Add(1)
-	w.mu.Unlock()
+	g.mu.Unlock()
 	defer g.calls.Done()
 
-	return g.fs.Add(dir)
+	return fsw.Add(dir)
 }
 
-// Forget stops following group by closing its watcher, whatever folders it
-// holds. A group not followed is not an error.
-func (w *Watcher) Forget(name string, _ []string) error {
-	w.mu.Lock()
-	g, ok := w.groups[name]
-	delete(w.groups, name)
-	w.mu.Unlock()
+// start gives the group its watcher, unless the watcher of every group is
+// closed. It runs under mu.
+func (g *Group) start() error {
+	fsw, err := fsnotify.NewWatcher()
+	if err != nil {
+		return fmt.Errorf("create watcher: %w", err)
+	}
 
-	if !ok {
+	g.w.mu.Lock()
+	if g.w.closed {
+		g.w.mu.Unlock()
+		_ = fsw.Close()
+		return fsnotify.ErrClosed
+	}
+	g.w.groups[g] = struct{}{}
+	g.w.mu.Unlock()
+
+	go drain(fsw, g.w.handle, g.w.fail)
+	g.fs = fsw
+	return nil
+}
+
+// Forget stops following every folder of the group by closing its watcher,
+// once the Add in flight returned. A group forgotten twice is not an error.
+func (g *Group) Forget() error {
+	g.mu.Lock()
+	if g.forgotten {
+		g.mu.Unlock()
 		return nil
 	}
-	return g.close()
+	g.forgotten = true
+	fsw := g.fs
+	g.mu.Unlock()
+
+	g.w.mu.Lock()
+	delete(g.w.groups, g)
+	g.w.mu.Unlock()
+
+	if fsw == nil {
+		return nil
+	}
+	g.calls.Wait()
+	return fsw.Close()
 }
 
 // Close stops following every group.
@@ -80,18 +119,12 @@ func (w *Watcher) Close() error {
 	w.mu.Lock()
 	w.closed = true
 	groups := w.groups
-	w.groups = map[string]*group{}
+	w.groups = map[*Group]struct{}{}
 	w.mu.Unlock()
 
 	var errs []error
-	for _, g := range groups {
-		errs = append(errs, g.close())
+	for g := range groups {
+		errs = append(errs, g.Forget())
 	}
 	return errors.Join(errs...)
-}
-
-// close closes the watcher of the group once the calls in flight returned.
-func (g *group) close() error {
-	g.calls.Wait()
-	return g.fs.Close()
 }

@@ -50,7 +50,8 @@ type Service struct {
 // tracked is one worktree under watch.
 type tracked struct {
 	wt      worktree.Worktree
-	active  bool // readings only happen while the numbers matter
+	group   *fswatch.Group // the directories of wt, which a late add to a worktree left behind can't reach
+	active  bool           // readings only happen while the numbers matter
 	dirs    []string
 	ignored map[string]struct{} // directories git ignores, asked about once
 	snap    Snapshot
@@ -98,16 +99,16 @@ func (s *Service) Track(taskID string, wt worktree.Worktree, active bool) {
 		return
 	}
 
-	var dropped []string
+	var dropped *fswatch.Group
 	switch {
 	case !found:
-		item = &tracked{wt: wt}
+		item = &tracked{wt: wt, group: s.fs.Open()}
 		s.items[taskID] = item
 	case moved:
 		// Another worktree: the one it was reading no longer says anything
 		// about the review, and neither does its reading.
 		dropped = s.releaseLocked(taskID, item)
-		item.wt = wt
+		item.wt, item.group = wt, s.fs.Open()
 		item.snap, item.read = Snapshot{}, false
 	}
 	activated := active && (!found || moved || !item.active)
@@ -289,19 +290,19 @@ func (s *Service) dirsOf(taskID string, wt worktree.Worktree) []string {
 	return dirs
 }
 
-// releaseLocked drops the wait of a task and hands back the directories it
-// owned, for the caller to unwatch outside the mutex.
-func (s *Service) releaseLocked(taskID string, item *tracked) []string {
+// releaseLocked drops the wait of a task and the directories it owned, and
+// hands back their group, for the caller to forget outside the mutex.
+func (s *Service) releaseLocked(taskID string, item *tracked) *fswatch.Group {
 	s.disarmLocked(item)
 
-	dirs := item.dirs
-	for _, dir := range dirs {
+	for _, dir := range item.dirs {
 		if s.owners[dir] == taskID {
 			delete(s.owners, dir)
 		}
 	}
-	item.dirs, item.ignored = nil, nil
-	return dirs
+	group := item.group
+	item.group, item.dirs, item.ignored = nil, nil, nil
+	return group
 }
 
 // disarmLocked stops the wait of a task, so that a timer already running down
