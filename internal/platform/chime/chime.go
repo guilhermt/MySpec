@@ -1,6 +1,7 @@
 // Package chime owns the sound of the notifications of the app: the WAV
 // embedded in the binary, its copy on disk that a notification server reads,
-// and playing it through the audio player the desktop has.
+// and playing it: through the audio player the desktop has on Linux, and
+// through Windows itself on Windows.
 package chime
 
 import (
