@@ -170,7 +170,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 
 	var themeSvc *theme.Service
 	if err = withTimeout(ctx, func(ctx context.Context) (err error) {
-		themeSvc, err = theme.New(ctx, st.Settings, a.systemDark, log, a.publish)
+		themeSvc, err = theme.New(ctx, st.Settings, a.systemDark, log, a.onThemeChanged)
 		return err
 	}); err != nil {
 		return fmt.Errorf("read settings: %w", err)
@@ -315,6 +315,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	})
 	a.theme, a.repositories, a.tasks, a.sessions, a.flow = themeSvc, repositories, tasks, sessions, flowSvc
 	a.worktrees, a.review, a.models, a.machine = worktrees, reviews, modelsSvc, machineSvc
+	a.paintTitleBar(themeSvc.Effective())
 	a.reviewModes, a.boards = reviewModesSvc, boards
 	a.pulls, a.prReviews, a.reviewFlow = pullRequests, prReviews, reviewFlow
 	a.discussions, a.discussionFlow = discussions, discussionFlow

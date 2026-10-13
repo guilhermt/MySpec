@@ -5,6 +5,8 @@ import (
 	"log/slog"
 
 	"github.com/godbus/dbus/v5"
+
+	"github.com/guilhermt/myspec/internal/theme"
 )
 
 // The XDG desktop settings portal, where the desktop publishes its colour
@@ -17,6 +19,10 @@ const (
 	portalKey        = "color-scheme"
 	schemePreferDark = uint32(1)
 )
+
+// paintTitleBar has nothing to paint on Linux, where the compositor or GTK
+// draws the decorations of the window.
+func (a *App) paintTitleBar(theme.Mode) {}
 
 // signalBuffer is how many portal signals may queue up before they are dropped.
 const signalBuffer = 10

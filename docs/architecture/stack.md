@@ -7,7 +7,7 @@ A stack do produto e a razão de cada escolha.
 | Camada | Escolha |
 |---|---|
 | Forma do app | Aplicação desktop para Linux e Windows 11 x64 |
-| Base desktop | Wails v3 (`v3.0.0-beta.16`), backend em Go 1.27, WebKitGTK 6.0 sobre GTK4 no Linux, WebView2 no Windows |
+| Base desktop | Wails v3 (`v3.0.0-beta.23`), backend em Go 1.27, WebKitGTK 6.0 sobre GTK4 no Linux, WebView2 no Windows |
 | Frontend | React 19 com TypeScript em modo strict, Vite |
 | Estilo e componentes | Tailwind CSS 4, shadcn/ui sobre Base UI e o design system do MySpec, fontes Fira Sans e Fira Code, ícones Lucide |
 | Markdown e diagramas | Streamdown, com `@streamdown/code` e `@streamdown/mermaid` |
@@ -22,7 +22,8 @@ A stack do produto e a razão de cada escolha.
 | Artefatos e prompts | Arquivos Markdown no diretório de dados do app (`~/.local/share/myspec/` no Linux, `%LOCALAPPDATA%\MySpec\data\` no Windows) |
 | Estado do app | SQLite via `modernc.org/sqlite`, acessado só pelo Go |
 | Notificações e tema do sistema (Linux) | D-Bus com godbus: `org.freedesktop.Notifications` e o portal de configurações |
-| Som das notificações (Linux) | WAV próprio embutido, tocado por `pw-play`, `paplay` ou `aplay` |
+| Notificações e tema do sistema (Windows) | Toasts do WinRT por COM (`golang.org/x/sys/windows`), o registro do usuário e o evento de tema do Wails |
+| Som das notificações | WAV próprio embutido, tocado por `pw-play`, `paplay` ou `aplay` no Linux e por `PlaySoundW` no Windows |
 | Logs | `slog` em JSON no diretório de estado do app (`~/.local/state/myspec/` no Linux, `%LOCALAPPDATA%\MySpec\state\` no Windows) |
 | Ferramentas | mise, Task, pnpm, Biome, Vitest com jsdom, golangci-lint, gotestsum, govulncheck, go-test-coverage, lefthook, shellcheck |
 
@@ -84,13 +85,23 @@ No Linux, o app fala direto com o barramento de sessão pelo godbus, que o Wails
 - **Tema do sistema**, pelo portal `org.freedesktop.portal.Settings`, assinando `SettingChanged`. No backend GTK4 do Wails, `Env.IsDarkMode()` responde falso antes de o loop principal começar e o evento `ThemeChanged` nunca dispara. Ler o portal diretamente também põe a cor certa atrás do webview desde o primeiro frame, porque a leitura acontece antes de a janela ser criada.
 - **Não perturbe**, lendo o estado que o KDE Plasma (propriedade `Inhibited`), o dunst (`org.dunstproject.cmd0.paused`) e o swaync (`GetDnd`) expõem. As leituras vão com `FlagNoAutoStart`, para que perguntar por um daemon instalado mas parado não o inicie ao lado do servidor que está rodando.
 
+## Windows
+
+No Windows o app fala com a plataforma do sistema por `golang.org/x/sys/windows`, que já é dependência direta, para três coisas:
+
+- **Notificações**, por toasts do WinRT. O service de notificações do Wails grava `LocalServer32` no registro, o que faria um clique abrir o app fechado, e não retira um toast já entregue. O WinRT direto, chamado por COM pelo `x/sys/windows`, cobre a identidade, o `Tag` e o `Group`, o clique pelo activator, a retirada e a leitura do modo de notificação, sem dependência nova.
+- **Tema do sistema**, pelo modo de app (`AppsUseLightTheme`) no registro, lido antes de a janela ser criada, e pelo evento `SystemThemeChanged` do Wails, que no Windows funciona: ele sai do broadcast `ImmersiveColorSet` na hora da troca. A barra de título é pintada por `w32.SetTheme`, para seguir o tema do app mesmo quando o usuário o fixa.
+- **Não perturbe**, lendo o `NotificationMode` do Windows e as configurações de banner e de som do MySpec no registro. A lista de prioritários o Windows não expõe, e por isso não é seguida: todo modo diferente de Unrestricted silencia o carrilhão, e um Windows que não informa o modo o deixa tocar.
+
 ## Som das notificações
 
-O som é só do Linux. Ele é do app e é o mesmo em toda distribuição: `internal/platform/chime/chime.wav`, gerado por `gen.go` a partir de senoides, sem licença de terceiros a acompanhar. É um WAV PCM de 16 bits, mono, 48 kHz, o formato que os três players leem.
+O som é do app e é o mesmo em toda distribuição: `internal/platform/chime/chime.wav`, gerado por `gen.go` a partir de senoides, sem licença de terceiros a acompanhar. É um WAV PCM de 16 bits, mono, 48 kHz, o formato que os três players leem.
 
 Quando o servidor de notificações toca sons, anunciando a capacidade `sound`, como o GNOME Shell, quem toca é ele, com o arquivo do app na hint `sound-file`, e o não perturbe e as preferências de som são os dele. Quando não toca, o app roda um player de áudio do sistema: `pw-play` (PipeWire), `paplay` (PulseAudio, que o PipeWire também serve) e `aplay` (ALSA), nessa ordem, passando ao seguinte quando um falta ou falha. Rodar o player cobre as três pilhas de áudio do Linux sem cgo nem módulo novo, do mesmo jeito que o app já roda `git` e `gh`. Um cliente PulseAudio em Go puro cobriria só a primeira pilha, e o ALSA por cgo manteria um dispositivo de áudio aberto enquanto o app roda.
 
 O não perturbe não tem padrão freedesktop. O app pergunta a quem o expõe: o shell do Omarchy, por `omarchy-shell notifications isDnd`, e o KDE Plasma, o dunst e o swaync, pelo D-Bus. Num sistema que não expõe o estado, o som toca sempre que a notificação é enviada.
+
+No Windows o toast vai mudo, porque um app sem pacote não põe um som próprio num toast, e o app toca o mesmo `chime.wav` com `PlaySoundW` quando `Toaster.Quiet` deixa.
 
 ## Ferramentas de desenvolvimento
 

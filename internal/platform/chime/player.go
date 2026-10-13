@@ -1,14 +1,8 @@
 package chime
 
 import (
-	"bytes"
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
-	"os/exec"
-	"slices"
-	"strings"
 	"sync"
 	"time"
 )
@@ -20,9 +14,9 @@ type Command struct {
 	Args   []string
 }
 
-// DefaultCommands are the players tried in order: PipeWire, PulseAudio (which
-// PipeWire serves too) and bare ALSA. Each reads a 16-bit PCM WAV and plays
-// it on the default output at the volume of the system.
+// DefaultCommands are the players of Linux, tried in order: PipeWire,
+// PulseAudio (which PipeWire serves too) and bare ALSA. Each reads a 16-bit
+// PCM WAV and plays it on the default output at the volume of the system.
 var DefaultCommands = []Command{
 	{Binary: "pw-play"},
 	{Binary: "paplay"},
@@ -38,14 +32,11 @@ const ringTimeout = 5 * time.Second
 // answer delays the chime by at most this much.
 const quietTimeout = 500 * time.Millisecond
 
-// waitDelay is how long a killed player has to release the pipe of its stderr.
-const waitDelay = time.Second
-
 // Deps are what Player needs from the outside.
 type Deps struct {
 	Path     string                         // the chime on disk
-	Commands []Command                      // nil means DefaultCommands
-	Env      []string                       // environment of the players; nil means the parent's; tests use it
+	Commands []Command                      // Linux only; nil means DefaultCommands
+	Env      []string                       // Linux only; environment of the players; nil means the parent's; tests use it
 	Quiet    func(ctx context.Context) bool // whether the desktop holds notifications back; nil counts as never
 	Log      *slog.Logger
 }
@@ -144,59 +135,11 @@ func (p *Player) silenced(ctx context.Context) bool {
 	return p.quiet(qctx)
 }
 
-// play runs each player in turn until one plays the chime. A player that is
-// missing or fails hands over to the next; a context that ran out stops at
-// once, because the next player would be killed just the same.
-func (p *Player) play(ctx context.Context) error {
-	var errs []error
-	for _, command := range p.commands {
-		err := p.run(ctx, command)
-		if err == nil {
-			p.log.Debug("chime played", "player", command.Binary)
-			return nil
-		}
-		errs = append(errs, err)
-		if ctx.Err() != nil {
-			break
-		}
-	}
-	return errors.Join(errs...)
-}
-
-// run plays the chime with one player. The error names the player and carries
-// what it said on stderr.
-func (p *Player) run(ctx context.Context, command Command) error {
-	binary, err := exec.LookPath(command.Binary)
-	if err != nil {
-		return fmt.Errorf("%s: %w", command.Binary, err)
-	}
-
-	args := append(slices.Clone(command.Args), p.path)
-	// No process group: the players spawn no children, so killing the player
-	// is all it takes.
-	cmd := exec.CommandContext(ctx, binary, args...)
-	cmd.Env = p.env
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	cmd.WaitDelay = waitDelay
-
-	if err = cmd.Run(); err == nil {
-		return nil
-	}
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		// The error of the process would only say it was killed.
-		err = ctxErr
-	}
-	if out := strings.TrimSpace(stderr.String()); out != "" {
-		return fmt.Errorf("%s: %w: %s", command.Binary, err, out)
-	}
-	return fmt.Errorf("%s: %w", command.Binary, err)
-}
-
 // Close stops the player: a chime still playing is cut off and nothing rings
 // after it. It returns once the ring in progress is gone, which the
-// cancellation makes immediate: the player process is killed and the
-// do-not-disturb check gives up.
+// cancellation makes immediate: a player process is killed and the
+// do-not-disturb check gives up. A sound the system is still playing, which
+// has no process to kill, is cut off by stop.
 func (p *Player) Close() {
 	p.mu.Lock()
 	p.closed = true
@@ -204,4 +147,5 @@ func (p *Player) Close() {
 
 	p.cancel()
 	p.wg.Wait()
+	p.stop()
 }

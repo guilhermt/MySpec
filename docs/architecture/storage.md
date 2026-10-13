@@ -1,12 +1,13 @@
 # Armazenamento
 
-Tudo que o app guarda fica em dois lugares: o diretório de dados para o estado, os artefatos e as worktrees, e o diretório de estado para o log. No Linux são os diretórios da especificação XDG; no Windows ficam em `%LOCALAPPDATA%\MySpec`, local e não roaming, porque o banco, as worktrees e os caminhos valem só naquela máquina.
+Tudo que o app guarda fica em dois lugares: o diretório de dados para o estado, os artefatos e as worktrees, e o diretório de estado para o log; no Windows o app também escreve no registro do usuário a identidade das notificações, `HKCU\Software\Classes\AppUserModelId\guilhermt.MySpec`, e nada mais fora dos dois diretórios. No Linux são os diretórios da especificação XDG; no Windows ficam em `%LOCALAPPDATA%\MySpec`, local e não roaming, porque o banco, as worktrees e os caminhos valem só naquela máquina.
 
 ## Diretório de dados
 
 `~/.local/share/myspec/` no Linux e `%LOCALAPPDATA%\MySpec\data\` no Windows:
 
 ```
+icons/myspec.png                       o ícone das notificações (Windows)
 myspec.db                              o banco SQLite
 prompts/<nome>.md                      só os prompts editados pelo usuário
 sounds/chime.wav                       o som das notificações
@@ -53,9 +54,9 @@ O artefato no disco é do agente e o produto nunca o reescreve; tudo o que é do
 
 Os prompts padrão vivem no binário, em `internal/prompts/defaults/`. O diretório `prompts/` guarda apenas os que o usuário editou: `prd.md`, `tech_spec.md`, `plan.md`, `one_shot.md`, `step_review.md`, `commit.md`, `pr.md`, `pr_review.md` e `discussion.md`. Um prompt sem arquivo segue o padrão da versão que roda, e um arquivo idêntico ao padrão é removido quando o app inicia, para que um prompt restaurado volte a acompanhar as versões novas. O prompt é lido quando uma sessão começa. A hora de uma edição é a do arquivo (`EditedAt`), e a lista de prompts das configurações sai só dessas horas, sem ler nenhum texto (`prompts.List`). Cada prompt informa quantas linhas tem o texto e quantas tem o padrão, sem contar a quebra de linha final.
 
-### Som
+### Som e ícone
 
-`sounds/chime.wav` é uma cópia do som embutido no binário, escrita ao iniciar quando falta ou difere, para que um servidor de notificações que toca sons a leia por caminho. Apagá-la é inofensivo: o app a escreve de novo na próxima vez que abrir.
+`sounds/chime.wav` é uma cópia do som embutido no binário, escrita ao iniciar quando falta ou difere, para que a leiam por caminho o servidor de notificações do Linux que toca sons e o próprio app no Windows. `icons/myspec.png` é a cópia do ícone do app que a plataforma de notificações do Windows lê, escrita ao iniciar quando falta ou difere. Apagar qualquer das duas é inofensivo: o app a escreve de novo na próxima vez que abrir.
 
 ### Migração dos dados
 

@@ -30,6 +30,7 @@ func (a *App) openWindow(cfg Config, mode theme.Mode) {
 		BackgroundColour: backgroundFor(mode),
 		URL:              "/",
 		Linux:            application.LinuxWindow{Icon: cfg.Icon},
+		Windows:          application.WindowsWindow{Theme: windowTheme(mode)},
 	})
 
 	a.mu.Lock()

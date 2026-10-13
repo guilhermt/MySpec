@@ -119,7 +119,7 @@ func (d desktopServer) Notify(summary, body string, sound bool) (uint32, error) 
 		uint32(0), // replaces no notification
 		desktopEntry,
 		summary,
-		body,
+		notify.EscapeMarkup(body),
 		[]string{notify.DefaultAction, "Open"},
 		hints,
 		int32(-1), // the expiration the server is configured with

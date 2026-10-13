@@ -21,6 +21,9 @@ var NewThrottle = newThrottle
 // ModeFor exposes modeFor to the external tests of the package.
 var ModeFor = modeFor
 
+// WindowTheme exposes windowTheme to the external tests of the package.
+var WindowTheme = windowTheme
+
 // SlowAfter exposes slowAfter to the external tests of the package.
 const SlowAfter = slowAfter
 

@@ -1,5 +1,6 @@
-// Package notify shows desktop notifications through the freedesktop
-// notification service and follows what the user does with them. A
+// Package notify shows desktop notifications through the notification service
+// of the system, the freedesktop service on Linux and the toasts on Windows,
+// each behind Server, and follows what the user does with them. A
 // notification dismissed by the user is only forgotten; a click on it is what
 // the app hears about. A notification that starts a burst makes a sound: the
 // server plays the chime of the app when it plays sounds, and the app rings it
@@ -7,6 +8,7 @@
 package notify
 
 import (
+	"io"
 	"log/slog"
 	"slices"
 	"strings"
@@ -43,13 +45,16 @@ const burstWindow = 2 * time.Second
 // for a tag or an entity.
 var markupEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
 
-// Server is the freedesktop notification service, reduced to the calls the
-// app makes.
+// Server is the notification service of the system, reduced to the calls the
+// app makes. A server that is also an io.Closer is closed once the notifier has
+// withdrawn what it shows.
 type Server interface {
 	// Capabilities are the optional features the server announces.
 	Capabilities() ([]string, error)
-	// Notify shows a notification. With sound, the server plays the chime of
-	// the app along with it; without, it is asked to play nothing.
+	// Notify shows a notification. The summary and the body arrive as plain
+	// text: a server that reads markup escapes the body itself. With sound, the
+	// server plays the chime of the app along with it; without, it is asked to
+	// play nothing.
 	Notify(summary, body string, sound bool) (uint32, error)
 	CloseNotification(id uint32) error
 }
@@ -127,7 +132,7 @@ func (n *Notifier) Send(id, title, body string) {
 		now := n.now()
 		sound := n.soundDue(now)
 		serverPlays := sound && n.serverPlaysSounds()
-		serverID, err := n.server.Notify(title, escapeMarkup(body), serverPlays)
+		serverID, err := n.server.Notify(title, body, serverPlays)
 		if err != nil {
 			n.log.Warn("send notification failed", "id", id, "err", err)
 			return
@@ -187,14 +192,7 @@ func (n *Notifier) HandleSignal(signal *dbus.Signal) {
 		if !isID || !isAction || action != DefaultAction {
 			return
 		}
-		n.enqueue(func() {
-			id, known := n.ids[serverID]
-			if !known {
-				return
-			}
-			n.forget(serverID)
-			n.onClick(id)
-		})
+		n.Activate(serverID)
 	case notificationClosed:
 		if len(signal.Body) == 0 {
 			return
@@ -207,6 +205,21 @@ func (n *Notifier) HandleSignal(signal *dbus.Signal) {
 		// anything.
 		n.enqueue(func() { n.forget(serverID) })
 	}
+}
+
+// Activate follows a click on the notification the server knows by serverID.
+// A notification the notifier does not know, because it was already clicked
+// or went away, is ignored. Like HandleSignal, it returns at once: the click
+// waits its turn on the goroutine behind what was asked for before it.
+func (n *Notifier) Activate(serverID uint32) {
+	n.enqueue(func() {
+		id, known := n.ids[serverID]
+		if !known {
+			return
+		}
+		n.forget(serverID)
+		n.onClick(id)
+	})
 }
 
 // Close withdraws every notification still shown and stops. It returns once
@@ -238,6 +251,11 @@ func (n *Notifier) loop() {
 	}
 	for id := range n.shown {
 		n.withdraw(id)
+	}
+	if closer, ok := n.server.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
+			n.log.Warn("close notification server failed", "err", err)
+		}
 	}
 }
 
@@ -283,10 +301,10 @@ func (n *Notifier) forget(serverID uint32) {
 	delete(n.shown, id)
 }
 
-// escapeMarkup keeps the body as it was written on a server that announces
-// body-markup, as most do, and reads the body as markup: a repository named
-// with an & would otherwise lose part of its name. The title is plain text by
-// the specification and goes as it is.
-func escapeMarkup(body string) string {
+// EscapeMarkup keeps a body as it was written on a freedesktop server that
+// announces body-markup, as most do, and reads the body as markup: a
+// repository named with an & would otherwise lose part of its name. The
+// title is plain text by the specification and needs no escaping.
+func EscapeMarkup(body string) string {
 	return markupEscaper.Replace(body)
 }
