@@ -50,7 +50,7 @@ Go: 60% por arquivo, 70% por pacote, 80% no total, excluindo `internal/app`, `ma
 
 ### Linux e Windows
 
-Todo teste Go roda nos dois sistemas.
+Todo teste Go compila nos dois sistemas, e o CI confere que compila ([ci.md](../development/ci.md)).
 
 - Um teste que depende do Unix (sinais, `chmod` numa pasta, bits de permissão, scripts `#!/bin/sh`, `setrlimit`) vai para um arquivo `_linux_test.go`.
 - Uma conferência pontual de permissão fica atrás de `runtime.GOOS != "windows"`.

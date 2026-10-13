@@ -43,6 +43,7 @@ O hook, definido em `lefthook.yml`, é de pre-commit e só formata: Biome nos ar
 | `task fmt` | Formata Go e frontend |
 | `task lint` | `lint:go` (golangci-lint), `lint:web` (Biome, as regras do design e o `knip`) e `lint:sh` (`shellcheck` no `install.sh`) |
 | `task lint:go:ci` / `task test:go:ci` | O lint e os testes Go sem race de todo pacote menos os três que importam o Wails; o que o CI roda ([ci.md](./ci.md)) |
+| `task check:windows` | Compila para Windows o app e os testes Go, sem rodá-los, com `go vet` e `go build`; o CI roda ([ci.md](./ci.md)) |
 | `task typecheck` | `tsc --noEmit` no frontend |
 | `task test` | `test:go` (os testes Go, com o cache de testes) e `test:web` (os testes do frontend que a branch alcança), sem cobertura ([testing.md](../guidelines/testing.md)) |
 | `task test:full` | `test:go:full` e depois `test:web:full`: todos os testes, com race, embaralhamento, cobertura e os limiares |
