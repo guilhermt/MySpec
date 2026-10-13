@@ -3,6 +3,7 @@ package session_test
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -163,11 +164,18 @@ func TestForShortensHome(t *testing.T) {
 		t.Skipf("no home directory: %v", err)
 	}
 
-	input := json.RawMessage(`{"file_path":"` + home + `/notes/todo.md"}`)
-	if target := session.For("Read", input, "/work/api").Target; target != "~/notes/todo.md" {
-		t.Errorf("target = %q, want ~/notes/todo.md", target)
+	file, err := json.Marshal(map[string]string{"file_path": filepath.Join(home, "notes", "todo.md")})
+	if err != nil {
+		t.Fatalf("marshal input: %v", err)
 	}
-	input = json.RawMessage(`{"file_path":"` + home + `"}`)
+	want := "~" + string(filepath.Separator) + filepath.Join("notes", "todo.md")
+	if target := session.For("Read", file, "/work/api").Target; target != want {
+		t.Errorf("target = %q, want %q", target, want)
+	}
+	input, err := json.Marshal(map[string]string{"file_path": home})
+	if err != nil {
+		t.Fatalf("marshal input: %v", err)
+	}
 	if target := session.For("Read", input, "/work/api").Target; target != "~" {
 		t.Errorf("target = %q, want ~", target)
 	}

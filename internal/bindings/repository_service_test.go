@@ -44,7 +44,7 @@ func TestBrowseRepositoryRegistersTheFolderTheUserChose(t *testing.T) {
 	if title != "Add repository" || calls != 1 {
 		t.Errorf("picker = %q after %d calls, want the add dialog once", title, calls)
 	}
-	if startIn != os.Getenv("HOME") {
+	if startIn != homeDir() {
 		t.Errorf("startIn = %q, want the home directory", startIn)
 	}
 }
@@ -329,7 +329,7 @@ func TestCloneRepositoryCancelledAtTheFolderChooserChangesNothing(t *testing.T) 
 		t.Fatalf("CloneRepository() = %t, %v, want false, nil", started, err)
 	}
 	title, startIn, calls := f.picker.asked()
-	if title != "Choose the clone folder" || startIn != os.Getenv("HOME") || calls != 1 {
+	if title != "Choose the clone folder" || startIn != homeDir() || calls != 1 {
 		t.Errorf("picker = %q at %q after %d calls, want the clone folder chooser at home once", title, startIn, calls)
 	}
 	if got := f.state.GetState().CloneFolder; got != "" {
@@ -364,7 +364,7 @@ func TestChooseCloneFolderStartsAtTheCurrentFolder(t *testing.T) {
 	if err := f.repoService.ChooseCloneFolder(); err != nil {
 		t.Fatalf("ChooseCloneFolder() = %v, want nil", err)
 	}
-	if _, startIn, _ := f.picker.asked(); startIn != os.Getenv("HOME") {
+	if _, startIn, _ := f.picker.asked(); startIn != homeDir() {
 		t.Errorf("startIn = %q, want the home directory", startIn)
 	}
 
@@ -416,4 +416,14 @@ func TestARepositoryCountsTheReviewsOfItsPullRequests(t *testing.T) {
 		!strings.Contains(err.Error(), "1 active review") {
 		t.Errorf("RemoveRepository() = %v, want the refusal about the reviews of the repository", err)
 	}
+}
+
+// homeDir is the home directory the way the service reads it: empty when the
+// system has none.
+func homeDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return home
 }

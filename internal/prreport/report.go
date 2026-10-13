@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -280,10 +281,18 @@ func parseLocation(number int, value string) (path string, line int, err error) 
 		return "", 0, fmt.Errorf("%w: finding %d points at %q, which has no line",
 			ErrUnreadable, number, value)
 	}
-	path = filepath.Clean(strings.TrimSpace(value[:at]))
-	if path == "." || filepath.IsAbs(path) || path == ".." || strings.HasPrefix(path, ".."+string(filepath.Separator)) {
+	// The location is how the diff and GitHub write it, with slashes; a report
+	// written on Windows may use backslashes.
+	path = pathpkg.Clean(strings.ReplaceAll(strings.TrimSpace(value[:at]), `\`, "/"))
+	if path == "." || hasDrive(path) || !filepath.IsLocal(path) {
 		return "", 0, fmt.Errorf("%w: finding %d points at %q, which is outside the pull request",
 			ErrUnreadable, number, value)
 	}
 	return path, line, nil
+}
+
+// hasDrive says whether a path starts with a Windows drive letter, which is
+// outside the pull request whatever system reads it.
+func hasDrive(path string) bool {
+	return len(path) >= 2 && path[1] == ':' && (path[0]|0x20) >= 'a' && (path[0]|0x20) <= 'z'
 }

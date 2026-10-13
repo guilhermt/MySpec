@@ -37,13 +37,13 @@ func TestPRPaths(t *testing.T) {
 
 	tk := task.Task{ArtifactsDir: "/data/add-login"}
 
-	if got, want := tk.PRDir(), "/data/add-login/pr"; got != want {
+	if got, want := tk.PRDir(), filepath.FromSlash("/data/add-login/pr"); got != want {
 		t.Errorf("PRDir() = %q, want %q", got, want)
 	}
-	if got, want := tk.DraftPath(), "/data/add-login/pr/draft.md"; got != want {
+	if got, want := tk.DraftPath(), filepath.FromSlash("/data/add-login/pr/draft.md"); got != want {
 		t.Errorf("DraftPath() = %q, want %q", got, want)
 	}
-	if got, want := tk.ReviewPath(2), "/data/add-login/pr/review-2.md"; got != want {
+	if got, want := tk.ReviewPath(2), filepath.FromSlash("/data/add-login/pr/review-2.md"); got != want {
 		t.Errorf("ReviewPath() = %q, want %q", got, want)
 	}
 }

@@ -48,7 +48,7 @@ The commits mix two changes.
 			{
 				Number: 1,
 				Title:  "Missing test",
-				Path:   filepath.Join("internal", "task", "service.go"),
+				Path:   "internal/task/service.go",
 				Line:   120,
 				Text:   "The new branch has no test.\n\nIt fails silently.",
 			},
@@ -114,6 +114,7 @@ func TestAReportTheProductCannotActOnIsUnreadable(t *testing.T) {
 		{"with a line of zero", report("changes", "## Findings\n\n### 1\nLocation: main.go:0\n\nA thing.\n")},
 		{"with a path out of the pull request", report("changes", "## Findings\n\n### 1\nLocation: ../secrets.txt:2\n\nA thing.\n")},
 		{"with an absolute path", report("changes", "## Findings\n\n### 1\nLocation: /etc/passwd:2\n\nA thing.\n")},
+		{"with a path of a Windows drive", report("changes", "## Findings\n\n### 1\nLocation: C:\\x\\a.go:3\n\nA thing.\n")},
 		{"with a finding that says nothing", report("changes", "## Findings\n\n### 1\nLocation: main.go:2\n")},
 	}
 
@@ -239,6 +240,21 @@ func TestALocationInBackticksPointsAtTheSameLine(t *testing.T) {
 	}
 
 	want := []prreport.ParsedFinding{{Number: 1, Path: "main.go", Line: 12, Text: "A thing."}}
+	if diff := cmp.Diff(want, got.Findings); diff != "" {
+		t.Errorf("findings (-want +got):\n%s", diff)
+	}
+}
+
+func TestABackslashLocationIsReadWithSlashes(t *testing.T) {
+	t.Parallel()
+
+	content := report("changes", "## Findings\n\n### 1\nLocation: internal\\board\\service.go:12\n\nA thing.\n")
+	got, err := prreport.ParseReport(content, 1)
+	if err != nil {
+		t.Fatalf("parse report: %v", err)
+	}
+
+	want := []prreport.ParsedFinding{{Number: 1, Path: "internal/board/service.go", Line: 12, Text: "A thing."}}
 	if diff := cmp.Diff(want, got.Findings); diff != "" {
 		t.Errorf("findings (-want +got):\n%s", diff)
 	}

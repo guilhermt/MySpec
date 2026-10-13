@@ -332,7 +332,7 @@ func TestTheSettersOfADefaultSayWhenTheDiskIsFull(t *testing.T) {
 	}{
 		{"outside the home", func(f *fixture) (string, string) { return f.dataDir, f.dataDir }},
 		{"under the home", func(*fixture) (string, string) {
-			return filepath.Join(home, ".local", "share", "myspec"), "~/.local/share/myspec"
+			return filepath.Join(home, ".local", "share", "myspec"), "~" + string(filepath.Separator) + filepath.Join(".local", "share", "myspec")
 		}},
 	}
 	for _, test := range tests {

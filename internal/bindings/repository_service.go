@@ -3,7 +3,6 @@ package bindings
 import (
 	"context"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -78,7 +77,7 @@ func (s *RepositoryService) BrowseRepository() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	path, ok, err := s.picker.PickFolder("Add repository", os.Getenv("HOME"))
+	path, ok, err := s.picker.PickFolder("Add repository", homeDir())
 	if err != nil {
 		return false, s.fail("BrowseRepository", err)
 	}
@@ -106,7 +105,7 @@ func (s *RepositoryService) ChangeRepositoryPath(id string) (changed bool, err e
 	if !ok {
 		return false, s.fail("ChangeRepositoryPath", repository.ErrNotFound)
 	}
-	startIn := os.Getenv("HOME")
+	startIn := homeDir()
 	if repo.Path != "" {
 		startIn = filepath.Dir(repo.Path)
 	}
@@ -137,7 +136,7 @@ func (s *RepositoryService) CloneRepository(id string) (started bool, err error)
 	}
 	folder := ""
 	if s.repositories.CloneFolder() == "" {
-		chosen, picked, pickErr := s.picker.PickFolder("Choose the clone folder", os.Getenv("HOME"))
+		chosen, picked, pickErr := s.picker.PickFolder("Choose the clone folder", homeDir())
 		if pickErr != nil {
 			return false, s.fail("CloneRepository", pickErr)
 		}
@@ -171,7 +170,7 @@ func (s *RepositoryService) ChooseCloneFolder() error {
 	}
 	startIn := s.repositories.CloneFolder()
 	if startIn == "" {
-		startIn = os.Getenv("HOME")
+		startIn = homeDir()
 	}
 	folder, picked, err := s.picker.PickFolder("Choose the clone folder", startIn)
 	if err != nil {

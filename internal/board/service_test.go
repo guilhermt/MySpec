@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -963,12 +964,12 @@ func TestAddRepositoryTiesOneMoreRepositoryToTheBoard(t *testing.T) {
 	f.repos.items = []repository.Repository{{ID: "repo-web", Owner: "acme", Name: "web"}}
 	f.clones["/src/web"] = repository.Identity{Owner: "acme", Name: "web"}
 
-	choice := board.RepositoryChoice{Owner: "acme", Name: "web", Path: "/src/web"}
+	choice := board.RepositoryChoice{Owner: "acme", Name: "web", Path: filepath.FromSlash("/src/web")}
 	if err := f.service.AddRepository(t.Context(), boardID, choice); err != nil {
 		t.Fatalf("AddRepository() = %v, want nil", err)
 	}
 
-	if diff := cmp.Diff([]board.Link{{RepositoryID: "repo-web", Path: "/src/web"}}, f.store.links); diff != "" {
+	if diff := cmp.Diff([]board.Link{{RepositoryID: "repo-web", Path: filepath.FromSlash("/src/web")}}, f.store.links); diff != "" {
 		t.Errorf("the links stored (-want +got):\n%s", diff)
 	}
 	if len(f.store.releases) != 0 {
@@ -992,9 +993,9 @@ func TestAddRegistersTheBoardWithItsRepositoriesAndReadsIt(t *testing.T) {
 	got, err := f.service.Add(t.Context(), otherURL, board.SaveParams{
 		FinalStatuses: []string{done.ID, "opt-gone"},
 		Repositories: []board.RepositoryChoice{
-			{Owner: "acme", Name: "web", Path: "/src/web/"},
+			{Owner: "acme", Name: "web", Path: filepath.FromSlash("/src/web/")},
 			{Owner: "acme", Name: "infra"},
-			{Owner: "acme", Name: "api", Path: "/src/api"},
+			{Owner: "acme", Name: "api", Path: filepath.FromSlash("/src/api")},
 		},
 	})
 	if err != nil {
@@ -1017,9 +1018,9 @@ func TestAddRegistersTheBoardWithItsRepositoriesAndReadsIt(t *testing.T) {
 		t.Errorf("Add() (-want +got):\n%s", diff)
 	}
 	wantLinks := []board.Link{
-		{NewID: "id-1", Owner: "acme", Name: "web", Path: "/src/web", CreatedAt: base},
+		{NewID: "id-1", Owner: "acme", Name: "web", Path: filepath.FromSlash("/src/web"), CreatedAt: base},
 		{NewID: "id-2", Owner: "acme", Name: "infra", CreatedAt: base},
-		{RepositoryID: "repo-api", Path: "/src/api"},
+		{RepositoryID: "repo-api", Path: filepath.FromSlash("/src/api")},
 	}
 	if diff := cmp.Diff(wantLinks, f.store.links); diff != "" {
 		t.Errorf("the links stored (-want +got):\n%s", diff)
@@ -1039,10 +1040,10 @@ func TestAddRefusesAClonePathOfAnotherRepository(t *testing.T) {
 	f.clones["/src/web"] = repository.Identity{Owner: "acme", Name: "api"}
 
 	_, err := f.service.Add(t.Context(), otherURL, board.SaveParams{
-		Repositories: []board.RepositoryChoice{{Owner: "acme", Name: "web", Path: "/src/web"}},
+		Repositories: []board.RepositoryChoice{{Owner: "acme", Name: "web", Path: filepath.FromSlash("/src/web")}},
 	})
 
-	want := &repository.Refusal{Reason: repository.ReasonOtherRepository, Path: "/src/web", Other: "acme/api", Repository: "acme/web"}
+	want := &repository.Refusal{Reason: repository.ReasonOtherRepository, Path: filepath.FromSlash("/src/web"), Other: "acme/api", Repository: "acme/web"}
 	if diff := cmp.Diff(error(want), err); diff != "" {
 		t.Errorf("Add() error (-want +got):\n%s", diff)
 	}
