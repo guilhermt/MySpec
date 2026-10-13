@@ -62,6 +62,7 @@ const (
 type App struct {
 	log            *slog.Logger
 	dirs           xdg.Dirs
+	icon           []byte             // the application icon, which the toasts of Windows show
 	services       *bindings.Services // the placeholders Wails holds, bound when the startup ends
 	startup        *startup
 	deps           attemptDeps // what an attempt reaches outside the data directory with
@@ -128,7 +129,7 @@ func Run(cfg Config) int {
 
 	applyWebKitEnvironment()
 
-	a := &App{log: log, dirs: dirs, services: bindings.NewWaitingServices()}
+	a := &App{log: log, dirs: dirs, icon: cfg.Icon, services: bindings.NewWaitingServices()}
 	a.publisher = newThrottle(publishWindow, a.publishNow)
 	a.systemDark = readSystemDark(log)
 	a.deps = a.desktopDeps()
