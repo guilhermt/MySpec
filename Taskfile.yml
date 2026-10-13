@@ -11,6 +11,10 @@ vars:
   # other build is a dev build.
   RELEASE_VERSION:
     sh: cat VERSION
+  # The date of the commit, the date of every entry of the release packages, so the same commit packs
+  # into the same bytes.
+  SOURCE_DATE_EPOCH:
+    sh: git log -1 --format=%ct HEAD
   # JOBS caps the parallelism of each tool in a run. Agents run the checks side by side and every
   # tool defaults to all the cores, so an uncapped run takes the machine. MYSPEC_JOBS overrides it;
   # the default is 4, or the cores there are when there are fewer.
@@ -23,6 +27,7 @@ vars:
 includes:
   common: ./build/Taskfile.yml
   linux: ./build/linux/Taskfile.yml
+  windows: ./build/windows/Taskfile.yml
 
 tasks:
   setup:
@@ -233,14 +238,16 @@ tasks:
         ignore_error: true
 
   package:
-    summary: Builds the release package, bin/myspec-linux-amd64.tar.gz, with the version in VERSION
+    summary: Builds the release packages, bin/myspec-linux-amd64.tar.gz and bin/myspec-windows-amd64.zip, with the version in VERSION
+    cmds:
+      - task: package:linux
+      - task: package:windows
+
+  package:linux:
+    summary: Builds the Linux release package, bin/myspec-linux-amd64.tar.gz
     vars:
-      PACKAGE_DIR: '{{.BIN_DIR}}/package'
+      PACKAGE_DIR: '{{.BIN_DIR}}/package/linux'
       PACKAGE: '{{.BIN_DIR}}/{{.APP_NAME}}-linux-amd64.tar.gz'
-      # Every entry of the archive gets the date of the commit, so the same commit packs into the
-      # same bytes.
-      SOURCE_DATE_EPOCH:
-        sh: git log -1 --format=%ct HEAD
     cmds:
       - rm -rf {{.PACKAGE_DIR}} {{.PACKAGE}}
       - task: linux:build
@@ -257,6 +264,24 @@ tasks:
         --mtime=@{{.SOURCE_DATE_EPOCH}} --owner=0 --group=0 --numeric-owner
         {{.APP_NAME}} {{.APP_ID}}.desktop {{.APP_ID}}.png {{.APP_ID}}.svg
         | gzip -9 --no-name > {{.PACKAGE}}
+
+  package:windows:
+    summary: Builds the Windows release package, bin/myspec-windows-amd64.zip, cross-compiled from Linux
+    vars:
+      PACKAGE_DIR: '{{.BIN_DIR}}/package/windows'
+      # What the build needs and the package does not carry.
+      RESOURCES_DIR: '{{.BIN_DIR}}/package/windows-resources'
+      PACKAGE: '{{.BIN_DIR}}/{{.APP_NAME}}-windows-amd64.zip'
+    cmds:
+      - rm -rf {{.PACKAGE_DIR}} {{.RESOURCES_DIR}} {{.PACKAGE}}
+      - mkdir -p {{.PACKAGE_DIR}} {{.RESOURCES_DIR}}
+      - task: windows:build
+        vars:
+          APP_VERSION: '{{.RELEASE_VERSION}}'
+          OUTPUT: '{{.PACKAGE_DIR}}/{{.APP_NAME}}.exe'
+          ICON: '{{.PACKAGE_DIR}}/{{.APP_NAME}}.ico'
+          RESOURCES_DIR: '{{.RESOURCES_DIR}}'
+      - go run ./cmd/zip -o {{.PACKAGE}} -C {{.PACKAGE_DIR}} -mtime {{.SOURCE_DATE_EPOCH}} {{.APP_NAME}}.exe {{.APP_NAME}}.ico
 
   release:
     summary: Publishes a release; task release -- <patch|minor|major>

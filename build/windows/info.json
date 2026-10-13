@@ -1,0 +1,19 @@
+{
+	"fixed": {
+		"file_version": "@VERSION@",
+		"product_version": "@VERSION@"
+	},
+	"info": {
+		"0000": {
+			"CompanyName": "Guilherme Martins",
+			"FileDescription": "MySpec",
+			"FileVersion": "@VERSION@",
+			"InternalName": "myspec",
+			"LegalCopyright": "(c) 2026, Guilherme Martins",
+			"OriginalFilename": "myspec.exe",
+			"ProductName": "MySpec",
+			"ProductVersion": "@VERSION@",
+			"Comments": "Orchestrates a Claude Code development workflow"
+		}
+	}
+}

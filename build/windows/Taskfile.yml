@@ -1,0 +1,32 @@
+version: '3'
+
+includes:
+  common: ../Taskfile.yml
+
+tasks:
+  build:
+    summary: Cross-compiles the production application for Windows amd64, with the icon, the manifest and the file properties
+    requires:
+      vars: [APP_VERSION, OUTPUT, ICON, RESOURCES_DIR]
+    deps:
+      - task: common:build:frontend
+        vars:
+          BUILD_FLAGS:
+            ref: .BUILD_FLAGS
+    cmds:
+      # go build links every .syso file in the directory of the package it builds, so the resources
+      # sit at the root only for the build.
+      - defer: rm -f {{.SYSO}}
+      - sed 's|@VERSION@|{{.APP_VERSION}}|g' build/windows/info.json > {{.RESOURCES_DIR}}/info.json
+      - wails3 generate icons -input build/appicon.png -windowsfilename {{.ICON}} -macfilename ''
+      - >-
+        wails3 generate syso -arch amd64 -icon {{.ICON}} -manifest build/windows/myspec.exe.manifest
+        -info {{.RESOURCES_DIR}}/info.json -out {{.SYSO}}
+      - go build {{.BUILD_FLAGS}} -o {{.OUTPUT}}
+    vars:
+      BUILD_FLAGS: '-tags production -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui -X main.version={{.APP_VERSION}}"'
+      SYSO: '{{.APP_NAME}}_windows_amd64.syso'
+    env:
+      GOOS: windows
+      GOARCH: amd64
+      CGO_ENABLED: 0
