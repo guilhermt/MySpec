@@ -1,32 +1,21 @@
-// Package xdg resolves the app directories inside the XDG base directory spec.
+// Package xdg resolves the app directories: inside the XDG base directories on
+// Linux, and in the local app data folder on Windows.
 package xdg
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/adrg/xdg"
 )
 
-// appDir is the directory name the app owns inside each XDG base directory.
-const appDir = "myspec"
-
-// dirPerm keeps the app directories private to the user.
+// dirPerm keeps the app directories private to the user. Windows ignores it; the
+// folder of the user is already private to them.
 const dirPerm = 0o700
 
-// Dirs holds the app directories inside the XDG base directory spec.
+// Dirs holds the app directories.
 type Dirs struct {
-	Data  string // $XDG_DATA_HOME/myspec  (~/.local/share/myspec)
-	State string // $XDG_STATE_HOME/myspec (~/.local/state/myspec)
-}
-
-// Resolve returns the app directories for the current environment.
-func Resolve() Dirs {
-	return Dirs{
-		Data:  filepath.Join(xdg.DataHome, appDir),
-		State: filepath.Join(xdg.StateHome, appDir),
-	}
+	Data  string // ~/.local/share/myspec on Linux, %LOCALAPPDATA%\MySpec\data on Windows
+	State string // ~/.local/state/myspec on Linux, %LOCALAPPDATA%\MySpec\state on Windows
 }
 
 // Ensure creates the directories, private to the user.

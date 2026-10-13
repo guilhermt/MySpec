@@ -3,10 +3,10 @@ package xdg_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	basedir "github.com/adrg/xdg"
-	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/platform/xdg"
 )
@@ -20,26 +20,13 @@ func setBases(t *testing.T, root string) {
 	t.Cleanup(basedir.Reload)
 }
 
-func TestResolve(t *testing.T) {
-	root := t.TempDir()
-	setBases(t, root)
-
-	want := xdg.Dirs{
-		Data:  filepath.Join(root, "data", "myspec"),
-		State: filepath.Join(root, "state", "myspec"),
-	}
-	if diff := cmp.Diff(want, xdg.Resolve()); diff != "" {
-		t.Errorf("Resolve() mismatch (-want +got):\n%s", diff)
-	}
-}
-
 func TestPaths(t *testing.T) {
-	dirs := xdg.Dirs{Data: "/data", State: "/state"}
+	dirs := xdg.Dirs{Data: filepath.FromSlash("/data"), State: filepath.FromSlash("/state")}
 
-	if got, want := dirs.DatabasePath(), "/data/myspec.db"; got != want {
+	if got, want := dirs.DatabasePath(), filepath.Join(dirs.Data, "myspec.db"); got != want {
 		t.Errorf("DatabasePath() = %q, want %q", got, want)
 	}
-	if got, want := dirs.LogPath(), "/state/myspec.log"; got != want {
+	if got, want := dirs.LogPath(), filepath.Join(dirs.State, "myspec.log"); got != want {
 		t.Errorf("LogPath() = %q, want %q", got, want)
 	}
 }
@@ -61,8 +48,11 @@ func TestEnsureCreatesDirectories(t *testing.T) {
 		if !info.IsDir() {
 			t.Errorf("%s is not a directory", dir)
 		}
-		if got := info.Mode().Perm(); got != 0o700 {
-			t.Errorf("%s permissions = %v, want %v", dir, got, os.FileMode(0o700))
+		// Windows has no permission bits.
+		if runtime.GOOS != "windows" {
+			if got := info.Mode().Perm(); got != 0o700 {
+				t.Errorf("%s permissions = %v, want %v", dir, got, os.FileMode(0o700))
+			}
 		}
 	}
 }
