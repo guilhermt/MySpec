@@ -12,8 +12,9 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
+
+	"github.com/guilhermt/myspec/internal/platform/procgroup"
 )
 
 // The ways a gh command fails without the app having anything to show.
@@ -118,14 +119,12 @@ func (r *Runner) RunInput(ctx context.Context, dir, stdin string, args ...string
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	}
-	// Its own process group, so a cancellation also reaches the git or the
-	// credential helper gh opened.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.WaitDelay = waitDelay
 
 	started := time.Now()
-	runErr := cmd.Run()
+	// Its own group, so a cancellation also reaches the git or the credential
+	// helper gh opened.
+	runErr := procgroup.Run(cmd)
 	exitCode := -1
 	if cmd.ProcessState != nil {
 		exitCode = cmd.ProcessState.ExitCode()
