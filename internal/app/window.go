@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 
 	"github.com/guilhermt/myspec/internal/theme"
 )
@@ -31,6 +32,10 @@ func (a *App) openWindow(cfg Config, mode theme.Mode) {
 		URL:              "/",
 		Linux:            application.LinuxWindow{Icon: cfg.Icon},
 		Windows:          application.WindowsWindow{Theme: windowTheme(mode)},
+	})
+
+	window.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
+		a.backdrop.ready(func(colour application.RGBA) { window.SetBackgroundColour(colour) })
 	})
 
 	a.mu.Lock()

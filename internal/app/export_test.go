@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/wailsapp/wails/v3/pkg/application"
+
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/platform/notify"
 	"github.com/guilhermt/myspec/internal/platform/xdg"
@@ -32,6 +34,15 @@ func (t *throttle) Request() { t.request() }
 
 // Stop exposes stop to the external tests of the package.
 func (t *throttle) Stop() { t.stop() }
+
+// Backdrop exposes backdrop to the external tests of the package.
+type Backdrop = backdrop
+
+// Set exposes set to the external tests of the package.
+func (b *backdrop) Set(colour application.RGBA) { b.set(colour) }
+
+// Ready exposes ready to the external tests of the package.
+func (b *backdrop) Ready(paint func(application.RGBA)) { b.ready(paint) }
 
 // Startup exposes startup to the external tests of the package.
 type Startup = startup
