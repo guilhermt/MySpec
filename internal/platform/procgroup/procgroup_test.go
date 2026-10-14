@@ -164,6 +164,17 @@ func TestRunReportsTheExitOfTheCommand(t *testing.T) {
 	}
 }
 
+func TestRunReportsACommandThatCannotStart(t *testing.T) {
+	t.Parallel()
+	cmd := exec.CommandContext(t.Context(), filepath.Join(t.TempDir(), "missing"))
+
+	err := procgroup.Run(cmd)
+
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("Run = %v, want an error wrapping os.ErrNotExist", err)
+	}
+}
+
 func TestHideLeavesTheCommandRunnable(t *testing.T) {
 	t.Parallel()
 	cmd, _ := command(t.Context(), t, "exit0")
