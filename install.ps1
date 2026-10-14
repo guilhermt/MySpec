@@ -360,7 +360,7 @@ namespace MySpecInstall
         try {
             New-Item -ItemType Directory -Path $AppDir -Force | Out-Null
             Remove-StaleCopy
-            # The icon goes first: if it fails, the old executable is intact, and a new
+            # The icon goes before the swap of the executable: if it fails, the old executable is intact, and a new
             # icon next to an old executable is the same icon.
             [System.IO.File]::Copy((Join-Path $PackageDir 'myspec.exe'), $new, $true)
             [System.IO.File]::Copy((Join-Path $PackageDir 'myspec.ico'), (Join-Path $AppDir 'myspec.ico'), $true)

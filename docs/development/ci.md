@@ -6,7 +6,7 @@ As verificações rodam em três lugares, cada um no seu momento ([guidelines](.
 |---|---|---|---|
 | `task check` | Ao verificar um step e antes de cada push numa PR aberta | tidy, lint Go, web (Biome, as regras do design, o `knip`) e dos scripts de instalação (`shellcheck` e PSScriptAnalyzer), typecheck, os testes Go (os que não mudaram vêm do cache), os testes do frontend que a branch alcança, `govulncheck` e a checagem dos bindings, com `nice` | uns 25 s numa branch sem mudança; uns 1 min 30 s com uma mudança em `src/test/setup.ts`, que leva à suíte inteira do frontend |
 | `task check:full` | Uma vez, antes de abrir a PR | O mesmo, com `test:full` no lugar de `test`: todos os testes Go com race, embaralhamento e `-count=1`, e a suíte do frontend inteira, os dois com cobertura e os limiares, um depois do outro | uns 3 min 30 s |
-| CI (`.github/workflows/ci.yml`) | Em cada pull request: na abertura e em cada push | tidy, lint web, lint do script de instalação, typecheck, lint Go, a compilação para Windows e testes Go sem race, sem a raiz, `internal/app` e `internal/bindings` | ~3 min |
+| CI (`.github/workflows/ci.yml`) | Em cada pull request: na abertura e em cada push | tidy, lint web, lint dos scripts de instalação, typecheck, lint Go, a compilação para Windows e testes Go sem race, sem a raiz, `internal/app` e `internal/bindings` | ~3 min |
 | Release (`.github/workflows/release.yml`) | Em cada push de tag `v*`, que `task release` faz | as conferências da tag, `task package` no Ubuntu 24.04, que monta o pacote Linux e o pacote Windows, e a publicação da release com os dois ([release.md](./release.md)) | poucos minutos |
 
 ## CI
