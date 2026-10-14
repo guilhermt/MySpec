@@ -96,6 +96,8 @@ type App struct {
 	ready   bool     // the startup ended with the services bound
 	closers []func() // what the attempt that stands leaves to close after Run
 
+	backdrop backdrop // the colour behind the webview, painted once the webview takes it
+
 	publishMu sync.Mutex // keeps concurrent publishes from interleaving
 	publisher *throttle  // limits how often the state is published
 }
