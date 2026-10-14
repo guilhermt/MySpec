@@ -12,7 +12,7 @@ Cinco coisas são instaladas à mão; tudo o mais vem delas.
 
    Em Debian e Ubuntu os equivalentes são `libgtk-4-dev`, `libwebkitgtk-6.0-dev`, `build-essential` e `pkg-config`.
 
-2. **[mise](https://mise.jdx.dev).** Com `mise activate` no shell, entrar na pasta do projeto ativa as versões pinadas em `mise.toml`: Go, Node, pnpm, Task, golangci-lint, gotestsum, lefthook, shellcheck, Biome, govulncheck e go-test-coverage. O CI instala as ferramentas que usa a partir do mesmo arquivo, então máquina e pipeline rodam as mesmas versões.
+2. **[mise](https://mise.jdx.dev).** Com `mise activate` no shell, entrar na pasta do projeto ativa as versões pinadas em `mise.toml`: Go, Node, pnpm, Task, golangci-lint, gotestsum, lefthook, shellcheck, PowerShell, Biome, govulncheck e go-test-coverage. O CI instala as ferramentas que usa a partir do mesmo arquivo, então máquina e pipeline rodam as mesmas versões.
 
 3. **Claude Code.** O `claude` 2.1.291 ou mais novo (`claude update` atualiza), no `PATH` ou em `~/.local/bin` (no Windows, `%USERPROFILE%\.local\bin\claude.exe`), logado uma vez com `claude` num terminal. `MYSPEC_CLAUDE_PATH` fixa outro caminho. Essa versão é `claude.MinVersion`, a em que o app foi verificado, e sobe quando o app passa a usar um recurso novo do CLI.
 
@@ -27,7 +27,7 @@ mise install   # instala o Task e o resto da toolchain pinada
 task setup
 ```
 
-`mise install` vem primeiro porque o próprio `task` é uma das ferramentas pinadas. `task setup` roda `mise install` de novo, instala o CLI `wails3` declarado no `go.mod` com `go install tool`, baixa os módulos Go, instala as dependências do frontend com pnpm e os hooks do git. Rodar duas vezes é inofensivo; é o comando que mantém um clone atualizado.
+`mise install` vem primeiro porque o próprio `task` é uma das ferramentas pinadas. `task setup` roda `mise install` de novo, instala o CLI `wails3` declarado no `go.mod` com `go install tool`, baixa os módulos Go, instala as dependências do frontend com pnpm e os hooks do git, e instala para o usuário o PSScriptAnalyzer, da PowerShell Gallery, que `task lint:ps` usa. Rodar duas vezes é inofensivo; é o comando que mantém um clone atualizado.
 
 O hook, definido em `lefthook.yml`, é de pre-commit e só formata: Biome nos arquivos do frontend em stage e `golangci-lint fmt` nos arquivos Go em stage, colocando de volta em stage o que corrigiu. Lint, typecheck e testes ficam para `task check` e para o CI, para que um commit nunca seja travado por uma verificação lenta.
 
@@ -41,7 +41,7 @@ O hook, definido em `lefthook.yml`, é de pre-commit e só formata: Biome nos ar
 | `task run` | Roda `bin/myspec` |
 | `task generate` | Regenera `frontend/bindings` a partir dos services Go |
 | `task fmt` | Formata Go e frontend |
-| `task lint` | `lint:go` (golangci-lint), `lint:web` (Biome, as regras do design e o `knip`) e `lint:sh` (`shellcheck` no `install.sh`) |
+| `task lint` | `lint:go` (golangci-lint), `lint:web` (Biome, as regras do design e o `knip`), `lint:sh` (`shellcheck` no `install.sh`) e `lint:ps` (PSScriptAnalyzer no `install.ps1`) |
 | `task lint:go:ci` / `task test:go:ci` | O lint e os testes Go sem race de todo pacote menos os três que importam o Wails; o que o CI roda ([ci.md](./ci.md)) |
 | `task check:windows` | Compila para Windows o app e os testes Go, sem rodá-los, com `go vet` e `go build`; o CI roda ([ci.md](./ci.md)) |
 | `task typecheck` | `tsc --noEmit` no frontend |

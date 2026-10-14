@@ -62,14 +62,14 @@ Os nomes são os de instalação. `@EXEC@` no `.desktop` é trocado pelo caminho
 
 ### Windows
 
-`myspec-windows-amd64.zip`, só para `amd64` (o `x64` do Windows). É um `.zip` porque o PowerShell do Windows 11 o extrai com `Expand-Archive`, sem ferramenta extra. É plano, sem diretório interno, com dois arquivos:
+`myspec-windows-amd64.zip`, só para `amd64` (o `x64` do Windows). É um `.zip` porque o Windows o abre sem ferramenta extra; o `install.ps1` o extrai pelo `System.IO.Compression` do .NET. É plano, sem diretório interno, com dois arquivos:
 
 | Arquivo | O que é |
 |---|---|
 | `myspec.exe` | o executável de produção, um app de janela sem console, com a versão, o ícone, o manifesto e as propriedades do arquivo |
-| `myspec.ico` | o ícone avulso, para um atalho que precise de um ícone explícito |
+| `myspec.ico` | o ícone avulso, que o atalho do menu Iniciar usa |
 
-O `.exe` é montado assim: `wails3 generate icons` converte `build/appicon.png` em `.ico`; `wails3 generate syso` junta o ícone, `build/windows/myspec.exe.manifest` e `build/windows/info.json` (com a versão no lugar de `@VERSION@`) num `.syso`, que o `go build` liga ao executável. As propriedades do arquivo são: produto e descrição `MySpec` (o nome que o Gerenciador de Tarefas mostra), empresa e copyright de `build/config.yml`, a descrição longa nos comentários e a versão da release. Os textos de `info.json` acompanham os de `build/config.yml`: mudou um, muda o outro.
+O `.exe` é montado assim: `wails3 generate icons` converte `build/appicon.png` em `.ico`; `wails3 generate syso` junta o ícone, `build/windows/myspec.exe.manifest` e `build/windows/info.json` (com a versão no lugar de `@VERSION@`) num `.syso`, que o `go build` liga ao executável. As propriedades do arquivo são: produto e descrição `MySpec` (o nome que o Gerenciador de Tarefas mostra), empresa e copyright de `build/config.yml`, a descrição longa nos comentários e a versão da release. Os textos de `info.json` acompanham os de `build/config.yml`: mudou um, muda o outro. A estrutura é estável, e o script de instalação do Windows depende dela ([Instalação pelo time](#instalação-pelo-time)).
 
 ### Comandos
 
@@ -83,7 +83,7 @@ O `.exe` sai de `CGO_ENABLED=0` e `-tags production -trimpath -buildvcs=false -l
 
 ## URL estável
 
-`https://github.com/guilhermt/MySpec/releases/latest/download/myspec-linux-amd64.tar.gz` e `https://github.com/guilhermt/MySpec/releases/latest/download/myspec-windows-amd64.zip` entregam sempre o pacote da última release publicada. O repositório precisa ser público para o download sem autenticação. O script de instalação do Linux parte da primeira URL.
+`https://github.com/guilhermt/MySpec/releases/latest/download/myspec-linux-amd64.tar.gz` e `https://github.com/guilhermt/MySpec/releases/latest/download/myspec-windows-amd64.zip` entregam sempre o pacote da última release publicada. O repositório precisa ser público para o download sem autenticação. O `install.sh` parte da primeira URL, e o `install.ps1`, da segunda.
 
 ## O que cada binário precisa em tempo de execução
 
@@ -106,7 +106,9 @@ Em qualquer sistema, o app ainda confere na abertura o Claude Code e o `gh`, pr�
 
 ## Instalação pelo time
 
-`install.sh`, na raiz, é servido pelo raw da `main`. O comando do time é o do README:
+`install.sh` e `install.ps1`, na raiz, são servidos pelo raw da `main`. Os comandos do time são os do README.
+
+### Linux
 
 ```
 curl -fsSL https://raw.githubusercontent.com/guilhermt/MySpec/main/install.sh | sh
@@ -122,9 +124,31 @@ O script, em `sh` POSIX:
 
 Nada muda no disco antes de tudo estar conferido, baixado e extraído. Ele nunca usa `sudo` e nunca toca nos dados do app.
 
-**A regra do formato:** vale para os dois pacotes. Um script de instalação depende da estrutura do pacote que instala, e o script da `main` precisa sempre entender o pacote da última release publicada. Uma mudança na estrutura do pacote chega à `main` com um script que aceita as duas estruturas, e o suporte à antiga sai só depois da release com a nova. Uma correção no script chega ao time no merge, sem release.
+### Windows
 
-A verificação é o `shellcheck` (`task lint:sh`, dentro de `task lint` e no CI). O comportamento se confere à mão no Arch e no Pop!_OS 24.04.
+```powershell
+irm https://raw.githubusercontent.com/guilhermt/MySpec/main/install.ps1 | iex
+```
+
+O script, em PowerShell, roda igual no Windows PowerShell 5.1, que vem com o Windows 11, e no PowerShell 7, só com .NET e cmdlets embutidos, sem depender da política de execução. Ele roda inteiro dentro de um bloco, que não deixa variáveis nem preferências na sessão, e nunca fecha a janela.
+
+O script:
+
+- confere o Windows 11 (build 22000 ou mais nova), a arquitetura `x64` da máquina (não a do processo), a sessão sem elevação e o WebView2, pelo registro;
+- lê a versão do redirect da URL estável e baixa o pacote da tag dessa versão, seguindo só redirects HTTPS;
+- extrai numa pasta temporária, confere os dois arquivos e tira a marca de arquivo baixado;
+- instala `myspec.exe` e `myspec.ico` em `%LOCALAPPDATA%\Programs\MySpec\` e recria o atalho `MySpec` em `%APPDATA%\Microsoft\Windows\Start Menu\Programs\`, com o ícone e a identidade `guilhermt.MySpec`, a mesma das notificações;
+- imprime a versão, que o app está no menu Iniciar e os pré-requisitos externos (`claude`, `gh` e `git`).
+
+Com o app aberto, o script renomeia o `myspec.exe` em uso para `myspec.exe.<sufixo>.old` e põe o novo no lugar: a janela aberta segue na versão antiga, e a próxima abertura já é a nova. Os `.old` que não estão mais em uso são apagados na execução seguinte. Quando um arquivo não pode ser substituído, o script devolve o executável anterior ao lugar e pede para fechar o MySpec e rodar de novo.
+
+Nada muda no disco antes de tudo estar conferido, baixado, extraído e pronto para o atalho. Ele nunca pede administrador e nunca toca nos dados do app, em `%LOCALAPPDATA%\MySpec\`, nem no registro.
+
+**Remoção manual:** para remover o MySpec do Windows, apague `%LOCALAPPDATA%\Programs\MySpec\` e o atalho `MySpec` do menu Iniciar, em `%APPDATA%\Microsoft\Windows\Start Menu\Programs\MySpec.lnk`. Os dados ficam em `%LOCALAPPDATA%\MySpec\`; apague a pasta só para perdê-los.
+
+**A regra do formato:** vale para os dois pacotes. Cada script de instalação depende da estrutura do pacote que instala, o `install.sh` a do pacote Linux e o `install.ps1` a do pacote Windows, e o script da `main` precisa sempre entender o pacote da última release publicada. Uma mudança na estrutura do pacote chega à `main` com um script que aceita as duas estruturas, e o suporte à antiga sai só depois da release com a nova. Uma correção no script chega ao time no merge, sem release.
+
+**Verificação:** a verificação automática é o `shellcheck` no `install.sh` (`task lint:sh`) e o PSScriptAnalyzer no `install.ps1` (`task lint:ps`), com as regras de compatibilidade do Windows PowerShell 5.1 e do PowerShell 7 em `PSScriptAnalyzerSettings.psd1`; os dois rodam em `task lint` e no CI. O comportamento se confere à mão: o `install.sh` no Arch e no Pop!_OS 24.04, e o `install.ps1` no Windows 11 x64, no Windows PowerShell 5.1 e no PowerShell 7: a instalação numa máquina sem o app, a atualização com o app fechado e com ele aberto, a limpeza do `.old` na execução seguinte, a recusa num PowerShell elevado e o atalho no menu Iniciar com o nome e o ícone, agrupado com a janela na barra de tarefas.
 
 ## Quando uma release falha
 

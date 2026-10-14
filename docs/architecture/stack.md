@@ -25,7 +25,7 @@ A stack do produto e a razão de cada escolha.
 | Notificações e tema do sistema (Windows) | Toasts do WinRT por COM (`golang.org/x/sys/windows`), o registro do usuário e o evento de tema do Wails |
 | Som das notificações | WAV próprio embutido, tocado por `pw-play`, `paplay` ou `aplay` no Linux e por `PlaySoundW` no Windows |
 | Logs | `slog` em JSON no diretório de estado do app (`~/.local/state/myspec/` no Linux, `%LOCALAPPDATA%\MySpec\state\` no Windows) |
-| Ferramentas | mise, Task, pnpm, Biome, Vitest com jsdom, golangci-lint, gotestsum, govulncheck, go-test-coverage, lefthook, shellcheck |
+| Ferramentas | mise, Task, pnpm, Biome, Vitest com jsdom, golangci-lint, gotestsum, govulncheck, go-test-coverage, lefthook, shellcheck, PowerShell e PSScriptAnalyzer |
 
 ## Desktop com Wails v3
 
@@ -105,12 +105,12 @@ No Windows o toast vai mudo, porque um app sem pacote não põe um som próprio 
 
 ## Ferramentas de desenvolvimento
 
-- **mise** pina, em `mise.toml`, as versões de Go, Node, pnpm, Task, golangci-lint, gotestsum, lefthook, shellcheck, Biome, govulncheck e go-test-coverage. O CI instala dele as ferramentas que usa. O CLI `wails3` é uma diretiva `tool` do `go.mod`, instalada por `go install tool` no setup. A versão dele é a mesma da biblioteca Wails que o app importa, então os bindings são gerados pelo CLI que corresponde ao runtime, e o Dependabot atualiza os dois juntos.
+- **mise** pina, em `mise.toml`, as versões de Go, Node, pnpm, Task, golangci-lint, gotestsum, lefthook, shellcheck, PowerShell, Biome, govulncheck e go-test-coverage. O CI instala dele as ferramentas que usa. O CLI `wails3` é uma diretiva `tool` do `go.mod`, instalada por `go install tool` no setup. A versão dele é a mesma da biblioteca Wails que o app importa, então os bindings são gerados pelo CLI que corresponde ao runtime, e o Dependabot atualiza os dois juntos.
 - **Task** orquestra tudo: dev, build, geração de bindings, formatação, lint, typecheck, testes, vulnerabilidades e a checagem completa.
 - **Releases**: `task release` é um programa Go, `cmd/release`, testado contra repositórios git reais como o resto do código, e o workflow `release.yml` builda os dois pacotes, Linux e Windows, e publica a partir da tag no Ubuntu 24.04, o Windows por compilação cruzada, com o `gh` do runner e sem action de terceiros. O zip do pacote Windows sai de `cmd/zip`, um programa Go com a biblioteca padrão, porque o `zip` do sistema grava a data local de cada arquivo e não é instalado pelo setup. Ver [release.md](../development/release.md).
 - **Frontend**: pnpm, Biome para lint e formatação no lugar de ESLint e Prettier, Vitest com Testing Library no jsdom, para o comportamento, a acessibilidade e a cobertura.
 - **Go**: golangci-lint v2 com gofumpt e goimports, gotestsum, cobertura com limiares por arquivo, pacote e total.
-- **Shell**: `shellcheck` no `install.sh`, checado como POSIX `sh`.
+- **Scripts de instalação**: `shellcheck` no `install.sh`, checado como POSIX `sh`, e PSScriptAnalyzer no `install.ps1`, com as regras de compatibilidade do Windows PowerShell 5.1 e do PowerShell 7.
 - **knip** acha o arquivo e a dependência que nada usa. O código sem uso é o que um design antigo deixa para trás, e o knip o pega em todo `task check`, em cerca de 1 s.
 - **lefthook** instala um hook de pre-commit que só formata os arquivos em stage.
 

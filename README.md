@@ -2,9 +2,11 @@
 
 Aplicação desktop que conduz um workflow de desenvolvimento com o Claude Code: a discussão de uma demanda de um board, que produz os cards dele, e então PRD, tech spec, plano de steps, implementação step a step, pull request, review de pull request e encerramento. O Claude Code é a inteligência de cada sessão; o MySpec inicia cada sessão no momento e no lugar certos, guarda os artefatos, sabe em que ponto cada task está, mostra o que espera pelo usuário e permite várias tasks em andamento ao mesmo tempo, numa única janela.
 
-Wails v3 com Go no backend, React com TypeScript na interface, Linux.
+Wails v3 com Go no backend, React com TypeScript na interface, para Linux e Windows 11 x64.
 
 ## Instalar
+
+### Linux
 
 Os sistemas suportados são Arch, com ou sem Omarchy, e Pop!_OS 24.04, em `amd64`. O app precisa de duas bibliotecas de sistema, GTK 4 e WebKitGTK 6.0:
 
@@ -21,7 +23,17 @@ curl -fsSL https://raw.githubusercontent.com/guilhermt/MySpec/main/install.sh | 
 
 O mesmo comando atualiza para a última release, sem tocar nos dados do app, e não usa `sudo`. Se faltar uma biblioteca, ele diz qual e como instalá-la.
 
-O app também precisa do Claude Code (`claude`) 2.1.291 ou mais novo e logado, do `gh` logado com os escopos `project` e `repo` e do `git` com acesso aos repositórios. O script lista os que não encontrou, e a página **Machine** das configurações mostra o que falta.
+### Windows
+
+O sistema suportado é o Windows 11 x64. Num PowerShell comum, sem "Run as administrator", um único comando instala o MySpec:
+
+```powershell
+irm https://raw.githubusercontent.com/guilhermt/MySpec/main/install.ps1 | iex
+```
+
+Ele instala o app para o usuário atual, em `%LOCALAPPDATA%\Programs\MySpec`, e o põe no menu Iniciar, sem pedir permissão de administrador. O mesmo comando atualiza para a última release, sem tocar nos dados do app, inclusive com o app aberto, que segue na versão anterior até ser fechado. O app usa o Microsoft Edge WebView2 Runtime, que vem com o Windows 11; se faltar, o comando diz onde baixá-lo.
+
+Nos dois sistemas, o app também precisa do Claude Code (`claude`) 2.1.291 ou mais novo e logado, do `gh` logado com os escopos `project` e `repo` e do `git` com acesso aos repositórios. O comando lista os que não encontrou, e a página **Machine** das configurações mostra o que falta.
 
 ## Começar
 

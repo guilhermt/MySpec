@@ -48,7 +48,8 @@ frontend/
   src/test/              setup do Vitest, render com store, mock do Go e as cenas das telas
   bindings/              gerados por `task generate`; nunca editados à mão
 build/                   config do Wails, ícones, entrada .desktop e os recursos do executável do Windows
-install.sh               instala ou atualiza o app a partir da última release
+install.sh               instala ou atualiza o app no Linux a partir da última release
+install.ps1              instala ou atualiza o app no Windows a partir da última release
 VERSION                  a versão da última release
 .github/                 CI, release e Dependabot
 ```
