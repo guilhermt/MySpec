@@ -1,4 +1,4 @@
-package toast_test
+package notify_test
 
 import (
 	"bytes"
@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/guilhermt/myspec/internal/platform/toast"
+	"github.com/guilhermt/myspec/internal/platform/notify"
 )
 
 // icon stands for the PNG of the app: InstallIcon copies bytes, whatever they
@@ -20,7 +20,7 @@ func TestInstallIconCopiesTheIconAndRepairsIt(t *testing.T) {
 
 	dataDir := t.TempDir()
 	wantPath := filepath.Join(dataDir, "icons", "myspec.png")
-	if got := toast.IconPath(dataDir); got != wantPath {
+	if got := notify.IconPath(dataDir); got != wantPath {
 		t.Errorf("IconPath() = %q, want %q", got, wantPath)
 	}
 
@@ -60,7 +60,7 @@ func TestInstallIconFailsWhereTheDirectoryCannotBeMade(t *testing.T) {
 		t.Fatalf("WriteFile() = %v, want nil", err)
 	}
 
-	path, err := toast.InstallIcon(dataDir, icon)
+	path, err := notify.InstallIcon(dataDir, icon)
 	if err == nil || path != "" {
 		t.Errorf("InstallIcon() = %q, %v, want \"\" and an error", path, err)
 	}
@@ -70,7 +70,7 @@ func TestInstallIconFailsWhereTheDirectoryCannotBeMade(t *testing.T) {
 func installIcon(t *testing.T, dataDir string) string {
 	t.Helper()
 
-	path, err := toast.InstallIcon(dataDir, icon)
+	path, err := notify.InstallIcon(dataDir, icon)
 	if err != nil {
 		t.Fatalf("InstallIcon() = %v, want nil", err)
 	}

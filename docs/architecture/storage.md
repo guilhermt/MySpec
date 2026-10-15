@@ -7,7 +7,7 @@ Tudo que o app guarda fica em dois lugares: o diretório de dados para o estado,
 `~/.local/share/myspec/` no Linux e `%LOCALAPPDATA%\MySpec\data\` no Windows:
 
 ```
-icons/myspec.png                       o ícone das notificações (Windows)
+icons/myspec.png                       a imagem das notificações
 myspec.db                              o banco SQLite
 prompts/<nome>.md                      só os prompts editados pelo usuário
 sounds/chime.wav                       o som das notificações
@@ -56,7 +56,7 @@ Os prompts padrão vivem no binário, em `internal/prompts/defaults/`. O diretó
 
 ### Som e ícone
 
-`sounds/chime.wav` é uma cópia do som embutido no binário, escrita ao iniciar quando falta ou difere, para que a leiam por caminho o servidor de notificações do Linux que toca sons e o próprio app no Windows. `icons/myspec.png` é a cópia do ícone do app que a plataforma de notificações do Windows lê, escrita ao iniciar quando falta ou difere. Apagar qualquer das duas é inofensivo: o app a escreve de novo na próxima vez que abrir.
+`sounds/chime.wav` é uma cópia do som embutido no binário, escrita ao iniciar quando falta ou difere, para que a leiam por caminho o servidor de notificações do Linux que toca sons e o próprio app no Windows. `icons/myspec.png` é a cópia da imagem das notificações, que o servidor de notificações do Linux e a plataforma de notificações do Windows leem por caminho, escrita ao iniciar quando falta ou difere. Apagar qualquer das duas é inofensivo: o app a escreve de novo na próxima vez que abrir.
 
 ### Migração dos dados
 

@@ -15,7 +15,6 @@ A interface é feita de neutros com um traço de calor, e as cores de estado fic
 O azul marca o que você aciona e onde você está, e nunca é um estado. A identidade precisa de presença para o produto ter caráter, e de papéis fixos para nunca competir com um sinal.
 
 Ele tem estes papéis, e só estes:
-- a marca;
 - o texto e o ícone do **New**, que é elevado e não cheio;
 - a ação primária;
 - o foco e o halo de um campo em foco, o compositor incluído;

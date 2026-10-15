@@ -1,4 +1,4 @@
-package toast
+package notify
 
 import (
 	"bytes"
@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 )
 
-// The copy of the icon of the app inside the data directory, which the
-// notification platform reads.
+// The copy of the image of the notifications inside the data directory, which
+// the notification platform reads by path.
 const (
 	iconDir  = "icons"
 	iconFile = "myspec.png"
@@ -16,12 +16,12 @@ const (
 	filePerm = 0o600
 )
 
-// IconPath is where InstallIcon puts the icon inside the data directory.
+// IconPath is where InstallIcon puts the image inside the data directory.
 func IconPath(dataDir string) string {
 	return filepath.Join(dataDir, iconDir, iconFile)
 }
 
-// InstallIcon copies the icon to the data directory unless the same bytes are
+// InstallIcon copies the image to the data directory unless the same bytes are
 // already there, and returns the path of the copy.
 func InstallIcon(dataDir string, png []byte) (string, error) {
 	path := IconPath(dataDir)

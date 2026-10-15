@@ -60,32 +60,32 @@ const (
 // App holds the running application: the Wails handles and the domain services
 // they are wired to.
 type App struct {
-	log            *slog.Logger
-	dirs           xdg.Dirs
-	icon           []byte             // the application icon, which the toasts of Windows show
-	services       *bindings.Services // the placeholders Wails holds, bound when the startup ends
-	startup        *startup
-	deps           attemptDeps // what an attempt reaches outside the data directory with
-	systemDark     bool        // what the desktop asked for before the window opened
-	repositories   *repository.Service
-	theme          *theme.Service
-	models         *models.Service
-	machine        *machine.Service
-	reviewModes    *reviewmode.Service
-	tasks          *task.Service
-	boards         *board.Service
-	sessions       *session.Service
-	worktrees      *worktree.Service
-	review         *review.Service
-	flow           *flow.Service
-	pulls          *pulls.Service
-	prReviews      *prreview.Service
-	reviewFlow     *reviewflow.Service
-	discussions    *discussion.Service
-	discussionFlow *discussionflow.Service
-	attention      *attention.Service
-	notifier       *notify.Notifier // nil when the desktop has no notification service
-	player         *chime.Player    // nil when there is no notifier or the chime could not be installed
+	log              *slog.Logger
+	dirs             xdg.Dirs
+	notificationIcon []byte             // the image the notifications show, copied to the data directory
+	services         *bindings.Services // the placeholders Wails holds, bound when the startup ends
+	startup          *startup
+	deps             attemptDeps // what an attempt reaches outside the data directory with
+	systemDark       bool        // what the desktop asked for before the window opened
+	repositories     *repository.Service
+	theme            *theme.Service
+	models           *models.Service
+	machine          *machine.Service
+	reviewModes      *reviewmode.Service
+	tasks            *task.Service
+	boards           *board.Service
+	sessions         *session.Service
+	worktrees        *worktree.Service
+	review           *review.Service
+	flow             *flow.Service
+	pulls            *pulls.Service
+	prReviews        *prreview.Service
+	reviewFlow       *reviewflow.Service
+	discussions      *discussion.Service
+	discussionFlow   *discussionflow.Service
+	attention        *attention.Service
+	notifier         *notify.Notifier // nil when the desktop has no notification service
+	player           *chime.Player    // nil when there is no notifier or the chime could not be installed
 
 	pollCtx  context.Context // ends when the app does; what runs in the background for as long as it runs
 	stopPoll context.CancelFunc
@@ -131,7 +131,7 @@ func Run(cfg Config) int {
 
 	applyWebKitEnvironment()
 
-	a := &App{log: log, dirs: dirs, icon: cfg.Icon, services: bindings.NewWaitingServices()}
+	a := &App{log: log, dirs: dirs, notificationIcon: cfg.NotificationIcon, services: bindings.NewWaitingServices()}
 	a.publisher = newThrottle(publishWindow, a.publishNow)
 	a.systemDark = readSystemDark(log)
 	a.deps = a.desktopDeps()

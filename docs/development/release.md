@@ -55,7 +55,7 @@ O workflow usa só o `GITHUB_TOKEN`, com `contents: write`, e só uma release ro
 |---|---|---|
 | `myspec` | o binário de produção, com a versão | 0755 |
 | `org.wails.myspec.desktop` | a entrada de desktop, com `@EXEC@` intacto | 0644 |
-| `org.wails.myspec.svg` | o ícone vetorial | 0644 |
+| `org.wails.myspec.svg` | o ícone escalável, o PNG de 512x512 dentro de um SVG | 0644 |
 | `org.wails.myspec.png` | o ícone de 512x512 | 0644 |
 
 Os nomes são os de instalação. `@EXEC@` no `.desktop` é trocado pelo caminho do binário, como faz `task install`. A estrutura é estável, e o script de instalação depende dela ([Instalação pelo time](#instalação-pelo-time)).

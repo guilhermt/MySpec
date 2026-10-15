@@ -897,7 +897,7 @@ O board, o History e a conversa montam só as linhas que aparecem, as fixadas (a
 
 | | |
 |---|---|
-| Marca | O quadrado da marca em `--brand` com o monograma em `--brand-on`: `sm` (`--size-mark`, raio `--radius-sm`) no topo da lateral; `lg` (`--space-8`, raio `--radius-md`, o monograma em `--space-5`) no início, nas boas-vindas e na migração |
+| Marca | A arte do robô no próprio fundo quase preto, um ladrilho igual nos dois temas, decorativo, que não usa a cor de destaque: `sm` (o robô sozinho, `--size-mark`, raio `--radius-sm`) no topo da lateral; `lg` (a arte inteira com o nome, `--size-mark-lg`, raio `--radius-xl`) no início, nas boas-vindas e na migração |
 | **Copy** | Fantasma, só de ícone, num cabeçalho de bloco (`Copy the error`; num bloco de código, `Copy the code`) e ao lado de um comando (`Copy gh auth login`); secundário, com o rótulo e o ícone, quando é a ação de uma página (**Copy the list**). Estados: padrão, hover, foco, copiado (o visto no lugar do ícone e `Copied` ao lado, por 2 s, sem mover o botão), erro (`Can't copy · select the text`, em `--state-error`) |
 | Bloco copiável | O bloco de código sem realce, para um erro ou um comando: afundado, raio `--radius-md`, o cabeçalho com o rótulo e **Copy**, o texto em mono com os caminhos pelo `~`. O rótulo de uma palavra fica em caixa alta (`error`, no início que falhou); o rótulo que é uma frase com um caminho fica como é escrito, em `--text-micro` `--ink-3`, porque a caixa alta trocaria a caixa do caminho (`To remove it yourself, in ~/code/api`, na página da task apagada) |
 
