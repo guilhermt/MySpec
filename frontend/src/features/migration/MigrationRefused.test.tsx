@@ -40,7 +40,6 @@ describe("MigrationRefused", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "MySpec couldn't be updated" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("MySpec")).toBeInTheDocument();
     expect(
       screen.getByText(/nothing was changed: your tasks, documents and worktrees are as they were/),
     ).toBeInTheDocument();
@@ -110,7 +109,6 @@ describe("MigrationRefused", () => {
       expect(
         screen.getByRole("heading", { level: 1, name: "This data is from a newer MySpec" }),
       ).toBeInTheDocument();
-      expect(screen.getByText("MySpec")).toBeInTheDocument();
       expect(
         screen.getByText(
           "A newer version of MySpec opened your data and changed it in ways this version doesn't know. To keep it safe, nothing was read or changed. Open the newer version, or a later one, to keep working.",

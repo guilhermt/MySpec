@@ -18,7 +18,7 @@ const appUserModelID = "guilhermt.MySpec"
 // without the toast platform is not a failure: the situations still show in
 // the app and the reason goes to the log.
 func (a *App) startNotifications(chimePath string) *notify.Notifier {
-	iconPath, err := toast.InstallIcon(a.dirs.Data, a.icon)
+	iconPath, err := notify.InstallIcon(a.dirs.Data, a.notificationIcon)
 	if err != nil {
 		// The toasts still show, without the icon.
 		a.log.Warn("install notification icon failed", "err", err)

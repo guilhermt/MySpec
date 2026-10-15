@@ -61,6 +61,32 @@ tasks:
     cmds:
       - task: common:generate:bindings
 
+  brand:
+    summary: Regenerates the brand images from build/logo.png with ImageMagick; run only when the art changes
+    vars:
+      # The robot crop stops just above the "MySpec" text of the art.
+      ROBOT_CROP: 650x650+258+135
+      ART_CROP: 1000x1000+139+82
+      OUT: -strip -define png:exclude-chunks=date,time
+    preconditions:
+      - sh: magick -version
+        msg: "ImageMagick (magick) not found"
+    cmds:
+      - mkdir -p frontend/src/assets
+      - >-
+        magick build/logo.png -crop {{.ROBOT_CROP}} +repage -resize 512x512
+        \( -size 512x512 xc:none -fill white -draw "roundrectangle 0,0 511,511 112,112" \)
+        -alpha off -compose CopyOpacity -composite {{.OUT}} build/appicon.png
+      - >-
+        printf '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"><image width="512" height="512" href="data:image/png;base64,%s"/></svg>\n'
+        "$(base64 -w0 build/appicon.png)" > build/linux/icon.svg
+      - >-
+        magick build/logo.png -crop {{.ART_CROP}} +repage -resize 256x256
+        \( -size 256x256 xc:none -fill white -draw "roundrectangle 0,0 255,255 56,56" \)
+        -alpha off -compose CopyOpacity -composite {{.OUT}} build/notification.png
+      - magick build/logo.png -crop {{.ROBOT_CROP}} +repage -resize 96x96 {{.OUT}} frontend/src/assets/brand-robot.png
+      - magick build/logo.png -crop {{.ART_CROP}} +repage -resize 384x384 {{.OUT}} frontend/src/assets/brand-art.png
+
   fmt:
     summary: Formats Go and frontend code
     deps: [fmt:go, fmt:web]

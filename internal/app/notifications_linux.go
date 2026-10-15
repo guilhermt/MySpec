@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/godbus/dbus/v5"
@@ -18,8 +19,8 @@ const (
 	notificationsService   = "org.freedesktop.Notifications"
 	notificationsPath      = "/org/freedesktop/Notifications"
 	notificationsInterface = "org.freedesktop.Notifications"
-	// desktopEntry is the desktop file task install writes, which names the
-	// app and its icon to the notification server.
+	// desktopEntry is the desktop file task install writes. The hint names the
+	// app to the notification server; the icon goes in app_icon.
 	desktopEntry = "org.wails.myspec"
 	// notifyTimeout bounds one call to the notification server.
 	notifyTimeout = 5 * time.Second
@@ -47,6 +48,15 @@ func (a *App) startNotifications(chimePath string) *notify.Notifier {
 		return nil
 	}
 
+	// The image of the notifications is a file the server reads by URI; without
+	// it the server falls back to the icon of the theme.
+	icon := desktopEntry
+	if path, err := notify.InstallIcon(a.dirs.Data, a.notificationIcon); err != nil {
+		a.log.Warn("install notification icon failed", "err", err)
+	} else {
+		icon = (&url.URL{Scheme: "file", Path: path}).String()
+	}
+
 	var ringer notify.Chime
 	if chimePath != "" {
 		detector := dnd.New(dnd.Deps{Bus: sessionBus{conn: conn}, Log: a.log})
@@ -54,7 +64,7 @@ func (a *App) startNotifications(chimePath string) *notify.Notifier {
 		ringer = a.player
 	}
 	notifier := notify.New(notify.Deps{
-		Server:  desktopServer{obj: conn.Object(notificationsService, notificationsPath), chime: chimePath},
+		Server:  desktopServer{obj: conn.Object(notificationsService, notificationsPath), chime: chimePath, icon: icon},
 		OnClick: a.openNotification,
 		Chime:   ringer,
 		Log:     a.log,
@@ -84,6 +94,7 @@ func (a *App) startNotifications(chimePath string) *notify.Notifier {
 type desktopServer struct {
 	obj   dbus.BusObject
 	chime string // the chime on disk, for a server that plays sounds
+	icon  string // the app_icon of every notification: the URI of the image, or the name of the theme icon
 }
 
 // Capabilities are the optional features the server announces.
@@ -117,7 +128,7 @@ func (d desktopServer) Notify(summary, body string, sound bool) (uint32, error) 
 	err := d.obj.CallWithContext(ctx, notificationsInterface+".Notify", 0,
 		appName,
 		uint32(0), // replaces no notification
-		desktopEntry,
+		d.icon,
 		summary,
 		notify.EscapeMarkup(body),
 		[]string{notify.DefaultAction, "Open"},

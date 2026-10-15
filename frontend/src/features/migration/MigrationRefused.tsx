@@ -28,10 +28,7 @@ function RefusedPage({ title, children }: { title: string; children: ReactNode }
   return (
     <main className="h-dvh overflow-y-auto bg-surface-1 text-ink-1">
       <div className="mx-auto flex w-[round(down,var(--measure-read),1px)] max-w-full flex-col gap-(--space-5) px-(--space-6) pt-(--space-16) pb-(--space-12)">
-        <div className="flex items-center gap-(--space-3) text-(length:--text-body) leading-(--leading-body) font-bold">
-          <BrandMark size="lg" />
-          MySpec
-        </div>
+        <BrandMark size="lg" />
         <h1 className="m-0 text-(length:--text-display) leading-(--leading-display) font-semibold text-ink-1">
           {title}
         </h1>

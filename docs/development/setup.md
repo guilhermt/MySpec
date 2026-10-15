@@ -40,6 +40,7 @@ O hook, definido em `lefthook.yml`, é de pre-commit e só formata: Biome nos ar
 | `task build` | Build de produção em `bin/myspec` |
 | `task run` | Roda `bin/myspec` |
 | `task generate` | Regenera `frontend/bindings` a partir dos services Go |
+| `task brand` | Regenera as imagens da marca a partir de `build/logo.png`, com o ImageMagick |
 | `task fmt` | Formata Go e frontend |
 | `task lint` | `lint:go` (golangci-lint), `lint:web` (Biome, as regras do design e o `knip`), `lint:sh` (`shellcheck` no `install.sh`) e `lint:ps` (PSScriptAnalyzer no `install.ps1`) |
 | `task lint:go:ci` / `task test:go:ci` | O lint e os testes Go sem race de todo pacote menos os três que importam o Wails; o que o CI roda ([ci.md](./ci.md)) |
@@ -61,6 +62,8 @@ O hook, definido em `lefthook.yml`, é de pre-commit e só formata: Biome nos ar
 `main.go` embute `frontend/dist`, que é saída de build e não existe num clone limpo, e `//go:embed` recusa um diretório vazio. As tarefas Go colocam um placeholder lá quando não encontram nada, então `task check` funciona antes do primeiro `task build`, e um build real o substitui.
 
 O som das notificações, `internal/platform/chime/chime.wav`, é versionado e gerado por `go generate ./internal/platform/chime/`, que roda `gen.go`. Só precisa rodar de novo quando o gerador muda.
+
+A arte da marca é `build/logo.png`, e `task brand` gera dela, com o `magick`, o ícone do app (`build/appicon.png` e `build/linux/icon.svg`, que embute o PNG), a imagem das notificações (`build/notification.png`) e as duas imagens do app em `frontend/src/assets/`. Todas são versionadas, e a tarefa só precisa rodar de novo quando a arte muda.
 
 Um teste só, em Go: `go test -run 'TestNome' ./internal/pacote/`. No frontend: `pnpm vitest run src/features/task/StepPane.test.tsx`, a partir de `frontend/`, ou `pnpm test:watch` para o modo interativo.
 
