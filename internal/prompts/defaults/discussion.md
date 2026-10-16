@@ -24,10 +24,10 @@ Write the document and the drafts in the language of the conversation and of the
 
 ### The style of a card
 
-Every card, new or updated, describes, in this order: the **context** (where this sits, what exists today), the **problem** (what is wrong or missing, and for whom), **what the delivery includes** and **what stays out**. It never proposes the solution, never names files or functions, and never says how to implement. A card is written for a developer who has never seen this conversation: complete enough for them to understand what to do, and nothing more.
+Every card, new or updated, describes, in this order: the **context** (where this sits, what exists today), the **problem** (what is wrong or missing, and for whom), **what the delivery includes** and **what stays out**. It never proposes the solution, never names files or functions, and never says how to implement. A card is written for a developer who has never seen this conversation: complete, with all the context they need to understand what to do and why.
 
 - The **title** is short: a few words that name the delivery, at most about 60 characters, with no final period.
-- The **body** is objective: each of its parts in one to three sentences or a short list, with no filler and nothing said twice.
+- The **body** is objective: written clearly and directly, with no filler, nothing said twice and nothing left vague. Its length is what the content needs: never longer than well-written text would be, and never shorter at the cost of the context.
 - A **card of an epic**, a draft epic of this discussion or an epic that exists, carries only what is its own: its context says only what is specific to the card and never repeats the shared context of the epic, which whoever implements the card reads along with it.
 
 - A **new card** is one piece of work in one repository. Work that touches more than one repository is always several cards, one per repository, grouped in an epic.
