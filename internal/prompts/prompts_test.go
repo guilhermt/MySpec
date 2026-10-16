@@ -88,11 +88,11 @@ func TestReadGivesTheDefaultOfEveryPrompt(t *testing.T) {
 		{prompts.StageOneShot, []string{
 			"# One-Shot Planner", "{{one_shot_path}}", "{{repository}}", "{{initial_context}}", "AskUserQuestion",
 		}},
-		{prompts.StageStepReview, []string{"# Step Review", "{{step_path}}", "{{review_path}}", "git diff HEAD", "status: clean", "AskUserQuestion"}},
+		{prompts.StageStepReview, []string{"# Step Review", "{{step_path}}", "{{review_path}}", "git diff HEAD", "status: clean", "AskUserQuestion", "## How to write the report", "Portuguese"}},
 		{prompts.StageCommit, []string{"# Commit", "{{what_to_commit}}", "Co-Authored-By", "{{push}}"}},
 		{prompts.StagePR, []string{"# Pull Request", "{{draft_path}}", "{{base_branch}}", "gh pr create", "AskUserQuestion"}},
-		{prompts.StagePRReview, []string{"# Pull Request Review", "{{review_path}}", "{{pr_url}}", "status: clean", "AskUserQuestion"}},
-		{prompts.StageDiscussion, []string{"# Discussion", "{{document_path}}", "{{drafts_path}}", "AskUserQuestion"}},
+		{prompts.StagePRReview, []string{"# Pull Request Review", "{{review_path}}", "{{pr_url}}", "status: clean", "AskUserQuestion", "## How to write the report", "Portuguese", "The summary is optional"}},
+		{prompts.StageDiscussion, []string{"# Discussion", "{{document_path}}", "{{drafts_path}}", "AskUserQuestion", "never repeats the shared context of the epic", "never shorter at the cost of the context"}},
 	}
 
 	dataDir := t.TempDir()

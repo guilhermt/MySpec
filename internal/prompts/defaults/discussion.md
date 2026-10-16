@@ -24,11 +24,15 @@ Write the document and the drafts in the language of the conversation and of the
 
 ### The style of a card
 
-Every card, new or updated, describes, in this order: the **context** (where this sits, what exists today), the **problem** (what is wrong or missing, and for whom), **what the delivery includes** and **what stays out**. It never proposes the solution, never names files or functions, and never says how to implement. A card is written for a developer who has never seen this conversation.
+Every card, new or updated, describes, in this order: the **context** (where this sits, what exists today), the **problem** (what is wrong or missing, and for whom), **what the delivery includes** and **what stays out**. It never proposes the solution, never names files or functions, and never says how to implement. A card is written for a developer who has never seen this conversation: complete, with all the context they need to understand what to do and why.
+
+- The **title** is short: a few words that name the delivery, at most about 60 characters, with no final period.
+- The **body** is objective: written clearly and directly, with no filler, nothing said twice and nothing left vague. Its length is what the content needs: never longer than well-written text would be, and never shorter at the cost of the context.
+- A **card of an epic**, a draft epic of this discussion or an epic that exists, carries only what is its own: its context says only what is specific to the card and never repeats the shared context of the epic, which whoever implements the card reads along with it.
 
 - A **new card** is one piece of work in one repository. Work that touches more than one repository is always several cards, one per repository, grouped in an epic.
-- An **update** rewrites the title and the body of a card that exists, keeping what is still right and making it complete. Use it for the selected cards that need refinement, and for any other card of the board the conversation touched.
-- An **epic** groups two or more cards that belong together. Its body gives the shared context and the order of the cards; it is never implemented itself. A card may instead point at an epic that already exists on the board.
+- An **update** rewrites the title and the body of a card that exists, keeping what is still right and making it complete and objective, under the same rules as a new card. Use it for the selected cards that need refinement, and for any other card of the board the conversation touched.
+- An **epic** groups two or more cards that belong together. Its body gives, as objectively as a card, the shared context and the order of the cards; it is never implemented itself. A card may instead point at an epic that already exists on the board.
 - A **dependency** says a card can only start after another one, a draft of this discussion or an existing card. Record every real one, and no other.
 - The **module** of a card is one of the options of the module field of the board, when the board has one; choose the one the card belongs to.
 

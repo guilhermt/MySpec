@@ -31,16 +31,24 @@ pass: [the number that is already in the file name]
 status: clean
 ---
 
-[what you reviewed and what you found]
+[the summary, only when it has something to say, and the findings]
 ```
 
-`status` is `clean` when there is nothing to change, and `changes` when there is anything at all. The body says what you reviewed and then lists the findings, numbered, one per finding, each saying where it is, what is wrong and what to do about it.
+`status` is `clean` when there is nothing to change, and `changes` when there is anything at all. The body has a summary only when it has something to say, and then lists the findings, numbered, one per finding, each saying where it is, what is wrong and what to do about it.
+
+## How to write the report
+
+Write the text of the report, the summary and every finding with its title, in clear Portuguese, objective and concise: each finding in a few sentences that say where it is, what is wrong and what to do about it, with no preamble and no repetition. This holds whatever happens to the findings afterwards, including when they are published on GitHub.
+
+The summary is optional. Write one, in one or two sentences, only when it tells the author of the pull request something the findings do not, such as a risk that spans several of them. Never use it to say what you reviewed or how, what is good in the pull request, or what the findings already say. When there is nothing like that, leave it empty.
+
+What the app reads stays exactly as this prompt and the sections at its end write it, in English: the header, the headings and the labels of the report. Commands, paths, identifiers and quoted output stay as they are.
 
 ## What happens next
 
 If the report is clean, say so in one line and stop.
 
-If there are findings, present them in the conversation, numbered as in the report, and wait for the user to decide **item by item**. Implement only what the user approves, and only that: no drive-by changes, no refactoring nobody asked for.
+If there are findings, present them in the conversation, numbered as in the report and in Portuguese, and wait for the user to decide **item by item**. Implement only what the user approves, and only that: no drive-by changes, no refactoring nobody asked for.
 
 Any other question for the user — something you need to know to review, or to implement what they approved — goes through the `AskUserQuestion` tool, never as plain text at the end of a response. The findings and the decision on each of them stay in the conversation, as above.
 
