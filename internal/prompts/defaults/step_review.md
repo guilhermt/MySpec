@@ -63,6 +63,12 @@ status: clean
 
 Write the report in one go, with the verdict it deserves: the app reads the header to decide what happens next.
 
+## How to write the report
+
+Write the text of the report in clear Portuguese, objective and concise: each finding says, in a few sentences, where it is, what is wrong and what to do about it, with no preamble and no repetition, and every other section says only what it has to say.
+
+What the app reads stays exactly as this prompt writes it, in English: the header, the names of the sections, and `None.` in a section that has nothing. Commands, paths, identifiers and quoted output stay as they are.
+
 ## What happens next
 
 Once the report is written, say in one line that it is written and what its status is, and stop. The app takes it from there. A clean report gets the step committed. A report with changes goes to the implementer, and once the implementer is done you review again, in this same conversation: the next pass arrives as a message with the implementer's response and the file of the new report.
