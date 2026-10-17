@@ -409,9 +409,30 @@ O resultado da procura pedida pelo botão aparece na página e é anunciado ao l
 
 Uma procura automática que falha só vai para o log e não mostra nada. Depois de uma procura que deu certo a página mostra `Checked 5m ago`, com a hora exata no tooltip.
 
-Com uma versão nova, a página mostra o bloco `MySpec 0.5.0 is available`: como atualizar (rodar de novo o comando de instalação num terminal; os dados ficam como estão) e o comando do sistema, com o botão de copiar. Abaixo, **Release notes** traz as notas de todas as releases depois da instalada, da mais nova para a mais antiga, cada uma com `0.4.0 · Oct 16` e as notas em markdown, ou `No notes for this release.` quando não há.
+Com uma versão nova, a página mostra o bloco `MySpec 0.5.0 is available`, com **Update to 0.5.0**, a única ação primária de Settings. Abaixo, **Release notes** traz as notas de todas as releases depois da instalada, da mais nova para a mais antiga, cada uma com `0.4.0 · Oct 16` e as notas em markdown, ou `No notes for this release.` quando não há. Um build `dev` não tem a ação.
 
-O **sinal** de uma versão nova é um botão de ícone na cor da marca, nunca de erro, no rodapé da barra lateral, antes de **Settings**, e na coluna do rodapé da faixa recolhida, acima de **Settings**. Ele tem o nome e o tooltip `MySpec 0.5.0 is available. Open About.` e abre a página **About**. O item **About** da navegação de Settings leva o mesmo ícone. Sem versão nova, o sinal não existe. A versão nova é anunciada uma vez, quando passa a ser conhecida, pela região de anúncios do app.
+A atualização roda o comando de instalação do sistema em segundo plano, a partir do script da `main`, e instala a última release publicada no momento, mesmo que seja mais nova que a mostrada; o app diz qual versão instalou. Enquanto ela roda, o botão mostra `Updating…`, **Check for updates** fica indisponível (`An update is running.`) e o bloco diz `You can keep working meanwhile.`: o app segue usável. Fechar o app no meio deixa a instalação terminar, e a próxima abertura já é a versão nova. A instalação tem 15 minutos.
+
+Quando a instalação termina:
+
+- **Sem agente trabalhando**, o app reinicia sozinho, como um fechamento e uma abertura normais.
+- **Com agente trabalhando**, o app não reinicia. O bloco passa a `MySpec 0.5.0 is installed`, com `Restart to use it. Until then, MySpec 0.4.0 keeps running.`, `Restarting now stops the agents that are working:` e a lista das conversas (`Add login · Step 3`, `acme/api#12 · Review`), com **Restart now** e **Later**. **Later** tira o botão e leva o foco a **Restart now**; a pergunta vale até o app fechar, e o app nunca reinicia sozinho depois de perguntar. Sem agente trabalhando quando a página é vista, o bloco diz `No agent is working. Restarting stops nothing.`. O sinal diz `MySpec 0.5.0 is installed. Restart to use it.`.
+- **A versão instalada igual à que roda** volta ao estado normal, sem reinício, e o app procura de novo.
+- **O reinício que não pôde iniciar a versão nova** deixa o app aberto, com `Couldn't restart`, a razão e `Close MySpec and open it again.` no bloco.
+
+Cada falha da instalação aparece no bloco como `Couldn't update`, com o motivo e o que fazer, e **Try again**:
+
+- `No connection to GitHub.`: `Check the connection and try again.`;
+- `GitHub's rate limit was reached.`: `Try again later.`;
+- `GitHub didn't answer in time.`: `Try again.`; também o que acontece quando a instalação passa dos 15 minutos;
+- bibliotecas do sistema que faltam: o motivo do script, `Install them, then try again.` e o comando de instalação delas, com **Copy**;
+- uma recusa do sistema (o Windows, a arquitetura, o administrador): o motivo do script;
+- `A file of MySpec couldn't be replaced.`: `Close MySpec and run the install command in a terminal.`;
+- qualquer outra: o motivo do script, ou `Something went wrong.`, e `Try again, or run the install command in a terminal.`.
+
+Embaixo, `Or run the install command in a terminal. Your data stays as it is.` e o comando do sistema, com o botão de copiar.
+
+O **sinal** de uma versão nova é um botão de ícone na cor da marca, nunca de erro, no rodapé da barra lateral, antes de **Settings**, e na coluna do rodapé da faixa recolhida, acima de **Settings**. Ele abre a página **About** e tem três estados: `MySpec 0.5.0 is available. Open About.`; `Updating to MySpec 0.5.0… Open About.`, com um spinner no lugar do ícone; e `MySpec 0.5.0 is installed. Restart to use it. Open About.`. O item **About** da navegação de Settings leva a marca dos mesmos três estados. Sem versão nova nem instalação, o sinal não existe. A região de anúncios do app diz cada passo, uma vez: a versão nova quando passa a ser conhecida, `Updating to MySpec 0.5.0…` ao começar, `MySpec 0.5.0 is installed. Restart to use it.` quando a instalação espera o reinício, `MySpec 0.5.0 is installed. Restarting…` quando o app reinicia sozinho, `Couldn't update.` e a razão quando falha e `You're on the latest version.` quando a versão instalada era a que roda.
 
 ### Tela de boas-vindas e barra lateral
 

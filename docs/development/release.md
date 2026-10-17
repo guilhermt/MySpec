@@ -119,8 +119,8 @@ curl -fsSL https://raw.githubusercontent.com/guilhermt/MySpec/main/install.sh | 
 O script, em `sh` POSIX:
 
 - confere o usuário (recusa root), `curl` e `tar`, o Linux `amd64` e as duas bibliotecas por `ldconfig -p`, e mostra o comando de instalação da distro de `/etc/os-release`;
-- lê a versão do redirect da URL estável e baixa o pacote da tag dessa versão;
-- instala nos caminhos do `task install` por rename atômico, o que deixa um app aberto na versão antiga;
+- lê a versão do redirect da URL estável e baixa o pacote da tag dessa versão, com limite de tempo no `curl` (30 segundos para conectar, 30 para achar a última release e 600 para baixar o pacote);
+- instala nos caminhos do `task install` por rename atômico, o que deixa um app aberto na versão antiga, e troca o `.desktop`, o `.svg` e o `.png` antes do binário: o binário é o último arquivo, então uma falha num arquivo de apoio deixa o executável antigo intacto e a versão nunca fica mista;
 - atualiza os caches do launcher e dos ícones;
 - imprime a versão, o aviso de `PATH` e os pré-requisitos externos (`claude`, `gh` e `git`).
 
@@ -148,9 +148,48 @@ Nada muda no disco antes de tudo estar conferido, baixado, extraído e pronto pa
 
 **Remoção manual:** para remover o MySpec do Windows, apague `%LOCALAPPDATA%\Programs\MySpec\` e o atalho `MySpec` do menu Iniciar, em `%APPDATA%\Microsoft\Windows\Start Menu\Programs\MySpec.lnk`. Os dados ficam em `%LOCALAPPDATA%\MySpec\`; apague a pasta só para perdê-los.
 
-**A regra do formato:** vale para os dois pacotes. Cada script de instalação depende da estrutura do pacote que instala, o `install.sh` a do pacote Linux e o `install.ps1` a do pacote Windows, e o script da `main` precisa sempre entender o pacote da última release publicada. Uma mudança na estrutura do pacote chega à `main` com um script que aceita as duas estruturas, e o suporte à antiga sai só depois da release com a nova. Uma correção no script chega ao time no merge, sem release.
+### Atualização de dentro do app
+
+O app se atualiza rodando o mesmo script do terminal. Ele baixa o `install.sh` ou o `install.ps1` do raw da `main` e o roda sem terminal: `/bin/sh` no Linux; `powershell.exe -NoProfile -NonInteractive -Command "iex …"`, sem janela, no Windows. O script roda num grupo de processos próprio, que o fechamento do app não para, com 15 minutos de prazo; só o prazo o mata. O resultado vem de um arquivo, cujo caminho o app passa em `MYSPEC_INSTALL_RESULT`. Sem a variável, ou vazia, o script se comporta como no terminal e não escreve resultado.
+
+**O contrato do resultado.** O script escreve o arquivo uma vez, no fim, em UTF-8 sem BOM, com uma linha `chave: valor` por campo.
+
+Sucesso:
+
+```
+result: installed
+version: 0.5.0
+path: /home/u/.local/bin/myspec
+```
+
+`version` vem sem o `v`; `path` é o executável instalado, o que o app inicia no reinício.
+
+Falha:
+
+```
+result: failed
+kind: libraries
+reason: MySpec needs system libraries that are missing: GTK 4
+command: sudo pacman -S gtk4
+```
+
+`kind` é `offline`, `timeout`, `libraries`, `system`, `replace` ou `failed`. `reason` é a primeira linha da mensagem de erro que o script mostra no terminal, sem o `error: `. `command` aparece zero ou mais vezes, só em `libraries`.
+
+O contrato é estável: a `main` nunca remove nem renomeia uma chave nem um `kind`, porque versões publicadas do app o leem. Uma chave nova pode entrar, e o app ignora as que não conhece.
+
+**O reinício.** Com a instalação concluída, o app inicia o executável de `path` com `--after-exit=<pid>` e sai pelo fechamento normal. O processo novo espera o antigo terminar antes de pegar o lock da instância única. A flag é parte do contrato entre versões: toda release a mantém, porque a versão que reinicia é a anterior à que sobe.
+
+**A regra do formato:** vale para os dois pacotes. Cada script de instalação depende da estrutura do pacote que instala, o `install.sh` a do pacote Linux e o `install.ps1` a do pacote Windows, e o script da `main` precisa sempre entender o pacote da última release publicada. Uma mudança na estrutura do pacote chega à `main` com um script que aceita as duas estruturas, e o suporte à antiga sai só depois da release com a nova. O contrato do resultado também é estável, pelo mesmo motivo. Uma correção no script chega ao time no merge, sem release.
 
 **Verificação:** a verificação automática é o `shellcheck` no `install.sh` (`task lint:sh`) e o PSScriptAnalyzer no `install.ps1` (`task lint:ps`), com as regras de compatibilidade do Windows PowerShell 5.1 e do PowerShell 7 em `PSScriptAnalyzerSettings.psd1`; os dois rodam em `task lint` e no CI. O comportamento se confere à mão: o `install.sh` no Arch e no Pop!_OS 24.04, e o `install.ps1` no Windows 11 x64, no Windows PowerShell 5.1 e no PowerShell 7: a instalação numa máquina sem o app, a atualização com o app fechado e com ele aberto, a limpeza do `.old` na execução seguinte, a recusa num PowerShell elevado e o atalho no menu Iniciar com o nome e o ícone, agrupado com a janela na barra de tarefas.
+
+A atualização de dentro do app também se confere à mão, no Arch, no Pop!_OS 24.04 e no Windows 11 com o Windows PowerShell 5.1, que é o que o app usa:
+
+- atualizar sem agente trabalhando: o app reinicia sozinho;
+- atualizar com um agente trabalhando: **Later**, o turno termina, **Restart now**;
+- atualizar sem rede: `Couldn't update` e **Try again**;
+- fechar o app durante `Updating…`: a próxima abertura é a nova;
+- no Windows, a limpeza do `.old` na atualização seguinte.
 
 ## Quando uma release falha
 
