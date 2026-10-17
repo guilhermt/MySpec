@@ -1507,6 +1507,7 @@ const NO_UPDATE: Update = {
   releases: [],
   failure: null,
   installCommand: "",
+  install: { phase: "idle", target: "", version: "", failure: null, restartError: "", working: [] },
 };
 
 /** useBoards is every registered board, by title. */

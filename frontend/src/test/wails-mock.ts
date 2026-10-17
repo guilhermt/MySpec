@@ -1088,6 +1088,14 @@ export function makeUpdate(overrides: Partial<Update> = {}): Update {
     failure: null,
     installCommand:
       "curl -fsSL https://raw.githubusercontent.com/guilhermt/MySpec/main/install.sh | sh",
+    install: {
+      phase: "idle",
+      target: "",
+      version: "",
+      failure: null,
+      restartError: "",
+      working: [],
+    },
     ...overrides,
   };
 }

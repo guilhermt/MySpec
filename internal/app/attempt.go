@@ -218,7 +218,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 		Log:      log,
 		OnChange: a.publish,
 	})
-	updateSvc := update.New(update.Deps{Installed: a.version, Log: log, OnChange: a.publish})
+	updateSvc := update.New(update.Deps{Installed: a.version, Log: log, OnChange: a.publish, OnInstalled: a.onUpdateInstalled})
 	repositories := repository.New(repository.Deps{
 		Store:         st.Repositories,
 		Settings:      st.Settings,
@@ -382,7 +382,8 @@ func (a *App) bound(
 	return bindings.Services{
 		State:      bindings.NewStateService(a.state),
 		Repository: bindings.NewRepositoryService(repositories, a, log),
-		Settings:   bindings.NewSettingsService(themeSvc, modelsSvc, reviewModesSvc, a.checkMachine, a.checkForUpdates, dataDir, log),
+		Settings: bindings.NewSettingsService(themeSvc, modelsSvc, reviewModesSvc, a.checkMachine,
+			bindings.UpdateActions{Check: a.checkForUpdates, Install: a.installUpdate, Restart: a.restartForUpdate}, dataDir, log),
 		Task: bindings.NewTaskService(
 			tasks, sessions, flowSvc, modelsSvc, reviewModesSvc, repositories, boards, editor.Open,
 			a.discussions.DocumentOfCard, a.hasConversation, log,

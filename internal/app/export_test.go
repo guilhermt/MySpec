@@ -198,3 +198,6 @@ func (a *App) State() bindings.State { return a.services.State.GetState() }
 
 // PublishNow exposes publishNow to the external tests of the package.
 func (a *App) PublishNow() { a.publishNow() }
+
+// WorkingOf exposes workingOf to the external tests of the package.
+var WorkingOf = workingOf

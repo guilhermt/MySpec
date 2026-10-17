@@ -3781,6 +3781,11 @@ export interface Update {
      * InstallCommand is the command that updates MySpec on this system.
      */
     "installCommand": string;
+
+    /**
+     * Install is where the installation of a newer version stands.
+     */
+    "install": UpdateInstall;
 }
 
 /**
@@ -3797,6 +3802,65 @@ export interface UpdateFailure {
      * what happened, the sentence the page shows for failed
      */
     "detail": string;
+}
+
+/**
+ * UpdateInstall is where the installation of a newer version stands, from
+ * Update to <version> until the app closes.
+ */
+export interface UpdateInstall {
+    /**
+     * Phase is idle, installing, installed or failed, a string for the same
+     * reason as State.Theme.
+     */
+    "phase": string;
+
+    /**
+     * the newest version known when the user asked, 0.5.0; "" when idle
+     */
+    "target": string;
+
+    /**
+     * the version installed; installed only
+     */
+    "version": string;
+
+    /**
+     * Failure is why the last installation failed; failed only, nil otherwise.
+     */
+    "failure": UpdateInstallFailure | null;
+
+    /**
+     * RestartError is why Restart now couldn't start the installed version; "" otherwise.
+     */
+    "restartError": string;
+
+    /**
+     * Working are the conversations whose agent works now, which a restart
+     * cuts; installed only, and never nil.
+     */
+    "working": UpdateWorking[] | null;
+}
+
+/**
+ * UpdateInstallFailure is why an installation failed.
+ */
+export interface UpdateInstallFailure {
+    /**
+     * Kind is offline, rate_limited, timeout, libraries, system, replace or
+     * failed, a string for the same reason as State.Theme.
+     */
+    "kind": string;
+
+    /**
+     * what happened, a sentence
+     */
+    "reason": string;
+
+    /**
+     * what to run to fix it, for libraries; never nil
+     */
+    "commands": string[] | null;
 }
 
 /**
@@ -3817,6 +3881,19 @@ export interface UpdateRelease {
      * markdown, as GitHub has it; "" without notes
      */
     "notes": string;
+}
+
+/**
+ * UpdateWorking is a conversation whose agent works now: the item, a task, a
+ * review of a pull request or a discussion, and the session stage.
+ */
+export interface UpdateWorking {
+    "itemId": string;
+
+    /**
+     * prd, step:3, step_review:3, pr_review, review, discussion…
+     */
+    "stage": string;
 }
 
 /**

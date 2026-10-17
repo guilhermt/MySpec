@@ -1097,6 +1097,41 @@ type Update struct {
 	Failure *UpdateFailure `json:"failure"`
 	// InstallCommand is the command that updates MySpec on this system.
 	InstallCommand string `json:"installCommand"`
+	// Install is where the installation of a newer version stands.
+	Install UpdateInstall `json:"install"`
+}
+
+// UpdateInstall is where the installation of a newer version stands, from
+// Update to <version> until the app closes.
+type UpdateInstall struct {
+	// Phase is idle, installing, installed or failed, a string for the same
+	// reason as State.Theme.
+	Phase   string `json:"phase"`
+	Target  string `json:"target"`  // the newest version known when the user asked, 0.5.0; "" when idle
+	Version string `json:"version"` // the version installed; installed only
+	// Failure is why the last installation failed; failed only, nil otherwise.
+	Failure *UpdateInstallFailure `json:"failure"`
+	// RestartError is why Restart now couldn't start the installed version; "" otherwise.
+	RestartError string `json:"restartError"`
+	// Working are the conversations whose agent works now, which a restart
+	// cuts; installed only, and never nil.
+	Working []UpdateWorking `json:"working"`
+}
+
+// UpdateInstallFailure is why an installation failed.
+type UpdateInstallFailure struct {
+	// Kind is offline, rate_limited, timeout, libraries, system, replace or
+	// failed, a string for the same reason as State.Theme.
+	Kind     string   `json:"kind"`
+	Reason   string   `json:"reason"`   // what happened, a sentence
+	Commands []string `json:"commands"` // what to run to fix it, for libraries; never nil
+}
+
+// UpdateWorking is a conversation whose agent works now: the item, a task, a
+// review of a pull request or a discussion, and the session stage.
+type UpdateWorking struct {
+	ItemID string `json:"itemId"`
+	Stage  string `json:"stage"` // prd, step:3, step_review:3, pr_review, review, discussion…
 }
 
 // UpdateRelease is one release newer than the installed version.
