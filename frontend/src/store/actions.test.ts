@@ -41,6 +41,7 @@ import {
   findArchived,
   followTaskReviewMode,
   groupIntoEpicInPlace,
+  installUpdate,
   interrupt,
   listPrompts,
   loadOlderHistory,
@@ -68,6 +69,7 @@ import {
   removeDraftDependency,
   removePending,
   removeRepository,
+  restartForUpdate,
   resume,
   resumeInPlace,
   retry,
@@ -858,6 +860,30 @@ describe("task actions", () => {
     expect(await checkMachineAgain()).toBeNull();
     expect(useAppStore.getState().announcement?.text).toBe(
       "Couldn't check this machine. Try again.",
+    );
+  });
+
+  it("starts the installation and announces a call that fails", async () => {
+    expect(await installUpdate()).toBe(true);
+    expect(api.installUpdate).toHaveBeenCalledTimes(1);
+    expect(useAppStore.getState().announcement).toBeNull();
+
+    vi.mocked(api.installUpdate).mockRejectedValueOnce(new Error("local build"));
+
+    expect(await installUpdate()).toBe(false);
+    expect(useAppStore.getState().announcement?.text).toBe("Couldn't update. local build");
+  });
+
+  it("restarts for the update and announces a call that fails", async () => {
+    expect(await restartForUpdate()).toBe(true);
+    expect(api.restartForUpdate).toHaveBeenCalledTimes(1);
+    expect(useAppStore.getState().announcement).toBeNull();
+
+    vi.mocked(api.restartForUpdate).mockRejectedValueOnce(new Error("no start"));
+
+    expect(await restartForUpdate()).toBe(false);
+    expect(useAppStore.getState().announcement?.text).toBe(
+      "Couldn't restart. Close MySpec and open it again.",
     );
   });
 

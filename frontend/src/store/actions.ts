@@ -1,3 +1,4 @@
+import { RESTART_FAILURE_TITLE, RESTART_REMEDY } from "@/features/about/about";
 import { checkAnnouncement } from "@/features/machine/machine";
 import type { PreviewReading } from "@/features/task/deletion";
 import { draftTitle } from "@/lib/drafts";
@@ -5,7 +6,13 @@ import { messageOf, noticeDetail, type Remedy } from "@/lib/errors";
 import { olderKey } from "@/lib/history";
 import { locationTitle } from "@/lib/locations";
 import type { ModelChoice } from "@/lib/models";
-import { availableAnnouncement, FAILURE_TITLE, failureReason, UP_TO_DATE } from "@/lib/update";
+import {
+  availableAnnouncement,
+  FAILURE_TITLE,
+  failureReason,
+  INSTALL_FAILURE_TITLE,
+  UP_TO_DATE,
+} from "@/lib/update";
 import type {
   ActionOutput,
   ArchivedDiscussion,
@@ -419,6 +426,28 @@ export async function checkForUpdates(known: string): Promise<Update | null> {
   } catch {
     announce("Couldn't check for updates. Try again.");
     return null;
+  }
+}
+
+/** installUpdate is Update to and Try again: it starts the installation, which the state follows and announces. It answers whether the call went through. */
+export async function installUpdate(): Promise<boolean> {
+  try {
+    await api.installUpdate();
+    return true;
+  } catch (error) {
+    useAppStore.getState().announce(`${INSTALL_FAILURE_TITLE}. ${messageOf(error)}`);
+    return false;
+  }
+}
+
+/** restartForUpdate is Restart now: the app closes and the installed version opens. A start that fails is in the state; the call announces it. */
+export async function restartForUpdate(): Promise<boolean> {
+  try {
+    await api.restartForUpdate();
+    return true;
+  } catch {
+    useAppStore.getState().announce(`${RESTART_FAILURE_TITLE}. ${RESTART_REMEDY}`);
+    return false;
   }
 }
 

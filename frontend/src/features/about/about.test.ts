@@ -2,12 +2,26 @@ import { describe, expect, it } from "vitest";
 import {
   checkedText,
   checkedTip,
+  keepsRunningText,
   releaseHeading,
   resultOf,
   signLabel,
+  signOf,
+  signText,
+  updateBlockOf,
   versionTitle,
+  workingLines,
 } from "@/features/about/about";
-import { makeUpdate, makeUpdateRelease } from "@/test/wails-mock";
+import {
+  makeDiscussion,
+  makeReviewSummary,
+  makeState,
+  makeTask,
+  makeUpdate,
+  makeUpdateInstall,
+  makeUpdateInstallFailure,
+  makeUpdateRelease,
+} from "@/test/wails-mock";
 
 const NOW = Date.parse("2026-10-17T14:10:00");
 
@@ -23,6 +37,154 @@ describe("versionTitle", () => {
 describe("signLabel", () => {
   it("names the version and where the sign leads", () => {
     expect(signLabel("0.5.0")).toBe("MySpec 0.5.0 is available. Open About.");
+  });
+});
+
+describe("keepsRunningText", () => {
+  it("says the running version keeps running", () => {
+    expect(keepsRunningText("0.4.0")).toBe(
+      "Restart to use it. Until then, MySpec 0.4.0 keeps running.",
+    );
+  });
+});
+
+const FAILURE = makeUpdateInstallFailure({ kind: "libraries", reason: "libfoo is missing." });
+
+describe("updateBlockOf", () => {
+  it("is installed with the version installed, before anything else", () => {
+    const update = makeUpdate({
+      latest: "0.6.0",
+      install: makeUpdateInstall({ phase: "installed", version: "0.5.0", target: "0.5.0" }),
+    });
+
+    expect(updateBlockOf(update)).toEqual({ kind: "installed", version: "0.5.0" });
+  });
+
+  it("is updating with the target, or the latest without one", () => {
+    const install = makeUpdateInstall({ phase: "installing", target: "0.5.0" });
+
+    expect(updateBlockOf(makeUpdate({ latest: "0.6.0", install }))).toEqual({
+      kind: "updating",
+      version: "0.5.0",
+    });
+    expect(
+      updateBlockOf(makeUpdate({ latest: "0.6.0", install: { ...install, target: "" } })),
+    ).toEqual({ kind: "updating", version: "0.6.0" });
+  });
+
+  it("is failed with the latest, or the target without one", () => {
+    const install = makeUpdateInstall({ phase: "failed", target: "0.5.0", failure: FAILURE });
+
+    expect(updateBlockOf(makeUpdate({ latest: "0.6.0", install }))).toEqual({
+      kind: "failed",
+      version: "0.6.0",
+      failure: FAILURE,
+    });
+    expect(updateBlockOf(makeUpdate({ latest: "", install }))).toEqual({
+      kind: "failed",
+      version: "0.5.0",
+      failure: FAILURE,
+    });
+  });
+
+  it("falls to the newest version known when a failed phase has no failure", () => {
+    const install = makeUpdateInstall({ phase: "failed" });
+
+    expect(updateBlockOf(makeUpdate({ latest: "0.5.0", install }))).toEqual({
+      kind: "available",
+      version: "0.5.0",
+    });
+  });
+
+  it("is available with the latest, none without one", () => {
+    expect(updateBlockOf(makeUpdate({ latest: "0.5.0" }))).toEqual({
+      kind: "available",
+      version: "0.5.0",
+    });
+    expect(updateBlockOf(makeUpdate())).toEqual({ kind: "none" });
+  });
+
+  it("is none in a build that never checks", () => {
+    const install = makeUpdateInstall({ phase: "installed", version: "0.5.0" });
+
+    expect(updateBlockOf(makeUpdate({ checks: false, latest: "0.5.0", install }))).toEqual({
+      kind: "none",
+    });
+  });
+});
+
+describe("signOf and signText", () => {
+  it("has no sign without a block", () => {
+    expect(signOf(makeUpdate())).toBeNull();
+  });
+
+  it("is available for a newer version and for a failed installation", () => {
+    const failed = makeUpdateInstall({ phase: "failed", failure: FAILURE });
+
+    expect(signOf(makeUpdate({ latest: "0.5.0" }))).toEqual({
+      kind: "available",
+      version: "0.5.0",
+    });
+    expect(signOf(makeUpdate({ latest: "0.5.0", install: failed }))).toEqual({
+      kind: "available",
+      version: "0.5.0",
+    });
+  });
+
+  it("is updating while the installation runs and installed after it", () => {
+    expect(
+      signOf(makeUpdate({ install: makeUpdateInstall({ phase: "installing", target: "0.5.0" }) })),
+    ).toEqual({ kind: "updating", version: "0.5.0" });
+    expect(
+      signOf(makeUpdate({ install: makeUpdateInstall({ phase: "installed", version: "0.5.0" }) })),
+    ).toEqual({ kind: "installed", version: "0.5.0" });
+  });
+
+  it("says each state", () => {
+    expect(signText({ kind: "available", version: "0.5.0" })).toBe("MySpec 0.5.0 is available");
+    expect(signText({ kind: "updating", version: "0.5.0" })).toBe("Updating to MySpec 0.5.0…");
+    expect(signText({ kind: "installed", version: "0.5.0" })).toBe(
+      "MySpec 0.5.0 is installed. Restart to use it.",
+    );
+  });
+});
+
+describe("workingLines", () => {
+  const app = makeState({
+    tasks: [makeTask({ id: "t1", name: "Add login" })],
+    reviews: [makeReviewSummary({ id: "r1", title: "acme/api#12" })],
+    discussions: [makeDiscussion({ id: "d1", title: "Caching" })],
+  });
+
+  it("titles a task, a review and a discussion", () => {
+    expect(
+      workingLines(app, [
+        { itemId: "t1", stage: "step:3" },
+        { itemId: "r1", stage: "review" },
+        { itemId: "d1", stage: "discussion" },
+      ]),
+    ).toEqual(["Add login · Step 3", "acme/api#12 · Review", "Caching · Discussion"]);
+  });
+
+  it("names only the place of an unknown item, or without a state", () => {
+    expect(workingLines(app, [{ itemId: "x", stage: "prd" }])).toEqual(["PRD"]);
+    expect(workingLines(null, [{ itemId: "t1", stage: "prd" }])).toEqual(["PRD"]);
+  });
+
+  it.each([
+    ["prd", "PRD"],
+    ["tech_spec", "Tech spec"],
+    ["plan", "Plan"],
+    ["one_shot", "Planning"],
+    ["step:2", "Step 2"],
+    ["step_review:2", "Reviewer of step 2"],
+    ["pr", "PR"],
+    ["pr_review", "PR review"],
+    ["review", "Review"],
+    ["discussion", "Discussion"],
+    ["mystery", "mystery"],
+  ])("places %s as %s", (stage, place) => {
+    expect(workingLines(app, [{ itemId: "t1", stage }])).toEqual([`Add login · ${place}`]);
   });
 });
 
