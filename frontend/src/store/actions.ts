@@ -5,6 +5,7 @@ import { messageOf, noticeDetail, type Remedy } from "@/lib/errors";
 import { olderKey } from "@/lib/history";
 import { locationTitle } from "@/lib/locations";
 import type { ModelChoice } from "@/lib/models";
+import { availableAnnouncement, FAILURE_TITLE, failureReason, UP_TO_DATE } from "@/lib/update";
 import type {
   ActionOutput,
   ArchivedDiscussion,
@@ -33,6 +34,7 @@ import type {
   StartReviewRequest,
   TaskStage,
   ThemePreference,
+  Update,
 } from "@/lib/wails";
 import { api } from "@/lib/wails";
 import { type OlderList, storedDraft, useAppStore } from "@/store/app-store";
@@ -393,6 +395,29 @@ export async function checkMachineAgain(): Promise<Machine | null> {
     return machine;
   } catch {
     useAppStore.getState().announce("Couldn't check this machine. Try again.");
+    return null;
+  }
+}
+
+/**
+ * checkForUpdates is Check for updates: it checks for a newer version and announces what the check
+ * found. A version that becomes known with it is announced by the state, so only the one known before
+ * (known) is announced here. It answers the update, or null when the call failed.
+ */
+export async function checkForUpdates(known: string): Promise<Update | null> {
+  const { announce } = useAppStore.getState();
+  try {
+    const update = await api.checkForUpdates();
+    if (update.failure !== null) {
+      announce(`${FAILURE_TITLE}. ${failureReason(update.failure)}`);
+    } else if (update.latest === "") {
+      announce(UP_TO_DATE);
+    } else if (update.latest === known) {
+      announce(availableAnnouncement(update.latest));
+    }
+    return update;
+  } catch {
+    announce("Couldn't check for updates. Try again.");
     return null;
   }
 }

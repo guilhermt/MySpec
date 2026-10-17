@@ -36,6 +36,7 @@ import {
   SIDEBAR_RAIL_KEY,
   writeStored,
 } from "@/lib/ui-storage";
+import { availableAnnouncement, newlyAvailable } from "@/lib/update";
 import type {
   ArchivedDiscussion,
   ArchivedReview,
@@ -64,6 +65,7 @@ import type {
   ThemePreference,
   Transcript,
   TranscriptEvent,
+  Update,
 } from "@/lib/wails";
 import { asPlaceKind, asPRState, asTaskStage, asThemePreference, sessionKey } from "@/lib/wails";
 import { allowedInWelcome, welcomeMode } from "@/lib/welcome";
@@ -1023,6 +1025,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     applyState: (next) => {
       set((state) => {
+        // A newer version is announced once, when it becomes known; the page of an item that left speaks first.
+        const available = newlyAvailable(state.app?.update, next.update);
         // With nothing registered and nothing active the Home welcomes: only the places the welcome
         // mode keeps stay, and an open prompt edit stays with Settings.
         if (welcomeMode(next)) {
@@ -1036,6 +1040,13 @@ export const useAppStore = create<AppStore>()((set, get) => {
             forward: state.forward.filter(keep),
             panel: null,
             earlierConversation: null,
+            announcement:
+              available === null
+                ? state.announcement
+                : {
+                    id: (state.announcement?.id ?? 0) + 1,
+                    text: availableAnnouncement(available),
+                  },
             ...(location.kind === "settings" ? {} : { promptEdit: null, pendingLeave: null }),
           };
         }
@@ -1063,13 +1074,18 @@ export const useAppStore = create<AppStore>()((set, get) => {
         // The page of an item that left on its own is announced; the one the
         // user just asked to remove is not.
         const arrived = moved && location.kind === "gone" ? location : null;
-        const announcement =
-          arrived === null || arrived.id === state.expectGone
-            ? state.announcement
-            : {
-                id: (state.announcement?.id ?? 0) + 1,
-                text: goneTitle(arrived, goneOutcome(next, arrived)),
-              };
+        let announcement = state.announcement;
+        if (arrived !== null && arrived.id !== state.expectGone) {
+          announcement = {
+            id: (state.announcement?.id ?? 0) + 1,
+            text: goneTitle(arrived, goneOutcome(next, arrived)),
+          };
+        } else if (available !== null) {
+          announcement = {
+            id: (state.announcement?.id ?? 0) + 1,
+            text: availableAnnouncement(available),
+          };
+        }
         // A review that is gone takes its failed publication and its open dialog with it.
         const reviewIds = new Set((next.reviews ?? []).map((review) => review.id));
         const attempts = Object.entries(state.publishAttempts);
@@ -1481,6 +1497,18 @@ const NO_MACHINE: Machine = {
   missingScopes: [],
 };
 
+/** NO_UPDATE is the check for updates before the state arrives: nothing checked, nothing known. */
+const NO_UPDATE: Update = {
+  version: "",
+  checks: false,
+  running: false,
+  checkedAt: "",
+  latest: "",
+  releases: [],
+  failure: null,
+  installCommand: "",
+};
+
 /** useBoards is every registered board, by title. */
 export function useBoards(): readonly Board[] {
   return useAppStore((state) => state.app?.boards ?? NO_BOARDS);
@@ -1611,6 +1639,11 @@ export function useMigration(): Migration | null {
 /** useModelCatalog is what the installed Claude Code offers, as the state carries it. */
 export function useModelCatalog(): ModelCatalog {
   return useAppStore((state) => state.app?.modelCatalog ?? NO_CATALOG);
+}
+
+/** useUpdate is what the last check for a newer version found, as the state carries it. */
+export function useUpdate(): Update {
+  return useAppStore((state) => state.app?.update ?? NO_UPDATE);
 }
 
 /** useMachine is what the last check of the machine found, as the state carries it. */
