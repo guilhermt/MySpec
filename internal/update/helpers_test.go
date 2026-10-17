@@ -5,6 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -202,4 +205,171 @@ func (b *syncBuffer) String() string {
 	defer b.mu.Unlock()
 
 	return b.buf.String()
+}
+
+// fakeScripts is an in-memory update.Scripts.
+type fakeScripts struct {
+	mu     sync.Mutex
+	script []byte
+	err    error
+	names  []string
+}
+
+func (f *fakeScripts) Script(_ context.Context, name string) ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.names = append(f.names, name)
+	return f.script, f.err
+}
+
+func (f *fakeScripts) callCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return len(f.names)
+}
+
+// fakeRunner is an update.Runner that writes what the test says as the result
+// of the script, instead of running one.
+type fakeRunner struct {
+	mu     sync.Mutex
+	result []byte // written to the result file; nil writes none
+	output []byte
+	err    error
+	calls  int
+	block  chan struct{} // makes Run wait for it to close, or for its context to end
+	script string        // the path Run was given
+}
+
+func (f *fakeRunner) set(result string, output string, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.result, f.output, f.err = nil, []byte(output), err
+	if result != "" {
+		f.result = []byte(result)
+	}
+}
+
+func (f *fakeRunner) callCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.calls
+}
+
+func (f *fakeRunner) Run(ctx context.Context, script, result string) ([]byte, error) {
+	f.mu.Lock()
+	f.calls++
+	f.script = script
+	content, output, err, block := f.result, f.output, f.err, f.block
+	f.mu.Unlock()
+
+	if block != nil {
+		select {
+		case <-block:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	if content != nil {
+		if werr := os.WriteFile(result, content, 0o600); werr != nil {
+			return nil, werr
+		}
+	}
+	return output, err
+}
+
+// installFixture is an update.Service that installs through the doubles.
+type installFixture struct {
+	*update.Service
+	releases *fakeReleases
+	scripts  *fakeScripts
+	runner   *fakeRunner
+	dir      string
+	logs     logCapture
+
+	mu        sync.Mutex
+	events    []string // "change" for each OnChange and "installed" for each OnInstalled, in order
+	installed []update.Install
+}
+
+func (f *installFixture) eventList() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return slices.Clone(f.events)
+}
+
+func (f *installFixture) installedList() []update.Install {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return slices.Clone(f.installed)
+}
+
+// phase is where the installation stands.
+func (f *installFixture) phase() update.InstallPhase {
+	return f.Status().Install.Phase
+}
+
+// waitPhase waits for the installation to reach the phase.
+func (f *installFixture) waitPhase(t *testing.T, phase update.InstallPhase) update.Install {
+	t.Helper()
+
+	waitFor(t, "the installation to be "+string(phase), func() bool { return f.phase() == phase })
+	return f.Status().Install
+}
+
+// installTarget is the newer version a service made by newInstallService knows.
+const installTarget = "0.5.0"
+
+// installedResult is what a script writes when it installed the version.
+func installedResult(t *testing.T, version string) string {
+	t.Helper()
+
+	return "result: installed\nversion: " + version + "\npath: " + filepath.Join(t.TempDir(), "myspec") + "\n"
+}
+
+// newInstallService builds a service on version installed that has checked and
+// found installTarget, whose script installs it.
+func newInstallService(t *testing.T, installed string, opts ...func(*update.Deps)) *installFixture {
+	t.Helper()
+
+	f := &installFixture{
+		releases: &fakeReleases{},
+		scripts:  &fakeScripts{script: []byte("echo install")},
+		runner:   &fakeRunner{},
+		dir:      t.TempDir(),
+		logs:     newLogCapture(),
+	}
+	f.releases.set([]update.Release{rel(t, installTarget)}, nil)
+	f.runner.set(installedResult(t, installTarget), "installing\n", nil)
+	deps := update.Deps{
+		Installed: installed,
+		Releases:  f.releases,
+		Scripts:   f.scripts,
+		Runner:    f.runner,
+		Log:       f.logs.log,
+		OnChange: func() {
+			f.mu.Lock()
+			f.events = append(f.events, "change")
+			f.mu.Unlock()
+		},
+		OnInstalled: func(i update.Install) {
+			f.mu.Lock()
+			f.events = append(f.events, "installed")
+			f.installed = append(f.installed, i)
+			f.mu.Unlock()
+		},
+		Tick:    runTick,
+		TempDir: f.dir,
+	}
+	for _, opt := range opts {
+		opt(&deps)
+	}
+	f.Service = update.New(deps)
+	f.Check(t.Context(), false)
+	return f
 }

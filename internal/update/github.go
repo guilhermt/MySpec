@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"time"
@@ -12,6 +13,9 @@ import (
 
 // DefaultBaseURL is the GitHub API.
 const DefaultBaseURL = "https://api.github.com"
+
+// DefaultRawBaseURL is where GitHub serves the files of a repository.
+const DefaultRawBaseURL = "https://raw.githubusercontent.com"
 
 // repository is where MySpec is released.
 const repository = "guilhermt/MySpec"
@@ -46,16 +50,18 @@ type apiRelease struct {
 
 // GitHubDeps are what the reader needs.
 type GitHubDeps struct {
-	BaseURL   string       // "" is DefaultBaseURL
-	Client    *http.Client // nil is a client of its own, over http.DefaultTransport
-	UserAgent string       // GitHub refuses a request without one
+	BaseURL    string       // "" is DefaultBaseURL
+	RawBaseURL string       // "" is DefaultRawBaseURL
+	Client     *http.Client // nil is a client of its own, over http.DefaultTransport
+	UserAgent  string       // GitHub refuses a request without one
 }
 
 // GitHub reads the releases of MySpec from the public REST API, without a token.
 type GitHub struct {
-	baseURL   string
-	client    *http.Client
-	userAgent string
+	baseURL    string
+	rawBaseURL string
+	client     *http.Client
+	userAgent  string
 }
 
 // NewGitHub builds the reader.
@@ -64,12 +70,16 @@ func NewGitHub(deps GitHubDeps) *GitHub {
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
+	rawBaseURL := deps.RawBaseURL
+	if rawBaseURL == "" {
+		rawBaseURL = DefaultRawBaseURL
+	}
 	client := deps.Client
 	if client == nil {
 		// No Timeout of its own: the deadline is the context of the check.
 		client = &http.Client{Transport: http.DefaultTransport}
 	}
-	return &GitHub{baseURL: baseURL, client: client, userAgent: deps.UserAgent}
+	return &GitHub{baseURL: baseURL, rawBaseURL: rawBaseURL, client: client, userAgent: deps.UserAgent}
 }
 
 // Read implements Releases.
@@ -133,6 +143,35 @@ func (g *GitHub) readPage(ctx context.Context, page int, installed Version) (new
 		newer = append(newer, Release{Version: version, PublishedAt: r.PublishedAt, Notes: notes})
 	}
 	return newer, reachedInstalled, len(decoded), nil
+}
+
+// Script reads an install script from the main branch of the repository, the
+// one the install command of the README runs. Implements Scripts.
+func (g *GitHub) Script(ctx context.Context, name string) ([]byte, error) {
+	url := fmt.Sprintf("%s/%s/main/%s", g.rawBaseURL, repository, name)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return nil, fmt.Errorf("build request %s: %w", url, err)
+	}
+	req.Header.Set("User-Agent", g.userAgent)
+
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("read install script: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return nil, &statusError{status: resp.Status, rateLimited: isRateLimited(resp)}
+	}
+	script, err := io.ReadAll(io.LimitReader(resp.Body, maxScriptSize+1))
+	if err != nil {
+		return nil, fmt.Errorf("read install script: %w", err)
+	}
+	if len(script) == 0 || len(script) > maxScriptSize {
+		return nil, fmt.Errorf("%w: the install script is empty or too large", errUnreadable)
+	}
+	return script, nil
 }
 
 // isRateLimited reports whether GitHub refused the request for the rate limit.
