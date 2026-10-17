@@ -5,7 +5,13 @@ import type { SettingsSection } from "@/lib/locations";
 import type { Machine } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeMachine, makeRepository, makeState, withMachineItems } from "@/test/wails-mock";
+import {
+  makeMachine,
+  makeRepository,
+  makeState,
+  makeUpdate,
+  withMachineItems,
+} from "@/test/wails-mock";
 
 // Place is the nav where Settings keeps it: there while the place is Settings, so a test can open it.
 function Place() {
@@ -15,10 +21,16 @@ function Place() {
 
 function nav(
   section: SettingsSection = "defaults",
-  options: { pendingFocus?: "nav" | null; missing?: boolean; machine?: Machine } = {},
+  options: {
+    pendingFocus?: "nav" | null;
+    missing?: boolean;
+    machine?: Machine;
+    latest?: string;
+  } = {},
 ) {
   const state = makeState({
     ...(options.machine !== undefined ? { machine: options.machine } : {}),
+    update: makeUpdate({ latest: options.latest ?? "" }),
     repositories: [
       makeRepository({ id: "r1", fullName: "acme/api" }),
       makeRepository({ id: "r2", fullName: "acme/infra", missing: options.missing === true }),
@@ -40,7 +52,7 @@ const section = () => {
 };
 
 describe("SettingsNav", () => {
-  it("lists the five pages as links and marks the open one as the current page", () => {
+  it("lists the six pages as links and marks the open one as the current page", () => {
     nav("boards");
 
     const list = screen.getByRole("navigation", { name: "Settings" });
@@ -51,6 +63,7 @@ describe("SettingsNav", () => {
       "Repositories",
       "Prompts",
       "Machine",
+      "About",
     ]);
     expect(link("Boards")).toHaveAttribute("aria-current", "page");
     expect(link("Defaults")).not.toHaveAttribute("aria-current");
@@ -103,12 +116,12 @@ describe("SettingsNav", () => {
 
     await user.keyboard("{End}");
 
-    expect(section()).toBe("machine");
-    expect(link("Machine")).toHaveFocus();
+    expect(section()).toBe("about");
+    expect(link("About")).toHaveFocus();
 
     await user.keyboard("{ArrowDown}");
 
-    expect(section()).toBe("machine");
+    expect(section()).toBe("about");
 
     await user.keyboard("{Home}");
 
@@ -220,5 +233,18 @@ describe("SettingsNav", () => {
 
     expect(link("Machine")).not.toHaveAccessibleDescription();
     expect(link("Machine")).toHaveTextContent(/^Machine$/);
+  });
+
+  it("marks About with the sign of a newer version, described for a screen reader", () => {
+    nav("defaults", { latest: "0.5.0" });
+
+    expect(link("About")).toHaveAccessibleDescription("MySpec 0.5.0 is available");
+  });
+
+  it("says nothing on About without a newer version", () => {
+    nav("defaults");
+
+    expect(link("About")).not.toHaveAccessibleDescription();
+    expect(link("About")).toHaveTextContent(/^About$/);
   });
 });
