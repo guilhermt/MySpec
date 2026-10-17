@@ -185,7 +185,7 @@ Um nó recolhido mostra à direita um glifo e uma contagem por estado, do mais g
 - `+N` quando há mais de uma situação;
 - o trilho no erro.
 
-Entre os grupos, um separador leva o `◇` da falha de leitura ou do clone, e, em Reviews, a contagem de PRs pendentes. O nome acessível de cada bloco é o da linha inteira. O rodapé fica em coluna.
+Entre os grupos, um separador leva o `◇` da falha de leitura ou do clone, e, em Reviews, a contagem de PRs pendentes. O nome acessível de cada bloco é o da linha inteira. O rodapé fica em coluna, com o sinal de versão nova acima de **Settings** quando há uma.
 
 ### O filtro
 
@@ -193,7 +193,7 @@ Entre os grupos, um separador leva o `◇` da falha de leitura ou do clone, e, e
 
 ### O rodapé
 
-**History**, com a contagem de tasks, reviews e discussões arquivados; o tema (System, Light, Dark, em ciclo), que só existe aqui; e **Settings**. **History** e **Settings** ficam pressionados enquanto o lugar deles, ou um arquivado, está aberto.
+**History**, com a contagem de tasks, reviews e discussões arquivados; o tema (System, Light, Dark, em ciclo), que só existe aqui; o sinal de versão nova, que só aparece quando há uma e abre **About**; e **Settings**. **History** e **Settings** ficam pressionados enquanto o lugar deles, ou um arquivado, está aberto.
 
 ## 3. Área principal com um item aberto
 
@@ -337,7 +337,7 @@ Sob o cabeçalho, na medida da conversa, quando algo bloqueia sem ser a situaç�
 - **Board**: o cabeçalho tem a idade da leitura, **Refresh**, **New discussion** `N` e `⋯` (**Select cards to discuss**, **Open on GitHub**, **Edit the board in Settings…**). Não tem **Start task**: uma task começa de um card. Abaixo, a busca e os filtros (o chip **Assigned to me**, os filtros ativos como chips, o menu **Filter**), e a lista agrupada pelas seções de status do board, na ordem dele, com as finais recolhidas. A linha do card mostra só o que decide a escolha: o número, o título, o épico, a dependência não satisfeita e a task (com a situação real) ou a discussão do card; as teclas `S` e `D` aparecem na linha em foco. O card abre num painel ao lado da lista, que é o único lugar de **Start task** e **Discuss** fora das teclas; o repositório sem clone aparece lá (**Clone and continue**) e na Home. A seleção de cards para uma discussão é um modo, pelo `⋯` ou por `Space`. A falha de leitura é uma faixa no alto da lista, com **Try again**, sobre a leitura guardada.
 - **Reviews**: a lista das PRs abertas, agrupada em `Pending`, `In review`, `Reviewed` e `Yours and your tasks`, as duas últimas recolhidas. A linha mostra a referência, o título, o autor e o estado que importa; `R` inicia o review, abre o que existe ou a task dona. A PR abre num painel com a ação, os checks pelo nome, os fatos e a descrição. Os filtros ficam no menu **Filter** (Board, Repository, Author, Label). A falha de leitura de um repositório é uma faixa no alto da lista.
 - **History**: uma lista só, por data de arquivamento, com os dias como seção, a busca no alto (onde o foco começa) e a contagem, e o filtro da lateral aplicado como chip removível. A linha tem o tipo, o nome, onde (card, PR ou board), o resultado e a hora. A linha recém-arquivada fica destacada quando se chega pela página do item que saiu. O arquivado é um lugar, com `← History`, o tipo, o título, a etiqueta e **Delete…** no `⋯`: a task com os fatos, o resultado do encerramento e as abas dos documentos (a aba **Pull request** com o rascunho e os relatórios do review), o review com cada passada, a discussão com o que publicou primeiro. Nada roda num arquivado, e apagá-lo volta ao History.
-- **Settings**: a navegação à esquerda com cinco páginas, **Defaults** (o modo de review e os modelos por etapa), **Boards**, **Repositories** (o que precisa de clone primeiro, depois os repositórios por board), **Prompts** (a lista dos nove, com `Default` ou `Edited`, e cada prompt aberto na mesma página, com a edição) e **Machine** (os seis itens do que o app precisa da máquina, em dois blocos, Claude Code e GitHub CLI, com **Check again**; o item leva `◇ N` quando algo falta). Cada página tem o título, uma frase do que ela serve e, quando há, a ação dela, secundária: Settings não pede nada, então não tem primária. Tudo em Defaults salva na hora. Não há página de aparência: o tema fica no rodapé da lateral. Abaixo de 820 px de área principal, a navegação vira uma linha acima da página.
+- **Settings**: a navegação à esquerda com seis páginas, **Defaults** (o modo de review e os modelos por etapa), **Boards**, **Repositories** (o que precisa de clone primeiro, depois os repositórios por board), **Prompts** (a lista dos nove, com `Default` ou `Edited`, e cada prompt aberto na mesma página, com a edição) e **Machine** (os seis itens do que o app precisa da máquina, em dois blocos, Claude Code e GitHub CLI, com **Check again**; o item leva `◇ N` quando algo falta) e **About** (a versão instalada e **Check for updates**; com uma versão nova, o comando de instalação e as notas das releases depois da instalada; o item leva o ícone do sinal de versão nova). Cada página tem o título, uma frase do que ela serve e, quando há, a ação dela, secundária: Settings não pede nada, então não tem primária. Tudo em Defaults salva na hora. Não há página de aparência: o tema fica no rodapé da lateral. Abaixo de 820 px de área principal, a navegação vira uma linha acima da página.
 
 ## 5. Atalhos
 
@@ -418,6 +418,7 @@ O design funciona de 1100 a 2600 px, sem pontos fixos de janela. Cada regra depe
 | Item que saiu enquanto aberto | A página da seção 1 |
 | Item que saiu sem estar aberto | Um toast para a task, o review ou a discussão, com o resultado curto e **Open in History** |
 | Falta algo na máquina | O aviso do topo depois do primeiro uso: uma faixa neutra sob o aviso do app, com o que falta, **Open Settings** e **Dismiss**; nas boas-vindas, o bloco `This machine`, e em Settings, o `◇ N` de **Machine** e a página com todos os itens |
+| Versão nova conhecida | O sinal no rodapé da lateral e na faixa recolhida, também nas boas-vindas; a marca do item **About** na navegação de Settings; e a página **About**, com o comando de instalação e as notas. Nunca vermelho: é uma informação, não uma falha |
 | Aviso do app | Uma ação sem lugar próprio que falhou: uma faixa no topo da área principal, com o trilho de erro, o rótulo com a ação (`Couldn't pause Rate limit per API key`) e o que fazer, até ser dispensada. Uma por vez |
 | Vazios | `No active items.` num board, `No review in progress.`, `No tasks in <repo>.`, `No artifacts yet`, e o estado vazio de cada lista, com o que faria algo aparecer e a ação |
 | Muitos itens na árvore | A árvore rola. O item aberto é trazido à vista. Os nós recolhem com resumo |

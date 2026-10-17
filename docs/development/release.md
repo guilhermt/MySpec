@@ -8,6 +8,8 @@ O arquivo `VERSION`, na raiz, guarda a versão da última release, em semver `MA
 
 Em `0.x`, `minor` é para features e `patch` para correções.
 
+O app compara a versão do binário com as releases publicadas no GitHub e avisa quando há uma mais nova; um build `dev` não procura.
+
 Os builds locais (`task build`, `task dev`, `task install`) se identificam como `dev`. O binário Linux e o `.exe` da release levam a versão no log `app starting`, no atributo `version`, gravada por `-X main.version` em `task package`; no `.exe` ela também está nas propriedades do arquivo.
 
 ## Publicar
