@@ -12,6 +12,8 @@ export interface IconButtonProps
   /** tooltip is what the tooltip says when it says more than the label does. */
   tooltip?: string;
   loading?: boolean;
+  /** busy shows the spinner in the place of the icon and keeps the click, for a button that opens the place of a work that runs. */
+  busy?: boolean;
   icon: IconGlyph;
   shortcut?: string;
   variant?: "ghost" | "secondary";
@@ -35,6 +37,7 @@ export function IconButton({
   disabledReason,
   reasonId,
   loading,
+  busy,
   className,
   onClick,
   ...props
@@ -54,7 +57,7 @@ export function IconButton({
           aria-label={label}
           {...props}
           {...(disabled !== undefined ? { disabled } : {})}
-          {...(loading ? { "aria-busy": true } : {})}
+          {...(loading || busy ? { "aria-busy": true } : {})}
           {...(describedBy !== undefined ? { reasonId: describedBy } : {})}
           onClick={(event) => {
             // Loading, the label stays the name and the spinner takes the place of the icon.
@@ -66,7 +69,7 @@ export function IconButton({
           }}
           className={cn(SQUARES[size], loading && "cursor-progress", className)}
         >
-          {loading ? (
+          {loading || busy ? (
             <Spinner tone="current" />
           ) : (
             <Icon icon={icon} size={size === "md" ? "md" : "sm"} />

@@ -1,11 +1,5 @@
 import { locationTitle } from "@/lib/locations";
-import {
-  availableAnnouncement,
-  availableText,
-  failureReason,
-  restartText,
-  updatingText,
-} from "@/lib/update";
+import { availableText, failureReason, restartText, updatingText } from "@/lib/update";
 import type {
   State,
   Update,
@@ -53,11 +47,6 @@ export const UPDATING_NOTE = "You can keep working meanwhile.";
 
 /** NO_NOTES is what a release without notes shows. */
 export const NO_NOTES = "No notes for this release.";
-
-/** signLabel is the name and the tooltip of the sign: "MySpec 0.5.0 is available. Open About." */
-export function signLabel(latest: string): string {
-  return `${availableAnnouncement(latest)} Open About.`;
-}
 
 /** UpdateBlock is what the block of the newer version shows. */
 export type UpdateBlock =
@@ -122,6 +111,16 @@ export function signText(sign: UpdateSign): string {
     case "installed":
       return restartText(sign.version);
   }
+}
+
+/** sentenceOf ends a text as a sentence: a full stop unless it already ends in a stop or an ellipsis. */
+function sentenceOf(text: string): string {
+  return text.endsWith(".") || text.endsWith("…") ? text : `${text}.`;
+}
+
+/** signLabel is the name and the tooltip of the sign: "MySpec 0.5.0 is available. Open About." */
+export function signLabel(sign: UpdateSign): string {
+  return `${sentenceOf(signText(sign))} Open About.`;
 }
 
 /** workingPlace is where in an item an agent works, as the page lists it: "Step 3", "Reviewer of step 3", "PR review". */

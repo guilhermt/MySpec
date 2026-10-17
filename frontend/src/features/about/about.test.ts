@@ -35,8 +35,15 @@ describe("versionTitle", () => {
 });
 
 describe("signLabel", () => {
-  it("names the version and where the sign leads", () => {
-    expect(signLabel("0.5.0")).toBe("MySpec 0.5.0 is available. Open About.");
+  it.each([
+    [{ kind: "available", version: "0.5.0" }, "MySpec 0.5.0 is available. Open About."],
+    [{ kind: "updating", version: "0.5.0" }, "Updating to MySpec 0.5.0… Open About."],
+    [
+      { kind: "installed", version: "0.5.0" },
+      "MySpec 0.5.0 is installed. Restart to use it. Open About.",
+    ],
+  ] as const)("names the state of %j and where the sign leads", (sign, label) => {
+    expect(signLabel(sign)).toBe(label);
   });
 });
 

@@ -10,6 +10,7 @@ import {
   makeRepository,
   makeState,
   makeUpdate,
+  makeUpdateInstall,
   withMachineItems,
 } from "@/test/wails-mock";
 
@@ -26,11 +27,15 @@ function nav(
     missing?: boolean;
     machine?: Machine;
     latest?: string;
+    install?: ReturnType<typeof makeUpdateInstall>;
   } = {},
 ) {
   const state = makeState({
     ...(options.machine !== undefined ? { machine: options.machine } : {}),
-    update: makeUpdate({ latest: options.latest ?? "" }),
+    update: makeUpdate({
+      latest: options.latest ?? "",
+      ...(options.install !== undefined ? { install: options.install } : {}),
+    }),
     repositories: [
       makeRepository({ id: "r1", fullName: "acme/api" }),
       makeRepository({ id: "r2", fullName: "acme/infra", missing: options.missing === true }),
@@ -239,6 +244,22 @@ describe("SettingsNav", () => {
     nav("defaults", { latest: "0.5.0" });
 
     expect(link("About")).toHaveAccessibleDescription("MySpec 0.5.0 is available");
+  });
+
+  it("marks About while the update installs and once it is installed", () => {
+    const installing = makeUpdateInstall({ phase: "installing", target: "0.5.0" });
+    const { unmount } = nav("defaults", { latest: "0.5.0", install: installing });
+
+    expect(link("About")).toHaveAccessibleDescription("Updating to MySpec 0.5.0…");
+    unmount();
+
+    nav("defaults", {
+      install: makeUpdateInstall({ phase: "installed", version: "0.5.0" }),
+    });
+
+    expect(link("About")).toHaveAccessibleDescription(
+      "MySpec 0.5.0 is installed. Restart to use it.",
+    );
   });
 
   it("says nothing on About without a newer version", () => {
