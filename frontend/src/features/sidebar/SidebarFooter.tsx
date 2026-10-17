@@ -3,6 +3,7 @@ import { Button } from "@/components/system/Button";
 import { IconButton } from "@/components/system/IconButton";
 import { ICONS } from "@/components/system/icons";
 import { Tooltip } from "@/components/system/Tooltip";
+import { UpdateButton } from "@/features/about/UpdateButton";
 import { ThemeButton } from "@/features/sidebar/ThemeButton";
 import { cn } from "@/lib/utils";
 import { useAppStore, useHistorySummary, useHistoryUi, useSettingsUi } from "@/store/app-store";
@@ -35,7 +36,7 @@ function archivedText(tasks: number, reviews: number, discussions: number): stri
 
 /**
  * SidebarFooter is the way into History, with the count of what is archived,
- * the theme, and Settings. History and Settings stay pressed while their place
+ * the theme, the sign of a newer version, and Settings. History and Settings stay pressed while their place
  * is on screen, History also with an archived item.
  */
 export function SidebarFooter({ rail = false, welcome = false }: SidebarFooterProps) {
@@ -65,6 +66,7 @@ export function SidebarFooter({ rail = false, welcome = false }: SidebarFooterPr
           className={cn(historyOpen && CURRENT)}
         />
         <ThemeButton />
+        <UpdateButton />
         <IconButton
           label="Settings"
           icon={ICONS.settings}
@@ -146,6 +148,7 @@ export function SidebarFooter({ rail = false, welcome = false }: SidebarFooterPr
       )}
       <span className="flex-1" />
       <ThemeButton />
+      <UpdateButton />
       {settings}
     </div>
   );

@@ -5,7 +5,7 @@ import type { Location } from "@/lib/locations";
 import type { State } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeHistorySummary, makeState } from "@/test/wails-mock";
+import { makeHistorySummary, makeState, makeUpdate } from "@/test/wails-mock";
 
 // Two archived tasks, one archived review and no archived discussion.
 function archive(): State {
@@ -135,5 +135,48 @@ describe("SidebarFooter", () => {
     );
     await user.click(screen.getByRole("button", { name: "History 3" }));
     expect(useAppStore.getState().location.kind).toBe("history");
+  });
+
+  it("puts the sign of a newer version before Settings", () => {
+    footer({ state: makeState({ update: makeUpdate({ latest: "0.5.0" }) }) });
+
+    const names = screen
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label") ?? button.textContent);
+    expect(names).toEqual([
+      "History",
+      "Theme: System",
+      "MySpec 0.5.0 is available. Open About.",
+      "Settings",
+    ]);
+  });
+
+  it("shows no sign without a newer version", () => {
+    footer();
+
+    expect(screen.queryByRole("button", { name: /is available/ })).not.toBeInTheDocument();
+  });
+
+  it("stacks the sign between the theme and Settings on the strip", () => {
+    footer({ rail: true, state: makeState({ update: makeUpdate({ latest: "0.5.0" }) }) });
+
+    const names = screen.getAllByRole("button").map((button) => button.getAttribute("aria-label"));
+    expect(names.slice(-3)).toEqual([
+      "Theme: System",
+      "MySpec 0.5.0 is available. Open About.",
+      "Settings",
+    ]);
+  });
+
+  it("shows the sign in the welcome mode too", async () => {
+    const { user } = renderWithStore(<SidebarFooter welcome />, {
+      state: makeState({ update: makeUpdate({ latest: "0.5.0" }) }),
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "MySpec 0.5.0 is available. Open About." }),
+    );
+
+    expect(useAppStore.getState().location).toEqual({ kind: "settings", section: "about" });
   });
 });
