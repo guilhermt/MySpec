@@ -85,6 +85,7 @@ import {
   makeTask,
   makeTaskConversation,
   makeTranscript,
+  makeUpdate,
 } from "@/test/wails-mock";
 
 const WEB = makeRepository();
@@ -327,6 +328,40 @@ describe("applyState", () => {
     useAppStore.getState().applyState(withTasks());
 
     expect(useAppStore.getState().lastRepositoryId).toBe("repo-2");
+  });
+});
+
+describe("the announcement of a newer version", () => {
+  const known = (latest: string, overrides = {}) =>
+    withTasks({ update: makeUpdate({ latest }), ...overrides });
+  const said = () => useAppStore.getState().announcement?.text;
+
+  it("announces a version when it becomes known, once", () => {
+    useAppStore.getState().applyState(known(""));
+    expect(said()).toBeUndefined();
+
+    useAppStore.getState().applyState(known("0.5.0"));
+    const first = useAppStore.getState().announcement;
+    expect(first?.text).toBe("MySpec 0.5.0 is available.");
+
+    useAppStore.getState().applyState(known("0.5.0"));
+    expect(useAppStore.getState().announcement).toBe(first);
+  });
+
+  it("announces again for a still newer version", () => {
+    useAppStore.getState().applyState(known("0.5.0"));
+    const first = useAppStore.getState().announcement;
+
+    useAppStore.getState().applyState(known("0.6.0"));
+
+    expect(said()).toBe("MySpec 0.6.0 is available.");
+    expect(useAppStore.getState().announcement?.id).toBeGreaterThan(first?.id ?? 0);
+  });
+
+  it("announces in the welcome mode too", () => {
+    useAppStore.getState().applyState({ ...WELCOME, update: makeUpdate({ latest: "0.5.0" }) });
+
+    expect(said()).toBe("MySpec 0.5.0 is available.");
   });
 });
 

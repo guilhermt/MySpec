@@ -61,7 +61,10 @@ func (a *App) snapshot() bindings.State {
 		ModelCatalog: bindings.FromCatalog(a.models.Catalog(), a.models.CatalogFailure()),
 		// Machine is what the last check of the machine found; like the
 		// catalog, it is the app's own.
-		Machine:           a.machineState(),
+		Machine: a.machineState(),
+		// Update is what the last check for a newer version found; like the
+		// machine, it is the app's own.
+		Update:            a.updateState(),
 		ReviewModeDefault: string(a.reviewModes.Default()),
 		Tasks: bindings.FromTasks(
 			tasks,

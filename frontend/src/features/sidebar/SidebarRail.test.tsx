@@ -14,6 +14,7 @@ import {
   makeSituation,
   makeState,
   makeTask,
+  makeUpdate,
 } from "@/test/wails-mock";
 
 // A review, then a board with two tasks: add-login idle, fix-header waiting on a question.
@@ -179,5 +180,19 @@ describe("SidebarRail", () => {
     expect(screen.getByRole("button", { name: /^History/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Theme: System" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+  });
+
+  it("adds the sign of a newer version before Settings, and none without it", () => {
+    const { unmount } = rail();
+    expect(screen.queryByRole("button", { name: /is available/ })).not.toBeInTheDocument();
+    unmount();
+
+    renderWithStore(<SidebarRail />, {
+      state: makeState({ ...state(), update: makeUpdate({ latest: "0.5.0" }) }),
+    });
+
+    const sign = screen.getByRole("button", { name: "MySpec 0.5.0 is available. Open About." });
+    const settings = screen.getByRole("button", { name: "Settings" });
+    expect(sign.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

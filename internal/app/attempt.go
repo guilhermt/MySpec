@@ -31,6 +31,7 @@ import (
 	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/theme"
+	"github.com/guilhermt/myspec/internal/update"
 	"github.com/guilhermt/myspec/internal/upgrade"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
@@ -217,6 +218,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 		Log:      log,
 		OnChange: a.publish,
 	})
+	updateSvc := update.New(update.Deps{Installed: a.version, Log: log, OnChange: a.publish})
 	repositories := repository.New(repository.Deps{
 		Store:         st.Repositories,
 		Settings:      st.Settings,
@@ -314,7 +316,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 		OnChange:     func(string) { a.publish() },
 	})
 	a.theme, a.repositories, a.tasks, a.sessions, a.flow = themeSvc, repositories, tasks, sessions, flowSvc
-	a.worktrees, a.review, a.models, a.machine = worktrees, reviews, modelsSvc, machineSvc
+	a.worktrees, a.review, a.models, a.machine, a.update = worktrees, reviews, modelsSvc, machineSvc, updateSvc
 	a.paintTitleBar(themeSvc.Effective())
 	a.reviewModes, a.boards = reviewModesSvc, boards
 	a.pulls, a.prReviews, a.reviewFlow = pullRequests, prReviews, reviewFlow
@@ -352,6 +354,8 @@ func (a *App) runInBackground() {
 	// What the machine lacks is checked at every opening, in the background:
 	// it reaches the interface with the state and never holds the window.
 	go a.machine.Check(a.pollCtx)
+	// A newer release is looked for at every opening and every hour after, in the background: it reaches the interface with the state and never holds it.
+	go a.update.Run(a.pollCtx)
 	// The catalog of models comes from the CLI on the machine and must not hold
 	// the interface: it is read in the background and reaches it with the state.
 	go a.discoverModels(a.pollCtx, a.dirs.Data)
@@ -378,7 +382,7 @@ func (a *App) bound(
 	return bindings.Services{
 		State:      bindings.NewStateService(a.state),
 		Repository: bindings.NewRepositoryService(repositories, a, log),
-		Settings:   bindings.NewSettingsService(themeSvc, modelsSvc, reviewModesSvc, a.checkMachine, dataDir, log),
+		Settings:   bindings.NewSettingsService(themeSvc, modelsSvc, reviewModesSvc, a.checkMachine, a.checkForUpdates, dataDir, log),
 		Task: bindings.NewTaskService(
 			tasks, sessions, flowSvc, modelsSvc, reviewModesSvc, repositories, boards, editor.Open,
 			a.discussions.DocumentOfCard, a.hasConversation, log,

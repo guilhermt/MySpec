@@ -170,10 +170,10 @@ describe("the keyboard of Settings", () => {
       expect(link("Boards")).toHaveFocus();
 
       await user.keyboard("{End}");
-      expect(place()).toEqual({ kind: "settings", section: "machine" });
+      expect(place()).toEqual({ kind: "settings", section: "about" });
 
       await user.keyboard("{ArrowDown}");
-      expect(place()).toEqual({ kind: "settings", section: "machine" });
+      expect(place()).toEqual({ kind: "settings", section: "about" });
 
       await user.keyboard("{Home}{ArrowUp}");
       expect(place()).toEqual({ kind: "settings", section: "defaults" });
@@ -294,6 +294,16 @@ describe("the keyboard of Settings", () => {
 });
 
 describe("the focus of Settings", () => {
+  it("reaches About with the arrows and starts its page on the navigation like the others", async () => {
+    const { user } = await drawn("settings-defaults", "");
+    link("Defaults").focus();
+
+    await user.keyboard("{End}");
+
+    expect(screen.getByRole("heading", { level: 2, name: "About" })).toBeInTheDocument();
+    expect(link("About")).toHaveFocus();
+  });
+
   it("starts on the page in the navigation when Settings opens by the keyboard", async () => {
     const { user } = setup(
       { ...settingsScene("settings-defaults", ""), location: { kind: "home" } },

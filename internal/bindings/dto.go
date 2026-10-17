@@ -135,6 +135,8 @@ type State struct {
 	ModelCatalog ModelCatalog `json:"modelCatalog"`
 	// Machine is what the last check of the machine found.
 	Machine Machine `json:"machine"`
+	// Update is what the last check for a newer version of MySpec found.
+	Update Update `json:"update"`
 	// ReviewModeDefault is manual or agent: who reviews the steps of a new
 	// task, a string for the same reason as State.Theme.
 	ReviewModeDefault string `json:"reviewModeDefault"`
@@ -1075,6 +1077,41 @@ type MachineItem struct {
 	Result string `json:"result"`
 	Reason string `json:"reason"`
 	Detail string `json:"detail"` // what the tool said; "" when there is nothing to show
+}
+
+// Update is where the check for a newer version stands: the installed
+// version, the releases newer than it and how to update. It is checked at
+// every opening, every hour and on Check for updates; nothing of it is
+// persisted.
+type Update struct {
+	Version string `json:"version"` // the installed version as the binary carries it: 0.4.0, dev
+	Checks  bool   `json:"checks"`  // false for a build whose version is not MAJOR.MINOR.PATCH, which never checks
+	Running bool   `json:"running"` // a check runs now
+	// CheckedAt is when the last successful check ended, RFC 3339; "" before one.
+	CheckedAt string `json:"checkedAt"`
+	// Latest is the newest release newer than Version, as 0.5.0; "" when there is none.
+	Latest string `json:"latest"`
+	// Releases are the releases newer than Version, newest first; never nil.
+	Releases []UpdateRelease `json:"releases"`
+	// Failure is why the last check failed when the user asked for it; nil otherwise.
+	Failure *UpdateFailure `json:"failure"`
+	// InstallCommand is the command that updates MySpec on this system.
+	InstallCommand string `json:"installCommand"`
+}
+
+// UpdateRelease is one release newer than the installed version.
+type UpdateRelease struct {
+	Version     string `json:"version"`     // 0.5.0, without the v
+	PublishedAt string `json:"publishedAt"` // RFC 3339
+	Notes       string `json:"notes"`       // markdown, as GitHub has it; "" without notes
+}
+
+// UpdateFailure is why a check the user asked for failed.
+type UpdateFailure struct {
+	// Kind is offline, rate_limited, timeout or failed, a string for the same
+	// reason as State.Theme.
+	Kind   string `json:"kind"`
+	Detail string `json:"detail"` // what happened, the sentence the page shows for failed
 }
 
 // CreateTaskRequest is the task the user filled in the creation dialog.

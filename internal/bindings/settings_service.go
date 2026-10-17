@@ -19,18 +19,21 @@ type SettingsService struct {
 	defaults     *models.Service
 	reviewModes  *reviewmode.Service
 	checkMachine func() Machine
+	checkUpdates func() Update
 	dataDir      string
 	log          *slog.Logger
 }
 
 // NewSettingsService builds the service over the theme domain, the model and
-// review mode defaults of the app, the check of the machine and the prompts of
+// review mode defaults of the app, the check of the machine, the check for a
+// newer version and the prompts of
 // the data directory.
 func NewSettingsService(
 	t *theme.Service,
 	defaults *models.Service,
 	reviewModes *reviewmode.Service,
 	checkMachine func() Machine,
+	checkUpdates func() Update,
 	dataDir string,
 	log *slog.Logger,
 ) *SettingsService {
@@ -39,6 +42,7 @@ func NewSettingsService(
 		defaults:     defaults,
 		reviewModes:  reviewModes,
 		checkMachine: checkMachine,
+		checkUpdates: checkUpdates,
 		dataDir:      dataDir,
 		log:          log,
 	}
@@ -133,6 +137,18 @@ func (s *SettingsService) CheckMachine() (Machine, error) {
 		return Machine{}, err
 	}
 	return s.checkMachine(), nil
+}
+
+// CheckForUpdates checks for a newer version of MySpec, or waits for the
+// check that runs, and returns where the check stands after it; the state
+// carries the same with state:changed. A failure of the check is in the
+// answer, not an error.
+func (s *SettingsService) CheckForUpdates() (Update, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return Update{}, err
+	}
+	return s.checkUpdates(), nil
 }
 
 // GetPrompt reads a prompt as the settings show it.

@@ -82,7 +82,7 @@ const withRepository = (fullName: string, change: Partial<Repository>) => async 
 const SETTINGS_ROWS: Row[] = [
   // The place.
   { control: "Close (Settings)", scene: "settings-defaults", role: "button", name: /^Close/ },
-  ...(["Defaults", "Boards", "Repositories", "Prompts", "Machine"] as const).map(
+  ...(["Defaults", "Boards", "Repositories", "Prompts", "Machine", "About"] as const).map(
     (name): Row => ({
       control: `${name} (navigation)`,
       scene: "settings-defaults",
@@ -652,6 +652,9 @@ describe("the one primary of each scene", () => {
     ["settings-machine", ""],
     ["settings-machine", "missing"],
     ["settings-machine", "checking"],
+    ...SETTINGS_VARIATIONS["settings-about"].map(
+      (variation) => ["settings-about", variation] as const,
+    ),
   ];
 
   it.each(PAGES)("has no primary on the page in %s %s", async (name, variation) => {

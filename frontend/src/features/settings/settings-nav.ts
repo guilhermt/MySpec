@@ -2,7 +2,7 @@ import type { IconMeaning } from "@/components/system/icons";
 import type { SettingsSection } from "@/lib/locations";
 import type { Repository } from "@/lib/wails";
 
-export type SettingsPage = "defaults" | "boards" | "repositories" | "prompts" | "machine";
+export type SettingsPage = "defaults" | "boards" | "repositories" | "prompts" | "machine" | "about";
 
 /** SETTINGS_PAGES are the pages in the order of the navigation, with their names and icons' meanings. */
 export const SETTINGS_PAGES: readonly { page: SettingsPage; label: string; icon: IconMeaning }[] = [
@@ -11,6 +11,7 @@ export const SETTINGS_PAGES: readonly { page: SettingsPage; label: string; icon:
   { page: "repositories", label: "Repositories", icon: "repository" },
   { page: "prompts", label: "Prompts", icon: "prompt" },
   { page: "machine", label: "Machine", icon: "machine" },
+  { page: "about", label: "About", icon: "mark" },
 ];
 
 /** pageOf is the page a section belongs to: a prompt is on the page Prompts. */
@@ -20,6 +21,7 @@ export function pageOf(section: SettingsSection): SettingsPage {
     case "boards":
     case "repositories":
     case "machine":
+    case "about":
       return section;
     default:
       return "prompts";

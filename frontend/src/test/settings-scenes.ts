@@ -42,16 +42,19 @@ import {
   makeStartupFailure,
   makeStartupStep,
   makeState,
+  makeUpdate,
+  makeUpdateRelease,
   withMachineItems,
 } from "@/test/wails-mock";
 
-/** SETTINGS_SCENES are the five pages of Settings. */
+/** SETTINGS_SCENES are the six pages of Settings. */
 export const SETTINGS_SCENES = [
   "settings-defaults",
   "settings-boards",
   "settings-repos",
   "settings-prompts",
   "settings-machine",
+  "settings-about",
 ] as const;
 
 /** SettingsSceneName is one page of Settings. */
@@ -91,6 +94,7 @@ export const SETTINGS_VARIATIONS: Record<SettingsSceneName, readonly string[]> =
   ],
   "settings-prompts": ["", "view", "edit", "reset", "discard", "list-failed", "view-failed"],
   "settings-machine": ["", "missing", "unchecked", "checking"],
+  "settings-about": ["", "available", "checking", "failed", "local"],
 };
 
 /** SettingsSceneSetup is what a test needs to draw a scene: the state, the place, and what the user did. */
@@ -994,6 +998,52 @@ function machineScene(variation: string): SettingsSceneSetup {
   }
 }
 
+function aboutScene(variation: string): SettingsSceneSetup {
+  const base = { location: settingsAt("about"), storage: {} };
+  switch (variation) {
+    case "":
+      return { ...base, state: sceneState({ update: makeUpdate() }) };
+    case "available":
+      return {
+        ...base,
+        state: sceneState({
+          update: makeUpdate({
+            latest: "0.5.0",
+            releases: [
+              makeUpdateRelease(),
+              makeUpdateRelease({
+                version: "0.4.2",
+                publishedAt: "2026-10-15T09:00:00Z",
+                notes: "",
+              }),
+              makeUpdateRelease({ version: "0.4.1", publishedAt: "2026-10-14T18:30:00Z" }),
+            ],
+          }),
+        }),
+      };
+    case "checking":
+      return { ...base, state: sceneState({ update: makeUpdate({ running: true }) }) };
+    case "failed":
+      return {
+        ...base,
+        state: sceneState({
+          update: makeUpdate({
+            failure: { kind: "offline", detail: "dial tcp: lookup api.github.com: no such host" },
+          }),
+        }),
+      };
+    case "local":
+      return {
+        ...base,
+        state: sceneState({
+          update: makeUpdate({ version: "dev", checks: false, checkedAt: "" }),
+        }),
+      };
+    default:
+      throw new Error(`settings-about has no variation ${variation}`);
+  }
+}
+
 /**
  * settingsScene is the setup of a page of Settings at a moment ("" for the page at rest). The
  * variation's after is what the user does to reach it, and the test reads the answers of the
@@ -1011,6 +1061,8 @@ export function settingsScene(name: SettingsSceneName, variation: string): Setti
       return promptsScene(variation);
     case "settings-machine":
       return machineScene(variation);
+    case "settings-about":
+      return aboutScene(variation);
   }
 }
 

@@ -298,7 +298,7 @@ func TestCheckMachineReturnsWhereTheCheckStands(t *testing.T) {
 		Items:   []bindings.MachineItem{{ID: "claude_found", Result: "missing"}},
 	}
 	service := bindings.NewSettingsService(
-		f.theme, f.models, f.reviewModes, func() bindings.Machine { return want }, f.dataDir, slog.New(slog.DiscardHandler),
+		f.theme, f.models, f.reviewModes, func() bindings.Machine { return want }, nil, f.dataDir, slog.New(slog.DiscardHandler),
 	)
 
 	got, err := service.CheckMachine()
@@ -307,6 +307,33 @@ func TestCheckMachineReturnsWhereTheCheckStands(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("CheckMachine() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestCheckForUpdatesReturnsWhereTheCheckStands(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	want := bindings.Update{Version: "0.4.0", Checks: true, Latest: "0.5.0", Releases: []bindings.UpdateRelease{{Version: "0.5.0"}}}
+	service := bindings.NewSettingsService(
+		f.theme, f.models, f.reviewModes, nil, func() bindings.Update { return want }, f.dataDir, slog.New(slog.DiscardHandler),
+	)
+
+	got, err := service.CheckForUpdates()
+	if err != nil {
+		t.Fatalf("CheckForUpdates() = %v, want nil", err)
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("CheckForUpdates() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestCheckForUpdatesBeforeTheAppIsBoundSaysItIsStarting(t *testing.T) {
+	t.Parallel()
+
+	_, err := bindings.NewWaitingServices().Settings.CheckForUpdates()
+
+	if err == nil || err.Error() != startingMessage {
+		t.Errorf("CheckForUpdates() = %v, want %q", err, startingMessage)
 	}
 }
 
@@ -349,7 +376,7 @@ func TestTheSettersOfADefaultSayWhenTheDiskIsFull(t *testing.T) {
 			}
 			dataDir, shown := test.dirs(f)
 			service := bindings.NewSettingsService(
-				f.theme, fullModels, fullModes, nil, dataDir, slog.New(slog.NewJSONHandler(f.logs, nil)),
+				f.theme, fullModels, fullModes, nil, nil, dataDir, slog.New(slog.NewJSONHandler(f.logs, nil)),
 			)
 			want := "no space left on the disk of " + shown + ". Free some space, then try again."
 

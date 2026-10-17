@@ -30,6 +30,7 @@ import (
 	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/theme"
+	"github.com/guilhermt/myspec/internal/update"
 	"github.com/guilhermt/myspec/internal/upgrade"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
@@ -127,6 +128,7 @@ func unopenedState(migration *Migration, systemDark bool) State {
 		ModelFactory:  FromModelSet(models.Factory()),
 		ModelCatalog:  ModelCatalog{Models: []CatalogModel{}},
 		Machine:       FromMachine(machine.Status{}),
+		Update:        FromUpdate(update.Status{}, ""),
 		Tasks:         []TaskSummary{},
 		History:       []ArchivedTask{},
 	}
@@ -2460,6 +2462,36 @@ func ArchivedDiscussionRepositories(
 		}
 	}
 	return counts
+}
+
+// FromUpdate converts where the check for a newer version stands, with the
+// install command of this system; Releases is never nil.
+func FromUpdate(status update.Status, installCommand string) Update {
+	releases := make([]UpdateRelease, 0, len(status.Newer))
+	for _, newer := range status.Newer {
+		releases = append(releases, UpdateRelease{
+			Version:     newer.Version.String(),
+			PublishedAt: newer.PublishedAt.Format(time.RFC3339),
+			Notes:       newer.Notes,
+		})
+	}
+	out := Update{
+		Version:        status.Installed,
+		Checks:         status.Enabled,
+		Running:        status.Running,
+		Releases:       releases,
+		InstallCommand: installCommand,
+	}
+	if !status.CheckedAt.IsZero() {
+		out.CheckedAt = status.CheckedAt.Format(time.RFC3339)
+	}
+	if len(releases) > 0 {
+		out.Latest = releases[0].Version
+	}
+	if f := status.Failure; f != nil {
+		out.Failure = &UpdateFailure{Kind: string(f.Kind), Detail: f.Detail}
+	}
+	return out
 }
 
 // FromMachine converts where the check of the machine stands; every list is

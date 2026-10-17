@@ -1,4 +1,11 @@
-import { type KeyboardEvent, type MouseEvent, useEffect, useId, useRef } from "react";
+import {
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+  useEffect,
+  useId,
+  useRef,
+} from "react";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import { StateGlyph } from "@/components/system/StateGlyph";
@@ -12,16 +19,24 @@ import {
   SETTINGS_PAGES,
   type SettingsPage,
 } from "@/features/settings/settings-nav";
+import { availableText } from "@/lib/update";
 import { cn } from "@/lib/utils";
-import { useAppStore, useMachine, useSettingsUi } from "@/store/app-store";
+import { useAppStore, useMachine, useSettingsUi, useUpdate } from "@/store/app-store";
 
 const NO_REPOSITORIES: never[] = [];
 
+/** Mark is what an item carries at its end: how it looks and what a screen reader reads. */
+interface Mark {
+  visual: ReactNode;
+  description: string;
+}
+
 /**
- * SettingsNav is the navigation of Settings: the five pages as links, the open one the stop of Tab.
+ * SettingsNav is the navigation of Settings: the six pages as links, the open one the stop of Tab.
  * The arrows open the page they reach, as the tabs do, and Home and End the ends of the list; with the
  * list in a row, as it is in a narrow window, the side arrows too. Repositories carries ◇ N when
- * the clone of a repository is missing, and Machine when something on the machine is.
+ * the clone of a repository is missing, Machine when something on the machine is, and About
+ * when a newer version is known.
  */
 export function SettingsNav() {
   const { settingsSection } = useSettingsUi();
@@ -30,10 +45,11 @@ export function SettingsNav() {
   const clearPendingFocus = useAppStore((state) => state.clearPendingFocus);
   const selectSettingsSection = useAppStore((state) => state.selectSettingsSection);
   const machine = useMachine();
+  const update = useUpdate();
   const open = pageOf(settingsSection);
   const missing = missingClones(repositories);
   const lacking = missingItems(machine).length;
-  const missingId = useId();
+  const markId = useId();
 
   const list = useRef<HTMLUListElement>(null);
   const items = useRef(new Map<SettingsPage, HTMLAnchorElement>());
@@ -70,6 +86,31 @@ export function SettingsNav() {
     selectSettingsSection(next);
   };
 
+  // markOf is what the item of a page carries at its end, with what a screen reader reads of it.
+  const markOf = (page: SettingsPage): Mark | null => {
+    if (page === "about") {
+      return update.latest === ""
+        ? null
+        : {
+            visual: <Icon icon={ICONS.update} size="xs" tone="active" />,
+            description: availableText(update.latest),
+          };
+    }
+    const count = page === "repositories" ? missing.length : page === "machine" ? lacking : 0;
+    if (count === 0) {
+      return null;
+    }
+    return {
+      visual: (
+        <>
+          <StateGlyph state="blocked" size="sm" />
+          {count}
+        </>
+      ),
+      description: page === "machine" ? navMissingText(machine) : missingText(missing),
+    };
+  };
+
   return (
     <nav aria-label="Settings" onKeyDown={onKeyDown} className="settings-nav">
       <ul
@@ -78,9 +119,7 @@ export function SettingsNav() {
       >
         {SETTINGS_PAGES.map(({ page, label, icon }) => {
           const current = page === open;
-          const count = page === "repositories" ? missing.length : page === "machine" ? lacking : 0;
-          const withMissing = count > 0;
-          const description = page === "machine" ? navMissingText(machine) : missingText(missing);
+          const mark = markOf(page);
           const link = (
             // biome-ignore lint/a11y/useValidAnchor: a page link of Settings, which has no URL of its own; the click is the navigation.
             <a
@@ -93,7 +132,7 @@ export function SettingsNav() {
               }}
               href="#"
               {...(current ? { "aria-current": "page" as const } : {})}
-              {...(withMissing ? { "aria-describedby": `${missingId}-${page}` } : {})}
+              {...(mark !== null ? { "aria-describedby": `${markId}-${page}` } : {})}
               tabIndex={current ? 0 : -1}
               onClick={(event: MouseEvent) => {
                 event.preventDefault();
@@ -107,7 +146,7 @@ export function SettingsNav() {
             >
               <Icon icon={ICONS[icon]} tone={current ? "active" : "muted"} />
               <span>{label}</span>
-              {withMissing && (
+              {mark !== null && (
                 <span
                   aria-hidden="true"
                   className={cn(
@@ -115,18 +154,17 @@ export function SettingsNav() {
                     current ? "text-ink-2" : "text-ink-3",
                   )}
                 >
-                  <StateGlyph state="blocked" size="sm" />
-                  {count}
+                  {mark.visual}
                 </span>
               )}
             </a>
           );
           return (
             <li key={page}>
-              {withMissing ? <Tooltip content={description}>{link}</Tooltip> : link}
-              {withMissing && (
-                <span id={`${missingId}-${page}`} className="sr-only">
-                  {description}
+              {mark !== null ? <Tooltip content={mark.description}>{link}</Tooltip> : link}
+              {mark !== null && (
+                <span id={`${markId}-${page}`} className="sr-only">
+                  {mark.description}
                 </span>
               )}
             </li>

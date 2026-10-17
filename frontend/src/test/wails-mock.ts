@@ -78,6 +78,8 @@ import type {
   ThemePreference,
   Transcript,
   TranscriptEvent,
+  Update,
+  UpdateRelease,
   WritingDiscussion,
 } from "@/lib/wails";
 
@@ -138,6 +140,7 @@ export const api = {
   ),
   listPrompts: vi.fn<() => Promise<PromptListing[]>>(() => Promise.resolve(makePromptListings())),
   checkMachine: vi.fn<() => Promise<Machine>>(() => Promise.resolve(makeMachine())),
+  checkForUpdates: vi.fn<() => Promise<Update>>(() => Promise.resolve(makeUpdate())),
 
   createTask: vi.fn<(req: CreateTaskRequest) => Promise<string>>(() => Promise.resolve("task-1")),
   deleteTask: vi.fn<(taskId: string) => Promise<DeleteResult>>(() =>
@@ -448,6 +451,7 @@ export function makeState(overrides: Partial<State> = {}): State {
     modelFactory: makeModelDefaults(),
     modelCatalog: makeModelCatalog(),
     machine: makeMachine(),
+    update: makeUpdate(),
     reviewModeDefault: "manual",
     tasks: [],
     history: [],
@@ -1072,6 +1076,32 @@ export function makeMachine(overrides: Partial<Machine> = {}): Machine {
   };
 }
 
+/** makeUpdate is a release build checked a minute before the scenes' moment, on the latest version. */
+export function makeUpdate(overrides: Partial<Update> = {}): Update {
+  return {
+    version: "0.4.0",
+    checks: true,
+    running: false,
+    checkedAt: new Date(Date.parse("2026-09-24T14:09:00")).toISOString(),
+    latest: "",
+    releases: [],
+    failure: null,
+    installCommand:
+      "curl -fsSL https://raw.githubusercontent.com/guilhermt/MySpec/main/install.sh | sh",
+    ...overrides,
+  };
+}
+
+/** makeUpdateRelease is a release with notes as GitHub generates them. */
+export function makeUpdateRelease(overrides: Partial<UpdateRelease> = {}): UpdateRelease {
+  return {
+    version: "0.5.0",
+    publishedAt: "2026-10-16T12:00:00Z",
+    notes: "## What's Changed\n* Show the version in Settings by @guilhermt in #130",
+    ...overrides,
+  };
+}
+
 /** withMachineItems swaps the named items of a machine, keeping the order. */
 export function withMachineItems(
   machine: Machine,
@@ -1669,4 +1699,5 @@ export function resetWailsMock(): void {
   api.restorePrompt.mockImplementation((stage) => Promise.resolve(makePrompt({ stage })));
   api.listPrompts.mockImplementation(() => Promise.resolve(makePromptListings()));
   api.checkMachine.mockImplementation(() => Promise.resolve(makeMachine()));
+  api.checkForUpdates.mockImplementation(() => Promise.resolve(makeUpdate()));
 }

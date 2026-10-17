@@ -34,6 +34,7 @@ import (
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/theme"
+	"github.com/guilhermt/myspec/internal/update"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
 
@@ -71,6 +72,8 @@ type App struct {
 	theme            *theme.Service
 	models           *models.Service
 	machine          *machine.Service
+	update           *update.Service
+	version          string // what main.version is: 0.4.0, or dev for a local build
 	reviewModes      *reviewmode.Service
 	tasks            *task.Service
 	boards           *board.Service
@@ -131,7 +134,7 @@ func Run(cfg Config) int {
 
 	applyWebKitEnvironment()
 
-	a := &App{log: log, dirs: dirs, notificationIcon: cfg.NotificationIcon, services: bindings.NewWaitingServices()}
+	a := &App{log: log, dirs: dirs, version: cfg.Version, notificationIcon: cfg.NotificationIcon, services: bindings.NewWaitingServices()}
 	a.publisher = newThrottle(publishWindow, a.publishNow)
 	a.systemDark = readSystemDark(log)
 	a.deps = a.desktopDeps()

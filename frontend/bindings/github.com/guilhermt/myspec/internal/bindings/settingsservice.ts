@@ -15,6 +15,16 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as $models from "./models.js";
 
 /**
+ * CheckForUpdates checks for a newer version of MySpec, or waits for the
+ * check that runs, and returns where the check stands after it; the state
+ * carries the same with state:changed. A failure of the check is in the
+ * answer, not an error.
+ */
+export function CheckForUpdates(): $CancellablePromise<$models.Update> {
+    return $Call.ByID(911279285);
+}
+
+/**
  * CheckMachine checks the machine again, or waits for the check that runs,
  * and returns where the check stands after it; the state carries the same
  * with state:changed.
