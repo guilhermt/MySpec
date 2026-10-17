@@ -79,6 +79,8 @@ import type {
   Transcript,
   TranscriptEvent,
   Update,
+  UpdateInstall,
+  UpdateInstallFailure,
   UpdateRelease,
   WritingDiscussion,
 } from "@/lib/wails";
@@ -141,6 +143,12 @@ export const api = {
   listPrompts: vi.fn<() => Promise<PromptListing[]>>(() => Promise.resolve(makePromptListings())),
   checkMachine: vi.fn<() => Promise<Machine>>(() => Promise.resolve(makeMachine())),
   checkForUpdates: vi.fn<() => Promise<Update>>(() => Promise.resolve(makeUpdate())),
+  installUpdate: vi.fn<() => Promise<Update>>(() =>
+    Promise.resolve(
+      makeUpdate({ install: makeUpdateInstall({ phase: "installing", target: "0.5.0" }) }),
+    ),
+  ),
+  restartForUpdate: vi.fn<() => Promise<void>>(() => Promise.resolve()),
 
   createTask: vi.fn<(req: CreateTaskRequest) => Promise<string>>(() => Promise.resolve("task-1")),
   deleteTask: vi.fn<(taskId: string) => Promise<DeleteResult>>(() =>
@@ -1088,8 +1096,29 @@ export function makeUpdate(overrides: Partial<Update> = {}): Update {
     failure: null,
     installCommand:
       "curl -fsSL https://raw.githubusercontent.com/guilhermt/MySpec/main/install.sh | sh",
+    install: makeUpdateInstall(),
     ...overrides,
   };
+}
+
+/** makeUpdateInstall is where no installation ran: idle, nothing working. */
+export function makeUpdateInstall(overrides: Partial<UpdateInstall> = {}): UpdateInstall {
+  return {
+    phase: "idle",
+    target: "",
+    version: "",
+    failure: null,
+    restartError: "",
+    working: [],
+    ...overrides,
+  };
+}
+
+/** makeUpdateInstallFailure is an installation that failed without a connection. */
+export function makeUpdateInstallFailure(
+  overrides: Partial<UpdateInstallFailure> = {},
+): UpdateInstallFailure {
+  return { kind: "offline", reason: "", commands: [], ...overrides };
 }
 
 /** makeUpdateRelease is a release with notes as GitHub generates them. */
@@ -1700,4 +1729,10 @@ export function resetWailsMock(): void {
   api.listPrompts.mockImplementation(() => Promise.resolve(makePromptListings()));
   api.checkMachine.mockImplementation(() => Promise.resolve(makeMachine()));
   api.checkForUpdates.mockImplementation(() => Promise.resolve(makeUpdate()));
+  api.installUpdate.mockImplementation(() =>
+    Promise.resolve(
+      makeUpdate({ install: makeUpdateInstall({ phase: "installing", target: "0.5.0" }) }),
+    ),
+  );
+  api.restartForUpdate.mockImplementation(() => Promise.resolve());
 }

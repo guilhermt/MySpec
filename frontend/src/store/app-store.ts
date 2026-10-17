@@ -36,7 +36,7 @@ import {
   SIDEBAR_RAIL_KEY,
   writeStored,
 } from "@/lib/ui-storage";
-import { availableAnnouncement, newlyAvailable } from "@/lib/update";
+import { availableAnnouncement, installAnnouncement, newlyAvailable } from "@/lib/update";
 import type {
   ArchivedDiscussion,
   ArchivedReview,
@@ -225,6 +225,8 @@ export interface AppStore {
   expectGone: string | null;
   /** machineNoticeDismissed is the notice of the machine dismissed; it holds until the next opening and is never stored. */
   machineNoticeDismissed: boolean;
+  /** updateLater is the user answered Later to the restart the installed version asks for; it lasts until the app closes, which the restart is. */
+  updateLater: boolean;
   /** transcripts and drafts are keyed by sessionKey: a task has one per stage. */
   transcripts: Record<string, TranscriptState>;
   drafts: Record<string, string>;
@@ -361,6 +363,8 @@ export interface AppStore {
   toggleSidebarRail: () => void;
   /** announce has the live region say a text, even the same one again. */
   announce: (text: string) => void;
+  /** deferUpdateRestart answers Later to the restart the installed version asks for. */
+  deferUpdateRestart: () => void;
   openTask: (id: string) => void;
   /** openNewTask opens the creation dialog, for a card when one is given. */
   openNewTask: (card?: CardRef) => void;
@@ -1010,6 +1014,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
     announcement: null,
     expectGone: null,
     machineNoticeDismissed: false,
+    updateLater: false,
     promptEdit: null,
     pendingLeave: null,
     promptReturn: null,
@@ -1025,8 +1030,9 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     applyState: (next) => {
       set((state) => {
-        // A newer version is announced once, when it becomes known; the page of an item that left speaks first.
-        const available = newlyAvailable(state.app?.update, next.update);
+        // A newer version is announced once, when it becomes known, and so is each phase of its
+        // installation; the page of an item that left speaks first.
+        const updated = updateAnnouncement(state.app?.update, next.update);
         // With nothing registered and nothing active the Home welcomes: only the places the welcome
         // mode keeps stay, and an open prompt edit stays with Settings.
         if (welcomeMode(next)) {
@@ -1041,12 +1047,9 @@ export const useAppStore = create<AppStore>()((set, get) => {
             panel: null,
             earlierConversation: null,
             announcement:
-              available === null
+              updated === null
                 ? state.announcement
-                : {
-                    id: (state.announcement?.id ?? 0) + 1,
-                    text: availableAnnouncement(available),
-                  },
+                : { id: (state.announcement?.id ?? 0) + 1, text: updated },
             ...(location.kind === "settings" ? {} : { promptEdit: null, pendingLeave: null }),
           };
         }
@@ -1080,11 +1083,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
             id: (state.announcement?.id ?? 0) + 1,
             text: goneTitle(arrived, goneOutcome(next, arrived)),
           };
-        } else if (available !== null) {
-          announcement = {
-            id: (state.announcement?.id ?? 0) + 1,
-            text: availableAnnouncement(available),
-          };
+        } else if (updated !== null) {
+          announcement = { id: (state.announcement?.id ?? 0) + 1, text: updated };
         }
         // A review that is gone takes its failed publication and its open dialog with it.
         const reviewIds = new Set((next.reviews ?? []).map((review) => review.id));
@@ -1369,6 +1369,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
     clearHistoryFocus: () => set({ historyFocus: null }),
 
     dismissMachineNotice: () => set({ machineNoticeDismissed: true }),
+    deferUpdateRestart: () => set({ updateLater: true }),
 
     dismissToast: (id) =>
       set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
@@ -1497,6 +1498,16 @@ const NO_MACHINE: Machine = {
   missingScopes: [],
 };
 
+/** updateAnnouncement is what the live region says of the update between two states: the installation changing phase first, else a newer version that became known; null otherwise. */
+function updateAnnouncement(previous: Update | undefined, next: Update | undefined): string | null {
+  const installed = installAnnouncement(previous, next);
+  if (installed !== null) {
+    return installed;
+  }
+  const available = newlyAvailable(previous, next);
+  return available === null ? null : availableAnnouncement(available);
+}
+
 /** NO_UPDATE is the check for updates before the state arrives: nothing checked, nothing known. */
 const NO_UPDATE: Update = {
   version: "",
@@ -1507,6 +1518,7 @@ const NO_UPDATE: Update = {
   releases: [],
   failure: null,
   installCommand: "",
+  install: { phase: "idle", target: "", version: "", failure: null, restartError: "", working: [] },
 };
 
 /** useBoards is every registered board, by title. */
@@ -1644,6 +1656,11 @@ export function useModelCatalog(): ModelCatalog {
 /** useUpdate is what the last check for a newer version found, as the state carries it. */
 export function useUpdate(): Update {
   return useAppStore((state) => state.app?.update ?? NO_UPDATE);
+}
+
+/** useUpdateLater is whether the user answered Later to the restart the installed version asks for. */
+export function useUpdateLater(): boolean {
+  return useAppStore((state) => state.updateLater);
 }
 
 /** useMachine is what the last check of the machine found, as the state carries it. */

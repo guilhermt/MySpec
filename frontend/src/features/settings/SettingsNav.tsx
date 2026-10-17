@@ -8,8 +8,10 @@ import {
 } from "react";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
+import { Spinner } from "@/components/system/Spinner";
 import { StateGlyph } from "@/components/system/StateGlyph";
 import { Tooltip } from "@/components/system/Tooltip";
+import { signOf, signText } from "@/features/about/about";
 import { missingItems, navMissingText } from "@/features/machine/machine";
 import {
   missingClones,
@@ -19,7 +21,6 @@ import {
   SETTINGS_PAGES,
   type SettingsPage,
 } from "@/features/settings/settings-nav";
-import { availableText } from "@/lib/update";
 import { cn } from "@/lib/utils";
 import { useAppStore, useMachine, useSettingsUi, useUpdate } from "@/store/app-store";
 
@@ -89,11 +90,21 @@ export function SettingsNav() {
   // markOf is what the item of a page carries at its end, with what a screen reader reads of it.
   const markOf = (page: SettingsPage): Mark | null => {
     if (page === "about") {
-      return update.latest === ""
+      const sign = signOf(update);
+      return sign === null
         ? null
         : {
-            visual: <Icon icon={ICONS.update} size="xs" tone="active" />,
-            description: availableText(update.latest),
+            visual:
+              sign.kind === "updating" ? (
+                <Spinner tone="current" />
+              ) : (
+                <Icon
+                  icon={sign.kind === "installed" ? ICONS.refresh : ICONS.update}
+                  size="xs"
+                  tone="active"
+                />
+              ),
+            description: signText(sign),
           };
     }
     const count = page === "repositories" ? missing.length : page === "machine" ? lacking : 0;

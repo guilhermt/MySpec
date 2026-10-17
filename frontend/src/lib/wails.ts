@@ -114,7 +114,10 @@ import type {
   TranscriptEvent,
   Update,
   UpdateFailure,
+  UpdateInstall,
+  UpdateInstallFailure,
   UpdateRelease,
+  UpdateWorking,
   UserEntry,
   WorktreePreview,
   WritingDiscussion,
@@ -239,7 +242,10 @@ export type {
   TranscriptEvent,
   Update,
   UpdateFailure,
+  UpdateInstall,
+  UpdateInstallFailure,
   UpdateRelease,
+  UpdateWorking,
   UserEntry,
   WorktreePreview,
   WritingDiscussion,
@@ -720,6 +726,46 @@ export function asUpdateFailureKind(value: string): UpdateFailureKind {
     case "offline":
     case "rate_limited":
     case "timeout":
+      return value;
+    default:
+      return "failed";
+  }
+}
+
+/** InstallPhase is where the installation of a newer version stands. */
+export type InstallPhase = "idle" | "installing" | "installed" | "failed";
+
+/** asInstallPhase narrows a phase from the Go; an unknown one is idle. */
+export function asInstallPhase(value: string): InstallPhase {
+  switch (value) {
+    case "installing":
+    case "installed":
+    case "failed":
+      return value;
+    default:
+      return "idle";
+  }
+}
+
+/** InstallFailureKind is why an installation failed. */
+export type InstallFailureKind =
+  | "offline"
+  | "rate_limited"
+  | "timeout"
+  | "libraries"
+  | "system"
+  | "replace"
+  | "failed";
+
+/** asInstallFailureKind narrows a kind from the Go; an unknown one is failed, whose reason says what. */
+export function asInstallFailureKind(value: string): InstallFailureKind {
+  switch (value) {
+    case "offline":
+    case "rate_limited":
+    case "timeout":
+    case "libraries":
+    case "system":
+    case "replace":
       return value;
     default:
       return "failed";
@@ -1516,6 +1562,8 @@ export const api = {
   listPrompts: async (): Promise<PromptListing[]> => (await SettingsService.ListPrompts()) ?? [],
   checkMachine: (): Promise<Machine> => SettingsService.CheckMachine(),
   checkForUpdates: (): Promise<Update> => SettingsService.CheckForUpdates(),
+  installUpdate: (): Promise<Update> => SettingsService.InstallUpdate(),
+  restartForUpdate: (): Promise<void> => SettingsService.RestartForUpdate(),
 
   createTask: (req: CreateTaskRequest): Promise<string> => TaskService.CreateTask(req),
   deleteTask: (taskId: string): Promise<DeleteResult> => TaskService.DeleteTask(taskId),

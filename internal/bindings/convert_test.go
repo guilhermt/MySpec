@@ -1906,7 +1906,7 @@ func TestRefusedStateCarriesTheCasesAndNothingElse(t *testing.T) {
 		ModelFactory:  bindings.FromModelSet(models.Factory()),
 		ModelCatalog:  bindings.ModelCatalog{Models: []bindings.CatalogModel{}},
 		Machine:       bindings.FromMachine(machine.Status{}),
-		Update:        bindings.FromUpdate(update.Status{}, ""),
+		Update:        bindings.FromUpdate(update.Status{}, "", nil),
 		Tasks:         []bindings.TaskSummary{},
 		History:       []bindings.ArchivedTask{},
 	}
@@ -3932,13 +3932,71 @@ func TestFromRemovalCountsAndNamesTheRepositories(t *testing.T) {
 func TestFromUpdateOfNothingCheckedHasAnEmptyList(t *testing.T) {
 	t.Parallel()
 
-	got := bindings.FromUpdate(update.Status{}, "")
+	got := bindings.FromUpdate(update.Status{}, "", nil)
 
 	if got.Releases == nil || len(got.Releases) != 0 {
 		t.Errorf("Releases = %#v, want an empty list that is not nil", got.Releases)
 	}
 	if got.Failure != nil || got.CheckedAt != "" || got.Latest != "" {
 		t.Errorf("FromUpdate(empty) = %+v, want no failure, no check and no latest", got)
+	}
+	want := bindings.UpdateInstall{Phase: "idle", Working: []bindings.UpdateWorking{}}
+	if diff := cmp.Diff(want, got.Install); diff != "" {
+		t.Errorf("Install mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromUpdateCarriesTheInstallation(t *testing.T) {
+	t.Parallel()
+	working := []session.Key{{TaskID: "t1", Stage: "step:3"}, {TaskID: "d2", Stage: "discussion"}}
+	tests := []struct {
+		name    string
+		install update.Install
+		working []session.Key
+		want    bindings.UpdateInstall
+	}{
+		{
+			name:    "installed with two sessions working",
+			install: update.Install{Phase: update.Installed, Target: "0.5.0", Version: "0.5.1", Path: "/bin/myspec", RestartError: "No."},
+			working: working,
+			want: bindings.UpdateInstall{
+				Phase: "installed", Target: "0.5.0", Version: "0.5.1", RestartError: "No.",
+				Working: []bindings.UpdateWorking{{ItemID: "t1", Stage: "step:3"}, {ItemID: "d2", Stage: "discussion"}},
+			},
+		},
+		{
+			name: "failed without commands",
+			install: update.Install{
+				Phase: update.InstallFailed, Target: "0.5.0",
+				Failure: &update.InstallFailure{Kind: update.Offline, Reason: "No network."},
+			},
+			want: bindings.UpdateInstall{
+				Phase: "failed", Target: "0.5.0", Working: []bindings.UpdateWorking{},
+				Failure: &bindings.UpdateInstallFailure{Kind: "offline", Reason: "No network.", Commands: []string{}},
+			},
+		},
+		{
+			name: "failed with commands",
+			install: update.Install{
+				Phase:   update.InstallFailed,
+				Failure: &update.InstallFailure{Kind: update.Libraries, Reason: "Missing.", Commands: []string{"sudo pacman -S gtk4"}},
+			},
+			want: bindings.UpdateInstall{
+				Phase: "failed", Working: []bindings.UpdateWorking{},
+				Failure: &bindings.UpdateInstallFailure{Kind: "libraries", Reason: "Missing.", Commands: []string{"sudo pacman -S gtk4"}},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := bindings.FromUpdate(update.Status{Install: test.install}, "", test.working)
+
+			if diff := cmp.Diff(test.want, got.Install); diff != "" {
+				t.Errorf("Install mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
 
@@ -3956,7 +4014,7 @@ func TestFromUpdateCarriesTheReleasesNewestFirstWithTheLatest(t *testing.T) {
 		},
 	}
 
-	got := bindings.FromUpdate(status, "install me")
+	got := bindings.FromUpdate(status, "install me", nil)
 
 	want := bindings.Update{
 		Version:   "0.4.0",
@@ -3968,6 +4026,7 @@ func TestFromUpdateCarriesTheReleasesNewestFirstWithTheLatest(t *testing.T) {
 			{Version: "0.4.1", PublishedAt: "2026-10-15T12:00:00Z"},
 		},
 		InstallCommand: "install me",
+		Install:        bindings.UpdateInstall{Phase: "idle", Working: []bindings.UpdateWorking{}},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("FromUpdate() mismatch (-want +got):\n%s", diff)
@@ -3978,7 +4037,7 @@ func TestFromUpdateCarriesTheFailure(t *testing.T) {
 	t.Parallel()
 	status := update.Status{Failure: &update.Failure{Kind: update.RateLimited, Detail: "GitHub answered 429 Too Many Requests."}}
 
-	got := bindings.FromUpdate(status, "")
+	got := bindings.FromUpdate(status, "", nil)
 
 	want := &bindings.UpdateFailure{Kind: "rate_limited", Detail: "GitHub answered 429 Too Many Requests."}
 	if diff := cmp.Diff(want, got.Failure); diff != "" {

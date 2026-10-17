@@ -19,21 +19,28 @@ type SettingsService struct {
 	defaults     *models.Service
 	reviewModes  *reviewmode.Service
 	checkMachine func() Machine
-	checkUpdates func() Update
+	updates      UpdateActions
 	dataDir      string
 	log          *slog.Logger
 }
 
+// UpdateActions are what Settings › About asks of the app: check for a newer
+// version, install it, and restart into it.
+type UpdateActions struct {
+	Check   func() Update
+	Install func() (Update, error)
+	Restart func() error
+}
+
 // NewSettingsService builds the service over the theme domain, the model and
-// review mode defaults of the app, the check of the machine, the check for a
-// newer version and the prompts of
-// the data directory.
+// review mode defaults of the app, the check of the machine, the actions on
+// the newer version of MySpec and the prompts of the data directory.
 func NewSettingsService(
 	t *theme.Service,
 	defaults *models.Service,
 	reviewModes *reviewmode.Service,
 	checkMachine func() Machine,
-	checkUpdates func() Update,
+	updates UpdateActions,
 	dataDir string,
 	log *slog.Logger,
 ) *SettingsService {
@@ -42,7 +49,7 @@ func NewSettingsService(
 		defaults:     defaults,
 		reviewModes:  reviewModes,
 		checkMachine: checkMachine,
-		checkUpdates: checkUpdates,
+		updates:      updates,
 		dataDir:      dataDir,
 		log:          log,
 	}
@@ -148,7 +155,37 @@ func (s *SettingsService) CheckForUpdates() (Update, error) {
 	if err != nil {
 		return Update{}, err
 	}
-	return s.checkUpdates(), nil
+	return s.updates.Check(), nil
+}
+
+// InstallUpdate installs the newest version of MySpec in the background and
+// returns where the check and the installation stand; the state follows the
+// installation with state:changed. A failure of the installation is in the
+// state, not an error; a local build is one.
+func (s *SettingsService) InstallUpdate() (Update, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return Update{}, err
+	}
+	out, err := s.updates.Install()
+	if err != nil {
+		return Update{}, s.fail("InstallUpdate", err)
+	}
+	return out, nil
+}
+
+// RestartForUpdate restarts MySpec into the installed version, cutting the
+// turns that run, as closing the app does. A start that fails is an error,
+// and its reason is also in the state.
+func (s *SettingsService) RestartForUpdate() error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
+	if err := s.updates.Restart(); err != nil {
+		return s.fail("RestartForUpdate", err)
+	}
+	return nil
 }
 
 // GetPrompt reads a prompt as the settings show it.

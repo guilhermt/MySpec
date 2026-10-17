@@ -136,7 +136,10 @@ export type {
     TranscriptEvent,
     Update,
     UpdateFailure,
+    UpdateInstall,
+    UpdateInstallFailure,
     UpdateRelease,
+    UpdateWorking,
     UserEntry,
     WorktreePreview,
     WritingDiscussion

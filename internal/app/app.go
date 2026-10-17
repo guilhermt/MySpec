@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -24,6 +25,7 @@ import (
 	"github.com/guilhermt/myspec/internal/platform/chime"
 	"github.com/guilhermt/myspec/internal/platform/logging"
 	"github.com/guilhermt/myspec/internal/platform/notify"
+	"github.com/guilhermt/myspec/internal/platform/relaunch"
 	"github.com/guilhermt/myspec/internal/platform/xdg"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
@@ -46,6 +48,8 @@ const (
 
 // callTimeout bounds the database work done while the app is running.
 const callTimeout = 5 * time.Second
+
+const relaunchWait = 30 * time.Second // how long a restarted MySpec waits for the one it replaces
 
 // shutdownTimeout is how long the sessions have to stop gracefully before
 // their processes are killed.
@@ -99,6 +103,8 @@ type App struct {
 	ready   bool     // the startup ended with the services bound
 	closers []func() // what the attempt that stands leaves to close after Run
 
+	restarting atomic.Bool // a restart for an update was asked and started the installed version
+
 	backdrop backdrop // the colour behind the webview, painted once the webview takes it
 
 	publishMu sync.Mutex // keeps concurrent publishes from interleaving
@@ -131,6 +137,14 @@ func Run(cfg Config) int {
 		"data_dir", dirs.Data,
 		"state_dir", dirs.State,
 	)
+
+	// A MySpec restarted for an update waits for the one it replaces, which holds
+	// the single instance until it exits.
+	if pid, ok := relaunch.Previous(cfg.Args); ok {
+		start := time.Now()
+		exited := relaunch.Wait(pid, relaunchWait)
+		log.Info("previous instance waited for", "pid", pid, "exited", exited, "duration_ms", time.Since(start).Milliseconds())
+	}
 
 	applyWebKitEnvironment()
 

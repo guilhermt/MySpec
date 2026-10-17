@@ -652,9 +652,12 @@ describe("the one primary of each scene", () => {
     ["settings-machine", ""],
     ["settings-machine", "missing"],
     ["settings-machine", "checking"],
-    ...SETTINGS_VARIATIONS["settings-about"].map(
-      (variation) => ["settings-about", variation] as const,
-    ),
+    // The block of the newer version has its own primary (Update to, Restart now): About is
+    // checked at rest only.
+    ["settings-about", ""],
+    ["settings-about", "checking"],
+    ["settings-about", "failed"],
+    ["settings-about", "local"],
   ];
 
   it.each(PAGES)("has no primary on the page in %s %s", async (name, variation) => {

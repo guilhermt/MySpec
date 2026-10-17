@@ -4,3 +4,7 @@ package update
 // system, the one of the README. When it changes, the one of install_linux.go
 // changes too.
 const InstallCommand = "irm https://raw.githubusercontent.com/guilhermt/MySpec/main/install.ps1 | iex"
+
+// scriptName is the install script of this system on the main branch, the one
+// InstallCommand runs.
+const scriptName = "install.ps1"

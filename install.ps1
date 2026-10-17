@@ -1,6 +1,9 @@
 # Installs or updates MySpec for the current user, from the latest GitHub release.
 # Usage, in PowerShell: irm https://raw.githubusercontent.com/guilhermt/MySpec/main/install.ps1 | iex
 #
+# The MySpec app runs this same script to update itself, and reads how it ended
+# from the file in MYSPEC_INSTALL_RESULT (the contract is in docs/development/release.md).
+#
 # Everything runs inside a single block, called with &, so a download cut short
 # never runs half a script and nothing is left in the session of whoever ran it.
 & {
@@ -19,18 +22,44 @@
     $ShortcutPath = [System.IO.Path]::Combine([Environment]::GetFolderPath('Programs'), 'MySpec.lnk')
     $Description = 'Orchestrates a Claude Code development workflow'
 
-    function Stop-Install([string]$Message) {
+    # The kind of the failure the app reads (see Write-Result); a failure that does
+    # not set one is failed.
+    $Failure = @{ Kind = 'failed' }
+
+    # Usage: Stop-Install <Kind> <Message>. The kind is one the app understands:
+    # offline, timeout, system, replace or failed.
+    function Stop-Install([string]$Kind, [string]$Message) {
+        $Failure.Kind = $Kind
         throw $Message
     }
 
-    # The innermost exception says the reason in one line: PowerShell wraps the
-    # exception of a .NET method call, and a Task wraps its own in an AggregateException.
-    function Get-Reason($ErrorRecord) {
+    # The innermost exception: PowerShell wraps the exception of a .NET method
+    # call, and a Task wraps its own in an AggregateException.
+    function Get-InnerException($ErrorRecord) {
         $e = $ErrorRecord.Exception
         while ($e.InnerException) {
             $e = $e.InnerException
         }
-        $e.Message
+        $e
+    }
+
+    # The innermost exception says the reason in one line.
+    function Get-Reason($ErrorRecord) {
+        (Get-InnerException $ErrorRecord).Message
+    }
+
+    # Writes the result the app reads, one line per item, when it asked for one by
+    # MYSPEC_INSTALL_RESULT. The terminal never sets it.
+    function Write-Result([string[]]$Lines) {
+        $path = $env:MYSPEC_INSTALL_RESULT
+        if (-not $path) {
+            return
+        }
+        try {
+            [System.IO.File]::WriteAllLines($path, $Lines)
+        } catch {
+            Write-Verbose "the result could not be written: $(Get-Reason $_)"
+        }
     }
 
     function Confirm-System {
@@ -41,7 +70,7 @@
         # $IsWindows does not exist in Windows PowerShell 5.1, so the edition comes first.
         if ($PSVersionTable.PSEdition -eq 'Core' -and -not $IsWindows) {
             $system = [System.Runtime.InteropServices.RuntimeInformation]::OSDescription
-            Stop-Install "MySpec is only published for Windows 11 x64; this system is $system"
+            Stop-Install 'system' "MySpec is only published for Windows 11 x64; this system is $system"
         }
         $v = [Environment]::OSVersion.Version
         if (-not ($v.Major -ge 10 -and $v.Build -ge 22000)) {
@@ -50,20 +79,20 @@
             } else {
                 $system = "Windows $($v.Major).$($v.Minor) (build $($v.Build))"
             }
-            Stop-Install "MySpec is only published for Windows 11 x64; this system is $system"
+            Stop-Install 'system' "MySpec is only published for Windows 11 x64; this system is $system"
         }
 
         # The machine value is AMD64 on any x64 machine, whatever the process: the
         # variable of the process and the .NET Framework lie under emulation.
         $arch = [Environment]::GetEnvironmentVariable('PROCESSOR_ARCHITECTURE', 'Machine')
         if ($arch -ne 'AMD64') {
-            Stop-Install "MySpec is only published for Windows 11 x64; this machine is $arch"
+            Stop-Install 'system' "MySpec is only published for Windows 11 x64; this machine is $arch"
         }
 
         $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
         $principal = [Security.Principal.WindowsPrincipal]$identity
         if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-            Stop-Install 'run this command in a regular PowerShell, not one opened with "Run as administrator"'
+            Stop-Install 'system' 'run this command in a regular PowerShell, not one opened with "Run as administrator"'
         }
     }
 
@@ -81,7 +110,7 @@
                 return
             }
         }
-        Stop-Install ("MySpec needs the Microsoft Edge WebView2 Runtime, which was not found.`n" +
+        Stop-Install 'system' ("MySpec needs the Microsoft Edge WebView2 Runtime, which was not found.`n" +
             'Install it from https://developer.microsoft.com/microsoft-edge/webview2/ and run this command again.')
     }
 
@@ -132,22 +161,25 @@
                 $request = $Client.GetAsync($PackageUrl, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead, $source.Token)
                 $response = Wait-Task $request
             } catch {
-                Stop-Install 'could not reach GitHub to find the latest release; check the connection and run this command again'
+                if ((Get-InnerException $_) -is [System.OperationCanceledException]) {
+                    Stop-Install 'timeout' "GitHub didn't answer in time to find the latest release; run this command again"
+                }
+                Stop-Install 'offline' 'could not reach GitHub to find the latest release; check the connection and run this command again'
             }
             $code = [int]$response.StatusCode
             if ($code -eq 404) {
-                Stop-Install 'no MySpec release is published yet'
+                Stop-Install 'failed' 'no MySpec release is published yet'
             }
             if (-not (Test-Redirect $response)) {
-                Stop-Install "unexpected answer from GitHub for the latest release: HTTP $code"
+                Stop-Install 'failed' "unexpected answer from GitHub for the latest release: HTTP $code"
             }
             if (-not $response.Headers.Location) {
-                Stop-Install 'unexpected answer from GitHub for the latest release: no Location header'
+                Stop-Install 'failed' 'unexpected answer from GitHub for the latest release: no Location header'
             }
             $location = Resolve-Location $response $PackageUrl
             $pattern = '^https://github\.com/[^/]+/[^/]+/releases/download/(v[0-9]+\.[0-9]+\.[0-9]+)/myspec-windows-amd64\.zip$'
             if ($location.AbsoluteUri -notmatch $pattern) {
-                Stop-Install "unexpected answer from GitHub for the latest release: $location"
+                Stop-Install 'failed' "unexpected answer from GitHub for the latest release: $location"
             }
             [pscustomobject]@{ Version = $Matches[1]; Url = $location }
         } finally {
@@ -194,7 +226,10 @@
                 $file.Dispose()
             }
         } catch {
-            Stop-Install "could not download MySpec $($Release.Version); check the connection and run this command again"
+            if ((Get-InnerException $_) -is [System.OperationCanceledException]) {
+                Stop-Install 'timeout' "GitHub didn't answer in time to download MySpec $($Release.Version); run this command again"
+            }
+            Stop-Install 'offline' "could not download MySpec $($Release.Version); check the connection and run this command again"
         } finally {
             if ($response) {
                 $response.Dispose()
@@ -207,12 +242,12 @@
         try {
             [System.IO.Compression.ZipFile]::ExtractToDirectory($Zip, $Destination)
         } catch {
-            Stop-Install 'the downloaded package could not be extracted'
+            Stop-Install 'failed' 'the downloaded package could not be extracted'
         }
         $files = @('myspec.exe', 'myspec.ico') | ForEach-Object { Join-Path $Destination $_ }
         foreach ($file in $files) {
             if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
-                Stop-Install "the package of MySpec $Version is missing $(Split-Path $file -Leaf)"
+                Stop-Install 'failed' "the package of MySpec $Version is missing $(Split-Path $file -Leaf)"
             }
         }
         # Nothing marks these files as downloaded, but this keeps the guarantee
@@ -336,7 +371,7 @@ namespace MySpecInstall
                 Add-Type -TypeDefinition $source
             }
         } catch {
-            Stop-Install "could not prepare the Start menu shortcut: $(Get-Reason $_)"
+            Stop-Install 'failed' "could not prepare the Start menu shortcut: $(Get-Reason $_)"
         }
     }
 
@@ -386,7 +421,7 @@ namespace MySpecInstall
             }
         } catch {
             Remove-Item -LiteralPath $new -Force -ErrorAction SilentlyContinue
-            Stop-Install ("could not install MySpec in ${AppDir}: $(Get-Reason $_)`n" +
+            Stop-Install 'replace' ("could not install MySpec in ${AppDir}: $(Get-Reason $_)`n" +
                 'Close MySpec if it is open and run this command again.')
         }
         $action
@@ -397,7 +432,7 @@ namespace MySpecInstall
             New-Item -ItemType Directory -Path (Split-Path $ShortcutPath) -Force | Out-Null
             [MySpecInstall.Shortcut]::Save($ShortcutPath, (Join-Path $AppDir 'myspec.exe'), $AppDir, (Join-Path $AppDir 'myspec.ico'), $Description, $AppId)
         } catch {
-            Stop-Install ("MySpec $Version was $Action, but the Start menu shortcut could not be created: $(Get-Reason $_)`n" +
+            Stop-Install 'failed' ("MySpec $Version was $Action, but the Start menu shortcut could not be created: $(Get-Reason $_)`n" +
                 'Run this command again.')
         }
     }
@@ -453,6 +488,7 @@ namespace MySpecInstall
             $action = Install-App $packageDir
             Set-StartMenuShortcut $release.Version $action
             Write-Summary $release.Version $action
+            Write-Result @('result: installed', "version: $($release.Version.Substring(1))", "path: $(Join-Path $AppDir 'myspec.exe')")
         } finally {
             Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
             if ($client) {
@@ -467,5 +503,6 @@ namespace MySpecInstall
         $lines = (Get-Reason $_) -split "`n"
         Write-Host "error: $($lines[0])" -ForegroundColor Red
         $lines | Select-Object -Skip 1 | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+        Write-Result @('result: failed', "kind: $($Failure.Kind)", "reason: $($lines[0])")
     }
 }
