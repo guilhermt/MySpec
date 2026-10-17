@@ -18,10 +18,6 @@ export function versionTitle(update: Update): string {
 /** NO_CHECKS is what a local build says in place of Check for updates. */
 export const NO_CHECKS = "Local builds don't check for updates.";
 
-/** HOW_TO_UPDATE says how to update until the app does it itself. */
-export const HOW_TO_UPDATE =
-  "To update, run the install command again in a terminal. Your data stays as it is.";
-
 /** keepsRunningText says the installed version waits for a restart: "Restart to use it. Until then, MySpec 0.4.0 keeps running." */
 export function keepsRunningText(running: string): string {
   return `Restart to use it. Until then, MySpec ${running} keeps running.`;

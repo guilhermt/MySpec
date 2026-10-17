@@ -1,22 +1,23 @@
 import { useId } from "react";
-import { CopyBlock } from "@/components/system/CopyBlock";
 import { StateGlyph } from "@/components/system/StateGlyph";
 import { Tooltip } from "@/components/system/Tooltip";
 import {
+  type UpdateBlock as Block,
   checkedText,
   checkedTip,
-  HOW_TO_UPDATE,
   NO_CHECKS,
   NO_NOTES,
   releaseHeading,
   resultOf,
+  updateBlockOf,
   versionTitle,
 } from "@/features/about/about";
 import { CheckForUpdatesButton } from "@/features/about/CheckForUpdatesButton";
+import { UpdateBlock } from "@/features/about/UpdateBlock";
 import { useNow } from "@/features/attention/useNow";
 import { Markdown } from "@/features/chat/Markdown";
 import { SettingsBlock, SettingsPage } from "@/features/settings/SettingsPage";
-import { availableText, FAILURE_TITLE, UP_TO_DATE } from "@/lib/update";
+import { FAILURE_TITLE, UP_TO_DATE } from "@/lib/update";
 import type { Update } from "@/lib/wails";
 import { useUpdate } from "@/store/app-store";
 
@@ -46,57 +47,54 @@ function Result({ update }: { update: Update }) {
   }
 }
 
-/** NewVersion is the newer version: how to update, the install command and the notes of every release after the installed one. */
-function NewVersion({ update, now }: { update: Update; now: number }) {
+/** NewVersion is the newer version: its block, and the notes of every release after the installed one. */
+function NewVersion({
+  update,
+  block,
+  now,
+}: {
+  update: Update;
+  block: Exclude<Block, { kind: "none" }>;
+  now: number;
+}) {
   const id = useId();
+  const releases = update.releases ?? [];
   return (
     <>
-      <section aria-labelledby={id} className="flex flex-col gap-(--space-3)">
-        <h3
-          id={id}
-          className="text-(length:--text-body) leading-(--leading-body) font-semibold text-ink-1"
-        >
-          {availableText(update.latest)}
-        </h3>
-        <p className="max-w-(--measure-read) text-(length:--text-body) leading-(--leading-body) text-ink-3">
-          {HOW_TO_UPDATE}
-        </p>
-        <CopyBlock
-          label="Install command"
-          copyLabel="Copy the install command"
-          text={update.installCommand}
-        />
-      </section>
-      <SettingsBlock title="Release notes">
-        <div className="flex flex-col gap-(--space-6)">
-          {(update.releases ?? []).map((release) => (
-            <article
-              key={release.version}
-              aria-labelledby={`${id}-${release.version}`}
-              className="flex flex-col gap-(--space-2)"
-            >
-              <h4
-                id={`${id}-${release.version}`}
-                className="text-(length:--text-ui) leading-(--leading-ui) font-semibold text-ink-1"
+      <UpdateBlock update={update} block={block} />
+      {releases.length > 0 && (
+        <SettingsBlock title="Release notes">
+          <div className="flex flex-col gap-(--space-6)">
+            {releases.map((release) => (
+              <article
+                key={release.version}
+                aria-labelledby={`${id}-${release.version}`}
+                className="flex flex-col gap-(--space-2)"
               >
-                {releaseHeading(release, now)}
-              </h4>
-              {release.notes.trim() === "" ? (
-                <p className="text-(length:--text-meta) text-ink-3">{NO_NOTES}</p>
-              ) : (
-                <Markdown className="ui-headings">{release.notes}</Markdown>
-              )}
-            </article>
-          ))}
-        </div>
-      </SettingsBlock>
+                <h4
+                  id={`${id}-${release.version}`}
+                  className="text-(length:--text-ui) leading-(--leading-ui) font-semibold text-ink-1"
+                >
+                  {releaseHeading(release, now)}
+                </h4>
+                {release.notes.trim() === "" ? (
+                  <p className="text-(length:--text-meta) text-ink-3">{NO_NOTES}</p>
+                ) : (
+                  <Markdown className="ui-headings">{release.notes}</Markdown>
+                )}
+              </article>
+            ))}
+          </div>
+        </SettingsBlock>
+      )}
     </>
   );
 }
 
-/** AboutPage is Settings › About: the installed version, Check for updates, and, with a newer version, how to update and the notes of every release after the installed one. */
+/** AboutPage is Settings › About: the installed version, Check for updates, and, with a newer version, its block (Update to, Restart now) and the notes of every release after the installed one. */
 export function AboutPage() {
   const update = useUpdate();
+  const block = updateBlockOf(update);
   const now = useNow(MINUTE, true);
   return (
     <SettingsPage
@@ -119,7 +117,7 @@ export function AboutPage() {
           )}
         </div>
       </SettingsBlock>
-      {update.latest !== "" && <NewVersion update={update} now={now} />}
+      {block.kind !== "none" && <NewVersion update={update} block={block} now={now} />}
     </SettingsPage>
   );
 }

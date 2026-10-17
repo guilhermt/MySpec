@@ -42,7 +42,10 @@ import {
   makeStartupFailure,
   makeStartupStep,
   makeState,
+  makeTask,
   makeUpdate,
+  makeUpdateInstall,
+  makeUpdateInstallFailure,
   makeUpdateRelease,
   withMachineItems,
 } from "@/test/wails-mock";
@@ -94,7 +97,17 @@ export const SETTINGS_VARIATIONS: Record<SettingsSceneName, readonly string[]> =
   ],
   "settings-prompts": ["", "view", "edit", "reset", "discard", "list-failed", "view-failed"],
   "settings-machine": ["", "missing", "unchecked", "checking"],
-  "settings-about": ["", "available", "checking", "failed", "local"],
+  "settings-about": [
+    "",
+    "available",
+    "updating",
+    "installed",
+    "installed-idle",
+    "install-failed",
+    "checking",
+    "failed",
+    "local",
+  ],
 };
 
 /** SettingsSceneSetup is what a test needs to draw a scene: the state, the place, and what the user did. */
@@ -998,8 +1011,19 @@ function machineScene(variation: string): SettingsSceneSetup {
   }
 }
 
+/** newerReleases are the releases after the installed one, newest first, as GitHub lists them. */
+const newerReleases = () => [
+  makeUpdateRelease(),
+  makeUpdateRelease({ version: "0.4.2", publishedAt: "2026-10-15T09:00:00Z", notes: "" }),
+  makeUpdateRelease({ version: "0.4.1", publishedAt: "2026-10-14T18:30:00Z" }),
+];
+
 function aboutScene(variation: string): SettingsSceneSetup {
   const base = { location: settingsAt("about"), storage: {} };
+  const newer = (overrides: Parameters<typeof makeUpdate>[0] = {}) =>
+    sceneState({
+      update: makeUpdate({ latest: "0.5.0", releases: newerReleases(), ...overrides }),
+    });
   switch (variation) {
     case "":
       return { ...base, state: sceneState({ update: makeUpdate() }) };
@@ -1018,6 +1042,55 @@ function aboutScene(variation: string): SettingsSceneSetup {
               }),
               makeUpdateRelease({ version: "0.4.1", publishedAt: "2026-10-14T18:30:00Z" }),
             ],
+          }),
+        }),
+      };
+    case "updating":
+      return {
+        ...base,
+        state: newer({ install: makeUpdateInstall({ phase: "installing", target: "0.5.0" }) }),
+      };
+    case "installed":
+      return {
+        ...base,
+        state: sceneState({
+          tasks: [
+            makeTask({ id: "task-1", name: "add-login", stage: "step:3" }),
+            makeTask({ id: "task-2", name: "fix-export", stage: "prd" }),
+          ],
+          update: makeUpdate({
+            latest: "0.5.0",
+            releases: newerReleases(),
+            install: makeUpdateInstall({
+              phase: "installed",
+              version: "0.5.0",
+              working: [
+                { itemId: "task-1", stage: "step:3" },
+                { itemId: "task-2", stage: "prd" },
+              ],
+            }),
+          }),
+        }),
+      };
+    case "installed-idle":
+      return {
+        ...base,
+        state: newer({
+          install: makeUpdateInstall({ phase: "installed", version: "0.5.0" }),
+        }),
+      };
+    case "install-failed":
+      return {
+        ...base,
+        state: newer({
+          install: makeUpdateInstall({
+            phase: "failed",
+            target: "0.5.0",
+            failure: makeUpdateInstallFailure({
+              kind: "libraries",
+              reason: "MySpec needs libraries this machine doesn't have: libwebkit2gtk-4.1.",
+              commands: ["sudo apt install libwebkit2gtk-4.1-0"],
+            }),
           }),
         }),
       };
