@@ -3188,6 +3188,11 @@ export interface State {
     "machine": Machine;
 
     /**
+     * Update is what the last check for a newer version of MySpec found.
+     */
+    "update": Update;
+
+    /**
      * ReviewModeDefault is manual or agent: who reviews the steps of a new
      * task, a string for the same reason as State.Theme.
      */
@@ -3728,6 +3733,90 @@ export interface TranscriptEvent {
     "entry": Entry | null;
     "entryId": string;
     "text": string;
+}
+
+/**
+ * Update is where the check for a newer version stands: the installed
+ * version, the releases newer than it and how to update. It is checked at
+ * every opening, every hour and on Check for updates; nothing of it is
+ * persisted.
+ */
+export interface Update {
+    /**
+     * the installed version as the binary carries it: 0.4.0, dev
+     */
+    "version": string;
+
+    /**
+     * false for a build whose version is not MAJOR.MINOR.PATCH, which never checks
+     */
+    "checks": boolean;
+
+    /**
+     * a check runs now
+     */
+    "running": boolean;
+
+    /**
+     * CheckedAt is when the last successful check ended, RFC 3339; "" before one.
+     */
+    "checkedAt": string;
+
+    /**
+     * Latest is the newest release newer than Version, as 0.5.0; "" when there is none.
+     */
+    "latest": string;
+
+    /**
+     * Releases are the releases newer than Version, newest first; never nil.
+     */
+    "releases": UpdateRelease[] | null;
+
+    /**
+     * Failure is why the last check failed when the user asked for it; nil otherwise.
+     */
+    "failure": UpdateFailure | null;
+
+    /**
+     * InstallCommand is the command that updates MySpec on this system.
+     */
+    "installCommand": string;
+}
+
+/**
+ * UpdateFailure is why a check the user asked for failed.
+ */
+export interface UpdateFailure {
+    /**
+     * Kind is offline, rate_limited, timeout or failed, a string for the same
+     * reason as State.Theme.
+     */
+    "kind": string;
+
+    /**
+     * what happened, the sentence the page shows for failed
+     */
+    "detail": string;
+}
+
+/**
+ * UpdateRelease is one release newer than the installed version.
+ */
+export interface UpdateRelease {
+    /**
+     * 0.5.0, without the v
+     */
+    "version": string;
+
+    /**
+     * RFC 3339
+     */
+    "publishedAt": string;
+
+    /**
+     * markdown, as GitHub has it; "" without notes
+     */
+    "notes": string;
 }
 
 /**

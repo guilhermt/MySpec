@@ -134,6 +134,9 @@ export type {
     TaskSummary,
     Transcript,
     TranscriptEvent,
+    Update,
+    UpdateFailure,
+    UpdateRelease,
     UserEntry,
     WorktreePreview,
     WritingDiscussion

@@ -112,6 +112,9 @@ import type {
   TaskSummary,
   Transcript,
   TranscriptEvent,
+  Update,
+  UpdateFailure,
+  UpdateRelease,
   UserEntry,
   WorktreePreview,
   WritingDiscussion,
@@ -234,6 +237,9 @@ export type {
   TaskSummary,
   Transcript,
   TranscriptEvent,
+  Update,
+  UpdateFailure,
+  UpdateRelease,
   UserEntry,
   WorktreePreview,
   WritingDiscussion,
@@ -699,6 +705,21 @@ export function asMachineReason(value: string): MachineReason {
     case "unreadable":
     case "no_scopes":
     case "invalid_token":
+      return value;
+    default:
+      return "failed";
+  }
+}
+
+/** UpdateFailureKind is why a check for updates the user asked for failed. */
+export type UpdateFailureKind = "offline" | "rate_limited" | "timeout" | "failed";
+
+/** asUpdateFailureKind narrows a kind from the Go; an unknown one is failed, whose detail says what. */
+export function asUpdateFailureKind(value: string): UpdateFailureKind {
+  switch (value) {
+    case "offline":
+    case "rate_limited":
+    case "timeout":
       return value;
     default:
       return "failed";
@@ -1494,6 +1515,7 @@ export const api = {
   restorePrompt: (stage: PromptStage): Promise<Prompt> => SettingsService.RestorePrompt(stage),
   listPrompts: async (): Promise<PromptListing[]> => (await SettingsService.ListPrompts()) ?? [],
   checkMachine: (): Promise<Machine> => SettingsService.CheckMachine(),
+  checkForUpdates: (): Promise<Update> => SettingsService.CheckForUpdates(),
 
   createTask: (req: CreateTaskRequest): Promise<string> => TaskService.CreateTask(req),
   deleteTask: (taskId: string): Promise<DeleteResult> => TaskService.DeleteTask(taskId),

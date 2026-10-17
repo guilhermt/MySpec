@@ -32,6 +32,7 @@ import (
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
+	"github.com/guilhermt/myspec/internal/update"
 	"github.com/guilhermt/myspec/internal/upgrade"
 	"github.com/guilhermt/myspec/internal/worktree"
 )
@@ -1905,6 +1906,7 @@ func TestRefusedStateCarriesTheCasesAndNothingElse(t *testing.T) {
 		ModelFactory:  bindings.FromModelSet(models.Factory()),
 		ModelCatalog:  bindings.ModelCatalog{Models: []bindings.CatalogModel{}},
 		Machine:       bindings.FromMachine(machine.Status{}),
+		Update:        bindings.FromUpdate(update.Status{}, ""),
 		Tasks:         []bindings.TaskSummary{},
 		History:       []bindings.ArchivedTask{},
 	}
@@ -3924,6 +3926,63 @@ func TestFromRemovalCountsAndNamesTheRepositories(t *testing.T) {
 	want := bindings.BoardRemoval{ToNoBoard: 1, ToNoBoardNames: []string{"acme/web"}, RemovedNames: []string{}}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("FromRemoval() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromUpdateOfNothingCheckedHasAnEmptyList(t *testing.T) {
+	t.Parallel()
+
+	got := bindings.FromUpdate(update.Status{}, "")
+
+	if got.Releases == nil || len(got.Releases) != 0 {
+		t.Errorf("Releases = %#v, want an empty list that is not nil", got.Releases)
+	}
+	if got.Failure != nil || got.CheckedAt != "" || got.Latest != "" {
+		t.Errorf("FromUpdate(empty) = %+v, want no failure, no check and no latest", got)
+	}
+}
+
+func TestFromUpdateCarriesTheReleasesNewestFirstWithTheLatest(t *testing.T) {
+	t.Parallel()
+	published := time.Date(2026, time.October, 16, 12, 0, 0, 0, time.UTC)
+	checked := time.Date(2026, time.October, 16, 14, 8, 0, 0, time.UTC)
+	status := update.Status{
+		Installed: "0.4.0",
+		Enabled:   true,
+		CheckedAt: checked,
+		Newer: []update.Release{
+			{Version: update.Version{Minor: 5}, PublishedAt: published, Notes: "## What's Changed"},
+			{Version: update.Version{Minor: 4, Patch: 1}, PublishedAt: published.Add(-24 * time.Hour)},
+		},
+	}
+
+	got := bindings.FromUpdate(status, "install me")
+
+	want := bindings.Update{
+		Version:   "0.4.0",
+		Checks:    true,
+		CheckedAt: "2026-10-16T14:08:00Z",
+		Latest:    "0.5.0",
+		Releases: []bindings.UpdateRelease{
+			{Version: "0.5.0", PublishedAt: "2026-10-16T12:00:00Z", Notes: "## What's Changed"},
+			{Version: "0.4.1", PublishedAt: "2026-10-15T12:00:00Z"},
+		},
+		InstallCommand: "install me",
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("FromUpdate() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromUpdateCarriesTheFailure(t *testing.T) {
+	t.Parallel()
+	status := update.Status{Failure: &update.Failure{Kind: update.RateLimited, Detail: "GitHub answered 429 Too Many Requests."}}
+
+	got := bindings.FromUpdate(status, "")
+
+	want := &bindings.UpdateFailure{Kind: "rate_limited", Detail: "GitHub answered 429 Too Many Requests."}
+	if diff := cmp.Diff(want, got.Failure); diff != "" {
+		t.Errorf("Failure mismatch (-want +got):\n%s", diff)
 	}
 }
 

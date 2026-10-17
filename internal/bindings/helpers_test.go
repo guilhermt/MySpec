@@ -561,7 +561,7 @@ func newFixture(t *testing.T) *fixture {
 
 	f.state = bindings.NewStateService(f.snapshot)
 	f.repoService = bindings.NewRepositoryService(f.repositories, f.picker, log)
-	f.settings = bindings.NewSettingsService(f.theme, f.models, f.reviewModes, nil, f.dataDir, log)
+	f.settings = bindings.NewSettingsService(f.theme, f.models, f.reviewModes, nil, nil, f.dataDir, log)
 	f.tasks = bindings.NewTaskService(
 		f.taskSvc, f.sessions, f.flow, f.models, f.reviewModes, f.repositories, f.boards, f.editor.open,
 		f.discussions.DocumentOfCard, f.hasConversation, log,
