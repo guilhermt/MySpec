@@ -12,6 +12,7 @@ export interface StoreOptions {
     Pick<
       AppStore,
       | "error"
+      | "updateLater"
       | "location"
       | "back"
       | "forward"
@@ -81,6 +82,7 @@ export function resetAppStore(options: StoreOptions = {}): void {
     announcement: options.ui?.announcement ?? null,
     expectGone: options.ui?.expectGone ?? null,
     machineNoticeDismissed: options.ui?.machineNoticeDismissed ?? false,
+    updateLater: options.ui?.updateLater ?? false,
     transcripts: options.ui?.transcripts ?? {},
     drafts: options.ui?.drafts ?? {},
     markerRequest: options.ui?.markerRequest ?? null,

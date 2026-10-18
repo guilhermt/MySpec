@@ -1,8 +1,10 @@
-// Package update finds out whether a newer release of MySpec is published: it
-// reads the public releases of the repository on GitHub, without gh and without
-// a token, compares them with the installed version and keeps in memory what
-// the last successful check found. It informs and never blocks; nothing of it
-// is persisted.
+// Package update finds out whether a newer release of MySpec is published and
+// installs it: it reads the public releases of the repository on GitHub,
+// without gh and without a token, compares them with the installed version and
+// installs the newest by the install script of the main branch, the one the
+// install command of the README runs. It keeps in memory what the last
+// successful check found and where the installation stands; nothing of it is
+// persisted.
 package update
 
 import (
@@ -21,7 +23,7 @@ type Release struct {
 	Notes       string // the body of the release as GitHub has it, markdown; "" when it has none
 }
 
-// FailureKind is why a check failed.
+// FailureKind is why a check or an installation failed.
 type FailureKind string
 
 // The ways a check fails.
@@ -30,6 +32,9 @@ const (
 	RateLimited FailureKind = "rate_limited" // GitHub refused the request for the rate limit
 	Timeout     FailureKind = "timeout"      // GitHub did not answer within checkTimeout
 	Failed      FailureKind = "failed"       // anything else; Detail says what
+	Libraries   FailureKind = "libraries"    // an install only: system libraries the new version needs are missing (Linux)
+	System      FailureKind = "system"       // an install only: the install script refused the system, as it does in a terminal
+	Replace     FailureKind = "replace"      // an install only: a file of MySpec couldn't be replaced
 )
 
 // Failure is why a check failed: the kind, and a sentence of what happened.
@@ -50,6 +55,8 @@ type Status struct {
 	// Failure is why the last check failed, when it was one the user asked
 	// for; nil otherwise. Any later check that ends clears it.
 	Failure *Failure
+	// Install is where the installation of a newer version stands.
+	Install Install
 }
 
 // Latest is the newest release newer than the installed version; ok is false when there is none.
@@ -81,24 +88,34 @@ type Releases interface {
 
 // Deps are what the service needs.
 type Deps struct {
-	Installed string   // the version of the binary: main.version
-	Releases  Releases // nil reads GitHub at DefaultBaseURL
-	Log       *slog.Logger
-	OnChange  func()           // called when a check starts and when it ends
-	Now       func() time.Time // nil is time.Now
-	Tick      time.Duration    // of Run; zero is tick
+	Installed      string   // the version of the binary: main.version
+	Releases       Releases // nil reads GitHub at DefaultBaseURL
+	Scripts        Scripts  // nil reads the script from GitHub, as Releases does
+	Runner         Runner   // nil runs the script on this system
+	Log            *slog.Logger
+	OnChange       func()           // called when a check or an installation starts and when it ends
+	OnInstalled    func(Install)    // called once a newer version is installed, after OnChange; may be nil
+	Now            func() time.Time // nil is time.Now
+	Tick           time.Duration    // of Run; zero is tick
+	InstallTimeout time.Duration    // bounds one installation; zero is installTimeout
+	TempDir        string           // where the script and its result are written; "" is os.TempDir()
 }
 
 // Service checks for a newer version and keeps what the last check found.
 type Service struct {
-	installed string
-	version   Version
-	enabled   bool
-	releases  Releases
-	log       *slog.Logger
-	onChange  func()
-	now       func() time.Time
-	tick      time.Duration
+	installed      string
+	version        Version
+	enabled        bool
+	releases       Releases
+	scripts        Scripts
+	runner         Runner
+	log            *slog.Logger
+	onChange       func()
+	onInstalled    func(Install)
+	now            func() time.Time
+	tick           time.Duration
+	installTimeout time.Duration
+	tempDir        string
 
 	mu        sync.Mutex
 	newer     []Release
@@ -106,6 +123,7 @@ type Service struct {
 	failure   *Failure
 	lastEnded time.Time // wall clock (Round(0)) of when the last check ended, of any kind and outcome
 	running   *run      // the check that runs; nil when none does
+	install   Install
 }
 
 // run is one check: done closes when it ends; requested is whether the user asked for it.
@@ -132,20 +150,43 @@ func New(deps Deps) *Service {
 	if interval == 0 {
 		interval = tick
 	}
-	releases := deps.Releases
-	if releases == nil {
+	releases, scripts := deps.Releases, deps.Scripts
+	switch {
+	case releases == nil && scripts == nil:
+		github := NewGitHub(GitHubDeps{UserAgent: "MySpec/" + deps.Installed})
+		releases, scripts = github, github
+	case releases == nil:
 		releases = NewGitHub(GitHubDeps{UserAgent: "MySpec/" + deps.Installed})
+	case scripts == nil:
+		scripts = NewGitHub(GitHubDeps{UserAgent: "MySpec/" + deps.Installed})
+	}
+	runner := deps.Runner
+	if runner == nil {
+		runner = scriptRunner{}
+	}
+	onInstalled := deps.OnInstalled
+	if onInstalled == nil {
+		onInstalled = func(Install) {}
+	}
+	timeout := deps.InstallTimeout
+	if timeout == 0 {
+		timeout = installTimeout
 	}
 	version, enabled := ParseVersion(deps.Installed)
 	return &Service{
-		installed: deps.Installed,
-		version:   version,
-		enabled:   enabled,
-		releases:  releases,
-		log:       log,
-		onChange:  onChange,
-		now:       now,
-		tick:      interval,
+		installed:      deps.Installed,
+		version:        version,
+		enabled:        enabled,
+		releases:       releases,
+		scripts:        scripts,
+		runner:         runner,
+		log:            log,
+		onChange:       onChange,
+		onInstalled:    onInstalled,
+		now:            now,
+		tick:           interval,
+		installTimeout: timeout,
+		tempDir:        deps.TempDir,
 	}
 }
 
@@ -282,6 +323,7 @@ func (s *Service) Status() Status {
 		Running:   s.running != nil,
 		CheckedAt: s.checkedAt,
 		Newer:     slices.Clone(s.newer),
+		Install:   cloneInstall(s.install),
 	}
 	if s.failure != nil {
 		f := *s.failure

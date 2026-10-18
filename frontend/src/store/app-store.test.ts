@@ -7,7 +7,14 @@ import {
   SIDEBAR_COLLAPSED_KEY,
   SIDEBAR_RAIL_KEY,
 } from "@/lib/ui-storage";
-import type { ArchivedTask, Place, PullRequest, Situation, TranscriptEvent } from "@/lib/wails";
+import type {
+  ArchivedTask,
+  Place,
+  PullRequest,
+  Situation,
+  TranscriptEvent,
+  Update,
+} from "@/lib/wails";
 import { sessionKey } from "@/lib/wails";
 import {
   initialNav,
@@ -86,6 +93,7 @@ import {
   makeTaskConversation,
   makeTranscript,
   makeUpdate,
+  makeUpdateInstall,
 } from "@/test/wails-mock";
 
 const WEB = makeRepository();
@@ -362,6 +370,51 @@ describe("the announcement of a newer version", () => {
     useAppStore.getState().applyState({ ...WELCOME, update: makeUpdate({ latest: "0.5.0" }) });
 
     expect(said()).toBe("MySpec 0.5.0 is available.");
+  });
+});
+
+describe("the announcement of the installation", () => {
+  const phase = (install: Partial<Update["install"]>, latest = "") =>
+    withTasks({ update: makeUpdate({ latest, install: makeUpdateInstall(install) }) });
+  const said = () => useAppStore.getState().announcement?.text;
+
+  it("announces each phase the installation reaches", () => {
+    useAppStore.getState().applyState(phase({}, "0.5.0"));
+    useAppStore.getState().applyState(phase({ phase: "installing", target: "0.5.0" }, "0.5.0"));
+    expect(said()).toBe("Updating to MySpec 0.5.0…");
+
+    useAppStore
+      .getState()
+      .applyState(phase({ phase: "installed", version: "0.5.0", target: "0.5.0" }, "0.5.0"));
+    expect(said()).toBe("MySpec 0.5.0 is installed. Restarting…");
+  });
+
+  it("takes precedence over a newer version that arrives in the same state", () => {
+    useAppStore.getState().applyState(phase({ phase: "installing", target: "0.5.0" }, "0.5.0"));
+
+    useAppStore
+      .getState()
+      .applyState(phase({ phase: "installed", version: "0.5.0", target: "0.5.0" }, "0.6.0"));
+
+    expect(said()).toBe("MySpec 0.5.0 is installed. Restarting…");
+  });
+
+  it("announces in the welcome mode too", () => {
+    useAppStore.getState().applyState({ ...WELCOME, update: makeUpdate() });
+    useAppStore.getState().applyState({
+      ...WELCOME,
+      update: makeUpdate({ install: makeUpdateInstall({ phase: "installing", target: "0.5.0" }) }),
+    });
+
+    expect(said()).toBe("Updating to MySpec 0.5.0…");
+  });
+
+  it("defers the restart until the app closes", () => {
+    expect(useAppStore.getState().updateLater).toBe(false);
+
+    useAppStore.getState().deferUpdateRestart();
+
+    expect(useAppStore.getState().updateLater).toBe(true);
   });
 });
 

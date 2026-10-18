@@ -2,6 +2,7 @@ package bindings_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -298,7 +299,7 @@ func TestCheckMachineReturnsWhereTheCheckStands(t *testing.T) {
 		Items:   []bindings.MachineItem{{ID: "claude_found", Result: "missing"}},
 	}
 	service := bindings.NewSettingsService(
-		f.theme, f.models, f.reviewModes, func() bindings.Machine { return want }, nil, f.dataDir, slog.New(slog.DiscardHandler),
+		f.theme, f.models, f.reviewModes, func() bindings.Machine { return want }, bindings.UpdateActions{}, f.dataDir, slog.New(slog.DiscardHandler),
 	)
 
 	got, err := service.CheckMachine()
@@ -315,7 +316,8 @@ func TestCheckForUpdatesReturnsWhereTheCheckStands(t *testing.T) {
 	f := newFixture(t)
 	want := bindings.Update{Version: "0.4.0", Checks: true, Latest: "0.5.0", Releases: []bindings.UpdateRelease{{Version: "0.5.0"}}}
 	service := bindings.NewSettingsService(
-		f.theme, f.models, f.reviewModes, nil, func() bindings.Update { return want }, f.dataDir, slog.New(slog.DiscardHandler),
+		f.theme, f.models, f.reviewModes, nil, bindings.UpdateActions{Check: func() bindings.Update { return want }}, f.dataDir,
+		slog.New(slog.DiscardHandler),
 	)
 
 	got, err := service.CheckForUpdates()
@@ -324,6 +326,82 @@ func TestCheckForUpdatesReturnsWhereTheCheckStands(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("CheckForUpdates() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestInstallUpdateReturnsWhereTheInstallationStands(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	want := bindings.Update{Version: "0.4.0", Install: bindings.UpdateInstall{Phase: "installing", Target: "0.5.0"}}
+	service := bindings.NewSettingsService(
+		f.theme, f.models, f.reviewModes, nil,
+		bindings.UpdateActions{Install: func() (bindings.Update, error) { return want, nil }},
+		f.dataDir, slog.New(slog.DiscardHandler),
+	)
+
+	got, err := service.InstallUpdate()
+	if err != nil {
+		t.Fatalf("InstallUpdate() = %v, want nil", err)
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("InstallUpdate() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestInstallUpdateReturnsTheErrorOfTheInstallation(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	service := bindings.NewSettingsService(
+		f.theme, f.models, f.reviewModes, nil,
+		bindings.UpdateActions{Install: func() (bindings.Update, error) { return bindings.Update{}, errors.New("a local build") }},
+		f.dataDir, slog.New(slog.DiscardHandler),
+	)
+
+	_, err := service.InstallUpdate()
+
+	if err == nil || err.Error() != "a local build" {
+		t.Errorf("InstallUpdate() = %v, want the error of the installation", err)
+	}
+}
+
+func TestRestartForUpdatePassesTheErrorOn(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	failing := errors.New("start failed")
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{"restarts", nil},
+		{"fails", failing},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			service := bindings.NewSettingsService(
+				f.theme, f.models, f.reviewModes, nil,
+				bindings.UpdateActions{Restart: func() error { return test.err }},
+				f.dataDir, slog.New(slog.DiscardHandler),
+			)
+
+			if got := service.RestartForUpdate(); !errors.Is(got, test.err) {
+				t.Errorf("RestartForUpdate() = %v, want %v", got, test.err)
+			}
+		})
+	}
+}
+
+func TestInstallAndRestartBeforeTheAppIsBoundSayItIsStarting(t *testing.T) {
+	t.Parallel()
+	settings := bindings.NewWaitingServices().Settings
+
+	_, installErr := settings.InstallUpdate()
+	restartErr := settings.RestartForUpdate()
+
+	for name, err := range map[string]error{"InstallUpdate": installErr, "RestartForUpdate": restartErr} {
+		if err == nil || err.Error() != startingMessage {
+			t.Errorf("%s() = %v, want %q", name, err, startingMessage)
+		}
 	}
 }
 
@@ -376,7 +454,7 @@ func TestTheSettersOfADefaultSayWhenTheDiskIsFull(t *testing.T) {
 			}
 			dataDir, shown := test.dirs(f)
 			service := bindings.NewSettingsService(
-				f.theme, fullModels, fullModes, nil, nil, dataDir, slog.New(slog.NewJSONHandler(f.logs, nil)),
+				f.theme, fullModels, fullModes, nil, bindings.UpdateActions{}, dataDir, slog.New(slog.NewJSONHandler(f.logs, nil)),
 			)
 			want := "no space left on the disk of " + shown + ". Free some space, then try again."
 

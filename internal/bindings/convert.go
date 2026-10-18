@@ -128,7 +128,7 @@ func unopenedState(migration *Migration, systemDark bool) State {
 		ModelFactory:  FromModelSet(models.Factory()),
 		ModelCatalog:  ModelCatalog{Models: []CatalogModel{}},
 		Machine:       FromMachine(machine.Status{}),
-		Update:        FromUpdate(update.Status{}, ""),
+		Update:        FromUpdate(update.Status{}, "", nil),
 		Tasks:         []TaskSummary{},
 		History:       []ArchivedTask{},
 	}
@@ -2465,8 +2465,9 @@ func ArchivedDiscussionRepositories(
 }
 
 // FromUpdate converts where the check for a newer version stands, with the
-// install command of this system; Releases is never nil.
-func FromUpdate(status update.Status, installCommand string) Update {
+// install command of this system and the sessions whose agent works now;
+// Releases, Install.Working and Install.Failure.Commands are never nil.
+func FromUpdate(status update.Status, installCommand string, working []session.Key) Update {
 	releases := make([]UpdateRelease, 0, len(status.Newer))
 	for _, newer := range status.Newer {
 		releases = append(releases, UpdateRelease{
@@ -2481,6 +2482,7 @@ func FromUpdate(status update.Status, installCommand string) Update {
 		Running:        status.Running,
 		Releases:       releases,
 		InstallCommand: installCommand,
+		Install:        fromInstall(status.Install, working),
 	}
 	if !status.CheckedAt.IsZero() {
 		out.CheckedAt = status.CheckedAt.Format(time.RFC3339)
@@ -2490,6 +2492,32 @@ func FromUpdate(status update.Status, installCommand string) Update {
 	}
 	if f := status.Failure; f != nil {
 		out.Failure = &UpdateFailure{Kind: string(f.Kind), Detail: f.Detail}
+	}
+	return out
+}
+
+// fromInstall converts where the installation stands; an empty phase is idle.
+func fromInstall(install update.Install, working []session.Key) UpdateInstall {
+	phase := string(install.Phase)
+	if phase == "" {
+		phase = string(update.InstallIdle)
+	}
+	out := UpdateInstall{
+		Phase:        phase,
+		Target:       install.Target,
+		Version:      install.Version,
+		RestartError: install.RestartError,
+		Working:      make([]UpdateWorking, 0, len(working)),
+	}
+	for _, key := range working {
+		out.Working = append(out.Working, UpdateWorking{ItemID: key.TaskID, Stage: key.Stage})
+	}
+	if f := install.Failure; f != nil {
+		out.Failure = &UpdateInstallFailure{
+			Kind:     string(f.Kind),
+			Reason:   f.Reason,
+			Commands: append(make([]string, 0, len(f.Commands)), f.Commands...),
+		}
 	}
 	return out
 }

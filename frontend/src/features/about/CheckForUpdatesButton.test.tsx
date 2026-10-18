@@ -3,7 +3,13 @@ import { describe, expect, it } from "vitest";
 import { CheckForUpdatesButton } from "@/features/about/CheckForUpdatesButton";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { api, makeState, makeUpdate, makeUpdateRelease } from "@/test/wails-mock";
+import {
+  api,
+  makeState,
+  makeUpdate,
+  makeUpdateInstall,
+  makeUpdateRelease,
+} from "@/test/wails-mock";
 
 function button(update = makeUpdate()) {
   return renderWithStore(<CheckForUpdatesButton />, { state: makeState({ update }) });
@@ -27,6 +33,19 @@ describe("CheckForUpdatesButton", () => {
     const checking = screen.getByRole("button", { name: "Checking…" });
     await user.click(checking);
 
+    expect(api.checkForUpdates).not.toHaveBeenCalled();
+  });
+
+  it("is unavailable while an update installs", async () => {
+    const { user } = button(
+      makeUpdate({ install: makeUpdateInstall({ phase: "installing", target: "0.5.0" }) }),
+    );
+
+    const check = screen.getByRole("button", { name: "Check for updates" });
+    await user.click(check);
+
+    expect(check).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText("An update is running.")).toBeInTheDocument();
     expect(api.checkForUpdates).not.toHaveBeenCalled();
   });
 

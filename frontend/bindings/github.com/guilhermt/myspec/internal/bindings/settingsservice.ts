@@ -41,10 +41,29 @@ export function GetPrompt(stage: string): $CancellablePromise<$models.Prompt> {
 }
 
 /**
+ * InstallUpdate installs the newest version of MySpec in the background and
+ * returns where the check and the installation stand; the state follows the
+ * installation with state:changed. A failure of the installation is in the
+ * state, not an error; a local build is one.
+ */
+export function InstallUpdate(): $CancellablePromise<$models.Update> {
+    return $Call.ByID(3315276708);
+}
+
+/**
  * ListPrompts says which prompts the user edited and when, without their text.
  */
 export function ListPrompts(): $CancellablePromise<$models.PromptListing[] | null> {
     return $Call.ByID(1474603361);
+}
+
+/**
+ * RestartForUpdate restarts MySpec into the installed version, cutting the
+ * turns that run, as closing the app does. A start that fails is an error,
+ * and its reason is also in the state.
+ */
+export function RestartForUpdate(): $CancellablePromise<void> {
+    return $Call.ByID(3382211093);
 }
 
 /**

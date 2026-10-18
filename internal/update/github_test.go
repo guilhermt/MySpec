@@ -1,6 +1,7 @@
 package update_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -294,5 +295,104 @@ func TestAFailedReadIsClassifiedForTheUser(t *testing.T) {
 				t.Errorf("Detail = %q, want %q", status.Failure.Detail, tt.wantDetail)
 			}
 		})
+	}
+}
+
+func TestScriptReadsTheMainBranch(t *testing.T) {
+	t.Parallel()
+
+	var got *http.Request
+	ts := serveFunc(t, func(w http.ResponseWriter, r *http.Request) {
+		got = r.Clone(r.Context())
+		_, _ = w.Write([]byte("echo install\n"))
+	})
+	github := update.NewGitHub(update.GitHubDeps{RawBaseURL: ts.URL, UserAgent: "MySpec/test"})
+
+	script, err := github.Script(t.Context(), "install.sh")
+	if err != nil {
+		t.Fatalf("Script: %v", err)
+	}
+
+	if string(script) != "echo install\n" {
+		t.Errorf("script = %q", script)
+	}
+	if got.Method != http.MethodGet || got.URL.Path != "/guilhermt/MySpec/main/install.sh" {
+		t.Errorf("request = %s %s", got.Method, got.URL.Path)
+	}
+	if ua := got.Header.Get("User-Agent"); ua != "MySpec/test" {
+		t.Errorf("User-Agent = %q", ua)
+	}
+	if accept := got.Header.Get("Accept"); accept != "" {
+		t.Errorf("Accept = %q, want none: the raw files are not the API", accept)
+	}
+}
+
+func TestScriptFailures(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		handler    http.HandlerFunc
+		wantKind   update.FailureKind
+		wantReason string
+	}{
+		{
+			name:     "404",
+			handler:  func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) },
+			wantKind: update.Failed, wantReason: "GitHub answered 404 Not Found.",
+		},
+		{
+			name: "429 with Retry-After",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Retry-After", "60")
+				w.WriteHeader(http.StatusTooManyRequests)
+			},
+			wantKind: update.RateLimited, wantReason: "GitHub answered 429 Too Many Requests.",
+		},
+		{
+			name:     "an empty body",
+			handler:  func(http.ResponseWriter, *http.Request) {},
+			wantKind: update.Failed, wantReason: "GitHub's answer couldn't be read.",
+		},
+		{
+			name: "a body over the limit",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write(bytes.Repeat([]byte("#"), 1<<20+1))
+			},
+			wantKind: update.Failed, wantReason: "GitHub's answer couldn't be read.",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ts := serveFunc(t, tt.handler)
+			scripts := update.NewGitHub(update.GitHubDeps{RawBaseURL: ts.URL, UserAgent: "MySpec/test"})
+			f := newInstallService(t, "0.4.0", func(d *update.Deps) { d.Scripts = scripts })
+
+			if err := f.Install(t.Context()); err != nil {
+				t.Fatalf("Install: %v", err)
+			}
+
+			failure := f.waitPhase(t, update.InstallFailed).Failure
+			if failure.Kind != tt.wantKind || failure.Reason != tt.wantReason {
+				t.Errorf("Failure = %q %q, want %q %q", failure.Kind, failure.Reason, tt.wantKind, tt.wantReason)
+			}
+		})
+	}
+}
+
+func TestScriptAtTheLimit(t *testing.T) {
+	t.Parallel()
+
+	ts := serveFunc(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(bytes.Repeat([]byte("#"), 1<<20))
+	})
+	github := update.NewGitHub(update.GitHubDeps{RawBaseURL: ts.URL, UserAgent: "MySpec/test"})
+
+	script, err := github.Script(t.Context(), "install.sh")
+
+	if err != nil || len(script) != 1<<20 {
+		t.Errorf("Script = %d bytes, %v, want 1 MiB", len(script), err)
 	}
 }

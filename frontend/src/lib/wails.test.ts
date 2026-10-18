@@ -20,6 +20,8 @@ import {
   asFindingDecision,
   asFindingPlacement,
   asHoldReason,
+  asInstallFailureKind,
+  asInstallPhase,
   asInterruptedBy,
   asIssueState,
   asMachineReason,
@@ -137,6 +139,40 @@ describe("asMachineReason", () => {
     }
     expect(asMachineReason("failed")).toBe("failed");
     expect(asMachineReason("broken")).toBe("failed");
+  });
+});
+
+describe("asInstallPhase", () => {
+  it("keeps the phases Go sends", () => {
+    for (const phase of ["idle", "installing", "installed", "failed"]) {
+      expect(asInstallPhase(phase)).toBe(phase);
+    }
+  });
+
+  it("takes an unknown phase as idle", () => {
+    expect(asInstallPhase("")).toBe("idle");
+    expect(asInstallPhase("paused")).toBe("idle");
+  });
+});
+
+describe("asInstallFailureKind", () => {
+  it("keeps the kinds Go sends", () => {
+    for (const kind of [
+      "offline",
+      "rate_limited",
+      "timeout",
+      "libraries",
+      "system",
+      "replace",
+      "failed",
+    ]) {
+      expect(asInstallFailureKind(kind)).toBe(kind);
+    }
+  });
+
+  it("takes an unknown kind as failed", () => {
+    expect(asInstallFailureKind("")).toBe("failed");
+    expect(asInstallFailureKind("disk_full")).toBe("failed");
   });
 });
 

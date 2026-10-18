@@ -73,4 +73,16 @@ describe("IconButton", () => {
     await user.click(button);
     expect(onClick).not.toHaveBeenCalled();
   });
+
+  it("is busy while it works and keeps the click", async () => {
+    const onClick = vi.fn();
+    const { user } = renderWithStore(
+      <IconButton label="Refresh" icon={Settings} busy onClick={onClick} />,
+    );
+    const button = screen.getByRole("button", { name: "Refresh" });
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button.querySelector("svg.lucide-settings")).toBeNull();
+    await user.click(button);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
 });
