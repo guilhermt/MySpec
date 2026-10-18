@@ -181,7 +181,7 @@ export function UpdateBlock({
       ) : (
         <>
           <Heading id={id}>{availableText(block.version)}</Heading>
-          {block.kind === "failed" ? (
+          {block.kind === "failed" && (
             <>
               <Failure
                 title={INSTALL_FAILURE_TITLE}
@@ -196,23 +196,22 @@ export function UpdateBlock({
                   text={command}
                 />
               ))}
-              <div>
-                <UpdateAction label="Try again" loading={false} />
-              </div>
+            </>
+          )}
+          {/* One button in one place for Update to, Updating… and Try again, so the focus stays on it. */}
+          <div>
+            <UpdateAction
+              label={block.kind === "failed" ? "Try again" : updateLabel(block.version)}
+              loading={block.kind === "updating"}
+            />
+          </div>
+          {block.kind === "updating" && (
+            <p className="text-(length:--text-meta) text-ink-3">{UPDATING_NOTE}</p>
+          )}
+          {block.kind === "failed" && (
+            <>
               <p className={`${READ} text-ink-3`}>{ALTERNATIVE}</p>
               <InstallCommand update={update} />
-            </>
-          ) : (
-            <>
-              <div>
-                <UpdateAction
-                  label={updateLabel(block.version)}
-                  loading={block.kind === "updating"}
-                />
-              </div>
-              {block.kind === "updating" && (
-                <p className="text-(length:--text-meta) text-ink-3">{UPDATING_NOTE}</p>
-              )}
             </>
           )}
         </>

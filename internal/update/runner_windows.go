@@ -1,7 +1,6 @@
 package update
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -13,8 +12,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// runnerWaitDelay is how long Run waits for the output of a script that was
-// killed, whose children may still hold the pipe.
+// runnerWaitDelay is how long Run waits for a script that was killed to exit
+// before it kills it again.
 const runnerWaitDelay = 5 * time.Second
 
 // scriptRunner runs the install script with Windows PowerShell, without a
@@ -39,11 +38,20 @@ func (scriptRunner) Run(ctx context.Context, script, result string) ([]byte, err
 	cmd.Env = append(os.Environ(), "MYSPEC_INSTALL_SCRIPT="+script, "MYSPEC_INSTALL_RESULT="+result)
 	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW | windows.CREATE_NEW_PROCESS_GROUP}
 	cmd.WaitDelay = runnerWaitDelay
-	var output bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &output, &output
-
-	if err := cmd.Run(); err != nil {
-		return output.Bytes(), fmt.Errorf("run %s: %w", script, err)
+	// The output goes to a file next to the script, never to a pipe of the app:
+	// a script that prints after the app closed would die on the closed pipe.
+	outputPath := filepath.Join(filepath.Dir(script), "output")
+	file, err := os.Create(outputPath)
+	if err != nil {
+		return nil, fmt.Errorf("create the output of %s: %w", script, err)
 	}
-	return output.Bytes(), nil
+	cmd.Stdout, cmd.Stderr = file, file
+
+	runErr := cmd.Run()
+	_ = file.Close()
+	output, _ := os.ReadFile(outputPath)
+	if runErr != nil {
+		return output, fmt.Errorf("run %s: %w", script, runErr)
+	}
+	return output, nil
 }

@@ -72,6 +72,36 @@ describe("UpdateBlock", () => {
     expect(screen.getByText("You can keep working meanwhile.")).toBeInTheDocument();
   });
 
+  it("keeps the focus on Try again when the installation starts again", async () => {
+    api.installUpdate.mockImplementation(() => new Promise(() => {}));
+    const { user } = block(
+      available({
+        install: makeUpdateInstall({
+          phase: "failed",
+          target: "0.5.0",
+          failure: makeUpdateInstallFailure({ kind: "offline" }),
+        }),
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    const button = await screen.findByRole("button", { name: "Updating…" });
+    button.focus();
+
+    act(() => {
+      useAppStore.setState({
+        app: makeState({
+          update: available({
+            install: makeUpdateInstall({ phase: "installing", target: "0.5.0" }),
+          }),
+        }),
+      });
+    });
+
+    const updating = screen.getByRole("button", { name: "Updating…" });
+    expect(updating).toBe(button);
+    expect(updating).toHaveFocus();
+  });
+
   it("says the installation failed, with the commands and the install command", async () => {
     const { user } = block(
       available({

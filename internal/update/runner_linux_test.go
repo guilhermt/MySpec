@@ -45,6 +45,26 @@ func TestScriptRunnerGivesTheScriptWhereToWriteItsResult(t *testing.T) {
 	}
 }
 
+func TestScriptRunnerWritesTheOutputToAFileThatOutlivesTheApp(t *testing.T) {
+	t.Parallel()
+
+	// A pipe of the app would close with it and kill the script at its next
+	// print; a file next to the script never does.
+	script := writeScript(t, "if [ -f /dev/stdout ] && [ -f /dev/stderr ]; then echo file; else echo pipe; fi\n")
+
+	output, err := update.NewScriptRunner().Run(t.Context(), script, filepath.Join(t.TempDir(), "result"))
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := string(output); got != "file\n" {
+		t.Errorf("output = %q, want the script to print to a file", got)
+	}
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(script), "output"))
+	if err != nil || string(data) != "file\n" {
+		t.Errorf("output file = %q, %v", data, err)
+	}
+}
+
 func TestScriptRunnerReportsAScriptThatFails(t *testing.T) {
 	t.Parallel()
 
