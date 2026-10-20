@@ -65,6 +65,29 @@ func TestPRRunUpsertCreatesAndUpdates(t *testing.T) {
 	}
 }
 
+func TestPRRunKeepsWhyTheReviewFellBack(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	taskID := seedTask(t, s)
+	run := newPRRun(taskID, task.PRReviewing)
+	run.Fallback = task.FallbackRoundsExhausted
+	if err := s.Tasks.UpsertPRRun(t.Context(), run); err != nil {
+		t.Fatalf("UpsertPRRun() = %v, want nil", err)
+	}
+	if got := getPRRun(t, s, taskID).Fallback; got != task.FallbackRoundsExhausted {
+		t.Errorf("Fallback = %q, want %q", got, task.FallbackRoundsExhausted)
+	}
+
+	run.Fallback = ""
+	if err := s.Tasks.UpsertPRRun(t.Context(), run); err != nil {
+		t.Fatalf("UpsertPRRun() again = %v, want nil", err)
+	}
+	if got := getPRRun(t, s, taskID).Fallback; got != "" {
+		t.Errorf("Fallback after clearing it = %q, want it empty", got)
+	}
+}
+
 func TestPRRunCarriesTheBlockOnlyWhenBlocked(t *testing.T) {
 	t.Parallel()
 	s := newStoreWithRepositories(t)

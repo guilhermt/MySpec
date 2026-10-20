@@ -1,5 +1,5 @@
-// Package reviewmode names who reviews the steps of a task, the user or an
-// agent, and keeps the mode a new task starts with.
+// Package reviewmode names who reviews the steps and the pull request of a task,
+// the user or an agent, and keeps the modes a new task starts with.
 package reviewmode
 
 import (

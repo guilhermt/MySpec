@@ -55,3 +55,25 @@ func TestParseReviewFallback(t *testing.T) {
 		t.Errorf("ParseReviewFallback(%q) = %v, want ErrUnknownReviewFallback", "nope", err)
 	}
 }
+
+func TestThePRModeIsManualUntilTheTaskHasOne(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		modes task.ReviewModes
+		want  reviewmode.Mode
+	}{
+		"none":   {modes: task.ReviewModes{}, want: reviewmode.Manual},
+		"manual": {modes: task.ReviewModes{PR: reviewmode.Manual}, want: reviewmode.Manual},
+		"agent":  {modes: task.ReviewModes{PR: reviewmode.Agent}, want: reviewmode.Agent},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := tc.modes.PRMode(); got != tc.want {
+				t.Errorf("PRMode() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

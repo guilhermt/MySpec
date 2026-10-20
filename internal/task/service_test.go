@@ -37,7 +37,7 @@ func TestCreateStoresTheTaskAndItsFolder(t *testing.T) {
 		InitialContext: "a login screen",
 		Stage:          task.StagePRD,
 		ArtifactsDir:   task.ArtifactsDir(f.dataDir, "dev", "web", "add-login"),
-		ReviewModes:    task.ReviewModes{Task: reviewmode.Manual},
+		ReviewModes:    task.ReviewModes{Task: reviewmode.Manual, PR: reviewmode.Manual},
 		CreatedAt:      base,
 		UpdatedAt:      base,
 	}
@@ -97,7 +97,7 @@ func TestCreateKeepsTheReviewModeOfTheTask(t *testing.T) {
 		t.Fatalf("Create() = %v, want nil", err)
 	}
 
-	want := task.ReviewModes{Task: reviewmode.Agent}
+	want := task.ReviewModes{Task: reviewmode.Agent, PR: reviewmode.Manual}
 	if diff := cmp.Diff(want, created.ReviewModes); diff != "" {
 		t.Errorf("Create() review modes mismatch (-want +got):\n%s", diff)
 	}
@@ -107,7 +107,7 @@ func TestCreateKeepsTheReviewModeOfTheTask(t *testing.T) {
 
 	// A task created without a mode is reviewed by the user.
 	plain := f.create(t, "add-logout")
-	if diff := cmp.Diff(task.ReviewModes{Task: reviewmode.Manual}, plain.ReviewModes); diff != "" {
+	if diff := cmp.Diff(task.ReviewModes{Task: reviewmode.Manual, PR: reviewmode.Manual}, plain.ReviewModes); diff != "" {
 		t.Errorf("Create() without a mode mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -1009,6 +1009,80 @@ func TestSetReviewModeStoresTheMode(t *testing.T) {
 	wantErrIs(t, err, task.ErrNotFound)
 }
 
+func TestCreateKeepsTheReviewModeOfThePullRequest(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created, err := f.service.Create(t.Context(), task.CreateParams{
+		Name:           "add-login",
+		RepositoryID:   repoID,
+		InitialContext: "a login screen",
+		ReviewMode:     reviewmode.Manual,
+		PRReviewMode:   reviewmode.Agent,
+	})
+	if err != nil {
+		t.Fatalf("Create() = %v, want nil", err)
+	}
+
+	want := task.ReviewModes{Task: reviewmode.Manual, PR: reviewmode.Agent}
+	if diff := cmp.Diff(want, created.ReviewModes); diff != "" {
+		t.Errorf("Create() review modes mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(want, f.repo.get(t, created.ID).ReviewModes); diff != "" {
+		t.Errorf("stored review modes mismatch (-want +got):\n%s", diff)
+	}
+
+	// A task created without a mode for its pull request is reviewed by the user.
+	plain := f.create(t, "add-logout")
+	if diff := cmp.Diff(reviewmode.Manual, plain.ReviewModes.PR); diff != "" {
+		t.Errorf("default PR mode mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestSetPRReviewModeStoresTheModeAndKeepsTheOthers(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login")
+	if _, err := f.service.SetStepReviewMode(t.Context(), created.ID, 1, reviewmode.Agent); err != nil {
+		t.Fatalf("SetStepReviewMode() = %v, want nil", err)
+	}
+	changes := f.changeCount()
+
+	got, err := f.service.SetPRReviewMode(t.Context(), created.ID, reviewmode.Agent)
+	if err != nil {
+		t.Fatalf("SetPRReviewMode() = %v, want nil", err)
+	}
+	if mode := got.ReviewModes.PRMode(); mode != reviewmode.Agent {
+		t.Errorf("SetPRReviewMode() mode = %q, want %q", mode, reviewmode.Agent)
+	}
+	stored := f.repo.get(t, created.ID)
+	if mode := stored.ReviewModes.PRMode(); mode != reviewmode.Agent {
+		t.Errorf("stored PR mode = %q, want %q", mode, reviewmode.Agent)
+	}
+	if !stored.ReviewModes.Adjusted(1) || stored.ReviewModes.Default() != reviewmode.Manual {
+		t.Errorf("stored modes = %+v, want the modes of the steps untouched", stored.ReviewModes)
+	}
+
+	// Changing the mode of the task keeps the one of the pull request.
+	again, err := f.service.SetReviewMode(t.Context(), created.ID, reviewmode.Agent)
+	if err != nil {
+		t.Fatalf("SetReviewMode() = %v, want nil", err)
+	}
+	if mode := again.ReviewModes.PRMode(); mode != reviewmode.Agent {
+		t.Errorf("PR mode after SetReviewMode() = %q, want %q", mode, reviewmode.Agent)
+	}
+	if f.changeCount() <= changes {
+		t.Error("OnChange did not run for the new mode")
+	}
+	if records := f.logs.count(t, "pr review mode set"); records != 1 {
+		t.Errorf("pr review mode set records = %d, want 1", records)
+	}
+
+	_, err = f.service.SetPRReviewMode(t.Context(), "nope", reviewmode.Agent)
+	wantErrIs(t, err, task.ErrNotFound)
+}
+
 func TestSetStepReviewModeMakesTheModeOfTheStepItsOwn(t *testing.T) {
 	t.Parallel()
 
@@ -1188,6 +1262,9 @@ func TestRemovingThePlanForgetsTheModesOfTheSteps(t *testing.T) {
 			if _, err := f.service.SetStepReviewMode(t.Context(), created.ID, 1, reviewmode.Manual); err != nil {
 				t.Fatalf("SetStepReviewMode() = %v, want nil", err)
 			}
+			if _, err := f.service.SetPRReviewMode(t.Context(), created.ID, reviewmode.Agent); err != nil {
+				t.Fatalf("SetPRReviewMode() = %v, want nil", err)
+			}
 
 			if err := f.service.RemoveArtifacts(t.Context(), created.ID, tc.from); err != nil {
 				t.Fatalf("RemoveArtifacts(%q) = %v, want nil", tc.from, err)
@@ -1201,6 +1278,9 @@ func TestRemovingThePlanForgetsTheModesOfTheSteps(t *testing.T) {
 				}
 				if got := m.Default(); got != reviewmode.Agent {
 					t.Errorf("%s Default() = %q, want %q", label, got, reviewmode.Agent)
+				}
+				if got := m.PRMode(); got != reviewmode.Agent {
+					t.Errorf("%s PRMode() = %q, want the mode of the pull request kept", label, got)
 				}
 			}
 		})

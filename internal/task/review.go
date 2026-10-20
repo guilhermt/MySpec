@@ -18,6 +18,10 @@ type ReviewModes struct {
 	// user adjusted before they started, and every step that started, which
 	// keeps the mode it started with.
 	Steps map[int]reviewmode.Mode `json:"steps,omitempty"`
+	// PR is who reviews the pull request of the task: the default of the app
+	// when it was created, and what changed on it before the review began. ""
+	// reads as Manual, the mode of the tasks created before it existed.
+	PR reviewmode.Mode `json:"pr,omitempty"`
 }
 
 // Default is the mode of the task, which the steps without a mode of their own
@@ -28,6 +32,14 @@ func (m ReviewModes) Default() reviewmode.Mode {
 		return reviewmode.Manual
 	}
 	return m.Task
+}
+
+// PRMode is the mode the review of the pull request runs with.
+func (m ReviewModes) PRMode() reviewmode.Mode {
+	if m.PR == "" {
+		return reviewmode.Manual
+	}
+	return m.PR
 }
 
 // Step is the mode a step runs with: its own when it has one, the one of the
@@ -47,7 +59,7 @@ func (m ReviewModes) Adjusted(number int) bool {
 
 // clone copies the map, so that a change never reaches a task a caller holds.
 func (m ReviewModes) clone() ReviewModes {
-	return ReviewModes{Task: m.Task, Steps: maps.Clone(m.Steps)}
+	return ReviewModes{Task: m.Task, Steps: maps.Clone(m.Steps), PR: m.PR}
 }
 
 // ReviewFallback is why a step that started under the agent review is reviewed
