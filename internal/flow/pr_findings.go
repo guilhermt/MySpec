@@ -197,11 +197,11 @@ func (s *Service) deciding(id string, number int) error {
 // or when the pull request is not under review or is over. The caller holds
 // the lock of the task.
 func (s *Service) decidable(id string, pass task.PRPass) error {
-	_, run, err := s.prOf(id)
+	t, run, err := s.prOf(id)
 	if err != nil {
 		return err
 	}
-	if !pass.Recorded || pass.Clean || pass.Sent() || run.Status != task.PRReviewing || prOver(run) {
+	if prAgentReviewed(t, run) || !pass.Recorded || pass.Clean || pass.Sent() || run.Status != task.PRReviewing || prOver(run) {
 		return fmt.Errorf("findings of pass %d of task %s: %w", pass.Pass, id, ErrNotDeciding)
 	}
 	return nil

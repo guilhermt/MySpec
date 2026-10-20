@@ -391,8 +391,13 @@ func TestReviewAgainCutsAPassUnderWay(t *testing.T) {
 	if _, err := os.Stat(tk.ReviewPath(1)); !os.IsNotExist(err) {
 		t.Errorf("stat report = %v, want it gone", err)
 	}
-	if run, _ := f.tasks.prRun("task-1"); run.Status != task.PRWaitingChecks || run.ReviewedCommit != "" {
-		t.Errorf("run = %+v, want the wait for the checks with no report covering the head", run)
+	// The reading of the checks runs on its own goroutine and moves the status on,
+	// so what was asked for is read from the calls and the commit reviewed.
+	if run, _ := f.tasks.prRun("task-1"); run.ReviewedCommit != "" {
+		t.Errorf("run = %+v, want no report covering the head", run)
+	}
+	if !slices.Contains(f.tasks.recorded(), "pr:waiting_checks:task-1") {
+		t.Errorf("task calls = %q, want the wait for the checks", f.tasks.recorded())
 	}
 }
 
@@ -706,4 +711,477 @@ func TestTheMessagesOfTheAgentReviewCarryTheRoundAndTheStatus(t *testing.T) {
 			t.Errorf("local pass message = %q, want it to contain %q", local, want)
 		}
 	}
+}
+
+// agentReview puts a task under the agent review of its pull request, with the
+// passes given and the reviewer at rest.
+func agentReview(t *testing.T, f *fixture, passes ...task.PRPass) {
+	t.Helper()
+
+	structured(t, f, passes...)
+	f.tasks.setReviewModes("task-1", task.ReviewModes{PR: reviewmode.Agent})
+}
+
+// appMessagesOf are the messages of the app of one kind, in order.
+func appMessagesOf(f *fixture, kind session.AppKind) []session.AppMessage {
+	var out []session.AppMessage
+	for _, app := range f.sessions.sentApps() {
+		if app.Kind == kind {
+			out = append(out, app)
+		}
+	}
+	return out
+}
+
+func TestAnAgentReviewHandsAReportWithFindingsToTheImplementer(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	agentReview(t, f, recordedPass(1, reportedFinding(1), reportedFinding(2)))
+
+	f.service.Check("task-1")
+
+	waitFor(t, "the implementer to be started", func() bool {
+		_, ok := f.sessions.info(fixKeyOf)
+		return ok
+	})
+	info, _ := f.sessions.info(fixKeyOf)
+	if info.Prompt != prompts.StagePRFix {
+		t.Errorf("prompt = %q, want the one of the implementer", info.Prompt)
+	}
+	request := info.Request
+	if request.Kind != session.AppReport || request.Pass != 1 || request.Round != 1 ||
+		request.Rounds != flow.MaxPRReviewRounds || request.Count != 2 {
+		t.Errorf("request = %+v, want round 1 of the report of pass 1, with its 2 findings", request)
+	}
+	if !strings.Contains(request.Text, "round 1 of 5") || !strings.Contains(request.Text, f.reviewPath(1)) {
+		t.Errorf("request text = %q, want the round and the path of the report", request.Text)
+	}
+	if pass := currentPassOf(t, f); !pass.Sent() {
+		t.Errorf("pass = %+v, want it marked as sent", pass)
+	}
+	if run, _ := f.tasks.prRun("task-1"); run.Fallback != "" {
+		t.Errorf("fallback = %q, want none", run.Fallback)
+	}
+}
+
+func TestTheReviewerReviewsAgainOnceTheImplementerIsDone(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	agentReview(t, f, sentPass(recordedPass(1, reportedFinding(1))))
+	implementerAtRest(f)
+	f.sessions.setReply(fixKeyOf, "Fixed finding 1.")
+	dirtyWorktree(f)
+	f.tasks.setPRRun("task-1", task.PRRun{
+		Status: task.PRReviewing, PR: openPR(), ReportedPass: 1, ReviewedCommit: startCommit,
+	})
+
+	f.service.Check("task-1")
+
+	waitFor(t, "the pass after the work of the implementer", func() bool {
+		return len(appMessagesOf(f, session.AppPRPass)) > 0
+	})
+	pass := appMessagesOf(f, session.AppPRPass)[0]
+	texts := strings.Join(f.sessions.sent(), "\n---\n")
+	for _, want := range []string{"Fixed finding 1.", "## GitHub status", f.reviewPath(2)} {
+		if !strings.Contains(texts, want) {
+			t.Errorf("messages = %q, want one to contain %q", texts, want)
+		}
+	}
+	if pass.Pass != 2 || len(f.tasks.PRPasses("task-1")) != 2 {
+		t.Errorf("pass = %+v with passes %+v, want the second one asked", pass, f.tasks.PRPasses("task-1"))
+	}
+	if kinds := appMessagesOf(f, session.AppCommitAllPush); len(kinds) != 0 {
+		t.Errorf("commit messages = %+v, want nothing committed", kinds)
+	}
+	if slices.Contains(f.sessions.recorded(), "send:task-1:pr_fix") {
+		t.Errorf("session calls = %q, want nothing sent to the implementer", f.sessions.recorded())
+	}
+}
+
+func TestACleanAgentReportWithChangesIsCommittedAndPushedByTheImplementer(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	agentReview(t, f, cleanPass(1))
+	implementerAtRest(f)
+	dirtyWorktree(f)
+
+	f.service.Check("task-1")
+
+	f.waitPRRun(t, "the commit to be asked", func(run task.PRRun) bool { return run.Status == task.PRCommitting })
+	waitFor(t, "the commit message", func() bool { return len(appMessagesOf(f, session.AppCommitAllPush)) > 0 })
+	if !slices.Contains(f.sessions.recorded(), "send:task-1:pr_fix") {
+		t.Errorf("session calls = %q, want the commit sent to the implementer", f.sessions.recorded())
+	}
+}
+
+func TestTheAgentReviewWaitsForTheChecksAfterItsPush(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	agentReview(t, f, cleanPass(1))
+	implementerAtRest(f)
+	f.worktrees.setStatus(git.Status{Head: commitSHA})
+	f.gh.setPR("task-1", withChecks(passedChecks()))
+
+	f.service.Check("task-1")
+
+	waitFor(t, "the second pass", func() bool {
+		return len(f.tasks.PRPasses("task-1")) == 2 && f.sessions.sentCount(reviewPrompt(f.reviewPath(2))) > 0
+	})
+	calls := f.tasks.recorded()
+	if !slices.Contains(calls, "pr:waiting_checks:task-1") {
+		t.Errorf("task calls = %q, want the wait for the checks of the push", calls)
+	}
+}
+
+func TestACleanAgentReportWithNothingToCommitEndsTheReview(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	agentReview(t, f, cleanPass(1))
+	implementerAtRest(f)
+
+	f.service.Check("task-1")
+
+	f.waitPRRun(t, "the review to end", func(run task.PRRun) bool { return run.Status == task.PRDone })
+	calls := f.sessions.recorded()
+	if !slices.Contains(calls, "close:task-1:pr_review") || !slices.Contains(calls, "close:task-1:pr_fix") {
+		t.Errorf("session calls = %q, want both conversations closed", calls)
+	}
+}
+
+func TestTheSixthReportWithFindingsFallsBackToTheUser(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	passes := make([]task.PRPass, 0, flow.MaxPRReviewRounds+1)
+	for pass := 1; pass <= flow.MaxPRReviewRounds; pass++ {
+		passes = append(passes, sentPass(recordedPass(pass, reportedFinding(1))))
+	}
+	passes = append(passes, recordedPass(flow.MaxPRReviewRounds+1, reportedFinding(1)))
+	agentReview(t, f, passes...)
+	implementerAtRest(f)
+
+	f.service.Check("task-1")
+
+	f.waitPRRun(t, "the fallback", func(run task.PRRun) bool { return run.Fallback == task.FallbackRoundsExhausted })
+	waitFor(t, "the findings to wait for the user", func() bool {
+		state := f.prState(t, "task-1")
+		return state.Status == flow.PRAwaitingDecision && state.Mode == reviewmode.Manual
+	})
+	if pass := currentPassOf(t, f); pass.Sent() {
+		t.Errorf("pass = %+v, want it recorded and not sent", pass)
+	}
+	if slices.Contains(f.sessions.recorded(), "send:task-1:pr_fix") {
+		t.Errorf("session calls = %q, want nothing sent to the implementer", f.sessions.recorded())
+	}
+}
+
+func TestACommitThatDoesNotHappenFallsBackToTheUser(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	agentReview(t, f, cleanPass(1))
+	f.tasks.setPRRun("task-1", task.PRRun{
+		Status: task.PRCommitting, PR: openPR(), ReportedPass: 1, ReviewedCommit: startCommit,
+	})
+	implementerAtRest(f)
+	dirtyWorktree(f)
+	unmoved := reviewed(1, 1)
+	unmoved.Head = startCommit
+	f.reviews.setSnapshot(unmoved)
+
+	f.service.Check("task-1")
+
+	f.waitPRRun(t, "the fallback", func(run task.PRRun) bool { return run.Fallback == task.FallbackNoCommit })
+	calls := f.tasks.recorded()
+	fallback := slices.Index(calls, "prFallback:commit_failed:task-1")
+	back := slices.Index(calls, "pr:reviewing:task-1")
+	if fallback < 0 || back < fallback {
+		t.Errorf("task calls = %q, want the fallback recorded before the review goes on", calls)
+	}
+}
+
+func TestTroubleAfterTheAgentReviewOpensAPassOnItsOwn(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	agentReview(t, f, cleanPass(1))
+	f.tasks.setPRRun("task-1", task.PRRun{
+		Status: task.PRDone, PR: openPR(), ReportedPass: 1, ReviewedCommit: startCommit,
+		Trouble: gh.Trouble{FailedChecks: []string{"build"}},
+	})
+	f.gh.setPR("task-1", withChecks(passedChecks()))
+
+	f.service.Check("task-1")
+
+	f.waitPRRun(t, "the wait for the checks", func(run task.PRRun) bool { return run.Status != task.PRDone })
+	waitFor(t, "the pass in the same conversation", func() bool {
+		return len(appMessagesOf(f, session.AppPRPass)) > 0
+	})
+	if pass := appMessagesOf(f, session.AppPRPass)[0]; pass.Pass != 2 {
+		t.Errorf("pass = %+v, want the second one", pass)
+	}
+	if slices.Contains(f.sessions.recorded(), "discard:task-1:pr_review") {
+		t.Errorf("session calls = %q, want the conversation kept", f.sessions.recorded())
+	}
+}
+
+func TestAMergedAgentReviewAsksNoPassForTrouble(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	agentReview(t, f, cleanPass(1))
+	f.tasks.setPRRun("task-1", task.PRRun{
+		Status: task.PRDone, PR: mergedPR(), ReportedPass: 1, ReviewedCommit: startCommit,
+		Trouble: gh.Trouble{Conflict: true},
+	})
+
+	f.service.Check("task-1")
+	f.waitEvaluations(t, 1)
+
+	if run, _ := f.tasks.prRun("task-1"); run.Status != task.PRDone {
+		t.Errorf("status = %q, want the review to stay over", run.Status)
+	}
+}
+
+func TestTheAgentLoopWaitsWhileEitherSessionWorksAsksOrFailed(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]session.Summary{
+		"the reviewer works": {Stage: session.PRReviewStage, Status: session.StatusWorking, TurnRunning: true},
+		"the reviewer failed": {
+			Stage: session.PRReviewStage, Status: session.StatusWaiting, Idle: true, TurnFailed: true,
+		},
+		"the implementer works": {Stage: session.PRFixStage, Status: session.StatusWorking, TurnRunning: true},
+		"the implementer has a message queued": {
+			Stage: session.PRFixStage, Status: session.StatusWaiting, PendingCount: 1,
+		},
+		"the implementer failed": {
+			Stage: session.PRFixStage, Status: session.StatusWaiting, Idle: true, TurnFailed: true,
+		},
+		"the implementer is paused": {Stage: session.PRFixStage, Status: session.StatusPaused},
+	}
+	for name, busy := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			agentReview(t, f, recordedPass(1, reportedFinding(1)))
+			f.sessions.setSummary("task-1", busy)
+
+			f.service.Check("task-1")
+			f.waitEvaluated(t, "task-1", 0)
+
+			if pass := currentPassOf(t, f); pass.Sent() {
+				t.Errorf("pass = %+v, want the report held back", pass)
+			}
+			for _, call := range f.sessions.recorded() {
+				if strings.HasPrefix(call, "send:") || strings.HasPrefix(call, "start:") {
+					t.Errorf("session calls = %q, want nothing sent", f.sessions.recorded())
+				}
+			}
+		})
+	}
+}
+
+func TestReviewPRMyselfCutsAPassUnderWayAndHandsTheLocalChangesToTheUser(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	agentReview(t, f, sentPass(recordedPass(1, reportedFinding(1))), askedPass(2))
+	f.tasks.setPRRun("task-1", task.PRRun{
+		Status: task.PRReviewing, PR: openPR(), ReportedPass: 1, ReviewedCommit: startCommit,
+	})
+	f.sessions.setSummary("task-1", session.Summary{
+		Stage: session.PRReviewStage, Status: session.StatusWorking, TurnRunning: true,
+	})
+	writeReport(t, f, 2, "half a report")
+	dirtyWorktree(f)
+	f.reviews.setSnapshot(reviewed(0, 1))
+	tk, _ := f.tasks.Get("task-1")
+
+	if err := f.service.ReviewPRMyself(t.Context(), "task-1"); err != nil {
+		t.Fatalf("ReviewPRMyself() = %v, want nil", err)
+	}
+
+	if run, _ := f.tasks.prRun("task-1"); run.Fallback != task.FallbackTakenOver {
+		t.Errorf("fallback = %q, want taken_over", run.Fallback)
+	}
+	if !slices.Contains(f.sessions.recorded(), "interrupt:task-1:pr_review") {
+		t.Errorf("session calls = %q, want the reviewer interrupted", f.sessions.recorded())
+	}
+	if passes := f.tasks.PRPasses("task-1"); len(passes) != 1 {
+		t.Errorf("passes = %+v, want the pass under way dropped", passes)
+	}
+	if _, err := os.Stat(tk.ReviewPath(2)); !os.IsNotExist(err) {
+		t.Errorf("stat report = %v, want it gone", err)
+	}
+	if state := f.prState(t, "task-1"); state.Status != flow.PRInReview || state.Mode != reviewmode.Manual {
+		t.Errorf("state = %q in %q, want the changes of the loop in review by the user", state.Status, state.Mode)
+	}
+}
+
+func TestReviewPRMyselfLeavesThePassAskedWhenTheWorktreeHasNoChanges(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	agentReview(t, f, sentPass(recordedPass(1, reportedFinding(1))), askedPass(2))
+	f.tasks.setPRRun("task-1", task.PRRun{
+		Status: task.PRReviewing, PR: openPR(), ReportedPass: 1, ReviewedCommit: startCommit,
+	})
+	f.sessions.setSummary("task-1", session.Summary{
+		Stage: session.PRReviewStage, Status: session.StatusWorking, TurnRunning: true,
+	})
+
+	if err := f.service.ReviewPRMyself(t.Context(), "task-1"); err != nil {
+		t.Fatalf("ReviewPRMyself() = %v, want nil", err)
+	}
+
+	if passes := f.tasks.PRPasses("task-1"); len(passes) != 2 {
+		t.Errorf("passes = %+v, want the pass asked kept", passes)
+	}
+}
+
+func TestReviewPRMyselfKeepsTheWaitForTheChecks(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	agentReview(t, f, cleanPass(1))
+	f.tasks.setPRRun("task-1", task.PRRun{
+		Status: task.PRWaitingChecks, PR: openPR(), ReportedPass: 1, ReviewedCommit: startCommit,
+	})
+
+	if err := f.service.ReviewPRMyself(t.Context(), "task-1"); err != nil {
+		t.Fatalf("ReviewPRMyself() = %v, want nil", err)
+	}
+
+	run, _ := f.tasks.prRun("task-1")
+	if run.Status != task.PRWaitingChecks || run.Fallback != task.FallbackTakenOver {
+		t.Errorf("run = %+v, want the wait kept with the review taken over", run)
+	}
+}
+
+func TestReviewPRMyselfIsRefusedWithoutTheAgentReview(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		modes task.ReviewModes
+		run   task.PRRun
+	}{
+		"manual mode": {task.ReviewModes{}, task.PRRun{Status: task.PRReviewing, PR: openPR()}},
+		"already taken over": {
+			task.ReviewModes{PR: reviewmode.Agent},
+			task.PRRun{Status: task.PRReviewing, PR: openPR(), Fallback: task.FallbackTakenOver},
+		},
+		"no pull request yet": {task.ReviewModes{PR: reviewmode.Agent}, task.PRRun{Status: task.PRDrafting}},
+		"merged": {
+			task.ReviewModes{PR: reviewmode.Agent}, task.PRRun{Status: task.PRDone, PR: mergedPR()},
+		},
+		"closing": {
+			task.ReviewModes{PR: reviewmode.Agent}, task.PRRun{Status: task.PRClosing, PR: openPR()},
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			structured(t, f, cleanPass(1))
+			f.tasks.setReviewModes("task-1", test.modes)
+			f.tasks.setPRRun("task-1", test.run)
+
+			wantErrIs(t, f.service.ReviewPRMyself(t.Context(), "task-1"), flow.ErrNoAgentPRReview)
+		})
+	}
+}
+
+func TestReviewAgainIsRefusedWhileTheAgentReviews(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	agentReview(t, f, recordedPass(1, reportedFinding(1)))
+
+	wantErrIs(t, f.service.ReviewAgain(t.Context(), "task-1"), flow.ErrAgentReviewsPR)
+
+	if run, _ := f.tasks.prRun("task-1"); run.Status != task.PRReviewing {
+		t.Errorf("status = %q, want reviewing", run.Status)
+	}
+}
+
+func TestReviewAgainIsAllowedOnceTheAgentReviewIsDone(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	agentReview(t, f, cleanPass(1))
+	f.tasks.setPRRun("task-1", task.PRRun{
+		Status: task.PRDone, PR: openPR(), ReportedPass: 1, ReviewedCommit: startCommit,
+	})
+	f.gh.setPR("task-1", withChecks(passedChecks()))
+
+	if err := f.service.ReviewAgain(t.Context(), "task-1"); err != nil {
+		t.Fatalf("ReviewAgain() = %v, want nil", err)
+	}
+
+	if !slices.Contains(f.tasks.recorded(), "pr:waiting_checks:task-1") {
+		t.Errorf("task calls = %q, want the wait for the checks", f.tasks.recorded())
+	}
+}
+
+func TestTheUserCannotApproveOrDecideWhileTheAgentReviews(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	agentReview(t, f, recordedPass(1, reportedFinding(1)))
+	f.reviews.setSnapshot(staged(3, 3))
+
+	wantErrIs(t, f.service.ApprovePR(t.Context(), "task-1"), flow.ErrAgentReviewsPR)
+	wantErrIs(t, f.service.DecidePRFinding(t.Context(), "task-1", 1, 1, approved), flow.ErrNotDeciding)
+	wantErrIs(t, f.service.ApplyPRFindings(t.Context(), "task-1"), flow.ErrNotDeciding)
+}
+
+func TestSetPRReviewModeIsRefusedOnceTheReviewBegan(t *testing.T) {
+	t.Parallel()
+
+	t.Run("before the pull request is found", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t)
+		inPR(f, "task-1", plan(), task.PRDrafting)
+		f.tasks.setPRRun("task-1", task.PRRun{Status: task.PRDrafting})
+
+		if err := f.service.SetPRReviewMode(t.Context(), "task-1", reviewmode.Agent); err != nil {
+			t.Fatalf("SetPRReviewMode() = %v, want nil", err)
+		}
+
+		tk, _ := f.tasks.Get("task-1")
+		if tk.ReviewModes.PRMode() != reviewmode.Agent {
+			t.Errorf("mode = %q, want agent", tk.ReviewModes.PRMode())
+		}
+	})
+
+	t.Run("once the pull request is found", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t)
+		structured(t, f, recordedPass(1, reportedFinding(1)))
+
+		wantErrIs(t, f.service.SetPRReviewMode(t.Context(), "task-1", reviewmode.Agent), flow.ErrPRReviewModeLocked)
+
+		tk, _ := f.tasks.Get("task-1")
+		if tk.ReviewModes.PRMode() != reviewmode.Manual {
+			t.Errorf("mode = %q, want it unchanged", tk.ReviewModes.PRMode())
+		}
+	})
+
+	t.Run("a task that does not exist", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t)
+
+		wantErrIs(t, f.service.SetPRReviewMode(t.Context(), "nope", reviewmode.Agent), task.ErrNotFound)
+	})
 }

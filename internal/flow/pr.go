@@ -773,7 +773,16 @@ func (s *Service) evaluatePR(ctx context.Context, t task.Task) {
 		// The closing the user asked for, and the one a reading in flight kept
 		// from starting when they asked.
 		s.spawnPRWork(t.ID, s.closeWork)
-	case task.PRPreparing, task.PRBlocked, task.PRDone, task.PRClosed:
+	case task.PRDone:
+		if prAgentReviewed(t, run) && run.PR.State == task.PRStateOpen && run.Trouble.Any() {
+			// A check that failed or a conflict since the last pass is a new round
+			// of the agent review, which no one has to ask for.
+			if err := s.askAgain(ctx, t.ID, run); err != nil {
+				s.log.Error("ask pr review again failed", "task", t.ID, "error", err)
+			}
+		}
+		s.review.Forget(t.ID)
+	case task.PRPreparing, task.PRBlocked, task.PRClosed:
 		// Nothing of these is the user's to review.
 		s.review.Forget(t.ID)
 	}
@@ -825,6 +834,9 @@ func (s *Service) evaluateReview(ctx context.Context, t task.Task, run task.PRRu
 		}
 		run, pass = updated, recorded
 		switch {
+		case prAgentReviewed(t, run):
+			s.evaluateAgentPR(ctx, t, wt, run, pass, sum)
+			return
 		case pass.Clean:
 			s.evaluateCleanPR(ctx, t, wt, run, sum)
 			return
@@ -970,15 +982,28 @@ func (s *Service) evaluatePRCommit(ctx context.Context, t task.Task, run task.PR
 		return task.PRRun{}, false
 	}
 
+	unmoved := snap.Head == "" || snap.Head == run.ReviewedCommit
+	agent := unmoved && prAgentReviewed(t, run)
+	if agent {
+		// Recorded before the task goes back to reviewing, so that a failure never
+		// leaves the review in a state that asks for a pass.
+		if _, err := s.tasks.SetPRFallback(ctx, t.ID, task.FallbackNoCommit); err != nil {
+			s.log.Error("record pr review fallback failed", "task", t.ID, "error", err)
+			return task.PRRun{}, false
+		}
+		s.log.Info("pr review fell back", "task", t.ID, "reason", string(task.FallbackNoCommit))
+	}
 	back, err := s.tasks.SetPRRun(ctx, t.ID, task.PRReviewing, nil)
 	if err != nil {
 		s.log.Error("record reviewing pull request failed", "task", t.ID, "error", err)
 		return task.PRRun{}, false
 	}
-	if snap.Head == "" || snap.Head == run.ReviewedCommit {
+	if unmoved {
 		// The agent finished its turn and the branch is where it was: whatever
 		// it did, it did not commit, and the task goes back to the user.
-		s.setPRNoCommit(t.ID, true)
+		if !agent {
+			s.setPRNoCommit(t.ID, true)
+		}
 		s.log.Warn("commit did not happen", "task", t.ID)
 		return back, true
 	}
@@ -1536,6 +1561,9 @@ func (s *Service) ApprovePR(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
+	if prAgentReviewed(t, run) {
+		return fmt.Errorf("approve the review of task %s: %w", id, ErrAgentReviewsPR)
+	}
 	a, err := s.tasks.Inspect(id)
 	if err != nil {
 		return err
@@ -1650,6 +1678,9 @@ func (s *Service) ReviewAgain(ctx context.Context, id string) error {
 	if !reviewable || run.PR.Number == 0 {
 		return fmt.Errorf("review task %s again: %w", id, ErrNoPullRequest)
 	}
+	if prAgentReviewed(t, run) && run.Status != task.PRDone {
+		return fmt.Errorf("review task %s again: %w", id, ErrAgentReviewsPR)
+	}
 	if fixer, open := s.sessions.Summary(prFixKey(id)); open && fixer.TurnRunning {
 		return fmt.Errorf("review task %s again: %w", id, ErrStepBusy)
 	}
@@ -1662,18 +1693,23 @@ func (s *Service) ReviewAgain(ctx context.Context, id string) error {
 	if pass, structured := currentPass(s.tasks.PRPasses(id)); structured && !pass.Recorded {
 		s.undoPass(ctx, t, pass.Pass)
 	}
-	// No report covers the head now: that is what has the pass asked for, after a
-	// restart or a block too.
+	if err := s.askAgain(ctx, id, run); err != nil {
+		return fmt.Errorf("review task %s again: %w", id, err)
+	}
+	return nil
+}
+
+// askAgain has the pass the pull request owes asked for: no report covers the
+// head now, which is what has the pass asked for, after a restart or a block
+// too, and the checks are read first. The caller holds the lock of the task.
+func (s *Service) askAgain(ctx context.Context, id string, run task.PRRun) error {
 	if _, err := s.tasks.SetPRReviewed(ctx, id, "", run.ReportedPass); err != nil {
 		return err
 	}
 	s.setPRNoCommit(id, false)
 	s.log.Info("pr review restarted", "task", id, "pass", run.ReportedPass+1)
 	// Nothing was pushed: a reading without checks is believed at once.
-	if err := s.beginChecksWait(ctx, id, false); err != nil {
-		return fmt.Errorf("review task %s again: %w", id, err)
-	}
-	return nil
+	return s.beginChecksWait(ctx, id, false)
 }
 
 // undoPass drops a pass that was asked and has no report: its row, its file

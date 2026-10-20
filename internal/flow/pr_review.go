@@ -1,12 +1,16 @@
 package flow
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreport"
@@ -222,4 +226,220 @@ func prFixInfo(
 	info.PRNumber, info.PRURL = strconv.Itoa(pr.Number), pr.URL
 	info.Choice = t.Models.Stage(models.PRFix)
 	return info
+}
+
+// lastReading is what the app last read from GitHub about the pull request, nil
+// when it never did.
+func lastReading(run task.PRRun) *gh.PRChecks {
+	if run.PR.CheckedAt.IsZero() {
+		return nil
+	}
+	return &gh.PRChecks{Checks: run.PR.Checks, Mergeable: run.PR.Mergeable}
+}
+
+// evaluateAgentPR drives the agent review of a pull request once both of its
+// sessions rest: it hands a report with findings to the implementer, asks the
+// reviewer for the pass that follows the implementer's work, has the changes
+// of a clean report committed and pushed, asks for the pass after a push, or
+// ends the review. A session that works, asks, is paused or failed is where
+// the review waits.
+func (s *Service) evaluateAgentPR(
+	ctx context.Context, t task.Task, wt worktree.Worktree, run task.PRRun, pass task.PRPass, reviewer session.Summary,
+) {
+	if !pass.Recorded {
+		// The reviewer works, or stopped without a report, which the user sorts out
+		// in its conversation.
+		return
+	}
+	if !reviewer.Idle || reviewer.TurnFailed {
+		return
+	}
+	if fixer, open := s.sessions.Summary(prFixKey(t.ID)); open && (!fixer.Idle || fixer.TurnFailed) {
+		return
+	}
+	// The loop reads the worktree too: the state and the commit that ends a round
+	// rely on its reading.
+	s.review.Track(t.ID, wt, true)
+	status, err := s.worktrees.Status(ctx, wt)
+	if err != nil {
+		s.log.Warn("read worktree failed", "task", t.ID, "path", wt.Path, "error", err)
+		return
+	}
+
+	passes := s.tasks.PRPasses(t.ID)
+	switch {
+	case status.Head != run.ReviewedCommit:
+		// The commit of the app went up, or a pass was asked again.
+		s.passDue(ctx, t, wt, run)
+	case pass.Clean && !status.Clean():
+		s.commitAgentPR(ctx, t, run)
+	case pass.Clean:
+		s.finishReview(ctx, t, run, prReviewKey(t.ID))
+	case !pass.Sent() && prRounds(passes) >= MaxPRReviewRounds:
+		if _, err := s.tasks.SetPRFallback(ctx, t.ID, task.FallbackRoundsExhausted); err != nil {
+			s.log.Error("record pr review fallback failed", "task", t.ID, "error", err)
+			return
+		}
+		s.log.Info("pr review fell back", "task", t.ID, "reason", string(task.FallbackRoundsExhausted))
+	case !pass.Sent():
+		s.deliverPRReport(ctx, t, run, pass, passes)
+	default:
+		s.askLocalPass(ctx, t, wt, run, status)
+	}
+}
+
+// deliverPRReport hands the report of a pass with findings to the implementer,
+// which starts the round of that report.
+func (s *Service) deliverPRReport(
+	ctx context.Context, t task.Task, run task.PRRun, pass task.PRPass, passes []task.PRPass,
+) {
+	path := t.ReviewPath(pass.Pass)
+	content, err := s.tasks.ReadArtifact(t.ID, task.PRDirName+"/"+filepath.Base(path))
+	if err != nil {
+		s.log.Error("read pr review report failed", "task", t.ID, "pass", pass.Pass, "error", err)
+		return
+	}
+	round := prRounds(passes) + 1
+	if err := s.tasks.MarkPRPassSent(ctx, t.ID, pass.Pass); err != nil {
+		s.log.Error("record sent pr review pass failed", "task", t.ID, "pass", pass.Pass, "error", err)
+		return
+	}
+	app := session.AppMessage{
+		Text: prReportMessage(path, content, round), Kind: session.AppReport,
+		Pass: pass.Pass, Round: round, Rounds: MaxPRReviewRounds, Count: len(pass.Findings),
+	}
+	if err := s.sendToFixer(ctx, t, run, app, nil); err != nil {
+		if unmarkErr := s.tasks.UnmarkPRPassSent(ctx, t.ID, pass.Pass); unmarkErr != nil {
+			s.log.Error("unmark sent pr review pass failed", "task", t.ID, "pass", pass.Pass, "error", unmarkErr)
+		}
+		s.log.Error("send pr review report failed", "task", t.ID, "pass", pass.Pass, "error", err)
+		return
+	}
+	s.log.Info("pr review report delivered", "task", t.ID, "pass", pass.Pass, "round", round)
+}
+
+// askLocalPass asks the reviewer for the pass that follows the work of the
+// implementer on a report: the changes are in the worktree and nothing is
+// committed, so nothing was read from GitHub since the last pass.
+func (s *Service) askLocalPass(
+	ctx context.Context, t task.Task, wt worktree.Worktree, run task.PRRun, status git.Status,
+) {
+	next := run.ReportedPass + 1
+	reply := implementerReply(s.sessions.LastReply(prFixKey(t.ID)))
+	// One state of the worktree asks for one pass, however many evaluations it
+	// takes for the report of that pass to land.
+	s.setPassAsked(t.ID, cmp.Or(status.Head, passAskedWithoutHead))
+	if _, err := s.tasks.AskPRPass(ctx, t.ID, next); err != nil {
+		s.setPassAsked(t.ID, "")
+		s.log.Error("record pr review pass failed", "task", t.ID, "pass", next, "error", err)
+		return
+	}
+	s.setUnreadable(t.ID, "")
+	section := prompts.PRChecksSection(lastReading(run), "origin/"+s.baseOf(ctx, wt))
+	app := session.AppMessage{
+		Text: prLocalPassMessage(reply, t.ReviewPath(next), section), Kind: session.AppPRPass, Pass: next,
+	}
+	if err := s.sessions.SendFromApp(ctx, prReviewKey(t.ID), app); err != nil {
+		s.setPassAsked(t.ID, "")
+		s.unaskPass(ctx, t.ID, next)
+		s.log.Error("send pr review pass failed", "task", t.ID, "pass", next, "error", err)
+		return
+	}
+	s.log.Info("pr review local pass asked", "task", t.ID, "pass", next)
+}
+
+// commitAgentPR asks the implementer of a pull request whose report came clean
+// to commit every change of the worktree and push it: nobody staged anything.
+func (s *Service) commitAgentPR(ctx context.Context, t task.Task, run task.PRRun) {
+	vars := commitVars(t)
+	vars.CommitAll = true
+	vars.Push = true
+	message, err := s.renderPrompt(prompts.StageCommit, vars)
+	if err != nil {
+		s.log.Error("render commit prompt failed", "task", t.ID, "error", err)
+		return
+	}
+	if _, err := s.tasks.SetPRRun(ctx, t.ID, task.PRCommitting, nil); err != nil {
+		s.log.Error("record committing pull request failed", "task", t.ID, "error", err)
+		return
+	}
+	s.setPRNoCommit(t.ID, false)
+	app := session.AppMessage{Text: message, Kind: session.AppCommitAllPush}
+	if err := s.sendToFixer(ctx, t, run, app, nil); err != nil {
+		if _, setErr := s.tasks.SetPRRun(ctx, t.ID, task.PRReviewing, nil); setErr != nil {
+			s.log.Error("record reviewing pull request failed", "task", t.ID, "error", setErr)
+		}
+		s.log.Error("send commit prompt failed", "task", t.ID, "error", err)
+		return
+	}
+	s.log.Info("pr review committing", "task", t.ID)
+}
+
+// ReviewPRMyself takes the review of the pull request of a task back from the
+// agent: the user reviews it from here on. A pass under way is cut short, and
+// the changes the loop left in the worktree go to the review by stage.
+func (s *Service) ReviewPRMyself(ctx context.Context, id string) error {
+	l := s.lockOf(id)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	t, run, err := s.prOf(id)
+	if err != nil {
+		return err
+	}
+	if !prAgentReviewed(t, run) || run.PR.Number == 0 || prOver(run) ||
+		run.Status == task.PRClosing || run.Status == task.PRClosed {
+		return fmt.Errorf("review the pull request of task %s yourself: %w", id, ErrNoAgentPRReview)
+	}
+	if _, err := s.tasks.SetPRFallback(ctx, id, task.FallbackTakenOver); err != nil {
+		return err
+	}
+	if pass, structured := currentPass(s.tasks.PRPasses(id)); structured && !pass.Recorded {
+		if reviewer, open := s.sessions.Summary(prReviewKey(id)); open && reviewer.TurnRunning {
+			if err := s.sessions.Interrupt(ctx, prReviewKey(id)); err != nil {
+				// The mode already changed: whatever the pass writes, nobody reads.
+				s.log.Warn("interrupt pr review failed", "task", id, "error", err)
+			}
+			if s.worktreeHasChanges(ctx, id) {
+				s.undoPass(ctx, t, pass.Pass)
+			}
+		}
+	}
+	s.log.Info("pr review fell back", "task", id, "reason", string(task.FallbackTakenOver))
+	return nil
+}
+
+// worktreeHasChanges says whether the worktree of a task holds changes nobody
+// committed; a worktree git cannot read counts as having none.
+func (s *Service) worktreeHasChanges(ctx context.Context, id string) bool {
+	wt, ok := s.worktrees.Get(id)
+	if !ok {
+		return false
+	}
+	status, err := s.worktrees.Status(ctx, wt)
+	return err == nil && !status.Clean()
+}
+
+// SetPRReviewMode changes who reviews the pull request of a task, until its
+// review begins.
+func (s *Service) SetPRReviewMode(ctx context.Context, id string, mode reviewmode.Mode) error {
+	l := s.lockOf(id)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	t, ok := s.tasks.Get(id)
+	if !ok {
+		return fmt.Errorf("set the review mode of the pull request of task %s: %w", id, task.ErrNotFound)
+	}
+	var current *PullRequest
+	if pr, found := s.PullRequest(id); found {
+		current = &pr
+	}
+	if !PRReviewModeEditable(t, current) {
+		return fmt.Errorf("set the review mode of the pull request of task %s: %w", id, ErrPRReviewModeLocked)
+	}
+	if _, err := s.tasks.SetPRReviewMode(ctx, id, mode); err != nil {
+		return err
+	}
+	return nil
 }
