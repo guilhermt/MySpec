@@ -93,6 +93,14 @@ func working(f *fixture) {
 	})
 }
 
+// implementerAtRest gives the review of the pull request an implementer with a
+// conversation, at rest.
+func implementerAtRest(f *fixture) {
+	f.sessions.setSummary("task-1", session.Summary{
+		Stage: session.PRFixStage, Status: session.StatusWaiting, Idle: true,
+	})
+}
+
 // writeReport writes the report of a pass where the agent leaves it.
 func writeReport(t *testing.T, f *fixture, pass int, content string) {
 	t.Helper()
@@ -262,10 +270,10 @@ func TestAStructuredPassIsShownByItsReportAndWhatTheUserDecidedAboutIt(t *testin
 			reviewing, false, false, reviewed(3, 3), true, flow.PRReadyToApprove,
 		},
 		{
-			"sent, the agent works",
+			"sent, the reviewer works",
 			[]task.PRPass{sentPass(decidedPass(1, approved))},
 			nil, reviewing,
-			false, true, reviewed(0, 1), true, flow.PRReviewing,
+			false, true, reviewed(0, 1), true, flow.PRInReview,
 		},
 		{
 			"sent, nothing changed",
@@ -314,16 +322,16 @@ func TestAStructuredPassIsShownByItsReportAndWhatTheUserDecidedAboutIt(t *testin
 			true, false, reviewed(0, 0), true, flow.PRDone,
 		},
 		{
-			"the session is paused while the agent applies the findings, with changes reviewed",
+			"the reviewer is paused after the findings were sent, with changes reviewed",
 			[]task.PRPass{sentPass(decidedPass(1, approved))},
 			nil, reviewing,
-			true, false, reviewed(3, 3), true, flow.PRReviewing,
+			true, false, reviewed(3, 3), true, flow.PRReadyToApprove,
 		},
 		{
-			"the session is paused while the agent applies the findings, nothing changed yet",
+			"the reviewer is paused after the findings were sent, nothing changed yet",
 			[]task.PRPass{sentPass(decidedPass(1, approved))},
 			nil, reviewing,
-			true, false, reviewed(0, 0), true, flow.PRReviewing,
+			true, false, reviewed(0, 0), true, flow.PRInReview,
 		},
 		{
 			"the session is paused, the report not in yet",
@@ -563,6 +571,7 @@ func TestApplyingTheFindingsSendsTheApprovedAndTheDiscardedOnes(t *testing.T) {
 
 	f := newFixture(t)
 	structured(t, f, decidedPass(1, approved, discarded, approved))
+	implementerAtRest(f)
 	if err := f.service.SetPRFindingText(t.Context(), "task-1", 1, 3, "Do it my way."); err != nil {
 		t.Fatalf("SetPRFindingText() = %v, want nil", err)
 	}
@@ -575,7 +584,7 @@ func TestApplyingTheFindingsSendsTheApprovedAndTheDiscardedOnes(t *testing.T) {
 	if !pass.Sent() {
 		t.Error("the pass is not marked as sent")
 	}
-	if want := prreport.ApplyMessage(1, pass.Findings); !slices.Equal(f.sessions.sent(), []string{want}) {
+	if want := prreport.FixMessage(1, pass.Findings); !slices.Equal(f.sessions.sent(), []string{want}) {
 		t.Errorf("sent = %q, want the message of the findings", f.sessions.sent())
 	}
 	for _, want := range []string{"### 3 · Finding 3", "Do it my way.", "## Discarded findings", "- 2 · Finding 2"} {
@@ -593,8 +602,8 @@ func TestApplyingTheFindingsSendsTheApprovedAndTheDiscardedOnes(t *testing.T) {
 	if diff := cmp.Diff(wantMarkers, f.sessions.marked(session.MarkerFindingsDecided)); diff != "" {
 		t.Errorf("findings_decided markers mismatch (-want +got):\n%s", diff)
 	}
-	if got := f.prState(t, "task-1").Status; got != flow.PRReviewing {
-		t.Errorf("status = %q, want reviewing: the agent works on what was approved", got)
+	if got := f.prState(t, "task-1").Status; got != flow.PRAddressingReview {
+		t.Errorf("status = %q, want addressing_review: the implementer works on what was approved", got)
 	}
 }
 
@@ -641,13 +650,13 @@ func TestApplyingTheFindingsResumesAPausedSession(t *testing.T) {
 
 	f := newFixture(t)
 	structured(t, f, decidedPass(1, approved))
-	f.sessions.setSummary("task-1", session.Summary{Stage: session.PRReviewStage, Status: session.StatusPaused})
+	f.sessions.setSummary("task-1", session.Summary{Stage: session.PRFixStage, Status: session.StatusPaused})
 
 	if err := f.service.ApplyPRFindings(t.Context(), "task-1"); err != nil {
 		t.Fatalf("ApplyPRFindings() = %v, want nil", err)
 	}
 
-	if !slices.Contains(f.sessions.recorded(), "resume:task-1:pr_review") {
+	if !slices.Contains(f.sessions.recorded(), "resume:task-1:pr_fix") {
 		t.Errorf("session calls = %q, want the session resumed", f.sessions.recorded())
 	}
 	if len(f.sessions.sent()) != 1 {
@@ -695,7 +704,7 @@ func TestApprovingTheChangesOfAStructuredPass(t *testing.T) {
 		{"findings still to decide", decidedPass(1, discarded, undecided), flow.ErrStepNotReady},
 		{"a finding approved and not sent", decidedPass(1, approved, discarded), flow.ErrStepNotReady},
 		{"the report is not recorded", askedPass(1), flow.ErrStepNotReady},
-		{"the pass is clean", task.PRPass{Pass: 1, Recorded: true, Clean: true}, flow.ErrStepNotReady},
+		{"the pass is clean, with changes of the worktree", task.PRPass{Pass: 1, Recorded: true, Clean: true}, nil},
 		{"every finding discarded", decidedPass(1, discarded, discarded), nil},
 		{"the approved findings were sent", sentPass(decidedPass(1, approved, discarded)), nil},
 	}
@@ -1326,7 +1335,8 @@ func TestReviewingAgainAfterAReportThatCouldNotBeRecordedAsksTheNextPass(t *test
 	}
 
 	waitFor(t, "the second pass to be asked for", func() bool {
-		return currentPassOf(t, f).Pass == 2
+		passes := f.tasks.PRPasses("task-1")
+		return len(passes) > 0 && passes[len(passes)-1].Pass == 2
 	})
 	if pass := currentPassOf(t, f); pass.Recorded {
 		t.Errorf("pass = %+v, want the second pass asked for and not recorded", pass)

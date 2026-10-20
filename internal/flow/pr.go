@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/review"
+	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
@@ -34,6 +36,7 @@ const (
 	PRAwaitingReply    PRStatus = "awaiting_reply" // the agent stopped short of what the app waits for: a draft, the pull request it was asked to open, or the report of a review pass
 	PROpening          PRStatus = "opening"
 	PRReviewing        PRStatus = "reviewing"         // the agent is reviewing
+	PRAddressingReview PRStatus = "addressing_review" // the implementer works on findings: the approved ones, or a report of the agent review
 	PRWaitingChecks    PRStatus = "waiting_checks"    // the pass waits for the checks of the head to finish
 	PRAwaitingDecision PRStatus = "awaiting_decision" // a report with changes, nothing changed yet
 	PRInReview         PRStatus = "in_review"         // the applied changes are being reviewed
@@ -86,6 +89,20 @@ type PullRequest struct {
 
 	SessionStage string // session.PRStage or session.PRReviewStage; "" when none is open
 	Session      session.Summary
+
+	// Mode is who reviews the pull request now: the mode of the task, or Manual
+	// once the agent review fell back; Fallback says why.
+	Mode     reviewmode.Mode
+	Fallback task.ReviewFallback
+	// Round is how many reports with findings the agent review handed to the
+	// implementer; agent mode only.
+	Round int
+	// FixerStage is session.PRFixStage while the implementer of the review has
+	// its conversation open, "" otherwise, and Fixer is its summary.
+	FixerStage string
+	Fixer      session.Summary
+	// FixerStarted says the implementer has a conversation, open or closed.
+	FixerStarted bool
 }
 
 // noWorktreeDetail is what blocks a task whose worktree the app no longer
@@ -120,6 +137,7 @@ func (s *Service) PullRequest(id string) (PullRequest, bool) {
 // doing and how far its review got.
 func (s *Service) prState(t task.Task, run task.PRRun, art task.PRArtifacts) PullRequest {
 	pr := PullRequest{
+		Fallback:     run.Fallback,
 		Block:        run.Block,
 		Reports:      art.Reports,
 		PR:           run.PR,
@@ -149,12 +167,26 @@ func (s *Service) prState(t task.Task, run task.PRRun, art task.PRArtifacts) Pul
 	snap, read := s.review.Snapshot(t.ID)
 	pr.Review = reading(snap, read)
 	pr.CommitFailed = s.prNoCommit(t.ID)
+	pr.Mode = PRReviewModeOf(t, &pr)
+	if t.ReviewModes.PRMode() == reviewmode.Agent {
+		pr.Round = prRounds(passes)
+	}
+	fixer, fixerOpen := s.sessions.Summary(prFixKey(t.ID))
+	if fixerOpen {
+		pr.FixerStage, pr.Fixer = session.PRFixStage, fixer
+	}
+	pr.FixerStarted = slices.ContainsFunc(s.sessions.Conversations(t.ID), func(c session.Conversation) bool {
+		return c.Stage == session.PRFixStage
+	})
 	facts := prFacts{
 		idle:       pr.Session.Idle && pr.SessionStage != "",
 		paused:     pausedAtRest(pr.Session) && pr.SessionStage != "",
 		openFailed: s.openFailed(t.ID),
 		passAsked:  s.passAsked(t.ID) != "",
 		pass:       pr.Pass,
+		agent:      prAgentReviewed(t, run),
+		fixerBusy:  fixerWorking(fixer, fixerOpen),
+		headMoved:  read && snap.Head != "" && snap.Head != run.ReviewedCommit,
 	}
 	pr.Status = prStatus(run, art, facts, snap, read)
 	pr.CanClose = canClose(pr.Status, pr.CheckError) && !pr.CloneMissing
@@ -199,6 +231,9 @@ type prFacts struct {
 	openFailed bool         // the last opening of the pull request ended without one
 	passAsked  bool         // a review pass was asked for and its report is not in yet
 	pass       *task.PRPass // the current structured pass; nil for a pass in text or none
+	agent      bool         // the agent reviews the pull request
+	fixerBusy  bool         // the implementer is open and not at rest
+	headMoved  bool         // the branch is on a commit no report covered
 }
 
 // prStatus turns what the app recorded, the artifacts on disk, what else it
@@ -255,19 +290,67 @@ func awaitingStatus(run task.PRRun) PRStatus {
 }
 
 // reviewingStatus is what a pull request under review is shown as: the pass
-// that runs, the report the agent still owes, the report that closed it, or how
-// far the user got with the changes it asked for. A structured pass is shown by
-// structuredStatus, with its session at rest, or paused with nothing queued
-// once its report is recorded and before its findings are sent: a pause keeps
-// the findings in the state they ask for, while a report is only read from a
-// session at rest, and a pause while the agent applies the approved findings
-// stops it halfway, so its changes are not ready for review.
+// that runs, the report the agent still owes, the report that closed it, the
+// implementer at work, or how far the user got with the changes it made. A
+// structured pass is read from its row, in the order of the table below: the
+// first line that fits decides. A pass in text, which has no row, is read from
+// the last report and the reviewer at rest.
 func reviewingStatus(
 	run task.PRRun, art task.PRArtifacts, facts prFacts, snap review.Snapshot, read bool,
 ) PRStatus {
-	if facts.pass != nil && (facts.idle || (facts.paused && facts.pass.Recorded && !facts.pass.Sent())) {
-		return structuredStatus(run, *facts.pass, snap, read)
+	if facts.pass == nil {
+		return textStatus(art, facts, snap, read)
 	}
+	pass := *facts.pass
+	changed := read && snap.Err == "" && snap.Total > 0
+	// The changes of a pass the implementer works on are not ready to review: the
+	// pass is shown as addressed while it does.
+	switch {
+	case pass.Sent() && (facts.fixerBusy || facts.agent):
+		// With the agent review, the second is transient: the evaluation asks the
+		// reviewer for the local pass.
+		return PRAddressingReview
+	case pass.Sent():
+		if !changed {
+			return PRInReview // the agent changed nothing: No file changed
+		}
+		return changesStatus(snap)
+	case !pass.Recorded && facts.idle:
+		return PRAwaitingReply
+	case !pass.Recorded, !facts.idle && !facts.paused:
+		// The reviewer works: on the report of the pass, or on its rewrite.
+		return PRReviewing
+	case facts.agent && pass.Clean && changed && !facts.headMoved:
+		return PRCommitting // transient: the evaluation that follows has the changes committed
+	case facts.agent:
+		// Transient: the evaluation that follows hands the report over, falls back,
+		// asks the pass after a commit, or ends the review.
+		return PRReviewing
+	case pass.Clean && changed:
+		return changesOrAddressing(snap, facts)
+	case pass.Clean:
+		return PRDone // transient: the evaluation that follows finishes the review, or asks the pass after a commit
+	case !pass.Decided() || len(pass.Approved()) > 0:
+		return PRAwaitingDecision
+	case changed:
+		return changesOrAddressing(snap, facts)
+	default:
+		return awaitingStatus(run)
+	}
+}
+
+// changesOrAddressing is the state of the changes the user reviews: the
+// implementer working on them keeps the review from starting.
+func changesOrAddressing(snap review.Snapshot, facts prFacts) PRStatus {
+	if facts.fixerBusy {
+		return PRAddressingReview
+	}
+	return changesStatus(snap)
+}
+
+// textStatus is what a pull request under review shows when its pass was asked
+// in text, before the structured format, or none was asked yet.
+func textStatus(art task.PRArtifacts, facts prFacts, snap review.Snapshot, read bool) PRStatus {
 	if !facts.idle {
 		return PRReviewing
 	}
@@ -277,7 +360,7 @@ func reviewingStatus(
 		return PRAwaitingReply
 	}
 	if last.Clean {
-		// Transient: the evaluation that follows records it.
+		// Transient: the evaluation that records it follows.
 		return PRDone
 	}
 	if !read || snap.Err != "" || snap.Total == 0 {
@@ -690,7 +773,16 @@ func (s *Service) evaluatePR(ctx context.Context, t task.Task) {
 		// The closing the user asked for, and the one a reading in flight kept
 		// from starting when they asked.
 		s.spawnPRWork(t.ID, s.closeWork)
-	case task.PRPreparing, task.PRBlocked, task.PRDone, task.PRClosed:
+	case task.PRDone:
+		if prAgentReviewed(t, run) && run.PR.State == task.PRStateOpen && run.Trouble.Any() {
+			// A check that failed or a conflict since the last pass is a new round
+			// of the agent review, which no one has to ask for.
+			if err := s.askAgain(ctx, t.ID, run); err != nil {
+				s.log.Error("ask pr review again failed", "task", t.ID, "error", err)
+			}
+		}
+		s.review.Forget(t.ID)
+	case task.PRPreparing, task.PRBlocked, task.PRClosed:
 		// Nothing of these is the user's to review.
 		s.review.Forget(t.ID)
 	}
@@ -699,37 +791,56 @@ func (s *Service) evaluatePR(ctx context.Context, t task.Task) {
 	}
 }
 
-// evaluateReview drives one pass of the review of a pull request: it starts
-// the conversation, records the report a pass leaves behind, hands the changes
-// to the user and asks for a new pass once they are committed.
+// evaluateReview drives the review of a pull request: it starts the
+// conversation of the reviewer, records the report a pass leaves behind, hands
+// the changes to the user and asks for a new pass once they are committed.
 func (s *Service) evaluateReview(ctx context.Context, t task.Task, run task.PRRun, art task.PRArtifacts) {
 	wt, ok := s.worktrees.Get(t.ID)
 	if !ok {
 		return
 	}
-	key := session.Key{TaskID: t.ID, Stage: session.PRReviewStage}
+	key := prReviewKey(t.ID)
 	sum, open := s.sessions.Summary(key)
+	exists := open
 	if !open {
-		// The first pass of the task, and the one a review asked again starts:
-		// both wait for the checks first.
-		if checks := s.takeChecks(t.ID); checks != nil {
-			s.startReview(ctx, t, wt, run, checks)
-		} else {
-			// A wait that could not be recorded is begun again by the evaluation
-			// that follows, which finds the task still without a conversation.
-			_ = s.beginChecksWait(ctx, t.ID, true)
+		var err error
+		if exists, err = s.sessions.Exists(ctx, key); err != nil {
+			s.log.Error("open pr session failed", "task", t.ID, "error", err)
+			return
 		}
+		if exists {
+			// The conversation of the review is one for the whole review: a pass
+			// that follows the end of an earlier one, or a restart, finds it closed.
+			s.reopenReviewer(ctx, t, wt, run)
+			if sum, open = s.sessions.Summary(key); !open {
+				return
+			}
+		}
+	}
+
+	passes := s.tasks.PRPasses(t.ID)
+	if !exists || (len(passes) == 0 && len(art.Reports) == 0) {
+		// The first pass of the task, or one that Review again or Review myself
+		// undid: it waits for the checks first.
+		s.firstPass(ctx, t, wt, run, exists)
 		return
 	}
 
-	pass, structured := currentPass(s.tasks.PRPasses(t.ID))
+	pass, structured := currentPass(passes)
 	if structured {
 		updated, recorded, ok := s.evaluateReport(ctx, t, wt, run, key, sum.Idle, pass)
 		if !ok {
 			return
 		}
 		run, pass = updated, recorded
-		if pass.Clean || (pass.AllDiscarded() && prOver(run)) {
+		switch {
+		case prAgentReviewed(t, run):
+			s.evaluateAgentPR(ctx, t, wt, run, pass, sum)
+			return
+		case pass.Clean:
+			s.evaluateCleanPR(ctx, t, wt, run, sum)
+			return
+		case pass.AllDiscarded() && prOver(run):
 			s.finishReview(ctx, t, run, key)
 			return
 		}
@@ -757,36 +868,109 @@ func (s *Service) evaluateReview(ctx context.Context, t task.Task, run task.PRRu
 	}
 
 	// A pass that asks for changes is reviewed like a step: the user reads what
-	// the agent did, file by file, in the worktree of the task. A structured
-	// pass paused before it was sent keeps showing them, so they are still
-	// watched; the next pass waits for the session to be resumed. A pass
-	// paused while the agent applies it is not reviewed, so it is not watched.
-	idle := sum.Idle
-	s.review.Track(t.ID, wt, idle || (structured && !pass.Sent() && pausedAtRest(sum)))
-	if !idle {
+	// the implementer did, file by file, in the worktree of the task. A structured
+	// pass paused before it was sent keeps showing the changes, so they are still
+	// watched; the next pass waits for the session to be resumed. While the
+	// implementer works on the findings, nothing is ready to review, so nothing is
+	// watched.
+	restReviewer := sum.Idle || (structured && !pass.Sent() && pausedAtRest(sum))
+	fixer, fixerOpen := s.sessions.Summary(prFixKey(t.ID))
+	working := fixerWorking(fixer, fixerOpen)
+	s.review.Track(t.ID, wt, restReviewer && !working)
+	if !sum.Idle || working {
 		return
 	}
+	s.passDue(ctx, t, wt, run)
+}
+
+// reopenReviewer opens again the conversation of the reviewer of a pull
+// request, which was closed. Reopening renders no prompt: what the app reads
+// from GitHub belongs to the pass that is asked.
+func (s *Service) reopenReviewer(ctx context.Context, t task.Task, wt worktree.Worktree, run task.PRRun) {
+	repo, err := s.repositoryOf(t)
+	if err != nil {
+		s.log.Error("open pr session failed", "task", t.ID, "error", err)
+		return
+	}
+	base := s.baseOf(ctx, wt)
+	info := prReviewInfo(t, wt, base, repo, run.PR, run.ReportedPass+1, nil, s.tasks.PRPasses(t.ID))
+	if err := s.sessions.Open(ctx, info); err != nil {
+		s.log.Error("open pr session failed", "task", t.ID, "error", err)
+	}
+}
+
+// firstPass asks for the first pass of the review of a pull request, or the
+// one that follows a review undone: it waits for the checks, and then starts
+// the conversation of the reviewer, or asks the one that exists.
+func (s *Service) firstPass(ctx context.Context, t task.Task, wt worktree.Worktree, run task.PRRun, exists bool) {
+	checks := s.takeChecks(t.ID)
+	if checks == nil {
+		// A wait that could not be recorded is begun again by the evaluation
+		// that follows, which finds the review still without its pass.
+		_ = s.beginChecksWait(ctx, t.ID, true)
+		return
+	}
+	if exists {
+		s.askPass(ctx, t, wt, run, prReviewKey(t.ID), cmp.Or(s.headOf(ctx, wt), passAskedWithoutHead), checks)
+		return
+	}
+	s.startReview(ctx, t, wt, run, checks)
+}
+
+// passDue asks for the pass a new commit, or a pass asked again, is owed: the
+// branch is on a commit no report covered. It waits for the checks first.
+func (s *Service) passDue(ctx context.Context, t task.Task, wt worktree.Worktree, run task.PRRun) {
 	head := s.headOf(ctx, wt)
 	if head == "" || head == run.ReviewedCommit || s.passAsked(t.ID) == head {
 		return
 	}
-	// The pass follows a commit the app pushed: it waits for the checks of the
-	// new head first.
 	checks := s.takeChecks(t.ID)
 	if checks == nil {
 		// A wait that could not be recorded is begun again by the evaluation
-		// that follows, which finds the new head still without its pass.
-		_ = s.beginChecksWait(ctx, t.ID, true)
+		// that follows, which finds the new head still without its pass. A
+		// reviewed commit that is empty is a pass asked again, with nothing
+		// pushed: a reading without checks is believed at once.
+		_ = s.beginChecksWait(ctx, t.ID, run.ReviewedCommit != "")
 		return
 	}
-	s.askPass(ctx, t, wt, run, key, head, checks)
+	s.askPass(ctx, t, wt, run, prReviewKey(t.ID), head, checks)
+}
+
+// evaluateCleanPR is what follows a clean report of a pull request the user
+// reviews: the pass a commit is owed, the review of changes that no one
+// committed, or the end of the review.
+func (s *Service) evaluateCleanPR(
+	ctx context.Context, t task.Task, wt worktree.Worktree, run task.PRRun, reviewer session.Summary,
+) {
+	status, err := s.worktrees.Status(ctx, wt)
+	if err != nil {
+		s.log.Warn("read worktree failed", "task", t.ID, "path", wt.Path, "error", err)
+		return
+	}
+	if status.Head != run.ReviewedCommit {
+		// The commit that came after a clean report is covered by a pass of its
+		// own.
+		if reviewer.Idle {
+			s.passDue(ctx, t, wt, run)
+		}
+		return
+	}
+	if !status.Clean() {
+		// Changes the report did not cover go to the review by stage: the
+		// fallback of the agent review with changes in the loop, or a change by
+		// hand.
+		fixer, fixerOpen := s.sessions.Summary(prFixKey(t.ID))
+		s.review.Track(t.ID, wt, reviewer.Idle && !fixerWorking(fixer, fixerOpen))
+		return
+	}
+	s.finishReview(ctx, t, run, prReviewKey(t.ID))
 }
 
 // evaluatePRCommit decides what became of the commit the app asked for. It
 // answers with the run the task goes back to reviewing with, and false while
 // the commit turn is not over.
 func (s *Service) evaluatePRCommit(ctx context.Context, t task.Task, run task.PRRun) (task.PRRun, bool) {
-	key := session.Key{TaskID: t.ID, Stage: session.PRReviewStage}
+	key := s.prCommitKey(t.ID)
 	sum, open := s.sessions.Summary(key)
 	if !open || !sum.Idle {
 		return task.PRRun{}, false
@@ -798,20 +982,47 @@ func (s *Service) evaluatePRCommit(ctx context.Context, t task.Task, run task.PR
 		return task.PRRun{}, false
 	}
 
+	unmoved := snap.Head == "" || snap.Head == run.ReviewedCommit
+	agent := unmoved && prAgentReviewed(t, run)
+	if agent {
+		// Recorded before the task goes back to reviewing, so that a failure never
+		// leaves the review in a state that asks for a pass.
+		if _, err := s.tasks.SetPRFallback(ctx, t.ID, task.FallbackNoCommit); err != nil {
+			s.log.Error("record pr review fallback failed", "task", t.ID, "error", err)
+			return task.PRRun{}, false
+		}
+		s.log.Info("pr review fell back", "task", t.ID, "reason", string(task.FallbackNoCommit))
+	}
 	back, err := s.tasks.SetPRRun(ctx, t.ID, task.PRReviewing, nil)
 	if err != nil {
 		s.log.Error("record reviewing pull request failed", "task", t.ID, "error", err)
 		return task.PRRun{}, false
 	}
-	if snap.Head == "" || snap.Head == run.ReviewedCommit {
+	if unmoved {
 		// The agent finished its turn and the branch is where it was: whatever
 		// it did, it did not commit, and the task goes back to the user.
-		s.setPRNoCommit(t.ID, true)
+		if !agent {
+			s.setPRNoCommit(t.ID, true)
+		}
 		s.log.Warn("commit did not happen", "task", t.ID)
 		return back, true
 	}
 	s.markPRCommit(ctx, t.ID, key, snap.Head, run.PR.Number)
 	return back, true
+}
+
+// prCommitKey is the conversation the commit of a pull request review was
+// asked of: the implementer's, or the reviewer's for a commit asked before the
+// review had an implementer, which a task that was committing then still waits
+// on.
+func (s *Service) prCommitKey(id string) session.Key {
+	hasFixer := slices.ContainsFunc(s.sessions.Conversations(id), func(c session.Conversation) bool {
+		return c.Stage == session.PRFixStage
+	})
+	if _, open := s.sessions.Summary(prFixKey(id)); open || hasFixer {
+		return prFixKey(id)
+	}
+	return prReviewKey(id)
 }
 
 // markPRCommit records in the conversation of the review the commit that went
@@ -853,14 +1064,14 @@ func (s *Service) startReview(
 		return
 	}
 	s.setUnreadable(t.ID, "")
-	if err := s.sessions.Start(ctx, prReviewInfo(t, wt, base, repo, run.PR, pass, checks), false); err != nil {
+	if err := s.sessions.Start(ctx, prReviewInfo(t, wt, base, repo, run.PR, pass, checks, s.tasks.PRPasses(t.ID)), false); err != nil {
 		s.setPassAsked(t.ID, "")
 		s.unaskPass(ctx, t.ID, pass)
 		// The session records a process that fails in the conversation itself.
 		s.log.Error("start pr review session failed", "task", t.ID, "error", err)
 		return
 	}
-	s.markChecks(ctx, session.Key{TaskID: t.ID, Stage: session.PRReviewStage}, pass, checks)
+	s.markChecks(ctx, prReviewKey(t.ID), pass, checks)
 	s.recordBaseline(ctx, t.ID, checks)
 	s.log.Info("pr review started", "task", t.ID, "pass", pass)
 }
@@ -894,6 +1105,11 @@ func (s *Service) finishReview(ctx context.Context, t task.Task, run task.PRRun,
 	if err := s.sessions.Close(ctx, key); err != nil {
 		s.log.Error("close pr review session failed", "task", t.ID, "error", err)
 	}
+	if _, open := s.sessions.Summary(prFixKey(t.ID)); open {
+		if err := s.sessions.Close(ctx, prFixKey(t.ID)); err != nil {
+			s.log.Error("close pr fix session failed", "task", t.ID, "error", err)
+		}
+	}
 	s.log.Info("pull request reviewed clean", "task", t.ID, "pass", run.ReportedPass)
 }
 
@@ -911,7 +1127,7 @@ func (s *Service) askPass(
 	}
 	pass := run.ReportedPass + 1
 	base := s.baseOf(ctx, wt)
-	info := prReviewInfo(t, wt, base, repo, run.PR, pass, checks)
+	info := prReviewInfo(t, wt, base, repo, run.PR, pass, checks, s.tasks.PRPasses(t.ID))
 	message, err := s.renderPrompt(prompts.StagePRReview, prReviewVars(info))
 	if err != nil {
 		s.log.Error("render pr review prompt failed", "task", t.ID, "error", err)
@@ -993,6 +1209,9 @@ func prReviewVars(info session.TaskInfo) prompts.Vars {
 		Instructions: info.Instructions,
 		Checks:       info.Checks,
 		MergeBase:    info.MergeBase,
+
+		ReviewOnly:        info.ReviewOnly,
+		DiscardedFindings: info.DiscardedFindings,
 	}
 }
 
@@ -1103,6 +1322,7 @@ func (s *Service) resumePR(ctx context.Context, t task.Task) {
 		s.reopenPRSession(ctx, t, run, false)
 	case task.PRReviewing, task.PRCommitting:
 		s.reopenPRSession(ctx, t, run, true)
+		s.reopenFixer(ctx, t, run)
 		// A review whose pass was all discarded waits for the merge, which may
 		// have happened while the app was closed.
 		if run.Status == task.PRReviewing && awaitingMerge(run, currentPassPtr(s.tasks.PRPasses(t.ID))) &&
@@ -1145,7 +1365,7 @@ func (s *Service) reopenPRSession(ctx context.Context, t task.Task, run task.PRR
 	if isReview {
 		// Reopening renders no prompt: what the app read from GitHub belongs to
 		// the pass that starts.
-		info = prReviewInfo(t, wt, base, repo, run.PR, run.ReportedPass+1, nil)
+		info = prReviewInfo(t, wt, base, repo, run.PR, run.ReportedPass+1, nil, s.tasks.PRPasses(t.ID))
 	}
 	if err := s.sessions.Open(ctx, info); err != nil {
 		s.log.Error("open pr session failed", "task", t.ID, "error", err)
@@ -1179,7 +1399,7 @@ func (s *Service) tearDownPR(ctx context.Context, t task.Task) error {
 	s.setUnreadable(t.ID, "")
 	s.forgetChecks(t.ID)
 
-	if err := s.sessions.Discard(ctx, t.ID, session.PRStage, session.PRReviewStage); err != nil {
+	if err := s.sessions.Discard(ctx, t.ID, session.PRStage, session.PRReviewStage, session.PRFixStage); err != nil {
 		return err
 	}
 	if err := s.tasks.ClearPRRun(ctx, t.ID); err != nil {
@@ -1206,11 +1426,12 @@ func prInfo(t task.Task, wt worktree.Worktree, base string, repo repository.Repo
 }
 
 // prReviewInfo is what the session that reviews the pull request needs to know,
-// with the report of the pass it is about to write and what the app read from
-// GitHub before it, nil when it read nothing.
+// with the report of the pass it is about to write, what the app read from
+// GitHub before it, nil when it read nothing, and what the user discarded in
+// the passes before it.
 func prReviewInfo(
 	t task.Task, wt worktree.Worktree, base string, repo repository.Repository, pr task.PRDetails, pass int,
-	checks *gh.PRChecks,
+	checks *gh.PRChecks, passes []task.PRPass,
 ) session.TaskInfo {
 	info := prSessionInfo(t, wt, base, repo)
 	info.Stage, info.Prompt = session.PRReviewStage, prompts.StagePRReview
@@ -1222,6 +1443,8 @@ func prReviewInfo(
 	info.Instructions = repo.ReviewInstructions
 	info.Checks = checks
 	info.MergeBase = "origin/" + base
+	info.ReviewOnly = true
+	info.DiscardedFindings = discardedFindings(passes, pass)
 	return info
 }
 
@@ -1342,7 +1565,7 @@ func openMessage(draftPath, base string) string {
 }
 
 // ApprovePR approves the review of the changes a pass of the pull request
-// review produced and asks the agent to commit and push them.
+// review produced and asks the implementer to commit and push them.
 func (s *Service) ApprovePR(ctx context.Context, id string) error {
 	l := s.lockOf(id)
 	l.mu.Lock()
@@ -1352,14 +1575,19 @@ func (s *Service) ApprovePR(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
+	if prAgentReviewed(t, run) {
+		return fmt.Errorf("approve the review of task %s: %w", id, ErrAgentReviewsPR)
+	}
 	a, err := s.tasks.Inspect(id)
 	if err != nil {
 		return err
 	}
 	last, hasReport := lastReport(a.PR)
 	if pass, structured := currentPass(s.tasks.PRPasses(id)); structured {
-		if run.Status != task.PRReviewing || !pass.Recorded || pass.Clean ||
-			(!pass.Sent() && (!pass.Decided() || len(pass.Approved()) > 0)) {
+		// A clean pass, one sent to the implementer and one whose findings were all
+		// discarded each leave changes that only the user's approval commits.
+		allDiscarded := pass.Decided() && len(pass.Approved()) == 0
+		if run.Status != task.PRReviewing || !pass.Recorded || (!pass.Clean && !pass.Sent() && !allDiscarded) {
 			return fmt.Errorf("approve the review of task %s: %w", id, ErrStepNotReady)
 		}
 	} else if run.Status != task.PRReviewing || !hasReport || last.Clean {
@@ -1370,13 +1598,11 @@ func (s *Service) ApprovePR(ctx context.Context, id string) error {
 		return fmt.Errorf("approve the review of task %s: %w", id, ErrStepNotReady)
 	}
 
-	key := session.Key{TaskID: id, Stage: session.PRReviewStage}
-	sum, err := s.readySession(ctx, key)
-	if err != nil {
-		return fmt.Errorf("approve the review of task %s: %w", id, err)
-	}
-	if !sum.Idle {
+	if reviewer, open := s.sessions.Summary(prReviewKey(id)); open && !reviewer.Idle && !pausedAtRest(reviewer) {
 		return fmt.Errorf("approve the review of task %s: %w", id, ErrStepBusy)
+	}
+	if err = s.fixerAtRest(ctx, id); err != nil {
+		return fmt.Errorf("approve the review of task %s: %w", id, err)
 	}
 
 	vars := commitVars(t)
@@ -1391,15 +1617,33 @@ func (s *Service) ApprovePR(ctx context.Context, id string) error {
 		return err
 	}
 	s.setPRNoCommit(id, false)
-	s.sessions.MarkChangesApproved(ctx, key, snap.Total)
 	app := session.AppMessage{Text: message, Kind: session.AppCommitPush}
-	if err := s.sessions.SendFromApp(ctx, key, app); err != nil {
+	approved := func() { s.sessions.MarkChangesApproved(ctx, prFixKey(id), snap.Total) }
+	if err := s.sendToFixer(ctx, t, run, app, approved); err != nil {
 		if _, setErr := s.tasks.SetPRRun(ctx, id, task.PRReviewing, nil); setErr != nil {
 			s.log.Error("record reviewing pull request failed", "task", id, "error", setErr)
 		}
 		return err
 	}
 	s.log.Info("pr review approved", "task", id, "files", snap.Total)
+	return nil
+}
+
+// fixerAtRest checks that the implementer of a pull request review, when it
+// has a conversation open, is at rest, resuming it when it was paused: what the
+// user approves should reach an agent that can answer. A conversation that is
+// closed, or that does not exist, is opened by the message itself.
+func (s *Service) fixerAtRest(ctx context.Context, id string) error {
+	if _, open := s.sessions.Summary(prFixKey(id)); !open {
+		return nil
+	}
+	fixer, err := s.readySession(ctx, prFixKey(id))
+	if err != nil {
+		return err
+	}
+	if !fixer.Idle {
+		return ErrStepBusy
+	}
 	return nil
 }
 
@@ -1429,14 +1673,15 @@ func (s *Service) readySession(ctx context.Context, key session.Key) (session.Su
 	return sum, nil
 }
 
-// ReviewAgain ends the review session of a task and starts a new pass over the
-// pull request as it is now. The reports already written stay.
+// ReviewAgain asks for a new pass of the review of the pull request as it is
+// now, in the conversation the reviewer already has. The reports already
+// written stay; a pass under way is cut.
 func (s *Service) ReviewAgain(ctx context.Context, id string) error {
 	l := s.lockOf(id)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	_, run, err := s.prOf(id)
+	t, run, err := s.prOf(id)
 	if err != nil {
 		return err
 	}
@@ -1447,26 +1692,49 @@ func (s *Service) ReviewAgain(ctx context.Context, id string) error {
 	if !reviewable || run.PR.Number == 0 {
 		return fmt.Errorf("review task %s again: %w", id, ErrNoPullRequest)
 	}
+	if prAgentReviewed(t, run) && run.Status != task.PRDone {
+		return fmt.Errorf("review task %s again: %w", id, ErrAgentReviewsPR)
+	}
+	if fixer, open := s.sessions.Summary(prFixKey(id)); open && fixer.TurnRunning {
+		return fmt.Errorf("review task %s again: %w", id, ErrStepBusy)
+	}
 
-	if err := s.sessions.Discard(ctx, id, session.PRReviewStage); err != nil {
-		return err
+	if reviewer, open := s.sessions.Summary(prReviewKey(id)); open && reviewer.TurnRunning {
+		if err := s.sessions.Interrupt(ctx, prReviewKey(id)); err != nil {
+			s.log.Warn("interrupt pr review failed", "task", id, "error", err)
+		}
 	}
-	// The pass asked for here is the one the review waits for: the report the
-	// task already has, clean or not, decides nothing until that one is in.
-	head := ""
-	if wt, ok := s.worktrees.Get(id); ok {
-		head = s.headOf(ctx, wt)
+	if pass, structured := currentPass(s.tasks.PRPasses(id)); structured && !pass.Recorded {
+		s.undoPass(ctx, t, pass.Pass)
 	}
-	s.setPassAsked(id, cmp.Or(head, passAskedWithoutHead))
-	s.setPRNoCommit(id, false)
-	s.log.Info("pr review restarted", "task", id, "pass", run.ReportedPass+1)
-	// Nothing was pushed: a reading without checks is believed at once.
-	if err := s.beginChecksWait(ctx, id, false); err != nil {
-		// The pass was not asked for after all, and nothing else would ask for it.
-		s.setPassAsked(id, "")
+	if err := s.askAgain(ctx, id, run); err != nil {
 		return fmt.Errorf("review task %s again: %w", id, err)
 	}
 	return nil
+}
+
+// askAgain has the pass the pull request owes asked for: no report covers the
+// head now, which is what has the pass asked for, after a restart or a block
+// too, and the checks are read first. The caller holds the lock of the task.
+func (s *Service) askAgain(ctx context.Context, id string, run task.PRRun) error {
+	if _, err := s.tasks.SetPRReviewed(ctx, id, "", run.ReportedPass); err != nil {
+		return err
+	}
+	s.setPRNoCommit(id, false)
+	s.log.Info("pr review restarted", "task", id, "pass", run.ReportedPass+1)
+	// Nothing was pushed: a reading without checks is believed at once.
+	return s.beginChecksWait(ctx, id, false)
+}
+
+// undoPass drops a pass that was asked and has no report: its row, its file
+// and what the app kept in memory about it.
+func (s *Service) undoPass(ctx context.Context, t task.Task, pass int) {
+	s.unaskPass(ctx, t.ID, pass)
+	if err := os.Remove(t.ReviewPath(pass)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		s.log.Warn("remove pr review report failed", "task", t.ID, "pass", pass, "error", err)
+	}
+	s.setPassAsked(t.ID, "")
+	s.setUnreadable(t.ID, "")
 }
 
 // DiscardDraft throws away the draft of a task and prepares the stage again. It

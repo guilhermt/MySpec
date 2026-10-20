@@ -2,7 +2,7 @@ import { hasReviewConversation, prPlaceOf } from "@/features/task/place";
 import type { StepperGlyph } from "@/features/task/stepper";
 import { stepperOf } from "@/features/task/stepper";
 import { baseName, prBaseName } from "@/lib/pull-requests";
-import { fallbackReason, stepReportLabel } from "@/lib/review-modes";
+import { fallbackReason, prFallbackReason, stepReportLabel } from "@/lib/review-modes";
 import { asLifecycleStage, lifecycleOf, stageLabel } from "@/lib/stages";
 import { taskModeLabel } from "@/lib/task-modes";
 import type {
@@ -15,6 +15,7 @@ import type {
   TaskSummary,
 } from "@/lib/wails";
 import { asReviewFallback, asReviewMode, asStepStatus, asTaskMode, asTaskStage } from "@/lib/wails";
+import type { StepTab } from "@/store/app-store";
 
 /** DetailsConversation is a row of a conversation; now is the one on screen, not a button. */
 export interface DetailsConversation {
@@ -64,6 +65,8 @@ export interface DetailsModel {
   /** planning is the planning conversations; [] hides the group. */
   planning: DetailsConversation[];
   pullRequest: {
+    /** mode is how the review of the pull request runs: the mode, the round of the agent review and why it fell back to Manual. */
+    mode: { mode: "Agent" | "Manual"; round: number; fallbackReason: string };
     conversations: DetailsConversation[];
     reports: DetailsReport[];
     pr: { number: number; url: string; base: string; state: string } | null;
@@ -76,6 +79,7 @@ export interface DetailsModel {
     epic: CardIssue | null;
     mode: string;
     reviewMode: ReviewMode;
+    prReviewMode: ReviewMode;
     branch: string;
     base: string;
     worktree: string;
@@ -204,6 +208,7 @@ function planningConversations(
 function pullRequestGroup(
   task: TaskSummary,
   onScreenStage: string | null,
+  tab: StepTab,
 ): DetailsModel["pullRequest"] {
   const pr = task.pr;
   if (asTaskStage(task.stage) !== "pr" || pr === null) {
@@ -214,12 +219,17 @@ function pullRequestGroup(
   // one on screen.
   const screen =
     prPlaceOf(task, pr, hasReviewConversation(task)).kind === "closedReview"
-      ? "pr_review"
+      ? tab === "implementer"
+        ? "pr_fix"
+        : "pr_review"
       : onScreenStage;
   const labels = [
     { stage: "pr", label: open ? `Draft and opening · #${pr.prNumber}` : "Draft and opening" },
-    { stage: "pr_review", label: "PR review" },
+    // The reviewer is the last row: the reports of its passes sit under it.
+    { stage: "pr_fix", label: "PR review · Implementer" },
+    { stage: "pr_review", label: "PR review · Reviewer" },
   ];
+  const agent = asReviewMode(task.prReviewMode) === "agent";
   const conversations = labels.flatMap(({ stage, label }) =>
     conversationsOf(task)
       .filter((conversation) => conversation.stage === stage)
@@ -238,6 +248,11 @@ function pullRequestGroup(
       };
     });
   return {
+    mode: {
+      mode: agent ? "Agent" : "Manual",
+      round: agent ? pr.reviewRound : 0,
+      fallbackReason: prFallbackReason(asReviewFallback(task.prReviewFallback)),
+    },
     conversations,
     reports,
     pr: open
@@ -251,13 +266,14 @@ export function detailsOf(
   task: TaskSummary,
   repository: Repository | null,
   onScreenStage: string | null,
+  tab: StepTab = "reviewer",
 ): DetailsModel {
   const oneShot = asTaskMode(task.mode) === "one_shot";
   return {
     steps: oneShot ? null : stepsGroup(task, onScreenStage),
     implementation: oneShot ? implementationRow(task, onScreenStage) : null,
     planning: planningConversations(task, onScreenStage),
-    pullRequest: pullRequestGroup(task, onScreenStage),
+    pullRequest: pullRequestGroup(task, onScreenStage, tab),
     task: {
       repository: task.repository,
       path: repository?.path ?? "",
@@ -266,6 +282,7 @@ export function detailsOf(
       epic: task.card?.epic ?? null,
       mode: taskModeLabel(asTaskMode(task.mode)),
       reviewMode: asReviewMode(task.reviewMode),
+      prReviewMode: asReviewMode(task.prReviewMode),
       branch: task.branch,
       base: baseName(task.baseBranch),
       worktree: task.worktreePath,
@@ -297,6 +314,9 @@ export function earlierPlace(task: TaskSummary, stage: string): string {
   if (stage === "pr") {
     return "Draft and opening";
   }
+  if (stage === "pr_fix") {
+    return "PR review · Implementer";
+  }
   const id = asLifecycleStage(stage);
   return id === null ? stage : stageLabel(id);
 }
@@ -317,6 +337,13 @@ export function backTarget(task: TaskSummary, screenStage: string | null): strin
         ? "the implementation"
         : `step ${task.currentStep}`;
     case "pr":
-      return screenStage === "pr_review" ? "the PR review" : "the pull request";
+      switch (screenStage) {
+        case "pr_review":
+          return "the PR review";
+        case "pr_fix":
+          return "the implementer of the PR review";
+        default:
+          return "the pull request";
+      }
   }
 }

@@ -78,6 +78,27 @@ func TestSetPRRunRecordsAndUpdatesTheStage(t *testing.T) {
 	}
 }
 
+func TestSetPRFallbackRecordsWhyTheReviewWentBackToTheUser(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login")
+	if _, err := f.service.SetPRRun(t.Context(), created.ID, task.PRReviewing, nil); err != nil {
+		t.Fatalf("SetPRRun() = %v, want nil", err)
+	}
+
+	run, err := f.service.SetPRFallback(t.Context(), created.ID, task.FallbackRoundsExhausted)
+	if err != nil {
+		t.Fatalf("SetPRFallback() = %v, want nil", err)
+	}
+	if run.Fallback != task.FallbackRoundsExhausted || run.Status != task.PRReviewing {
+		t.Errorf("SetPRFallback() = %q in %q, want the fallback with the status kept", run.Fallback, run.Status)
+	}
+	if got, _ := f.service.PRRun(created.ID); got.Fallback != task.FallbackRoundsExhausted {
+		t.Errorf("PRRun() fallback = %q, want %q", got.Fallback, task.FallbackRoundsExhausted)
+	}
+}
+
 func TestSetPRRunKeepsThePullRequestItDoesNotChange(t *testing.T) {
 	t.Parallel()
 

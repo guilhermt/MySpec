@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { type AgentTabModel, agentTabsOf } from "@/features/task/agent-tabs";
-import type { Situation, Step, TaskSummary } from "@/lib/wails";
-import { makeSituation, makeStep, makeStepReviewer, makeTask } from "@/test/wails-mock";
+import { type AgentTabModel, agentTabsOf, prAgentTabsOf } from "@/features/task/agent-tabs";
+import type { PullRequest, Situation, Step, TaskSummary } from "@/lib/wails";
+import {
+  makePRImplementer,
+  makePullRequest,
+  makeSituation,
+  makeStep,
+  makeStepReviewer,
+  makeTask,
+} from "@/test/wails-mock";
 
 const NOW = Date.parse("2026-09-27T15:00:00Z");
 const MINUTES_AGO = (minutes: number) => new Date(NOW - minutes * 60_000).toISOString();
@@ -25,7 +32,14 @@ const step = (overrides: Partial<Step>) =>
 function tab(
   overrides: Partial<AgentTabModel> & Pick<AgentTabModel, "tab" | "name" | "label">,
 ): AgentTabModel {
-  return { glyph: "idle", word: "", disabled: false, situationId: null, ...overrides };
+  return {
+    glyph: "idle",
+    word: "",
+    disabled: false,
+    disabledLabel: "",
+    situationId: null,
+    ...overrides,
+  };
 }
 
 describe("agentTabsOf", () => {
@@ -187,6 +201,7 @@ describe("agentTabsOf", () => {
           tab: "reviewer",
           name: "Reviewer",
           disabled: true,
+          disabledLabel: "starts with pass 1",
           label: "Reviewer: starts with pass 1",
         }),
       ],
@@ -202,5 +217,135 @@ describe("agentTabsOf", () => {
     ["a step done", { status: "done" }],
   ])("has no tabs on %s", (_, overrides) => {
     expect(agentTabsOf(task(), step(overrides), "implementer", NOW)).toBeNull();
+  });
+});
+
+describe("prAgentTabsOf", () => {
+  const prReviewer = (overrides: Partial<PullRequest> = {}) =>
+    makePullRequest({
+      status: "awaiting_decision",
+      sessionStage: "pr_review",
+      sessionStatus: "waiting",
+      ...overrides,
+    });
+
+  function prTask(
+    pr: PullRequest,
+    situations: Situation[] = [],
+    overrides: Partial<TaskSummary> = {},
+  ): TaskSummary {
+    return makeTask({
+      stage: "pr",
+      pr,
+      situations,
+      conversations: [{ stage: "pr_review", startedAt: MINUTES_AGO(60) }],
+      ...overrides,
+    });
+  }
+
+  const disabledImplementer = (waits: string) =>
+    tab({
+      tab: "implementer",
+      name: "Implementer",
+      disabled: true,
+      disabledLabel: waits,
+      label: `Implementer: ${waits}`,
+    });
+
+  it("has no tabs before the reviewer's conversation exists", () => {
+    const pr = makePullRequest({ status: "drafting", sessionStage: "pr" });
+
+    expect(
+      prAgentTabsOf(makeTask({ stage: "pr", pr, conversations: [] }), pr, "reviewer", NOW),
+    ).toBeNull();
+  });
+
+  it.each<[string, PullRequest, Partial<TaskSummary>, string]>([
+    [
+      "an agent review before round 1",
+      prReviewer(),
+      { prReviewMode: "agent" },
+      "starts with round 1",
+    ],
+    ["a manual review", prReviewer(), { prReviewMode: "manual" }, "starts with Apply approved"],
+    [
+      "a review that ended without it",
+      prReviewer({ status: "done" }),
+      { prReviewMode: "agent" },
+      "never started",
+    ],
+    ["a merged pull request", prReviewer({ status: "merged" }), {}, "never started"],
+  ])("disables the implementer on %s", (_, pr, overrides, waits) => {
+    const [implementer] = prAgentTabsOf(prTask(pr, [], overrides), pr, "reviewer", NOW) ?? [];
+
+    expect(implementer).toEqual(disabledImplementer(waits));
+  });
+
+  it("draws the reviewer working and the implementer idle and enabled once its session closed", () => {
+    const pr = prReviewer({
+      sessionStatus: "working",
+      processRunning: true,
+      implementerStarted: true,
+    });
+
+    expect(prAgentTabsOf(prTask(pr), pr, "reviewer", NOW)).toEqual([
+      tab({ tab: "implementer", name: "Implementer", label: "Implementer: idle" }),
+      tab({ tab: "reviewer", name: "Reviewer", glyph: "work", label: "Reviewer: working" }),
+    ]);
+  });
+
+  it("keeps both tabs once the review ended, read-only", () => {
+    const pr = prReviewer({
+      status: "done",
+      implementerStarted: true,
+      implementer: makePRImplementer({ sessionStatus: "idle" }),
+    });
+
+    expect(prAgentTabsOf(prTask(pr), pr, "reviewer", NOW)).toHaveLength(2);
+  });
+
+  it("draws the implementer's session and its question, out of view", () => {
+    const pr = prReviewer({
+      implementerStarted: true,
+      implementer: makePRImplementer({ sessionStatus: "working", processRunning: true }),
+    });
+    const asks = makeSituation({
+      id: "q",
+      kind: "question",
+      place: { kind: "pr_fix", stage: "", step: 0 },
+      startedAt: MINUTES_AGO(3),
+    });
+
+    const [implementer, reviewerTab] = prAgentTabsOf(prTask(pr, [asks]), pr, "reviewer", NOW) ?? [];
+
+    expect(implementer).toMatchObject({
+      glyph: "wait",
+      word: "waits",
+      situationId: "q",
+      label: "Implementer: waits for you: question, for 3 minutes",
+    });
+    expect(reviewerTab).toMatchObject({ word: "" });
+  });
+
+  it("gives the reviewer only the situations of a conversation, not the ones of the pull request", () => {
+    const pr = prReviewer();
+    const findings = makeSituation({
+      id: "f",
+      kind: "findings",
+      place: { kind: "pr", stage: "", step: 0 },
+      startedAt: MINUTES_AGO(3),
+    });
+    const question = makeSituation({
+      id: "q",
+      kind: "question",
+      place: { kind: "pr", stage: "", step: 0 },
+      startedAt: MINUTES_AGO(3),
+    });
+
+    const [, withFindings] = prAgentTabsOf(prTask(pr, [findings]), pr, "implementer", NOW) ?? [];
+    const [, withQuestion] = prAgentTabsOf(prTask(pr, [question]), pr, "implementer", NOW) ?? [];
+
+    expect(withFindings).toMatchObject({ situationId: null, label: "Reviewer: idle" });
+    expect(withQuestion).toMatchObject({ situationId: "q", word: "waits" });
   });
 });

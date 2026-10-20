@@ -122,3 +122,59 @@ func TestSetDefaultKeepsTheDefaultWhenTheSaveFails(t *testing.T) {
 		t.Errorf("onChange ran %d times, want the failed save to notify nobody", *changes)
 	}
 }
+
+func TestNewReadsTheSavedDefaultOfThePullRequest(t *testing.T) {
+	t.Parallel()
+
+	service, _ := newService(t, newSettings(map[string]string{"pr_review_mode": "agent"}))
+	if got := service.PRDefault(); got != reviewmode.Agent {
+		t.Errorf("PRDefault() = %q, want %q", got, reviewmode.Agent)
+	}
+	if got := service.Default(); got != reviewmode.Manual {
+		t.Errorf("Default() = %q, want the steps to keep their own default, %q", got, reviewmode.Manual)
+	}
+
+	none, _ := newService(t, newSettings(nil))
+	if got := none.PRDefault(); got != reviewmode.Manual {
+		t.Errorf("PRDefault() without a saved value = %q, want %q", got, reviewmode.Manual)
+	}
+
+	invalid, _ := newService(t, newSettings(map[string]string{"pr_review_mode": "nope"}))
+	if got := invalid.PRDefault(); got != reviewmode.Manual {
+		t.Errorf("PRDefault() with an invalid value = %q, want %q", got, reviewmode.Manual)
+	}
+}
+
+func TestSetPRDefaultPersistsAndNotifies(t *testing.T) {
+	t.Parallel()
+
+	settings := newSettings(nil)
+	service, changes := newService(t, settings)
+
+	if err := service.SetPRDefault(t.Context(), reviewmode.Agent); err != nil {
+		t.Fatalf("SetPRDefault() = %v, want nil", err)
+	}
+
+	if got := service.PRDefault(); got != reviewmode.Agent {
+		t.Errorf("PRDefault() = %q, want %q", got, reviewmode.Agent)
+	}
+	if got := service.Default(); got != reviewmode.Manual {
+		t.Errorf("Default() = %q, want it untouched, %q", got, reviewmode.Manual)
+	}
+	if *changes != 1 {
+		t.Errorf("onChange ran %d times, want 1", *changes)
+	}
+
+	reopened, _ := newService(t, settings)
+	if got := reopened.PRDefault(); got != reviewmode.Agent {
+		t.Errorf("PRDefault() after reading again = %q, want %q", got, reviewmode.Agent)
+	}
+
+	settings.err = errors.New("database is locked")
+	if err := service.SetPRDefault(t.Context(), reviewmode.Manual); err == nil {
+		t.Fatal("SetPRDefault() with a failing save = nil, want an error")
+	}
+	if got := service.PRDefault(); got != reviewmode.Agent {
+		t.Errorf("PRDefault() after a failed save = %q, want %q", got, reviewmode.Agent)
+	}
+}

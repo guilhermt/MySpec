@@ -363,6 +363,9 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 			Checks:       r.task.Checks,
 			MergeBase:    r.task.MergeBase,
 
+			ReviewOnly:        r.task.ReviewOnly,
+			DiscardedFindings: r.task.DiscardedFindings,
+
 			DocumentPath: r.task.DocumentPath,
 			DraftsPath:   r.task.DraftsPath,
 			Board:        r.task.Board,
@@ -378,6 +381,8 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 			vars.PassInstructions = e.User.Text
 		case prompts.StageStepReview:
 			vars.ImplementerReply = e.User.Text
+		case prompts.StagePRFix:
+			vars.FixRequest = e.User.Text
 		default:
 			// The prompt of every other stage has nothing appended.
 		}
@@ -388,7 +393,7 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 		}
 		text = rendered
 		switch r.task.Prompt {
-		case prompts.StageTechSpec, prompts.StagePlan, prompts.StagePR, prompts.StagePRReview:
+		case prompts.StageTechSpec, prompts.StagePlan, prompts.StagePR, prompts.StagePRReview, prompts.StagePRFix:
 			e.User.Sent = rendered
 		default:
 			// The prompt of every other stage is not kept.

@@ -8,3 +8,6 @@ var TailOf = tailOf
 
 // RetryReasonOf exposes retryReasonOf to the external tests of the package.
 var RetryReasonOf = retryReasonOf
+
+// ArtifactOf exposes artifactOf to the external tests of the package.
+var ArtifactOf = artifactOf

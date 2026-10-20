@@ -151,6 +151,10 @@ type PRRun struct {
 	ReviewedCommit string
 	ReportedPass   int
 
+	// Fallback is why a pull request whose review started in agent mode is
+	// reviewed by the user; "" while the mode holds.
+	Fallback ReviewFallback
+
 	// TroubleBaseline is what the reading the last review pass started from
 	// showed wrong, and Trouble what went wrong since, while the task waited
 	// for the merge.

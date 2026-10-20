@@ -62,6 +62,7 @@ describe("ModelsPopover", () => {
       "Step review",
       "PR",
       "PR review",
+      "PR review fixes",
     ]);
   });
 

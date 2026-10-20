@@ -90,6 +90,14 @@ export function SetModelDefault(stage: string, model: string, effort: string): $
 }
 
 /**
+ * SetPRReviewModeDefault stores who reviews the pull request of the tasks
+ * created from now on: manual or agent.
+ */
+export function SetPRReviewModeDefault(mode: string): $CancellablePromise<void> {
+    return $Call.ByID(3363565216, mode);
+}
+
+/**
  * SetReviewModeDefault stores who reviews the steps of the tasks created from
  * now on: manual or agent.
  */

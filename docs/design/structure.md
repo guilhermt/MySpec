@@ -28,7 +28,7 @@ A arquitetura de informação e o modelo de navegação do MySpec: os lugares, a
   Home não lista o que espera pelo usuário: isso é da árvore.
 - **Chegar a uma situação.** A notificação do sistema e o `Ctrl+J` levam ao mesmo lugar, do mesmo jeito:
   - a janela vem à frente;
-  - o item abre no lugar da situação (a aba `Reviewer` para uma situação do revisor);
+  - o item abre no lugar da situação (a aba `Reviewer` para uma situação do revisor, a `Implementer` para uma do implementador, num step e na PR);
   - a linha é trazida à vista na árvore;
   - o foco vai para o que o item pede. Numa pergunta ou permissão, é a primeira opção do cartão, e as teclas 1 a 9 respondem direto. Com apontamentos ou rascunhos a decidir, é o próximo por decidir. Em todo o resto, é a primária da barra do pedido (ou a primeira ação habilitada); quando a resposta vai pelo compositor (`reply`, um plano inválido, um turno que falhou, `findings` em texto), é o compositor; sem nenhuma ação habilitada, é a própria barra. Quando a ação com o foco resolve a situação e some, o foco vai ao compositor, ou à última entrada da conversa sem ele, ou ao título sem conversa.
 
@@ -66,7 +66,7 @@ Duas linhas, e uma terceira só enquanto o agente trabalha.
 
 **Por tipo de item**, a posição é:
 
-- task: a etapa como o stepper a nomeia (`PRD`, `Tech spec`, `Plan`, `Planning`, `PR`, `PR review`, `Closing`); na implementação, `Step N/M`, com o laço quando há (`Reviewer · pass 2`, `Addressing review · round 1`);
+- task: a etapa como o stepper a nomeia (`PRD`, `Tech spec`, `Plan`, `Planning`, `PR`, `PR review`, `Closing`); na implementação, `Step N/M`, com o laço quando há (`Reviewer · pass 2`, `Addressing review · round 1`); na PR, `PR review`, com o laço quando há (`Reviewer · pass 2`, `Implementer · round 1`);
 - review de PR: a passada (`Pass 1`), com o progresso de decisão ou a espera (`Pass 1 · checks 4/6`);
 - discussão: `Discussing` até os primeiros rascunhos, depois a rodada (`Round 1`).
 
@@ -88,7 +88,7 @@ A task One-Shot tem uma marca própria no glifo de tipo, em qualquer largura.
 
 - **Os dois relógios.** O chip é o relógio do usuário: há quanto tempo o item espera por ele, da situação mais grave e, entre as de mesma gravidade, da mais antiga. O texto na borda direita da linha em que o agente trabalha é o relógio do agente: há quanto tempo ele está no turno atual. O spinner fica só no início da segunda linha. Formas diferentes, e o nome acessível diz `waiting for you` ou `agent working`.
 - **Destaque.** Uma linha que espera pelo usuário tem o nome em negrito.
-- **O que se lê em voz.** O nome acessível da linha é a frase inteira: tipo (`One-Shot task`), nome, cada situação com lugar e tempo, a posição, e, com o agente rodando, quem trabalha, a ação e o contexto; o meta; e, na linha que `Ctrl+J` abriria, `Ctrl+J opens this next.` Quem trabalha é `Implementer` ou `Reviewer` num step, `<Etapa> agent` numa etapa (`PRD agent`, `Plan agent`, `PR agent`), `Reviewer` num review e `Discussion agent` numa discussão.
+- **O que se lê em voz.** O nome acessível da linha é a frase inteira: tipo (`One-Shot task`), nome, cada situação com lugar e tempo, a posição, e, com o agente rodando, quem trabalha, a ação e o contexto; o meta; e, na linha que `Ctrl+J` abriria, `Ctrl+J opens this next.` Quem trabalha é `Implementer` ou `Reviewer` num step e no review da pull request de uma task, `<Etapa> agent` numa etapa (`PRD agent`, `Plan agent`, `PR agent`), `Reviewer` num review e `Discussion agent` numa discussão.
 - **Linha selecionada.** Meta e ação sobem de `--ink-4` para `--ink-3`, pelo contraste sobre o fundo selecionado.
 
 #### A linha 2 com situação
@@ -99,7 +99,7 @@ Nas fórmulas: `N/M` é o step e o total, `<etapa>` é `PRD`, `Tech spec`, `Plan
 
 | `kind` | Longa | Curta |
 |---|---|---|
-| `session_error`, `permission`, `question`, `reply` | `<Rótulo> · <lugar>`. Rótulo: `Session error`, `Permission`, `Question`, `Reply`. Lugar: `<etapa>`; num step, `<conversa> · Step N/M`; na PR, `PR` antes da abertura e `PR review · pass K` depois; num review, `pass K`; numa discussão, `Discussing` ou `Round R` | Sem a conversa: `Question · Step 3/7`, `Reply · PRD`, `Session error · PR review · pass 1` |
+| `session_error`, `permission`, `question`, `reply` | `<Rótulo> · <lugar>`. Rótulo: `Session error`, `Permission`, `Question`, `Reply`. Lugar: `<etapa>`; num step, `<conversa> · Step N/M`; na PR, `PR` antes da abertura e depois dela `PR review · Reviewer · pass K` ou `PR review · Implementer`, com ` · round R` no modo `Agent`; num review, `pass K`; numa discussão, `Discussing` ou `Round R` | Sem a conversa: `Question · Step 3/7`, `Reply · PRD`, `Session error · PR review · pass 1` |
 | `step_blocked` | `Step N/M blocked · <razão>` | `Step N/M blocked` |
 | `worktree_unreadable` | `Can't read worktree · Step N/M` | igual |
 | `plan_invalid` | `Plan still invalid · <n> problems` | `Plan still invalid` |
@@ -137,7 +137,8 @@ Um item sem situação mostra o que roda ou onde está. A gravidade ordena esses
 | Step que o app commita (`committing`) | Spinner | `Step N/M · committing` | — | Agente |
 | PR que o app prepara ou abre (`preparing`, `opening`) | Spinner | `PR · preparing`, `PR · opening` | — | Agente |
 | PR com o rascunho sendo escrito, sessão trabalhando | Spinner | `PR · drafting` | O relógio | Agente |
-| PR com a passada do review, sessão trabalhando | Spinner | `PR review · pass K` | O relógio | Agente |
+| PR com a passada do review, revisor trabalhando | Spinner | `PR review · pass K` | O relógio | Agente |
+| PR com o implementador aplicando (`addressing_review`) | Spinner | `PR review · Implementer` no `Manual`, `PR review · Implementer · round R` no `Agent` | O relógio | Agente |
 | PR com as mudanças sendo commitadas | Spinner | `PR review · committing` | — | Agente |
 | PR esperando os checks (`waiting_checks`) | Círculo tracejado | `PR review · checks a/b`; antes da primeira leitura, `PR review · checking GitHub`, com o brilho | `GitHub` | GitHub |
 | Task que o app encerra (`closing`) | Spinner | `Closing` | — | Agente |
@@ -200,7 +201,7 @@ Entre os grupos, um separador leva o `◇` da falha de leitura ou do clone, e, e
 Task, review de PR e discussão têm a mesma forma. De cima para baixo:
 
 - **o cabeçalho**, uma faixa com um fio embaixo;
-- **as abas `Implementer` e `Reviewer`**, só num step `Agent`, da primeira passada do revisor até o commit;
+- **as abas `Implementer` e `Reviewer`**, num step `Agent`, da primeira passada do revisor até o commit, e na etapa de PR, da primeira passada do review da pull request em diante, também depois dele;
 - **a conversa do lugar atual**, que rola;
 - **a barra do pedido**, enquanto o item pede algo;
 - **o compositor**, enquanto a conversa na tela tem uma sessão aberta.
@@ -220,7 +221,7 @@ Todo o resto fica fechado, nos painéis ou no menu `⋯`. Um painel aberto fica 
 
 **Largura.** O topo cede pela largura da área principal, em limites fixos: primeiro o que fica em volta do progresso (o breadcrumb dobra, os painéis ficam só com o ícone, **Pause** só com o ícone, o medidor só com a porcentagem), depois as etapas feitas, depois o laço e a palavra da pílula, por último os nomes das futuras; o nome da etapa atual nunca sai. O título cede depois de tudo. Os limites estão em [components.md](./components.md), Cabeçalho do lugar. Na metade do monitor, o stepper ainda nomeia a atual e as futuras.
 
-**O `⋯`** tem as ferramentas do item e as ações raras e destrutivas, agrupadas por assunto, com o destrutivo por último, em vermelho: na task, as do step (**Review myself**, **Open in VS Code**, **Discard step N…**), as da PR (**Open PR**, **Refresh PR**, **Review again**, que na task pede a passada sem diálogo), as do planejamento e da task (**Review mode ›**, **Models ›**, **Back to <etapa>…**, **Discard and restart the <etapa>…**, **Delete task…**); no review, **Open PR**, **Refresh PR**, **Open in VS Code**, **Review again…** e **Delete review…**; na discussão, **Open <board>**, **Group drafts into an epic…**, **Archive…** e **Delete discussion…**. Cada destrutiva diz antes o que será perdido. Um item desabilitado diz por quê ao lado.
+**O `⋯`** tem as ferramentas do item e as ações raras e destrutivas, agrupadas por assunto, com o destrutivo por último, em vermelho: na task, as do step (**Review myself**, **Open in VS Code**, **Discard step N…**), as da PR (**Open PR**, **Refresh PR**, **Review again**, que na task pede a passada sem diálogo, e **Review myself**, que só existe quando o agente revisa a PR), as do planejamento e da task (**Review mode ›**, com os modos dos steps e da PR ao lado, **Models ›**, **Back to <etapa>…**, **Discard and restart the <etapa>…**, **Delete task…**); no review, **Open PR**, **Refresh PR**, **Open in VS Code**, **Review again…** e **Delete review…**; na discussão, **Open <board>**, **Group drafts into an epic…**, **Archive…** e **Delete discussion…**. Cada destrutiva diz antes o que será perdido. Um item desabilitado diz por quê ao lado.
 
 ### A situação é dita uma vez
 
@@ -229,6 +230,8 @@ Enquanto o item tem uma situação, o topo e o cartão não a repetem: a pílula
 ### Abas `Implementer` e `Reviewer`
 
 Duas abas de texto sobre um fio, cada uma com o glifo da sua sessão. A escolhida é sublinhada. A de fora diz a palavra só quando espera ou falhou (`Implementer · waits`, `Reviewer · error`), com o que pede e o tempo no tooltip e no nome acessível. A aba não tem chip de tempo. Abre a conversa de quem tem a vez; com as duas esperando, a do pedido mais antigo. O produto nunca troca de aba sozinho.
+
+No review da pull request as abas existem da primeira passada em diante e ficam quando o review acaba, com as duas conversas somente leitura. Antes de o implementador ter conversa, a aba dele fica desabilitada com o que a espera: `Implementer · starts with round 1`, `Implementer · starts with Apply approved` ou, com o review encerrado sem ele, `Implementer · never started`. Sem situação, a aba escolhida na primeira vez é a do implementador enquanto ele aplica ou commita, e a do revisor no resto. Os apontamentos, as mudanças, o merge, o problema e o bloqueio aparecem nas duas abas; a pergunta, a permissão e o erro de uma sessão aparecem só na aba dela.
 
 ### A conversa
 
@@ -283,7 +286,7 @@ Tem quatro formas: **quieta**, quando um cartão na conversa tem o conteúdo e a
 - **Ferramenta do item disponível a qualquer momento que também resolve uma situação.** **Discard step N…**, **Discard draft**, **Delete task…**, **Review again** (na task; **Review again…** no review) e **Archive…** ficam no `⋯`, porque existem fora de qualquer situação. Quando uma delas é a saída de uma situação (`step_empty`, `draft`, `pr_closed`, `new_commits`, pronta para arquivar), a barra do pedido a repete, porque é para lá que o olho do usuário vai.
 - **Pausar e retomar.** **Pause** e **Resume** ficam só no cabeçalho. Um item pausado não espera por ninguém: não tem situação, não notifica e fica fora do `Ctrl+J`. A barra do pedido continua com o que o estado do item pede e com a ação (aprovar, abrir a PR, encerrar; continuar uma etapa revisitada espera o **Resume**), na forma quieta, com as duas barras no lugar do glifo e sem o chip de tempo, porque a espera não conta; a ação retoma a sessão. A pílula diz `paused`, o marco `Paused by you` diz desde quando, e o compositor diz que enviar retoma.
 
-**Mais de uma situação.** A barra fala da conversa em tela. A outra está na aba dela. Se só a outra conversa espera, a barra diz isso e leva até lá (**Go to reviewer**).
+**Mais de uma situação.** A barra fala da conversa em tela. A outra está na aba dela. Se só a outra conversa espera, a barra diz isso e leva até lá (**Go to reviewer**, **Go to implementer**), num step e no review da pull request.
 
 **Botões desabilitados.** Um botão desabilitado, na barra ou em qualquer lugar, tem borda tracejada, também o fantasma, que em repouso não tem borda. A razão fica ao lado, e `aria-describedby` aponta para ela.
 
@@ -310,7 +313,7 @@ Embaixo da conversa, na mesma medida. Existe sempre que a conversa na tela tem u
 O que cada um mostra:
 
 - **`Details`** mostra os fatos do item e o que ficou para trás:
-  - task: os steps (commitados com o SHA, as conversas e os relatórios de cada um; o atual; os não iniciados com os seletores de modo e de modelo), as conversas do planejamento, a PR (a conversa do rascunho, o número, a base, os checks pelo nome, a última leitura), e os fatos da task (repositório com o clone, card, épico, modo, **Review mode** e **Models**, branch, base, worktree, início);
+  - task: os steps (commitados com o SHA, as conversas e os relatórios de cada um; o atual; os não iniciados com os seletores de modo e de modelo), as conversas do planejamento, a PR (o modo do review com a rodada, as conversas do rascunho, do revisor e do implementador, o número, a base, os checks pelo nome, a última leitura), e os fatos da task (repositório com o clone, card, épico, modo, **Review mode** e **Models**, branch, base, worktree, início);
   - review: a PR, os checks lidos antes de cada passada, as passadas com o estado, e o modo, o modelo e a worktree;
   - discussão: o board, os cards de entrada, os repositórios lidos, as rodadas e os documentos.
 
@@ -337,7 +340,7 @@ Sob o cabeçalho, na medida da conversa, quando algo bloqueia sem ser a situaç�
 - **Board**: o cabeçalho tem a idade da leitura, **Refresh**, **New discussion** `N` e `⋯` (**Select cards to discuss**, **Open on GitHub**, **Edit the board in Settings…**). Não tem **Start task**: uma task começa de um card. Abaixo, a busca e os filtros (o chip **Assigned to me**, os filtros ativos como chips, o menu **Filter**), e a lista agrupada pelas seções de status do board, na ordem dele, com as finais recolhidas. A linha do card mostra só o que decide a escolha: o número, o título, o épico, a dependência não satisfeita e a task (com a situação real) ou a discussão do card; as teclas `S` e `D` aparecem na linha em foco. O card abre num painel ao lado da lista, que é o único lugar de **Start task** e **Discuss** fora das teclas; o repositório sem clone aparece lá (**Clone and continue**) e na Home. A seleção de cards para uma discussão é um modo, pelo `⋯` ou por `Space`. A falha de leitura é uma faixa no alto da lista, com **Try again**, sobre a leitura guardada.
 - **Reviews**: a lista das PRs abertas, agrupada em `Pending`, `In review`, `Reviewed` e `Yours and your tasks`, as duas últimas recolhidas. A linha mostra a referência, o título, o autor e o estado que importa; `R` inicia o review, abre o que existe ou a task dona. A PR abre num painel com a ação, os checks pelo nome, os fatos e a descrição. Os filtros ficam no menu **Filter** (Board, Repository, Author, Label). A falha de leitura de um repositório é uma faixa no alto da lista.
 - **History**: uma lista só, por data de arquivamento, com os dias como seção, a busca no alto (onde o foco começa) e a contagem, e o filtro da lateral aplicado como chip removível. A linha tem o tipo, o nome, onde (card, PR ou board), o resultado e a hora. A linha recém-arquivada fica destacada quando se chega pela página do item que saiu. O arquivado é um lugar, com `← History`, o tipo, o título, a etiqueta e **Delete…** no `⋯`: a task com os fatos, o resultado do encerramento e as abas dos documentos (a aba **Pull request** com o rascunho e os relatórios do review), o review com cada passada, a discussão com o que publicou primeiro. Nada roda num arquivado, e apagá-lo volta ao History.
-- **Settings**: a navegação à esquerda com seis páginas, **Defaults** (o modo de review e os modelos por etapa), **Boards**, **Repositories** (o que precisa de clone primeiro, depois os repositórios por board), **Prompts** (a lista dos nove, com `Default` ou `Edited`, e cada prompt aberto na mesma página, com a edição) e **Machine** (os seis itens do que o app precisa da máquina, em dois blocos, Claude Code e GitHub CLI, com **Check again**; o item leva `◇ N` quando algo falta) e **About** (a versão instalada e **Check for updates**; com uma versão nova, **Update to 0.5.0**, a ação primária do bloco da versão nova, e as notas das releases depois da instalada; o item leva a marca do sinal de versão nova). Cada página tem o título, uma frase do que ela serve e, quando há, a ação dela, secundária: Settings não pede nada, então não tem primária. A exceção é o bloco da versão nova em About, cujas ações (**Update to 0.5.0**, **Try again**, **Restart now**) são primárias, porque são o único pedido de Settings. Tudo em Defaults salva na hora. Não há página de aparência: o tema fica no rodapé da lateral. Abaixo de 820 px de área principal, a navegação vira uma linha acima da página.
+- **Settings**: a navegação à esquerda com seis páginas, **Defaults** (os modos de review, dos steps e da pull request, e os modelos por etapa), **Boards**, **Repositories** (o que precisa de clone primeiro, depois os repositórios por board), **Prompts** (a lista dos dez, com `Default` ou `Edited`, e cada prompt aberto na mesma página, com a edição) e **Machine** (os seis itens do que o app precisa da máquina, em dois blocos, Claude Code e GitHub CLI, com **Check again**; o item leva `◇ N` quando algo falta) e **About** (a versão instalada e **Check for updates**; com uma versão nova, **Update to 0.5.0**, a ação primária do bloco da versão nova, e as notas das releases depois da instalada; o item leva a marca do sinal de versão nova). Cada página tem o título, uma frase do que ela serve e, quando há, a ação dela, secundária: Settings não pede nada, então não tem primária. A exceção é o bloco da versão nova em About, cujas ações (**Update to 0.5.0**, **Try again**, **Restart now**) são primárias, porque são o único pedido de Settings. Tudo em Defaults salva na hora. Não há página de aparência: o tema fica no rodapé da lateral. Abaixo de 820 px de área principal, a navegação vira uma linha acima da página.
 
 ## 5. Atalhos
 

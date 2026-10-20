@@ -92,6 +92,7 @@ func TestReadGivesTheDefaultOfEveryPrompt(t *testing.T) {
 		{prompts.StageCommit, []string{"# Commit", "{{what_to_commit}}", "Co-Authored-By", "{{push}}"}},
 		{prompts.StagePR, []string{"# Pull Request", "{{draft_path}}", "{{base_branch}}", "gh pr create", "AskUserQuestion"}},
 		{prompts.StagePRReview, []string{"# Pull Request Review", "{{review_path}}", "{{pr_url}}", "status: clean", "AskUserQuestion", "## How to write the report", "Portuguese", "The summary is optional"}},
+		{prompts.StagePRFix, []string{"# Pull Request Review Fixes", "{{pr_url}}", "{{prd_path}}", "AskUserQuestion", "never by rebasing", "Never write or rewrite a review report"}},
 		{prompts.StageDiscussion, []string{"# Discussion", "{{document_path}}", "{{drafts_path}}", "AskUserQuestion", "never repeats the shared context of the epic", "never shorter at the cost of the context"}},
 	}
 
@@ -284,6 +285,10 @@ func TestPlaceholdersAreTheOnesTheDefaultUses(t *testing.T) {
 			"{{prd_path}}", "{{tech_spec_path}}", "{{repository}}", "{{branch}}",
 			"{{base_branch}}", "{{review_path}}", "{{pr_number}}", "{{pr_url}}",
 		}},
+		{prompts.StagePRFix, []string{
+			"{{prd_path}}", "{{tech_spec_path}}", "{{repository}}", "{{branch}}",
+			"{{base_branch}}", "{{pr_number}}", "{{pr_url}}",
+		}},
 		{prompts.StageDiscussion, []string{
 			"{{task_name}}", "{{artifacts_dir}}", "{{initial_context}}", "{{document_path}}", "{{drafts_path}}",
 		}},
@@ -313,7 +318,7 @@ func TestEditableListsThePromptsInWorkflowOrder(t *testing.T) {
 	want := []prompts.Stage{
 		prompts.StagePRD, prompts.StageTechSpec, prompts.StagePlan, prompts.StageOneShot,
 		prompts.StageStepReview, prompts.StageCommit, prompts.StagePR, prompts.StagePRReview,
-		prompts.StageDiscussion,
+		prompts.StagePRFix, prompts.StageDiscussion,
 	}
 	if diff := cmp.Diff(want, prompts.Editable); diff != "" {
 		t.Errorf("Editable mismatch (-want +got):\n%s", diff)
@@ -495,6 +500,9 @@ func TestRenderTheDefaultPromptsKeepNoPlaceholder(t *testing.T) {
 		{prompts.StagePRReview, everyVar(), []string{
 			"https://github.com/acme/api/pull/42", "`42`", "/data/tasks/add-login/pr/review-1.md",
 		}},
+		{prompts.StagePRFix, everyVar(), []string{
+			"https://github.com/acme/api/pull/42", "`42`", "`acme/api`", "git merge origin/dev",
+		}},
 		{prompts.StageDiscussion, discussionVars(), []string{
 			"invoices", "/data/discussions/invoices", documentPath, draftsPath,
 			"## Initial context\n\nthe invoices of the month",
@@ -527,6 +535,7 @@ func TestRenderTheDefaultPromptsOtherThanPRDGetNoInitialContext(t *testing.T) {
 
 	for _, stage := range []prompts.Stage{
 		prompts.StageTechSpec, prompts.StagePlan, prompts.StageStepReview, prompts.StageCommit, prompts.StagePR, prompts.StagePRReview,
+		prompts.StagePRFix,
 	} {
 		got, err := prompts.Render(dataDir, stage, everyVar())
 		if err != nil {
@@ -1737,4 +1746,127 @@ func TestListSaysWhichPromptsAreEditedInWorkflowOrder(t *testing.T) {
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("List() mismatch (-want +got):\n%s", diff)
 	}
+}
+
+// reviewerOfATaskVars are the vars the reviewer of the pull request of a task
+// renders with when an implementer of its own applies the findings.
+func reviewerOfATaskVars() prompts.Vars {
+	vars := everyVar()
+	vars.ReviewOnly = true
+	return vars
+}
+
+func TestRenderGivesTheReviewerOfATaskTheReviewingNote(t *testing.T) {
+	t.Parallel()
+
+	got, err := prompts.Render(t.TempDir(), prompts.StagePRReview, reviewerOfATaskVars())
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	for _, want := range []string{"## Reviewing\n\nYou only review.", "git diff HEAD", "AskUserQuestion"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("Render() does not contain %q", want)
+		}
+	}
+	for _, unwanted := range []string{"## Applying", "then `git merge", "When a finding about a check is approved"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("Render() contains %q, which is not for a reviewer that only reviews", unwanted)
+		}
+	}
+	assertInOrder(t, got, "## Findings format", "## Reviewing", "## GitHub checks and conflicts", "## GitHub status")
+}
+
+func TestRenderKeepsTheApplyingNoteOfTheReviewCenter(t *testing.T) {
+	t.Parallel()
+
+	vars := everyVar()
+	vars.MergeBase = "origin/dev"
+
+	got, err := prompts.Render(t.TempDir(), prompts.StagePRReview, vars)
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	for _, want := range []string{
+		"## Applying", "git fetch origin`, then `git merge origin/dev`",
+		"find out.\n- When a finding about a check is approved",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("Render() does not contain %q", want)
+		}
+	}
+	if strings.Contains(got, "## Reviewing") {
+		t.Errorf("Render() carries the note of the reviewer that only reviews")
+	}
+}
+
+func TestRenderListsTheDiscardedFindingsBeforeTheReviewInstructions(t *testing.T) {
+	t.Parallel()
+
+	vars := reviewerOfATaskVars()
+	vars.Instructions = "Never change a published migration."
+	vars.DiscardedFindings = "- pass 1 · 2 · Vague · general\n- pass 2 · 3 · No test · main.go:12"
+
+	got, err := prompts.Render(t.TempDir(), prompts.StagePRReview, vars)
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	assertInOrder(t, got, "## GitHub status", "## Findings the user discarded", "## Review instructions")
+	if !strings.Contains(got, "Do not report them again unless the code they point at changed since.\n\n"+vars.DiscardedFindings) {
+		t.Errorf("Render() does not list the discarded findings under their note")
+	}
+
+	none, err := prompts.Render(t.TempDir(), prompts.StagePRReview, reviewerOfATaskVars())
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+	if strings.Contains(none, "## Findings the user discarded") {
+		t.Errorf("Render() carries the section without a discarded finding")
+	}
+}
+
+func TestRenderEndsThePromptOfThePRFixesWithTheFirstRequest(t *testing.T) {
+	t.Parallel()
+
+	vars := everyVar()
+	vars.FixRequest = "Fix the findings."
+
+	for name, edit := range map[string]string{"default": "", "edited": "fix it"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dataDir := t.TempDir()
+			if edit != "" {
+				write(t, dataDir, prompts.StagePRFix, edit)
+			}
+
+			got, err := prompts.Render(dataDir, prompts.StagePRFix, vars)
+			if err != nil {
+				t.Fatalf("Render() = %v, want nil", err)
+			}
+			if !strings.HasSuffix(got, "\n\n## The first request\n\nFix the findings.") {
+				t.Errorf("Render() = %q, want it to end with the first request", got)
+			}
+		})
+	}
+}
+
+func TestRenderGivesThePRFixesTheOneShotNote(t *testing.T) {
+	t.Parallel()
+
+	vars := oneShotVars()
+	vars.FixRequest = "Fix the findings."
+
+	got, err := prompts.Render(t.TempDir(), prompts.StagePRFix, vars)
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+
+	want := "## One-Shot task\n\nThis task was planned in a single document, `" + oneShotPath + "`"
+	if !strings.Contains(got, want) {
+		t.Errorf("Render() does not contain %q", want)
+	}
+	assertInOrder(t, got, "## One-Shot task", "## The first request")
 }

@@ -24,6 +24,7 @@ export const MODEL_STAGES: readonly ModelStage[] = [
   "step_review",
   "pr",
   "pr_review",
+  "pr_fix",
   "discussion",
 ];
 
@@ -35,6 +36,7 @@ const STRUCTURED_MODEL_STAGES: readonly ModelStage[] = [
   "step_review",
   "pr",
   "pr_review",
+  "pr_fix",
 ];
 
 const ONE_SHOT_MODEL_STAGES: readonly ModelStage[] = [
@@ -43,6 +45,7 @@ const ONE_SHOT_MODEL_STAGES: readonly ModelStage[] = [
   "step_review",
   "pr",
   "pr_review",
+  "pr_fix",
 ];
 
 /** modelStagesOf is the stages of a task of a mode that carry a choice, in order. It mirrors task.Mode.ModelStages. */
@@ -175,6 +178,8 @@ export function modelStageLabel(stage: ModelStage): string {
       return "One-Shot planning";
     case "discussion":
       return "Discussion";
+    case "pr_fix":
+      return "PR review fixes";
     default:
       return stageLabel(stage);
   }

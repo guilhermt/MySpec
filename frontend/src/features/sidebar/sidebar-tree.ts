@@ -27,6 +27,7 @@ import {
   asPlaceKind,
   asPRStatus,
   asPullReviewStatus,
+  asReviewMode,
   asSituationForm,
   asSituationGroup,
   asSituationKind,
@@ -293,6 +294,13 @@ function taskPosition(task: TaskSummary): string {
   return stageLabel(task.stage);
 }
 
+// prRoundText is ` · round R` of the agent review of the pull request of a task, "" outside it.
+function prRoundText(task: TaskSummary): string {
+  return task.pr !== null && asReviewMode(task.prReviewMode) === "agent" && task.pr.reviewRound > 0
+    ? ` · round ${task.pr.reviewRound}`
+    : "";
+}
+
 // Where a situation of a conversation is, long with the conversation and short without it.
 function conversationPlace(owner: Owner, situation: Situation): RowText {
   const { place } = situation;
@@ -309,7 +317,13 @@ function conversationPlace(owner: Owner, situation: Situation): RowText {
       if (owner.kind !== "task" || prNumber(owner.task) === 0) {
         return same("PR");
       }
-      return same(`PR review · pass ${prPass(owner.task)}`);
+      return same(`PR review · Reviewer · pass ${prPass(owner.task)}`);
+    case "pr_fix":
+      return same(
+        owner.kind === "task"
+          ? `PR review · Implementer${prRoundText(owner.task)}`
+          : "PR review · Implementer",
+      );
     case "review":
       return same(owner.kind === "review" ? `pass ${reviewPass(owner.review)}` : "pass 1");
     case "discussion":
@@ -602,6 +616,12 @@ function taskStanding(task: TaskSummary): Standing {
         return sessionStanding(sessions, place, same("PR · drafting"));
       case "reviewing":
         return sessionStanding(sessions, place, same(`PR review · pass ${prPass(task)}`));
+      case "addressing_review":
+        return sessionStanding(
+          sessions,
+          place,
+          same(`PR review · Implementer${prRoundText(task)}`),
+        );
       default:
         return sessionStanding(sessions, place, same(place));
     }

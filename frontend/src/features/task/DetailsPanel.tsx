@@ -30,7 +30,7 @@ import { screenSession } from "@/features/task/task-session";
 import { choiceLabel, choiceOf, type ModelChoice } from "@/lib/models";
 import { displayPath } from "@/lib/paths";
 import { checkDuration, checkRows, checksSummary, prChecks } from "@/lib/pull-requests";
-import { reviewModeLabel } from "@/lib/review-modes";
+import { MAX_PR_REVIEW_ROUNDS, reviewModeLabel, reviewModesLabel } from "@/lib/review-modes";
 import { cn } from "@/lib/utils";
 import {
   asReviewMode,
@@ -88,7 +88,7 @@ export function DetailsPanel({ task }: DetailsPanelProps) {
   const [openFile, setOpenFile] = useState<string | null>(asked);
   // The last report opened is the row the focus returns to on the way back.
   const [lastReport, setLastReport] = useState<string | null>(asked);
-  const model = detailsOf(task, repository, screenSession(task, tab)?.stage ?? null);
+  const model = detailsOf(task, repository, screenSession(task, tab)?.stage ?? null, tab);
   // A report the task no longer has falls back to the list.
   const open = openFile === null ? null : reportOf(model, openFile);
 
@@ -181,6 +181,9 @@ export function DetailsPanel({ task }: DetailsPanelProps) {
                 model.pullRequest.reports.length > 0 ||
                 model.pullRequest.pr !== null) && (
                 <PanelSection legend="Pull request">
+                  <ul className="flex flex-col">
+                    <PullRequestModeRow mode={model.pullRequest.mode} />
+                  </ul>
                   {(model.pullRequest.conversations.length > 0 ||
                     model.pullRequest.reports.length > 0) && (
                     // The reports of every pass sit under the PR review conversation, the last row.
@@ -438,6 +441,45 @@ function StepChoosers({ task, step }: { task: TaskSummary; step: Step }) {
   );
 }
 
+/** pullRequestModeLine is the line of the mode of the review of the pull request: "now · Agent · round 2 of 5". */
+function pullRequestModeLine(mode: NonNullable<DetailsModel["pullRequest"]>["mode"]): string {
+  return [
+    "now",
+    mode.mode,
+    ...(mode.round > 0 ? [`round ${mode.round} of ${MAX_PR_REVIEW_ROUNDS}`] : []),
+  ].join(" · ");
+}
+
+interface PullRequestModeRowProps {
+  mode: NonNullable<DetailsModel["pullRequest"]>["mode"];
+}
+
+/** PullRequestModeRow is the mode the review of the pull request runs in, with why it fell back to Manual. */
+function PullRequestModeRow({ mode }: PullRequestModeRowProps) {
+  const line = <span className="font-medium text-brand-ink">{pullRequestModeLine(mode)}</span>;
+  return (
+    <li>
+      <PanelRow
+        meta={
+          mode.fallbackReason === "" ? (
+            line
+          ) : (
+            <Tooltip content={mode.fallbackReason}>
+              <span>
+                {line}
+                <span className="sr-only">{` · ${mode.fallbackReason}`}</span>
+              </span>
+            </Tooltip>
+          )
+        }
+        className="font-semibold"
+      >
+        Review
+      </PanelRow>
+    </li>
+  );
+}
+
 interface PullRequestFactsProps {
   pr: PullRequest;
   facts: NonNullable<NonNullable<DetailsModel["pullRequest"]>["pr"]>;
@@ -541,13 +583,13 @@ function TaskFacts({ task, facts, now }: TaskFactsProps) {
             ref={reviewModeRef}
             kind="menu"
             size="sm"
-            aria-label={`Review mode of the task: ${reviewModeLabel(facts.reviewMode)}`}
+            aria-label={`Review mode of the task: ${reviewModesLabel(facts.reviewMode, facts.prReviewMode)}`}
             aria-haspopup="dialog"
             aria-expanded={popover === "reviewMode"}
             onClick={() => setPopover("reviewMode")}
           >
             <Icon icon={MODE_ICONS[facts.reviewMode]} size="xs" />
-            {reviewModeLabel(facts.reviewMode)}
+            {reviewModesLabel(facts.reviewMode, facts.prReviewMode)}
           </Chip>
         </Fact>
         <Fact label="Models">

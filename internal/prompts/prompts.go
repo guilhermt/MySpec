@@ -38,6 +38,7 @@ const (
 	StageCommit     Stage = "commit"
 	StagePR         Stage = "pr"
 	StagePRReview   Stage = "pr_review"
+	StagePRFix      Stage = "pr_fix" // the implementer of the review of the pull request of a task
 	StageDiscussion Stage = "discussion"
 )
 
@@ -48,7 +49,7 @@ const StageStep Stage = "step"
 // workflow order. The prompt of a step is a file of the plan, not one of them.
 var Editable = []Stage{
 	StagePRD, StageTechSpec, StagePlan, StageOneShot, StageStepReview, StageCommit, StagePR, StagePRReview,
-	StageDiscussion,
+	StagePRFix, StageDiscussion,
 }
 
 // ErrUnknownStage is a prompt the app does not have.
@@ -184,6 +185,8 @@ const (
 	githubStatusHeading     = "\n\n## GitHub status\n\n"
 	instructionsHeading     = "\n\n## Review instructions\n\n"
 	passInstructionsHeading = "\n\n## Instructions for this pass\n\n"
+	reviewOnlyHeading       = "\n\n## Reviewing\n\n"
+	discardedHeading        = "\n\n## Findings the user discarded\n\n"
 )
 
 // The headings of the sections the app appends to the prompt of a discussion:
@@ -196,6 +199,10 @@ const (
 // draftsFormatNote is how the file of drafts of a discussion has to read, so
 // that the app can read every draft of it.
 const draftsFormatNote = "The app reads `{{drafts_path}}`, so it must follow this format exactly. The file opens with a header, then one block per draft:\n\n```markdown\n---\nstatus: drafts\n---\n\n## Draft: export-invoices\n- Kind: new\n- Repository: owner/name\n- Module: Billing\n- Epic: invoices-epic\n- Depends on: invoice-schema, owner/name#42\n\n### Title\nExport invoices as CSV\n\n### Body\n[the body of the card, as Markdown, until the next \"## Draft:\" line]\n```\n\n- `status` is `drafts` when the file has at least one draft, and `none` when the discussion ends without a card; a file with `status: none` has no draft blocks.\n- Each block opens with `## Draft: <id>`. The id is yours: lowercase letters, digits and hyphens, unique in the file, and stable across rewrites: a draft that keeps its id keeps what the user edited and decided. When you change a draft, keep its id; a new id is a new draft.\n- `Kind` is `new`, `update` or `epic`.\n  - `new` and `epic` take `Repository: owner/name`, one of the repositories the board manages.\n  - `update` takes `Card: owner/name#number`, a card of the board, and no `Repository`.\n  - `epic` takes no `Module`, no `Epic` and no `Depends on`.\n- `Module` is the name of one option of the module field of the board, only when the board has one. Optional.\n- `Epic` is the id of an `epic` draft of this file, or `owner/name#number` of an issue that exists. Optional.\n- `Depends on` lists the ids of `new` or `update` drafts of this file and `owner/name#number` of existing cards, separated by commas. Optional. A draft never depends on itself.\n- `### Title` is followed by the title on one line. `### Body` is followed by the body, which runs until the next `## Draft:` line or the end of the file. Both are required. The body must not contain a line that reads exactly `### Title`, `### Body` or starts with `## Draft:`.\n\nAny deviation makes the file unreadable, and the app tells the user so; rewrite it in place to fix it."
+
+// fixRequestHeading opens the section every prompt of the implementer of a pull
+// request review ends with: the first request of the app.
+const fixRequestHeading = "\n\n## The first request\n\n"
 
 // oneShotHeading opens the section Render appends to the prompts that read the
 // documents of a task, when the task is One-Shot.
@@ -224,6 +231,10 @@ const prReviewOneShotNote = "This task was planned in a single document, `{{one_
 	"that document, and it is the criteria. Its Problem and its Scope play the role of the product requirements, " +
 	"and its Technical decisions and its Change plan play the role of the technical specification: a deviation " +
 	"from them is a finding, even when the code works."
+
+// prFixOneShotNote is what the prompt of the implementer of a pull request
+// review says about the document of a One-Shot task.
+const prFixOneShotNote = "This task was planned in a single document, `{{one_shot_path}}`, instead of a PRD and a technical specification: every reference in this prompt to the PRD or the technical specification means that document."
 
 // cardHeading opens the section Render appends to the prompt of a pull request
 // when the task was created from a card.
@@ -256,8 +267,20 @@ const applyNote = "The user decides on each finding in the app, and the app then
 const checksNote = "Before this pass the app read on GitHub the checks of the head of the pull request and whether the branch merges clean into the base; the `## GitHub status` section, at the end of this prompt or of the message that asks for the pass, says what it found. That is part of what you review: a check that failed and a conflict with the base are findings of the report like any other, and the report is `changes` whenever there is one of them.\n\n" +
 	"- For each check that failed, investigate the cause with the `gh` of this session: `gh pr checks {{pr_number}}` lists the checks with their links; for a check of GitHub Actions, `gh run view <run id> --log-failed` prints the steps that failed, with the run id that is in the link; a check of another system may have only its link. Relate the cause to the code of the pull request.\n" +
 	"- Write one finding per check that failed, or one per cause when several failed for the same one, saying which check failed, with its link, and what caused the failure: the test that broke, the lint error, the command that did not finish. The finding is anchored on a line of the new version that is part of the diff when the cause is there, such as the broken test or the line the linter pointed at, and general when it is not, such as a test the pull request does not touch that started failing or a failure of the infrastructure of the check. When the cause cannot be found, such as a log you cannot reach, the finding is general and says so: the check, its link and that the cause was not found.\n" +
-	"- When the branch has conflicts with the base, write a single general finding saying that the branch has conflicts with `{{base_branch}}` and, when you can tell, the files in conflict: `git merge-tree --write-tree HEAD {{merge_base}}` lists them without touching the worktree. Never run `git merge` to find out.\n" +
-	"- When a finding about a check is approved, fix its cause like any finding. When the finding about the conflict is approved, resolve it by merging the base into the branch, never by rebasing: `git fetch origin`, then `git merge {{merge_base}}`; resolve the conflicts in the files and leave the merge in progress, without `git add` on the resolved files and without committing: the user reviews and stages them in the app, and the commit, which comes from another prompt, concludes the merge. Resolve the conflict before the other findings approved in the same round, so that you fix them on the merged code. The rule of this prompt never to merge is about merging the pull request; merging the base into its branch to resolve an approved conflict is the exception."
+	"- When the branch has conflicts with the base, write a single general finding saying that the branch has conflicts with `{{base_branch}}` and, when you can tell, the files in conflict: `git merge-tree --write-tree HEAD {{merge_base}}` lists them without touching the worktree. Never run `git merge` to find out."
+
+// checksFixNote is what the review of a pull request does when a finding about a check or the conflict is
+// approved: the reviewer of a task, which only reviews, does not get it.
+const checksFixNote = "- When a finding about a check is approved, fix its cause like any finding. When the finding about the conflict is approved, resolve it by merging the base into the branch, never by rebasing: `git fetch origin`, then `git merge {{merge_base}}`; resolve the conflicts in the files and leave the merge in progress, without `git add` on the resolved files and without committing: the user reviews and stages them in the app, and the commit, which comes from another prompt, concludes the merge. Resolve the conflict before the other findings approved in the same round, so that you fix them on the merged code. The rule of this prompt never to merge is about merging the pull request; merging the base into its branch to resolve an approved conflict is the exception."
+
+// reviewOnlyNote is what the reviewer of the pull request of a task does with
+// its findings: an implementer of its own applies them.
+const reviewOnlyNote = "You only review. The app hands the findings of your report to an implementer, another session of this task, in one of two ways: the user decides on each finding in the app and the approved ones go to the implementer, or the report goes to the implementer as it is, and it fixes or contests each finding. This replaces what this prompt says above under \"What happens next\": after writing the report, say in one line what you found and stop. Never edit a file, never run `git add`, never commit, never push and never merge: that is the implementer's work, and the commit comes from a separate prompt.\n\n" +
+	"The worktree may have changes that are not committed yet, made after your last report. Review them together with the diff of the pull request: `git status` and `git diff HEAD` show them, and every untracked file is read whole. A finding about a check that failed or a conflict with the base, from a reading of GitHub older than those changes, counts as addressed when the changes fix it: do not report it again only because the reading predates them, since the checks that follow the push confirm it.\n\n" +
+	"When the message that asks for a pass brings the implementer's response, judge each finding it contested: withdraw it when the implementer is right, keep it when it is not, and ask the user with the `AskUserQuestion` tool when you cannot decide with confidence. When the user asks in the conversation for a finding to be added, changed or removed, rewrite the report of the current pass in place, keeping the numbers of the findings that did not change."
+
+// discardedNote introduces the findings the user discarded in earlier passes.
+const discardedNote = "The user decided not to act on these findings of earlier passes. Do not report them again unless the code they point at changed since."
 
 // noChecksReading is the status section of a pass the app read nothing from
 // GitHub for.
@@ -312,6 +335,8 @@ func oneShotNote(stage Stage) string {
 		return prOneShotNote
 	case StagePRReview:
 		return prReviewOneShotNote
+	case StagePRFix:
+		return prFixOneShotNote
 	default:
 		return ""
 	}
@@ -540,6 +565,15 @@ type Vars struct {
 	// PassInstructions is what the user wrote for this pass of a review of a
 	// pull request.
 	PassInstructions string
+	// ReviewOnly: PR review of a task: an implementer of its own applies the
+	// findings, so the reviewer only reviews.
+	ReviewOnly bool
+	// DiscardedFindings: PR review of a task: the findings the user discarded in
+	// earlier passes, one line each.
+	DiscardedFindings string
+	// FixRequest is StagePRFix only: the first request of the app, appended to
+	// the prompt.
+	FixRequest string
 	// The discussion sessions: the two files the agent writes and the board the
 	// discussion runs on.
 	DocumentPath string
@@ -587,7 +621,7 @@ func commitInstruction(all bool) string {
 // request of a task created from a card ends with the card, and the prompt of
 // the review of a pull request with what the review is about, what the app
 // read of its checks and conflicts on GitHub and the instructions it runs
-// with. StageStep is the exception: the step file is sent
+// with. The prompt of the implementer of a pull request review always ends with the first request of the app. StageStep is the exception: the step file is sent
 // verbatim.
 func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 	if stage == StageStep {
@@ -656,6 +690,9 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 	if stage == StagePRReview {
 		rendered += reviewSections(vars)
 	}
+	if stage == StagePRFix {
+		rendered += fixRequestHeading + vars.FixRequest
+	}
 	// What the implementer said is never a placeholder: the prompt of a
 	// reviewer always ends with it.
 	if stage == StageStepReview {
@@ -694,13 +731,23 @@ func reviewSections(vars Vars) string {
 		b.WriteString(externalHeading + reviewNote(externalNote, vars))
 	}
 	b.WriteString(findingsFormatHeading + reviewNote(findingsFormatNote, vars))
-	if vars.Publish {
+	switch {
+	case vars.Publish:
 		b.WriteString(publishHeading + reviewNote(publishNote, vars))
-	} else {
+	case vars.ReviewOnly:
+		b.WriteString(reviewOnlyHeading + reviewNote(reviewOnlyNote, vars))
+	default:
 		b.WriteString(applyHeading + reviewNote(applyNote, vars))
 	}
-	b.WriteString(checksHeading + reviewNote(checksNote, vars))
+	checks := checksNote
+	if !vars.ReviewOnly {
+		checks += "\n" + checksFixNote
+	}
+	b.WriteString(checksHeading + reviewNote(checks, vars))
 	b.WriteString(githubStatusHeading + reviewNote(PRChecksSection(vars.Checks, vars.MergeBase), vars))
+	if vars.DiscardedFindings != "" {
+		b.WriteString(discardedHeading + discardedNote + "\n\n" + vars.DiscardedFindings)
+	}
 	if vars.Instructions != "" {
 		b.WriteString(instructionsHeading + vars.Instructions)
 	}

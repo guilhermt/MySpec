@@ -6,17 +6,20 @@ import {
   type TaskRequestButton,
 } from "@/features/task/request";
 import { decidedCounts } from "@/lib/findings";
-import { counted } from "@/lib/situations";
+import { prFallbackReason } from "@/lib/review-modes";
+import { counted, lowerFirst } from "@/lib/situations";
 import type {
   PRReport,
   PRStatus,
   PullRequest,
+  ReviewFallback,
   ReviewFinding,
   SituationKind,
   TaskSummary,
 } from "@/lib/wails";
 import { asPRState, asPRStatus } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
+import type { StepTab } from "@/store/app-store";
 
 /** DECIDING_STATUSES are the states of the pull request in which its current pass is decided. */
 const DECIDING_STATUSES: readonly PRStatus[] = [
@@ -157,7 +160,7 @@ export function findingsNotes(pr: PullRequest): { notes: string[]; tooltip: stri
   return { notes, tooltip: tooltips.join(" ") };
 }
 
-/** noFileChanged says the agent applied the findings and changed nothing. */
+/** noFileChanged says the implementer applied the findings and changed nothing. */
 export function noFileChanged(pr: PullRequest): boolean {
   const sent = currentReport(pr)?.sentAt ?? "";
   return (
@@ -168,7 +171,11 @@ export function noFileChanged(pr: PullRequest): boolean {
 }
 
 /** findingsBar is the bar of the findings of the pull request in a form. */
-export function findingsBar(pr: PullRequest, form: FindingsForm): Bar {
+export function findingsBar(
+  pr: PullRequest,
+  form: FindingsForm,
+  fallback: ReviewFallback = "",
+): Bar {
   const place = passPlace(pr);
   if (form === "text") {
     return {
@@ -188,7 +195,8 @@ export function findingsBar(pr: PullRequest, form: FindingsForm): Bar {
       label: "Ready to apply",
       place,
       progress: [
-        `${counted(approved, "approved finding")} ${approved === 1 ? "goes" : "go"} to the agent`,
+        `${counted(approved, "approved finding")} ${approved === 1 ? "goes" : "go"} to the implementer`,
+        ...(fallback === "rounds_exhausted" ? [lowerFirst(prFallbackReason(fallback))] : []),
         ...notes,
       ].join(" · "),
       progressTooltip: tooltip,
@@ -215,13 +223,13 @@ export function findingsBar(pr: PullRequest, form: FindingsForm): Bar {
   };
 }
 
-/** disabledNote is where a finding went once its pass is behind: "Sent to the agent · 17:36" or "Not sent". */
+/** disabledNote is where a finding went once its pass is behind: "Sent to the implementer · 17:36" or "Not sent". */
 export function disabledNote(report: PRReport, finding: ReviewFinding, now: number): string {
   if (finding.decision !== "approved") {
     return "Not sent";
   }
   const sent = clockTime(report.sentAt, now);
-  return sent === "" ? "Sent to the agent" : `Sent to the agent · ${sent}`;
+  return sent === "" ? "Sent to the implementer" : `Sent to the implementer · ${sent}`;
 }
 
 /** reviewAgainTooltip is what Review again tells about the decisions it leaves behind; null without any. */
@@ -234,11 +242,18 @@ export function reviewAgainTooltip(pr: PullRequest): string | null {
   return `Starts pass ${pass + 1}. The decisions of review ${pass} aren't applied.`;
 }
 
-/** prComposerContext is how the composer of the PR review reads the findings: in text, structured, or the changes. */
+/**
+ * prComposerContext is how the composer of the PR review reads the findings: in text, structured, or
+ * the changes. The reviewer's conversation reads them; the implementer's always asks for a change.
+ */
 export function prComposerContext(
   task: TaskSummary,
   kind: SituationKind | null,
+  tab: StepTab,
 ): { findings: boolean; reviseFindings: boolean; askForChange: boolean } {
+  if (tab === "implementer") {
+    return { findings: false, reviseFindings: false, askForChange: true };
+  }
   const structured = task.pr !== null && currentReport(task.pr) !== null;
   return {
     findings: kind === "findings" && !structured,

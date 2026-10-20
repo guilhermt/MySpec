@@ -251,6 +251,8 @@ export function announcePlace(situation: Situation, round = 0): string | null {
       return "Reviewer";
     case "pr":
       return "PR";
+    case "pr_fix":
+      return "Implementer";
     case "review":
       return null;
     case "discussion":
@@ -357,6 +359,43 @@ export function prSituation(task: TaskSummary): Situation | null {
   return (
     (task.situations ?? []).find((situation) => asPlaceKind(situation.place.kind) === "pr") ?? null
   );
+}
+
+/** prFixSituation is the situation of the conversation of the implementer of the review of the pull request of a task, null when it has none. */
+export function prFixSituation(task: TaskSummary): Situation | null {
+  return (
+    (task.situations ?? []).find((situation) => asPlaceKind(situation.place.kind) === "pr_fix") ??
+    null
+  );
+}
+
+/** SESSION_KINDS are the situations a conversation holds: what its agent asks or how its session failed. */
+const SESSION_KINDS: readonly SituationKind[] = [
+  "question",
+  "permission",
+  "reply",
+  "session_error",
+];
+
+/** isSessionKind says the situation belongs to a conversation, not to the pull request. */
+export function isSessionKind(situation: Situation): boolean {
+  return SESSION_KINDS.includes(asSituationKind(situation.kind));
+}
+
+/**
+ * prTabSituation is the situation of the tab of the review of the pull request on screen: the
+ * reviewer's is the one of the pull request; the implementer's is its own, else the one of the
+ * pull request that is not the reviewer's conversation (findings, changes, merge, trouble, block).
+ */
+export function prTabSituation(
+  task: TaskSummary,
+  tab: "implementer" | "reviewer",
+): Situation | null {
+  const ofPR = prSituation(task);
+  if (tab === "reviewer") {
+    return ofPR;
+  }
+  return prFixSituation(task) ?? (ofPR !== null && !isSessionKind(ofPR) ? ofPR : null);
 }
 
 const MINUTE_MS = 60_000;

@@ -8,11 +8,14 @@ import {
   type Situation,
   type TaskConversation,
 } from "@/lib/wails";
+import type { StepTab } from "@/store/app-store";
 import type { TranscriptState } from "@/store/transcript";
 import { renderWithStore } from "@/test/render";
 import {
   makeEntry,
   makePRCheck,
+  makePRImplementer,
+  makePRReport,
   makePullRequest,
   makeRepository,
   makeReview,
@@ -53,6 +56,8 @@ interface PaneOptions {
   conversations?: TaskConversation[];
   repositories?: ReturnType<typeof makeRepository>[];
   review?: Entry[];
+  tab?: StepTab;
+  fix?: Entry[];
 }
 
 function pane(overrides: Partial<PullRequest> = {}, options: PaneOptions = {}) {
@@ -63,18 +68,19 @@ function pane(overrides: Partial<PullRequest> = {}, options: PaneOptions = {}) {
     situations: options.situations ?? [],
     conversations: options.conversations ?? [makeTaskConversation({ stage: "pr" })],
   });
-  return renderWithStore(<PRPane task={task} pr={pr} tab="implementer" />, {
+  return renderWithStore(<PRPane task={task} pr={pr} tab={options.tab ?? "reviewer"} />, {
     state: makeState({ repositories: options.repositories ?? [makeRepository()], tasks: [task] }),
     ui: {
       transcripts: {
         "task-1|pr": read([said("Write the draft")]),
         "task-1|pr_review": read(options.review ?? [said("Review the pull request")]),
+        "task-1|pr_fix": read(options.fix ?? [said("Apply the findings")]),
       },
     },
   });
 }
 
-const composer = () => screen.queryByRole("textbox", { name: "Reply to the PR agent" });
+const composer = () => screen.queryByRole("textbox", { name: /^Reply to the / });
 const feed = () => screen.getByRole("feed");
 
 // placeEmpty is the empty state of the place, which is not a live region.
@@ -357,4 +363,146 @@ describe("PRPane, the conversation", () => {
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
     expect(composer()).toBeInTheDocument();
   });
+});
+
+describe("PRPane, the two conversations of the review", () => {
+  const FIXING: TaskConversation[] = [...REVIEWED, makeTaskConversation({ stage: "pr_fix" })];
+  const implementer = makePRImplementer({ sessionStatus: "working", processRunning: true });
+  const CHANGED = makeReview({ staged: 1, total: 2, percent: 50 });
+  const FINDINGS = makePRReport({ pass: 1, recorded: true, structured: true });
+
+  it("is a tabpanel that the chosen tab names", () => {
+    pane(
+      { status: "in_review", prNumber: 12, sessionStage: "pr_review", implementer },
+      { conversations: FIXING, tab: "implementer" },
+    );
+
+    const panel = screen.getByRole("tabpanel");
+    expect(panel).toHaveAttribute("id", "agent-conversation");
+    expect(panel.getAttribute("aria-labelledby")).toMatch(/implementer$/);
+  });
+
+  it("has no tabpanel before the reviewer has its conversation", () => {
+    pane({ status: "drafting", sessionStage: "pr" });
+
+    expect(screen.queryByRole("tabpanel")).not.toBeInTheDocument();
+  });
+
+  it("reads the conversation of the implementer on its tab, with its composer", () => {
+    pane(
+      { status: "in_review", prNumber: 12, sessionStage: "pr_review", implementer },
+      { conversations: FIXING, tab: "implementer" },
+    );
+
+    expect(within(feed()).getByText("Apply the findings")).toBeInTheDocument();
+    expect(screen.queryByText("Review the pull request")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Reply to the implementer" })).toHaveAttribute(
+      "placeholder",
+      "Ask the implementer for a change…",
+    );
+  });
+
+  it("reads the conversation of the reviewer on its tab", () => {
+    pane(
+      { status: "in_review", prNumber: 12, sessionStage: "pr_review", implementer },
+      { conversations: FIXING, tab: "reviewer" },
+    );
+
+    expect(within(feed()).getByText("Review the pull request")).toBeInTheDocument();
+    expect(screen.queryByText("Apply the findings")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Reply to the reviewer" })).toBeInTheDocument();
+  });
+
+  it("reads the conversation of an implementer whose session closed, without a composer", () => {
+    pane(
+      {
+        status: "in_review",
+        prNumber: 12,
+        sessionStage: "pr_review",
+        implementer: null,
+        implementerStarted: true,
+      },
+      { conversations: FIXING, tab: "implementer" },
+    );
+
+    expect(within(feed()).getByText("Apply the findings")).toBeInTheDocument();
+    expect(composer()).not.toBeInTheDocument();
+  });
+
+  it("puts the changed files at the end of both conversations", () => {
+    for (const tab of ["reviewer", "implementer"] as const) {
+      const { unmount } = pane(
+        {
+          status: "in_review",
+          prNumber: 12,
+          sessionStage: "pr_review",
+          implementer,
+          review: CHANGED,
+        },
+        { conversations: FIXING, tab },
+      );
+
+      expect(
+        within(feed()).getByRole("article", { name: "Changed files · 2" }),
+      ).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it("puts the live checks only at the end of the reviewer's conversation", () => {
+    const checks = {
+      status: "waiting_checks",
+      prNumber: 12,
+      sessionStage: "pr_review",
+      implementer,
+      checkedAt: new Date().toISOString(),
+      checks: [makePRCheck({ name: "unit", state: "running", completedAt: "" })],
+    };
+
+    const { unmount } = pane(checks, { conversations: FIXING, tab: "reviewer" });
+    expect(
+      within(feed()).getByRole("article", { name: "Waiting for checks · 0 of 1 passed" }),
+    ).toBeInTheDocument();
+    unmount();
+
+    pane(checks, { conversations: FIXING, tab: "implementer" });
+    expect(
+      within(feed()).queryByRole("article", { name: "Waiting for checks · 0 of 1 passed" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("anchors the findings card only in the conversation of the reviewer", () => {
+    const deciding = {
+      status: "awaiting_decision",
+      prNumber: 12,
+      sessionStage: "pr_review",
+      currentPass: 1,
+      reports: [FINDINGS],
+      implementer,
+    };
+
+    const { unmount } = pane(deciding, { conversations: FIXING, tab: "reviewer" });
+    expect(screen.getByRole("group", { name: "Findings of pass 1" })).toBeInTheDocument();
+    unmount();
+
+    pane(deciding, { conversations: FIXING, tab: "implementer" });
+    expect(screen.queryByRole("group", { name: "Findings of pass 1" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["reviewer", "pr_review", "Review the pull request"],
+    ["implementer", "pr_fix", "Apply the findings"],
+  ] as const)(
+    "reads the closed conversation of the %s on its tab once the review is done",
+    (tab, _, text) => {
+      pane(
+        { status: "done", prState: "open", prNumber: 12, sessionStage: "" },
+        { conversations: FIXING, tab },
+      );
+
+      expect(within(feed()).getByText(text)).toBeInTheDocument();
+      expect(composer()).not.toBeInTheDocument();
+      expect(screen.getByRole("tabpanel")).toBeInTheDocument();
+    },
+  );
 });

@@ -2,6 +2,7 @@ import { type MarkerView, mergedLineOf } from "@/features/chat/markers";
 import { discardedPass } from "@/features/task/pr-findings";
 import { draftAtHand, prBlockHint } from "@/features/task/pr-status";
 import { blockHint, currentStepOf, stepPhaseLabel } from "@/features/task/step-status";
+import { hasReviewConversation } from "@/lib/pull-requests";
 import { counted } from "@/lib/situations";
 import type { PRStatus, PullRequest, Step, TaskSummary } from "@/lib/wails";
 import {
@@ -12,6 +13,8 @@ import {
   asStepStatus,
   asTaskMode,
 } from "@/lib/wails";
+
+export { hasReviewConversation };
 
 /** PlaceView is what the place of a step or of the pull request shows (table O lugar sem conversa). */
 export type PlaceView =
@@ -213,11 +216,6 @@ export function prPlaceOf(
  */
 export function hasComposer(view: PlaceView): boolean {
   return view.kind === "conversation";
-}
-
-/** hasReviewConversation reports whether the review of the pull request has a conversation: the index of the conversations of the task lists it once the first pass started. */
-export function hasReviewConversation(task: TaskSummary): boolean {
-  return (task.conversations ?? []).some((conversation) => conversation.stage === "pr_review");
 }
 
 /** FixedCard is the card the screen draws at the end of a conversation, outside its transcript. */

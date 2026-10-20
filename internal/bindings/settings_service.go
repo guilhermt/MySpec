@@ -122,6 +122,27 @@ func (s *SettingsService) SetReviewModeDefault(mode string) error {
 	return nil
 }
 
+// SetPRReviewModeDefault stores who reviews the pull request of the tasks
+// created from now on: manual or agent.
+func (s *SettingsService) SetPRReviewModeDefault(mode string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
+	target, err := reviewmode.ParseMode(mode)
+	if err != nil {
+		return s.fail("SetPRReviewModeDefault", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.reviewModes.SetPRDefault(ctx, target); err != nil {
+		return s.failSetting("SetPRReviewModeDefault", err)
+	}
+	return nil
+}
+
 // ListPrompts says which prompts the user edited and when, without their text.
 func (s *SettingsService) ListPrompts() ([]PromptListing, error) {
 	s, err := s.late.resolve(s)

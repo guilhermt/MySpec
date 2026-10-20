@@ -3,6 +3,7 @@ import { loadingSteps, type PillModel, stepperOf } from "@/features/task/stepper
 import type { Place, PullRequest, Situation, Step, TaskSummary } from "@/lib/wails";
 import {
   makePRCheck,
+  makePRImplementer,
   makePullRequest,
   makeSituation,
   makeStep,
@@ -256,7 +257,11 @@ describe("stepperOf, the pill", () => {
         sessionStatus: "working",
         reports: reports(1),
       }),
-      pill("PR review", "PR agent working", { ...working, position: "pass 2" }),
+      pill("PR review", "Reviewer working", {
+        ...working,
+        position: "pass 2",
+        qualifier: "Manual",
+      }),
     ],
     [
       "PR review reviewing a structured pass, working",
@@ -268,7 +273,11 @@ describe("stepperOf, the pill", () => {
         currentPass: 2,
         reports: reports(2),
       }),
-      pill("PR review", "PR agent working", { ...working, position: "pass 2" }),
+      pill("PR review", "Reviewer working", {
+        ...working,
+        position: "pass 2",
+        qualifier: "Manual",
+      }),
     ],
     [
       "PR review awaiting_reply of a pass",
@@ -278,7 +287,7 @@ describe("stepperOf, the pill", () => {
         sessionStage: "pr_review",
         reports: reports(1),
       }),
-      pill("PR review", "idle", { position: "pass 2" }),
+      pill("PR review", "idle", { position: "pass 2", qualifier: "Manual" }),
     ],
     [
       "PR review committing",
@@ -291,9 +300,75 @@ describe("stepperOf, the pill", () => {
       pill("PR review", "committing", { ...working, position: "pass 1", qualifier: "committing" }),
     ],
     [
+      "PR review of the agent, reviewing before its first round",
+      inPR(
+        {
+          status: "reviewing",
+          prNumber: 1284,
+          sessionStage: "pr_review",
+          sessionStatus: "working",
+          reports: reports(0),
+        },
+        { prReviewMode: "agent" },
+      ),
+      pill("PR review", "Reviewer working", { ...working, position: "pass 1" }),
+    ],
+    [
+      "PR review of the agent, reviewing after a round",
+      inPR(
+        {
+          status: "reviewing",
+          prNumber: 1284,
+          sessionStage: "pr_review",
+          sessionStatus: "working",
+          reports: reports(2),
+          reviewRound: 2,
+        },
+        { prReviewMode: "agent" },
+      ),
+      pill("PR review", "Reviewer working", {
+        ...working,
+        position: "pass 3",
+        qualifier: "round 2/5",
+      }),
+    ],
+    [
+      "PR review addressing_review, the implementer working",
+      inPR(
+        {
+          status: "addressing_review",
+          prNumber: 1284,
+          sessionStage: "pr_review",
+          reports: reports(2),
+          reviewRound: 2,
+          implementer: makePRImplementer({ sessionStatus: "working" }),
+        },
+        { prReviewMode: "agent" },
+      ),
+      pill("PR review", "Implementer working", {
+        ...working,
+        position: "pass 2",
+        qualifier: "round 2/5",
+      }),
+    ],
+    [
+      "PR review committing, in the agent review",
+      inPR(
+        {
+          status: "committing",
+          prNumber: 1284,
+          sessionStage: "pr_review",
+          reports: reports(1),
+          reviewRound: 1,
+        },
+        { prReviewMode: "agent" },
+      ),
+      pill("PR review", "committing", { ...working, position: "pass 1", qualifier: "committing" }),
+    ],
+    [
       "PR review without work or situation",
       inPR({ status: "in_review", prNumber: 1284, sessionStage: "pr_review", reports: reports(2) }),
-      pill("PR review", "idle", { position: "pass 2" }),
+      pill("PR review", "idle", { position: "pass 2", qualifier: "Manual" }),
     ],
     [
       "Closing closing",
@@ -433,7 +508,11 @@ describe("stepperOf, the pill", () => {
         },
         { mode: "one_shot", steps: [makeStep({ status: "done" })] },
       ),
-      pill("PR review", "PR agent working", { ...working, position: "pass 1" }),
+      pill("PR review", "Reviewer working", {
+        ...working,
+        position: "pass 1",
+        qualifier: "Manual",
+      }),
     ],
   ])("%s", (_, task, expected) => {
     expect(stepperOf(task, NOW).pill).toEqual(expected);
@@ -652,7 +731,7 @@ describe("stepperOf, the nine scenes", () => {
         },
         { situations: [situation("findings", "waiting", place("pr"))] },
       ),
-      "✓ ✓ ✓ ✓ ✓ [PR review pass 1 ●] ○ Closing",
+      "✓ ✓ ✓ ✓ ✓ [PR review pass 1 · Manual ●] ○ Closing",
     ],
     [
       "close",

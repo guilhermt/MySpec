@@ -257,51 +257,54 @@ func FromTasks(
 			summary.Status = session.StatusWaiting
 		}
 		converted[i] = TaskSummary{
-			ID:                 t.ID,
-			Name:               t.Name,
-			RepositoryID:       t.RepositoryID,
-			Repository:         fullName,
-			Card:               fromTaskCard(t.Card),
-			Mode:               string(t.Mode),
-			Stage:              string(t.Stage),
-			Revisiting:         t.Revisiting,
-			ReviewMode:         string(t.ReviewModes.Default()),
-			ReviewModeEditable: flow.ReviewModeEditable(t, states),
-			SessionStatus:      string(summary.Status),
-			SessionModel:       string(summary.Choice.Model),
-			SessionEffort:      string(summary.Choice.Effort),
-			TurnRunning:        summary.TurnRunning,
-			ProcessRunning:     summary.ProcessRunning,
-			RetryAttempt:       summary.RetryAttempt,
-			RetryMax:           summary.RetryMax,
-			RetryAt:            timeOrEmpty(summary.RetryAt),
-			RetryReason:        summary.RetryReason,
-			TurnFailed:         summary.TurnFailed,
-			TurnStartedAt:      turnStart(summary),
-			PausedAt:           pausedAt(summary),
-			ActionLabel:        summary.ActionLabel,
-			ActionTarget:       summary.ActionTarget,
-			ContextPercent:     summary.ContextPercent,
-			PendingCount:       summary.PendingCount,
-			Corrections:        summary.Corrections,
-			HasPRD:             a.PRD,
-			HasTechSpec:        a.TechSpec,
-			HasOneShot:         a.OneShot,
-			Steps:              fromSteps(states),
-			CurrentStep:        currentStep(states),
-			PR:                 fromPullRequest(prPointer),
-			PlanProblems:       fromProblems(a.Plan.Problems),
-			Situations:         fromSituations(situations[t.ID]),
-			Models:             fromStageModels(flow.StageModels(t, states, prPointer)),
-			Conversations:      fromConversations(conversations(t.ID)),
-			Branch:             wt.Branch,
-			BaseBranch:         wt.Base,
-			WorktreePath:       wt.Path,
-			CanContinue:        t.Revisiting && a.Done(t.Stage) && summary.Idle,
-			ArtifactVersion:    t.ArtifactVersion,
-			LastError:          summary.LastError,
-			CreatedAt:          t.CreatedAt.Format(time.RFC3339),
-			UpdatedAt:          t.UpdatedAt.Format(time.RFC3339),
+			ID:                   t.ID,
+			Name:                 t.Name,
+			RepositoryID:         t.RepositoryID,
+			Repository:           fullName,
+			Card:                 fromTaskCard(t.Card),
+			Mode:                 string(t.Mode),
+			Stage:                string(t.Stage),
+			Revisiting:           t.Revisiting,
+			ReviewMode:           string(t.ReviewModes.Default()),
+			ReviewModeEditable:   flow.ReviewModeEditable(t, states),
+			PRReviewMode:         string(flow.PRReviewModeOf(t, prPointer)),
+			PRReviewModeEditable: flow.PRReviewModeEditable(t, prPointer),
+			PRReviewFallback:     prFallback(prPointer),
+			SessionStatus:        string(summary.Status),
+			SessionModel:         string(summary.Choice.Model),
+			SessionEffort:        string(summary.Choice.Effort),
+			TurnRunning:          summary.TurnRunning,
+			ProcessRunning:       summary.ProcessRunning,
+			RetryAttempt:         summary.RetryAttempt,
+			RetryMax:             summary.RetryMax,
+			RetryAt:              timeOrEmpty(summary.RetryAt),
+			RetryReason:          summary.RetryReason,
+			TurnFailed:           summary.TurnFailed,
+			TurnStartedAt:        turnStart(summary),
+			PausedAt:             pausedAt(summary),
+			ActionLabel:          summary.ActionLabel,
+			ActionTarget:         summary.ActionTarget,
+			ContextPercent:       summary.ContextPercent,
+			PendingCount:         summary.PendingCount,
+			Corrections:          summary.Corrections,
+			HasPRD:               a.PRD,
+			HasTechSpec:          a.TechSpec,
+			HasOneShot:           a.OneShot,
+			Steps:                fromSteps(states),
+			CurrentStep:          currentStep(states),
+			PR:                   fromPullRequest(prPointer),
+			PlanProblems:         fromProblems(a.Plan.Problems),
+			Situations:           fromSituations(situations[t.ID]),
+			Models:               fromStageModels(flow.StageModels(t, states, prPointer)),
+			Conversations:        fromConversations(conversations(t.ID)),
+			Branch:               wt.Branch,
+			BaseBranch:           wt.Base,
+			WorktreePath:         wt.Path,
+			CanContinue:          t.Revisiting && a.Done(t.Stage) && summary.Idle,
+			ArtifactVersion:      t.ArtifactVersion,
+			LastError:            summary.LastError,
+			CreatedAt:            t.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:            t.UpdatedAt.Format(time.RFC3339),
 		}
 	}
 	return converted
@@ -375,6 +378,10 @@ func fromPullRequest(pr *flow.PullRequest) *PullRequest {
 		CloneMissing: pr.CloneMissing,
 		Close:        fromCloseResult(pr.Close),
 
+		ReviewRound:        pr.Round,
+		Implementer:        fromAgentSession(pr.FixerStage, pr.Fixer),
+		ImplementerStarted: pr.FixerStarted,
+
 		SessionStage:   pr.SessionStage,
 		SessionStatus:  string(summary.Status),
 		SessionModel:   string(summary.Choice.Model),
@@ -394,6 +401,15 @@ func fromPullRequest(pr *flow.PullRequest) *PullRequest {
 		PendingCount:   summary.PendingCount,
 		LastError:      summary.LastError,
 	}
+}
+
+// prFallback is why the agent review of the pull request fell back to Manual;
+// "" without a pull request, or while the mode holds.
+func prFallback(pr *flow.PullRequest) string {
+	if pr == nil {
+		return ""
+	}
+	return string(pr.Fallback)
 }
 
 // fromTrouble converts what went wrong with a pull request, never with a nil
@@ -722,7 +738,7 @@ func fromSteps(states []flow.StepState) []Step {
 			ReviewRound:        state.ReviewRound,
 			ReportMissing:      state.ReportMissing,
 			Reports:            fromStepReports(state.Reports),
-			Reviewer:           fromStepReviewer(state.ReviewerStage, state.Reviewer),
+			Reviewer:           fromAgentSession(state.ReviewerStage, state.Reviewer),
 		}
 	}
 	return converted
@@ -740,13 +756,14 @@ func fromStepReports(reports []task.ReviewReport) []StepReport {
 	return converted
 }
 
-// fromStepReviewer converts the conversation that reviews a step, keeping nil
-// for a step that has none open.
-func fromStepReviewer(stage string, summary session.Summary) *StepReviewer {
+// fromAgentSession converts the second conversation of a place, the reviewer
+// of a step or the implementer of the review of a pull request, keeping nil
+// for one that has none open.
+func fromAgentSession(stage string, summary session.Summary) *AgentSession {
 	if stage == "" {
 		return nil
 	}
-	return &StepReviewer{
+	return &AgentSession{
 		SessionStage:   stage,
 		SessionStatus:  string(summary.Status),
 		SessionModel:   string(summary.Choice.Model),

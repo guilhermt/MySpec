@@ -33,7 +33,8 @@ import (
 // and the summary of a pass that was published, chainVersion the one that took
 // back the approval of the epics of the active discussions, roundsVersion the
 // one that brought the round of a draft, savedStatusesVersion the one that
-// brought the statuses saved with a board, and latestVersion the version the
+// brought the statuses saved with a board, prReviewFixesVersion the one that
+// brought the implementer of the review of a pull request, and latestVersion the version the
 // embedded migrations end at.
 const (
 	stagesVersion        = 3
@@ -49,7 +50,8 @@ const (
 	chainVersion         = 23
 	roundsVersion        = 24
 	savedStatusesVersion = 25
-	latestVersion        = 25
+	prReviewFixesVersion = 26
+	latestVersion        = 26
 )
 
 // upgradeTime is the instant the repositories of the fake upgrades are stamped
@@ -436,6 +438,9 @@ func TestMigrateLeavesTheTasksThatExistToTheUser(t *testing.T) {
 	// stage keeps the one it had.
 	want := maps.Clone(before)
 	want[models.StepReview] = models.Choice{Model: "claude-opus-5", Effort: models.High}
+	// The implementer of the review of the pull request starts with the choice
+	// of its reviewer.
+	want[models.Stage("pr_fix")] = before[models.PRReview]
 	if diff := cmp.Diff(want, gotModels.Stages); diff != "" {
 		t.Errorf("stages mismatch (-want +got):\n%s", diff)
 	}
@@ -619,6 +624,53 @@ func TestTheSavedStatusesMigrationTakesTheStatusesOfTheLastGoodReading(t *testin
 	}
 	if got := readOne(t, db, `SELECT saved_statuses FROM boards WHERE id = 'board-lonely'`); got != "" {
 		t.Errorf("a board without readings: saved_statuses = %q, want it empty", got)
+	}
+}
+
+func TestThePRReviewFixesMigrationGivesTheImplementerTheChoiceOfTheReview(t *testing.T) {
+	t.Parallel()
+
+	const choice = `{"model":"claude-sonnet-5","effort":"low"}`
+	db := openAt(t, prReviewFixesVersion-1)
+	const insertRepository = `INSERT INTO repositories (id, owner, name, path, created_at)
+		VALUES ('repo-1', 'acme', 'api', '/code/api', '2026-09-06T10:00:00Z')`
+	if _, err := db.ExecContext(t.Context(), insertRepository); err != nil {
+		t.Fatalf("seed repository: %v", err)
+	}
+	seed := func(id, models string) {
+		t.Helper()
+		const stmt = `INSERT INTO tasks
+			(id, repository_id, name, initial_context, stage, artifacts_dir, created_at, updated_at, models, review_modes)
+			VALUES (?, 'repo-1', ?, 'context', 'pr', '/data/x', '2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z', ?, '{"task":"agent"}')`
+		if _, err := db.ExecContext(t.Context(), stmt, id, id, models); err != nil {
+			t.Fatalf("seed task %s: %v", id, err)
+		}
+	}
+	seed("chosen", `{"stages":{"pr_review":`+choice+`,"prd":{"model":"claude-opus-5","effort":"high"}}}`)
+	seed("plain", `{"stages":{"prd":{"model":"claude-opus-5","effort":"high"}}}`)
+	if _, err := db.ExecContext(t.Context(), `INSERT INTO pr_runs (task_id, status, created_at, updated_at)
+		VALUES ('chosen', 'reviewing', '2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`); err != nil {
+		t.Fatalf("seed pr run: %v", err)
+	}
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), carryOver(t)); err != nil {
+		t.Fatalf("migrate() = %v, want nil", err)
+	}
+
+	if got := readOne(t, db, `SELECT json_extract(models, '$.stages.pr_fix') FROM tasks WHERE id = 'chosen'`); got != choice {
+		t.Errorf("pr_fix = %q, want %q", got, choice)
+	}
+	if got := readOne(t, db, `SELECT json_extract(models, '$.stages.pr_review') FROM tasks WHERE id = 'chosen'`); got != choice {
+		t.Errorf("pr_review = %q, want %q kept", got, choice)
+	}
+	if got := readOne(t, db, `SELECT COALESCE(json_extract(models, '$.stages.pr_fix'), '') FROM tasks WHERE id = 'plain'`); got != "" {
+		t.Errorf("pr_fix of a task without a choice = %q, want none", got)
+	}
+	if got := readOne(t, db, `SELECT review_fallback FROM pr_runs WHERE task_id = 'chosen'`); got != "" {
+		t.Errorf("review_fallback = %q, want it empty", got)
+	}
+	if got := readOne(t, db, `SELECT review_modes FROM tasks WHERE id = 'chosen'`); got != `{"task":"agent"}` {
+		t.Errorf("review_modes = %q, want it unchanged", got)
 	}
 }
 

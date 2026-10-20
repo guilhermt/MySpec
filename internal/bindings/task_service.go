@@ -117,6 +117,10 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 	if err != nil {
 		return "", s.fail("CreateTask", err)
 	}
+	prReviewMode, err := reviewModeOf(s.reviewModes.PRDefault(), req.PRReviewMode)
+	if err != nil {
+		return "", s.fail("CreateTask", err)
+	}
 	mode, err := modeOf(req.Mode)
 	if err != nil {
 		return "", s.fail("CreateTask", err)
@@ -165,6 +169,7 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 		InitialContext: initialContext,
 		Models:         set,
 		ReviewMode:     reviewMode,
+		PRReviewMode:   prReviewMode,
 		Card:           taskCard,
 	})
 	if errors.Is(err, task.ErrNameTaken) {
@@ -471,7 +476,7 @@ func (s *TaskService) SetStepModel(taskID string, step int, model, effort string
 
 // SetSessionModel changes the model and effort of a session from its next
 // message on. The stage names the session: prd, tech_spec, plan, one_shot,
-// step:<n>, step_review:<n>, pr or pr_review.
+// step:<n>, step_review:<n>, pr, pr_review or pr_fix.
 func (s *TaskService) SetSessionModel(taskID, stage, model, effort string) error {
 	s, err := s.late.resolve(s)
 	if err != nil {
@@ -508,6 +513,27 @@ func (s *TaskService) SetReviewMode(taskID, mode string) error {
 
 	if err := s.flow.SetReviewMode(ctx, taskID, target); err != nil {
 		return s.fail("SetReviewMode", err)
+	}
+	return nil
+}
+
+// SetPRReviewMode changes who reviews the pull request of a task whose review
+// has not started.
+func (s *TaskService) SetPRReviewMode(taskID, mode string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
+	target, err := reviewmode.ParseMode(mode)
+	if err != nil {
+		return s.fail("SetPRReviewMode", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.SetPRReviewMode(ctx, taskID, target); err != nil {
+		return s.fail("SetPRReviewMode", err)
 	}
 	return nil
 }
@@ -560,6 +586,22 @@ func (s *TaskService) ReviewStepMyself(taskID string) error {
 
 	if err := s.flow.ReviewStepMyself(ctx, taskID); err != nil {
 		return s.fail("ReviewStepMyself", err)
+	}
+	return nil
+}
+
+// ReviewPRMyself takes the review of the pull request of a task back from the
+// agent.
+func (s *TaskService) ReviewPRMyself(taskID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.ReviewPRMyself(ctx, taskID); err != nil {
+		return s.fail("ReviewPRMyself", err)
 	}
 	return nil
 }
@@ -1076,6 +1118,9 @@ var userMessages = []struct {
 	{flow.ErrReviewModeLocked, "Every step of this task has already started."},
 	{flow.ErrAgentReviewing, "The agent is reviewing this step. Review it yourself to approve it."},
 	{flow.ErrNoAgentReview, "The agent isn't reviewing this step."},
+	{flow.ErrPRReviewModeLocked, "The review of this pull request has already started."},
+	{flow.ErrAgentReviewsPR, "The agent is reviewing this pull request. Take it over with Review myself first."},
+	{flow.ErrNoAgentPRReview, "The agent isn't reviewing this pull request."},
 	{flow.ErrNotDeciding, "These findings can't change now: they went to the agent, or a new pass started."},
 	{flow.ErrNotDecided, "Decide every finding first."},
 	{flow.ErrNothingApproved, "No finding is approved."},

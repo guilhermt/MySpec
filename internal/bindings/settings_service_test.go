@@ -133,6 +133,28 @@ func TestSetReviewModeDefaultChangesTheDefaultOfTheState(t *testing.T) {
 	}
 }
 
+func TestSetPRReviewModeDefaultChangesTheDefaultOfTheState(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	if err := f.settings.SetPRReviewModeDefault("agent"); err != nil {
+		t.Fatalf("SetPRReviewModeDefault() = %v, want nil", err)
+	}
+
+	state := f.state.GetState()
+	if state.PRReviewModeDefault != "agent" || state.ReviewModeDefault != "manual" {
+		t.Errorf("State = prReviewModeDefault %q reviewModeDefault %q, want agent and manual",
+			state.PRReviewModeDefault, state.ReviewModeDefault)
+	}
+
+	if err := f.settings.SetPRReviewModeDefault("auto"); err == nil || err.Error() != "Unknown review mode." {
+		t.Errorf("SetPRReviewModeDefault(auto) error = %v, want the unknown review mode notice", err)
+	}
+	if got := f.reviewModes.PRDefault(); got != reviewmode.Agent {
+		t.Errorf("PRDefault() = %q, want the last valid mode kept", got)
+	}
+}
+
 func TestSetReviewModeDefaultRejectsAnUnknownMode(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -459,8 +481,9 @@ func TestTheSettersOfADefaultSayWhenTheDiskIsFull(t *testing.T) {
 			want := "no space left on the disk of " + shown + ". Free some space, then try again."
 
 			for name, set := range map[string]func() error{
-				"SetModelDefault":      func() error { return service.SetModelDefault("prd", "sonnet", "high") },
-				"SetReviewModeDefault": func() error { return service.SetReviewModeDefault("agent") },
+				"SetModelDefault":        func() error { return service.SetModelDefault("prd", "sonnet", "high") },
+				"SetReviewModeDefault":   func() error { return service.SetReviewModeDefault("agent") },
+				"SetPRReviewModeDefault": func() error { return service.SetPRReviewModeDefault("agent") },
 			} {
 				if err := set(); err == nil || err.Error() != want {
 					t.Errorf("%s() = %v, want %q", name, err, want)

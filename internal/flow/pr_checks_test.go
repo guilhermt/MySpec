@@ -253,14 +253,14 @@ func TestReviewAgainWaitsForTheChecks(t *testing.T) {
 				t.Errorf("status = %q, want waiting_checks", run.Status)
 			}
 			f.waitRead(t, before)
-			if f.reviewOpen() {
-				t.Error("the review session opened while a check was pending")
+			if got := len(f.tasks.PRPasses("task-1")); got != 1 {
+				t.Errorf("passes = %d while a check was pending, want the first only", got)
 			}
 
 			f.gh.setPR("task-1", withChecks(passedChecks()))
-			f.pollUntil(t, "the session of the second pass", func() bool {
-				info, ok := f.sessions.info(reviewKeyOf)
-				return ok && f.reviewOpen() && info.ReviewPath == f.reviewPath(2)
+			f.pollUntil(t, "the second pass", func() bool {
+				passes := f.tasks.PRPasses("task-1")
+				return len(passes) == 2 && f.reviewOpen()
 			})
 		})
 	}

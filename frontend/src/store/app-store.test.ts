@@ -18,6 +18,7 @@ import type {
 import { sessionKey } from "@/lib/wails";
 import {
   initialNav,
+  PR_TAB_SLOT,
   readLastItem,
   stepTabKey,
   storedDraft,
@@ -80,6 +81,7 @@ import {
   makeLeftover,
   makeMigration,
   makeModelCatalog,
+  makePRImplementer,
   makePullRequest,
   makeRepository,
   makeReviewCenter,
@@ -978,6 +980,115 @@ describe("step tabs", () => {
     expect(useAppStore.getState().openStepTab).toEqual({
       [stepTabKey(WEB_TASK.id, 1)]: "implementer",
     });
+  });
+});
+
+// A task in the review of its pull request, with the conversation of the reviewer unless told otherwise.
+function withReview(
+  pr: Partial<PullRequest> = {},
+  options: { situations?: Situation[]; reviewed?: boolean } = {},
+) {
+  return withTasks({
+    tasks: [
+      {
+        ...WEB_TASK,
+        stage: "pr",
+        situations: options.situations ?? [],
+        conversations:
+          options.reviewed === false ? [] : [makeTaskConversation({ stage: "pr_review" })],
+        pr: makePullRequest({ status: "in_review", sessionStage: "pr_review", prNumber: 7, ...pr }),
+      },
+    ],
+  });
+}
+
+const FIX_PLACE: Place = { kind: "pr_fix", stage: "", step: 0 };
+
+describe("tabs of the review of the pull request", () => {
+  it("opens on the tab of firstPRTab and keeps the tab the user picks, in the slot of the PR", () => {
+    const { result } = renderHook(() => useOpenStepTab(WEB_TASK.id));
+
+    act(() => {
+      useAppStore
+        .getState()
+        .applyState(withReview({ status: "addressing_review", implementer: makePRImplementer() }));
+    });
+    expect(result.current).toBe("implementer");
+
+    act(() => {
+      useAppStore.getState().selectStepTab(WEB_TASK.id, PR_TAB_SLOT, "reviewer");
+      useAppStore
+        .getState()
+        .applyState(withReview({ status: "addressing_review", implementer: makePRImplementer() }));
+    });
+    expect(result.current).toBe("reviewer");
+    expect(useAppStore.getState().openStepTab).toEqual({
+      [stepTabKey(WEB_TASK.id, PR_TAB_SLOT)]: "reviewer",
+    });
+  });
+
+  it("opens on the reviewer before the reviewer has its conversation", () => {
+    const { result } = renderHook(() => useOpenStepTab(WEB_TASK.id));
+
+    act(() => {
+      useAppStore.getState().applyState(withReview({ status: "drafting" }, { reviewed: false }));
+      useAppStore.getState().selectStepTab(WEB_TASK.id, PR_TAB_SLOT, "implementer");
+    });
+
+    expect(result.current).toBe("reviewer");
+  });
+
+  it("opens the implementer tab for a situation of the implementer, and the reviewer's for the pull request's", () => {
+    const { result } = renderHook(() => useOpenStepTab(WEB_TASK.id));
+    act(() => {
+      useAppStore.getState().applyState(withReview());
+    });
+
+    act(() => {
+      useAppStore.getState().openSituation(WEB_TASK.id, FIX_PLACE);
+    });
+    expect(result.current).toBe("implementer");
+
+    act(() => {
+      useAppStore.getState().openSituation(WEB_TASK.id, PR_PLACE);
+    });
+    expect(result.current).toBe("reviewer");
+    expect(useAppStore.getState().openStepTab).toEqual({
+      [stepTabKey(WEB_TASK.id, PR_TAB_SLOT)]: "reviewer",
+    });
+  });
+
+  it("is the situation of the tab on screen: the implementer's question only on its tab", () => {
+    const { result } = renderHook(() => useOnScreenSituationId());
+    const situations = [
+      makeSituation({ id: "s-pr", kind: "question", place: PR_PLACE }),
+      makeSituation({ id: "s-fix", kind: "question", place: FIX_PLACE }),
+    ];
+
+    act(() => {
+      useAppStore.getState().applyState(withReview({}, { situations }));
+      useAppStore.getState().openTask(WEB_TASK.id);
+      useAppStore.getState().selectStepTab(WEB_TASK.id, PR_TAB_SLOT, "reviewer");
+    });
+    expect(result.current).toBe("s-pr");
+
+    act(() => {
+      useAppStore.getState().selectStepTab(WEB_TASK.id, PR_TAB_SLOT, "implementer");
+    });
+    expect(result.current).toBe("s-fix");
+  });
+
+  it("is the pull request's situation on both tabs when no conversation asks", () => {
+    const { result } = renderHook(() => useOnScreenSituationId());
+    const findings = makeSituation({ id: "s-findings", kind: "findings", place: PR_PLACE });
+
+    act(() => {
+      useAppStore.getState().applyState(withReview({}, { situations: [findings] }));
+      useAppStore.getState().openTask(WEB_TASK.id);
+      useAppStore.getState().selectStepTab(WEB_TASK.id, PR_TAB_SLOT, "implementer");
+    });
+
+    expect(result.current).toBe("s-findings");
   });
 });
 

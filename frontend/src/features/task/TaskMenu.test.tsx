@@ -61,6 +61,19 @@ describe("TaskMenu", () => {
     expect(api.reviewStepMyself).toHaveBeenCalledWith("task-1");
   });
 
+  it("takes the review of the pull request back from the agent at once", async () => {
+    const { user } = menu({
+      stage: "pr",
+      prReviewMode: "agent",
+      pr: makePullRequest({ status: "reviewing", prNumber: 12 }),
+    });
+    await openMenu(user);
+
+    await user.click(screen.getByRole("menuitem", { name: "Review myself" }));
+
+    expect(api.reviewPRMyself).toHaveBeenCalledWith("task-1");
+  });
+
   it("asks before discarding the step", async () => {
     const { user } = menu(IMPLEMENTING);
     await openMenu(user);

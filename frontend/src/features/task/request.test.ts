@@ -17,10 +17,11 @@ import {
   taskRequestOf,
 } from "@/features/task/request";
 import { cloneMissingText } from "@/lib/repositories";
-import type { Entry, PullRequest, Situation, Step, StepReviewer, TaskSummary } from "@/lib/wails";
+import type { AgentSession, Entry, PullRequest, Situation, Step, TaskSummary } from "@/lib/wails";
 import type { PrDraft, StepTab } from "@/store/app-store";
 import {
   makeEntry,
+  makePRImplementer,
   makePRReport,
   makePullRequest,
   makeRepository,
@@ -30,6 +31,7 @@ import {
   makeStep,
   makeStepReviewer,
   makeTask,
+  makeTaskConversation,
 } from "@/test/wails-mock";
 
 const NOW = Date.parse("2026-09-27T15:00:00Z");
@@ -436,7 +438,7 @@ describe("taskRequestOf and pausedRequestOf", () => {
         label: "Ready to apply",
         place: "PR review · pass 1",
         time: WAIT,
-        progress: "1 approved finding goes to the agent",
+        progress: "1 approved finding goes to the implementer",
         status: "Ready to apply · PR review · pass 1",
         actions: [APPLY_FINDINGS],
         situationId: "s-findings",
@@ -835,7 +837,7 @@ describe("taskRequestOf and pausedRequestOf", () => {
 
     expect(taskRequestOf(task, "implementer", NOW)).toMatchObject({
       label: "Waiting for reply",
-      place: "PR review",
+      place: "Reviewer",
       progress: "no heading for the finding 3",
       progressTooltip: "no heading for the finding 3",
     });
@@ -937,7 +939,7 @@ const STEP_4 = { kind: "step", stage: "", step: 4 };
 const REVIEWER_4 = { kind: "step_review", stage: "", step: 4 };
 const stagePlace = (stage: string) => ({ kind: "stage", stage, step: 0 });
 
-const reviewer = (overrides: Partial<StepReviewer> = {}) =>
+const reviewer = (overrides: Partial<AgentSession> = {}) =>
   makeStepReviewer({ sessionStage: "step_review:4", ...overrides });
 
 // stepTask is a task in step 4, under a pass of the agent review: it has both tabs.
@@ -1128,8 +1130,8 @@ describe("sessionRequestOf", () => {
         form: "tinted",
         glyph: "wait",
         label: "Waiting for reply",
-        place: "PR review",
-        status: "Waiting for reply · PR review",
+        place: "Reviewer",
+        status: "Waiting for reply · Reviewer",
         actions: [],
         situationId: "s-reply",
         focus: "composer",
@@ -1272,9 +1274,9 @@ describe("sessionRequestOf", () => {
         form: "error",
         glyph: "error",
         label: "Session error",
-        place: "PR review",
-        status: "Session error · PR review",
-        actions: [retry("Retry PR agent", "pr_review")],
+        place: "Reviewer",
+        status: "Session error · Reviewer",
+        actions: [retry("Retry reviewer", "pr_review")],
         situationId: "s-session_error",
         focus: "primary",
       },
@@ -1486,7 +1488,8 @@ describe("retryLabelOf", () => {
     ["step:4", "Retry implementer"],
     ["step_review:4", "Retry reviewer"],
     ["pr", "Retry PR agent"],
-    ["pr_review", "Retry PR agent"],
+    ["pr_review", "Retry reviewer"],
+    ["pr_fix", "Retry implementer"],
     ["", "Retry"],
   ])("names the retry of %s", (stage, label) => {
     expect(retryLabelOf(stage)).toBe(label);
@@ -1514,6 +1517,7 @@ describe("otherConversationOf", () => {
         label: "The reviewer waits · Question",
         goLabel: "Go to reviewer",
         goTab: "reviewer",
+        slot: 4,
         status: "The reviewer waits · Question",
         situationId: "reviewer-question",
         time: TIME,
@@ -1528,6 +1532,7 @@ describe("otherConversationOf", () => {
         label: "The reviewer waits · Permission",
         goLabel: "Go to reviewer",
         goTab: "reviewer",
+        slot: 4,
         status: "The reviewer waits · Permission",
         situationId: "reviewer-permission",
         time: TIME,
@@ -1542,6 +1547,7 @@ describe("otherConversationOf", () => {
         label: "The reviewer waits · Reply",
         goLabel: "Go to reviewer",
         goTab: "reviewer",
+        slot: 4,
         status: "The reviewer waits · Reply",
         situationId: "reviewer-reply",
         time: TIME,
@@ -1556,6 +1562,7 @@ describe("otherConversationOf", () => {
         label: "Session error · Reviewer",
         goLabel: "Go to reviewer",
         goTab: "reviewer",
+        slot: 4,
         status: "Session error · Reviewer",
         situationId: "reviewer-session_error",
         time: TIME,
@@ -1570,6 +1577,7 @@ describe("otherConversationOf", () => {
         label: "The implementer waits · Question",
         goLabel: "Go to implementer",
         goTab: "implementer",
+        slot: 4,
         status: "The implementer waits · Question",
         situationId: "step-question",
         time: TIME,
@@ -1584,6 +1592,7 @@ describe("otherConversationOf", () => {
         label: "Session error · Implementer",
         goLabel: "Go to implementer",
         goTab: "implementer",
+        slot: 4,
         status: "Session error · Implementer",
         situationId: "step-session_error",
         time: TIME,
@@ -1696,5 +1705,193 @@ describe("screenStageOf", () => {
     ["the PR stage before its session", makeTask({ stage: "pr", pr: null }), "implementer", ""],
   ])("is %s", (_name, task, tab, stage) => {
     expect(screenStageOf(task, tab)).toBe(stage);
+  });
+});
+
+describe("the request of the review of the pull request with two conversations", () => {
+  const FIX_PLACE = { kind: "pr_fix", stage: "", step: 0 };
+  const reviewed = (
+    task: Partial<TaskSummary> = {},
+    pr: Partial<PullRequest> = {},
+    situations: Situation[] = [],
+  ): TaskSummary =>
+    makeTask({
+      stage: "pr",
+      prReviewMode: "agent",
+      conversations: [makeTaskConversation({ stage: "pr_review" })],
+      pr: makePullRequest({
+        status: "addressing_review",
+        prNumber: 1284,
+        sessionStage: "pr_review",
+        implementer: makePRImplementer(),
+        ...pr,
+      }),
+      situations,
+      ...task,
+    });
+  const ofReviewer = (kind: string, group = "waiting") => situation(kind, group, "", PR_PLACE);
+  const ofFix = (kind: string, group = "waiting") => situation(kind, group, "", FIX_PLACE);
+
+  describe("screenStageOf", () => {
+    it.each<[string, StepTab, string]>([
+      ["the implementer's tab", "implementer", "pr_fix"],
+      ["the reviewer's tab", "reviewer", "pr_review"],
+    ])("is the conversation of %s", (_name, tab, stage) => {
+      expect(screenStageOf(reviewed(), tab)).toBe(stage);
+    });
+
+    it("falls back to the reviewer's conversation once the review closed its session", () => {
+      expect(screenStageOf(reviewed({}, { sessionStage: "" }), "reviewer")).toBe("pr_review");
+    });
+  });
+
+  describe("the bar by tab", () => {
+    it("asks the implementer's question only on its tab", () => {
+      const task = reviewed({}, { implementer: makePRImplementer() }, [ofFix("question")]);
+
+      expect(taskRequestOf(task, "implementer", NOW)).toMatchObject({
+        label: "Question",
+        place: "Implementer",
+      });
+      expect(taskRequestOf(task, "reviewer", NOW)).toBeNull();
+    });
+
+    it("asks the reviewer's question only on its tab", () => {
+      const task = reviewed({}, {}, [ofReviewer("question")]);
+
+      expect(taskRequestOf(task, "reviewer", NOW)).toMatchObject({
+        label: "Question",
+        place: "Reviewer",
+      });
+      expect(taskRequestOf(task, "implementer", NOW)).toBeNull();
+    });
+
+    it("draws the findings on both tabs", () => {
+      const task = reviewed({}, { status: "awaiting_decision", currentPass: 1 }, [
+        situation("findings", "waiting", "text"),
+      ]);
+
+      expect(taskRequestOf(task, "reviewer", NOW)?.label).toBe("Decide findings");
+      expect(taskRequestOf(task, "implementer", NOW)?.label).toBe("Decide findings");
+    });
+
+    it("names the retry of the implementer's session that stopped", () => {
+      const task = reviewed(
+        {},
+        { implementer: makePRImplementer({ lastError: "claude exited" }) },
+        [ofFix("session_error", "error")],
+      );
+
+      expect(taskRequestOf(task, "implementer", NOW)).toMatchObject({
+        label: "Session error",
+        place: "Implementer",
+        actions: [retry("Retry implementer", "pr_fix")],
+      });
+    });
+  });
+
+  describe("situationSession", () => {
+    it("is the session of the implementer, with its error", () => {
+      const task = reviewed({}, { implementer: makePRImplementer({ lastError: "boom" }) });
+
+      expect(situationSession(ofFix("session_error", "error"), task)).toEqual({
+        stage: "pr_fix",
+        lastError: "boom",
+      });
+    });
+  });
+
+  describe("conversationName", () => {
+    it.each([
+      ["pr_review", "Reviewer"],
+      ["pr_fix", "Implementer"],
+    ])("calls %s %s", (stage, name) => {
+      expect(conversationName(stage)).toBe(name);
+    });
+  });
+
+  describe("otherConversationOf", () => {
+    it("points to the implementer's question from the reviewer's tab, in the slot of the PR", () => {
+      const task = reviewed({}, {}, [ofFix("question")]);
+
+      expect(otherConversationOf(task, "reviewer", NOW)).toEqual({
+        failed: false,
+        label: "The implementer waits · Question",
+        goLabel: "Go to implementer",
+        goTab: "implementer",
+        slot: 0,
+        status: "The implementer waits · Question",
+        situationId: "s-question",
+        time: { short: "9m", long: "9 minutes" },
+      });
+    });
+
+    it("points to the reviewer's session error from the implementer's tab", () => {
+      const task = reviewed({}, {}, [ofReviewer("session_error", "error")]);
+
+      expect(otherConversationOf(task, "implementer", NOW)).toMatchObject({
+        failed: true,
+        label: "Session error · Reviewer",
+        goLabel: "Go to reviewer",
+        goTab: "reviewer",
+        slot: 0,
+      });
+    });
+
+    it.each<[string, StepTab, Situation[]]>([
+      ["both conversations ask", "reviewer", [ofReviewer("question"), ofFix("question")]],
+      ["the conversation on screen asks", "reviewer", [ofReviewer("question")]],
+      ["nothing asks", "implementer", []],
+      [
+        "the pull request asks for the findings, on both tabs",
+        "reviewer",
+        [ofReviewer("findings")],
+      ],
+      [
+        "the pull request asks for the findings, on the other tab",
+        "implementer",
+        [ofReviewer("findings")],
+      ],
+    ])("is none when %s", (_name, tab, situations) => {
+      expect(otherConversationOf(reviewed({}, {}, situations), tab, NOW)).toBeNull();
+    });
+
+    it("is none before the reviewer has its conversation", () => {
+      const task = reviewed({ conversations: [] }, {}, [ofFix("question")]);
+
+      expect(otherConversationOf(task, "reviewer", NOW)).toBeNull();
+    });
+  });
+
+  describe("the fallback of the agent review on the bar", () => {
+    it("tells the commit that didn't happen on the changes to review", () => {
+      const task = reviewed(
+        { prReviewMode: "manual", prReviewFallback: "commit_failed" },
+        {
+          status: "in_review",
+          review: staged(2, 3),
+        },
+      );
+      const found = situation("changes_review", "waiting", "");
+
+      expect(taskRequestOf({ ...task, situations: [found] }, "reviewer", NOW)?.progress).toBe(
+        "2 of 3 files staged · 67% · the commit after the agent review didn't happen",
+      );
+    });
+
+    it("keeps the changes bar as it was for the other fallbacks", () => {
+      const task = reviewed(
+        { prReviewMode: "manual", prReviewFallback: "taken_over" },
+        {
+          status: "in_review",
+          review: staged(2, 3),
+        },
+      );
+      const found = situation("changes_review", "waiting", "");
+
+      expect(taskRequestOf({ ...task, situations: [found] }, "reviewer", NOW)?.progress).toBe(
+        "2 of 3 files staged · 67%",
+      );
+    });
   });
 });

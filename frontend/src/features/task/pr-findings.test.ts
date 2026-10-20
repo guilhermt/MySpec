@@ -184,6 +184,37 @@ describe("findingsNotes", () => {
   });
 });
 
+describe("findingsBar and the fallback of the agent review", () => {
+  const decided = pr("awaiting_decision", [report(["approved", "approved", "discarded"])]);
+
+  it("adds why the review fell back to Manual after five rounds, before the notes", () => {
+    const bar = findingsBar(
+      { ...decided, review: makeReview({ total: 1 }) },
+      "apply",
+      "rounds_exhausted",
+    );
+
+    expect(bar.progress).toBe(
+      "2 approved findings go to the implementer · the agent review didn't come clean after five rounds · the worktree has changes",
+    );
+  });
+
+  it.each(["", "taken_over", "commit_failed"] as const)(
+    "doesn't add a reason for the fallback %j",
+    (fallback) => {
+      expect(findingsBar(decided, "apply", fallback).progress).toBe(
+        "2 approved findings go to the implementer",
+      );
+    },
+  );
+
+  it("doesn't add the reason to the findings still to decide", () => {
+    const open = pr("awaiting_decision", [report(["approved", "", ""])]);
+
+    expect(findingsBar(open, "decide", "rounds_exhausted").progress).toBe("1 of 3 decided");
+  });
+});
+
 describe("findingsBar", () => {
   const NEXT = expect.objectContaining({ action: "nextToDecide", shortcut: "Alt ↓" });
 
@@ -248,8 +279,8 @@ describe("findingsBar", () => {
   });
 
   it.each([
-    [1, "1 approved finding goes to the agent"],
-    [2, "2 approved findings go to the agent"],
+    [1, "1 approved finding goes to the implementer"],
+    [2, "2 approved findings go to the implementer"],
   ])("draws the findings ready to apply with %i approved", (count, progress) => {
     const bar = findingsBar(
       pr("awaiting_decision", [report([...Array(count).fill("approved"), "discarded"])]),
@@ -313,7 +344,7 @@ describe("disabledNote", () => {
   const [approved, discarded, open] = sent.findings ?? [];
 
   it.each([
-    ["an approved finding", approved, `Sent to the agent · ${clockTime(SENT_AT, NOW)}`],
+    ["an approved finding", approved, `Sent to the implementer · ${clockTime(SENT_AT, NOW)}`],
     ["a discarded finding", discarded, "Not sent"],
     ["a finding not decided", open, "Not sent"],
   ])("says where %s went", (_name, finding, note) => {
@@ -324,7 +355,7 @@ describe("disabledNote", () => {
     const pass = report(["approved"]);
 
     expect(disabledNote(pass, pass.findings?.[0] ?? makeReviewFinding(), NOW)).toBe(
-      "Sent to the agent",
+      "Sent to the implementer",
     );
   });
 });
@@ -349,7 +380,7 @@ describe("prComposerContext", () => {
   const text = pr("awaiting_decision", [makeTextPRReport(1, false)]);
   const discarded = pr("done", [report(["discarded"])]);
   const REST: ComposerContext = {
-    who: "PR agent",
+    who: "reviewer",
     paused: false,
     stopped: false,
     turnFailed: false,
@@ -367,29 +398,48 @@ describe("prComposerContext", () => {
   };
 
   it.each<[string, PullRequest, SituationKind, string]>([
-    ["a pass in text", text, "findings", "Tell the PR agent which findings to apply…"],
+    ["a pass in text", text, "findings", "Tell the reviewer which findings to apply…"],
     [
       "findings to decide",
       structured,
       "findings",
-      "Ask the PR agent to add, change or drop a finding…",
+      "Ask the reviewer to add, change or drop a finding…",
     ],
     [
       "every finding discarded",
       discarded,
       "merge",
-      "Ask the PR agent to add, change or drop a finding…",
+      "Ask the reviewer to add, change or drop a finding…",
     ],
-    ["a merge with a pass in text", text, "merge", "Reply to the PR agent…"],
-    ["the changes to review", structured, "changes_review", "Ask the PR agent for a change…"],
+    ["a merge with a pass in text", text, "merge", "Reply to the reviewer…"],
+    ["the changes to review", structured, "changes_review", "Ask the reviewer for a change…"],
   ])("says what to write with %s", (_name, request, kind, placeholder) => {
     const task = makeTask({ stage: "pr", pr: request });
 
-    expect(placeholderOf({ ...REST, ...prComposerContext(task, kind) })).toBe(placeholder);
+    expect(placeholderOf({ ...REST, ...prComposerContext(task, kind, "reviewer") })).toBe(
+      placeholder,
+    );
+  });
+
+  it.each<[string, PullRequest, SituationKind | null]>([
+    ["a pass in text", text, "findings"],
+    ["findings to decide", structured, "findings"],
+    ["every finding discarded", discarded, "merge"],
+    ["the changes to review", structured, "changes_review"],
+    ["a merge", text, "merge"],
+    ["no situation", structured, null],
+  ])("always asks the implementer for a change, with %s", (_name, request, kind) => {
+    const task = makeTask({ stage: "pr", pr: request });
+    const context = prComposerContext(task, kind, "implementer");
+
+    expect(context).toEqual({ findings: false, reviseFindings: false, askForChange: true });
+    expect(placeholderOf({ ...REST, who: "implementer", ...context })).toBe(
+      "Ask the implementer for a change…",
+    );
   });
 
   it("asks for nothing without a situation", () => {
-    expect(prComposerContext(makeTask({ stage: "pr", pr: structured }), null)).toEqual({
+    expect(prComposerContext(makeTask({ stage: "pr", pr: structured }), null, "reviewer")).toEqual({
       findings: false,
       reviseFindings: false,
       askForChange: false,

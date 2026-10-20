@@ -4,6 +4,7 @@ import {
   canDiscardDraft,
   canOpenPR,
   canReviewAgain,
+  canReviewPRMyself,
   closeHint,
   draftAtHand,
   prBlockHint,
@@ -11,7 +12,11 @@ import {
   prStatusTone,
   reviewAgainRefusal,
 } from "@/features/task/pr-status";
-import { makePullRequest, makeRepository } from "@/test/wails-mock";
+import type { PullRequest, TaskSummary } from "@/lib/wails";
+import { makePRImplementer, makePullRequest, makeRepository, makeTask } from "@/test/wails-mock";
+
+const taskOf = (pr: Partial<PullRequest>, task: Partial<TaskSummary> = {}) =>
+  makeTask({ pr: makePullRequest(pr), ...task });
 
 const DRAFT = { title: "Add the login form", body: "Adds the form.", file: "draft.md" };
 
@@ -24,6 +29,7 @@ describe("prStatusLabel and prStatusTone", () => {
     ["awaiting_reply", "Waiting for your reply", "idle"],
     ["opening", "Opening the pull request", "working"],
     ["reviewing", "Reviewing the pull request", "working"],
+    ["addressing_review", "Addressing the review", "working"],
     ["waiting_checks", "Waiting for checks", "working"],
     ["awaiting_decision", "Waiting for your decision", "idle"],
     ["in_review", "In review", "idle"],
@@ -108,20 +114,20 @@ describe("what the pull request allows", () => {
   });
 
   it("reviews again from every state the pull request exists in", () => {
-    expect(canReviewAgain(makePullRequest({ status: "awaiting_decision" }))).toBe(true);
-    expect(canReviewAgain(makePullRequest({ status: "done" }))).toBe(true);
-    expect(canReviewAgain(makePullRequest({ status: "trouble" }))).toBe(true);
-    expect(canReviewAgain(makePullRequest({ status: "merged" }))).toBe(true);
-    expect(canReviewAgain(makePullRequest({ status: "draft_ready" }))).toBe(false);
-    expect(canReviewAgain(makePullRequest({ status: "waiting_checks", prNumber: 12 }))).toBe(false);
-    expect(canReviewAgain(makePullRequest({ status: "pr_closed" }))).toBe(false);
-    expect(canReviewAgain(makePullRequest({ status: "closing" }))).toBe(false);
-    expect(canReviewAgain(makePullRequest({ status: "closed" }))).toBe(false);
+    expect(canReviewAgain(taskOf({ status: "awaiting_decision" }))).toBe(true);
+    expect(canReviewAgain(taskOf({ status: "done" }))).toBe(true);
+    expect(canReviewAgain(taskOf({ status: "trouble" }))).toBe(true);
+    expect(canReviewAgain(taskOf({ status: "merged" }))).toBe(true);
+    expect(canReviewAgain(taskOf({ status: "draft_ready" }))).toBe(false);
+    expect(canReviewAgain(taskOf({ status: "waiting_checks", prNumber: 12 }))).toBe(false);
+    expect(canReviewAgain(taskOf({ status: "pr_closed" }))).toBe(false);
+    expect(canReviewAgain(taskOf({ status: "closing" }))).toBe(false);
+    expect(canReviewAgain(taskOf({ status: "closed" }))).toBe(false);
   });
 
   it("reviews again while the agent waits for a reply over an open pull request", () => {
-    expect(canReviewAgain(makePullRequest({ status: "awaiting_reply", prNumber: 12 }))).toBe(true);
-    expect(canReviewAgain(makePullRequest({ status: "awaiting_reply" }))).toBe(false);
+    expect(canReviewAgain(taskOf({ status: "awaiting_reply", prNumber: 12 }))).toBe(true);
+    expect(canReviewAgain(taskOf({ status: "awaiting_reply" }))).toBe(false);
   });
 
   it("closes only when the backend says the closing is the user's to ask for", () => {
@@ -167,6 +173,30 @@ describe("prBlockHint", () => {
   });
 });
 
+describe("canReviewPRMyself", () => {
+  const agent = (pr: Partial<PullRequest>) =>
+    taskOf({ status: "reviewing", prNumber: 12, ...pr }, { prReviewMode: "agent" });
+
+  it("takes the review back while the agent runs it over an open pull request", () => {
+    expect(canReviewPRMyself(agent({}))).toBe(true);
+    expect(canReviewPRMyself(agent({ status: "addressing_review", prState: "open" }))).toBe(true);
+  });
+
+  it.each([
+    ["in Manual mode", taskOf({ status: "reviewing", prNumber: 12 })],
+    ["without a task pull request", makeTask({ pr: null, prReviewMode: "agent" })],
+    ["before the pull request exists", agent({ prNumber: 0 })],
+    ["once GitHub says merged", agent({ prState: "merged" })],
+    ["once GitHub says closed", agent({ prState: "closed" })],
+    ["in merged", agent({ status: "merged" })],
+    ["in pr_closed", agent({ status: "pr_closed" })],
+    ["in closing", agent({ status: "closing" })],
+    ["in closed", agent({ status: "closed" })],
+  ])("refuses %s", (_, task) => {
+    expect(canReviewPRMyself(task)).toBe(false);
+  });
+});
+
 describe("reviewAgainRefusal", () => {
   it.each([
     ["waiting_checks", 12, "a pass waits for the checks"],
@@ -178,6 +208,50 @@ describe("reviewAgainRefusal", () => {
     ["done", 12, null],
     ["awaiting_reply", 12, null],
   ])("refuses a pass in %s with %s", (status, prNumber, reason) => {
-    expect(reviewAgainRefusal(makePullRequest({ status, prNumber }))).toBe(reason);
+    expect(reviewAgainRefusal(taskOf({ status, prNumber }))).toBe(reason);
+  });
+
+  it.each(["reviewing", "addressing_review", "awaiting_decision", "in_review", "committing"])(
+    "tells the user to take over the agent review in %s",
+    (status) => {
+      const task = taskOf({ status, prNumber: 12 }, { prReviewMode: "agent" });
+
+      expect(reviewAgainRefusal(task)).toBe(
+        "The agent is reviewing the pull request. Take it over with Review myself first.",
+      );
+      expect(canReviewAgain(task)).toBe(false);
+    },
+  );
+
+  it.each(["done", "trouble", "merged"])(
+    "lets an agent review be asked again once it is %s",
+    (status) => {
+      const task = taskOf({ status, prNumber: 12 }, { prReviewMode: "agent" });
+
+      expect(reviewAgainRefusal(task)).toBeNull();
+      expect(canReviewAgain(task)).toBe(true);
+    },
+  );
+
+  it.each([
+    ["pr_closed", "the pull request was closed"],
+    ["blocked", "the pull request stage is blocked"],
+    ["closing", "the task is closing"],
+  ])("gives an agent review in %s the reason of its state", (status, reason) => {
+    const task = taskOf({ status, prNumber: 12 }, { prReviewMode: "agent" });
+
+    expect(reviewAgainRefusal(task)).toBe(reason);
+    expect(canReviewAgain(task)).toBe(false);
+  });
+
+  it("refuses while the implementer works", () => {
+    const task = taskOf({
+      status: "awaiting_decision",
+      prNumber: 12,
+      implementer: makePRImplementer({ turnRunning: true }),
+    });
+
+    expect(reviewAgainRefusal(task)).toBe("The implementer is still working.");
+    expect(canReviewAgain(task)).toBe(false);
   });
 });

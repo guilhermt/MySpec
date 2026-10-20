@@ -41,9 +41,11 @@ var (
 var (
 	structuredModelStages = []models.Stage{
 		models.PRD, models.TechSpec, models.Plan, models.Implementation, models.StepReview, models.PR, models.PRReview,
+		models.PRFix,
 	}
 	oneShotModelStages = []models.Stage{
 		models.OneShot, models.Implementation, models.StepReview, models.PR, models.PRReview,
+		models.PRFix,
 	}
 )
 

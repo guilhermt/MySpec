@@ -187,6 +187,7 @@ func TestEachModeHasItsStagesWithAChoiceOfModel(t *testing.T) {
 
 	structured := []models.Stage{
 		models.PRD, models.TechSpec, models.Plan, models.Implementation, models.StepReview, models.PR, models.PRReview,
+		models.PRFix,
 	}
 	tests := map[string]struct {
 		mode task.Mode
@@ -195,7 +196,7 @@ func TestEachModeHasItsStagesWithAChoiceOfModel(t *testing.T) {
 		"structured": {mode: task.ModeStructured, want: structured},
 		"one-shot": {
 			mode: task.ModeOneShot,
-			want: []models.Stage{models.OneShot, models.Implementation, models.StepReview, models.PR, models.PRReview},
+			want: []models.Stage{models.OneShot, models.Implementation, models.StepReview, models.PR, models.PRReview, models.PRFix},
 		},
 		"no mode": {mode: "", want: structured},
 	}

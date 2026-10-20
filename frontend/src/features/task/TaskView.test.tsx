@@ -9,6 +9,7 @@ import type { TranscriptState } from "@/store/transcript";
 import { renderWithStore } from "@/test/render";
 import {
   makeEntry,
+  makePRImplementer,
   makePRReport,
   makePullRequest,
   makeReview,
@@ -385,6 +386,115 @@ describe("TaskView", () => {
       expect(api.getTranscript).toHaveBeenCalledWith("task-1", "pr_review");
     });
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  describe("the two conversations of the review of the pull request", () => {
+    const REVIEWED = [
+      makeTaskConversation({ stage: "pr" }),
+      makeTaskConversation({ stage: "pr_review" }),
+    ];
+    const agentReview = (pr: Partial<PullRequest> = {}) =>
+      view({
+        stage: "pr",
+        prReviewMode: "agent",
+        conversations: REVIEWED,
+        pr: makePullRequest({
+          status: "addressing_review",
+          prNumber: 12,
+          sessionStage: "pr_review",
+          reviewRound: 1,
+          implementer: makePRImplementer({ sessionStatus: "working" }),
+          ...pr,
+        }),
+      });
+
+    it("puts the agent tabs over the conversation, on the implementer's while it addresses the review", async () => {
+      agentReview();
+
+      const tablist = await screen.findByRole("tablist", { name: "Conversations" });
+      expect(within(tablist).getByRole("tab", { selected: true })).toHaveAccessibleName(
+        "Implementer: starting",
+      );
+      expect(screen.getByRole("tabpanel")).toHaveAttribute("id", AGENT_CONVERSATION);
+      await waitFor(() => {
+        expect(api.getTranscript).toHaveBeenCalledWith("task-1", "pr_fix");
+      });
+      expect(api.getTranscript).not.toHaveBeenCalledWith("task-1", "pr_review");
+    });
+
+    it("fetches the conversation of the reviewer when its tab opens, once", async () => {
+      const { user } = agentReview();
+      await waitFor(() => {
+        expect(api.getTranscript).toHaveBeenCalledWith("task-1", "pr_fix");
+      });
+
+      await user.click(screen.getByRole("tab", { name: /^Reviewer/ }));
+
+      await waitFor(() => {
+        expect(api.getTranscript).toHaveBeenCalledWith("task-1", "pr_review");
+      });
+      expect(useAppStore.getState().openStepTab["task-1|0"]).toBe("reviewer");
+    });
+
+    it("has no tabs before the reviewer's conversation exists", () => {
+      view({ stage: "pr", pr: makePullRequest({ status: "drafting", sessionStage: "pr" }) });
+
+      expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    });
+
+    it("reads the closed conversation of the implementer on its tab once the pull request is merged", async () => {
+      const { user } = view({
+        stage: "pr",
+        prReviewMode: "agent",
+        conversations: [...REVIEWED, makeTaskConversation({ stage: "pr_fix" })],
+        pr: makePullRequest({
+          status: "merged",
+          prState: "merged",
+          prNumber: 12,
+          sessionStage: "",
+          implementerStarted: true,
+        }),
+      });
+      await waitFor(() => {
+        expect(api.getTranscript).toHaveBeenCalledWith("task-1", "pr_review");
+      });
+
+      await user.click(screen.getByRole("tab", { name: /^Implementer/ }));
+
+      await waitFor(() => {
+        expect(api.getTranscript).toHaveBeenCalledWith("task-1", "pr_fix");
+      });
+      expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    });
+
+    it("points to the question of the implementer from the reviewer's tab, and goes to it", async () => {
+      const task = makeTask({
+        stage: "pr",
+        prReviewMode: "agent",
+        conversations: REVIEWED,
+        situations: [
+          makeSituation({
+            id: "fix-question",
+            kind: "question",
+            place: { kind: "pr_fix", stage: "", step: 0 },
+          }),
+        ],
+        pr: makePullRequest({
+          status: "addressing_review",
+          prNumber: 12,
+          sessionStage: "pr_review",
+          implementer: makePRImplementer({ sessionStatus: "needs_answer" }),
+        }),
+      });
+      const { user } = renderWithStore(<TaskView taskId="task-1" />, {
+        state: makeState({ tasks: [task] }),
+        ui: { location: { kind: "task", id: "task-1" }, openStepTab: { "task-1|0": "reviewer" } },
+      });
+
+      await user.click(await screen.findByRole("button", { name: "Go to implementer" }));
+
+      expect(useAppStore.getState().openStepTab["task-1|0"]).toBe("implementer");
+    });
   });
 
   it("announces the place that changes with the screen open, and not the one it arrives on", () => {

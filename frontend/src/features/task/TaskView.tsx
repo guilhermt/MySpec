@@ -1,12 +1,13 @@
-import { type KeyboardEvent, useEffect, useRef } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useRef } from "react";
 import { ArrivalFocus } from "@/components/ArrivalFocus";
 import { PanelLayout } from "@/components/system/AuxPanel";
+import { useNow } from "@/features/attention/useNow";
 import { Conversation } from "@/features/chat/Conversation";
 import { COLUMN_CLASS } from "@/features/chat/ConversationColumn";
 import { IDLE_SESSION } from "@/features/chat/session";
-import { AgentTabs } from "@/features/task/AgentTabs";
+import { AgentTabs, useStoredFirstTab } from "@/features/task/AgentTabs";
 import { ArtifactsPanel } from "@/features/task/ArtifactsPanel";
-import { agentTabsOf } from "@/features/task/agent-tabs";
+import { agentTabsOf, firstTab, prAgentTabsOf } from "@/features/task/agent-tabs";
 import { CardPanel } from "@/features/task/CardPanel";
 import { DetailsPanel } from "@/features/task/DetailsPanel";
 import { earlierPlace } from "@/features/task/details";
@@ -31,9 +32,16 @@ import { useTaskRequest } from "@/features/task/useTaskRequest";
 import { focusFindingToDecide } from "@/lib/focus";
 import { modalOpen } from "@/lib/layers";
 import { prOf } from "@/lib/pull-requests";
-import { asTaskStage, type Step, sessionKey, type TaskSummary } from "@/lib/wails";
+import {
+  asTaskStage,
+  type PullRequest,
+  type Step,
+  sessionKey,
+  type TaskSummary,
+} from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
 import {
+  PR_TAB_SLOT,
   type StepTab,
   useAppStore,
   useEarlierConversation,
@@ -41,19 +49,70 @@ import {
   usePanel,
   useTask,
 } from "@/store/app-store";
+import { firstPRTab, firstPRTabDecided, firstTabDecided } from "@/store/step-tab";
+
+const MINUTE = 60_000;
+
+/** TabsTop is the row of agent tabs over a conversation, in the conversation column. */
+function TabsTop({ children }: { children: ReactNode }) {
+  return (
+    <div className="shrink-0 px-(--space-6) pt-(--space-1)">
+      <div className={COLUMN_CLASS}>{children}</div>
+    </div>
+  );
+}
 
 /** StepTop is what sits over the conversation of the step: the agent tabs, in the conversation column. */
-function StepTop({ task, step }: { task: TaskSummary; step: Step }) {
-  // Only whether there are tabs matters here: AgentTabs says which one is chosen.
-  if (agentTabsOf(task, step, "implementer", 0) === null) {
+export function StepTop({ task, step }: { task: TaskSummary; step: Step }) {
+  const chosen = useOpenStepTab(task.id);
+  const now = useNow(MINUTE, true);
+  const selectStepTab = useAppStore((state) => state.selectStepTab);
+  const tabs = agentTabsOf(task, step, chosen, now);
+  useStoredFirstTab(
+    task.id,
+    step.number,
+    tabs !== null && firstTabDecided(task, step),
+    firstTab(task, step),
+  );
+  if (tabs === null) {
     return null;
   }
   return (
-    <div className="shrink-0 px-(--space-6) pt-(--space-1)">
-      <div className={COLUMN_CLASS}>
-        <AgentTabs task={task} step={step} />
-      </div>
-    </div>
+    <TabsTop>
+      <AgentTabs
+        task={task}
+        tabs={tabs}
+        chosen={chosen}
+        onSelect={(tab) => selectStepTab(task.id, step.number, tab)}
+      />
+    </TabsTop>
+  );
+}
+
+/** PRTop is what sits over the conversation of the review of the pull request: the agent tabs, in the conversation column. */
+export function PRTop({ task, pr }: { task: TaskSummary; pr: PullRequest }) {
+  const chosen = useOpenStepTab(task.id);
+  const now = useNow(MINUTE, true);
+  const selectStepTab = useAppStore((state) => state.selectStepTab);
+  const tabs = prAgentTabsOf(task, pr, chosen, now);
+  useStoredFirstTab(
+    task.id,
+    PR_TAB_SLOT,
+    tabs !== null && firstPRTabDecided(task, pr),
+    firstPRTab(task, pr),
+  );
+  if (tabs === null) {
+    return null;
+  }
+  return (
+    <TabsTop>
+      <AgentTabs
+        task={task}
+        tabs={tabs}
+        chosen={chosen}
+        onSelect={(tab) => selectStepTab(task.id, PR_TAB_SLOT, tab)}
+      />
+    </TabsTop>
   );
 }
 
@@ -137,12 +196,7 @@ export function TaskView({ taskId }: TaskViewProps) {
   // of the step that runs in the implementation stage, the pull request in the
   // PR one. Both open a session of their own only once they get that far. Past
   // its review, the pull request reads the conversation of the review, closed.
-  const closedReview =
-    task !== null &&
-    opening &&
-    pr !== null &&
-    prPlaceOf(task, pr, hasReviewConversation(task)).kind === "closedReview";
-  const stage = task === null ? "" : closedReview ? "pr_review" : screenStageOf(task, stepTab);
+  const stage = task === null ? "" : screenStageOf(task, stepTab);
   const hasConversation =
     task !== null && (implementing ? hasStepSession(step) : opening ? stage !== "" : true);
   // A conversation that couldn't be read is settled too: the focus lands without it.
@@ -227,7 +281,12 @@ export function TaskView({ taskId }: TaskViewProps) {
             <StepPane task={task} />
           </>
         ) : opening ? (
-          pr !== null && <PRPane task={task} pr={pr} tab={stepTab} />
+          pr !== null && (
+            <>
+              <PRTop task={task} pr={pr} />
+              <PRPane task={task} pr={pr} tab={stepTab} />
+            </>
+          )
         ) : (
           <>
             <Conversation

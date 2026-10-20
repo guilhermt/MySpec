@@ -221,7 +221,7 @@ function cardRows(state: string, task: TaskSummary): Row[] {
 }
 
 // ASK_FOR_FINDINGS is what the composer says while a structured pass is decided.
-const ASK_FOR_FINDINGS = /^Ask the PR agent to add, change or drop a finding…$/;
+const ASK_FOR_FINDINGS = /^Ask the reviewer to add, change or drop a finding…$/;
 
 // REPORTED is the conversation of the review with the milestone of the report, the one that opens it.
 const REPORTED: Record<string, TranscriptState> = {
@@ -1051,7 +1051,7 @@ const ROWS: Row[] = [
     state: "a pass in text",
     task: inPR(IN_TEXT, "findings"),
     where: "placeholder",
-    name: /^Tell the PR agent which findings to apply…$/,
+    name: /^Tell the reviewer which findings to apply…$/,
   },
   {
     origin: "ReportLink",

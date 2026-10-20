@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { type ReviewModeNote, reviewModeNote } from "@/features/review-mode/review-mode-note";
+import {
+  prReviewModeNote,
+  type ReviewModeNote,
+  reviewModeNote,
+} from "@/features/review-mode/review-mode-note";
 import type { Step, TaskSummary } from "@/lib/wails";
 import { makeStep, makeTask } from "@/test/wails-mock";
 
@@ -63,5 +67,38 @@ describe("reviewModeNote", () => {
     ],
   ])("says %s", (_, task, note) => {
     expect(reviewModeNote(task)).toEqual(note);
+  });
+});
+
+describe("prReviewModeNote", () => {
+  it.each<[string, Partial<TaskSummary>, ReviewModeNote]>([
+    [
+      "before the review starts",
+      { prReviewModeEditable: true },
+      { text: "Applies to the review of the pull request, before it starts.", disabled: false },
+    ],
+    [
+      "once the review started",
+      { prReviewModeEditable: false, prReviewFallback: "" },
+      { text: "The PR review has started, so the mode can't change.", disabled: true },
+    ],
+    [
+      "after a takeover",
+      { prReviewModeEditable: false, prReviewFallback: "taken_over" },
+      {
+        text: "The review fell back to Manual: taken over from the agent review.",
+        disabled: true,
+      },
+    ],
+    [
+      "after the rounds ran out",
+      { prReviewModeEditable: false, prReviewFallback: "rounds_exhausted" },
+      {
+        text: "The review fell back to Manual: the agent review didn't come clean after five rounds.",
+        disabled: true,
+      },
+    ],
+  ])("says what the mode applies to %s", (_, task, note) => {
+    expect(prReviewModeNote(makeTask(task))).toEqual(note);
   });
 });

@@ -888,7 +888,7 @@ describe("task actions", () => {
   });
 
   it("lists the prompts and lets the failure through", async () => {
-    expect(await listPrompts()).toHaveLength(9);
+    expect(await listPrompts()).toHaveLength(10);
 
     vi.mocked(api.listPrompts).mockRejectedValueOnce(new Error("no prompts"));
 
@@ -919,6 +919,7 @@ describe("createTask", () => {
       mode: "",
       models: [],
       reviewMode: "",
+      prReviewMode: "",
       card: null,
     });
 
@@ -936,6 +937,7 @@ describe("createTask", () => {
         mode: "",
         models: [],
         reviewMode: "",
+        prReviewMode: "",
         card: null,
       }),
     ).rejects.toThrow("claude is not logged in");

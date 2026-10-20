@@ -11,10 +11,69 @@ import { SaveFailure } from "@/features/task/SaveFailure";
 import { catalogModels, choiceOf } from "@/lib/models";
 import { reviewModeLabel } from "@/lib/review-modes";
 import { asCatalogFailure, asReviewMode, type ReviewMode, type StageModel } from "@/lib/wails";
-import { setReviewModeDefaultInPlace } from "@/store/actions";
+import { setPRReviewModeDefaultInPlace, setReviewModeDefaultInPlace } from "@/store/actions";
 import { useAppStore, useModelCatalog } from "@/store/app-store";
 
 const NO_MODELS: readonly StageModel[] = [];
+
+interface ModeSaving {
+  saving: ReviewMode | null;
+  failure: { mode: ReviewMode; message: string } | null;
+  choose: (mode: ReviewMode) => Promise<void>;
+}
+
+// useModeSaving holds the saving and the failure of one row of review mode.
+function useModeSaving(save: (mode: ReviewMode) => Promise<string | null>): ModeSaving {
+  const [saving, setSaving] = useState<ReviewMode | null>(null);
+  const [failure, setFailure] = useState<{ mode: ReviewMode; message: string } | null>(null);
+  const choose = async (mode: ReviewMode) => {
+    setSaving(mode);
+    setFailure(null);
+    const message = await save(mode);
+    setSaving(null);
+    if (message !== null) setFailure({ mode, message });
+  };
+  return { saving, failure, choose };
+}
+
+interface ReviewModeRowProps {
+  title: string;
+  sentence: string;
+  label: string;
+  subject: "steps" | "pr";
+  value: ReviewMode;
+  state: ModeSaving;
+}
+
+// ReviewModeRow is one subject of the review mode: its caption, the options and the failure to save.
+function ReviewModeRow({ title, sentence, label, subject, value, state }: ReviewModeRowProps) {
+  const { saving, failure, choose } = state;
+  return (
+    <div className="flex flex-col gap-(--space-2)">
+      <p className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
+        <span className="font-medium text-ink-2">{title}</span>
+        {" · "}
+        <span>{sentence}</span>
+      </p>
+      <ReviewModeOptions
+        subject={subject}
+        label={label}
+        value={value}
+        saving={saving}
+        layout="row"
+        onChoose={(mode) => void choose(mode)}
+      />
+      {failure !== null && (
+        <SaveFailure
+          onRetry={() => void choose(failure.mode)}
+          className="text-(length:--text-meta) leading-(--leading-meta)"
+        >
+          {`Couldn't save ${reviewModeLabel(failure.mode)}: ${failure.message}`}
+        </SaveFailure>
+      )}
+    </div>
+  );
+}
 
 /** Defaults is what a new task starts with: who reviews its steps, and the model and effort of each stage. */
 export function Defaults() {
@@ -26,40 +85,32 @@ export function Defaults() {
   const reading = catalogModels(catalog).length === 0 && failure === "";
   const notice = catalogModels(catalog).length === 0 ? catalogNotice(failure) : null;
   const reviewMode = useAppStore((state) => asReviewMode(state.app?.reviewModeDefault ?? ""));
-  const [saving, setSaving] = useState<ReviewMode | null>(null);
-  const [saveFailure, setSaveFailure] = useState<{ mode: ReviewMode; message: string } | null>(
-    null,
-  );
-
-  const choose = async (mode: ReviewMode) => {
-    setSaving(mode);
-    setSaveFailure(null);
-    const message = await setReviewModeDefaultInPlace(mode);
-    setSaving(null);
-    if (message !== null) setSaveFailure({ mode, message });
-  };
+  const prReviewMode = useAppStore((state) => asReviewMode(state.app?.prReviewModeDefault ?? ""));
+  const steps = useModeSaving(setReviewModeDefaultInPlace);
+  const pr = useModeSaving(setPRReviewModeDefaultInPlace);
 
   return (
     <SettingsPage
       title="Defaults"
       sentence="What a new task, review or discussion starts with. A change applies to what you create after it; nothing that runs changes."
     >
-      <SettingsBlock title="Review mode" sentence="Who reviews the steps of a new task">
-        <ReviewModeOptions
+      <SettingsBlock title="Review mode">
+        <ReviewModeRow
+          title="Step review"
+          sentence="Who reviews the steps of a new task"
           label="Review mode of a new task"
+          subject="steps"
           value={reviewMode}
-          saving={saving}
-          layout="row"
-          onChoose={(mode) => void choose(mode)}
+          state={steps}
         />
-        {saveFailure !== null && (
-          <SaveFailure
-            onRetry={() => void choose(saveFailure.mode)}
-            className="text-(length:--text-meta) leading-(--leading-meta)"
-          >
-            {`Couldn't save ${reviewModeLabel(saveFailure.mode)}: ${saveFailure.message}`}
-          </SaveFailure>
-        )}
+        <ReviewModeRow
+          title="PR review"
+          sentence="Who reviews the pull request of a new task"
+          label="PR review mode of a new task"
+          subject="pr"
+          value={prReviewMode}
+          state={pr}
+        />
       </SettingsBlock>
       <SettingsBlock
         title="Models"
@@ -111,8 +162,8 @@ export function Defaults() {
           ))}
         </div>
         <p className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
-          A commit runs in the session of its step or of its pull request review, with that
-          session's model and effort.
+          A commit runs in the session of its step or of the implementer of its pull request review,
+          with that session's model and effort.
         </p>
       </SettingsBlock>
     </SettingsPage>

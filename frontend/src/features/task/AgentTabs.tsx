@@ -1,20 +1,33 @@
 import { useEffect } from "react";
 import { StateGlyph } from "@/components/system/StateGlyph";
 import { Tabs } from "@/components/system/Tabs";
-import { useNow } from "@/features/attention/useNow";
-import { type AgentTabModel, agentTabsOf, firstTab } from "@/features/task/agent-tabs";
-import { asSituationGroup, type Step, type TaskSummary } from "@/lib/wails";
-import { stepTabKey, useAppStore, useFlashing, useOpenStepTab } from "@/store/app-store";
-import { firstTabDecided } from "@/store/step-tab";
-
-const MINUTE = 60_000;
+import type { AgentTabModel } from "@/features/task/agent-tabs";
+import { asSituationGroup, type TaskSummary } from "@/lib/wails";
+import { type StepTab, stepTabKey, useAppStore, useFlashing } from "@/store/app-store";
 
 /** AGENT_CONVERSATION is the id of the conversation the tabs switch. */
 export const AGENT_CONVERSATION = "agent-conversation";
 
+/**
+ * useStoredFirstTab stores the first tab of a slot once it has grounds to be picked: from then on
+ * the product never moves between the tabs on its own. Before that, and without a situation on
+ * either side, the first tab is only a guess to have something to display, and it waits, unstored.
+ */
+export function useStoredFirstTab(taskId: string, slot: number, decided: boolean, first: StepTab) {
+  const stored = useAppStore((state) => state.openStepTab[stepTabKey(taskId, slot)] !== undefined);
+  const selectStepTab = useAppStore((state) => state.selectStepTab);
+  useEffect(() => {
+    if (decided && !stored) {
+      selectStepTab(taskId, slot, first);
+    }
+  }, [decided, stored, selectStepTab, taskId, slot, first]);
+}
+
 export interface AgentTabsProps {
   task: TaskSummary;
-  step: Step;
+  tabs: AgentTabModel[];
+  chosen: StepTab;
+  onSelect: (tab: StepTab) => void;
 }
 
 // The flash takes the veil of the gravity of the situation of the tab.
@@ -29,40 +42,18 @@ function flashOf(tab: AgentTabModel, task: TaskSummary, flashing: ReadonlySet<st
 }
 
 /**
- * AgentTabs switches the conversation of a step between the agent that implements it and the one
- * that reviews it, from the first review pass to the commit.
+ * AgentTabs switches a conversation between the agent that implements and the one that reviews:
+ * in a step, from the first review pass to the commit; in the pull request, from the reviewer's
+ * conversation on.
  */
-export function AgentTabs({ task, step }: AgentTabsProps) {
-  const chosen = useOpenStepTab(task.id);
-  const stored = useAppStore(
-    (state) => state.openStepTab[stepTabKey(task.id, step.number)] !== undefined,
-  );
-  const selectStepTab = useAppStore((state) => state.selectStepTab);
+export function AgentTabs({ task, tabs, chosen, onSelect }: AgentTabsProps) {
   const flashing = useFlashing();
-  const now = useNow(MINUTE, true);
-  const tabs = agentTabsOf(task, step, chosen, now);
-  const shown = tabs !== null;
-
-  // The first opening stores the choice, and from then on the product never moves between the
-  // tabs on its own. Before the reviewer's session starts and without a situation on either side,
-  // firstTab only guesses "implementer" to have something to display; that guess waits, unstored,
-  // until firstTab has real grounds to decide.
-  useEffect(() => {
-    if (shown && !stored && firstTabDecided(task, step)) {
-      selectStepTab(task.id, step.number, firstTab(task, step));
-    }
-  }, [shown, stored, selectStepTab, task, step]);
-
-  if (tabs === null) {
-    return null;
-  }
-
   return (
     <Tabs
       label="Conversations"
       controls={AGENT_CONVERSATION}
       value={chosen}
-      onValueChange={(tab) => selectStepTab(task.id, step.number, tab)}
+      onValueChange={onSelect}
       items={tabs.map((tab) => ({
         id: tab.tab,
         label: tab.name,
@@ -71,7 +62,7 @@ export function AgentTabs({ task, step }: AgentTabsProps) {
           ? { word: { text: tab.word, tone: tab.word === "error" ? "error" : "wait" } as const }
           : {}),
         disabled: tab.disabled,
-        ...(tab.disabled ? { disabledLabel: "starts with pass 1" } : {}),
+        ...(tab.disabled ? { disabledLabel: tab.disabledLabel } : {}),
         accessibleName: tab.label,
         tooltip: tab.label,
         flash: tab.tab === chosen ? null : flashOf(tab, task, flashing),

@@ -1,14 +1,24 @@
 import type { SessionState } from "@/features/chat/session";
 import type { StepperGlyph } from "@/features/task/stepper";
+import { hasReviewConversation, isReviewed } from "@/lib/pull-requests";
 import {
+  isSessionKind,
   lowerFirst,
+  prFixSituation,
+  prSituation,
   reviewerSituation,
   situationLabel,
   spokenWait,
   stepSituation,
 } from "@/lib/situations";
-import type { Situation, Step, TaskSummary } from "@/lib/wails";
-import { asSessionStatus, asSituationGroup, asSituationKind, asStepStatus } from "@/lib/wails";
+import type { PullRequest, Situation, Step, TaskSummary } from "@/lib/wails";
+import {
+  asReviewMode,
+  asSessionStatus,
+  asSituationGroup,
+  asSituationKind,
+  asStepStatus,
+} from "@/lib/wails";
 import type { StepTab } from "@/store/app-store";
 
 export { firstTab } from "@/store/step-tab";
@@ -21,8 +31,10 @@ export interface AgentTabModel {
   glyph: StepperGlyph | "idle";
   /** word is said only on the tab not chosen: waits, error, or nothing. */
   word: "" | "waits" | "error";
-  /** disabled is the reviewer tab before its session: Reviewer · starts with pass 1. */
+  /** disabled is a tab before its session: Reviewer · starts with pass 1. */
   disabled: boolean;
+  /** disabledLabel is what a disabled tab says it waits for: "starts with pass 1". */
+  disabledLabel: string;
   /** label is "<Name>: <state>", the accessible name and the tooltip. */
   label: string;
   /** situationId is the situation of the conversation, for the flash. */
@@ -83,6 +95,7 @@ function tabOf(
     glyph,
     word,
     disabled: false,
+    disabledLabel: "",
     label: `${name}: ${stateOf(session, situation, now)}`,
     situationId: situation?.id ?? null,
   };
@@ -122,9 +135,73 @@ export function agentTabsOf(
           glyph: "idle" as const,
           word: "" as const,
           disabled: true,
+          disabledLabel: "starts with pass 1",
           label: "Reviewer: starts with pass 1",
           situationId: null,
         }
       : tabOf("reviewer", step.reviewer, reviewerSituation(task, step.number), chosen, now);
+  return [implementer, reviewer];
+}
+
+// implementerWaits is what the implementer tab of the pull request says before its session exists:
+// past the review, the implementer that never started never will.
+function implementerWaits(task: TaskSummary, pr: PullRequest): string {
+  if (isReviewed(pr)) {
+    return "never started";
+  }
+  return asReviewMode(task.prReviewMode) === "agent"
+    ? "starts with round 1"
+    : "starts with Apply approved";
+}
+
+/**
+ * prAgentTabsOf is the two tabs of the review of the pull request: they exist once the reviewer has
+ * its conversation, and stay after the review ends, when both conversations are read-only. null
+ * before.
+ */
+export function prAgentTabsOf(
+  task: TaskSummary,
+  pr: PullRequest,
+  chosen: StepTab,
+  now: number,
+): AgentTabModel[] | null {
+  if (!hasReviewConversation(task)) {
+    return null;
+  }
+  const ofPR = prSituation(task);
+  const reviewer = tabOf(
+    "reviewer",
+    pr,
+    ofPR !== null && isSessionKind(ofPR) ? ofPR : null,
+    chosen,
+    now,
+  );
+  let implementer: AgentTabModel;
+  if (pr.implementer !== null) {
+    implementer = tabOf("implementer", pr.implementer, prFixSituation(task), chosen, now);
+  } else if (pr.implementerStarted) {
+    implementer = {
+      tab: "implementer",
+      name: "Implementer",
+      glyph: "idle",
+      word: "",
+      disabled: false,
+      disabledLabel: "",
+      label: "Implementer: idle",
+      situationId: null,
+    };
+  } else {
+    const waits = implementerWaits(task, pr);
+    implementer = {
+      tab: "implementer",
+      name: "Implementer",
+      glyph: "idle",
+      word: "",
+      disabled: true,
+      disabledLabel: waits,
+      label: `Implementer: ${waits}`,
+      situationId: null,
+    };
+  }
   return [implementer, reviewer];
 }

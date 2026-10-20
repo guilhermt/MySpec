@@ -282,6 +282,14 @@ export function ReviewAgain(taskID: string): $CancellablePromise<void> {
 }
 
 /**
+ * ReviewPRMyself takes the review of the pull request of a task back from the
+ * agent.
+ */
+export function ReviewPRMyself(taskID: string): $CancellablePromise<void> {
+    return $Call.ByID(1203767924, taskID);
+}
+
+/**
  * ReviewStepMyself takes the review of the current step of a task back from
  * the agent.
  */
@@ -306,6 +314,14 @@ export function SetPRFindingText(taskID: string, pass: number, $number: number, 
 }
 
 /**
+ * SetPRReviewMode changes who reviews the pull request of a task whose review
+ * has not started.
+ */
+export function SetPRReviewMode(taskID: string, mode: string): $CancellablePromise<void> {
+    return $Call.ByID(3952048399, taskID, mode);
+}
+
+/**
  * SetReviewMode changes who reviews the steps of a task that are still to
  * start and have no mode of their own.
  */
@@ -316,7 +332,7 @@ export function SetReviewMode(taskID: string, mode: string): $CancellablePromise
 /**
  * SetSessionModel changes the model and effort of a session from its next
  * message on. The stage names the session: prd, tech_spec, plan, one_shot,
- * step:<n>, step_review:<n>, pr or pr_review.
+ * step:<n>, step_review:<n>, pr, pr_review or pr_fix.
  */
 export function SetSessionModel(taskID: string, stage: string, model: string, effort: string): $CancellablePromise<void> {
     return $Call.ByID(2320848335, taskID, stage, model, effort);

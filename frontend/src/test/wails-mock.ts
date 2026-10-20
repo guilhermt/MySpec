@@ -2,6 +2,7 @@ import { vi } from "vitest";
 import type {
   ActionEntry,
   ActionOutput,
+  AgentSession,
   ArchivedDiscussion,
   ArchivedItem,
   ArchivedReview,
@@ -69,7 +70,6 @@ import type {
   StartupStep,
   State,
   Step,
-  StepReviewer,
   TaskCard,
   TaskConversation,
   TaskStage,
@@ -129,6 +129,7 @@ export const api = {
     Promise.resolve(),
   ),
   setReviewModeDefault: vi.fn<(mode: ReviewMode) => Promise<void>>(() => Promise.resolve()),
+  setPRReviewModeDefault: vi.fn<(mode: ReviewMode) => Promise<void>>(() => Promise.resolve()),
   getPrompt: vi.fn<(stage: PromptStage) => Promise<Prompt>>((stage) =>
     Promise.resolve(makePrompt({ stage })),
   ),
@@ -213,6 +214,9 @@ export const api = {
   setReviewMode: vi.fn<(taskId: string, mode: ReviewMode) => Promise<void>>(() =>
     Promise.resolve(),
   ),
+  setPRReviewMode: vi.fn<(taskId: string, mode: ReviewMode) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
   setStepReviewMode: vi.fn<(taskId: string, step: number, mode: ReviewMode) => Promise<void>>(() =>
     Promise.resolve(),
   ),
@@ -220,6 +224,7 @@ export const api = {
     Promise.resolve(),
   ),
   reviewStepMyself: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  reviewPRMyself: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
   approveStep: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
   openPR: vi.fn<(taskId: string, title: string, body: string) => Promise<void>>(() =>
     Promise.resolve(),
@@ -461,6 +466,7 @@ export function makeState(overrides: Partial<State> = {}): State {
     machine: makeMachine(),
     update: makeUpdate(),
     reviewModeDefault: "manual",
+    prReviewModeDefault: "manual",
     tasks: [],
     history: [],
     boards: [],
@@ -682,6 +688,9 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     revisiting: false,
     reviewMode: "manual",
     reviewModeEditable: true,
+    prReviewMode: "manual",
+    prReviewModeEditable: true,
+    prReviewFallback: "",
     sessionStatus: "waiting",
     sessionModel: "claude-fable-5-1",
     sessionEffort: "high",
@@ -841,9 +850,18 @@ export function makeStep(overrides: Partial<Step> = {}): Step {
   };
 }
 
-export function makeStepReviewer(overrides: Partial<StepReviewer> = {}): StepReviewer {
+export function makeStepReviewer(overrides: Partial<AgentSession> = {}): AgentSession {
+  return makeAgentSession({ sessionStage: "step_review:1", ...overrides });
+}
+
+/** makePRImplementer is the implementer of the review of a pull request. */
+export function makePRImplementer(overrides: Partial<AgentSession> = {}): AgentSession {
+  return makeAgentSession({ sessionStage: "pr_fix", ...overrides });
+}
+
+function makeAgentSession(overrides: Partial<AgentSession> = {}): AgentSession {
   return {
-    sessionStage: "step_review:1",
+    sessionStage: "",
     sessionStatus: "waiting",
     sessionModel: "claude-opus-5-5[1m]",
     sessionEffort: "high",
@@ -921,6 +939,9 @@ export function makePullRequest(overrides: Partial<PullRequest> = {}): PullReque
     unreadableReport: "",
     review: null,
     commitFailed: false,
+    reviewRound: 0,
+    implementer: null,
+    implementerStarted: false,
     prNumber: 0,
     prUrl: "",
     prState: "",
@@ -968,6 +989,7 @@ const factoryChoices: { stage: ModelStage; model: string; effort: string }[] = [
   { stage: "step_review", model: "claude-opus-5-5[1m]", effort: "high" },
   { stage: "pr", model: "claude-opus-5-5[1m]", effort: "medium" },
   { stage: "pr_review", model: "claude-opus-5-5[1m]", effort: "high" },
+  { stage: "pr_fix", model: "claude-opus-5-5[1m]", effort: "high" },
   { stage: "discussion", model: "claude-fable-5-1", effort: "high" },
 ];
 
@@ -993,13 +1015,13 @@ export function makeModelCatalog(overrides: Partial<ModelCatalog> = {}): ModelCa
   };
 }
 
-/** makeModelDefaults are the factory choices of the nine stages of the app. */
+/** makeModelDefaults are the factory choices of the ten stages of the app. */
 export function makeModelDefaults(): StageModel[] {
   return factoryChoices.map((choice) => ({ ...choice }));
 }
 
 /**
- * makeTaskModels are the models of the seven stages of a Structured task in the
+ * makeTaskModels are the models of the eight stages of a Structured task in the
  * PRD, whose session runs while every other stage is still to start, with what
  * overrides says of each line.
  */
@@ -1033,7 +1055,7 @@ export function makePrompt(overrides: Partial<Prompt> = {}): Prompt {
   };
 }
 
-/** makePromptListings are the nine prompts of the list, in workflow order, none edited. */
+/** makePromptListings are the ten prompts of the list, in workflow order, none edited. */
 export function makePromptListings(): PromptListing[] {
   return [
     "prd",
@@ -1044,6 +1066,7 @@ export function makePromptListings(): PromptListing[] {
     "commit",
     "pr",
     "pr_review",
+    "pr_fix",
     "discussion",
   ].map((stage) => ({ stage, modified: false, editedAt: "" }));
 }

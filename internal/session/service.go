@@ -71,7 +71,10 @@ type TaskInfo struct {
 	// ImplementerReply is what the implementer of a step said last, which the
 	// prompt of its reviewer ends with; step review sessions only.
 	ImplementerReply string
-	ArtifactExists   bool // the artifact of Prompt is already there; always false for a step
+	// Request is the first message of the app to the implementer of a pull
+	// request review, which its prompt ends with; StagePRFix sessions only.
+	Request        AppMessage
+	ArtifactExists bool // the artifact of Prompt is already there; always false for a step
 
 	// Choice is the model and effort a session created for this task and stage
 	// starts with. A session that already exists keeps its own.
@@ -104,6 +107,11 @@ type TaskInfo struct {
 	// resolved by merging; PR review sessions only.
 	Checks    *gh.PRChecks
 	MergeBase string
+	// ReviewOnly says the reviewer of the pull request of a task only reviews,
+	// because an implementer of its own applies the findings; DiscardedFindings
+	// lists the findings the user discarded in earlier passes, one line each.
+	ReviewOnly        bool
+	DiscardedFindings string
 
 	// The discussion sessions.
 	ExtraDirs    []string // the clones the agent may read, passed to the CLI with --add-dir; discussions only
@@ -126,7 +134,7 @@ func artifactOf(stage prompts.Stage) ArtifactKind {
 		return ArtifactPlan
 	case prompts.StageOneShot:
 		return ArtifactOneShot
-	case prompts.StageStep, prompts.StageStepReview, prompts.StagePR, prompts.StagePRReview, prompts.StageDiscussion:
+	case prompts.StageStep, prompts.StageStepReview, prompts.StagePR, prompts.StagePRReview, prompts.StagePRFix, prompts.StageDiscussion:
 		// A step file, the PR prompts and a discussion produce no artifact of the
 		// planning: what they write is the work itself, not a document of a stage.
 		return ""
@@ -435,6 +443,10 @@ func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 		entry.Text, entry.App = t.ImplementerReply, true
 	case prompts.StagePRReview:
 		entry.Text = t.PassInstructions
+	case prompts.StagePRFix:
+		entry.Text, entry.App, entry.AppKind = t.Request.Text, true, t.Request.Kind
+		entry.AppPass, entry.AppRound, entry.AppRounds, entry.AppCount =
+			t.Request.Pass, t.Request.Round, t.Request.Rounds, t.Request.Count
 	default:
 		// Every other stage starts with an empty prompt entry.
 	}

@@ -2,10 +2,12 @@ package bindings
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"testing"
 
 	"github.com/guilhermt/myspec/internal/discussionflow"
+	"github.com/guilhermt/myspec/internal/flow"
 )
 
 func TestARunningPublicationGetsItsSentence(t *testing.T) {
@@ -46,5 +48,24 @@ func TestUndoneFailureSaysTheTaskWasUndoneOnlyWhenItWas(t *testing.T) {
 				t.Errorf("undoneFailure() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestThePullRequestReviewRefusalsGetTheirSentences(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		err  error
+		want string
+	}{
+		{flow.ErrPRReviewModeLocked, "The review of this pull request has already started."},
+		{flow.ErrAgentReviewsPR, "The agent is reviewing this pull request. Take it over with Review myself first."},
+		{flow.ErrNoAgentPRReview, "The agent isn't reviewing this pull request."},
+	}
+	for _, tt := range tests {
+		wrapped := fmt.Errorf("do it: %w", tt.err)
+		if got := failure(slog.New(slog.DiscardHandler), "ReviewPRMyself", wrapped); got == nil || got.Error() != tt.want {
+			t.Errorf("failure(%v) = %v, want %q", tt.err, got, tt.want)
+		}
 	}
 }

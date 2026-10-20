@@ -11,9 +11,12 @@ import {
   DURATION_SLOW_MS,
   discussionSituation,
   FLASH_MS,
+  isSessionKind,
   listed,
   nextWaiting,
+  prFixSituation,
   prSituation,
+  prTabSituation,
   reviewerSituation,
   reviewName,
   reviewSituation,
@@ -39,6 +42,7 @@ function stagePlace(stage: string): Place {
   return { kind: "stage", stage, step: 0 };
 }
 
+const PR_FIX_PLACE: Place = { kind: "pr_fix", stage: "", step: 0 };
 function stepPlace(step: number): Place {
   return { kind: "step", stage: "", step };
 }
@@ -331,6 +335,10 @@ describe("announcement", () => {
     expect(announcePlace(makeSituation({ place: DISCUSSION_PLACE }))).toBeNull();
   });
 
+  it("names the implementer of the review of the pull request", () => {
+    expect(announcePlace(makeSituation({ place: PR_FIX_PLACE }))).toBe("Implementer");
+  });
+
   it("names the round of a discussion", () => {
     const situation = makeSituation({ kind: "drafts", place: DISCUSSION_PLACE });
 
@@ -489,5 +497,52 @@ describe("counted", () => {
     [3, "3 findings"],
   ])("counts %i as %j", (count, want) => {
     expect(counted(count, "finding")).toBe(want);
+  });
+});
+
+describe("the situations of the review of the pull request", () => {
+  const ofPR = (kind: string) => makeSituation({ id: "pr", kind, place: PR_PLACE });
+  const ofFix = (kind: string) => makeSituation({ id: "fix", kind, place: PR_FIX_PLACE });
+
+  it("finds the situation of the implementer apart from the pull request's", () => {
+    const task = makeTask({ situations: [ofPR("findings"), ofFix("question")] });
+
+    expect(prFixSituation(task)?.id).toBe("fix");
+    expect(prSituation(task)?.id).toBe("pr");
+    expect(prFixSituation(makeTask({ situations: [ofPR("findings")] }))).toBeNull();
+  });
+
+  it.each([
+    ["question", true],
+    ["permission", true],
+    ["reply", true],
+    ["session_error", true],
+    ["findings", false],
+    ["changes_review", false],
+    ["merge", false],
+  ])("says %s is a situation of a conversation: %s", (kind, session) => {
+    expect(isSessionKind(makeSituation({ kind }))).toBe(session);
+  });
+
+  it("gives the reviewer's tab the situation of the pull request, whatever its kind", () => {
+    expect(prTabSituation(makeTask({ situations: [ofPR("question")] }), "reviewer")?.id).toBe("pr");
+    expect(prTabSituation(makeTask({ situations: [ofPR("findings")] }), "reviewer")?.id).toBe("pr");
+  });
+
+  it("gives the implementer's tab its own, then the pull request's that is not a conversation's", () => {
+    expect(
+      prTabSituation(makeTask({ situations: [ofPR("question"), ofFix("question")] }), "implementer")
+        ?.id,
+    ).toBe("fix");
+    expect(prTabSituation(makeTask({ situations: [ofPR("findings")] }), "implementer")?.id).toBe(
+      "pr",
+    );
+  });
+
+  it("keeps the question of the reviewer off the implementer's tab", () => {
+    expect(prTabSituation(makeTask({ situations: [ofPR("question")] }), "implementer")).toBeNull();
+    expect(
+      prTabSituation(makeTask({ situations: [ofPR("session_error")] }), "implementer"),
+    ).toBeNull();
   });
 });

@@ -149,7 +149,7 @@ func TestFromTasksCarriesTheAgentReviewOfAStep(t *testing.T) {
 				{Pass: 1, File: "1-review-1.md"},
 				{Pass: 2, File: "1-review-2.md", Clean: true},
 			},
-			Reviewer: &bindings.StepReviewer{
+			Reviewer: &bindings.AgentSession{
 				SessionStage:   "step_review:1",
 				SessionStatus:  "working",
 				SessionModel:   "claude-opus-5-5[1m]",
@@ -1598,6 +1598,74 @@ func TestFromTasksCarriesThePullRequestOfThePRStage(t *testing.T) {
 	}
 }
 
+func TestFromTasksCarriesTheImplementerAndTheModeOfThePullRequestReview(t *testing.T) {
+	t.Parallel()
+
+	pr := flow.PullRequest{
+		Status:       flow.PRAddressingReview,
+		PR:           task.PRDetails{Number: 7},
+		SessionStage: session.PRReviewStage,
+		Fallback:     task.FallbackRoundsExhausted,
+		Round:        3,
+		FixerStage:   session.PRFixStage,
+		FixerStarted: true,
+		Fixer: session.Summary{
+			Status:         session.StatusNeedsAnswer,
+			Choice:         models.Choice{Model: models.Opus55, Effort: models.High},
+			ContextPercent: 20,
+		},
+	}
+	task1 := task.Task{
+		ID: "task-1", Stage: task.StagePR, ReviewModes: task.ReviewModes{PR: reviewmode.Agent},
+	}
+	convert := func(t task.Task, pr flow.PullRequest, ok bool) bindings.TaskSummary {
+		return bindings.FromTasks(
+			[]task.Task{t},
+			func(string) task.Artifacts { return task.Artifacts{} },
+			func(string) []flow.StepState { return nil },
+			func(string) (flow.PullRequest, bool) { return pr, ok },
+			noWorktree, noConversations, repoOf, nil, nil,
+		)[0]
+	}
+
+	got := convert(task1, pr, true)
+	wantImplementer := &bindings.AgentSession{
+		SessionStage:   "pr_fix",
+		SessionStatus:  "needs_answer",
+		SessionModel:   "claude-opus-5-5[1m]",
+		SessionEffort:  "high",
+		ContextPercent: 20,
+	}
+	if diff := cmp.Diff(wantImplementer, got.PR.Implementer); diff != "" {
+		t.Errorf("implementer mismatch (-want +got):\n%s", diff)
+	}
+	if got.PR.ReviewRound != 3 || !got.PR.ImplementerStarted {
+		t.Errorf("pull request = round %d started %v, want round 3 started", got.PR.ReviewRound, got.PR.ImplementerStarted)
+	}
+	if got.PRReviewMode != "manual" || got.PRReviewFallback != "rounds_exhausted" || got.PRReviewModeEditable {
+		t.Errorf("task = mode %q fallback %q editable %v, want manual after rounds_exhausted, locked",
+			got.PRReviewMode, got.PRReviewFallback, got.PRReviewModeEditable)
+	}
+
+	// A pull request whose agent review holds, with no implementer yet.
+	pr = flow.PullRequest{Status: flow.PRReviewing, SessionStage: session.PRReviewStage}
+	got = convert(task1, pr, true)
+	if got.PR.Implementer != nil || got.PR.ImplementerStarted || got.PR.ReviewRound != 0 {
+		t.Errorf("pull request = %+v, want no implementer and round 0", got.PR)
+	}
+	if got.PRReviewMode != "agent" || got.PRReviewFallback != "" || !got.PRReviewModeEditable {
+		t.Errorf("task = mode %q fallback %q editable %v, want agent, no fallback, editable",
+			got.PRReviewMode, got.PRReviewFallback, got.PRReviewModeEditable)
+	}
+
+	// Before the PR stage there is no pull request, so no fallback.
+	got = convert(task.Task{ID: "task-1", Stage: task.StagePlan, ReviewModes: task.ReviewModes{PR: reviewmode.Agent}}, flow.PullRequest{}, false)
+	if got.PRReviewMode != "agent" || got.PRReviewFallback != "" || !got.PRReviewModeEditable {
+		t.Errorf("task = mode %q fallback %q editable %v, want agent, no fallback, editable",
+			got.PRReviewMode, got.PRReviewFallback, got.PRReviewModeEditable)
+	}
+}
+
 func TestFromTasksCarriesTheModelsOfEveryStage(t *testing.T) {
 	t.Parallel()
 
@@ -1646,6 +1714,7 @@ func TestFromTasksCarriesTheModelsOfEveryStage(t *testing.T) {
 		{Stage: "step_review", Model: "claude-opus-5-5[1m]", Effort: "high", Editable: true},
 		{Stage: "pr", Model: "claude-opus-5-5[1m]", Effort: "medium", Editable: true},
 		{Stage: "pr_review", Model: "claude-sonnet-5", Effort: "low", Editable: true},
+		{Stage: "pr_fix", Model: "claude-opus-5-5[1m]", Effort: "high", Editable: true},
 	}
 	if diff := cmp.Diff(want, got[0].Models); diff != "" {
 		t.Errorf("models mismatch (-want +got):\n%s", diff)
@@ -1668,6 +1737,7 @@ func TestFromModelSetIsInTheOrderOfTheSettings(t *testing.T) {
 		{Stage: "step_review", Model: "claude-opus-5-5[1m]", Effort: "high"},
 		{Stage: "pr", Model: "claude-opus-5-5[1m]", Effort: "medium"},
 		{Stage: "pr_review", Model: "claude-opus-5-5[1m]", Effort: "high"},
+		{Stage: "pr_fix", Model: "claude-opus-5-5[1m]", Effort: "high"},
 		{Stage: "discussion", Model: "claude-fable-5-1", Effort: "high"},
 	}
 

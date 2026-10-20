@@ -140,6 +140,9 @@ type State struct {
 	// ReviewModeDefault is manual or agent: who reviews the steps of a new
 	// task, a string for the same reason as State.Theme.
 	ReviewModeDefault string `json:"reviewModeDefault"`
+	// PRReviewModeDefault is manual or agent: who reviews the pull request of
+	// a new task, a string for the same reason as State.Theme.
+	PRReviewModeDefault string `json:"prReviewModeDefault"`
 	// Tasks are the active tasks of every repository, in creation order; never
 	// nil.
 	Tasks []TaskSummary `json:"tasks"`
@@ -242,7 +245,7 @@ type Step struct {
 	ReviewRound    int           `json:"reviewRound"`   // addressing_review only: the report the implementer addresses
 	ReportMissing  bool          `json:"reportMissing"` // agent_review only: the reviewer rests without the report of the pass
 	Reports        []StepReport  `json:"reports"`       // the reports of the agent review, by pass; never nil
-	Reviewer       *StepReviewer `json:"reviewer"`      // nil while the step has no reviewer conversation open
+	Reviewer       *AgentSession `json:"reviewer"`      // nil while the step has no reviewer conversation open
 }
 
 // StepReport is one pass of the agent review of a step.
@@ -254,10 +257,11 @@ type StepReport struct {
 	Findings int `json:"findings"`
 }
 
-// StepReviewer is the conversation that reviews a step, with the state of its
-// session. It has the shape the chat takes from a task and a repository.
-type StepReviewer struct {
-	SessionStage string `json:"sessionStage"` // step_review:<n>
+// AgentSession is the second conversation of a place: the reviewer of a step,
+// or the implementer of the review of a pull request. It has the shape the chat
+// takes from a task and a repository.
+type AgentSession struct {
+	SessionStage string `json:"sessionStage"` // step_review:<n> or pr_fix
 	// SessionStatus is working, waiting, needs_permission, needs_answer, paused
 	// or error.
 	SessionStatus  string `json:"sessionStatus"`
@@ -350,7 +354,8 @@ type CloseResult struct {
 // PullRequest is the PR stage of a task, with its conversation and its state.
 type PullRequest struct {
 	// Status is preparing, blocked, drafting, draft_ready, awaiting_reply,
-	// opening, reviewing, waiting_checks, awaiting_decision, in_review,
+	// opening, reviewing, addressing_review, waiting_checks, awaiting_decision,
+	// in_review,
 	// ready_to_approve, committing, done, trouble, merged, pr_closed, closing or
 	// closed, a string for the same reason as State.Theme.
 	Status       string   `json:"status"`
@@ -370,6 +375,15 @@ type PullRequest struct {
 	Review           *Review `json:"review"` // the review states and committing only
 	// CommitFailed says the last approval of the review ended without a commit.
 	CommitFailed bool `json:"commitFailed"`
+	// ReviewRound is the reports with findings the agent review handed to the
+	// implementer; 0 in manual mode.
+	ReviewRound int `json:"reviewRound"`
+	// Implementer is the conversation that applies the review; nil while the
+	// implementer of the review has no conversation open.
+	Implementer *AgentSession `json:"implementer"`
+	// ImplementerStarted says the implementer has had a conversation, open or
+	// closed.
+	ImplementerStarted bool `json:"implementerStarted"`
 
 	PRNumber int    `json:"prNumber"`
 	PRURL    string `json:"prUrl"`
@@ -456,7 +470,7 @@ type PlanProblem struct {
 
 // Place is where in a task a situation is.
 type Place struct {
-	// Kind is stage, step, step_review, pr, review or discussion, a string for
+	// Kind is stage, step, step_review, pr, pr_fix, review or discussion, a string for
 	// the same reason as State.Theme.
 	Kind  string `json:"kind"`
 	Stage string `json:"stage"` // stage only: prd, tech_spec, plan or one_shot
@@ -527,6 +541,13 @@ type TaskSummary struct {
 	// without a mode of their own take.
 	ReviewMode         string `json:"reviewMode"`
 	ReviewModeEditable bool   `json:"reviewModeEditable"` // a change of the mode still reaches a step
+	// PRReviewMode is manual or agent: who reviews the pull request of the
+	// task, Manual once its agent review fell back.
+	PRReviewMode         string `json:"prReviewMode"`
+	PRReviewModeEditable bool   `json:"prReviewModeEditable"` // the review of the pull request has not started
+	// PRReviewFallback is taken_over, rounds_exhausted or commit_failed; ""
+	// while the mode holds.
+	PRReviewFallback string `json:"prReviewFallback"`
 	// SessionStatus is working, waiting, needs_permission, needs_answer, paused
 	// or error.
 	SessionStatus string `json:"sessionStatus"`
@@ -581,7 +602,7 @@ type TaskSummary struct {
 
 // TaskConversation is a conversation a task has had, open or closed.
 type TaskConversation struct {
-	Stage     string `json:"stage"`     // the session stage: prd, tech_spec, plan, one_shot, step:<n>, step_review:<n>, pr or pr_review
+	Stage     string `json:"stage"`     // the session stage: prd, tech_spec, plan, one_shot, step:<n>, step_review:<n>, pr, pr_review or pr_fix
 	StartedAt string `json:"startedAt"` // RFC 3339
 }
 
@@ -720,7 +741,7 @@ type UserEntry struct {
 	// every other entry.
 	Sent string `json:"sent"`
 	// AppKind is which message of the workflow the app sent: report, pass,
-	// commit, commit_all, commit_push, correction, open, pr_pass or apply; ""
+	// commit, commit_all, commit_all_push, commit_push, correction, open, pr_pass or apply; ""
 	// for every other entry. AppPass belongs to report, pass and pr_pass;
 	// AppRound and AppRounds to report (the round of MaxReviewRounds) and
 	// correction (the attempt of MaxCorrections); AppCount to report (the
@@ -986,7 +1007,7 @@ type TranscriptEvent struct {
 // StageModel is the model and effort of one stage.
 type StageModel struct {
 	// Stage is prd, tech_spec, plan, one_shot, implementation, step_review, pr,
-	// pr_review or discussion, a string for the same reason as State.Theme.
+	// pr_review, pr_fix or discussion, a string for the same reason as State.Theme.
 	Stage  string `json:"stage"`
 	Model  string `json:"model"`  // the full name of the model, as the catalog gives it
 	Effort string `json:"effort"` // an effort level of the model, or "" for a model that takes none
@@ -1024,7 +1045,7 @@ type TaskStageModel struct {
 // Prompt is the text a kind of session opens with, as the settings show it.
 type Prompt struct {
 	// Stage is prd, tech_spec, plan, one_shot, step_review, commit, pr,
-	// pr_review or discussion, a string for the same reason as State.Theme.
+	// pr_review, pr_fix or discussion, a string for the same reason as State.Theme.
 	Stage    string `json:"stage"`
 	Text     string `json:"text"`
 	Modified bool   `json:"modified"` // the user edited it: it no longer follows the default of the app
@@ -1131,7 +1152,7 @@ type UpdateInstallFailure struct {
 // review of a pull request or a discussion, and the session stage.
 type UpdateWorking struct {
 	ItemID string `json:"itemId"`
-	Stage  string `json:"stage"` // prd, step:3, step_review:3, pr_review, review, discussion…
+	Stage  string `json:"stage"` // prd, step:3, step_review:3, pr_review, pr_fix, review, discussion…
 }
 
 // UpdateRelease is one release newer than the installed version.
@@ -1159,6 +1180,9 @@ type CreateTaskRequest struct {
 	// default of the app.
 	Models     []StageModel `json:"models"`
 	ReviewMode string       `json:"reviewMode"` // manual or agent; "" takes the default of the app
+	// PRReviewMode is manual or agent: who reviews the pull request; "" takes
+	// the default of the app.
+	PRReviewMode string `json:"prReviewMode"`
 	// Card is the card the task is created from; nil for a task without one. With
 	// a card, RepositoryID is ignored, and InitialContext is the text the user
 	// added.

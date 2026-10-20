@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { useRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { api, type TaskSummary } from "@/lib/wails";
@@ -51,8 +51,12 @@ async function open(task: TaskSummary = makeTask({ reviewMode: "agent", steps: S
   return rendered;
 }
 
-const agent = () => screen.getByRole("radio", { name: /^Agent/ });
-const manual = () => screen.getByRole("radio", { name: /^Manual/ });
+const stepGroup = () => screen.getByRole("radiogroup", { name: "Review mode of the task" });
+const prGroup = () => screen.getByRole("radiogroup", { name: "PR review mode of the task" });
+const agent = () => within(stepGroup()).getByRole("radio", { name: /^Agent/ });
+const manual = () => within(stepGroup()).getByRole("radio", { name: /^Manual/ });
+const prAgent = () => within(prGroup()).getByRole("radio", { name: /^Agent/ });
+const prManual = () => within(prGroup()).getByRole("radio", { name: /^Manual/ });
 
 describe("ReviewModePopover", () => {
   it("offers the two modes, each with what it does, in a named group", async () => {
@@ -66,6 +70,83 @@ describe("ReviewModePopover", () => {
     );
   });
 
+  it("offers the PR review in a group of its own, under its own caption", async () => {
+    await open();
+    expect(screen.getByText("Step review")).toBeInTheDocument();
+    expect(screen.getByText("PR review")).toBeInTheDocument();
+    expect(prAgent()).toHaveAccessibleName(
+      "Agent A reviewer and an implementer iterate on the pull request; a clean report is pushed.",
+    );
+    expect(prManual()).toHaveAccessibleName(
+      "Manual You decide each finding, stage the fixes in VS Code and approve each push.",
+    );
+    expect(prManual()).toHaveAttribute("aria-checked", "true");
+    expect(prGroup()).toHaveAccessibleDescription(
+      "Applies to the review of the pull request, before it starts.",
+    );
+  });
+
+  it("saves the PR review mode chosen, apart from the steps", async () => {
+    const { user } = await open();
+    await user.click(prAgent());
+    expect(api.setPRReviewMode).toHaveBeenCalledWith("task-1", "agent");
+    expect(api.setReviewMode).not.toHaveBeenCalled();
+  });
+
+  it("says in its own note that the PR review mode wasn't saved", async () => {
+    vi.mocked(api.setPRReviewMode).mockRejectedValueOnce(new Error("started"));
+    const { user } = await open();
+    await user.click(prAgent());
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't save the mode · Try again",
+    );
+    expect(prManual()).toHaveAttribute("aria-checked", "true");
+    expect(stepGroup()).toHaveAccessibleDescription(
+      "Applies to the steps not started that follow the task: 5, 6. Step 4 has its own mode.",
+    );
+  });
+
+  it("can't change the PR review mode once it started, and says why", async () => {
+    const { user } = await open(
+      makeTask({ reviewMode: "agent", steps: STEPS, prReviewModeEditable: false }),
+    );
+    expect(prGroup()).toHaveAttribute("aria-disabled", "true");
+    expect(prGroup()).toHaveAccessibleDescription(
+      "The PR review has started, so the mode can't change.",
+    );
+    await user.click(prAgent());
+    expect(api.setPRReviewMode).not.toHaveBeenCalled();
+    expect(manual()).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("says the review fell back to Manual, and gives the focus to the steps' group only when it can change", async () => {
+    await open(
+      makeTask({
+        reviewMode: "agent",
+        reviewModeEditable: false,
+        steps: STEPS,
+        prReviewMode: "manual",
+        prReviewModeEditable: false,
+        prReviewFallback: "rounds_exhausted",
+      }),
+    );
+    expect(prGroup()).toHaveAccessibleDescription(
+      "The review fell back to Manual: the agent review didn't come clean after five rounds.",
+    );
+  });
+
+  it("opens the focus on the PR group when the steps can't change", async () => {
+    await open(
+      makeTask({
+        reviewMode: "agent",
+        reviewModeEditable: false,
+        steps: [makeStep({ number: 1, status: "done" })],
+        prReviewMode: "agent",
+      }),
+    );
+    await waitFor(() => expect(prAgent()).toHaveFocus());
+  });
+
   it("checks the mode of the task and gives it the focus", async () => {
     await open();
     expect(agent()).toHaveAttribute("aria-checked", "true");
@@ -75,7 +156,7 @@ describe("ReviewModePopover", () => {
 
   it("says what the choice applies to, as the description of the group", async () => {
     await open();
-    expect(screen.getByRole("radiogroup")).toHaveAccessibleDescription(
+    expect(stepGroup()).toHaveAccessibleDescription(
       "Applies to the steps not started that follow the task: 5, 6. Step 4 has its own mode.",
     );
   });
@@ -112,7 +193,7 @@ describe("ReviewModePopover", () => {
     expect(screen.getByText("Saving…")).toBeInTheDocument();
     finish();
     await waitFor(() => expect(screen.queryByText("Saving…")).not.toBeInTheDocument());
-    expect(screen.getByRole("radiogroup")).toHaveAccessibleDescription(
+    expect(stepGroup()).toHaveAccessibleDescription(
       "Applies to the steps not started that follow the task: 5, 6. Step 4 has its own mode.",
     );
   });
@@ -154,7 +235,7 @@ describe("ReviewModePopover", () => {
       steps: [makeStep({ number: 1, status: "done" })],
     });
     const { user } = await open(task);
-    const group = screen.getByRole("radiogroup");
+    const group = stepGroup();
     expect(group).toHaveAttribute("aria-disabled", "true");
     expect(group).toHaveAccessibleDescription(
       "No step is left to start, so the mode can't change.",
@@ -166,7 +247,7 @@ describe("ReviewModePopover", () => {
 
   it("says a One-Shot task applies the mode to its implementation", async () => {
     await open(makeTask({ mode: "one_shot", reviewMode: "agent", steps: [] }));
-    expect(screen.getByRole("radiogroup")).toHaveAccessibleDescription(
+    expect(stepGroup()).toHaveAccessibleDescription(
       "Applies to the implementation, before it starts.",
     );
   });

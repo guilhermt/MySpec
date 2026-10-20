@@ -27,6 +27,7 @@ export {
 export type {
     ActionEntry,
     ActionOutput,
+    AgentSession,
     ArchivedDiscussion,
     ArchivedItem,
     ArchivedPR,
@@ -127,7 +128,6 @@ export type {
     Step,
     StepBlock,
     StepReport,
-    StepReviewer,
     TaskCard,
     TaskConversation,
     TaskStageModel,

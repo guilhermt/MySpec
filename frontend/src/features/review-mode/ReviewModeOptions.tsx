@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils";
 import { asReviewMode, type ReviewMode } from "@/lib/wails";
 
 export interface ReviewModeOptionsProps {
+  /** subject is what the mode reviews: the steps of the task, or its pull request. */
+  subject?: "steps" | "pr";
   /** label names the group: "Review mode of a new task", "Review mode of the task". */
   label: string;
   value: ReviewMode;
@@ -24,19 +26,37 @@ export interface ReviewModeOptionsProps {
   chosenRef?: Ref<HTMLElement>;
 }
 
-/** MODE_OPTIONS are the two options, each with its icon and what it does. */
-const MODE_OPTIONS: readonly { mode: ReviewMode; icon: IconGlyph; description: string }[] = [
-  {
-    mode: "agent",
-    icon: ICONS.agentMode,
-    description: "An agent reviews each step with the implementer; clean steps are committed.",
-  },
-  {
-    mode: "manual",
-    icon: ICONS.manualMode,
-    description: "You review each step in VS Code, stage the files and approve.",
-  },
-];
+/** MODE_OPTIONS are the two options of each subject, each with its icon and what it does. */
+const MODE_OPTIONS: Record<
+  "steps" | "pr",
+  readonly { mode: ReviewMode; icon: IconGlyph; description: string }[]
+> = {
+  steps: [
+    {
+      mode: "agent",
+      icon: ICONS.agentMode,
+      description: "An agent reviews each step with the implementer; clean steps are committed.",
+    },
+    {
+      mode: "manual",
+      icon: ICONS.manualMode,
+      description: "You review each step in VS Code, stage the files and approve.",
+    },
+  ],
+  pr: [
+    {
+      mode: "agent",
+      icon: ICONS.agentMode,
+      description:
+        "A reviewer and an implementer iterate on the pull request; a clean report is pushed.",
+    },
+    {
+      mode: "manual",
+      icon: ICONS.manualMode,
+      description: "You decide each finding, stage the fixes in VS Code and approve each push.",
+    },
+  ],
+};
 
 const LAYOUTS = {
   column: "flex flex-col gap-(--space-1)",
@@ -44,11 +64,12 @@ const LAYOUTS = {
 } as const;
 
 /**
- * ReviewModeOptions are the two ways of reviewing the steps, as a radio group: the chosen one in the
+ * ReviewModeOptions are the two ways of reviewing the steps or the pull request, as a radio group: the chosen one in the
  * brand tint with its check, the one being saved with the spinner. While one saves the group is busy
  * and ignores the arrows; when the options can't change they are read-only, with the reason.
  */
 export function ReviewModeOptions({
+  subject = "steps",
   label,
   value,
   saving,
@@ -78,7 +99,7 @@ export function ReviewModeOptions({
         {...(disabled ? { readOnly: true, "aria-disabled": true } : {})}
         className={LAYOUTS[layout]}
       >
-        {MODE_OPTIONS.map((option) => (
+        {MODE_OPTIONS[subject].map((option) => (
           <Radio.Root
             key={option.mode}
             value={option.mode}

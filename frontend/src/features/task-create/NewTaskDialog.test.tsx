@@ -17,6 +17,11 @@ import {
 const NAME_HELP = "Lowercase letters, digits and hyphens. It names the branch and the worktree.";
 
 const WEB = makeRepository();
+const stepRadio = (name: "Agent" | "Manual") =>
+  within(screen.getByRole("radiogroup", { name: "Step review" })).getByRole("radio", { name });
+const prRadio = (name: "Agent" | "Manual") =>
+  within(screen.getByRole("radiogroup", { name: "PR review" })).getByRole("radio", { name });
+
 const API = makeRepository({
   id: "repo-2",
   name: "api",
@@ -193,6 +198,7 @@ describe("NewTaskDialog", () => {
       mode: "structured",
       models: makeModelDefaults(),
       reviewMode: "manual",
+      prReviewMode: "manual",
       card: null,
     });
     expect(useAppStore.getState().newTaskOpen).toBe(false);
@@ -253,6 +259,7 @@ describe("NewTaskDialog", () => {
         line.stage === "prd" ? { ...line, effort: "xhigh" } : line,
       ),
       reviewMode: "manual",
+      prReviewMode: "manual",
       card: null,
     });
   });
@@ -272,6 +279,7 @@ describe("NewTaskDialog", () => {
         mode: "structured",
         models: makeModelDefaults(),
         reviewMode: "manual",
+        prReviewMode: "manual",
         card: null,
       });
     });
@@ -280,7 +288,7 @@ describe("NewTaskDialog", () => {
   it("starts from the review mode of the settings and says what it does", () => {
     open({ reviewModeDefault: "agent" });
 
-    expect(screen.getByRole("radio", { name: "Agent" })).toBeChecked();
+    expect(stepRadio("Agent")).toBeChecked();
     expect(
       screen.getByText(
         "An agent reviews each step, and the task runs to the pull request on its own.",
@@ -295,7 +303,7 @@ describe("NewTaskDialog", () => {
       screen.getByText("You review each step in VS Code before its commit."),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("radio", { name: "Agent" }));
+    await user.click(stepRadio("Agent"));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Name"), "add-login");
@@ -310,15 +318,49 @@ describe("NewTaskDialog", () => {
         mode: "structured",
         models: makeModelDefaults(),
         reviewMode: "agent",
+        prReviewMode: "manual",
         card: null,
       });
+    });
+  });
+
+  it("starts the PR review from its own default and says what it does", () => {
+    open({ reviewModeDefault: "manual", prReviewModeDefault: "agent" });
+
+    expect(prRadio("Agent")).toBeChecked();
+    expect(stepRadio("Manual")).toBeChecked();
+    expect(
+      screen.getByText(
+        "A reviewer and an implementer iterate on the pull request until it's ready to merge.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("creates the task with the PR review mode of the dialog", async () => {
+    const { user } = open();
+
+    expect(
+      screen.getByText(
+        "You decide each finding of the review and approve the fixes before each push.",
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(prRadio("Agent"));
+    await user.type(screen.getByLabelText("Name"), "add-login");
+    await user.type(screen.getByLabelText("Context"), "A login screen");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(api.createTask).toHaveBeenCalledWith(
+        expect.objectContaining({ reviewMode: "manual", prReviewMode: "agent" }),
+      );
     });
   });
 
   it("lists the review modes with the agent first", () => {
     open();
 
-    const modes = screen.getByRole("radiogroup", { name: "Review mode" });
+    const modes = screen.getByRole("radiogroup", { name: "Step review" });
     expect(
       within(modes)
         .getAllByRole("radio")
@@ -348,9 +390,9 @@ describe("NewTaskDialog", () => {
     await user.keyboard("{ArrowLeft}");
     expect(screen.getByRole("radio", { name: "Structured" })).toBeChecked();
 
-    await user.click(screen.getByRole("radio", { name: "Manual" }));
+    await user.click(stepRadio("Manual"));
     await user.keyboard("{ArrowLeft}");
-    expect(screen.getByRole("radio", { name: "Agent" })).toBeChecked();
+    expect(stepRadio("Agent")).toBeChecked();
     expect(
       screen.getByText(
         "An agent reviews each step, and the task runs to the pull request on its own.",
@@ -446,6 +488,7 @@ describe("NewTaskDialog", () => {
         mode: "one_shot",
         models: makeModelDefaults(),
         reviewMode: "manual",
+        prReviewMode: "manual",
         card: null,
       });
     });
@@ -758,6 +801,7 @@ describe("NewTaskDialog", () => {
         mode: "structured",
         models: makeModelDefaults(),
         reviewMode: "manual",
+        prReviewMode: "manual",
         card: CARD_REF,
       });
       expect(useAppStore.getState().newTaskCard).toBeNull();

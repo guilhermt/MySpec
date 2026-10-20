@@ -1,9 +1,9 @@
 import type { MenuRowItem } from "@/components/MenuRow";
 import { reviewAgainTooltip } from "@/features/task/pr-findings";
-import { canDiscardDraft, reviewAgainRefusal } from "@/features/task/pr-status";
+import { canDiscardDraft, canReviewPRMyself, reviewAgainRefusal } from "@/features/task/pr-status";
 import { type StageAction, stageNoun } from "@/features/task/stage-actions";
 import { canReviewMyself, currentStepOf, hasStepSession } from "@/features/task/step-status";
-import { reviewModeLabel } from "@/lib/review-modes";
+import { reviewModesLabel } from "@/lib/review-modes";
 import { type LifecycleStage, lifecycleOf, stageIndex, stageLabel } from "@/lib/stages";
 import type { PullRequest, TaskMode, TaskStage, TaskSummary } from "@/lib/wails";
 import { asPRStatus, asReviewMode, asTaskMode, asTaskStage } from "@/lib/wails";
@@ -18,6 +18,7 @@ export type TaskMenuAction =
   | { kind: "openPR" }
   | { kind: "refreshPR" }
   | { kind: "reviewAgain" }
+  | { kind: "reviewPRMyself" }
   | { kind: "reviewModePopover" }
   | { kind: "modelsPopover" }
   | { kind: "stage"; action: StageAction; stage: TaskStage }
@@ -142,10 +143,10 @@ function draftGroup(pr: PullRequest): TaskMenuGroup {
   return { label: "Pull request", items };
 }
 
-function pullRequestGroup(pr: PullRequest, now: number): TaskMenuGroup {
+function pullRequestGroup(task: TaskSummary, pr: PullRequest, now: number): TaskMenuGroup {
   const closing = asPRStatus(pr.status) === "closing";
   const checked = age(pr.checkedAt, now);
-  const refusal = reviewAgainRefusal(pr);
+  const refusal = reviewAgainRefusal(task);
   const decisions = refusal === null ? reviewAgainTooltip(pr) : null;
   const items: TaskMenuItem[] = [
     { id: "pr.open", label: "Open PR", action: { kind: "openPR" }, icon: "external" },
@@ -167,6 +168,13 @@ function pullRequestGroup(pr: PullRequest, now: number): TaskMenuGroup {
       ...(decisions === null ? {} : { tooltip: decisions }),
     },
   ];
+  if (canReviewPRMyself(task)) {
+    items.push({
+      id: "pr.reviewMyself",
+      label: "Review myself",
+      action: { kind: "reviewPRMyself" },
+    });
+  }
   if (pr.worktreePath !== "" && !closing) {
     items.push(openInEditor("pr.openInEditor"));
   }
@@ -178,7 +186,7 @@ function prGroup(task: TaskSummary, now: number): TaskMenuGroup | null {
   if (asTaskStage(task.stage) !== "pr" || pr === null) {
     return null;
   }
-  return pr.prNumber > 0 ? pullRequestGroup(pr, now) : draftGroup(pr);
+  return pr.prNumber > 0 ? pullRequestGroup(task, pr, now) : draftGroup(pr);
 }
 
 function planningGroup(task: TaskSummary): TaskMenuGroup | null {
@@ -204,7 +212,7 @@ function taskGroup(task: TaskSummary): TaskMenuGroup {
         id: "task.reviewMode",
         label: "Review mode",
         action: { kind: "reviewModePopover" },
-        sub: reviewModeLabel(asReviewMode(task.reviewMode)),
+        sub: reviewModesLabel(asReviewMode(task.reviewMode), asReviewMode(task.prReviewMode)),
         opensPopover: true,
       },
       {

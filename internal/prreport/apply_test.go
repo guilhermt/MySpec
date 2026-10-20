@@ -74,3 +74,64 @@ func TestApplyMessageSendsTheApprovedFindingsAndTheDiscardedOnes(t *testing.T) {
 		})
 	}
 }
+
+const fixIntro = "The user decided on the findings of pass 2 of the review of the pull request. Implement only the ones below, and only that: " +
+	"no drive-by changes, no refactoring nobody asked for. Do not commit, do not run `git add` and do not " +
+	"push: the user reviews the changes in the app. When you are done, say in a few lines what you changed."
+
+func TestFixMessageSendsTheApprovedFindingsAndTheDiscardedOnes(t *testing.T) {
+	t.Parallel()
+
+	approved := prreport.DecisionApproved
+	discarded := prreport.DecisionDiscarded
+
+	cases := []struct {
+		name     string
+		findings []prreport.Finding
+		want     string
+	}{
+		{
+			"without discarded ones",
+			[]prreport.Finding{{Number: 1, Title: "No test", Path: "main.go", Line: 12, Text: "No test.", Decision: approved}},
+			fixIntro + "\n\n## Approved findings\n\n### 1 · No test\nLocation: main.go:12\n\nNo test.",
+		},
+		{
+			"with discarded ones",
+			[]prreport.Finding{
+				{Number: 1, Text: "Fix it.", Decision: approved},
+				{Number: 3, Title: "Vague", Text: "x", Decision: discarded},
+				{Number: 4, Path: "docs/a.md", Line: 12, Text: "y", Decision: discarded},
+			},
+			fixIntro + "\n\n## Approved findings\n\n### 1\nLocation: general\n\nFix it.\n\n" +
+				"## Discarded findings\n\nThe user decided not to act on these: leave the code they point at as it is." +
+				"\n\n- 3 · Vague · general\n- 4 · docs/a.md:12",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := prreport.FixMessage(2, c.findings); got != c.want {
+				t.Errorf("FixMessage() =\n%s\n\nwant:\n%s", got, c.want)
+			}
+		})
+	}
+}
+
+func TestDescribeIsTheLineOfAFinding(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		finding prreport.Finding
+		want    string
+	}{
+		"anchored with a title": {prreport.Finding{Number: 2, Title: "No test", Path: "main.go", Line: 7}, "2 · No test · main.go:7"},
+		"general without one":   {prreport.Finding{Number: 5}, "5 · general"},
+	}
+	for name, c := range cases {
+		if got := prreport.Describe(c.finding); got != c.want {
+			t.Errorf("%s: Describe() = %q, want %q", name, got, c.want)
+		}
+	}
+}

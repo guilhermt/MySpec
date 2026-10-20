@@ -242,6 +242,7 @@ type CreateParams struct {
 	InitialContext string
 	Models         models.Set      // a choice for every stage: the defaults with what the user adjusted
 	ReviewMode     reviewmode.Mode // the mode of the task: the default, or what the user picked
+	PRReviewMode   reviewmode.Mode // who reviews its pull request: the default, or what the user picked
 	Mode           Mode            // the mode of the task; "" is Structured
 	Card           *Card           // the card the task is created from; nil for none
 }
@@ -283,10 +284,13 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 		Stage:          mode.Stages()[0],
 		ArtifactsDir:   ArtifactsDir(s.dataDir, repo.Owner, repo.Name, name),
 		Models:         Models{Stages: maps.Clone(p.Models)},
-		ReviewModes:    ReviewModes{Task: cmp.Or(p.ReviewMode, reviewmode.Manual)},
-		CreatedAt:      now,
-		UpdatedAt:      now,
-		Card:           cloneCard(p.Card),
+		ReviewModes: ReviewModes{
+			Task: cmp.Or(p.ReviewMode, reviewmode.Manual),
+			PR:   cmp.Or(p.PRReviewMode, reviewmode.Manual),
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
+		Card:      cloneCard(p.Card),
 	}
 
 	// A folder already there belongs to a task with this name, or is what a
@@ -635,6 +639,20 @@ func (s *Service) SetReviewMode(ctx context.Context, id string, mode reviewmode.
 	return t, nil
 }
 
+// SetPRReviewMode records the mode the review of the pull request of a task
+// runs with.
+func (s *Service) SetPRReviewMode(ctx context.Context, id string, mode reviewmode.Mode) (Task, error) {
+	t, err := s.updateReviewModes(ctx, id, func(m *ReviewModes) {
+		m.PR = mode
+	})
+	if err != nil {
+		return Task{}, err
+	}
+
+	s.log.Info("pr review mode set", "task", id, "mode", string(mode))
+	return t, nil
+}
+
 // SetStepReviewMode records the mode a step runs with, which makes the mode
 // its own.
 func (s *Service) SetStepReviewMode(ctx context.Context, id string, number int, mode reviewmode.Mode) (Task, error) {
@@ -958,6 +976,14 @@ func (s *Service) SetPRReviewed(ctx context.Context, id, commit string, pass int
 	})
 }
 
+// SetPRFallback records why the review of the pull request went back to the
+// user.
+func (s *Service) SetPRFallback(ctx context.Context, id string, fallback ReviewFallback) (PRRun, error) {
+	return s.updatePRRun(ctx, id, func(run *PRRun) {
+		run.Fallback = fallback
+	})
+}
+
 // SetPRBaseline records what the reading a review pass starts from shows
 // wrong, and forgets the trouble measured against the baseline before it.
 func (s *Service) SetPRBaseline(ctx context.Context, id string, baseline gh.Trouble) (PRRun, error) {
@@ -1052,7 +1078,7 @@ func (s *Service) RemoveArtifacts(ctx context.Context, id string, from Stage) er
 		}
 	}
 	if planning && len(t.ReviewModes.Steps) > 0 {
-		t.ReviewModes = ReviewModes{Task: t.ReviewModes.Task}
+		t.ReviewModes = ReviewModes{Task: t.ReviewModes.Task, PR: t.ReviewModes.PR}
 		if err := s.repo.UpdateReviewModes(ctx, t.ID, t.ReviewModes, s.now().UTC()); err != nil {
 			return err
 		}

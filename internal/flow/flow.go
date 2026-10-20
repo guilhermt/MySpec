@@ -38,6 +38,7 @@ type Tasks interface {
 	SetStageModel(ctx context.Context, id string, stage models.Stage, c models.Choice) (task.Task, error)
 	SetStepModel(ctx context.Context, id string, number int, c models.Choice) (task.Task, error)
 	SetReviewMode(ctx context.Context, id string, mode reviewmode.Mode) (task.Task, error)
+	SetPRReviewMode(ctx context.Context, id string, mode reviewmode.Mode) (task.Task, error)
 	SetStepReviewMode(ctx context.Context, id string, number int, mode reviewmode.Mode) (task.Task, error)
 	ClearStepReviewMode(ctx context.Context, id string, number int) (task.Task, error)
 	RemoveArtifacts(ctx context.Context, id string, from task.Stage) error
@@ -46,6 +47,7 @@ type Tasks interface {
 	SetPRDetails(ctx context.Context, id string, pr task.PRDetails) (task.PRRun, error)
 	SetPRClosed(ctx context.Context, id string, result task.CloseResult) (task.PRRun, error)
 	SetPRReviewed(ctx context.Context, id, commit string, pass int) (task.PRRun, error)
+	SetPRFallback(ctx context.Context, id string, fallback task.ReviewFallback) (task.PRRun, error)
 	SetPRBaseline(ctx context.Context, id string, baseline gh.Trouble) (task.PRRun, error)
 	SetPRTrouble(ctx context.Context, id string, trouble gh.Trouble) (task.PRRun, error)
 	ClearPRRun(ctx context.Context, id string) error
@@ -87,6 +89,7 @@ type Sessions interface {
 	SetChoice(ctx context.Context, k session.Key, c models.Choice) error
 	Summary(k session.Key) (session.Summary, bool)
 	Summaries() map[session.Key]session.Summary
+	Conversations(taskID string) []session.Conversation
 	LastReply(k session.Key) string
 	SendFromApp(ctx context.Context, k session.Key, m session.AppMessage) error
 	SendCorrection(ctx context.Context, k session.Key, m session.AppMessage) error

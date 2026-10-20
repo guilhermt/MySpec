@@ -51,10 +51,16 @@ func renderPrompt(stage prompts.Stage, vars prompts.Vars) (string, error) {
 	case prompts.StagePRReview:
 		rendered := fmt.Sprintf("Stage %s reviews %s (external %t, publish %t) with %q and %q",
 			stage, vars.ContextPath, vars.External, vars.Publish, vars.Instructions, vars.PassInstructions)
+		if vars.ReviewOnly {
+			rendered += fmt.Sprintf("\n\nReview only, discarded: %q", vars.DiscardedFindings)
+		}
 		if vars.Checks != nil {
 			rendered += "\n\n## GitHub status\n\n" + prompts.PRChecksSection(vars.Checks, vars.MergeBase)
 		}
 		return rendered, nil
+	case prompts.StagePRFix:
+		return fmt.Sprintf("Stage %s fixes %s in %s", stage, vars.PRURL, vars.Repository) +
+			"\n\n## The first request\n\n" + vars.FixRequest, nil
 	case prompts.StagePR:
 		return fmt.Sprintf("Stage %s of task %s opens %s from %s, with the card %s: %s",
 			stage, vars.TaskName, vars.Branch, vars.BaseBranch, vars.CardReference, vars.Card), nil
