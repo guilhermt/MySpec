@@ -640,6 +640,7 @@ function withStepTab(
       return { ...current, [stepTabKey(taskId, place.step)]: "reviewer" };
     case "stage":
     case "pr":
+    case "pr_fix":
     case "review":
     case "discussion":
       return current;

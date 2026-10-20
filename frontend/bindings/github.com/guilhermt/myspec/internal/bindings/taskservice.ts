@@ -282,6 +282,14 @@ export function ReviewAgain(taskID: string): $CancellablePromise<void> {
 }
 
 /**
+ * ReviewPRMyself takes the review of the pull request of a task back from the
+ * agent.
+ */
+export function ReviewPRMyself(taskID: string): $CancellablePromise<void> {
+    return $Call.ByID(1203767924, taskID);
+}
+
+/**
  * ReviewStepMyself takes the review of the current step of a task back from
  * the agent.
  */
@@ -303,6 +311,14 @@ export function SendMessage(taskID: string, stage: string, text: string): $Cance
  */
 export function SetPRFindingText(taskID: string, pass: number, $number: number, text: string): $CancellablePromise<void> {
     return $Call.ByID(4113891214, taskID, pass, $number, text);
+}
+
+/**
+ * SetPRReviewMode changes who reviews the pull request of a task whose review
+ * has not started.
+ */
+export function SetPRReviewMode(taskID: string, mode: string): $CancellablePromise<void> {
+    return $Call.ByID(3952048399, taskID, mode);
 }
 
 /**

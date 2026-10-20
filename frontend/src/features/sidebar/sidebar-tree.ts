@@ -310,6 +310,8 @@ function conversationPlace(owner: Owner, situation: Situation): RowText {
         return same("PR");
       }
       return same(`PR review · pass ${prPass(owner.task)}`);
+    case "pr_fix":
+      return same("PR review · Implementer");
     case "review":
       return same(owner.kind === "review" ? `pass ${reviewPass(owner.review)}` : "pass 1");
     case "discussion":

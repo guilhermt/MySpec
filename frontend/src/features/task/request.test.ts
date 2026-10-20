@@ -17,7 +17,7 @@ import {
   taskRequestOf,
 } from "@/features/task/request";
 import { cloneMissingText } from "@/lib/repositories";
-import type { Entry, PullRequest, Situation, Step, StepReviewer, TaskSummary } from "@/lib/wails";
+import type { AgentSession, Entry, PullRequest, Situation, Step, TaskSummary } from "@/lib/wails";
 import type { PrDraft, StepTab } from "@/store/app-store";
 import {
   makeEntry,
@@ -937,7 +937,7 @@ const STEP_4 = { kind: "step", stage: "", step: 4 };
 const REVIEWER_4 = { kind: "step_review", stage: "", step: 4 };
 const stagePlace = (stage: string) => ({ kind: "stage", stage, step: 0 });
 
-const reviewer = (overrides: Partial<StepReviewer> = {}) =>
+const reviewer = (overrides: Partial<AgentSession> = {}) =>
   makeStepReviewer({ sessionStage: "step_review:4", ...overrides });
 
 // stepTask is a task in step 4, under a pass of the agent review: it has both tabs.

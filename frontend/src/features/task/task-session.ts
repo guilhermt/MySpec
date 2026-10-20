@@ -3,7 +3,7 @@ import { taskSessions } from "@/features/sidebar/sessions";
 import { stageNoun } from "@/features/task/stage-actions";
 import { currentStepOf, hasStepSession, loopSession, stepStage } from "@/features/task/step-status";
 import { lowerFirst } from "@/lib/situations";
-import type { Step, StepReviewer, TaskSummary } from "@/lib/wails";
+import type { AgentSession, Step, TaskSummary } from "@/lib/wails";
 import { asPRStatus, asSessionStatus, asTaskStage } from "@/lib/wails";
 import type { StepTab } from "@/store/app-store";
 
@@ -46,7 +46,7 @@ function implementerOf(task: TaskSummary, step: Step): TaskSession {
   return sessionOf(task, stepStage(step.number), task);
 }
 
-function reviewerOf(task: TaskSummary, reviewer: StepReviewer): TaskSession {
+function reviewerOf(task: TaskSummary, reviewer: AgentSession): TaskSession {
   return sessionOf(task, reviewer.sessionStage, reviewer);
 }
 

@@ -899,13 +899,14 @@ func (f *fixture) snapshot() bindings.State {
 		f.repositories.Cloning,
 	)
 	return bindings.State{
-		Repositories:      repositories,
-		RepositoryFilter:  f.repositories.Filter(),
-		Theme:             string(f.theme.Preference()),
-		SystemDark:        f.theme.SystemDark(),
-		ModelDefaults:     bindings.FromModelSet(f.models.Defaults()),
-		ModelFactory:      bindings.FromModelSet(models.Factory()),
-		ReviewModeDefault: string(f.reviewModes.Default()),
+		Repositories:        repositories,
+		RepositoryFilter:    f.repositories.Filter(),
+		Theme:               string(f.theme.Preference()),
+		SystemDark:          f.theme.SystemDark(),
+		ModelDefaults:       bindings.FromModelSet(f.models.Defaults()),
+		ModelFactory:        bindings.FromModelSet(models.Factory()),
+		ReviewModeDefault:   string(f.reviewModes.Default()),
+		PRReviewModeDefault: string(f.reviewModes.PRDefault()),
 		Tasks: bindings.FromTasks(
 			f.taskSvc.List(), f.taskArtifacts, f.flow.Steps, f.flow.PullRequest, f.flow.Worktree, f.sessions.Conversations,
 			f.repositories.Get, f.sessions.Summaries(), nil,

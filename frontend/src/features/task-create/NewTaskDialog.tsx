@@ -207,6 +207,7 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
       mode,
       models: choices,
       reviewMode,
+      prReviewMode: "",
       card: origin === null ? null : { boardId: origin.boardId, key: origin.card.key },
     })
       .then((id) => {

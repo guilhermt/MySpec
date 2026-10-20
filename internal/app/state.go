@@ -64,8 +64,9 @@ func (a *App) snapshot() bindings.State {
 		Machine: a.machineState(),
 		// Update is what the last check for a newer version found; like the
 		// machine, it is the app's own.
-		Update:            a.updateState(),
-		ReviewModeDefault: string(a.reviewModes.Default()),
+		Update:              a.updateState(),
+		ReviewModeDefault:   string(a.reviewModes.Default()),
+		PRReviewModeDefault: string(a.reviewModes.PRDefault()),
 		Tasks: bindings.FromTasks(
 			tasks,
 			func(id string) task.Artifacts { return artifacts[id] },

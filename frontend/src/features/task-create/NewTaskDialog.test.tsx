@@ -193,6 +193,7 @@ describe("NewTaskDialog", () => {
       mode: "structured",
       models: makeModelDefaults(),
       reviewMode: "manual",
+      prReviewMode: "",
       card: null,
     });
     expect(useAppStore.getState().newTaskOpen).toBe(false);
@@ -253,6 +254,7 @@ describe("NewTaskDialog", () => {
         line.stage === "prd" ? { ...line, effort: "xhigh" } : line,
       ),
       reviewMode: "manual",
+      prReviewMode: "",
       card: null,
     });
   });
@@ -272,6 +274,7 @@ describe("NewTaskDialog", () => {
         mode: "structured",
         models: makeModelDefaults(),
         reviewMode: "manual",
+        prReviewMode: "",
         card: null,
       });
     });
@@ -310,6 +313,7 @@ describe("NewTaskDialog", () => {
         mode: "structured",
         models: makeModelDefaults(),
         reviewMode: "agent",
+        prReviewMode: "",
         card: null,
       });
     });
@@ -446,6 +450,7 @@ describe("NewTaskDialog", () => {
         mode: "one_shot",
         models: makeModelDefaults(),
         reviewMode: "manual",
+        prReviewMode: "",
         card: null,
       });
     });
@@ -758,6 +763,7 @@ describe("NewTaskDialog", () => {
         mode: "structured",
         models: makeModelDefaults(),
         reviewMode: "manual",
+        prReviewMode: "",
         card: CARD_REF,
       });
       expect(useAppStore.getState().newTaskCard).toBeNull();

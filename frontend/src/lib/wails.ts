@@ -5,6 +5,7 @@ import * as HistoryService from "@bindings/historyservice";
 import type {
   ActionEntry,
   ActionOutput,
+  AgentSession,
   ArchivedDiscussion,
   ArchivedItem,
   ArchivedPR,
@@ -105,7 +106,6 @@ import type {
   Step,
   StepBlock,
   StepReport,
-  StepReviewer,
   TaskCard,
   TaskConversation,
   TaskStageModel,
@@ -133,6 +133,7 @@ import { Browser, Events } from "@wailsio/runtime";
 export type {
   ActionEntry,
   ActionOutput,
+  AgentSession,
   ArchivedDiscussion,
   ArchivedItem,
   ArchivedPR,
@@ -233,7 +234,6 @@ export type {
   Step,
   StepBlock,
   StepReport,
-  StepReviewer,
   TaskCard,
   TaskConversation,
   TaskStageModel,
@@ -266,6 +266,7 @@ export type ModelStage =
   | "step_review"
   | "pr"
   | "pr_review"
+  | "pr_fix"
   | "discussion";
 
 /** CatalogFailure is why the app has no catalog of models: "" when it has one or is still reading. */
@@ -281,6 +282,7 @@ export type PromptStage =
   | "commit"
   | "pr"
   | "pr_review"
+  | "pr_fix"
   | "discussion";
 
 export type StepStatus =
@@ -306,6 +308,7 @@ export type PRStatus =
   | "awaiting_reply"
   | "opening"
   | "reviewing"
+  | "addressing_review"
   | "waiting_checks"
   | "awaiting_decision"
   | "in_review"
@@ -411,6 +414,7 @@ export type AppKind =
   | "pass"
   | "commit"
   | "commit_all"
+  | "commit_all_push"
   | "commit_push"
   | "correction"
   | "open"
@@ -476,7 +480,14 @@ export type SituationForm =
   | "checks_conflict";
 
 /** PlaceKind is the part of an item a situation is in: of a task, or a review or a discussion of its own. */
-export type PlaceKind = "stage" | "step" | "step_review" | "pr" | "review" | "discussion";
+export type PlaceKind =
+  | "stage"
+  | "step"
+  | "step_review"
+  | "pr"
+  | "pr_fix"
+  | "review"
+  | "discussion";
 
 /** ReviewMode is who reviews the steps: the user, or an agent. */
 export type ReviewMode = "manual" | "agent";
@@ -806,6 +817,7 @@ export function asModelStage(value: string): ModelStage {
     case "step_review":
     case "pr":
     case "pr_review":
+    case "pr_fix":
     case "discussion":
       return value;
     default:
@@ -834,6 +846,7 @@ export function asPromptStage(value: string): PromptStage {
     case "commit":
     case "pr":
     case "pr_review":
+    case "pr_fix":
     case "discussion":
       return value;
     default:
@@ -871,6 +884,7 @@ export function asPRStatus(value: string): PRStatus {
     case "awaiting_reply":
     case "opening":
     case "reviewing":
+    case "addressing_review":
     case "waiting_checks":
     case "awaiting_decision":
     case "in_review":
@@ -1082,6 +1096,7 @@ export function asAppKind(value: string): AppKind {
     case "pass":
     case "commit":
     case "commit_all":
+    case "commit_all_push":
     case "commit_push":
     case "correction":
     case "open":
@@ -1211,6 +1226,7 @@ export function asPlaceKind(value: string): PlaceKind {
     case "step":
     case "step_review":
     case "pr":
+    case "pr_fix":
     case "review":
     case "discussion":
       return value;
@@ -1555,6 +1571,8 @@ export const api = {
     SettingsService.SetModelDefault(stage, model, effort),
   setReviewModeDefault: (mode: ReviewMode): Promise<void> =>
     SettingsService.SetReviewModeDefault(mode),
+  setPRReviewModeDefault: (mode: ReviewMode): Promise<void> =>
+    SettingsService.SetPRReviewModeDefault(mode),
   getPrompt: (stage: PromptStage): Promise<Prompt> => SettingsService.GetPrompt(stage),
   savePrompt: (stage: PromptStage, text: string): Promise<Prompt> =>
     SettingsService.SavePrompt(stage, text),
@@ -1616,11 +1634,14 @@ export const api = {
     TaskService.SetSessionModel(taskId, stage, model, effort),
   setReviewMode: (taskId: string, mode: ReviewMode): Promise<void> =>
     TaskService.SetReviewMode(taskId, mode),
+  setPRReviewMode: (taskId: string, mode: ReviewMode): Promise<void> =>
+    TaskService.SetPRReviewMode(taskId, mode),
   setStepReviewMode: (taskId: string, step: number, mode: ReviewMode): Promise<void> =>
     TaskService.SetStepReviewMode(taskId, step, mode),
   clearStepReviewMode: (taskId: string, step: number): Promise<void> =>
     TaskService.ClearStepReviewMode(taskId, step),
   reviewStepMyself: (taskId: string): Promise<void> => TaskService.ReviewStepMyself(taskId),
+  reviewPRMyself: (taskId: string): Promise<void> => TaskService.ReviewPRMyself(taskId),
   approveStep: (taskId: string): Promise<void> => TaskService.ApproveStep(taskId),
   openPR: (taskId: string, title: string, body: string): Promise<void> =>
     TaskService.OpenPR(taskId, title, body),

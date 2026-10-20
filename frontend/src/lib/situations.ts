@@ -251,6 +251,8 @@ export function announcePlace(situation: Situation, round = 0): string | null {
       return "Reviewer";
     case "pr":
       return "PR";
+    case "pr_fix":
+      return "Implementer";
     case "review":
       return null;
     case "discussion":

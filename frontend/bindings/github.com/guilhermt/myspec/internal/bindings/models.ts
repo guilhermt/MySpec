@@ -76,6 +76,65 @@ export interface ActionOutput {
 }
 
 /**
+ * AgentSession is the second conversation of a place: the reviewer of a step,
+ * or the implementer of the review of a pull request. It has the shape the chat
+ * takes from a task and a repository.
+ */
+export interface AgentSession {
+    /**
+     * step_review:<n> or pr_fix
+     */
+    "sessionStage": string;
+
+    /**
+     * SessionStatus is working, waiting, needs_permission, needs_answer, paused
+     * or error.
+     */
+    "sessionStatus": string;
+    "sessionModel": string;
+    "sessionEffort": string;
+    "turnRunning": boolean;
+    "processRunning": boolean;
+    "retryAttempt": number;
+
+    /**
+     * RetryMax, RetryAt (RFC 3339) and RetryReason (overloaded, rate_limit,
+     * server, connection or other) go with RetryAttempt; zero without a retry.
+     */
+    "retryMax": number;
+    "retryAt": string;
+    "retryReason": string;
+
+    /**
+     * TurnFailed says the last turn ended in an error the CLI survived; the
+     * session is at rest all the same.
+     */
+    "turnFailed": boolean;
+
+    /**
+     * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
+     * a turn.
+     */
+    "turnStartedAt": string;
+
+    /**
+     * when the session was paused, RFC 3339; "" when it is not, or the time is unknown
+     */
+    "pausedAt": string;
+
+    /**
+     * ActionLabel and ActionTarget are the action the agent runs now, as the
+     * conversation words it ("Reading", "internal/app/state.go"); "" when none
+     * runs.
+     */
+    "actionLabel": string;
+    "actionTarget": string;
+    "contextPercent": number;
+    "pendingCount": number;
+    "lastError": string;
+}
+
+/**
  * ArchivedDiscussion is a discussion of the history, with what it produced.
  */
 export interface ArchivedDiscussion {
@@ -785,6 +844,12 @@ export interface CreateTaskRequest {
      * manual or agent; "" takes the default of the app
      */
     "reviewMode": string;
+
+    /**
+     * PRReviewMode is manual or agent: who reviews the pull request; "" takes
+     * the default of the app.
+     */
+    "prReviewMode": string;
 
     /**
      * Card is the card the task is created from; nil for a task without one. With
@@ -1941,7 +2006,7 @@ export interface PermissionEntry {
  */
 export interface Place {
     /**
-     * Kind is stage, step, step_review, pr, review or discussion, a string for
+     * Kind is stage, step, step_review, pr, pr_fix, review or discussion, a string for
      * the same reason as State.Theme.
      */
     "kind": string;
@@ -1974,7 +2039,7 @@ export interface PlanProblem {
 export interface Prompt {
     /**
      * Stage is prd, tech_spec, plan, one_shot, step_review, commit, pr,
-     * pr_review or discussion, a string for the same reason as State.Theme.
+     * pr_review, pr_fix or discussion, a string for the same reason as State.Theme.
      */
     "stage": string;
     "text": string;
@@ -2051,7 +2116,8 @@ export interface PullLabel {
 export interface PullRequest {
     /**
      * Status is preparing, blocked, drafting, draft_ready, awaiting_reply,
-     * opening, reviewing, waiting_checks, awaiting_decision, in_review,
+     * opening, reviewing, addressing_review, waiting_checks, awaiting_decision,
+     * in_review,
      * ready_to_approve, committing, done, trouble, merged, pr_closed, closing or
      * closed, a string for the same reason as State.Theme.
      */
@@ -2096,6 +2162,24 @@ export interface PullRequest {
      * CommitFailed says the last approval of the review ended without a commit.
      */
     "commitFailed": boolean;
+
+    /**
+     * ReviewRound is the reports with findings the agent review handed to the
+     * implementer; 0 in manual mode.
+     */
+    "reviewRound": number;
+
+    /**
+     * Implementer is the conversation that applies the review; nil while the
+     * implementer of the review has no conversation open.
+     */
+    "implementer": AgentSession | null;
+
+    /**
+     * ImplementerStarted says the implementer has had a conversation, open or
+     * closed.
+     */
+    "implementerStarted": boolean;
     "prNumber": number;
     "prUrl": string;
 
@@ -2994,7 +3078,7 @@ export interface SituationStarted {
 export interface StageModel {
     /**
      * Stage is prd, tech_spec, plan, one_shot, implementation, step_review, pr,
-     * pr_review or discussion, a string for the same reason as State.Theme.
+     * pr_review, pr_fix or discussion, a string for the same reason as State.Theme.
      */
     "stage": string;
 
@@ -3199,6 +3283,12 @@ export interface State {
     "reviewModeDefault": string;
 
     /**
+     * PRReviewModeDefault is manual or agent: who reviews the pull request of
+     * a new task, a string for the same reason as State.Theme.
+     */
+    "prReviewModeDefault": string;
+
+    /**
      * Tasks are the active tasks of every repository, in creation order; never
      * nil.
      */
@@ -3379,7 +3469,7 @@ export interface Step {
     /**
      * nil while the step has no reviewer conversation open
      */
-    "reviewer": StepReviewer | null;
+    "reviewer": AgentSession | null;
 }
 
 /**
@@ -3423,64 +3513,6 @@ export interface StepReport {
 }
 
 /**
- * StepReviewer is the conversation that reviews a step, with the state of its
- * session. It has the shape the chat takes from a task and a repository.
- */
-export interface StepReviewer {
-    /**
-     * step_review:<n>
-     */
-    "sessionStage": string;
-
-    /**
-     * SessionStatus is working, waiting, needs_permission, needs_answer, paused
-     * or error.
-     */
-    "sessionStatus": string;
-    "sessionModel": string;
-    "sessionEffort": string;
-    "turnRunning": boolean;
-    "processRunning": boolean;
-    "retryAttempt": number;
-
-    /**
-     * RetryMax, RetryAt (RFC 3339) and RetryReason (overloaded, rate_limit,
-     * server, connection or other) go with RetryAttempt; zero without a retry.
-     */
-    "retryMax": number;
-    "retryAt": string;
-    "retryReason": string;
-
-    /**
-     * TurnFailed says the last turn ended in an error the CLI survived; the
-     * session is at rest all the same.
-     */
-    "turnFailed": boolean;
-
-    /**
-     * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
-     * a turn.
-     */
-    "turnStartedAt": string;
-
-    /**
-     * when the session was paused, RFC 3339; "" when it is not, or the time is unknown
-     */
-    "pausedAt": string;
-
-    /**
-     * ActionLabel and ActionTarget are the action the agent runs now, as the
-     * conversation words it ("Reading", "internal/app/state.go"); "" when none
-     * runs.
-     */
-    "actionLabel": string;
-    "actionTarget": string;
-    "contextPercent": number;
-    "pendingCount": number;
-    "lastError": string;
-}
-
-/**
  * TaskCard is the card a task was created from.
  */
 export interface TaskCard {
@@ -3504,7 +3536,7 @@ export interface TaskCard {
  */
 export interface TaskConversation {
     /**
-     * the session stage: prd, tech_spec, plan, one_shot, step:<n>, step_review:<n>, pr or pr_review
+     * the session stage: prd, tech_spec, plan, one_shot, step:<n>, step_review:<n>, pr, pr_review or pr_fix
      */
     "stage": string;
 
@@ -3583,6 +3615,23 @@ export interface TaskSummary {
      * a change of the mode still reaches a step
      */
     "reviewModeEditable": boolean;
+
+    /**
+     * PRReviewMode is manual or agent: who reviews the pull request of the
+     * task, Manual once its agent review fell back.
+     */
+    "prReviewMode": string;
+
+    /**
+     * the review of the pull request has not started
+     */
+    "prReviewModeEditable": boolean;
+
+    /**
+     * PRReviewFallback is taken_over, rounds_exhausted or commit_failed; ""
+     * while the mode holds.
+     */
+    "prReviewFallback": string;
 
     /**
      * SessionStatus is working, waiting, needs_permission, needs_answer, paused
@@ -3891,7 +3940,7 @@ export interface UpdateWorking {
     "itemId": string;
 
     /**
-     * prd, step:3, step_review:3, pr_review, review, discussion…
+     * prd, step:3, step_review:3, pr_review, pr_fix, review, discussion…
      */
     "stage": string;
 }
@@ -3915,7 +3964,7 @@ export interface UserEntry {
 
     /**
      * AppKind is which message of the workflow the app sent: report, pass,
-     * commit, commit_all, commit_push, correction, open, pr_pass or apply; ""
+     * commit, commit_all, commit_all_push, commit_push, correction, open, pr_pass or apply; ""
      * for every other entry. AppPass belongs to report, pass and pr_pass;
      * AppRound and AppRounds to report (the round of MaxReviewRounds) and
      * correction (the attempt of MaxCorrections); AppCount to report (the

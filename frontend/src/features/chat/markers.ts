@@ -320,6 +320,8 @@ function appComplement(user: UserEntry): string {
       return "Commit · the staged files";
     case "commit_all":
       return "Commit · every change of the step";
+    case "commit_all_push":
+      return "Commit and push · every change, after a clean review";
     case "commit_push":
       return "Commit and push · the staged files";
     case "correction":

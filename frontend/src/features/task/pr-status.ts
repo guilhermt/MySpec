@@ -21,6 +21,8 @@ export function prStatusLabel(pr: PullRequest): string {
       return "Opening the pull request";
     case "reviewing":
       return "Reviewing the pull request";
+    case "addressing_review":
+      return "Addressing the review";
     case "waiting_checks":
       return "Waiting for checks";
     case "awaiting_decision":
@@ -57,6 +59,7 @@ export function prStatusTone(pr: PullRequest): StatusTone {
     case "drafting":
     case "opening":
     case "reviewing":
+    case "addressing_review":
     case "waiting_checks":
     case "committing":
     case "closing":

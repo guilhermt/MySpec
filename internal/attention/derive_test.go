@@ -498,6 +498,32 @@ func TestDeriveThePullRequestOfThePRStage(t *testing.T) {
 				"The changes from the review of the pull request are ready for your review."),
 		},
 		{
+			"the implementer addresses the review",
+			prInput(flow.PullRequest{
+				Status: flow.PRAddressingReview, SessionStage: session.PRReviewStage, Session: waiting,
+				FixerStage: session.PRFixStage, Fixer: summary(session.StatusWorking, false),
+			}),
+			nil,
+		},
+		{
+			"the agent review gave up with findings to decide",
+			prInput(flow.PullRequest{
+				Status: flow.PRAwaitingDecision, SessionStage: session.PRReviewStage, Session: waiting,
+				Fallback: task.FallbackRoundsExhausted, Pass: structuredPass(undecided),
+			}),
+			situation(attention.KindFindings, attention.FormDecide, 0,
+				"The agent review of the pull request didn't come clean after 5 rounds. The review of the pull request found 1 change for you to decide."),
+		},
+		{
+			"the commit after the agent review did not happen",
+			prInput(flow.PullRequest{
+				Status: flow.PRReadyToApprove, Review: &review.Snapshot{Staged: 2, Total: 2},
+				Fallback: task.FallbackNoCommit, SessionStage: session.PRReviewStage, Session: waiting,
+			}),
+			situation(attention.KindChangesReview, attention.FormApprove, 0,
+				"Review the changes of the review: the commit after the agent review didn't happen."),
+		},
+		{
 			"the last approval of the changes left no commit",
 			prInput(flow.PullRequest{
 				Status: flow.PRReadyToApprove, Review: &review.Snapshot{Staged: 2, Total: 2},
@@ -630,6 +656,68 @@ func TestDeriveThePullRequestOfThePRStage(t *testing.T) {
 	}
 }
 
+func TestDeriveTheImplementerOfThePullRequestReview(t *testing.T) {
+	t.Parallel()
+
+	implementerPlace := attention.Place{Kind: attention.PlacePRFix}
+	fixer := func(sum session.Summary) flow.PullRequest {
+		return flow.PullRequest{
+			Status: flow.PRAwaitingDecision, SessionStage: session.PRReviewStage,
+			Session: summary(session.StatusWaiting, true), Pass: structuredPass(undecided),
+			FixerStage: session.PRFixStage, Fixer: sum,
+		}
+	}
+
+	t.Run("a question and a finding to decide, in two places", func(t *testing.T) {
+		t.Parallel()
+
+		want := []attention.Found{
+			{
+				TaskID: taskID, Place: prPlace, Kind: attention.KindFindings, Form: attention.FormDecide, Title: taskName,
+				Body: "The review of the pull request found 1 change for you to decide.",
+			},
+			{
+				TaskID: taskID, Place: implementerPlace, Kind: attention.KindQuestion, Title: taskName,
+				Body: "The agent has a question in the review fixes.",
+			},
+		}
+		if diff := cmp.Diff(want, attention.Derive(prInput(fixer(summary(session.StatusNeedsAnswer, false))))); diff != "" {
+			t.Errorf("Derive() mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("a permission", func(t *testing.T) {
+		t.Parallel()
+
+		got := attention.Derive(prInput(fixer(summary(session.StatusNeedsPermission, false))))
+		if len(got) != 2 || got[1].Place != implementerPlace || got[1].Body != "Permission requested in the review fixes." {
+			t.Errorf("Derive() = %+v, want the permission at the review fixes", got)
+		}
+	})
+
+	t.Run("the agent at rest, working or paused holds nothing", func(t *testing.T) {
+		t.Parallel()
+
+		for _, sum := range []session.Summary{
+			summary(session.StatusWaiting, true), summary(session.StatusWorking, false), summary(session.StatusPaused, false),
+		} {
+			if got := attention.Derive(prInput(fixer(sum))); len(got) != 1 || got[0].Place != prPlace {
+				t.Errorf("Derive() with %s = %+v, want only the situation of the pull request", sum.Status, got)
+			}
+		}
+	})
+
+	t.Run("a conversation that is not open holds nothing", func(t *testing.T) {
+		t.Parallel()
+
+		pr := fixer(summary(session.StatusNeedsAnswer, false))
+		pr.FixerStage = ""
+		if got := attention.Derive(prInput(pr)); len(got) != 1 || got[0].Place != prPlace {
+			t.Errorf("Derive() = %+v, want only the situation of the pull request", got)
+		}
+	})
+}
+
 func TestParsePlaceReadsThePlaceOfThePullRequest(t *testing.T) {
 	t.Parallel()
 
@@ -749,6 +837,7 @@ func TestPlaceKeysReadBack(t *testing.T) {
 		{"step", attention.Place{Kind: attention.PlaceStep, Step: 12}, "step:12"},
 		{"step review", attention.Place{Kind: attention.PlaceStepReview, Step: 3}, "step_review:3"},
 		{"the pull request", attention.Place{Kind: attention.PlacePR}, "pr"},
+		{"the implementer of the review of the pull request", attention.Place{Kind: attention.PlacePRFix}, "pr_fix"},
 		{"the review of a pull request", attention.Place{Kind: attention.PlaceReview}, "review"},
 		{"the discussion of a demand", attention.Place{Kind: attention.PlaceDiscussion}, "discussion"},
 	}

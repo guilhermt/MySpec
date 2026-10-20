@@ -112,6 +112,7 @@ const (
 	PlaceStep       PlaceKind = "step"        // the current step
 	PlaceStepReview PlaceKind = "step_review" // the conversation that reviews the current step
 	PlacePR         PlaceKind = "pr"          // the pull request of the task
+	PlacePRFix      PlaceKind = "pr_fix"      // the conversation of the implementer of the review of the pull request
 	PlaceReview     PlaceKind = "review"      // the review of a pull request, which is an item of its own
 	PlaceDiscussion PlaceKind = "discussion"  // the discussion of a demand of a board, which is an item of its own
 )
@@ -124,7 +125,7 @@ type Place struct {
 }
 
 // Key names a place inside its item, the way the store keeps it:
-// stage:<stage>, step:<number>, step_review:<number>, pr, review or
+// stage:<stage>, step:<number>, step_review:<number>, pr, pr_fix, review or
 // discussion.
 func (p Place) Key() string {
 	switch p.Kind {
@@ -138,6 +139,8 @@ func (p Place) Key() string {
 		return "step_review:" + strconv.Itoa(p.Step)
 	case PlacePR:
 		return "pr"
+	case PlacePRFix:
+		return string(PlacePRFix)
 	default:
 		return "stage:" + string(p.Stage)
 	}
@@ -148,6 +151,8 @@ func ParsePlace(key string) (Place, bool) {
 	switch key {
 	case string(PlacePR):
 		return Place{Kind: PlacePR}, true
+	case string(PlacePRFix):
+		return Place{Kind: PlacePRFix}, true
 	case string(PlaceReview):
 		return Place{Kind: PlaceReview}, true
 	case string(PlaceDiscussion):

@@ -417,6 +417,7 @@ const sceneState = (overrides: Partial<State> = {}): State =>
     modelFactory: makeModelDefaults(),
     modelCatalog: makeModelCatalog(),
     reviewModeDefault: "agent",
+    prReviewModeDefault: "agent",
     cloneFolder: "",
     ...overrides,
   });

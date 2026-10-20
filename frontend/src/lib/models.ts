@@ -175,6 +175,8 @@ export function modelStageLabel(stage: ModelStage): string {
       return "One-Shot planning";
     case "discussion":
       return "Discussion";
+    case "pr_fix":
+      return "PR review fixes";
     default:
       return stageLabel(stage);
   }

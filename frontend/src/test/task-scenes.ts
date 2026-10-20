@@ -27,6 +27,7 @@ import {
   makeBoardCard,
   makeEntry,
   makePRCheck,
+  makePRImplementer,
   makePRReport,
   makePullRequest,
   makeRepository,
@@ -245,6 +246,7 @@ function models(live: ModelStage[], editable: ModelStage[]): ReturnType<typeof m
     "step_review",
     "pr",
     "pr_review",
+    "pr_fix",
   ];
   return makeTaskModels(
     Object.fromEntries(
@@ -360,6 +362,7 @@ function inPR(
         ...stepConversations(TITLES.length, true),
         "pr",
         ...(pr.sessionStage === "pr_review" ? ["pr_review"] : []),
+        ...(pr.implementerStarted === true ? ["pr_fix"] : []),
       ]),
       ...task,
     },
@@ -538,6 +541,12 @@ function said(text: string): Entry {
 // milestones that follow.
 function reviewTalk(...rest: Entry[]): Entry[] {
   return talk("Review the pull request #1284.", "Report 1 written.", ...rest);
+}
+
+// fixTalk is the conversation of the implementer of the review of the pull request: the prompt, the
+// answer and the messages and milestones that follow.
+function fixTalk(...rest: Entry[]): Entry[] {
+  return talk("Apply the review fixes of the pull request #1284.", "Applied.", ...rest);
 }
 
 // USER is the user entry of a message: the fields none of them sets.
@@ -753,6 +762,8 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
           contextPercent: 33,
           currentPass: 1,
           reports: [structuredReport(1, { findings: findingsOf(4, DECIDED), sentAt: at(4) })],
+          implementer: makePRImplementer(),
+          implementerStarted: true,
         },
         {},
         longName,
@@ -776,6 +787,8 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
           sessionStage: "pr_review",
           contextPercent: 36,
           currentPass: 2,
+          implementer: makePRImplementer(),
+          implementerStarted: true,
           unreadableReport: "The report can't be read: finding 2 does not open with its location.",
           reports: [
             structuredReport(1, {
@@ -810,11 +823,12 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
             }),
             structuredReport(2, { clean: true, recordedAt: at(125) }),
           ],
+          implementerStarted: true,
         },
         {
           situations: [situation("merge", "closing", prPlace, 120, { form: "close" })],
           conversations: conversations(
-            [...PLANNING, ...stepConversations(TITLES.length, true), "pr", "pr_review"],
+            [...PLANNING, ...stepConversations(TITLES.length, true), "pr", "pr_review", "pr_fix"],
             120,
           ),
         },
@@ -883,7 +897,8 @@ function conversationsOf(name: SceneName): Record<string, Entry[]> {
       };
     case "findings-sent":
       return {
-        pr_review: reviewTalk(written(1, 4, 12), decidedOf(1, 4), applied(4)),
+        pr_review: reviewTalk(written(1, 4, 12), decidedOf(1, 4)),
+        pr_fix: fixTalk(applied(4)),
       };
     case "findings-text":
       return { pr_review: reviewTalk(written(1, -1, 12)) };
@@ -892,6 +907,11 @@ function conversationsOf(name: SceneName): Record<string, Entry[]> {
         pr_review: reviewTalk(
           written(1, 4, 50),
           decidedOf(1, 38),
+          milestone("checks_read", 10, { pass: 2, passed: 5, total: 5 }),
+          productMessage("pr_pass", "Review the pull request again.", 9, { appPass: 2 }),
+          said("Report 2 written."),
+        ),
+        pr_fix: fixTalk(
           applied(38),
           makeEntry("action", { createdAt: at(30) }),
           milestone("changes_approved", 22, { files: 3 }),
@@ -901,16 +921,12 @@ function conversationsOf(name: SceneName): Record<string, Entry[]> {
             pushed: true,
             number: 1284,
           }),
-          milestone("checks_read", 10, { pass: 2, passed: 5, total: 5 }),
-          productMessage("pr_pass", "Review the pull request again.", 9, { appPass: 2 }),
-          said("Report 2 written."),
         ),
       };
     case "close":
       return {
-        pr_review: reviewTalk(
-          written(1, 4, 172),
-          decidedOf(1, 164),
+        pr_review: reviewTalk(written(1, 4, 172), decidedOf(1, 164), written(2, 0, 125)),
+        pr_fix: fixTalk(
           applied(164),
           makeEntry("action", { createdAt: at(162) }),
           milestone("changes_approved", 146, { files: 3 }),
@@ -920,7 +936,6 @@ function conversationsOf(name: SceneName): Record<string, Entry[]> {
             pushed: true,
             number: 1284,
           }),
-          written(2, 0, 125),
         ),
       };
   }

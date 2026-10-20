@@ -359,6 +359,11 @@ describe("narrowing", () => {
     expect(asPlaceKind("step")).toBe("step");
     expect(asPlaceKind("step_review")).toBe("step_review");
     expect(asPlaceKind("pr")).toBe("pr");
+    expect(asPlaceKind("pr_fix")).toBe("pr_fix");
+    expect(asPRStatus("addressing_review")).toBe("addressing_review");
+    expect(asAppKind("commit_all_push")).toBe("commit_all_push");
+    expect(asModelStage("pr_fix")).toBe("pr_fix");
+    expect(asPromptStage("pr_fix")).toBe("pr_fix");
     expect(asReviewMode("manual")).toBe("manual");
     expect(asReviewMode("agent")).toBe("agent");
     expect(asReviewFallback("")).toBe("");
@@ -563,6 +568,7 @@ describe("api", () => {
     await wails.api.setTheme("dark");
     await wails.api.setModelDefault("pr", "claude-opus-5-5[1m]", "medium");
     await wails.api.setReviewModeDefault("agent");
+    await wails.api.setPRReviewModeDefault("agent");
     await wails.api.getPrompt("prd");
     await wails.api.savePrompt("prd", "# PRD");
     await wails.api.restorePrompt("prd");
@@ -574,6 +580,7 @@ describe("api", () => {
       mode: "",
       models: [],
       reviewMode: "",
+      prReviewMode: "",
       card: null,
     });
     await wails.api.deleteTask("task-1");
@@ -599,6 +606,8 @@ describe("api", () => {
     await wails.api.setReviewMode("task-1", "agent");
     await wails.api.setStepReviewMode("task-1", 2, "manual");
     await wails.api.reviewStepMyself("task-1");
+    await wails.api.setPRReviewMode("task-1", "agent");
+    await wails.api.reviewPRMyself("task-1");
     await wails.api.openInEditor("task-1");
     await wails.api.approveStep("task-1");
     await wails.api.openFileInEditor("task-1", "src/login.ts");
@@ -684,9 +693,9 @@ describe("api", () => {
     await wails.api.deleteDiscussion("discussion-1");
     await wails.api.readDiscussionArtifact("discussion-1", "discussion.md");
 
-    expect(Call.ByID).toHaveBeenCalledTimes(92);
+    expect(Call.ByID).toHaveBeenCalledTimes(95);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);
-    expect(new Set(ids).size).toBe(92);
+    expect(new Set(ids).size).toBe(95);
   });
 
   it("opens a link in the browser of the desktop, never in the webview", async () => {

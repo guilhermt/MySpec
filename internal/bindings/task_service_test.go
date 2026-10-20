@@ -83,16 +83,17 @@ func TestCreateTaskAddsTheTaskToTheState(t *testing.T) {
 		Stage:              "prd",
 		ReviewMode:         "manual",
 		ReviewModeEditable: true,
-		SessionStatus:      "waiting",
-		SessionModel:       "claude-fable-5-1",
-		SessionEffort:      "high",
-		Steps:              []bindings.Step{},
-		PlanProblems:       []bindings.PlanProblem{},
-		Situations:         []bindings.Situation{},
-		Models:             startedTaskModels(models.Factory()),
-		Conversations:      got.Conversations,
-		CreatedAt:          got.CreatedAt,
-		UpdatedAt:          got.UpdatedAt,
+		PRReviewMode:       "manual", PRReviewModeEditable: true,
+		SessionStatus: "waiting",
+		SessionModel:  "claude-fable-5-1",
+		SessionEffort: "high",
+		Steps:         []bindings.Step{},
+		PlanProblems:  []bindings.PlanProblem{},
+		Situations:    []bindings.Situation{},
+		Models:        startedTaskModels(models.Factory()),
+		Conversations: got.Conversations,
+		CreatedAt:     got.CreatedAt,
+		UpdatedAt:     got.UpdatedAt,
 	}
 	// The context percentage depends on the tokens the fake reports, and the
 	// process may still be idling; neither belongs in this comparison.
@@ -460,6 +461,71 @@ func TestCreateTaskReportsAnUnknownReviewMode(t *testing.T) {
 	}
 	if tasks := f.state.GetState().Tasks; len(tasks) != 0 {
 		t.Errorf("state has %d tasks, want none", len(tasks))
+	}
+}
+
+func TestCreateTaskStartsFromThePRReviewModeOfTheSettings(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+
+	if err := f.settings.SetPRReviewModeDefault("agent"); err != nil {
+		t.Fatalf("SetPRReviewModeDefault() = %v, want nil", err)
+	}
+
+	id, err := f.tasks.CreateTask(newTask("login-screen"))
+	if err != nil {
+		t.Fatalf("CreateTask() = %v, want nil", err)
+	}
+
+	got := f.taskOf(t, id)
+	if got.PRReviewMode != "agent" || got.ReviewMode != "manual" {
+		t.Errorf("task = prReviewMode %q reviewMode %q, want the default of the PR alone", got.PRReviewMode, got.ReviewMode)
+	}
+}
+
+func TestCreateTaskKeepsThePRReviewModeOfTheDialog(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+
+	req := newTask("login-screen")
+	req.PRReviewMode = "agent"
+	id, err := f.tasks.CreateTask(req)
+	if err != nil {
+		t.Fatalf("CreateTask() = %v, want nil", err)
+	}
+
+	if got := f.taskOf(t, id); got.PRReviewMode != "agent" || got.ReviewMode != "manual" {
+		t.Errorf("task = prReviewMode %q reviewMode %q, want agent and manual", got.PRReviewMode, got.ReviewMode)
+	}
+
+	req = newTask("signup-screen")
+	req.PRReviewMode = "auto"
+	if id, err := f.tasks.CreateTask(req); err == nil || err.Error() != "Unknown review mode." {
+		t.Errorf("CreateTask(auto) = %q, %v, want the unknown review mode notice", id, err)
+	}
+}
+
+func TestSetPRReviewModeChangesTheModeOfTheState(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := createdTask(t)
+
+	if err := f.tasks.SetPRReviewMode(id, "agent"); err != nil {
+		t.Fatalf("SetPRReviewMode() = %v, want nil", err)
+	}
+	if got := f.taskOf(t, id); got.PRReviewMode != "agent" || !got.PRReviewModeEditable {
+		t.Errorf("task = prReviewMode %q editable %v, want agent and still editable", got.PRReviewMode, got.PRReviewModeEditable)
+	}
+
+	if err := f.tasks.SetPRReviewMode(id, "auto"); err == nil || err.Error() != "Unknown review mode." {
+		t.Errorf("SetPRReviewMode(auto) error = %v, want the unknown review mode notice", err)
+	}
+	if f.logged(t, "binding failed") {
+		t.Error("a mistake the user can correct was logged as a failure")
 	}
 }
 
@@ -1114,6 +1180,7 @@ func TestPullRequestOperationsReportWhatTheUserGotWrong(t *testing.T) {
 		{"open a pull request", func() error { return f.tasks.OpenPR(id, "A title", "A body") }},
 		{"approve a review", func() error { return f.tasks.ApprovePR(id) }},
 		{"review again", func() error { return f.tasks.ReviewAgain(id) }},
+		{"take over the review", func() error { return f.tasks.ReviewPRMyself(id) }},
 		{"discard a draft", func() error { return f.tasks.DiscardDraft(id) }},
 		{"retry the stage", func() error { return f.tasks.RetryPR(id) }},
 		{"refresh a pull request", func() error { return f.tasks.RefreshPR(id) }},

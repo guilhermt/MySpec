@@ -59,6 +59,8 @@ func placeName(place Place, prReview bool) string {
 			return "the review"
 		}
 		return "the pull request"
+	case PlacePRFix:
+		return "the review fixes"
 	case PlaceReview:
 		return "the review"
 	case PlaceDiscussion:
@@ -171,8 +173,18 @@ func draftBody() string {
 
 // findingsBody is the notification of a pull request review that found
 // changes for the user: how many to decide, or the approved ones ready to
-// apply. A pass in text has no count (-1).
-func findingsBody(form Form, count int) string {
+// apply. A pass in text has no count (-1). One the agent review could not
+// bring clean says so first.
+func findingsBody(form Form, count int, fallback task.ReviewFallback) string {
+	body := findingsText(form, count)
+	if fallback == task.FallbackRoundsExhausted {
+		return fmt.Sprintf("The agent review of the pull request didn't come clean after %d rounds. ", flow.MaxPRReviewRounds) + body
+	}
+	return body
+}
+
+// findingsText is findingsBody without the fallback.
+func findingsText(form Form, count int) string {
 	switch {
 	case form == FormApply:
 		return "The approved findings of the pull request review are ready to apply."
@@ -187,10 +199,14 @@ func findingsBody(form Form, count int) string {
 
 // changesReviewBody is the notification of the changes a pull request review
 // applied. One that starts ready to approve, because the last approval left no
-// commit, says so.
-func changesReviewBody(form Form, commitFailed bool) string {
+// commit, says so, and so does one the commit after the agent review did not
+// happen.
+func changesReviewBody(form Form, commitFailed bool, fallback task.ReviewFallback) string {
 	if form == FormApprove && commitFailed {
 		return "The last approval of the pull request didn't produce a commit."
+	}
+	if fallback == task.FallbackNoCommit {
+		return "Review the changes of the review: the commit after the agent review didn't happen."
 	}
 	return "The changes from the review of the pull request are ready for your review."
 }
