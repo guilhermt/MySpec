@@ -39,10 +39,26 @@ describe("TaskView, the nine scenes", () => {
     ["checks", "Progress · PR review · waiting for the checks, 3 of 5 passed", "github"],
     [
       "findings",
-      "Progress · PR review pass 1 · waiting for you: decide findings in PR review",
+      "Progress · PR review pass 1 · Manual · waiting for you: decide findings in PR review",
       "wait",
     ],
     ["close", "Progress · Closing · ready to close", "close"],
+    ["pr-agent-review", "Progress · PR review pass 2 · round 1/5 · Reviewer working", "work"],
+    [
+      "pr-agent-addressing",
+      "Progress · PR review pass 1 · round 1/5 · Implementer working",
+      "work",
+    ],
+    [
+      "pr-fallback-rounds",
+      "Progress · PR review pass 6 · Manual · waiting for you: ready to apply in PR review",
+      "wait",
+    ],
+    [
+      "pr-implementer-question",
+      "Progress · PR review pass 1 · round 1/5 · waiting for you: question in Implementer",
+      "wait",
+    ],
   ])("draws the stepper of the %s scene, with the glyph of its pill", (name, label, glyph) => {
     scene(name);
 
@@ -65,7 +81,24 @@ describe("TaskView, the nine scenes", () => {
     );
   });
 
-  it.each<SceneName>(["plan", "manual", "blocked", "checks", "findings", "close"])(
+  it.each<[SceneName, "Implementer" | "Reviewer", string]>([
+    ["findings", "Reviewer", "Implementer · starts with Apply approvedReviewer"],
+    ["close", "Reviewer", "ImplementerReviewer"],
+    ["pr-agent-review", "Reviewer", "ImplementerReviewer"],
+    ["pr-agent-addressing", "Implementer", "ImplementerReviewer"],
+    ["pr-fallback-rounds", "Reviewer", "ImplementerReviewer"],
+    ["pr-implementer-question", "Reviewer", "Implementer· waitsReviewer"],
+  ])("puts the agent tabs of the %s scene on the %s", (name, chosen, text) => {
+    scene(name);
+
+    const tablist = screen.getByRole("tablist", { name: "Conversations" });
+    expect(tablist).toHaveTextContent(text, { normalizeWhitespace: true });
+    expect(within(tablist).getByRole("tab", { selected: true })).toHaveAccessibleName(
+      new RegExp(`^${chosen}: `),
+    );
+  });
+
+  it.each<SceneName>(["plan", "manual", "blocked", "checks"])(
     "has no agent tabs in the %s scene",
     (name) => {
       scene(name);
@@ -207,5 +240,40 @@ describe("TaskView, the nine scenes", () => {
     scene("checks");
 
     expect(screen.queryByRole("meter")).not.toBeInTheDocument();
+  });
+
+  it("tells the findings of the fallback scene go to the implementer, and why the user decides", () => {
+    scene("pr-fallback-rounds");
+
+    const bar = screen.getByRole("region", { name: "Request" });
+    expect(bar).toHaveTextContent("Ready to apply");
+    expect(bar).toHaveTextContent("3 approved findings go to the implementer");
+    expect(bar).toHaveTextContent("the agent review didn't come clean after five rounds");
+  });
+
+  it("reads the conversation of the implementer in the addressing scene", () => {
+    scene("pr-agent-addressing");
+
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby");
+    expect(screen.getByRole("textbox", { name: "Reply to the implementer" })).toBeInTheDocument();
+    expect(screen.queryByText("Report 1 written.")).not.toBeInTheDocument();
+  });
+
+  it("points to the implementer's question from the reviewer's tab, and goes there", async () => {
+    const { user } = scene("pr-implementer-question");
+
+    const bar = screen.getByRole("region", { name: "Request" });
+    expect(bar).toHaveTextContent("The implementer waits · Question");
+
+    await user.click(within(bar).getByRole("button", { name: "Go to implementer" }));
+
+    expect(
+      within(screen.getByRole("tablist", { name: "Conversations" })).getByRole("tab", {
+        selected: true,
+      }),
+    ).toHaveAccessibleName(/^Implementer: /);
+    expect(
+      within(screen.getByRole("region", { name: "Request" })).getByText("Question"),
+    ).toBeInTheDocument();
   });
 });

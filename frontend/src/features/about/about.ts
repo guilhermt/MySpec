@@ -134,6 +134,8 @@ function workingPlace(stage: string): string {
       return "PR";
     case "pr_review":
       return "PR review";
+    case "pr_fix":
+      return "PR review · Implementer";
     case "review":
       return "Review";
     case "discussion":

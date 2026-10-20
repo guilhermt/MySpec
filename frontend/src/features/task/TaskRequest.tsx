@@ -103,7 +103,7 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
   const approveRest = useFocusAfterApproveRest(request);
 
   if (request === null) {
-    if (other === null || step === null) {
+    if (other === null) {
       return null;
     }
     return (
@@ -115,7 +115,7 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
           {...(other.time !== undefined ? { time: other.time } : {})}
           goLabel={other.goLabel}
           goTooltip={`Show the ${other.goTab}'s conversation`}
-          onGo={() => selectStepTab(task.id, step.number, other.goTab)}
+          onGo={() => selectStepTab(task.id, other.slot, other.goTab)}
           {...(flashing.has(other.situationId) ? { flash: other.failed ? "error" : "wait" } : {})}
         />
       </div>

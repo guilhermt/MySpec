@@ -20,7 +20,7 @@ import type {
   Transcript,
 } from "@/lib/wails";
 import { sessionKey } from "@/lib/wails";
-import { stepTabKey } from "@/store/app-store";
+import { PR_TAB_SLOT, stepTabKey } from "@/store/app-store";
 import { fromTranscript, type TranscriptState } from "@/store/transcript";
 import {
   makeBoard,
@@ -44,7 +44,7 @@ import {
   makeTranscript,
 } from "@/test/wails-mock";
 
-/** SCENES are the moments of the reference task: the nine of the mock and the ones of the findings. */
+/** SCENES are the moments of the reference task: the nine of the mock, the ones of the findings and the ones of the agent review of the pull request. */
 export const SCENES = [
   "plan",
   "run",
@@ -62,6 +62,10 @@ export const SCENES = [
   "findings-text",
   "findings-unreadable",
   "close",
+  "pr-agent-review",
+  "pr-agent-addressing",
+  "pr-fallback-rounds",
+  "pr-implementer-question",
 ] as const;
 
 /** SceneName is one moment of the reference task. */
@@ -220,6 +224,7 @@ function situation(
 const stepPlace = (step: number) => ({ kind: "step", stage: "", step });
 const reviewerPlace = (step: number) => ({ kind: "step_review", stage: "", step });
 const prPlace = { kind: "pr", stage: "", step: 0 };
+const prFixPlace = { kind: "pr_fix", stage: "", step: 0 };
 
 // reference is the reference task at a moment.
 function reference(overrides: Partial<TaskSummary>, longName: boolean): TaskSummary {
@@ -834,6 +839,100 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
         },
         longName,
       );
+    case "pr-agent-review":
+      // The agent review, in its second pass: the reviewer works on the pull request after the
+      // implementer applied the first round.
+      return inPR(
+        {
+          status: "reviewing",
+          sessionStage: "pr_review",
+          sessionStatus: "working",
+          turnRunning: true,
+          processRunning: true,
+          turnStartedAt: at(2),
+          contextPercent: 36,
+          currentPass: 2,
+          reviewRound: 1,
+          reports: [
+            structuredReport(1, { findings: findingsOf(4, DECIDED), sentAt: at(14) }),
+            structuredReport(2, { recorded: false, file: "", revision: 0, recordedAt: "" }),
+          ],
+          implementer: makePRImplementer({ contextPercent: 24 }),
+          implementerStarted: true,
+        },
+        { prReviewMode: "agent" },
+        longName,
+      );
+    case "pr-agent-addressing":
+      // The implementer applies the first round of the agent review.
+      return inPR(
+        {
+          status: "addressing_review",
+          sessionStage: "pr_review",
+          contextPercent: 33,
+          currentPass: 1,
+          reviewRound: 1,
+          reports: [structuredReport(1, { findings: findingsOf(4, DECIDED), sentAt: at(4) })],
+          implementer: makePRImplementer({
+            sessionStatus: "working",
+            turnRunning: true,
+            processRunning: true,
+            turnStartedAt: at(3),
+            contextPercent: 24,
+          }),
+          implementerStarted: true,
+        },
+        { prReviewMode: "agent" },
+        longName,
+      );
+    case "pr-fallback-rounds":
+      // The agent review did not come clean after five rounds: the user decides the last findings.
+      return inPR(
+        {
+          status: "awaiting_decision",
+          sessionStage: "pr_review",
+          contextPercent: 41,
+          currentPass: 6,
+          reviewRound: 5,
+          reports: [
+            ...[1, 2, 3, 4, 5].map((pass) =>
+              structuredReport(pass, {
+                findings: findingsOf(2, DECIDED),
+                recordedAt: at(70 - pass * 10),
+                sentAt: at(65 - pass * 10),
+              }),
+            ),
+            structuredReport(6, { findings: findingsOf(4, DECIDED) }),
+          ],
+          implementer: makePRImplementer({ contextPercent: 52 }),
+          implementerStarted: true,
+        },
+        {
+          prReviewMode: "manual",
+          prReviewFallback: "rounds_exhausted",
+          situations: [situation("findings", "waiting", prPlace, 6, { form: "apply" })],
+        },
+        longName,
+      );
+    case "pr-implementer-question":
+      // The implementer asks while the reviewer is the conversation on screen.
+      return inPR(
+        {
+          status: "addressing_review",
+          sessionStage: "pr_review",
+          contextPercent: 33,
+          currentPass: 1,
+          reviewRound: 1,
+          reports: [structuredReport(1, { findings: findingsOf(4, DECIDED), sentAt: at(9) })],
+          implementer: makePRImplementer({ sessionStatus: "needs_answer", contextPercent: 27 }),
+          implementerStarted: true,
+        },
+        {
+          prReviewMode: "agent",
+          situations: [situation("question", "waiting", prFixPlace, 5)],
+        },
+        longName,
+      );
   }
 }
 
@@ -923,6 +1022,30 @@ function conversationsOf(name: SceneName): Record<string, Entry[]> {
           }),
         ),
       };
+    case "pr-agent-review":
+      return {
+        pr_review: reviewTalk(
+          written(1, 4, 14),
+          decidedOf(1, 14),
+          productMessage("pass", "Review the pull request again.", 2, { appPass: 2 }),
+        ),
+        pr_fix: fixTalk(applied(14)),
+      };
+    case "pr-agent-addressing":
+      return {
+        pr_review: reviewTalk(written(1, 4, 5), decidedOf(1, 4)),
+        pr_fix: fixTalk(applied(4), makeEntry("action", { createdAt: at(2) })),
+      };
+    case "pr-fallback-rounds":
+      return {
+        pr_review: reviewTalk(written(5, 2, 20), written(6, 4, 6)),
+        pr_fix: fixTalk(applied(20)),
+      };
+    case "pr-implementer-question":
+      return {
+        pr_review: reviewTalk(written(1, 4, 10), decidedOf(1, 9)),
+        pr_fix: fixTalk(applied(9), makeEntry("question")),
+      };
     case "close":
       return {
         pr_review: reviewTalk(written(1, 4, 172), decidedOf(1, 164), written(2, 0, 125)),
@@ -948,8 +1071,21 @@ export function sceneTask(name: SceneName, { longName = false } = {}): Scene {
   );
   // The reviewer is on screen where it asks or failed; the implementer everywhere else.
   const tab = name === "ask" || name === "error" ? "reviewer" : "implementer";
-  return sceneOf(taskOf(name, longName), transcripts, tab);
+  const scene = sceneOf(taskOf(name, longName), transcripts, tab);
+  const prTab = PR_TABS[name];
+  return prTab === undefined
+    ? scene
+    : { ...scene, openStepTab: { [stepTabKey(TASK_ID, PR_TAB_SLOT)]: prTab } };
 }
+
+// PR_TABS are the scenes of the agent review that choose the tab of the review of the pull request;
+// the others open the one the product picks.
+const PR_TABS: Partial<Record<SceneName, "implementer" | "reviewer">> = {
+  "pr-agent-review": "reviewer",
+  "pr-agent-addressing": "implementer",
+  "pr-fallback-rounds": "reviewer",
+  "pr-implementer-question": "reviewer",
+};
 
 /**
  * sceneOf is what the store holds to draw a moment of the reference task: the task, among the

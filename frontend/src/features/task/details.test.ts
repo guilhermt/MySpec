@@ -6,7 +6,8 @@ import {
   earlierPlace,
   reportOf,
 } from "@/features/task/details";
-import type { TaskSummary } from "@/lib/wails";
+import type { PullRequest, TaskSummary } from "@/lib/wails";
+import type { StepTab } from "@/store/app-store";
 import {
   makePRReport,
   makePullRequest,
@@ -242,6 +243,7 @@ describe("detailsOf, Pull request", () => {
     });
 
     expect(detailsOf(task, null, "pr").pullRequest).toEqual({
+      mode: { mode: "Manual", round: 0, fallbackReason: "" },
       conversations: [{ stage: "pr", label: "Draft and opening", startedAt: AT, now: true }],
       reports: [],
       pr: null,
@@ -264,9 +266,10 @@ describe("detailsOf, Pull request", () => {
     });
 
     expect(detailsOf(task, null, null).pullRequest).toEqual({
+      mode: { mode: "Manual", round: 0, fallbackReason: "" },
       conversations: [
         { stage: "pr", label: "Draft and opening · #1284", startedAt: AT, now: false },
-        { stage: "pr_review", label: "PR review", startedAt: AT, now: true },
+        { stage: "pr_review", label: "PR review · Reviewer", startedAt: AT, now: true },
       ],
       reports: [
         {
@@ -329,7 +332,7 @@ describe("detailsOf, Pull request past its review", () => {
 
       expect(detailsOf(task, null, null).pullRequest?.conversations).toEqual([
         { stage: "pr", label: "Draft and opening · #1284", startedAt: AT, now: false },
-        { stage: "pr_review", label: "PR review", startedAt: AT, now: true },
+        { stage: "pr_review", label: "PR review · Reviewer", startedAt: AT, now: true },
       ]);
     },
   );
@@ -342,6 +345,72 @@ describe("detailsOf, Pull request past its review", () => {
     });
 
     expect(detailsOf(task, null, null).pullRequest?.conversations[1]?.now).toBe(false);
+  });
+});
+
+describe("detailsOf, the review of the pull request", () => {
+  const reviewTask = (task: Partial<TaskSummary>, pr: Partial<PullRequest> = {}) =>
+    makeTask({
+      stage: "pr",
+      conversations: [conversation("pr"), conversation("pr_review"), conversation("pr_fix")],
+      pr: makePullRequest({ status: "addressing_review", prNumber: 12, ...pr }),
+      ...task,
+    });
+
+  it("tells the agent review with its round", () => {
+    const task = reviewTask({ prReviewMode: "agent" }, { reviewRound: 2 });
+
+    expect(detailsOf(task, null, null).pullRequest?.mode).toEqual({
+      mode: "Agent",
+      round: 2,
+      fallbackReason: "",
+    });
+  });
+
+  it("tells the manual review without a round, and why it fell back", () => {
+    const task = reviewTask(
+      { prReviewMode: "manual", prReviewFallback: "rounds_exhausted" },
+      { reviewRound: 5 },
+    );
+
+    expect(detailsOf(task, null, null).pullRequest?.mode).toEqual({
+      mode: "Manual",
+      round: 0,
+      fallbackReason: "The agent review didn't come clean after five rounds",
+    });
+  });
+
+  it("names the conversations of the reviewer and of the implementer", () => {
+    const rows = detailsOf(reviewTask({}), null, "pr_fix").pullRequest?.conversations;
+
+    expect(rows?.map(({ stage, label, now }) => [stage, label, now])).toEqual([
+      ["pr", "Draft and opening · #12", false],
+      ["pr_review", "PR review · Reviewer", false],
+      ["pr_fix", "PR review · Implementer", true],
+    ]);
+  });
+
+  it.each<[StepTab, string]>([
+    ["reviewer", "pr_review"],
+    ["implementer", "pr_fix"],
+  ])("has the conversation of the %s tab on screen once the review is closed", (tab, stage) => {
+    const task = reviewTask({}, { status: "done", sessionStage: "" });
+
+    const now = detailsOf(task, null, null, tab).pullRequest?.conversations.filter(
+      (row) => row.now,
+    );
+
+    expect(now?.map((row) => row.stage)).toEqual([stage]);
+  });
+});
+
+describe("earlierPlace and backTarget of the implementer of the review", () => {
+  it("names the implementer conversation and where it goes back to", () => {
+    const task = makeTask({ stage: "pr" });
+
+    expect(earlierPlace(task, "pr_fix")).toBe("PR review · Implementer");
+    expect(backTarget(task, "pr_fix")).toBe("the implementer of the PR review");
+    expect(backTarget(task, "pr_review")).toBe("the PR review");
   });
 });
 
@@ -360,6 +429,7 @@ describe("detailsOf, Task", () => {
       epic: card.epic,
       mode: "Structured",
       reviewMode: "agent",
+      prReviewMode: "manual",
       branch: "rate-limit",
       base: "dev",
       worktree: "/home/dev/worktrees/rate-limit",

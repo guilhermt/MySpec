@@ -3,6 +3,7 @@ import type { StepperStepView } from "@/components/system/Stepper";
 import { currentStepOf } from "@/features/task/step-status";
 import { isPaused, waitingSession } from "@/features/task/task-session";
 import { checkCounts, prChecks } from "@/lib/pull-requests";
+import { MAX_PR_REVIEW_ROUNDS } from "@/lib/review-modes";
 import { situationPillState } from "@/lib/situations";
 import { type LifecycleStage, lifecycleOf, stageLabel, stageState } from "@/lib/stages";
 import type { PullRequest, SituationGroup, Step, TaskSummary } from "@/lib/wails";
@@ -57,6 +58,7 @@ const SITUATION_GLYPHS: Record<SituationGroup, StepperGlyph> = {
 // The states the pull request reaches once its pass wrote the report: the pass counts the reports.
 const REPORTED: readonly string[] = [
   "awaiting_decision",
+  "addressing_review",
   "in_review",
   "ready_to_approve",
   "committing",
@@ -175,6 +177,18 @@ function prMoment(task: TaskSummary): Moment {
   }
 }
 
+// prQualifier is what the pill of the review of the pull request adds to its pass: the commit, the
+// manual review, or the round of the agent review.
+function prQualifier(task: TaskSummary, pr: PullRequest): string {
+  if (asPRStatus(pr.status) === "committing") {
+    return "committing";
+  }
+  if (asReviewMode(task.prReviewMode) === "manual") {
+    return "Manual";
+  }
+  return pr.reviewRound > 0 ? `round ${pr.reviewRound}/${MAX_PR_REVIEW_ROUNDS}` : "";
+}
+
 function prReviewMoment(task: TaskSummary, pr: PullRequest): Moment {
   const name = stageLabel("pr_review");
   switch (asPRStatus(pr.status)) {
@@ -193,9 +207,12 @@ function prReviewMoment(task: TaskSummary, pr: PullRequest): Moment {
       });
     }
     case "committing":
-      return busy(name, "committing", { position: reviewPassOf(pr), qualifier: "committing" });
+      return busy(name, "committing", {
+        position: reviewPassOf(pr),
+        qualifier: prQualifier(task, pr),
+      });
     default:
-      return agent(task, name, { position: reviewPassOf(pr) });
+      return agent(task, name, { position: reviewPassOf(pr), qualifier: prQualifier(task, pr) });
   }
 }
 

@@ -8,8 +8,14 @@ import {
   type TaskSession,
   waitingSession,
 } from "@/features/task/task-session";
-import type { Step, TaskSummary } from "@/lib/wails";
-import { makePullRequest, makeStep, makeStepReviewer, makeTask } from "@/test/wails-mock";
+import type { PullRequest, Step, TaskSummary } from "@/lib/wails";
+import {
+  makePRImplementer,
+  makePullRequest,
+  makeStep,
+  makeStepReviewer,
+  makeTask,
+} from "@/test/wails-mock";
 
 const PAUSED_AT = "2026-09-27T14:52:00Z";
 
@@ -72,7 +78,30 @@ describe("waitingSession", () => {
         pr: makePullRequest({ status: "reviewing", prNumber: 12, sessionStage: "pr_review" }),
       }),
       "pr_review",
-      "PR agent",
+      "Reviewer",
+    ],
+    [
+      "the implementer of the pull request review while it addresses the findings",
+      makeTask({
+        stage: "pr",
+        pr: makePullRequest({
+          status: "addressing_review",
+          prNumber: 12,
+          sessionStage: "pr_review",
+          implementer: makePRImplementer({ sessionStatus: "working" }),
+        }),
+      }),
+      "pr_fix",
+      "Implementer",
+    ],
+    [
+      "the reviewer once the changes are under review without an implementer",
+      makeTask({
+        stage: "pr",
+        pr: makePullRequest({ status: "in_review", prNumber: 12, sessionStage: "pr_review" }),
+      }),
+      "pr_review",
+      "Reviewer",
     ],
   ])("is the conversation of %s", (_, task, stage, role) => {
     expect(waitingSession(task)).toMatchObject({ stage, role });
@@ -142,6 +171,52 @@ describe("screenSession", () => {
     ],
   ])("is none in %s", (_, task) => {
     expect(screenSession(task, "implementer")).toBeNull();
+  });
+});
+
+describe("screenSession in the review of the pull request", () => {
+  const reviewing = (pr: Partial<PullRequest> = {}) =>
+    makeTask({
+      stage: "pr",
+      conversations: [{ stage: "pr_review", startedAt: "2026-09-27T09:14:00Z" }],
+      pr: makePullRequest({
+        status: "in_review",
+        prNumber: 12,
+        sessionStage: "pr_review",
+        contextPercent: 30,
+        ...pr,
+      }),
+    });
+
+  it("is the implementer's session on its tab, with its own context", () => {
+    const task = reviewing({ implementer: makePRImplementer({ contextPercent: 61 }) });
+
+    expect(screenSession(task, "implementer")).toMatchObject({
+      stage: "pr_fix",
+      role: "Implementer",
+      contextPercent: 61,
+    });
+  });
+
+  it("is the reviewer's session on its tab", () => {
+    const task = reviewing({ implementer: makePRImplementer({ contextPercent: 61 }) });
+
+    expect(screenSession(task, "reviewer")).toMatchObject({
+      stage: "pr_review",
+      role: "Reviewer",
+      contextPercent: 30,
+    });
+  });
+
+  it("is none on the implementer's tab once its session is closed", () => {
+    expect(screenSession(reviewing({ implementerStarted: true }), "implementer")).toBeNull();
+  });
+
+  it("is none once the pull request is done, on either tab", () => {
+    const task = reviewing({ status: "done", implementer: makePRImplementer() });
+
+    expect(screenSession(task, "implementer")).toBeNull();
+    expect(screenSession(task, "reviewer")).toBeNull();
   });
 });
 

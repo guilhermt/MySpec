@@ -9,6 +9,7 @@ import {
 import type { TaskSummary } from "@/lib/wails";
 import {
   makeDiscussion,
+  makePRImplementer,
   makePullRequest,
   makeReviewSummary,
   makeStep,
@@ -59,6 +60,29 @@ describe("taskSessions", () => {
     ]);
     const quiet = makeTask({ stage: "pr", pr: makePullRequest({ sessionStage: "" }) });
     expect(taskSessions(quiet)).toEqual([]);
+  });
+
+  it("is the reviewer, not the PR agent, once the session is the review's", () => {
+    const task = makeTask({
+      stage: "pr",
+      pr: makePullRequest({ sessionStage: "pr_review", prNumber: 12 }),
+    });
+
+    expect(roles(taskSessions(task))).toEqual(["Reviewer pr_review"]);
+  });
+
+  it("adds the implementer of the review while it has a session", () => {
+    const task = makeTask({
+      stage: "pr",
+      pr: makePullRequest({
+        sessionStage: "pr_review",
+        prNumber: 12,
+        implementer: makePRImplementer({ sessionStatus: "working", contextPercent: 30 }),
+      }),
+    });
+
+    expect(roles(taskSessions(task))).toEqual(["Reviewer pr_review", "Implementer pr_fix"]);
+    expect(taskSessions(task)[1]).toMatchObject({ working: true, contextPercent: 30 });
   });
 
   it("carries the state and the action of the session", () => {

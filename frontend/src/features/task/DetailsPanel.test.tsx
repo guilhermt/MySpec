@@ -446,7 +446,7 @@ describe("DetailsPanel, Task", () => {
       Card: "dev/web#12 · In progress",
       Epic: "API hardening",
       Mode: "Structured",
-      "Review mode": "Agent",
+      "Review mode": "Steps Agent · PR Manual",
       Models: "Per stage",
       Branch: "rate-limit",
       Base: "dev",
@@ -486,7 +486,9 @@ describe("DetailsPanel, Task", () => {
 
   it("opens the review mode popover on its chip, and gives the focus back to it", async () => {
     const { user } = details(STRUCTURED);
-    const chip = screen.getByRole("button", { name: "Review mode of the task: Agent" });
+    const chip = screen.getByRole("button", {
+      name: "Review mode of the task: Steps Agent · PR Manual",
+    });
 
     await user.click(chip);
 
@@ -621,9 +623,10 @@ describe("DetailsPanel, conversations", () => {
     });
 
     const rows = within(group("Pull request")).getAllByRole("listitem");
-    expect(rows.slice(0, 3).map((row) => row.textContent)).toEqual([
+    expect(rows.slice(0, 4).map((row) => row.textContent)).toEqual([
+      "Reviewnow · Manual",
       "Draft and opening · #1284now",
-      `PR review${time}`,
+      `PR review · Reviewer${time}`,
       "Review 1 · changes",
     ]);
   });
@@ -638,9 +641,9 @@ describe("DetailsPanel, conversations", () => {
     });
 
     const rows = within(group("Pull request")).getAllByRole("listitem");
-    expect(rows.slice(0, 2).map((row) => row.textContent)).toEqual([
+    expect(rows.slice(1, 3).map((row) => row.textContent)).toEqual([
       `Draft and opening · #1284${time}`,
-      "PR reviewnow",
+      "PR review · Reviewernow",
     ]);
     expect(within(group("Pull request")).queryByRole("button", { name: /^PR review/ })).toBeNull();
   });
@@ -773,5 +776,52 @@ describe("DetailsPanel, conversations", () => {
     await waitFor(() => {
       expect(useAppStore.getState().earlierConversation?.stage).toBe("step_review:1");
     });
+  });
+});
+
+describe("DetailsPanel, the mode of the review of the pull request", () => {
+  const STARTED = "2026-09-27T09:14:00Z";
+  const time = shortTime(STARTED, Date.now());
+  const conversations = [
+    makeTaskConversation({ stage: "pr", startedAt: STARTED }),
+    makeTaskConversation({ stage: "pr_review", startedAt: STARTED }),
+    makeTaskConversation({ stage: "pr_fix", startedAt: STARTED }),
+  ];
+
+  it("tells the agent review with its round, at the top of the group", () => {
+    details({
+      ...inPR({ status: "addressing_review", reviewRound: 2 }),
+      prReviewMode: "agent",
+      conversations,
+    });
+
+    const [mode, ...rest] = within(group("Pull request")).getAllByRole("listitem");
+    expect(mode).toHaveTextContent("Reviewnow · Agent · round 2 of 5");
+    expect(rest.map((row) => row.textContent)).toContain(`PR review · Implementer${time}`);
+  });
+
+  it("tells the agent review before its first round without one", () => {
+    details({ ...inPR({ reviewRound: 0 }), prReviewMode: "agent", conversations });
+
+    expect(within(group("Pull request")).getAllByRole("listitem")[0]).toHaveTextContent(
+      "Reviewnow · Agent",
+    );
+    expect(within(group("Pull request")).queryByText(/round/)).toBeNull();
+  });
+
+  it("says why the review fell back to Manual, in the tooltip and to the screen reader", async () => {
+    const { user } = details({
+      ...inPR({ reviewRound: 5 }),
+      prReviewMode: "manual",
+      prReviewFallback: "rounds_exhausted",
+      conversations,
+    });
+    const reason = "The agent review didn't come clean after five rounds";
+
+    const mode = within(group("Pull request")).getAllByRole("listitem")[0];
+    expect(mode).toHaveTextContent(`now · Manual · ${reason}`);
+    await user.hover(within(mode as HTMLElement).getByText("now · Manual"));
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(reason);
   });
 });

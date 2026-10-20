@@ -4,7 +4,7 @@ import { asSessionStatus, asTaskStage } from "@/lib/wails";
 
 /** ItemSession is one conversation of an item: who it is, how it is and what it runs now. */
 export interface ItemSession {
-  /** role is who speaks in it: Implementer, Reviewer, PRD agent, Tech spec agent, Plan agent, Planning agent, PR agent or Discussion agent. */
+  /** role is who speaks in it: Implementer, Reviewer (also of the PR review), PRD agent, Tech spec agent, Plan agent, Planning agent, PR agent or Discussion agent. */
   role: string;
   stage: string;
   status: SessionStatus;
@@ -70,10 +70,23 @@ export function taskSessions(task: TaskSummary): ItemSession[] {
       }
       return sessions;
     }
-    case "pr":
-      return task.pr && task.pr.sessionStage !== ""
-        ? [itemSession("PR agent", task.pr.sessionStage, task.pr)]
-        : [];
+    case "pr": {
+      const { pr } = task;
+      const sessions: ItemSession[] = [];
+      if (pr !== null && pr.sessionStage !== "") {
+        sessions.push(
+          itemSession(
+            pr.sessionStage === "pr_review" ? "Reviewer" : "PR agent",
+            pr.sessionStage,
+            pr,
+          ),
+        );
+      }
+      if (pr?.implementer) {
+        sessions.push(itemSession("Implementer", "pr_fix", pr.implementer));
+      }
+      return sessions;
+    }
   }
 }
 

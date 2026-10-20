@@ -19,9 +19,10 @@ import {
   sameLocation,
   withoutFresh,
 } from "@/lib/locations";
+import { hasReviewConversation } from "@/lib/pull-requests";
 import {
   discussionSituation,
-  prSituation,
+  prTabSituation,
   reviewerSituation,
   reviewName,
   reviewSituation,
@@ -69,7 +70,7 @@ import type {
 } from "@/lib/wails";
 import { asPlaceKind, asPRState, asTaskStage, asThemePreference, sessionKey } from "@/lib/wails";
 import { allowedInWelcome, welcomeMode } from "@/lib/welcome";
-import { firstTab } from "@/store/step-tab";
+import { firstPRTab, firstTab } from "@/store/step-tab";
 import {
   applyEvent,
   emptyTranscript,
@@ -99,6 +100,9 @@ export type StepTab = "implementer" | "reviewer";
 export function stepTabKey(taskId: string, step: number): string {
   return `${taskId}|${step}`;
 }
+
+/** PR_TAB_SLOT is the slot of the tabs of the review of the pull request: they share openStepTab with the steps, under a slot no step has. */
+export const PR_TAB_SLOT = 0;
 
 /** PromptEdit is a prompt open in the editor: the text it opened with and the text it has now. */
 export interface PromptEdit {
@@ -638,9 +642,11 @@ function withStepTab(
       return { ...current, [stepTabKey(taskId, place.step)]: "implementer" };
     case "step_review":
       return { ...current, [stepTabKey(taskId, place.step)]: "reviewer" };
-    case "stage":
-    case "pr":
     case "pr_fix":
+      return { ...current, [stepTabKey(taskId, PR_TAB_SLOT)]: "implementer" };
+    case "pr":
+      return { ...current, [stepTabKey(taskId, PR_TAB_SLOT)]: "reviewer" };
+    case "stage":
     case "review":
     case "discussion":
       return current;
@@ -1691,9 +1697,15 @@ export function useDraft(taskId: string, stage: string): string {
 }
 
 // A tab that no longer has a conversation behind it falls back to the implementer, and a step
-// with nothing stored opens the tab of firstTab.
+// with nothing stored opens the tab of firstTab; the pull request, the one of firstPRTab.
 function openStepTabOf(state: AppStore, taskId: string): StepTab {
   const task = findTask(state.app, taskId);
+  if (task?.pr != null && asTaskStage(task.stage) === "pr") {
+    // Before the reviewer has its conversation the pull request has the one conversation of its session.
+    return hasReviewConversation(task)
+      ? (state.openStepTab[stepTabKey(taskId, PR_TAB_SLOT)] ?? firstPRTab(task, task.pr))
+      : "reviewer";
+  }
   const step = (task?.steps ?? []).find((candidate) => candidate.number === task?.currentStep);
   if (task === null || step === undefined || step.reviewer === null) {
     return "implementer";
@@ -1732,7 +1744,7 @@ function onScreenSituation(state: AppStore): Situation | null {
         ? reviewerSituation(task, task.currentStep)
         : stepSituation(task, task.currentStep);
     case "pr":
-      return prSituation(task);
+      return prTabSituation(task, openStepTabOf(state, task.id));
     case "prd":
     case "tech_spec":
     case "plan":

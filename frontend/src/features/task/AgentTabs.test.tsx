@@ -2,11 +2,20 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { act, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { AGENT_CONVERSATION, AgentTabs } from "@/features/task/AgentTabs";
-import type { Situation, Step, TaskSummary } from "@/lib/wails";
+import { AGENT_CONVERSATION } from "@/features/task/AgentTabs";
+import { PRTop, StepTop } from "@/features/task/TaskView";
+import type { PullRequest, Situation, Step, TaskSummary } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore, type StoreOptions } from "@/test/render";
-import { makeSituation, makeState, makeStep, makeStepReviewer, makeTask } from "@/test/wails-mock";
+import {
+  makePRImplementer,
+  makePullRequest,
+  makeSituation,
+  makeState,
+  makeStep,
+  makeStepReviewer,
+  makeTask,
+} from "@/test/wails-mock";
 
 // Vitest runs with css: false, so the stylesheet is read as text.
 const GLOBALS = readFileSync(join(import.meta.dirname, "../../styles/globals.css"), "utf8");
@@ -49,7 +58,7 @@ function tabs(
   ui: NonNullable<StoreOptions["ui"]> = {},
 ) {
   const { task, step: current } = taskWith(step, situations);
-  return renderWithStore(<AgentTabs task={task} step={current} />, {
+  return renderWithStore(<StepTop task={task} step={current} />, {
     state: makeState({ tasks: [task] }),
     ui,
   });
@@ -58,7 +67,7 @@ function tabs(
 const tab = (name: RegExp) => screen.getByRole("tab", { name });
 const stored = () => useAppStore.getState().openStepTab["task-1|1"];
 
-describe("AgentTabs", () => {
+describe("AgentTabs of a step", () => {
   it("shows nothing while the step has no reviewer outside a review pass", () => {
     const { container } = tabs({ status: "implementing", reviewer: null });
 
@@ -161,7 +170,7 @@ describe("AgentTabs", () => {
     act(() => {
       useAppStore.getState().applyState(makeState({ tasks: [task] }));
     });
-    rerender(<AgentTabs task={task} step={step} />);
+    rerender(<StepTop task={task} step={step} />);
 
     expect(stored()).toBe("reviewer");
     expect(tab(/^Reviewer/)).toHaveAttribute("aria-selected", "true");
@@ -175,7 +184,7 @@ describe("AgentTabs", () => {
     act(() => {
       useAppStore.getState().applyState(makeState({ tasks: [task] }));
     });
-    rerender(<AgentTabs task={task} step={step} />);
+    rerender(<StepTop task={task} step={step} />);
 
     expect(stored()).toBe("implementer");
     expect(tab(/^Implementer/)).toHaveAttribute("aria-selected", "true");
@@ -212,5 +221,181 @@ describe("AgentTabs", () => {
       .map((match) => match[1] ?? "")
       .join("\n");
     expect(reduced).toMatch(/\.situation-flash\[data-flash\] \{\s*animation: none;\s*\}/);
+  });
+});
+
+const FIX_ASKS = makeSituation({
+  id: "implementer-question",
+  kind: "question",
+  place: { kind: "pr_fix", stage: "", step: 0 },
+  startedAt: "2026-09-05T10:05:00Z",
+});
+
+const FINDINGS = makeSituation({
+  id: "findings",
+  kind: "findings",
+  form: "decide",
+  place: { kind: "pr", stage: "", step: 0 },
+  startedAt: "2026-09-05T10:00:00Z",
+});
+
+const REVIEWER_QUESTION = makeSituation({
+  id: "pr-reviewer-question",
+  kind: "question",
+  place: { kind: "pr", stage: "", step: 0 },
+  startedAt: "2026-09-05T10:00:00Z",
+});
+
+function prTaskWith(pr: Partial<PullRequest>, situations: Situation[] = [], review = "manual") {
+  const current = makePullRequest({
+    status: "awaiting_decision",
+    sessionStage: "pr_review",
+    sessionStatus: "waiting",
+    prNumber: 7,
+    ...pr,
+  });
+  const task: TaskSummary = makeTask({
+    stage: "pr",
+    pr: current,
+    prReviewMode: review,
+    conversations: [
+      { stage: "pr", startedAt: "2026-09-05T09:00:00Z" },
+      { stage: "pr_review", startedAt: "2026-09-05T09:30:00Z" },
+    ],
+    situations,
+  });
+  return { task, pr: current };
+}
+
+function prTabs(
+  pr: Partial<PullRequest>,
+  situations: Situation[] = [],
+  ui: NonNullable<StoreOptions["ui"]> = {},
+  review = "manual",
+) {
+  const { task, pr: current } = prTaskWith(pr, situations, review);
+  return renderWithStore(<PRTop task={task} pr={current} />, {
+    state: makeState({ tasks: [task] }),
+    ui,
+  });
+}
+
+const storedPR = () => useAppStore.getState().openStepTab["task-1|0"];
+
+describe("AgentTabs of the review of the pull request", () => {
+  it("shows nothing before the reviewer has its conversation", () => {
+    const task: TaskSummary = makeTask({
+      stage: "pr",
+      pr: makePullRequest({ status: "drafting", sessionStage: "pr" }),
+      conversations: [{ stage: "pr", startedAt: "2026-09-05T09:00:00Z" }],
+    });
+    const { container } = renderWithStore(<PRTop task={task} pr={task.pr as PullRequest} />, {
+      state: makeState({ tasks: [task] }),
+    });
+
+    expect(container).toBeEmptyDOMElement();
+    expect(storedPR()).toBeUndefined();
+  });
+
+  it("keeps the implementer tab disabled until its session starts, saying with what", () => {
+    prTabs({}, [], {}, "agent");
+
+    expect(tab(/^Implementer/)).toHaveTextContent("Implementer · starts with round 1");
+    expect(tab(/^Implementer/)).toHaveAttribute("aria-disabled", "true");
+    expect(tab(/^Implementer/)).toHaveAccessibleName("Implementer: starts with round 1");
+  });
+
+  it("starts the manual implementer with Apply approved", () => {
+    prTabs({});
+
+    expect(tab(/^Implementer/)).toHaveAccessibleName("Implementer: starts with Apply approved");
+  });
+
+  it("says the implementer never started once the review ended", () => {
+    prTabs({ status: "done" });
+
+    expect(tab(/^Implementer/)).toHaveAccessibleName("Implementer: never started");
+  });
+
+  it("is enabled and idle when the implementer's session was closed after it started", () => {
+    prTabs({ implementerStarted: true, implementer: null });
+
+    expect(tab(/^Implementer/)).not.toHaveAttribute("aria-disabled", "true");
+    expect(tab(/^Implementer/)).toHaveAccessibleName("Implementer: idle");
+  });
+
+  it("moves between the conversations with the arrows and stores the choice in the slot of the PR", async () => {
+    const { user } = prTabs(
+      { implementer: makePRImplementer({ sessionStatus: "working", processRunning: true }) },
+      [],
+      { openStepTab: { "task-1|0": "reviewer" } },
+    );
+
+    await user.tab();
+    await user.keyboard("{ArrowLeft}");
+
+    expect(tab(/^Implementer/)).toHaveAttribute("aria-selected", "true");
+    expect(tab(/^Implementer/)).toHaveAccessibleName("Implementer: working");
+    expect(storedPR()).toBe("implementer");
+    expect(useAppStore.getState().openStepTab["task-1|1"]).toBeUndefined();
+  });
+
+  it("says waits on the tab not chosen, and the question of the reviewer only on its tab", () => {
+    prTabs({ implementer: makePRImplementer() }, [FIX_ASKS, REVIEWER_QUESTION, FINDINGS], {
+      openStepTab: { "task-1|0": "reviewer" },
+    });
+
+    expect(tab(/^Implementer/)).toHaveTextContent("Implementer· waits");
+    expect(tab(/^Implementer/)).toHaveAccessibleName(/^Implementer: waits for you: question, for /);
+    expect(tab(/^Reviewer/)).toHaveTextContent(/^Reviewer$/);
+  });
+
+  it("doesn't give the findings of the pull request to the reviewer's tab as a question", () => {
+    prTabs({ implementer: makePRImplementer() }, [FINDINGS], {
+      openStepTab: { "task-1|0": "implementer" },
+    });
+
+    expect(tab(/^Reviewer/)).toHaveAccessibleName("Reviewer: idle");
+  });
+
+  it.each<[string, Partial<PullRequest>, Situation[], "implementer" | "reviewer"]>([
+    [
+      "the older situation of the two",
+      { implementer: makePRImplementer() },
+      [FIX_ASKS, REVIEWER_QUESTION],
+      "reviewer",
+    ],
+    [
+      "the only situation, the implementer's",
+      { implementer: makePRImplementer() },
+      [FIX_ASKS],
+      "implementer",
+    ],
+    [
+      "the implementer while it addresses the review",
+      { status: "addressing_review", implementer: makePRImplementer({ sessionStatus: "working" }) },
+      [],
+      "implementer",
+    ],
+  ])("opens the first time on %s, and stores it", (_, pr, situations, first) => {
+    prTabs(pr, situations);
+
+    expect(storedPR()).toBe(first);
+  });
+
+  it("waits to store a choice while nothing decides it", () => {
+    prTabs({ status: "reviewing" });
+
+    expect(storedPR()).toBeUndefined();
+    expect(tab(/^Reviewer/)).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("flashes the implementer's tab for its new situation", () => {
+    prTabs({ implementer: makePRImplementer() }, [FIX_ASKS], {
+      openStepTab: { "task-1|0": "reviewer" },
+      flashing: new Set([FIX_ASKS.id]),
+    });
+
+    expect(tab(/^Implementer/)).toHaveAttribute("data-flash", "wait");
   });
 });

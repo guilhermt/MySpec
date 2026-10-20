@@ -2,6 +2,7 @@ import type { SessionState } from "@/features/chat/session";
 import { taskSessions } from "@/features/sidebar/sessions";
 import { stageNoun } from "@/features/task/stage-actions";
 import { currentStepOf, hasStepSession, loopSession, stepStage } from "@/features/task/step-status";
+import { hasReviewConversation } from "@/lib/pull-requests";
 import { lowerFirst } from "@/lib/situations";
 import type { AgentSession, Step, TaskSummary } from "@/lib/wails";
 import { asPRStatus, asSessionStatus, asTaskStage } from "@/lib/wails";
@@ -9,9 +10,9 @@ import type { StepTab } from "@/store/app-store";
 
 /** TaskSession is a session of a task seen from its screen: where it talks, who talks, and its state. */
 export interface TaskSession extends SessionState {
-  /** stage is the session stage: prd, step:<n>, step_review:<n>, pr, pr_review… */
+  /** stage is the session stage: prd, step:<n>, step_review:<n>, pr, pr_review, pr_fix… */
   stage: string;
-  /** role is who talks: Implementer, Reviewer, PRD agent, Tech spec agent, Plan agent, Planning agent, PR agent. */
+  /** role is who talks: Implementer, Reviewer (also in the PR review), PRD agent, Tech spec agent, Plan agent, Planning agent, PR agent. */
   role: string;
   contextPercent: number;
 }
@@ -50,9 +51,19 @@ function reviewerOf(task: TaskSummary, reviewer: AgentSession): TaskSession {
   return sessionOf(task, reviewer.sessionStage, reviewer);
 }
 
+// IMPLEMENTER_STATUSES are the states of the pull request whose conversation is the implementer's
+// when it has a session: it applies the findings, commits, and answers the changes under review.
+const IMPLEMENTER_STATUSES: readonly string[] = [
+  "addressing_review",
+  "committing",
+  "in_review",
+  "ready_to_approve",
+];
+
 /**
  * waitingSession is the conversation the task waits on: the planning stage's; in a step, the reviewer's
- * in agent_review and the implementer's in the rest, only with a session; in the PR, pr.sessionStage's.
+ * in agent_review and the implementer's in the rest, only with a session; in the PR, the implementer's
+ * while it applies the findings or its changes are under review, else pr.sessionStage's.
  * Null when there is none.
  */
 export function waitingSession(task: TaskSummary): TaskSession | null {
@@ -74,14 +85,21 @@ export function waitingSession(task: TaskSummary): TaskSession | null {
     }
     case "pr": {
       const pr = task.pr;
+      if (
+        pr !== null &&
+        pr.implementer !== null &&
+        IMPLEMENTER_STATUSES.includes(asPRStatus(pr.status))
+      ) {
+        return sessionOf(task, "pr_fix", pr.implementer);
+      }
       return pr === null || pr.sessionStage === "" ? null : sessionOf(task, pr.sessionStage, pr);
     }
   }
 }
 
 /**
- * screenSession is the conversation on screen: the chosen tab's in a step with both, else
- * waitingSession; null without a session on screen (step blocked or preparing, PR waiting for checks
+ * screenSession is the conversation on screen: the chosen tab's in a step or a PR review with both,
+ * else waitingSession; null without a session on screen (step blocked or preparing, PR waiting for checks
  * without a conversation, PR done or merged).
  */
 export function screenSession(task: TaskSummary, tab: StepTab): TaskSession | null {
@@ -90,6 +108,13 @@ export function screenSession(task: TaskSummary, tab: StepTab): TaskSession | nu
     if (status === "done" || status === "merged") {
       return null;
     }
+  }
+  const pr = task.pr;
+  if (pr !== null && asTaskStage(task.stage) === "pr" && hasReviewConversation(task)) {
+    if (tab === "implementer") {
+      return pr.implementer === null ? null : sessionOf(task, "pr_fix", pr.implementer);
+    }
+    return pr.sessionStage === "" ? null : sessionOf(task, pr.sessionStage, pr);
   }
   const step = asTaskStage(task.stage) === "implementation" ? currentStepOf(task) : null;
   if (step !== null && hasStepSession(step) && step.reviewer !== null) {

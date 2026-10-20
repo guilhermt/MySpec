@@ -122,7 +122,8 @@ const VOICES: Record<string, string> = {
   plan: "Plan agent",
   one_shot: "Planning agent",
   pr: "PR agent",
-  pr_review: "PR agent",
+  pr_review: "Reviewer",
+  pr_fix: "Implementer",
   [REVIEW_STAGE]: "Reviewer",
   [DISCUSSION_STAGE]: "Discussion agent",
 };
@@ -235,6 +236,12 @@ function stageComplement(stage: string, task: TaskSummary | null): string {
         ? "pass 1"
         : `pass 1 · #${pr.prNumber} into ${prBaseName(pr)}`;
     }
+    case "pr_fix": {
+      const pr = task?.pr ?? null;
+      return pr === null || pr.prNumber === 0
+        ? "applies the findings"
+        : `applies the findings of #${pr.prNumber}`;
+    }
     default:
       return "";
   }
@@ -244,7 +251,8 @@ function stageComplement(stage: string, task: TaskSummary | null): string {
 function stageStart(start: StartOf, prompt: UserEntry | null, ctx: MarkerContext): MarkerView {
   const stage = start.stage !== "" ? start.stage : ctx.stage;
   const known = asLifecycleStage(stage);
-  const name = known === null ? "Stage" : stageLabel(known);
+  const name =
+    stage === "pr_fix" ? "PR review fixes" : known === null ? "Stage" : stageLabel(known);
   // The PRD and the planning open with what the user wrote; the other stages
   // with the prompt the session got, kept only since it is recorded.
   const opened = stage === "prd" || stage === "one_shot" ? prompt?.text : prompt?.sent;

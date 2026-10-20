@@ -18,13 +18,16 @@ import {
 } from "@/features/task/step-status";
 import { isPaused } from "@/features/task/task-session";
 import type { RequestFocus } from "@/lib/focus";
-import { prBaseName, troubleLabel } from "@/lib/pull-requests";
-import { fallbackReason } from "@/lib/review-modes";
+import { hasReviewConversation, prBaseName, troubleLabel } from "@/lib/pull-requests";
+import { fallbackReason, prFallbackReason } from "@/lib/review-modes";
 import {
   compactWait,
   counted,
+  isSessionKind,
   lowerFirst,
+  prFixSituation,
   prSituation,
+  prTabSituation,
   reviewerSituation,
   spokenWait,
   stageSituation,
@@ -38,6 +41,7 @@ import type {
   PullRequest,
   Repository,
   Review,
+  ReviewFallback,
   Situation,
   SituationGroup,
   SituationKind,
@@ -57,7 +61,7 @@ import {
   asTaskMode,
   asTaskStage,
 } from "@/lib/wails";
-import type { PrDraft, StepTab } from "@/store/app-store";
+import { PR_TAB_SLOT, type PrDraft, type StepTab } from "@/store/app-store";
 
 /** TaskRequestAction is what a button of the request bar of a task does. */
 export type TaskRequestAction =
@@ -94,7 +98,7 @@ export type PendingRequest =
   | { kind: "question"; questions: number }
   | { kind: "permission"; defaultToNo: boolean };
 
-/** OtherConversationModel is the bar of a step whose other conversation asks, and not the one on screen. */
+/** OtherConversationModel is the bar of a step, or of a PR review, whose other conversation asks, and not the one on screen. */
 export interface OtherConversationModel {
   /** failed is the other conversation having stopped on an error; otherwise it waits. */
   failed: boolean;
@@ -104,6 +108,8 @@ export interface OtherConversationModel {
   goLabel: string;
   /** goTab is the tab of the other conversation. */
   goTab: StepTab;
+  /** slot is where the tabs are stored: the number of the step, or PR_TAB_SLOT. */
+  slot: number;
   /** status is what the bar's status says. */
   status: string;
   situationId: string;
@@ -406,6 +412,7 @@ function troubleBar(pr: PullRequest): Bar {
 
 function prBar(
   pr: PullRequest,
+  fallback: ReviewFallback,
   want: Want,
   repository: Repository | null,
   editedDraft: PrDraft | null,
@@ -431,6 +438,9 @@ function prBar(
       if (pr.commitFailed) {
         notes.push("the last approval didn't produce a commit");
       }
+      if (fallback === "commit_failed") {
+        notes.push(lowerFirst(prFallbackReason(fallback)));
+      }
       const label = want.form === "approve" ? "Approve changes" : "Review changes";
       const place = "PR review";
       const empty = noFileChanged(pr);
@@ -449,7 +459,11 @@ function prBar(
       };
     }
     case "findings":
-      return findingsBar(pr, want.form === "decide" || want.form === "apply" ? want.form : "text");
+      return findingsBar(
+        pr,
+        want.form === "decide" || want.form === "apply" ? want.form : "text",
+        fallback,
+      );
     case "merge":
       return mergeBar(pr, want, repository);
     case "pr_trouble":
@@ -484,7 +498,9 @@ function barOf(
     case "ready_to_continue":
       return continueBar(task);
     default:
-      return task.pr === null ? null : prBar(task.pr, want, repository, editedDraft);
+      return task.pr === null
+        ? null
+        : prBar(task.pr, asReviewFallback(task.prReviewFallback), want, repository, editedDraft);
   }
 }
 
@@ -550,6 +566,13 @@ const TASK_KINDS: readonly SituationKind[] = [
   "findings",
 ];
 
+// prScreenSituation is the situation of the pull request on screen: of the tab chosen with the two
+// conversations of its review. The findings, the changes, the merge, the trouble and the block are
+// on both tabs; a question is only on the tab of the agent that asks.
+function prScreenSituation(task: TaskSummary, tab: StepTab): Situation | null {
+  return hasReviewConversation(task) ? prTabSituation(task, tab) : prSituation(task);
+}
+
 // screenSituation is the situation of the conversation on screen, null when there is none: the one
 // of the step (step_review and step_empty are on both tabs), of the tab on screen, of the stage or
 // of the pull request.
@@ -566,7 +589,7 @@ function screenSituation(task: TaskSummary, tab: StepTab): Situation | null {
           ? reviewerSituation(task, step.number)
           : inStep;
   }
-  found ??= stageSituation(task) ?? prSituation(task);
+  found ??= stageSituation(task) ?? prScreenSituation(task, tab);
   return found !== null && TASK_KINDS.includes(asSituationKind(found.kind)) ? found : null;
 }
 
@@ -729,8 +752,8 @@ export function pendingRequestOf(entries: readonly Entry[]): PendingRequest | nu
 
 /**
  * screenStageOf is the session stage of the conversation on screen: the tab of the step that runs
- * in the implementation, the pull request's in the PR stage, the stage itself before; "" when the
- * place has none yet.
+ * in the implementation, the tab of the review in the PR stage (the pull request's session before
+ * the review has a conversation), the stage itself before; "" when the place has none yet.
  */
 export function screenStageOf(task: TaskSummary, tab: StepTab): string {
   switch (asTaskStage(task.stage)) {
@@ -743,8 +766,19 @@ export function screenStageOf(task: TaskSummary, tab: StepTab): string {
         ? step.reviewer.sessionStage
         : stepStage(step.number);
     }
-    case "pr":
-      return task.pr?.sessionStage ?? "";
+    case "pr": {
+      const { pr } = task;
+      if (pr === null) {
+        return "";
+      }
+      if (!hasReviewConversation(task)) {
+        return pr.sessionStage;
+      }
+      if (tab === "implementer") {
+        return "pr_fix";
+      }
+      return pr.sessionStage === "" ? "pr_review" : pr.sessionStage;
+    }
     default:
       return task.stage;
   }
@@ -811,7 +845,9 @@ export function conversationName(stage: string): string {
     case "pr":
       return "PR";
     case "pr_review":
-      return "PR review";
+      return "Reviewer";
+    case "pr_fix":
+      return "Implementer";
     default:
       return "";
   }
@@ -852,6 +888,8 @@ export function situationSession(situation: Situation, task: TaskSummary): Situa
         stage: task.pr === null || task.pr.sessionStage === "" ? "pr" : task.pr.sessionStage,
         lastError: task.pr?.lastError ?? "",
       };
+    case "pr_fix":
+      return { stage: "pr_fix", lastError: task.pr?.implementer?.lastError ?? "" };
     default:
       return { stage: place.stage, lastError: task.lastError };
   }
@@ -1030,7 +1068,7 @@ export function planRequestOf(s: Situation, task: TaskSummary): TaskRequestModel
 }
 
 /**
- * otherConversationOf is the bar of a step with both tabs when the conversation on screen asks
+ * otherConversationOf is the bar of a step, or of the review of a pull request, with both tabs when the conversation on screen asks
  * nothing and the other one asks: it waits (a permission, a question, a reply) or it failed. Null
  * otherwise; step_review and step_empty are the step's, and their bar is on both tabs.
  */
@@ -1040,15 +1078,32 @@ export function otherConversationOf(
   now: number,
 ): OtherConversationModel | null {
   const step = asTaskStage(task.stage) === "implementation" ? currentStepOf(task) : null;
-  if (step === null || !hasStepSession(step) || step.reviewer === null) {
-    return null;
+  const inPR = asTaskStage(task.stage) === "pr" && hasReviewConversation(task);
+  let slot: number;
+  let onScreen: Situation | null;
+  let other: Situation | null;
+  if (inPR) {
+    slot = PR_TAB_SLOT;
+    const ofPR = prSituation(task);
+    onScreen = prTabSituation(task, tab);
+    other =
+      tab === "reviewer"
+        ? prFixSituation(task)
+        : ofPR !== null && isSessionKind(ofPR)
+          ? ofPR
+          : null;
+  } else {
+    if (step === null || !hasStepSession(step) || step.reviewer === null) {
+      return null;
+    }
+    const ofStep = stepSituation(task, step.number);
+    const ofReviewer = reviewerSituation(task, step.number);
+    if (ofStep !== null && STEP_KINDS.includes(asSituationKind(ofStep.kind))) {
+      return null;
+    }
+    slot = step.number;
+    [onScreen, other] = tab === "reviewer" ? [ofReviewer, ofStep] : [ofStep, ofReviewer];
   }
-  const ofStep = stepSituation(task, step.number);
-  const ofReviewer = reviewerSituation(task, step.number);
-  if (ofStep !== null && STEP_KINDS.includes(asSituationKind(ofStep.kind))) {
-    return null;
-  }
-  const [onScreen, other] = tab === "reviewer" ? [ofReviewer, ofStep] : [ofStep, ofReviewer];
   if (onScreen !== null || other === null) {
     return null;
   }
@@ -1068,6 +1123,7 @@ export function otherConversationOf(
     label,
     goLabel: `Go to ${goTab}`,
     goTab,
+    slot,
     status: label,
     situationId: other.id,
     time: { short: compactWait(other.startedAt, now), long: spokenWait(other.startedAt, now) },

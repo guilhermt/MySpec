@@ -25,6 +25,7 @@ import {
   makeDiscussionCard,
   makeDraft,
   makePRCheck,
+  makePRImplementer,
   makePRReport,
   makePullRequest,
   makeRepository,
@@ -47,6 +48,7 @@ const STAGE_PLACE: Place = { kind: "stage", stage: "plan", step: 0 };
 const STEP_PLACE: Place = { kind: "step", stage: "", step: 3 };
 const REVIEWER_PLACE: Place = { kind: "step_review", stage: "", step: 3 };
 const PR_PLACE: Place = { kind: "pr", stage: "", step: 0 };
+const PR_FIX_PLACE: Place = { kind: "pr_fix", stage: "", step: 0 };
 const REVIEW_PLACE: Place = { kind: "review", stage: "", step: 0 };
 const DISCUSSION_PLACE: Place = { kind: "discussion", stage: "", step: 0 };
 
@@ -150,8 +152,28 @@ describe("the line 2 of a task with a situation", () => {
       "a session error on the PR review",
       { kind: "session_error", group: "error", place: PR_PLACE },
       {},
-      "Session error · PR review · pass 2",
-      "Session error · PR review · pass 2",
+      "Session error · PR review · Reviewer · pass 2",
+      "Session error · PR review · Reviewer · pass 2",
+    ],
+    [
+      "a question of the implementer of the agent PR review, in its round",
+      { kind: "question", place: PR_FIX_PLACE },
+      {
+        prReviewMode: "agent",
+        pr: makePullRequest({ status: "addressing_review", prNumber: 1279, reviewRound: 2 }),
+      },
+      "Question · PR review · Implementer · round 2",
+      "Question · PR review · Implementer · round 2",
+    ],
+    [
+      "a question of the implementer of the manual PR review",
+      { kind: "question", place: PR_FIX_PLACE },
+      {
+        prReviewMode: "manual",
+        pr: makePullRequest({ status: "in_review", prNumber: 1279, reviewRound: 2 }),
+      },
+      "Question · PR review · Implementer",
+      "Question · PR review · Implementer",
     ],
     [
       "a blocked step",
@@ -635,6 +657,42 @@ describe("the line of an item without a situation", () => {
       "agent",
       "PR review · pass 1",
       "PR review · pass 1",
+      "turn",
+    ],
+    [
+      "a PR addressing the review in a round, the implementer working",
+      taskWith({
+        stage: "pr",
+        prReviewMode: "agent",
+        pr: makePullRequest({
+          status: "addressing_review",
+          prNumber: 7,
+          sessionStage: "pr_review",
+          reviewRound: 2,
+          implementer: makePRImplementer(working),
+        }),
+      }),
+      "agent",
+      "PR review · Implementer · round 2",
+      "PR review · Implementer · round 2",
+      "turn",
+    ],
+    [
+      "a PR addressing the review, in Manual",
+      taskWith({
+        stage: "pr",
+        prReviewMode: "manual",
+        pr: makePullRequest({
+          status: "addressing_review",
+          prNumber: 7,
+          sessionStage: "pr_review",
+          reviewRound: 0,
+          implementer: makePRImplementer(working),
+        }),
+      }),
+      "agent",
+      "PR review · Implementer",
+      "PR review · Implementer",
       "turn",
     ],
     [

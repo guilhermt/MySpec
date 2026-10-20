@@ -31,7 +31,7 @@ export function useTaskComposer(
     chips: kind === "reply" ? cards.chips : [],
     context: {
       ...(asTaskStage(task.stage) === "pr"
-        ? prComposerContext(task, kind)
+        ? prComposerContext(task, kind, tab)
         : {
             findings: false,
             reviseFindings: false,

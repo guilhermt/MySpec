@@ -112,8 +112,11 @@ function pullRequestItem(task: TaskSummary): string | null {
   if (pr.draft !== null) {
     parts.push("the pull request draft");
   }
-  if (pr.sessionStage !== "" || (task.conversations ?? []).some((each) => each.stage === "pr")) {
-    parts.push("the PR conversation");
+  const conversations = new Set((task.conversations ?? []).map((each) => each.stage));
+  const session = pr.sessionStage !== "" || conversations.has("pr");
+  const implementer = pr.implementer !== null || conversations.has("pr_fix");
+  if (session || implementer) {
+    parts.push(session && implementer ? "the PR conversations" : "the PR conversation");
   }
   if ((pr.reports ?? []).length > 0) {
     parts.push("the reports of its review");

@@ -15,6 +15,11 @@ import { duration } from "@/lib/when";
 // on the only thing left is the closing.
 const REVIEWED_STATES: readonly PRStatus[] = ["done", "merged", "pr_closed", "closing", "closed"];
 
+/** hasReviewConversation reports whether the review of the pull request has a conversation: the index of the conversations of the task lists it once the first pass started. */
+export function hasReviewConversation(task: TaskSummary): boolean {
+  return (task.conversations ?? []).some((conversation) => conversation.stage === "pr_review");
+}
+
 /** prOf is the pull request of a task, null outside the PR stage. */
 export function prOf(task: TaskSummary | null): PullRequest | null {
   return task?.pr ?? null;

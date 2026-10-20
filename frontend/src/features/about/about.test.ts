@@ -187,6 +187,7 @@ describe("workingLines", () => {
     ["step_review:2", "Reviewer of step 2"],
     ["pr", "PR"],
     ["pr_review", "PR review"],
+    ["pr_fix", "PR review · Implementer"],
     ["review", "Review"],
     ["discussion", "Discussion"],
     ["mystery", "mystery"],

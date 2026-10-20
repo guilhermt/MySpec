@@ -14,6 +14,7 @@ import {
 import type { TaskStage, TaskSummary } from "@/lib/wails";
 import {
   makeDeletePreview,
+  makePRImplementer,
   makePRReport,
   makePullRequest,
   makeStep,
@@ -249,6 +250,10 @@ describe("stage actions", () => {
     ]);
     expect(lost(pr({ draft: DRAFT }))).toEqual(["the pull request draft"]);
     expect(lost(pr({ sessionStage: "pr" }))).toEqual(["the PR conversation"]);
+    expect(lost(pr({ implementer: makePRImplementer() }))).toEqual(["the PR conversation"]);
+    expect(lost(pr({ sessionStage: "pr_review", implementer: makePRImplementer() }))).toEqual([
+      "the PR conversations",
+    ]);
     expect(lost(pr())).toEqual([]);
   });
 

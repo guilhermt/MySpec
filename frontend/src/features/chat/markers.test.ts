@@ -173,7 +173,8 @@ describe("voiceOf", () => {
     ["step:3", "Implementer"],
     ["step_review:3", "Reviewer"],
     ["pr", "PR agent"],
-    ["pr_review", "PR agent"],
+    ["pr_review", "Reviewer"],
+    ["pr_fix", "Implementer"],
     ["review", "Reviewer"],
     ["discussion", "Discussion agent"],
     ["closing", ""],
@@ -308,6 +309,16 @@ describe("startLineOf", () => {
       }),
     ],
     [
+      "the implementer of the review of the pull request",
+      markerEntry({ type: "stage_started", stage: "pr_fix" }),
+      prompt({ sent: "Apply the findings of #1284." }),
+      ctx("pr_fix"),
+      view("start", "PR review fixes started", {
+        complement: "applies the findings of #1284",
+        body: { kind: "markdown", text: "Apply the findings of #1284." },
+      }),
+    ],
+    [
       "a review",
       markerEntry({
         type: "review_started",
@@ -422,6 +433,16 @@ describe("productMessageOf", () => {
       "a commit after a clean report",
       app({ appKind: "commit_all" }),
       product("Commit · every change of the step"),
+    ],
+    [
+      "the report of a pull request review round",
+      app({ appKind: "report", appPass: 3, appRound: 2, appRounds: 5, appCount: 4 }),
+      product("Review 3 · 4 findings · round 2 of 5"),
+    ],
+    [
+      "a commit and push of everything after a clean review",
+      app({ appKind: "commit_all_push" }),
+      product("Commit and push · every change, after a clean review"),
     ],
     [
       "a commit that pushes",
@@ -1133,7 +1154,7 @@ describe("markerOf in the PR review of a task", () => {
     const shown = latest?.body.kind === "findings" ? latest.body.findings : [];
     expect(latest?.complement).toBe("1 approved · 1 discarded");
     expect(shown.map((finding) => finding.disabled)).toEqual([
-      `Sent to the agent · ${clockTime(sent.sentAt, NOW)}`,
+      `Sent to the implementer · ${clockTime(sent.sentAt, NOW)}`,
       "Not sent",
     ]);
     expect(markerOf(decided, context, "e1", NOW)?.body).toEqual({ kind: "none" });
@@ -1142,11 +1163,11 @@ describe("markerOf in the PR review of a task", () => {
   it("reads the message that applies the approved findings", () => {
     const read = productMessageOf(
       user({ app: true, appKind: "apply", appCount: 3 }),
-      "PR agent",
+      "Implementer",
       inTask([sent]),
     );
 
-    expect(read.text).toBe("MySpec → PR agent");
+    expect(read.text).toBe("MySpec → Implementer");
     expect(read.complement).toBe("apply 3 approved findings");
   });
 });
