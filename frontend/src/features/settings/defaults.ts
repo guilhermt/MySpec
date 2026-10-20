@@ -44,6 +44,7 @@ export const MODEL_GROUPS: readonly ModelGroup[] = [
     stages: [
       { stage: "pr", note: "" },
       { stage: "pr_review", note: "Also where a review of someone's pull request starts" },
+      { stage: "pr_fix", note: "" },
     ],
   },
   {
@@ -53,7 +54,7 @@ export const MODEL_GROUPS: readonly ModelGroup[] = [
   },
 ];
 
-/** changedText is "6 of 9 changed from the factory defaults", "None changed from the factory defaults". */
+/** changedText is "6 of 10 changed from the factory defaults", "None changed from the factory defaults". */
 export function changedText(
   defaults: readonly StageModel[],
   factory: readonly StageModel[],

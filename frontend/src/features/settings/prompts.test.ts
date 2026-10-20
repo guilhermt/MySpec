@@ -8,7 +8,7 @@ import {
 } from "@/features/settings/prompts";
 
 describe("PROMPTS", () => {
-  it("has the nine prompts in workflow order, with the One-Shot planning after the plan", () => {
+  it("has the ten prompts in workflow order, with the One-Shot planning after the plan", () => {
     expect(PROMPTS.map((prompt) => prompt.stage)).toEqual([
       "prd",
       "tech_spec",
@@ -18,6 +18,7 @@ describe("PROMPTS", () => {
       "commit",
       "pr",
       "pr_review",
+      "pr_fix",
       "discussion",
     ]);
   });

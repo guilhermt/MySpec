@@ -78,6 +78,7 @@ const SETTINGS_SECTIONS: readonly string[] = [
   "commit",
   "pr",
   "pr_review",
+  "pr_fix",
   "discussion",
 ] satisfies readonly SettingsSection[];
 

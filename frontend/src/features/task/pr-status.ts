@@ -1,8 +1,8 @@
 import type { StatusTone } from "@/features/task/status";
 import { prBaseName, troubleText } from "@/lib/pull-requests";
 import { cloneMissingText } from "@/lib/repositories";
-import type { PRBlockReason, PullRequest, Repository } from "@/lib/wails";
-import { asPRStatus } from "@/lib/wails";
+import type { PRBlockReason, PullRequest, Repository, TaskSummary } from "@/lib/wails";
+import { asPRState, asPRStatus, asReviewMode } from "@/lib/wails";
 
 /** prStatusLabel is where the pull request of a task stands, in the words of the product. */
 export function prStatusLabel(pr: PullRequest): string {
@@ -120,8 +120,20 @@ export function canDiscardDraft(pr: PullRequest): boolean {
   }
 }
 
-/** canReviewAgain reports whether another review pass can be asked for. */
-export function canReviewAgain(pr: PullRequest): boolean {
+// agentRefusal is why the agent review or the implementer holds another pass back; null when neither does.
+function agentRefusal(task: TaskSummary): string | null {
+  const status = task.pr === null ? null : asPRStatus(task.pr.status);
+  if (asReviewMode(task.prReviewMode) === "agent" && status !== "done" && status !== "trouble") {
+    return "The agent is reviewing the pull request. Take it over with Review myself first.";
+  }
+  if (task.pr?.implementer?.turnRunning === true) {
+    return "The implementer is still working.";
+  }
+  return null;
+}
+
+// statusAllowsReviewAgain reports whether the state of the pull request has a pass to ask for.
+function statusAllowsReviewAgain(pr: PullRequest): boolean {
   switch (asPRStatus(pr.status)) {
     case "reviewing":
     case "awaiting_decision":
@@ -140,9 +152,22 @@ export function canReviewAgain(pr: PullRequest): boolean {
   }
 }
 
+/** canReviewAgain reports whether another review pass can be asked for. */
+export function canReviewAgain(task: TaskSummary): boolean {
+  return task.pr !== null && agentRefusal(task) === null && statusAllowsReviewAgain(task.pr);
+}
+
 /** reviewAgainRefusal is why another review pass can't be asked for right now; null when it can. */
-export function reviewAgainRefusal(pr: PullRequest): string | null {
-  if (canReviewAgain(pr)) {
+export function reviewAgainRefusal(task: TaskSummary): string | null {
+  const pr = task.pr;
+  if (pr === null) {
+    return null;
+  }
+  const held = agentRefusal(task);
+  if (held !== null) {
+    return held;
+  }
+  if (statusAllowsReviewAgain(pr)) {
     return null;
   }
   switch (asPRStatus(pr.status)) {
@@ -158,6 +183,30 @@ export function reviewAgainRefusal(pr: PullRequest): string | null {
       return "the task is closing";
     default:
       return null;
+  }
+}
+
+/**
+ * canReviewPRMyself reports whether the review of the pull request can be taken back from the
+ * agent: it runs in Agent mode over a pull request that exists and is not over.
+ */
+export function canReviewPRMyself(task: TaskSummary): boolean {
+  const pr = task.pr;
+  if (pr === null || asReviewMode(task.prReviewMode) !== "agent" || pr.prNumber <= 0) {
+    return false;
+  }
+  const state = asPRState(pr.prState);
+  if (state === "merged" || state === "closed") {
+    return false;
+  }
+  switch (asPRStatus(pr.status)) {
+    case "merged":
+    case "pr_closed":
+    case "closing":
+    case "closed":
+      return false;
+    default:
+      return true;
   }
 }
 

@@ -6,6 +6,9 @@ export const REVIEW_MODES: readonly ReviewMode[] = ["manual", "agent"];
 /** MAX_REVIEW_ROUNDS mirrors flow.MaxReviewRounds: the reports with changes the implementer gets before the step goes to the user. */
 export const MAX_REVIEW_ROUNDS = 3;
 
+/** MAX_PR_REVIEW_ROUNDS mirrors flow.MaxPRReviewRounds: the reports with findings the implementer gets before the pull request goes to the user. */
+export const MAX_PR_REVIEW_ROUNDS = 5;
+
 /** reviewModeLabel is the name of a mode, the same wherever the app shows it. */
 export function reviewModeLabel(mode: ReviewMode): string {
   return mode === "agent" ? "Agent" : "Manual";
@@ -18,6 +21,18 @@ export function reviewModeHint(mode: ReviewMode): string {
     : "You review each step in VS Code before its commit.";
 }
 
+/** prReviewModeHint is what a mode does to the pull request of a task, as the creation dialog explains it. */
+export function prReviewModeHint(mode: ReviewMode): string {
+  return mode === "agent"
+    ? "A reviewer and an implementer iterate on the pull request until it's ready to merge."
+    : "You decide each finding of the review and approve the fixes before each push.";
+}
+
+/** reviewModesLabel is the modes of a task in one line: "Steps Agent · PR Manual". */
+export function reviewModesLabel(stepMode: ReviewMode, prMode: ReviewMode): string {
+  return `Steps ${reviewModeLabel(stepMode)} · PR ${reviewModeLabel(prMode)}`;
+}
+
 /** fallbackReason says why a step that started under the agent review was reviewed by the user; "" while its mode held. */
 export function fallbackReason(fallback: ReviewFallback): string {
   switch (fallback) {
@@ -25,6 +40,20 @@ export function fallbackReason(fallback: ReviewFallback): string {
       return "Taken over from the agent review";
     case "rounds_exhausted":
       return "The agent review didn't come clean after three rounds";
+    case "commit_failed":
+      return "The commit after the agent review didn't happen";
+    case "":
+      return "";
+  }
+}
+
+/** prFallbackReason says why a pull request that started under the agent review was reviewed by the user; "" while its mode held. */
+export function prFallbackReason(fallback: ReviewFallback): string {
+  switch (fallback) {
+    case "taken_over":
+      return "Taken over from the agent review";
+    case "rounds_exhausted":
+      return "The agent review didn't come clean after five rounds";
     case "commit_failed":
       return "The commit after the agent review didn't happen";
     case "":

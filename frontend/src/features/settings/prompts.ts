@@ -31,13 +31,18 @@ export const PROMPTS: readonly PromptMeta[] = [
     stage: "commit",
     name: "Commit",
     description:
-      "Sent after a step is approved, by you or by the agent review, and after you approve the changes of a PR review.",
+      "Sent after a step is approved, by you or by the agent review, and when the fixes of a PR review are approved or its agent review comes clean.",
   },
   { stage: "pr", name: "PR", description: "Opens the pull request session of the task." },
   {
     stage: "pr_review",
     name: "PR review",
-    description: "Opens the review session of the pull request.",
+    description: "Opens the reviewer session of the pull request.",
+  },
+  {
+    stage: "pr_fix",
+    name: "PR review fixes",
+    description: "Opens the implementer session of the PR review, which applies its findings.",
   },
   {
     stage: "discussion",

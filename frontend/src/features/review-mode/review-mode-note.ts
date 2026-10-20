@@ -1,6 +1,8 @@
 import { joinList } from "@/features/task/stage-actions";
+import { prFallbackReason } from "@/lib/review-modes";
+import { lowerFirst } from "@/lib/situations";
 import type { TaskSummary } from "@/lib/wails";
-import { asStepStatus, asTaskMode } from "@/lib/wails";
+import { asReviewFallback, asStepStatus, asTaskMode } from "@/lib/wails";
 
 /** ReviewModeNote is the note under the options of the Review mode popover; disabled says why the mode can't change. */
 export interface ReviewModeNote {
@@ -40,4 +42,25 @@ export function reviewModeNote(task: TaskSummary): ReviewModeNote {
       ? ` Step ${own[0]} has its own mode.`
       : ` Steps ${joinList(own.map(String))} have their own mode.`;
   return { text: `${applies}${owners}`, disabled };
+}
+
+/**
+ * prReviewModeNote is what the PR review mode of a task applies to and, when it can't change, why:
+ * the review fell back to Manual, or it has started.
+ */
+export function prReviewModeNote(task: TaskSummary): ReviewModeNote {
+  if (task.prReviewModeEditable) {
+    return {
+      text: "Applies to the review of the pull request, before it starts.",
+      disabled: false,
+    };
+  }
+  const fallback = asReviewFallback(task.prReviewFallback);
+  if (fallback !== "") {
+    return {
+      text: `The review fell back to Manual: ${lowerFirst(prFallbackReason(fallback))}.`,
+      disabled: true,
+    };
+  }
+  return { text: "The PR review has started, so the mode can't change.", disabled: true };
 }

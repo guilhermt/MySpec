@@ -272,11 +272,18 @@ const ROWS: Row[] = [
   },
   { control: "Mode", scene: "create", screen: "dialog", role: "radiogroup", name: "Mode" },
   {
-    control: "Review mode",
+    control: "Step review",
     scene: "create",
     screen: "dialog",
     role: "radiogroup",
-    name: "Review mode",
+    name: "Step review",
+  },
+  {
+    control: "PR review",
+    scene: "create",
+    screen: "dialog",
+    role: "radiogroup",
+    name: "PR review",
   },
   { control: "Models", scene: "create", screen: "dialog", role: "button", name: /^Models/ },
 ];

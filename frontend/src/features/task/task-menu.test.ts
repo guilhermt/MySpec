@@ -209,6 +209,21 @@ describe("taskMenuOf, the pull request group", () => {
       open("closing"),
       "Pull request #1284: Open PR, Refresh PR [the task is closing], Review again [the task is closing]",
     ],
+    [
+      "reviewing under the agent review",
+      open("reviewing", {}, { prReviewMode: "agent" }),
+      "Pull request #1284: Open PR, Refresh PR, Review again [The agent is reviewing the pull request. Take it over with Review myself first.], Review myself, Open in VS Code",
+    ],
+    [
+      "done under the agent review",
+      open("done", {}, { prReviewMode: "agent" }),
+      "Pull request #1284: Open PR, Refresh PR, Review again, Review myself, Open in VS Code",
+    ],
+    [
+      "merged under the agent review",
+      open("merged", { prState: "merged" }, { prReviewMode: "agent" }),
+      "Pull request #1284: Open PR, Refresh PR, Review again [The agent is reviewing the pull request. Take it over with Review myself first.], Open in VS Code",
+    ],
   ])("offers a pull request %s", (_, task, line) => {
     const [first] = outline(taskMenuOf(task, NOW));
 
@@ -272,27 +287,42 @@ describe("taskMenuOf, the items", () => {
   });
 
   it.each([
-    ["agent", "Agent"],
-    ["manual", "Manual"],
-  ])("names the %s review mode beside its popover, and the models per stage", (reviewMode, sub) => {
-    const task = taskMenuOf(makeTask({ reviewMode }), NOW).find((group) => group.label === "Task");
+    ["agent", "manual", "Steps Agent · PR Manual"],
+    ["manual", "agent", "Steps Manual · PR Agent"],
+  ])(
+    "names the %s steps and %s PR review modes beside the popover, and the models per stage",
+    (reviewMode, prReviewMode, sub) => {
+      const task = taskMenuOf(makeTask({ reviewMode, prReviewMode }), NOW).find(
+        (group) => group.label === "Task",
+      );
 
-    expect(task?.items.slice(0, 2)).toEqual([
-      {
-        id: "task.reviewMode",
-        label: "Review mode",
-        action: { kind: "reviewModePopover" },
-        sub,
-        opensPopover: true,
-      },
-      {
-        id: "task.models",
-        label: "Models",
-        action: { kind: "modelsPopover" },
-        sub: "per stage",
-        opensPopover: true,
-      },
-    ]);
+      expect(task?.items.slice(0, 2)).toEqual([
+        {
+          id: "task.reviewMode",
+          label: "Review mode",
+          action: { kind: "reviewModePopover" },
+          sub,
+          opensPopover: true,
+        },
+        {
+          id: "task.models",
+          label: "Models",
+          action: { kind: "modelsPopover" },
+          sub: "per stage",
+          opensPopover: true,
+        },
+      ]);
+    },
+  );
+
+  it("takes the review of the pull request back with Review myself", () => {
+    const [group] = taskMenuOf(open("reviewing", {}, { prReviewMode: "agent" }), NOW);
+
+    expect(group?.items.find((item) => item.id === "pr.reviewMyself")).toEqual({
+      id: "pr.reviewMyself",
+      label: "Review myself",
+      action: { kind: "reviewPRMyself" },
+    });
   });
 
   it("asks for each action on a stage by what it does and to which stage", () => {

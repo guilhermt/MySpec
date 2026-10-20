@@ -27,6 +27,7 @@ describe("modelStagesOf", () => {
       "step_review",
       "pr",
       "pr_review",
+      "pr_fix",
     ]);
   });
 
@@ -37,6 +38,7 @@ describe("modelStagesOf", () => {
       "step_review",
       "pr",
       "pr_review",
+      "pr_fix",
     ]);
   });
 
@@ -191,6 +193,7 @@ describe("modelStageLabel", () => {
   it("names a stage the way the track does", () => {
     expect(modelStageLabel("tech_spec")).toBe("Tech spec");
     expect(modelStageLabel("pr_review")).toBe("PR review");
+    expect(modelStageLabel("pr_fix")).toBe("PR review fixes");
   });
 });
 

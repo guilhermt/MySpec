@@ -7,19 +7,29 @@ import { renderWithStore } from "@/test/render";
 import { makeModelCatalog, makeModelDefaults, makeState } from "@/test/wails-mock";
 
 function defaults(
-  options: { catalog?: ModelCatalog; models?: StageModel[]; reviewMode?: "agent" | "manual" } = {},
+  options: {
+    catalog?: ModelCatalog;
+    models?: StageModel[];
+    reviewMode?: "agent" | "manual";
+    prReviewMode?: "agent" | "manual";
+  } = {},
 ) {
   return renderWithStore(<Defaults />, {
     state: makeState({
       modelCatalog: options.catalog ?? makeModelCatalog(),
       modelDefaults: options.models ?? makeModelDefaults(),
       reviewModeDefault: options.reviewMode ?? "manual",
+      prReviewModeDefault: options.prReviewMode ?? "manual",
     }),
   });
 }
 
 const group = (name: string) => screen.getByRole("group", { name });
 const reviewGroup = () => screen.getByRole("radiogroup", { name: "Review mode of a new task" });
+const prReviewGroup = () =>
+  screen.getByRole("radiogroup", { name: "PR review mode of a new task" });
+const stepAgent = () => within(reviewGroup()).getByRole("radio", { name: /^Agent/ });
+const stepManual = () => within(reviewGroup()).getByRole("radio", { name: /^Manual/ });
 
 describe("Defaults", () => {
   it("is the page Defaults, with its sentence and its two sections", () => {
@@ -34,16 +44,17 @@ describe("Defaults", () => {
     expect(screen.getByRole("heading", { level: 3, name: "Review mode" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 3, name: "Models" })).toBeInTheDocument();
     expect(screen.getByText("Who reviews the steps of a new task")).toBeInTheDocument();
+    expect(screen.getByText("Who reviews the pull request of a new task")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Add/ })).not.toBeInTheDocument();
   });
 
-  it("lists the nine stages in the four groups, the last without a title", () => {
+  it("lists the ten stages in the four groups, the last without a title", () => {
     defaults();
 
     const rows = (name: string) => within(group(name)).getAllByRole("listitem");
     expect(rows("Planning")).toHaveLength(4);
     expect(rows("Steps")).toHaveLength(2);
-    expect(rows("Pull request")).toHaveLength(2);
+    expect(rows("Pull request")).toHaveLength(3);
     expect(rows("Discussion")).toHaveLength(1);
     expect(within(group("Planning")).getByText("Planning")).toBeInTheDocument();
     expect(within(group("Discussion")).queryByText("Discussion", { selector: "p" })).toBeNull();
@@ -69,7 +80,7 @@ describe("Defaults", () => {
       ),
     });
 
-    expect(screen.getByText("1 of 9 changed from the factory defaults")).toBeInTheDocument();
+    expect(screen.getByText("1 of 10 changed from the factory defaults")).toBeInTheDocument();
     expect(
       screen.getByRole("button", {
         name: "PRD: Fable 5.1 · xhigh, changed from the factory default Fable 5.1 · high",
@@ -135,7 +146,7 @@ describe("Defaults", () => {
 
     expect(
       screen.getByText(
-        "A commit runs in the session of its step or of its pull request review, with that session's model and effort.",
+        "A commit runs in the session of its step or of the implementer of its pull request review, with that session's model and effort.",
       ),
     ).toBeInTheDocument();
   });
@@ -144,14 +155,44 @@ describe("Defaults", () => {
     it("checks the default and saves another at once", async () => {
       const { user } = defaults();
 
-      expect(screen.getByRole("radio", { name: /^Manual/ })).toHaveAttribute(
+      expect(stepManual()).toHaveAttribute("aria-checked", "true");
+
+      await user.click(stepAgent());
+
+      expect(api.setReviewModeDefault).toHaveBeenCalledWith("agent");
+      expect(api.setPRReviewModeDefault).not.toHaveBeenCalled();
+    });
+
+    it("checks the PR default and saves another at once, apart from the steps", async () => {
+      const { user } = defaults({ reviewMode: "agent" });
+
+      expect(within(prReviewGroup()).getByRole("radio", { name: /^Manual/ })).toHaveAttribute(
         "aria-checked",
         "true",
       );
+      expect(within(prReviewGroup()).getByRole("radio", { name: /^Agent/ })).toHaveAccessibleName(
+        "Agent A reviewer and an implementer iterate on the pull request; a clean report is pushed.",
+      );
 
-      await user.click(screen.getByRole("radio", { name: /^Agent/ }));
+      await user.click(within(prReviewGroup()).getByRole("radio", { name: /^Agent/ }));
 
-      expect(api.setReviewModeDefault).toHaveBeenCalledWith("agent");
+      expect(api.setPRReviewModeDefault).toHaveBeenCalledWith("agent");
+      expect(api.setReviewModeDefault).not.toHaveBeenCalled();
+    });
+
+    it("says why the PR default wasn't saved, under its own options", async () => {
+      vi.mocked(api.setPRReviewModeDefault).mockRejectedValueOnce(new Error("the disk is full"));
+      const { user } = defaults();
+
+      await user.click(within(prReviewGroup()).getByRole("radio", { name: /^Agent/ }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Couldn't save Agent: the disk is full",
+      );
+      expect(within(prReviewGroup()).getByRole("radio", { name: /^Manual/ })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      );
     });
 
     it("shows the new option chosen and saving until the answer comes", async () => {
@@ -163,10 +204,10 @@ describe("Defaults", () => {
       );
       const { user } = defaults();
 
-      await user.click(screen.getByRole("radio", { name: /^Agent/ }));
+      await user.click(stepAgent());
 
-      expect(screen.getByRole("radio", { name: /^Agent/ })).toHaveAttribute("aria-checked", "true");
-      expect(screen.getByRole("radio", { name: /^Agent/ })).toHaveTextContent("Agent · saving…");
+      expect(stepAgent()).toHaveAttribute("aria-checked", "true");
+      expect(stepAgent()).toHaveTextContent("Agent · saving…");
       expect(reviewGroup()).toHaveAttribute("aria-busy", "true");
 
       finish();
@@ -177,14 +218,11 @@ describe("Defaults", () => {
       vi.mocked(api.setReviewModeDefault).mockRejectedValueOnce(new Error("the disk is full"));
       const { user } = defaults();
 
-      await user.click(screen.getByRole("radio", { name: /^Agent/ }));
+      await user.click(stepAgent());
 
       const alert = await screen.findByRole("alert");
       expect(alert).toHaveTextContent("Couldn't save Agent: the disk is full");
-      expect(screen.getByRole("radio", { name: /^Manual/ })).toHaveAttribute(
-        "aria-checked",
-        "true",
-      );
+      expect(stepManual()).toHaveAttribute("aria-checked", "true");
 
       await user.click(within(alert).getByRole("button", { name: "Try again" }));
 

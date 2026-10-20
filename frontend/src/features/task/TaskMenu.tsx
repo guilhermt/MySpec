@@ -26,6 +26,7 @@ import {
   openInEditor,
   refreshPR,
   reviewAgain,
+  reviewPRMyself,
   reviewStepMyself,
 } from "@/store/actions";
 
@@ -74,6 +75,9 @@ export function TaskMenu({ task }: TaskMenuProps) {
         break;
       case "reviewAgain":
         void reviewAgain(task.id);
+        break;
+      case "reviewPRMyself":
+        void reviewPRMyself(task.id);
         break;
       default:
         handsFocus.current =

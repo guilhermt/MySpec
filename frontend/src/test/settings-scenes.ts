@@ -627,7 +627,7 @@ function defaultsScene(variation: string): SettingsSceneSetup {
                 )
               : forever<void>(),
           );
-          await user.click(screen.getByRole("radio", { name: /^Manual/ }));
+          await user.click(screen.getByRole("radio", { name: /^Manual You review each step/ }));
           await user.click(
             button(
               "Plan: Opus 5.5 (1M) · medium, changed from the factory default Fable 5.1 · high",

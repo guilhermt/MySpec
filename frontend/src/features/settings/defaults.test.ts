@@ -8,7 +8,7 @@ const FABLE = { model: "claude-fable-5-1", effort: "high" };
 const OPUS = { model: "claude-opus-5-5[1m]", effort: "high" };
 
 describe("MODEL_GROUPS", () => {
-  it("holds the nine stages once each, in four groups, the last untitled", () => {
+  it("holds the ten stages once each, in four groups, the last untitled", () => {
     expect(MODEL_GROUPS.map(({ title }) => title)).toEqual([
       "Planning",
       "Steps",
@@ -25,7 +25,7 @@ describe("MODEL_GROUPS", () => {
     expect(MODEL_GROUPS.map(({ stages }) => stages.map(({ stage }) => stage))).toEqual([
       ["prd", "tech_spec", "plan", "one_shot"],
       ["implementation", "step_review"],
-      ["pr", "pr_review"],
+      ["pr", "pr_review", "pr_fix"],
       ["discussion"],
     ]);
   });
@@ -48,8 +48,8 @@ describe("changedText", () => {
       line.stage === "prd" || line.stage === "plan" ? { ...line, model: "claude-sonnet-5" } : line,
     );
 
-    expect(changedText(one, factory)).toBe("1 of 9 changed from the factory defaults");
-    expect(changedText(many, factory)).toBe("2 of 9 changed from the factory defaults");
+    expect(changedText(one, factory)).toBe("1 of 10 changed from the factory defaults");
+    expect(changedText(many, factory)).toBe("2 of 10 changed from the factory defaults");
   });
 });
 

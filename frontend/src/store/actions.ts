@@ -292,6 +292,14 @@ export function setReviewModeDefaultInPlace(mode: ReviewMode): Promise<string | 
   return inPlace(() => api.setReviewModeDefault(mode));
 }
 
+/**
+ * setPRReviewModeDefaultInPlace changes who reviews the pull request of the tasks created next, from
+ * the options of Defaults, which show their own failure under them: it answers the message, or null.
+ */
+export function setPRReviewModeDefaultInPlace(mode: ReviewMode): Promise<string | null> {
+  return inPlace(() => api.setPRReviewModeDefault(mode));
+}
+
 /** setStageModel changes what a stage of a task runs with, before it starts. */
 export async function setStageModel(
   taskId: string,
@@ -350,6 +358,14 @@ export async function setReviewMode(taskId: string, mode: ReviewMode): Promise<v
  */
 export function setReviewModeInPlace(taskId: string, mode: ReviewMode): Promise<string | null> {
   return inPlace(() => api.setReviewMode(taskId, mode));
+}
+
+/**
+ * setPRReviewModeInPlace changes who reviews the pull request of a task that hasn't started its
+ * review, for a popover that shows its own failure in its note: it answers the message, or null.
+ */
+export function setPRReviewModeInPlace(taskId: string, mode: ReviewMode): Promise<string | null> {
+  return inPlace(() => api.setPRReviewMode(taskId, mode));
 }
 
 /** setStepReviewMode gives one step a review mode of its own, apart from the task. */
@@ -674,6 +690,14 @@ export async function approveStep(taskId: string): Promise<void> {
 export async function reviewStepMyself(taskId: string): Promise<void> {
   await run(fail(`Couldn't take over the review of the step of ${theItem(taskId)}`, TRY), () =>
     api.reviewStepMyself(taskId),
+  );
+}
+
+/** reviewPRMyself takes the review of the pull request back from the agent. */
+export async function reviewPRMyself(taskId: string): Promise<void> {
+  await run(
+    fail(`Couldn't take over the review of the pull request of ${theItem(taskId)}`, TRY),
+    () => api.reviewPRMyself(taskId),
   );
 }
 

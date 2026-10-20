@@ -38,7 +38,7 @@ import {
   withChoice,
 } from "@/lib/models";
 import { defaultRepositoryId, findRepository, takenNames } from "@/lib/repositories";
-import { reviewModeHint, reviewModeLabel } from "@/lib/review-modes";
+import { prReviewModeHint, reviewModeHint, reviewModeLabel } from "@/lib/review-modes";
 import { TASK_MODES, taskModeHint, taskModeLabel } from "@/lib/task-modes";
 import { isValidTaskName, suggestTaskName, taskNameProblem } from "@/lib/task-name";
 import {
@@ -136,6 +136,7 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
   const defaults = useAppStore((state) => state.app?.modelDefaults ?? NO_MODELS);
   const catalog = useModelCatalog();
   const defaultMode = useAppStore((state) => asReviewMode(state.app?.reviewModeDefault ?? ""));
+  const defaultPRMode = useAppStore((state) => asReviewMode(state.app?.prReviewModeDefault ?? ""));
 
   const [chosenRepositoryId, setChosenRepositoryId] = useState(() =>
     app === null ? "" : defaultRepositoryId(app, openTaskId, lastRepositoryId),
@@ -153,6 +154,7 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
   const [choices, setChoices] = useState<StageModel[]>(() => [...defaults]);
   const [modelsOpen, setModelsOpen] = useState(false);
   const [reviewMode, setReviewMode] = useState<ReviewMode>(() => defaultMode);
+  const [prReviewMode, setPRReviewMode] = useState<ReviewMode>(() => defaultPRMode);
   // Every task starts Structured: One-Shot is a choice made for the task at hand.
   const [mode, setMode] = useState<TaskMode>("structured");
   const reasonId = useId();
@@ -207,7 +209,7 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
       mode,
       models: choices,
       reviewMode,
-      prReviewMode: "",
+      prReviewMode,
       card: origin === null ? null : { boardId: origin.boardId, key: origin.card.key },
     })
       .then((id) => {
@@ -345,24 +347,25 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
             return <DependencyNotice key={model.key} model={model} />;
           })}
 
+        <Field label="Mode">
+          <SegmentedControl
+            label="Mode"
+            size="sm"
+            value={mode}
+            options={TASK_MODES.map((option) => ({
+              value: option,
+              label: taskModeLabel(option),
+            }))}
+            onValueChange={setMode}
+            disabled={creating}
+          />
+          <p className={HINT}>{`${taskModeHint(mode)} ${MODE_FIXED}`}</p>
+        </Field>
+
         <div className="grid grid-cols-2 gap-(--space-4)">
-          <Field label="Mode">
+          <Field label="Step review">
             <SegmentedControl
-              label="Mode"
-              size="sm"
-              value={mode}
-              options={TASK_MODES.map((option) => ({
-                value: option,
-                label: taskModeLabel(option),
-              }))}
-              onValueChange={setMode}
-              disabled={creating}
-            />
-            <p className={HINT}>{`${taskModeHint(mode)} ${MODE_FIXED}`}</p>
-          </Field>
-          <Field label="Review mode">
-            <SegmentedControl
-              label="Review mode"
+              label="Step review"
               size="sm"
               value={reviewMode}
               options={DIALOG_REVIEW_MODES.map((option) => ({
@@ -374,6 +377,21 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
               disabled={creating}
             />
             <p className={HINT}>{reviewModeHint(reviewMode)}</p>
+          </Field>
+          <Field label="PR review">
+            <SegmentedControl
+              label="PR review"
+              size="sm"
+              value={prReviewMode}
+              options={DIALOG_REVIEW_MODES.map((option) => ({
+                value: option,
+                label: reviewModeLabel(option),
+                icon: REVIEW_MODE_ICONS[option],
+              }))}
+              onValueChange={setPRReviewMode}
+              disabled={creating}
+            />
+            <p className={HINT}>{prReviewModeHint(prReviewMode)}</p>
           </Field>
         </div>
 
