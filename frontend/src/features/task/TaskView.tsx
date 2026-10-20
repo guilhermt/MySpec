@@ -196,17 +196,7 @@ export function TaskView({ taskId }: TaskViewProps) {
   // of the step that runs in the implementation stage, the pull request in the
   // PR one. Both open a session of their own only once they get that far. Past
   // its review, the pull request reads the conversation of the review, closed.
-  const closedReview =
-    task !== null &&
-    opening &&
-    pr !== null &&
-    prPlaceOf(task, pr, hasReviewConversation(task)).kind === "closedReview";
-  const stage =
-    task === null
-      ? ""
-      : closedReview && stepTab === "reviewer"
-        ? "pr_review"
-        : screenStageOf(task, stepTab);
+  const stage = task === null ? "" : screenStageOf(task, stepTab);
   const hasConversation =
     task !== null && (implementing ? hasStepSession(step) : opening ? stage !== "" : true);
   // A conversation that couldn't be read is settled too: the focus lands without it.

@@ -332,7 +332,7 @@ export function SetReviewMode(taskID: string, mode: string): $CancellablePromise
 /**
  * SetSessionModel changes the model and effort of a session from its next
  * message on. The stage names the session: prd, tech_spec, plan, one_shot,
- * step:<n>, step_review:<n>, pr or pr_review.
+ * step:<n>, step_review:<n>, pr, pr_review or pr_fix.
  */
 export function SetSessionModel(taskID: string, stage: string, model: string, effort: string): $CancellablePromise<void> {
     return $Call.ByID(2320848335, taskID, stage, model, effort);

@@ -476,7 +476,7 @@ func (s *TaskService) SetStepModel(taskID string, step int, model, effort string
 
 // SetSessionModel changes the model and effort of a session from its next
 // message on. The stage names the session: prd, tech_spec, plan, one_shot,
-// step:<n>, step_review:<n>, pr or pr_review.
+// step:<n>, step_review:<n>, pr, pr_review or pr_fix.
 func (s *TaskService) SetSessionModel(taskID, stage, model, effort string) error {
 	s, err := s.late.resolve(s)
 	if err != nil {
