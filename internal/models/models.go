@@ -56,12 +56,13 @@ const (
 	StepReview     Stage = "step_review"
 	PR             Stage = "pr"
 	PRReview       Stage = "pr_review"
+	PRFix          Stage = "pr_fix"
 	Discussion     Stage = "discussion"
 )
 
 // Stages lists every stage that carries a choice, in the order the settings
 // list them; the stages of a task are task.Mode.ModelStages.
-var Stages = []Stage{PRD, TechSpec, Plan, OneShot, Implementation, StepReview, PR, PRReview, Discussion}
+var Stages = []Stage{PRD, TechSpec, Plan, OneShot, Implementation, StepReview, PR, PRReview, PRFix, Discussion}
 
 // Set is a choice for every stage.
 type Set map[Stage]Choice
@@ -100,6 +101,7 @@ func Factory() Set {
 		StepReview:     {Model: Opus55, Effort: High},
 		PR:             {Model: Opus55, Effort: Medium},
 		PRReview:       {Model: Opus55, Effort: High},
+		PRFix:          {Model: Opus55, Effort: High},
 		Discussion:     {Model: Fable51, Effort: High},
 	}
 }

@@ -74,6 +74,11 @@ func StageModels(t task.Task, steps []StepState, pr *PullRequest) []StageModelSt
 		case models.PRReview:
 			state.Editable = before(task.StagePR) || (inPR && pr != nil && reviewToStart(*pr))
 			state.Live = inPR && pr != nil && pr.SessionStage == session.PRReviewStage
+		case models.PRFix:
+			// The implementer starts with the choice the task has when the review
+			// first sends it something.
+			state.Editable = before(task.StagePR) || (inPR && pr != nil && !pr.FixerStarted)
+			state.Live = inPR && pr != nil && pr.FixerStage != ""
 		case models.Discussion:
 			// The discussion is an item of its own, so it is no stage of a mode
 			// and never reaches this loop.
@@ -163,8 +168,8 @@ func (s *Service) SetStepModel(ctx context.Context, id string, number int, c mod
 // SetSessionModel changes the model and effort of a live session from its next
 // message on. A session of a planning stage or of a step carries the change to
 // its stage or its step, so that starting it over keeps it; a session of a
-// reviewer, of the PR stage or of the review of a pull request keeps it to
-// itself.
+// reviewer, of the PR stage or of the review of a pull request, or the
+// implementer of it, keeps it to itself.
 func (s *Service) SetSessionModel(ctx context.Context, id, stage string, c models.Choice) error {
 	l := s.lockOf(id)
 	l.mu.Lock()
@@ -180,7 +185,8 @@ func (s *Service) SetSessionModel(ctx context.Context, id, stage string, c model
 		if _, err := s.tasks.SetStepModel(ctx, id, number, c); err != nil {
 			return err
 		}
-	case isReviewer, stage == session.PRStage, stage == session.PRReviewStage, stage == session.ReviewStage:
+	case isReviewer, stage == session.PRStage, stage == session.PRReviewStage, stage == session.PRFixStage,
+		stage == session.ReviewStage:
 		// The choice of one reviewer, of the PR stage or of the review of a pull
 		// request is not the choice of a stage: the others keep theirs.
 	default:

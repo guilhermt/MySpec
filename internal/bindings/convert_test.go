@@ -1646,6 +1646,7 @@ func TestFromTasksCarriesTheModelsOfEveryStage(t *testing.T) {
 		{Stage: "step_review", Model: "claude-opus-5-5[1m]", Effort: "high", Editable: true},
 		{Stage: "pr", Model: "claude-opus-5-5[1m]", Effort: "medium", Editable: true},
 		{Stage: "pr_review", Model: "claude-sonnet-5", Effort: "low", Editable: true},
+		{Stage: "pr_fix", Model: "claude-opus-5-5[1m]", Effort: "high", Editable: true},
 	}
 	if diff := cmp.Diff(want, got[0].Models); diff != "" {
 		t.Errorf("models mismatch (-want +got):\n%s", diff)
@@ -1668,6 +1669,7 @@ func TestFromModelSetIsInTheOrderOfTheSettings(t *testing.T) {
 		{Stage: "step_review", Model: "claude-opus-5-5[1m]", Effort: "high"},
 		{Stage: "pr", Model: "claude-opus-5-5[1m]", Effort: "medium"},
 		{Stage: "pr_review", Model: "claude-opus-5-5[1m]", Effort: "high"},
+		{Stage: "pr_fix", Model: "claude-opus-5-5[1m]", Effort: "high"},
 		{Stage: "discussion", Model: "claude-fable-5-1", Effort: "high"},
 	}
 

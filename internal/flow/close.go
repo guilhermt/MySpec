@@ -42,7 +42,7 @@ func (s *Service) CloseTask(ctx context.Context, id string) error {
 
 	// The conversations of the stage ran inside the worktree; they stop before
 	// it goes. Their records stay until the task is archived.
-	for _, stage := range []string{session.PRStage, session.PRReviewStage} {
+	for _, stage := range []string{session.PRStage, session.PRReviewStage, session.PRFixStage} {
 		if err := s.sessions.Close(ctx, session.Key{TaskID: id, Stage: stage}); err != nil {
 			return err
 		}

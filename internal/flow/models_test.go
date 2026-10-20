@@ -54,6 +54,7 @@ func TestStageModelsSayWhatCanStillChange(t *testing.T) {
 				models.StepReview:     {Editable: true},
 				models.PR:             {Editable: true},
 				models.PRReview:       {Editable: true},
+				models.PRFix:          {Editable: true},
 			},
 		},
 		"the tech spec, whose session runs": {
@@ -66,6 +67,7 @@ func TestStageModelsSayWhatCanStillChange(t *testing.T) {
 				models.StepReview:     {Editable: true},
 				models.PR:             {Editable: true},
 				models.PRReview:       {Editable: true},
+				models.PRFix:          {Editable: true},
 			},
 		},
 		"implementation with a step still to start": {
@@ -79,6 +81,7 @@ func TestStageModelsSayWhatCanStillChange(t *testing.T) {
 				models.StepReview:     {Editable: true},
 				models.PR:             {Editable: true},
 				models.PRReview:       {Editable: true},
+				models.PRFix:          {Editable: true},
 			},
 		},
 		"implementation with every step started": {
@@ -92,6 +95,7 @@ func TestStageModelsSayWhatCanStillChange(t *testing.T) {
 				models.StepReview:     {Editable: true},
 				models.PR:             {Editable: true},
 				models.PRReview:       {Editable: true},
+				models.PRFix:          {Editable: true},
 			},
 		},
 		"implementation with a reviewer at work": {
@@ -108,6 +112,7 @@ func TestStageModelsSayWhatCanStillChange(t *testing.T) {
 				models.StepReview:     {Editable: true, Live: true},
 				models.PR:             {Editable: true},
 				models.PRReview:       {Editable: true},
+				models.PRFix:          {Editable: true},
 			},
 		},
 		"a pull request still to prepare": {
@@ -121,6 +126,7 @@ func TestStageModelsSayWhatCanStillChange(t *testing.T) {
 				models.StepReview:     {},
 				models.PR:             {Editable: true},
 				models.PRReview:       {Editable: true},
+				models.PRFix:          {Editable: true},
 			},
 		},
 		"a pull request being drafted": {
@@ -134,6 +140,7 @@ func TestStageModelsSayWhatCanStillChange(t *testing.T) {
 				models.StepReview:     {},
 				models.PR:             {Live: true},
 				models.PRReview:       {Editable: true},
+				models.PRFix:          {Editable: true},
 			},
 		},
 		"the pull request under review": {
@@ -147,6 +154,38 @@ func TestStageModelsSayWhatCanStillChange(t *testing.T) {
 				models.StepReview:     {},
 				models.PR:             {},
 				models.PRReview:       {Live: true},
+				models.PRFix:          {Editable: true},
+			},
+		},
+		"the implementer of the review at work": {
+			stage: task.StagePR,
+			pr: &flow.PullRequest{
+				Status: flow.PRAddressingReview, SessionStage: session.PRReviewStage,
+				FixerStage: session.PRFixStage, FixerStarted: true,
+			},
+			want: map[models.Stage]rule{
+				models.PRD:            {},
+				models.TechSpec:       {},
+				models.Plan:           {},
+				models.Implementation: {},
+				models.StepReview:     {},
+				models.PR:             {},
+				models.PRReview:       {Live: true},
+				models.PRFix:          {Live: true},
+			},
+		},
+		"the implementer of the review closed": {
+			stage: task.StagePR,
+			pr:    &flow.PullRequest{Status: flow.PRReviewing, SessionStage: session.PRReviewStage, FixerStarted: true},
+			want: map[models.Stage]rule{
+				models.PRD:            {},
+				models.TechSpec:       {},
+				models.Plan:           {},
+				models.Implementation: {},
+				models.StepReview:     {},
+				models.PR:             {},
+				models.PRReview:       {Live: true},
+				models.PRFix:          {},
 			},
 		},
 	}
@@ -181,6 +220,7 @@ func TestStageModelsOfAOneShotTaskSayWhatCanStillChange(t *testing.T) {
 				models.StepReview:     {Editable: true},
 				models.PR:             {Editable: true},
 				models.PRReview:       {Editable: true},
+				models.PRFix:          {Editable: true},
 			},
 		},
 		"implementation with the step still to start": {
@@ -192,6 +232,7 @@ func TestStageModelsOfAOneShotTaskSayWhatCanStillChange(t *testing.T) {
 				models.StepReview:     {Editable: true},
 				models.PR:             {Editable: true},
 				models.PRReview:       {Editable: true},
+				models.PRFix:          {Editable: true},
 			},
 		},
 		"implementation with the step started": {
@@ -203,6 +244,7 @@ func TestStageModelsOfAOneShotTaskSayWhatCanStillChange(t *testing.T) {
 				models.StepReview:     {Editable: true},
 				models.PR:             {Editable: true},
 				models.PRReview:       {Editable: true},
+				models.PRFix:          {Editable: true},
 			},
 		},
 		"the pull request under review": {
@@ -214,6 +256,7 @@ func TestStageModelsOfAOneShotTaskSayWhatCanStillChange(t *testing.T) {
 				models.StepReview:     {},
 				models.PR:             {},
 				models.PRReview:       {Live: true},
+				models.PRFix:          {Editable: true},
 			},
 		},
 	}
@@ -478,6 +521,8 @@ func TestSetSessionModelCarriesTheChangeToTheStageOrTheStep(t *testing.T) {
 		},
 		// The choice of the pull request is the stage's alone.
 		"the pull request": {taskStage: task.StagePR, stage: session.PRStage},
+		// So is the choice of the implementer of its review.
+		"the implementer of the review": {taskStage: task.StagePR, stage: session.PRFixStage},
 	}
 
 	for name, tc := range tests {

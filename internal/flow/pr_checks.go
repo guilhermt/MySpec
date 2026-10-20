@@ -121,8 +121,10 @@ func (s *Service) endWaitForClosedPR(ctx context.Context, id string, state task.
 		return
 	}
 	s.review.Forget(id)
-	if err := s.sessions.Close(ctx, session.Key{TaskID: id, Stage: session.PRReviewStage}); err != nil {
-		s.log.Error("close pr review session failed", "task", id, "error", err)
+	for _, key := range []session.Key{prReviewKey(id), prFixKey(id)} {
+		if err := s.sessions.Close(ctx, key); err != nil {
+			s.log.Error("close pr review session failed", "task", id, "stage", key.Stage, "error", err)
+		}
 	}
 	s.setPassAsked(id, "")
 	s.log.Info("pull request over before the pass", "task", id, "state", string(state))
@@ -160,13 +162,14 @@ func (s *Service) takeChecks(id string) *gh.PRChecks {
 func (s *Service) resumeChecksWait(ctx context.Context, t task.Task, run task.PRRun) {
 	// Reopening a conversation that does not exist would create an empty one,
 	// which the evaluation would take for a pass already under way.
-	exists, err := s.sessions.Exists(ctx, session.Key{TaskID: t.ID, Stage: session.PRReviewStage})
+	exists, err := s.sessions.Exists(ctx, prReviewKey(t.ID))
 	switch {
 	case err != nil:
 		s.log.Error("open pr session failed", "task", t.ID, "error", err)
 	case exists:
 		s.reopenPRSession(ctx, t, run, true)
 	}
+	s.reopenFixer(ctx, t, run)
 
 	// The tolerance to a reading without checks dies with the app.
 	l := s.lockOf(t.ID)

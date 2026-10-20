@@ -33,8 +33,12 @@ func prArtifacts(art task.PRArtifacts) task.Artifacts {
 	}
 }
 
-// reviewKeyOf is the session that reviews the pull request of the task.
-var reviewKeyOf = session.Key{TaskID: "task-1", Stage: session.PRReviewStage}
+// reviewKeyOf is the session that reviews the pull request of the task, and
+// fixKeyOf the one that applies the findings of the review.
+var (
+	reviewKeyOf = session.Key{TaskID: "task-1", Stage: session.PRReviewStage}
+	fixKeyOf    = session.Key{TaskID: "task-1", Stage: session.PRFixStage}
+)
 
 // underReview brings a task to the review session of its pull request, with
 // the pull request the app recorded and the branch on startCommit.
@@ -171,7 +175,7 @@ func TestAReportWithFindingsWaitsForTheDecision(t *testing.T) {
 	}
 }
 
-func TestApprovingAReviewAsksForACommitThatIsPushed(t *testing.T) {
+func TestApprovePRCommitsThroughTheImplementer(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -179,6 +183,7 @@ func TestApprovingAReviewAsksForACommitThatIsPushed(t *testing.T) {
 	reportsWritten(t, f, reports(1, false))
 	f.waitPRRun(t, "the report of the first pass", func(run task.PRRun) bool { return run.ReportedPass == 1 })
 	applied(t, f, 1)
+	implementerAtRest(f)
 	f.reviews.setSnapshot(staged(3, 3))
 	f.sessions.goIdle("task-1")
 
@@ -200,12 +205,12 @@ func TestApprovingAReviewAsksForACommitThatIsPushed(t *testing.T) {
 	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppCommitPush}}, f.sessions.sentApps()); diff != "" {
 		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
 	}
-	approved := []keyedMarker{{Key: reviewKeyOf, Marker: session.MarkerEntry{Type: session.MarkerChangesApproved, Files: 3}}}
+	approved := []keyedMarker{{Key: fixKeyOf, Marker: session.MarkerEntry{Type: session.MarkerChangesApproved, Files: 3}}}
 	if diff := cmp.Diff(approved, f.sessions.marked(session.MarkerChangesApproved)); diff != "" {
 		t.Errorf("changes_approved markers mismatch (-want +got):\n%s", diff)
 	}
-	if !slices.Contains(f.sessions.recorded(), "send:task-1:pr_review") {
-		t.Errorf("session calls = %q, want the prompt sent to the review session", f.sessions.recorded())
+	if !slices.Contains(f.sessions.recorded(), "send:task-1:pr_fix") {
+		t.Errorf("session calls = %q, want the prompt sent to the implementer", f.sessions.recorded())
 	}
 }
 
@@ -217,6 +222,7 @@ func TestACommitOfAReviewStartsTheNextPass(t *testing.T) {
 	reportsWritten(t, f, reports(1, false))
 	f.waitPRRun(t, "the report of the first pass", func(run task.PRRun) bool { return run.ReportedPass == 1 })
 	applied(t, f, 1)
+	implementerAtRest(f)
 	f.reviews.setSnapshot(staged(3, 3))
 	f.sessions.goIdle("task-1")
 	if err := f.service.ApprovePR(t.Context(), "task-1"); err != nil {
@@ -244,7 +250,7 @@ func TestACommitOfAReviewStartsTheNextPass(t *testing.T) {
 	if state := f.prState(t, "task-1"); state.CommitFailed {
 		t.Error("the approval is reported as having produced no commit")
 	}
-	committed := []keyedMarker{{Key: reviewKeyOf, Marker: session.MarkerEntry{
+	committed := []keyedMarker{{Key: fixKeyOf, Marker: session.MarkerEntry{
 		Type: session.MarkerCommitted, SHA: commitSHA[:7], Subject: "Do the work of the step", Pushed: true, Number: 7,
 	}}}
 	if diff := cmp.Diff(committed, f.sessions.marked(session.MarkerCommitted)); diff != "" {
@@ -460,8 +466,8 @@ func TestReviewingAgainStartsAPassOverTheSamePullRequest(t *testing.T) {
 	if state := f.prState(t, "task-1"); len(state.Reports) != 1 {
 		t.Errorf("reports = %d, want the one already written", len(state.Reports))
 	}
-	if !slices.Contains(f.sessions.recorded(), "discard:task-1:pr_review") {
-		t.Errorf("session calls = %q, want the review session discarded", f.sessions.recorded())
+	if slices.Contains(f.sessions.recorded(), "discard:task-1:pr_review") {
+		t.Errorf("session calls = %q, want the conversation of the reviewer kept", f.sessions.recorded())
 	}
 
 	// The clean report of the first pass does not close the review asked for

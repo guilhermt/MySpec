@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/guilhermt/myspec/internal/prreport"
-	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 	"github.com/guilhermt/myspec/internal/worktree"
@@ -51,31 +50,6 @@ func prOver(run task.PRRun) bool {
 func awaitingMerge(run task.PRRun, pass *task.PRPass) bool {
 	return run.Status == task.PRDone ||
 		(run.Status == task.PRReviewing && pass != nil && pass.AllDiscarded())
-}
-
-// structuredStatus is a pull request under review in a structured pass, at
-// rest: the report the agent owes, the findings the user decides, the changes
-// the agent made, or, with every finding discarded and nothing changed, the
-// wait for the merge, as after a clean pass.
-func structuredStatus(run task.PRRun, pass task.PRPass, snap review.Snapshot, read bool) PRStatus {
-	changed := read && snap.Err == "" && snap.Total > 0
-	switch {
-	case !pass.Recorded:
-		return PRAwaitingReply
-	case pass.Clean:
-		return PRDone // transient: the evaluation that follows finishes the review
-	case pass.Sent():
-		if !changed {
-			return PRInReview // the agent changed nothing: No file changed
-		}
-		return changesStatus(snap)
-	case !pass.Decided() || len(pass.Approved()) > 0:
-		return PRAwaitingDecision
-	case changed:
-		return changesStatus(snap)
-	default:
-		return awaitingStatus(run)
-	}
 }
 
 // evaluateReport keeps the current structured pass in step with its report:
@@ -282,9 +256,9 @@ func (s *Service) ApproveRestOfPRFindings(ctx context.Context, id string, pass i
 	return s.tasks.ApproveRestOfPRFindings(ctx, id, pass)
 }
 
-// ApplyPRFindings sends the agent the findings of the current pass the user
-// approved, with the ones they discarded, and the review goes on as after any
-// pass: the changes, the commit and the next pass.
+// ApplyPRFindings sends the implementer the findings of the current pass the
+// user approved, with the ones they discarded, and the review goes on as after
+// any pass: the changes, the commit and the next pass.
 func (s *Service) ApplyPRFindings(ctx context.Context, id string) error {
 	l := s.lockOf(id)
 	l.mu.Lock()
@@ -301,13 +275,21 @@ func (s *Service) ApplyPRFindings(ctx context.Context, id string) error {
 		return fmt.Errorf("apply the findings of task %s: %w", id, ErrNothingApproved)
 	}
 
-	key := session.Key{TaskID: id, Stage: session.PRReviewStage}
-	sum, err := s.readySession(ctx, key)
+	t, run, err := s.prOf(id)
+	if err != nil {
+		return err
+	}
+	// The reviewer rests too: a rewrite of the report under way would change the
+	// findings.
+	sum, err := s.readySession(ctx, prReviewKey(id))
 	if err != nil {
 		return fmt.Errorf("apply the findings of task %s: %w", id, err)
 	}
 	if !sum.Idle {
 		return fmt.Errorf("apply the findings of task %s: %w", id, ErrStepBusy)
+	}
+	if err := s.fixerAtRest(ctx, id); err != nil {
+		return fmt.Errorf("apply the findings of task %s: %w", id, err)
 	}
 	// Nothing was written until here: a refusal leaves the findings as they were.
 
@@ -315,11 +297,11 @@ func (s *Service) ApplyPRFindings(ctx context.Context, id string) error {
 		return fmt.Errorf("apply the findings of task %s: %w", id, err)
 	}
 	approved, discarded := prreport.Counts(current.Findings)
-	s.sessions.MarkFindingsDecided(ctx, key, current.Pass, approved, discarded)
+	s.sessions.MarkFindingsDecided(ctx, prReviewKey(id), current.Pass, approved, discarded)
 	app := session.AppMessage{
-		Text: prreport.ApplyMessage(current.Pass, current.Findings), Kind: session.AppApply, Count: approved,
+		Text: prreport.FixMessage(current.Pass, current.Findings), Kind: session.AppApply, Count: approved,
 	}
-	if err := s.sessions.SendFromApp(ctx, key, app); err != nil {
+	if err := s.sendToFixer(ctx, t, run, app, nil); err != nil {
 		if unmarkErr := s.tasks.UnmarkPRPassSent(ctx, id, current.Pass); unmarkErr != nil {
 			s.log.Error("unmark sent pr review pass failed", "task", id, "pass", current.Pass, "error", unmarkErr)
 		}

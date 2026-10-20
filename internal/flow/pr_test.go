@@ -535,7 +535,7 @@ func TestDiscardingThePlanTearsDownThePullRequests(t *testing.T) {
 		t.Error("the pr run is still there, want it forgotten")
 	}
 	// The two conversations of the stage go with it.
-	if !slices.Contains(f.sessions.recorded(), "discard:task-1:pr,pr_review") {
+	if !slices.Contains(f.sessions.recorded(), "discard:task-1:pr,pr_review,pr_fix") {
 		t.Errorf("session calls = %q, want the pr sessions discarded", f.sessions.recorded())
 	}
 	calls := f.tasks.recorded()
@@ -571,7 +571,7 @@ func TestBackToTheOneShotPlanningTearsDownThePullRequest(t *testing.T) {
 		t.Errorf("step runs = %+v, want none", runs)
 	}
 	sessionCalls := f.sessions.recorded()
-	if !slices.Contains(sessionCalls, "discard:task-1:pr,pr_review") {
+	if !slices.Contains(sessionCalls, "discard:task-1:pr,pr_review,pr_fix") {
 		t.Errorf("session calls = %q, want the pr sessions discarded", sessionCalls)
 	}
 	if last := sessionCalls[len(sessionCalls)-1]; last != "open:task-1:one_shot" {

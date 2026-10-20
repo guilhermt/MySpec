@@ -307,6 +307,12 @@ func (m *memTasks) SetReviewMode(_ context.Context, id string, mode reviewmode.M
 	})
 }
 
+func (m *memTasks) SetPRReviewMode(_ context.Context, id string, mode reviewmode.Mode) (task.Task, error) {
+	return m.updateReviewModes(id, "prReviewMode:"+id+":"+string(mode), func(modes *task.ReviewModes) {
+		modes.PR = mode
+	})
+}
+
 func (m *memTasks) SetStepReviewMode(_ context.Context, id string, number int, mode reviewmode.Mode) (task.Task, error) {
 	return m.updateReviewModes(
 		id,
@@ -460,6 +466,10 @@ func (m *memTasks) SetPRReviewed(_ context.Context, id, commit string, pass int)
 	return m.updatePRRun(id, "prReviewed:"+strconv.Itoa(pass), func(run *task.PRRun) {
 		run.ReviewedCommit, run.ReportedPass = commit, pass
 	})
+}
+
+func (m *memTasks) SetPRFallback(_ context.Context, id string, fallback task.ReviewFallback) (task.PRRun, error) {
+	return m.updatePRRun(id, "prFallback:"+string(fallback), func(run *task.PRRun) { run.Fallback = fallback })
 }
 
 func (m *memTasks) SetPRBaseline(_ context.Context, id string, baseline gh.Trouble) (task.PRRun, error) {
@@ -1010,11 +1020,13 @@ type memSessions struct {
 	mu        sync.Mutex
 	summaries map[session.Key]session.Summary
 	infos     map[session.Key]session.TaskInfo
-	replies   map[session.Key]string // what the agent of a session said last
+	replies   map[session.Key]string            // what the agent of a session said last
+	started   map[string][]session.Conversation // the conversations a task has had, open or closed
 	calls     []string
 	messages  []string
 	apps      []session.AppMessage // every message of the app, with its kind and numbers
 	markers   []keyedMarker        // every marker of the Mark methods but the reviews'
+	sendSeen  []int                // how many markers there were when each message of the app was sent
 	err       error                // returned by every call that changes something
 }
 
@@ -1023,7 +1035,29 @@ func newSessions() *memSessions {
 		summaries: map[session.Key]session.Summary{},
 		infos:     map[session.Key]session.TaskInfo{},
 		replies:   map[session.Key]string{},
+		started:   map[string][]session.Conversation{},
 	}
+}
+
+// remember records that a conversation exists, once.
+func (m *memSessions) remember(taskID, stage string) {
+	if slices.ContainsFunc(m.started[taskID], func(c session.Conversation) bool { return c.Stage == stage }) {
+		return
+	}
+	m.started[taskID] = append(m.started[taskID], session.Conversation{Stage: stage})
+}
+
+func (m *memSessions) Conversations(taskID string) []session.Conversation {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	out := slices.Clone(m.started[taskID])
+	for k := range m.summaries {
+		if k.TaskID == taskID && !slices.ContainsFunc(out, func(c session.Conversation) bool { return c.Stage == k.Stage }) {
+			out = append(out, session.Conversation{Stage: k.Stage})
+		}
+	}
+	return out
 }
 
 func (m *memSessions) Open(_ context.Context, t session.TaskInfo) error {
@@ -1035,6 +1069,7 @@ func (m *memSessions) Open(_ context.Context, t session.TaskInfo) error {
 		return m.err
 	}
 	m.infos[t.Key()] = t
+	m.remember(t.ID, t.Stage)
 	if _, ok := m.summaries[t.Key()]; !ok {
 		m.summaries[t.Key()] = session.Summary{
 			TaskID: t.ID, Stage: t.Stage, Status: session.StatusWaiting, Idle: true,
@@ -1052,6 +1087,7 @@ func (m *memSessions) Start(_ context.Context, t session.TaskInfo, restarted boo
 		return m.err
 	}
 	m.infos[t.Key()] = t
+	m.remember(t.ID, t.Stage)
 	m.summaries[t.Key()] = session.Summary{TaskID: t.ID, Stage: t.Stage, Status: session.StatusWorking}
 	return nil
 }
@@ -1066,6 +1102,7 @@ func (m *memSessions) Discard(_ context.Context, taskID string, stages ...string
 	}
 	for _, stage := range stages {
 		delete(m.summaries, session.Key{TaskID: taskID, Stage: stage})
+		m.started[taskID] = slices.DeleteFunc(m.started[taskID], func(c session.Conversation) bool { return c.Stage == stage })
 	}
 	return nil
 }
@@ -1086,11 +1123,10 @@ func (m *memSessions) Exists(_ context.Context, k session.Key) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.err != nil {
-		return false, m.err
+	if _, ok := m.summaries[k]; ok {
+		return true, nil
 	}
-	_, ok := m.summaries[k]
-	return ok, nil
+	return slices.ContainsFunc(m.started[k.TaskID], func(c session.Conversation) bool { return c.Stage == k.Stage }), nil
 }
 
 func (m *memSessions) CloseTask(_ context.Context, taskID string) error {
@@ -1117,6 +1153,7 @@ func (m *memSessions) DiscardTask(_ context.Context, taskID string) error {
 	if m.err != nil {
 		return m.err
 	}
+	delete(m.started, taskID)
 	for k := range m.summaries {
 		if k.TaskID == taskID {
 			delete(m.summaries, k)
@@ -1334,6 +1371,15 @@ func (m *memSessions) marked(t session.MarkerType) []keyedMarker {
 	return out
 }
 
+// markersBeforeSends is how many markers were recorded when each message of the
+// app was sent, in order.
+func (m *memSessions) markersBeforeSends() []int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.sendSeen)
+}
+
 // sentApps is the kind and the numbers of every message of the app, without
 // the text, which sent holds.
 func (m *memSessions) sentApps() []session.AppMessage {
@@ -1358,6 +1404,7 @@ func (m *memSessions) send(k session.Key, msg session.AppMessage, correction boo
 	}
 	m.messages = append(m.messages, msg.Text)
 	m.apps = append(m.apps, msg)
+	m.sendSeen = append(m.sendSeen, len(m.markers))
 	sum := m.summaries[k]
 	if correction {
 		sum.Corrections++
