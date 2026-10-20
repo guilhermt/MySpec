@@ -77,6 +77,10 @@ const (
 	AppApply      AppKind = "apply"       // apply the approved findings
 )
 
+// AppCommitAllPush is the message that commits every change of the worktree and
+// pushes, after a clean report of the agent review of a pull request.
+const AppCommitAllPush AppKind = "commit_all_push"
+
 // AppMessage is a message the app sends the agent on the user's behalf.
 type AppMessage struct {
 	Text   string

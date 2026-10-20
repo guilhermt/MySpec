@@ -1550,6 +1550,7 @@ func TestThePromptSentIsKeptForTheStagesThatShowIt(t *testing.T) {
 		prompts.StagePlan:       true,
 		prompts.StagePR:         true,
 		prompts.StagePRReview:   true,
+		prompts.StagePRFix:      true,
 	}
 
 	for stage, kept := range tests {
@@ -3073,5 +3074,73 @@ func TestStartOfADiscussionCarriesTheModelTheBoardAndTheEpics(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, f.entriesOf(t, info.Key(), session.KindMarker)[0].Marker); diff != "" {
 		t.Errorf("marker mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestTheFirstRequestOfThePRFixesReadsAsAMessageOfTheApp(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := atStage(taskInfo(t, "t1"), prompts.StagePRFix)
+	info.PRURL = "https://github.com/acme/api/pull/42"
+	info.Request = session.AppMessage{
+		Text: "Round 2 of 5 report", Kind: session.AppReport, Pass: 3, Round: 2, Rounds: 5, Count: 4,
+	}
+	f.start(t, info)
+	f.waitIdle(t, info.Key())
+
+	tr := f.transcript(t, info.Key())
+	var user *session.UserEntry
+	var echoed string
+	for _, e := range tr.Entries {
+		switch {
+		case e.User != nil:
+			user = e.User
+		case e.Assistant != nil:
+			echoed = e.Assistant.Text
+		}
+	}
+	wantSent := "Stage pr_fix fixes https://github.com/acme/api/pull/42 in dev/web\n\n## The first request\n\nRound 2 of 5 report"
+	wantUser := &session.UserEntry{
+		Text: info.Request.Text, Prompt: true, Sent: wantSent, App: true, AppKind: session.AppReport,
+		AppPass: 3, AppRound: 2, AppRounds: 5, AppCount: 4,
+	}
+	if diff := cmp.Diff(wantUser, user); diff != "" {
+		t.Errorf("prompt entry mismatch (-want +got):\n%s", diff)
+	}
+	if echoed != wantSent {
+		t.Errorf("prompt sent = %q, want %q", echoed, wantSent)
+	}
+	if got := tr.Entries[0].Marker; got == nil || got.Type != session.MarkerStageStarted || got.Stage != "pr_fix" {
+		t.Errorf("first entry = %+v, want the generic stage start of pr_fix", tr.Entries[0])
+	}
+}
+
+func TestTheReviewerThatOnlyReviewsReceivesItsNoteAndTheDiscardedFindings(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := atStage(taskInfo(t, "t1"), prompts.StagePRReview)
+	info.ReviewOnly = true
+	info.DiscardedFindings = "- pass 1 · 2 · Vague · general"
+	f.start(t, info)
+	f.waitIdle(t, info.Key())
+
+	var echoed string
+	for _, e := range f.transcript(t, info.Key()).Entries {
+		if e.Assistant != nil {
+			echoed = e.Assistant.Text
+		}
+	}
+	if want := `Review only, discarded: "- pass 1 · 2 · Vague · general"`; !strings.Contains(echoed, want) {
+		t.Errorf("prompt sent = %q, want it to contain %q", echoed, want)
+	}
+}
+
+func TestThePRFixesProduceNoArtifact(t *testing.T) {
+	t.Parallel()
+
+	if got := session.ArtifactOf(prompts.StagePRFix); got != "" {
+		t.Errorf("artifactOf(pr_fix) = %q, want none", got)
 	}
 }

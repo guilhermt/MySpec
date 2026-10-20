@@ -47,10 +47,12 @@ const (
 )
 
 // The session keys of the PR stage of a task: the conversation that drafts
-// and opens the pull request, and the one that reviews it.
+// and opens the pull request, the one that reviews it and the one that applies
+// its findings.
 const (
 	PRStage       = "pr"
 	PRReviewStage = "pr_review"
+	PRFixStage    = "pr_fix"
 )
 
 // ReviewStage is the session key of the review of a pull request, the only
