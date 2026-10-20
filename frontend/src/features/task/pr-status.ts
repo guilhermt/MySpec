@@ -1,7 +1,7 @@
 import type { StatusTone } from "@/features/task/status";
 import { prBaseName, troubleText } from "@/lib/pull-requests";
 import { cloneMissingText } from "@/lib/repositories";
-import type { PRBlockReason, PullRequest, Repository, TaskSummary } from "@/lib/wails";
+import type { PRBlockReason, PRStatus, PullRequest, Repository, TaskSummary } from "@/lib/wails";
 import { asPRState, asPRStatus, asReviewMode } from "@/lib/wails";
 
 /** prStatusLabel is where the pull request of a task stands, in the words of the product. */
@@ -120,10 +120,26 @@ export function canDiscardDraft(pr: PullRequest): boolean {
   }
 }
 
+// The states in which the agent review no longer runs: past it, over or blocked, each with its own
+// answer to Review again.
+const AGENT_LOOP_OVER: readonly PRStatus[] = [
+  "done",
+  "trouble",
+  "merged",
+  "pr_closed",
+  "closing",
+  "closed",
+  "blocked",
+];
+
 // agentRefusal is why the agent review or the implementer holds another pass back; null when neither does.
 function agentRefusal(task: TaskSummary): string | null {
   const status = task.pr === null ? null : asPRStatus(task.pr.status);
-  if (asReviewMode(task.prReviewMode) === "agent" && status !== "done" && status !== "trouble") {
+  if (
+    asReviewMode(task.prReviewMode) === "agent" &&
+    status !== null &&
+    !AGENT_LOOP_OVER.includes(status)
+  ) {
     return "The agent is reviewing the pull request. Take it over with Review myself first.";
   }
   if (task.pr?.implementer?.turnRunning === true) {

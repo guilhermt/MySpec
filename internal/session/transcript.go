@@ -66,20 +66,17 @@ type AppKind string
 
 // The messages of the workflow.
 const (
-	AppReport     AppKind = "report"      // a step review report to the implementer
-	AppPass       AppKind = "pass"        // the next pass to the step reviewer
-	AppCommit     AppKind = "commit"      // commit the staged files
-	AppCommitAll  AppKind = "commit_all"  // commit every change of the step, after a clean report
-	AppCommitPush AppKind = "commit_push" // commit the staged files and push
-	AppCorrection AppKind = "correction"  // the plan isn't valid yet
-	AppOpen       AppKind = "open"        // open the pull request
-	AppPRPass     AppKind = "pr_pass"     // the next pass of the pull request review
-	AppApply      AppKind = "apply"       // apply the approved findings
+	AppReport        AppKind = "report"          // a step review report to the implementer
+	AppPass          AppKind = "pass"            // the next pass to the step reviewer
+	AppCommit        AppKind = "commit"          // commit the staged files
+	AppCommitAll     AppKind = "commit_all"      // commit every change of the step, after a clean report
+	AppCommitPush    AppKind = "commit_push"     // commit the staged files and push
+	AppCommitAllPush AppKind = "commit_all_push" // commit every change of the worktree and push, after a clean report of the agent review of a pull request
+	AppCorrection    AppKind = "correction"      // the plan isn't valid yet
+	AppOpen          AppKind = "open"            // open the pull request
+	AppPRPass        AppKind = "pr_pass"         // the next pass of the pull request review
+	AppApply         AppKind = "apply"           // apply the approved findings
 )
-
-// AppCommitAllPush is the message that commits every change of the worktree and
-// pushes, after a clean report of the agent review of a pull request.
-const AppCommitAllPush AppKind = "commit_all_push"
 
 // AppMessage is a message the app sends the agent on the user's behalf.
 type AppMessage struct {

@@ -47,8 +47,8 @@ func Describe(f Finding) string {
 
 // message is the approved findings in the format of the report, with the text
 // as the user left it, and the discarded ones, listed under intro and
-// discardedIntro.
-func message(intro, discardedIntro string, pass int, findings []Finding) string {
+// discardedLead.
+func message(intro, discardedLead string, pass int, findings []Finding) string {
 	var approved, discarded []Finding
 	for _, finding := range findings {
 		switch finding.Decision {
@@ -72,7 +72,7 @@ func message(intro, discardedIntro string, pass int, findings []Finding) string 
 	if len(discarded) == 0 {
 		return strings.TrimSuffix(b.String(), "\n\n")
 	}
-	b.WriteString("## Discarded findings\n\n" + discardedIntro + "\n\n")
+	b.WriteString("## Discarded findings\n\n" + discardedLead + "\n\n")
 	lines := make([]string, 0, len(discarded))
 	for _, finding := range discarded {
 		lines = append(lines, "- "+Describe(finding))

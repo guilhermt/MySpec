@@ -223,11 +223,25 @@ describe("reviewAgainRefusal", () => {
     },
   );
 
-  it.each(["done", "trouble"])("lets an agent review be asked again once it is %s", (status) => {
+  it.each(["done", "trouble", "merged"])(
+    "lets an agent review be asked again once it is %s",
+    (status) => {
+      const task = taskOf({ status, prNumber: 12 }, { prReviewMode: "agent" });
+
+      expect(reviewAgainRefusal(task)).toBeNull();
+      expect(canReviewAgain(task)).toBe(true);
+    },
+  );
+
+  it.each([
+    ["pr_closed", "the pull request was closed"],
+    ["blocked", "the pull request stage is blocked"],
+    ["closing", "the task is closing"],
+  ])("gives an agent review in %s the reason of its state", (status, reason) => {
     const task = taskOf({ status, prNumber: 12 }, { prReviewMode: "agent" });
 
-    expect(reviewAgainRefusal(task)).toBeNull();
-    expect(canReviewAgain(task)).toBe(true);
+    expect(reviewAgainRefusal(task)).toBe(reason);
+    expect(canReviewAgain(task)).toBe(false);
   });
 
   it("refuses while the implementer works", () => {

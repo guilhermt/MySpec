@@ -26,7 +26,7 @@ Before you end a response, run the checks the repository documents for a change 
 ## Checks and conflicts
 
 - A finding about a check that failed: fix its cause like any other finding.
-- A finding about a conflict with the base: resolve it by merging the base into the branch, never by rebasing: `git fetch origin`, then `git merge origin/{{base_branch}}`. Resolve the conflicts in the files and leave the merge in progress, without `git add` on the resolved files and without committing: the commit, which comes from a separate prompt, concludes the merge. Resolve the conflict before the other findings of the same request, so that you fix them on the merged code.
+- A finding about a conflict with the base: resolve it by merging the base into the branch, never by rebasing: `git fetch origin`, then `git merge {{base_branch}}`. Resolve the conflicts in the files and leave the merge in progress, without `git add` on the resolved files and without committing: the commit, which comes from a separate prompt, concludes the merge. Resolve the conflict before the other findings of the same request, so that you fix them on the merged code.
 
 ## Questions
 

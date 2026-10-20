@@ -385,8 +385,8 @@ describe("detailsOf, the review of the pull request", () => {
 
     expect(rows?.map(({ stage, label, now }) => [stage, label, now])).toEqual([
       ["pr", "Draft and opening · #12", false],
-      ["pr_review", "PR review · Reviewer", false],
       ["pr_fix", "PR review · Implementer", true],
+      ["pr_review", "PR review · Reviewer", false],
     ]);
   });
 

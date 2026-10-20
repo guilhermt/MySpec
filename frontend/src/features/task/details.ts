@@ -225,8 +225,9 @@ function pullRequestGroup(
       : onScreenStage;
   const labels = [
     { stage: "pr", label: open ? `Draft and opening · #${pr.prNumber}` : "Draft and opening" },
-    { stage: "pr_review", label: "PR review · Reviewer" },
+    // The reviewer is the last row: the reports of its passes sit under it.
     { stage: "pr_fix", label: "PR review · Implementer" },
+    { stage: "pr_review", label: "PR review · Reviewer" },
   ];
   const agent = asReviewMode(task.prReviewMode) === "agent";
   const conversations = labels.flatMap(({ stage, label }) =>

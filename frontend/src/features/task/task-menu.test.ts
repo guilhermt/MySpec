@@ -222,7 +222,7 @@ describe("taskMenuOf, the pull request group", () => {
     [
       "merged under the agent review",
       open("merged", { prState: "merged" }, { prReviewMode: "agent" }),
-      "Pull request #1284: Open PR, Refresh PR, Review again [The agent is reviewing the pull request. Take it over with Review myself first.], Open in VS Code",
+      "Pull request #1284: Open PR, Refresh PR, Review again, Open in VS Code",
     ],
   ])("offers a pull request %s", (_, task, line) => {
     const [first] = outline(taskMenuOf(task, NOW));

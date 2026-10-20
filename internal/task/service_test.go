@@ -1063,6 +1063,9 @@ func TestSetPRReviewModeStoresTheModeAndKeepsTheOthers(t *testing.T) {
 	if !stored.ReviewModes.Adjusted(1) || stored.ReviewModes.Default() != reviewmode.Manual {
 		t.Errorf("stored modes = %+v, want the modes of the steps untouched", stored.ReviewModes)
 	}
+	if f.changeCount() <= changes {
+		t.Error("OnChange did not run for the new mode")
+	}
 
 	// Changing the mode of the task keeps the one of the pull request.
 	again, err := f.service.SetReviewMode(t.Context(), created.ID, reviewmode.Agent)
@@ -1071,9 +1074,6 @@ func TestSetPRReviewModeStoresTheModeAndKeepsTheOthers(t *testing.T) {
 	}
 	if mode := again.ReviewModes.PRMode(); mode != reviewmode.Agent {
 		t.Errorf("PR mode after SetReviewMode() = %q, want %q", mode, reviewmode.Agent)
-	}
-	if f.changeCount() <= changes {
-		t.Error("OnChange did not run for the new mode")
 	}
 	if records := f.logs.count(t, "pr review mode set"); records != 1 {
 		t.Errorf("pr review mode set records = %d, want 1", records)

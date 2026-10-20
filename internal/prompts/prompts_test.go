@@ -501,7 +501,7 @@ func TestRenderTheDefaultPromptsKeepNoPlaceholder(t *testing.T) {
 			"https://github.com/acme/api/pull/42", "`42`", "/data/tasks/add-login/pr/review-1.md",
 		}},
 		{prompts.StagePRFix, everyVar(), []string{
-			"https://github.com/acme/api/pull/42", "`42`", "`acme/api`", "git merge origin/origin/dev",
+			"https://github.com/acme/api/pull/42", "`42`", "`acme/api`", "git merge origin/dev",
 		}},
 		{prompts.StageDiscussion, discussionVars(), []string{
 			"invoices", "/data/discussions/invoices", documentPath, draftsPath,

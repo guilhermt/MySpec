@@ -970,7 +970,7 @@ func (s *Service) evaluateCleanPR(
 // answers with the run the task goes back to reviewing with, and false while
 // the commit turn is not over.
 func (s *Service) evaluatePRCommit(ctx context.Context, t task.Task, run task.PRRun) (task.PRRun, bool) {
-	key := prFixKey(t.ID)
+	key := s.prCommitKey(t.ID)
 	sum, open := s.sessions.Summary(key)
 	if !open || !sum.Idle {
 		return task.PRRun{}, false
@@ -1009,6 +1009,20 @@ func (s *Service) evaluatePRCommit(ctx context.Context, t task.Task, run task.PR
 	}
 	s.markPRCommit(ctx, t.ID, key, snap.Head, run.PR.Number)
 	return back, true
+}
+
+// prCommitKey is the conversation the commit of a pull request review was
+// asked of: the implementer's, or the reviewer's for a commit asked before the
+// review had an implementer, which a task that was committing then still waits
+// on.
+func (s *Service) prCommitKey(id string) session.Key {
+	hasFixer := slices.ContainsFunc(s.sessions.Conversations(id), func(c session.Conversation) bool {
+		return c.Stage == session.PRFixStage
+	})
+	if _, open := s.sessions.Summary(prFixKey(id)); open || hasFixer {
+		return prFixKey(id)
+	}
+	return prReviewKey(id)
 }
 
 // markPRCommit records in the conversation of the review the commit that went

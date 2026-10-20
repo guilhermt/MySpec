@@ -1,6 +1,6 @@
 import type { SessionState } from "@/features/chat/session";
 import type { StepperGlyph } from "@/features/task/stepper";
-import { hasReviewConversation } from "@/lib/pull-requests";
+import { hasReviewConversation, isReviewed } from "@/lib/pull-requests";
 import {
   isSessionKind,
   lowerFirst,
@@ -13,7 +13,6 @@ import {
 } from "@/lib/situations";
 import type { PullRequest, Situation, Step, TaskSummary } from "@/lib/wails";
 import {
-  asPRStatus,
   asReviewMode,
   asSessionStatus,
   asSituationGroup,
@@ -144,12 +143,10 @@ export function agentTabsOf(
   return [implementer, reviewer];
 }
 
-// The states of the pull request after its review: the implementer that never started never will.
-const REVIEW_ENDED: readonly string[] = ["done", "merged", "pr_closed", "closing", "closed"];
-
-// implementerWaits is what the implementer tab of the pull request says before its session exists.
+// implementerWaits is what the implementer tab of the pull request says before its session exists:
+// past the review, the implementer that never started never will.
 function implementerWaits(task: TaskSummary, pr: PullRequest): string {
-  if (REVIEW_ENDED.includes(asPRStatus(pr.status))) {
+  if (isReviewed(pr)) {
     return "never started";
   }
   return asReviewMode(task.prReviewMode) === "agent"

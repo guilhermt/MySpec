@@ -14,6 +14,7 @@ import (
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreport"
+	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
@@ -276,6 +277,31 @@ func TestTheCommitOfTheImplementerIsWaitedOn(t *testing.T) {
 	f.reviews.setSnapshot(unmoved)
 	f.service.Check("task-1")
 	waitFor(t, "the approval to go back to the user", func() bool { return f.prState(t, "task-1").CommitFailed })
+}
+
+func TestACommitAskedBeforeTheImplementerIsWaitedOnInTheConversationOfTheReviewer(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	structured(t, f, sentPass(decidedPass(1, approved)))
+	f.tasks.setPRRun("task-1", task.PRRun{
+		Status: task.PRCommitting, PR: openPR(), ReportedPass: 1, ReviewedCommit: startCommit,
+	})
+	// The review had no implementer when the commit was asked: the reviewer
+	// holds the commit turn.
+	f.sessions.setSummary("task-1", session.Summary{Stage: session.PRReviewStage, Idle: true})
+	f.worktrees.setStatus(git.Status{Head: commitSHA})
+	f.reviews.setSnapshot(review.Snapshot{Head: commitSHA})
+
+	f.service.Check("task-1")
+
+	f.waitPRRun(t, "the review after the commit", func(run task.PRRun) bool { return run.Status != task.PRCommitting })
+	committed := []keyedMarker{{Key: reviewKeyOf, Marker: session.MarkerEntry{
+		Type: session.MarkerCommitted, SHA: commitSHA[:7], Subject: "Do the work of the step", Pushed: true, Number: 7,
+	}}}
+	if diff := cmp.Diff(committed, f.sessions.marked(session.MarkerCommitted)); diff != "" {
+		t.Errorf("committed markers mismatch (-want +got):\n%s", diff)
+	}
 }
 
 func TestTheDiscardedFindingsOfEarlierPassesAreListedForTheReviewer(t *testing.T) {
