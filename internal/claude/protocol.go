@@ -112,11 +112,12 @@ func (u Usage) ContextTokens() int {
 
 // ContentBlock is one block of an assistant message.
 type ContentBlock struct {
-	Type  string          `json:"type"`  // thinking | text | tool_use
-	ID    string          `json:"id"`    // tool_use
-	Name  string          `json:"name"`  // tool_use
-	Text  string          `json:"text"`  // text
-	Input json.RawMessage `json:"input"` // tool_use, complete only on AssistantEvent
+	Type     string          `json:"type"`     // thinking | redacted_thinking | text | tool_use
+	ID       string          `json:"id"`       // tool_use
+	Name     string          `json:"name"`     // tool_use
+	Text     string          `json:"text"`     // text
+	Thinking string          `json:"thinking"` // thinking; "" for internal reasoning, which carries only its signature
+	Input    json.RawMessage `json:"input"`    // tool_use, complete only on AssistantEvent
 }
 
 // StreamEvent carries the partial messages of a turn in progress.
@@ -133,6 +134,7 @@ type StreamEvent struct {
 		Delta        *struct {
 			Type        string `json:"type"` // text_delta | input_json_delta | thinking_delta | signature_delta
 			Text        string `json:"text"`
+			Thinking    string `json:"thinking"` // thinking_delta
 			PartialJSON string `json:"partial_json"`
 			StopReason  string `json:"stop_reason"`
 		} `json:"delta"`

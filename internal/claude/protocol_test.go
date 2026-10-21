@@ -24,6 +24,7 @@ const (
 	silentFixture    = "bash-silent.jsonl"
 	editErrorFixture = "edit-error.jsonl"
 	apiRetryFixture  = "api-retry.jsonl"
+	narrationFixture = "narration.jsonl"
 )
 
 // loadFixture decodes every line of a captured session in testdata.
@@ -175,8 +176,8 @@ func TestDecodeStreamEventsCoverTheWholeMessage(t *testing.T) {
 				t.Fatal("content_block_delta has no delta, want one")
 			}
 			deltaTypes[delta.Type]++
-			if delta.Type == "thinking_delta" && delta.Text != "" {
-				t.Errorf("thinking_delta text = %q, want empty", delta.Text)
+			if delta.Type == "thinking_delta" && delta.Thinking != "" {
+				t.Errorf("thinking_delta thinking = %q, want empty: the capture holds only internal reasoning", delta.Thinking)
 			}
 		case "message_delta":
 			if stream.Event.Delta == nil || stream.Event.Delta.StopReason == "" {
@@ -226,6 +227,57 @@ func TestDecodeTextDeltasAddUpToTheAssistantBlock(t *testing.T) {
 	}
 	if streamed.String() != final.String() {
 		t.Errorf("streamed text = %q, want %q", streamed.String(), final.String())
+	}
+}
+
+// Fact 4 and 5: internal reasoning carries no text, only its signature.
+func TestDecodeInternalReasoningHasNoText(t *testing.T) {
+	t.Parallel()
+	events := loadFixture(t, turnFixture)
+
+	seen := 0
+	for _, assistant := range assistants(events) {
+		for _, block := range assistant.Message.Content {
+			if block.Type != "thinking" {
+				continue
+			}
+			seen++
+			if block.Thinking != "" {
+				t.Errorf("thinking block thinking = %q, want empty", block.Thinking)
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no thinking blocks, want the internal reasoning of the capture")
+	}
+}
+
+// Fact 4 and 5: thinking deltas add up to the narration the assistant events carry.
+func TestDecodeThinkingDeltasAddUpToTheNarration(t *testing.T) {
+	t.Parallel()
+	events := loadFixture(t, narrationFixture)
+
+	var streamed strings.Builder
+	for _, stream := range streams(events) {
+		if delta := stream.Event.Delta; delta != nil && delta.Type == "thinking_delta" {
+			streamed.WriteString(delta.Thinking)
+		}
+	}
+
+	var final strings.Builder
+	for _, assistant := range assistants(events) {
+		for _, block := range assistant.Message.Content {
+			if block.Type == "thinking" {
+				final.WriteString(block.Thinking)
+			}
+		}
+	}
+
+	if strings.TrimSpace(streamed.String()) == "" {
+		t.Fatal("no narration was streamed, want the narration of the capture")
+	}
+	if streamed.String() != final.String() {
+		t.Errorf("streamed narration = %q, want %q", streamed.String(), final.String())
 	}
 }
 
