@@ -278,8 +278,8 @@ type AgentSession struct {
 	// TurnFailed says the last turn ended in an error the CLI survived; the
 	// session is at rest all the same.
 	TurnFailed bool `json:"turnFailed"`
-	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
-	// a turn.
+	// TurnStartedAt is when the turn in progress started, RFC 3339; with no turn
+	// and work in the background, when the last turn started; "" otherwise.
 	TurnStartedAt string `json:"turnStartedAt"`
 	PausedAt      string `json:"pausedAt"` // when the session was paused, RFC 3339; "" when it is not, or the time is unknown
 	// ActionLabel and ActionTarget are the action the agent runs now, as the
@@ -431,8 +431,8 @@ type PullRequest struct {
 	// TurnFailed says the last turn ended in an error the CLI survived; the
 	// session is at rest all the same.
 	TurnFailed bool `json:"turnFailed"`
-	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
-	// a turn.
+	// TurnStartedAt is when the turn in progress started, RFC 3339; with no turn
+	// and work in the background, when the last turn started; "" otherwise.
 	TurnStartedAt string `json:"turnStartedAt"`
 	PausedAt      string `json:"pausedAt"` // when the session was paused, RFC 3339; "" when it is not, or the time is unknown
 	// ActionLabel and ActionTarget are the action the agent runs now, as the
@@ -566,8 +566,8 @@ type TaskSummary struct {
 	// TurnFailed says the last turn ended in an error the CLI survived; the
 	// session is at rest all the same.
 	TurnFailed bool `json:"turnFailed"`
-	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
-	// a turn.
+	// TurnStartedAt is when the turn in progress started, RFC 3339; with no turn
+	// and work in the background, when the last turn started; "" otherwise.
 	TurnStartedAt string `json:"turnStartedAt"`
 	PausedAt      string `json:"pausedAt"` // when the session was paused, RFC 3339; "" when it is not, or the time is unknown
 	// ActionLabel and ActionTarget are the action the agent runs now, as the
@@ -1653,8 +1653,8 @@ type ReviewSummary struct {
 	// TurnFailed says the last turn ended in an error the CLI survived; the
 	// session is at rest all the same.
 	TurnFailed bool `json:"turnFailed"`
-	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
-	// a turn.
+	// TurnStartedAt is when the turn in progress started, RFC 3339; with no turn
+	// and work in the background, when the last turn started; "" otherwise.
 	TurnStartedAt string `json:"turnStartedAt"`
 	PausedAt      string `json:"pausedAt"` // when the session was paused, RFC 3339; "" when it is not, or the time is unknown
 	// ActionLabel and ActionTarget are the action the agent runs now, as the
@@ -1869,8 +1869,8 @@ type DiscussionSummary struct {
 	// TurnFailed says the last turn ended in an error the CLI survived; the
 	// session is at rest all the same.
 	TurnFailed bool `json:"turnFailed"`
-	// TurnStartedAt is when the turn in progress started, RFC 3339; "" without
-	// a turn.
+	// TurnStartedAt is when the turn in progress started, RFC 3339; with no turn
+	// and work in the background, when the last turn started; "" otherwise.
 	TurnStartedAt string `json:"turnStartedAt"`
 	PausedAt      string `json:"pausedAt"` // when the session was paused, RFC 3339; "" when it is not, or the time is unknown
 	// ActionLabel and ActionTarget are the action the agent runs now, as the

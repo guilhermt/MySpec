@@ -1479,6 +1479,11 @@ func idle(stage task.Stage) session.Summary {
 	return session.Summary{Stage: string(stage), Status: session.StatusWaiting, Idle: true}
 }
 
+// background is a session whose turn ended with work left in the background.
+func background(stage task.Stage) session.Summary {
+	return session.Summary{Stage: string(stage), Status: session.StatusWorking, ProcessRunning: true}
+}
+
 // busy is a session in the middle of a turn.
 func busy(stage task.Stage) session.Summary {
 	return session.Summary{Stage: string(stage), Status: session.StatusWorking, TurnRunning: true}

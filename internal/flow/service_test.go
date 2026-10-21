@@ -37,6 +37,25 @@ func TestAStageEndsOnlyWhenTheSessionIsIdle(t *testing.T) {
 	f.wantTaskCalls(t, "stage:task-1:tech_spec:revisiting=false")
 }
 
+func TestAStageDoesNotEndWhileTheSessionWorksInTheBackground(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.tasks.add("task-1", task.StagePRD, task.Artifacts{PRD: true})
+	f.sessions.setSummary("task-1", background(task.StagePRD))
+
+	f.service.Check("task-1")
+	f.waitEvaluations(t, 1)
+	if got, _ := f.tasks.Get("task-1"); got.Stage != task.StagePRD {
+		t.Fatalf("stage = %q, want prd while the work goes on in the background", got.Stage)
+	}
+	f.wantCalls(t)
+
+	f.sessions.setSummary("task-1", idle(task.StagePRD))
+	f.service.Check("task-1")
+	f.waitStage(t, "task-1", task.StageTechSpec)
+}
+
 func TestAFinishedPlanReachesImplementationAndStartsAStep(t *testing.T) {
 	t.Parallel()
 

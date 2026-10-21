@@ -450,6 +450,28 @@ func TestTheImplementerWithoutAReplyIsSaidToHaveNone(t *testing.T) {
 	}
 }
 
+func TestAnImplementerWorkingInTheBackgroundIsNotReviewedUntilItRests(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.sessions.setReply(implementerKey("task-1", 1), "I added the form.")
+	startAgentStep(t, f, staged(0, 2))
+	stage := session.StepStage(1)
+	f.sessions.setSummary("task-1", session.Summary{Stage: stage, Status: session.StatusWorking, ProcessRunning: true})
+
+	before := f.tasks.inspectCount()
+	f.service.Check("task-1")
+	f.waitEvaluated(t, "task-1", before)
+
+	if _, open := f.sessions.Summary(reviewerKey("task-1", 1)); open {
+		t.Fatal("the reviewer started, want the pass held back while the work goes on in the background")
+	}
+
+	f.sessions.goIdleSession(implementerKey("task-1", 1))
+	f.service.Check("task-1")
+	f.waitReviewer(t, "task-1", 1)
+}
+
 func TestAnImplementerWithoutChangesIsNotReviewed(t *testing.T) {
 	t.Parallel()
 

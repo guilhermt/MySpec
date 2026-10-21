@@ -280,6 +280,22 @@ func TestNothingIsRecordedWhileTheAgentIsStillWorking(t *testing.T) {
 	}
 }
 
+func TestNothingIsRecordedWhileTheAgentWorksInTheBackground(t *testing.T) {
+	f := newFixture(t)
+	id := f.start(t)
+	f.writeReport(t, id, 1, reportFile("changes", twoFindings))
+	f.sessions.goBackground(id)
+
+	f.settled(t, id)
+
+	if f.pass(t, id, 1).Recorded {
+		t.Error("the report of a pass was recorded while the work goes on in the background")
+	}
+	if sent := f.sessions.sent(); len(sent) != 0 {
+		t.Errorf("messages = %q, want nothing sent", sent)
+	}
+}
+
 func TestNothingIsRecordedForAReviewWithoutAConversation(t *testing.T) {
 	f := newFixture(t)
 	id := asked(t, f)

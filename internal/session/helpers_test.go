@@ -417,7 +417,13 @@ type fixture struct {
 	states  []session.Key
 	retries []session.Summary // the summaries reported while an api_retry was pending
 	events  []session.TranscriptEvent
+	rests   map[session.Key]int  // how many times each session went from at work to at rest
+	atRest  map[session.Key]bool // the last Idle reported for each session
 }
+
+// limits are the limits of the work in the background; the zero value is the
+// defaults.
+type limits struct{ command, grace, ret time.Duration }
 
 // prd is the session key of a task in the PRD stage, which is where most of
 // these tests keep theirs.
@@ -437,6 +443,14 @@ func newFixture(t *testing.T, scenario string) *fixture {
 func newFixtureWith(t *testing.T, launcher *fakeLauncher, idle time.Duration) *fixture {
 	t.Helper()
 
+	return newFixtureLimits(t, launcher, idle, limits{})
+}
+
+// newFixtureLimits builds a Service over a given launcher, idle timeout and
+// limits of the work in the background.
+func newFixtureLimits(t *testing.T, launcher *fakeLauncher, idle time.Duration, l limits) *fixture {
+	t.Helper()
+
 	entries := &memEntries{}
 	f := &fixture{
 		sessions: newMemSessions(entries),
@@ -444,7 +458,7 @@ func newFixtureWith(t *testing.T, launcher *fakeLauncher, idle time.Duration) *f
 		launcher: launcher,
 		now:      base,
 	}
-	f.build(t, idle)
+	f.build(t, idle, l)
 	return f
 }
 
@@ -454,12 +468,12 @@ func (f *fixture) restart(t *testing.T) *fixture {
 	t.Helper()
 
 	next := &fixture{sessions: f.sessions, entries: f.entries, launcher: f.launcher, now: f.clock()}
-	next.build(t, 0)
+	next.build(t, 0, limits{})
 	return next
 }
 
 // build creates the Service of a fixture over its collaborators.
-func (f *fixture) build(t *testing.T, idle time.Duration) {
+func (f *fixture) build(t *testing.T, idle time.Duration, l limits) {
 	t.Helper()
 
 	var ids int
@@ -477,9 +491,12 @@ func (f *fixture) build(t *testing.T, idle time.Duration) {
 			ids++
 			return "id-" + strconv.Itoa(ids)
 		},
-		IdleTimeout:  idle,
-		OnState:      f.onState,
-		OnTranscript: f.onTranscript,
+		IdleTimeout:   idle,
+		CommandLimit:  l.command,
+		MonitorGrace:  l.grace,
+		ReturnTimeout: l.ret,
+		OnState:       f.onState,
+		OnTranscript:  f.onTranscript,
 	})
 	// The first TempDir of a test registers the removal of every later one; made
 	// here, it runs after Shutdown, once no process works in them. Windows
@@ -521,11 +538,19 @@ func newGatedFixture(t *testing.T) (*fixture, func(gates ...string)) {
 func newGatedFixtureOf(t *testing.T, scenario string) (*fixture, func(gates ...string)) {
 	t.Helper()
 
+	return newGatedFixtureLimits(t, scenario, 0, limits{})
+}
+
+// newGatedFixtureLimits is newGatedFixtureOf with an idle timeout and limits
+// of the work in the background.
+func newGatedFixtureLimits(t *testing.T, scenario string, idle time.Duration, l limits) (*fixture, func(gates ...string)) {
+	t.Helper()
+
 	dir := t.TempDir()
-	f := newFixtureWith(t, &fakeLauncher{
+	f := newFixtureLimits(t, &fakeLauncher{
 		scenario: scenario,
 		env:      []string{claudetest.EnvGates + "=" + dir},
-	}, 0)
+	}, idle, l)
 	open := func(gates ...string) {
 		t.Helper()
 		for _, g := range gates {
@@ -547,6 +572,21 @@ func (f *fixture) onState(k session.Key) {
 	if sum.RetryAttempt > 0 {
 		f.retries = append(f.retries, sum)
 	}
+	if f.rests == nil {
+		f.rests, f.atRest = map[session.Key]int{}, map[session.Key]bool{}
+	}
+	if was, seen := f.atRest[k]; seen && !was && sum.Idle {
+		f.rests[k]++
+	}
+	f.atRest[k] = sum.Idle
+}
+
+// restCount returns how many times a session went from at work to at rest.
+func (f *fixture) restCount(k session.Key) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.rests[k]
 }
 
 // retrySummaries returns the summaries reported while an api_retry was pending.
@@ -800,6 +840,16 @@ func (f *fixture) waitIdle(t *testing.T, k session.Key) session.Summary {
 
 	return f.waitStatus(t, k, "the turn to end", func(s session.Summary) bool {
 		return s.Status == session.StatusWaiting && s.ProcessRunning
+	})
+}
+
+// waitBackground waits until the turn of a session is over and work in the
+// background keeps it at work.
+func (f *fixture) waitBackground(t *testing.T, k session.Key) session.Summary {
+	t.Helper()
+
+	return f.waitStatus(t, k, "the work in the background", func(s session.Summary) bool {
+		return s.Status == session.StatusWorking && !s.TurnRunning && s.ProcessRunning
 	})
 }
 

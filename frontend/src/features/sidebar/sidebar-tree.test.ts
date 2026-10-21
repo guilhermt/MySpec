@@ -965,6 +965,7 @@ describe("line 3", () => {
   const working = {
     sessionStatus: "working",
     turnRunning: true,
+    processRunning: true,
     turnStartedAt: THREE_MINUTES_AGO,
     contextPercent: 42,
   };
@@ -980,10 +981,17 @@ describe("line 3", () => {
     ["thinking, with no action", {}, "Thinking…", "Thinking…", "Thinking…"],
     [
       "a session starting",
-      { turnRunning: false },
+      { turnRunning: false, processRunning: false },
       "Starting session…",
       "Starting session…",
       "Starting session…",
+    ],
+    [
+      "work in the background, with no turn",
+      { turnRunning: false, processRunning: true },
+      "Working in the background…",
+      "Working in the background…",
+      "Working in the background…",
     ],
     [
       "a retry",
@@ -1087,6 +1095,22 @@ describe("the accessible name", () => {
       label:
         "One-Shot task add-login. agent working, Planning. Planning agent working for 3 minutes: Reading go.mod. context 30% used. web · One-Shot.",
     });
+  });
+
+  it.each([
+    [true, "working in the background"],
+    [false, "starting session"],
+  ])("tells a session with no turn, process running %s", (processRunning, spoken) => {
+    const task = makeTask({
+      mode: "one_shot",
+      stage: "one_shot",
+      sessionStatus: "working",
+      turnRunning: false,
+      processRunning,
+      turnStartedAt: THREE_MINUTES_AGO,
+    });
+
+    expect(taskRow(makeState(), task, NOW).label).toContain(`for 3 minutes: ${spoken}.`);
   });
 
   it("tells a review waiting on GitHub", () => {

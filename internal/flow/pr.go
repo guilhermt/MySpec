@@ -1695,7 +1695,7 @@ func (s *Service) ReviewAgain(ctx context.Context, id string) error {
 	if prAgentReviewed(t, run) && run.Status != task.PRDone {
 		return fmt.Errorf("review task %s again: %w", id, ErrAgentReviewsPR)
 	}
-	if fixer, open := s.sessions.Summary(prFixKey(id)); open && fixer.TurnRunning {
+	if fixer, open := s.sessions.Summary(prFixKey(id)); open && fixer.Status == session.StatusWorking {
 		return fmt.Errorf("review task %s again: %w", id, ErrStepBusy)
 	}
 

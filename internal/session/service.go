@@ -145,16 +145,19 @@ func artifactOf(stage prompts.Stage) ArtifactKind {
 
 // Deps are what Service needs from the outside.
 type Deps struct {
-	Sessions     SessionRepository
-	Entries      EntryRepository
-	Launcher     Launcher
-	RenderPrompt func(stage prompts.Stage, vars prompts.Vars) (string, error)
-	Log          *slog.Logger
-	Now          func() time.Time         // defaults to time.Now
-	NewID        func() string            // defaults to uuid.NewString
-	IdleTimeout  time.Duration            // defaults to DefaultIdleTimeout
-	OnState      func(k Key)              // a Summary changed; may be nil
-	OnTranscript func(ev TranscriptEvent) // the conversation changed; may be nil
+	Sessions      SessionRepository
+	Entries       EntryRepository
+	Launcher      Launcher
+	RenderPrompt  func(stage prompts.Stage, vars prompts.Vars) (string, error)
+	Log           *slog.Logger
+	Now           func() time.Time         // defaults to time.Now
+	NewID         func() string            // defaults to uuid.NewString
+	IdleTimeout   time.Duration            // defaults to DefaultIdleTimeout
+	CommandLimit  time.Duration            // defaults to DefaultCommandLimit
+	MonitorGrace  time.Duration            // defaults to DefaultMonitorGrace
+	ReturnTimeout time.Duration            // defaults to DefaultReturnTimeout
+	OnState       func(k Key)              // a Summary changed; may be nil
+	OnTranscript  func(ev TranscriptEvent) // the conversation changed; may be nil
 }
 
 // The errors the service reports to its callers.
@@ -174,6 +177,15 @@ const (
 	// DefaultIdleTimeout is how long a process without a turn, a request or a
 	// pending message stays alive before the session stops it.
 	DefaultIdleTimeout = 10 * time.Minute
+	// DefaultCommandLimit is how long a command in the background counts as
+	// work of the session, from its start; past it, it runs on uncounted.
+	DefaultCommandLimit = 15 * time.Minute
+	// DefaultMonitorGrace is how long past its deadline a monitor still counts,
+	// for its end to arrive on its own first.
+	DefaultMonitorGrace = time.Minute
+	// DefaultReturnTimeout is how long the session waits for the CLI to answer
+	// a task that came back with no turn open.
+	DefaultReturnTimeout = 30 * time.Second
 	// StartTimeout is how long a started process has to say anything.
 	StartTimeout = 90 * time.Second
 	// InterruptTimeout is how long an interrupted turn has to end.
@@ -193,16 +205,19 @@ const (
 
 // Service owns the sessions of every open task.
 type Service struct {
-	sessions     SessionRepository
-	entries      EntryRepository
-	launcher     Launcher
-	renderPrompt func(stage prompts.Stage, vars prompts.Vars) (string, error)
-	log          *slog.Logger
-	now          func() time.Time
-	newID        func() string
-	idleTimeout  time.Duration
-	onState      func(k Key)
-	onTranscript func(ev TranscriptEvent)
+	sessions      SessionRepository
+	entries       EntryRepository
+	launcher      Launcher
+	renderPrompt  func(stage prompts.Stage, vars prompts.Vars) (string, error)
+	log           *slog.Logger
+	now           func() time.Time
+	newID         func() string
+	idleTimeout   time.Duration
+	commandLimit  time.Duration
+	monitorGrace  time.Duration
+	returnTimeout time.Duration
+	onState       func(k Key)
+	onTranscript  func(ev TranscriptEvent)
 
 	mu            sync.Mutex
 	runs          map[Key]*run
@@ -221,6 +236,9 @@ func New(deps Deps) *Service {
 		now:           deps.Now,
 		newID:         deps.NewID,
 		idleTimeout:   deps.IdleTimeout,
+		commandLimit:  deps.CommandLimit,
+		monitorGrace:  deps.MonitorGrace,
+		returnTimeout: deps.ReturnTimeout,
 		onState:       deps.OnState,
 		onTranscript:  deps.OnTranscript,
 		runs:          map[Key]*run{},
@@ -237,6 +255,15 @@ func New(deps Deps) *Service {
 	}
 	if s.idleTimeout <= 0 {
 		s.idleTimeout = DefaultIdleTimeout
+	}
+	if s.commandLimit <= 0 {
+		s.commandLimit = DefaultCommandLimit
+	}
+	if s.monitorGrace <= 0 {
+		s.monitorGrace = DefaultMonitorGrace
+	}
+	if s.returnTimeout <= 0 {
+		s.returnTimeout = DefaultReturnTimeout
 	}
 	return s
 }

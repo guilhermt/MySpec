@@ -2,7 +2,7 @@ import type { StatusTone } from "@/features/task/status";
 import { prBaseName, troubleText } from "@/lib/pull-requests";
 import { cloneMissingText } from "@/lib/repositories";
 import type { PRBlockReason, PRStatus, PullRequest, Repository, TaskSummary } from "@/lib/wails";
-import { asPRState, asPRStatus, asReviewMode } from "@/lib/wails";
+import { asPRState, asPRStatus, asReviewMode, asSessionStatus } from "@/lib/wails";
 
 /** prStatusLabel is where the pull request of a task stands, in the words of the product. */
 export function prStatusLabel(pr: PullRequest): string {
@@ -142,7 +142,7 @@ function agentRefusal(task: TaskSummary): string | null {
   ) {
     return "The agent is reviewing the pull request. Take it over with Review myself first.";
   }
-  if (task.pr?.implementer?.turnRunning === true) {
+  if (asSessionStatus(task.pr?.implementer?.sessionStatus ?? "") === "working") {
     return "The implementer is still working.";
   }
   return null;

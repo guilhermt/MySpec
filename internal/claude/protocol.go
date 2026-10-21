@@ -28,6 +28,8 @@ type Event struct {
 	APIRetry         *APIRetryEvent
 	TaskStarted      *TaskStartedEvent
 	TaskNotification *TaskNotificationEvent
+	TaskUpdated      *TaskUpdatedEvent
+	BackgroundTasks  *BackgroundTasksEvent
 	Stream           *StreamEvent
 	Assistant        *AssistantEvent
 	User             *UserEvent
@@ -87,6 +89,24 @@ type TaskNotificationEvent struct {
 	ToolUseID string `json:"tool_use_id"`
 	Status    string `json:"status"`  // completed | failed | stopped
 	Summary   string `json:"summary"` // `Background command "X" failed with exit code 1`, ...
+}
+
+// TaskUpdatedEvent is a change of a task the CLI started; the app reads only
+// the move of a task to the background.
+type TaskUpdatedEvent struct {
+	TaskID string `json:"task_id"`
+	RunID  string `json:"run_id"`
+	Patch  struct {
+		IsBackgrounded *bool `json:"is_backgrounded"` // nil when the patch does not say
+	} `json:"patch"`
+}
+
+// BackgroundTasksEvent is every task the CLI runs in the background after a
+// change, the whole set each time.
+type BackgroundTasksEvent struct {
+	Tasks []struct {
+		TaskID string `json:"task_id"`
+	} `json:"tasks"`
 }
 
 // ResultOrigin is what opened the turn a result closes; the result of a turn a
@@ -323,6 +343,10 @@ func decodeSystem(line []byte, event *Event) error {
 		event.TaskStarted, err = decodePayload[TaskStartedEvent](line, "system/task_started")
 	case "task_notification":
 		event.TaskNotification, err = decodePayload[TaskNotificationEvent](line, "system/task_notification")
+	case "task_updated":
+		event.TaskUpdated, err = decodePayload[TaskUpdatedEvent](line, "system/task_updated")
+	case "background_tasks_changed":
+		event.BackgroundTasks, err = decodePayload[BackgroundTasksEvent](line, "system/background_tasks_changed")
 	default:
 		// Unknown subtypes keep Type, Subtype and Raw, and nothing else.
 	}

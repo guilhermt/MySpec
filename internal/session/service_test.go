@@ -3308,7 +3308,7 @@ func TestAReturnDuringATurnIsMarkedWhereItArrives(t *testing.T) {
 	f, open := newGatedFixtureOf(t, "background")
 	f.start(t, taskInfo(t, "t1"))
 	open("1-1")
-	f.waitIdle(t, prd("t1"))
+	f.waitBackground(t, prd("t1"))
 
 	tr := f.transcript(t, prd("t1"))
 	var woke []session.Entry
@@ -3346,7 +3346,7 @@ func TestATurnTheAgentOpensWorksLikeAnyOther(t *testing.T) {
 	f, open := newGatedFixtureOf(t, "background")
 	f.start(t, taskInfo(t, "t1"))
 	open("1-1", "1-2", "1-3")
-	f.waitIdle(t, prd("t1"))
+	f.waitBackground(t, prd("t1"))
 
 	f.advance(time.Minute)
 	open("1-4")
@@ -3565,4 +3565,223 @@ func TestAReturnReadsItsStatusAndExitCode(t *testing.T) {
 			}
 		})
 	}
+}
+
+// bgScenarioRun starts a gated session of a bg_* scenario; the test waits for
+// the work in the background its first turn leaves.
+func bgScenarioRun(t *testing.T, scenario string, idle time.Duration, l limits) (*fixture, func(gates ...string)) {
+	t.Helper()
+
+	f, open := newGatedFixtureLimits(t, scenario, idle, l)
+	f.start(t, taskInfo(t, "t1"))
+	return f, open
+}
+
+func TestAnAgentInTheBackgroundKeepsTheSessionWorking(t *testing.T) {
+	t.Parallel()
+
+	f, open := bgScenarioRun(t, "bg_agents", 0, limits{})
+	sum := f.waitBackground(t, prd("t1"))
+	if sum.Idle || !sum.TurnStartedAt.Equal(base) {
+		t.Errorf("summary = %+v, want the session not at rest, its clock at the start of the first turn %v", sum, base)
+	}
+
+	f.advance(time.Minute)
+	open("1-1")
+	waitWokeWith(t, f, prd("t1"), 0, []session.Wake{{
+		Kind: session.WakeAgent, Name: claudetest.BackgroundAgentA, Status: session.WakeCompleted,
+	}})
+	waitSaid(t, f, prd("t1"), claudetest.BackgroundAgentAText)
+	sum = f.waitBackground(t, prd("t1"))
+	if want := base.Add(time.Minute); !sum.TurnStartedAt.Equal(want) {
+		t.Errorf("TurnStartedAt = %v, want %v, the start of the last turn", sum.TurnStartedAt, want)
+	}
+
+	open("1-2")
+	waitSaid(t, f, prd("t1"), claudetest.BackgroundAgentBText)
+	f.waitIdle(t, prd("t1"))
+	waitFor(t, "the empty turn", func() bool { return f.restCount(prd("t1")) >= 1 })
+	if got := f.restCount(prd("t1")); got != 1 {
+		t.Errorf("restCount = %d, want the one rest at the end of all the work", got)
+	}
+}
+
+func TestAMessageWithOnlyTheBackgroundWorkingGoesOutAtOnce(t *testing.T) {
+	t.Parallel()
+
+	f, _ := bgScenarioRun(t, "bg_agents", 0, limits{})
+	f.waitBackground(t, prd("t1"))
+
+	f.send(t, prd("t1"), "meanwhile")
+	if sum := f.summary(t, prd("t1")); sum.PendingCount != 0 || !sum.TurnRunning {
+		t.Errorf("summary = %+v, want the message out and its turn running", sum)
+	}
+}
+
+func TestACommandStopsCountingPastItsLimit(t *testing.T) {
+	t.Parallel()
+
+	f, _ := bgScenarioRun(t, "bg_command", 0, limits{command: 200 * time.Millisecond})
+	f.waitBackground(t, prd("t1"))
+
+	sum := f.waitIdle(t, prd("t1"))
+	if !sum.ProcessRunning {
+		t.Errorf("summary = %+v, want the process still running", sum)
+	}
+	waitFor(t, "the rest", func() bool { return f.restCount(prd("t1")) >= 1 })
+	if got := f.restCount(prd("t1")); got != 1 {
+		t.Errorf("restCount = %d, want 1", got)
+	}
+}
+
+func TestTheIdleTimerWaitsForTheWorkInTheBackground(t *testing.T) {
+	t.Parallel()
+
+	f, _ := bgScenarioRun(t, "bg_command", 50*time.Millisecond, limits{command: 300 * time.Millisecond})
+	started := time.Now()
+	f.waitBackground(t, prd("t1"))
+
+	time.Sleep(150*time.Millisecond - time.Since(started))
+	if sum := f.summary(t, prd("t1")); !sum.ProcessRunning || sum.Status != session.StatusWorking {
+		t.Fatalf("summary = %+v, want the process running and at work past the idle timeout", sum)
+	}
+	f.waitStatus(t, prd("t1"), "the process to stop", func(s session.Summary) bool { return !s.ProcessRunning })
+}
+
+func TestAModelChangeWaitsForTheWorkInTheBackground(t *testing.T) {
+	t.Parallel()
+
+	f, _ := bgScenarioRun(t, "bg_command", 0, limits{command: 300 * time.Millisecond})
+	f.waitBackground(t, prd("t1"))
+
+	f.setChoice(t, prd("t1"), models.Choice{Model: models.Fable51, Effort: models.XHigh})
+	f.send(t, prd("t1"), "with more effort")
+	if sum := f.summary(t, prd("t1")); sum.PendingCount != 1 {
+		t.Fatalf("PendingCount = %d, want the message waiting for the work", sum.PendingCount)
+	}
+	if starts := f.launcher.started(); len(starts) != 1 {
+		t.Fatalf("starts = %d, want the process left alone", len(starts))
+	}
+
+	f.waitStarts(t, 2)
+	f.waitStatus(t, prd("t1"), "the message to go out", func(s session.Summary) bool { return s.PendingCount == 0 })
+}
+
+func TestATimedMonitorCountsUntilItEnds(t *testing.T) {
+	t.Parallel()
+
+	f, open := bgScenarioRun(t, "bg_monitor", 0, limits{})
+	f.waitBackground(t, prd("t1"))
+
+	open("1-1")
+	waitSaid(t, f, prd("t1"), claudetest.MonitorEventText)
+	f.waitBackground(t, prd("t1"))
+
+	open("1-2")
+	waitSaid(t, f, prd("t1"), claudetest.MonitorDoneText)
+	f.waitIdle(t, prd("t1"))
+	waitFor(t, "the rest", func() bool { return f.restCount(prd("t1")) >= 1 })
+	if got := f.restCount(prd("t1")); got != 1 {
+		t.Errorf("restCount = %d, want 1, with the persistent monitor still alive", got)
+	}
+}
+
+func TestATimedMonitorStopsCountingPastItsDeadline(t *testing.T) {
+	t.Parallel()
+
+	f, _ := bgScenarioRun(t, "bg_monitor", 0, limits{grace: 10 * time.Millisecond})
+	f.waitBackground(t, prd("t1"))
+	f.waitIdle(t, prd("t1"))
+}
+
+func TestAPermissionWithTheBackgroundWorkingShowsAtOnce(t *testing.T) {
+	t.Parallel()
+
+	f, open := bgScenarioRun(t, "bg_permission", 0, limits{})
+	f.waitBackground(t, prd("t1"))
+
+	open("1-1")
+	request := f.waitStatus(t, prd("t1"), "the permission", func(s session.Summary) bool {
+		return s.Status == session.StatusNeedsPermission
+	})
+	if request.Idle {
+		t.Errorf("summary = %+v, want a session that is not at rest", request)
+	}
+	pending := f.waitEntries(t, prd("t1"), session.KindPermission, 1)[0]
+	err := f.service.AnswerPermission(t.Context(), prd("t1"), pending.Permission.RequestID, session.DecisionAllow, "")
+	if err != nil {
+		t.Fatalf("AnswerPermission() = %v, want nil", err)
+	}
+	f.waitBackground(t, prd("t1"))
+
+	open("1-2")
+	f.waitIdle(t, prd("t1"))
+}
+
+func TestAReturnTheCLIDoesNotAnswerEndsAfterTheTimeout(t *testing.T) {
+	t.Parallel()
+
+	const ret = 300 * time.Millisecond
+	f, open := bgScenarioRun(t, "bg_silent", 0, limits{ret: ret})
+	f.waitBackground(t, prd("t1"))
+
+	opened := time.Now()
+	open("1-1")
+	f.waitIdle(t, prd("t1"))
+	if held := time.Since(opened); held < ret {
+		t.Errorf("the session rested %v after the return, want it held for at least %v", held, ret)
+	}
+}
+
+func TestAnEmptyTurnAnswersAReturn(t *testing.T) {
+	t.Parallel()
+
+	f, open := bgScenarioRun(t, "bg_silent", 0, limits{})
+	f.waitBackground(t, prd("t1"))
+
+	open("1-1", "1-2")
+	f.waitIdle(t, prd("t1"))
+}
+
+func TestATaskMissingFromTheCLIListStopsCounting(t *testing.T) {
+	t.Parallel()
+
+	f, open := bgScenarioRun(t, "bg_level", 0, limits{ret: 50 * time.Millisecond})
+	f.waitBackground(t, prd("t1"))
+
+	open("1-1")
+	f.waitIdle(t, prd("t1"))
+}
+
+func TestATaskMovedToTheBackgroundCounts(t *testing.T) {
+	t.Parallel()
+
+	f, open := bgScenarioRun(t, "bg_promoted", 0, limits{})
+	f.waitBackground(t, prd("t1"))
+
+	open("1-1")
+	f.waitIdle(t, prd("t1"))
+	waitWokeWith(t, f, prd("t1"), 0, []session.Wake{{
+		Kind: session.WakeCommand, Name: claudetest.PromotedDescription, Status: session.WakeCompleted,
+	}})
+	if got := len(wokeMarkers(t, f, prd("t1"))); got != 1 {
+		t.Errorf("woke markers = %d, want only the return of the command in the background", got)
+	}
+}
+
+func TestACrashWithTheBackgroundWorkingStopsCounting(t *testing.T) {
+	t.Parallel()
+
+	f, _ := bgScenarioRun(t, "bg_agents", 0, limits{})
+	f.waitBackground(t, prd("t1"))
+
+	f.launcher.kill(t)
+	f.waitStatus(t, prd("t1"), "the error", func(s session.Summary) bool { return s.Status == session.StatusError })
+
+	if err := f.service.Retry(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Retry() = %v, want nil", err)
+	}
+	f.waitStatus(t, prd("t1"), "the new process", func(s session.Summary) bool {
+		return s.ProcessRunning && s.Status == session.StatusWaiting
+	})
 }
