@@ -112,8 +112,8 @@ export interface AgentSession {
     "turnFailed": boolean;
 
     /**
-     * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
-     * a turn.
+     * TurnStartedAt is when the turn in progress started, RFC 3339; with no turn
+     * and work in the background, when the last turn started; "" otherwise.
      */
     "turnStartedAt": string;
 
@@ -1057,8 +1057,8 @@ export interface DiscussionSummary {
     "turnFailed": boolean;
 
     /**
-     * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
-     * a turn.
+     * TurnStartedAt is when the turn in progress started, RFC 3339; with no turn
+     * and work in the background, when the last turn started; "" otherwise.
      */
     "turnStartedAt": string;
 
@@ -2286,8 +2286,8 @@ export interface PullRequest {
     "turnFailed": boolean;
 
     /**
-     * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
-     * a turn.
+     * TurnStartedAt is when the turn in progress started, RFC 3339; with no turn
+     * and work in the background, when the last turn started; "" otherwise.
      */
     "turnStartedAt": string;
 
@@ -2981,8 +2981,8 @@ export interface ReviewSummary {
     "turnFailed": boolean;
 
     /**
-     * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
-     * a turn.
+     * TurnStartedAt is when the turn in progress started, RFC 3339; with no turn
+     * and work in the background, when the last turn started; "" otherwise.
      */
     "turnStartedAt": string;
 
@@ -3670,8 +3670,8 @@ export interface TaskSummary {
     "turnFailed": boolean;
 
     /**
-     * TurnStartedAt is when the turn in progress started, RFC 3339; "" without
-     * a turn.
+     * TurnStartedAt is when the turn in progress started, RFC 3339; with no turn
+     * and work in the background, when the last turn started; "" otherwise.
      */
     "turnStartedAt": string;
 

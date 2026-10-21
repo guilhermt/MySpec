@@ -49,6 +49,7 @@ func TestDeriveAPlanningStage(t *testing.T) {
 	}{
 		{"no session", stageInput(task.StagePRD, task.Artifacts{}), nil},
 		{"the agent is working", stageInput(task.StagePRD, task.Artifacts{}, summary(session.StatusWorking, false)), nil},
+		{"the agent works in the background", stageInput(task.StageTechSpec, written, summary(session.StatusWorking, false)), nil},
 		{"a message waits in the queue", stageInput(task.StagePRD, task.Artifacts{}, summary(session.StatusWaiting, false)), nil},
 		{"the session is paused", stageInput(task.StagePRD, task.Artifacts{}, summary(session.StatusPaused, false)), nil},
 		{

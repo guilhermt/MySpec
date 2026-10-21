@@ -3,6 +3,7 @@ package discussionflow_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 
@@ -73,6 +74,26 @@ func TestAnIdleConversationRecordsTheDraftsOfTheArtifact(t *testing.T) {
 	if card := f.draftState(id, "export-invoices").Draft; card.Module != "Billing" {
 		t.Errorf("the module of the card is %q, want Billing", card.Module)
 	}
+}
+
+func TestTheDraftsAreNotReadWhileTheConversationWorksInTheBackground(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.write(id, discussion.DraftsFile, draftsArtifact)
+	f.sessions.background(id)
+
+	f.flow.Check(id)
+	time.Sleep(10 * pollStep)
+
+	if state := f.state(id); state.Discussion.DraftsRead || len(state.Drafts) != 0 {
+		t.Errorf("state = %+v, want the drafts left unread while the work goes on in the background", state)
+	}
+
+	f.sessions.idle(id)
+	f.flow.Check(id)
+	f.waitFor(id, func(s discussionflow.State) bool { return s.Discussion.DraftsRead })
 }
 
 func TestAnArtifactTheAppCannotReadLeavesTheDiscussionAwaitingDrafts(t *testing.T) {

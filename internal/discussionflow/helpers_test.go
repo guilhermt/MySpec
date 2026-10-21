@@ -166,6 +166,18 @@ func (m *memSessions) idle(id string) {
 	m.summaries[k] = session.Summary{TaskID: id, Stage: session.DiscussionStage, Status: session.StatusWaiting, Idle: true}
 }
 
+// background leaves the conversation of a discussion working with no turn,
+// because work goes on in the background.
+func (m *memSessions) background(id string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	k := session.Key{TaskID: id, Stage: session.DiscussionStage}
+	m.summaries[k] = session.Summary{
+		TaskID: id, Stage: session.DiscussionStage, Status: session.StatusWorking, ProcessRunning: true,
+	}
+}
+
 // shut leaves a discussion without an open conversation, which is a
 // discussion no evaluation reads the drafts of or publishes for.
 func (m *memSessions) shut(id string) {

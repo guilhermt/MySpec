@@ -427,6 +427,20 @@ func TestReviewAgainCutsAPassUnderWay(t *testing.T) {
 	}
 }
 
+func TestReviewAgainIsRefusedWhileTheImplementerWorksInTheBackground(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	structured(t, f, sentPass(decidedPass(1, approved)))
+	f.sessions.setSummary("task-1", background(session.PRFixStage))
+
+	wantErrIs(t, f.service.ReviewAgain(t.Context(), "task-1"), flow.ErrStepBusy)
+
+	if run, _ := f.tasks.prRun("task-1"); run.Status != task.PRReviewing {
+		t.Errorf("status = %q, want reviewing", run.Status)
+	}
+}
+
 func TestReviewAgainIsRefusedWhileTheImplementerWorks(t *testing.T) {
 	t.Parallel()
 
@@ -982,7 +996,9 @@ func TestTheAgentLoopWaitsWhileEitherSessionWorksAsksOrFailed(t *testing.T) {
 		"the reviewer failed": {
 			Stage: session.PRReviewStage, Status: session.StatusWaiting, Idle: true, TurnFailed: true,
 		},
-		"the implementer works": {Stage: session.PRFixStage, Status: session.StatusWorking, TurnRunning: true},
+		"the reviewer works in the background":    background(session.PRReviewStage),
+		"the implementer works":                   {Stage: session.PRFixStage, Status: session.StatusWorking, TurnRunning: true},
+		"the implementer works in the background": background(session.PRFixStage),
 		"the implementer has a message queued": {
 			Stage: session.PRFixStage, Status: session.StatusWaiting, PendingCount: 1,
 		},

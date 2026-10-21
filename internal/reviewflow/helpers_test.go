@@ -325,6 +325,21 @@ func (m *memSessions) goBusy(id string) {
 	m.summaries[key] = sum
 }
 
+// goBackground puts the conversation of a review working with no turn,
+// because work goes on in the background.
+func (m *memSessions) goBackground(id string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := session.Key{TaskID: id, Stage: session.ReviewStage}
+	sum, ok := m.summaries[key]
+	if !ok {
+		return
+	}
+	sum.Status, sum.Idle, sum.TurnRunning, sum.ProcessRunning = session.StatusWorking, false, false, true
+	m.summaries[key] = sum
+}
+
 // forget drops the conversation of a review, which is a review the app
 // reopened without one.
 func (m *memSessions) forget(id string) {
