@@ -326,6 +326,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	a.reviewModes, a.boards = reviewModesSvc, boards
 	a.pulls, a.prReviews, a.reviewFlow = pullRequests, prReviews, reviewFlow
 	a.discussions, a.discussionFlow = discussions, discussionFlow
+	a.cardImages = cardImages
 
 	if err = a.read(ctx); err != nil {
 		return fmt.Errorf("load tasks: %w", err)
@@ -343,6 +344,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 
 	a.resume(ctx)
 
+	a.images.Store(&imageFiles{artifactsDir: a.artifactsDirOf, cards: cardImages})
 	a.services.Bind(a.bound(
 		repositories, boards, themeSvc, modelsSvc, reviewModesSvc, tasks, sessions, flowSvc,
 		cardImages, a.dirs.Data, log,
@@ -368,6 +370,8 @@ func (a *App) runInBackground() {
 	// The pull requests the app waits for are merged outside it, so it asks
 	// GitHub about them on a timer of its own for as long as it runs.
 	go a.pollPRs(a.pollCtx)
+	// The cache of the images of the cards drops what wasn't used in a month.
+	go a.cardImages.Prune()
 }
 
 // bound are the services the interface calls, built over the ones the attempt

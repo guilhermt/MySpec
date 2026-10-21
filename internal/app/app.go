@@ -17,6 +17,7 @@ import (
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/cardimages"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/flow"
@@ -91,8 +92,10 @@ type App struct {
 	discussions      *discussion.Service
 	discussionFlow   *discussionflow.Service
 	attention        *attention.Service
-	notifier         *notify.Notifier // nil when the desktop has no notification service
-	player           *chime.Player    // nil when there is no notifier or the chime could not be installed
+	cardImages       *cardimages.Service
+	images           atomic.Pointer[imageFiles] // what the image middleware reads from; set once the services are up
+	notifier         *notify.Notifier           // nil when the desktop has no notification service
+	player           *chime.Player              // nil when there is no notifier or the chime could not be installed
 
 	pollCtx  context.Context // ends when the app does; what runs in the background for as long as it runs
 	stopPoll context.CancelFunc
@@ -194,7 +197,7 @@ func (a *App) options(cfg Config) application.Options {
 			a.services.Wails(),
 			application.NewService(bindings.NewStartupService(a.startup.snapshot, a.startup.tryAgain)),
 		),
-		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(cfg.Assets)},
+		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(cfg.Assets), Middleware: a.imagesMiddleware},
 		Linux:  application.LinuxOptions{ProgramName: programName},
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID:               programName,
