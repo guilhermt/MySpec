@@ -30,6 +30,9 @@ import type {
   ReviewSummary,
   TaskSummary,
   UserEntry,
+  Wake,
+  WakeKind,
+  WakeStatus,
 } from "@/lib/wails";
 import {
   asAppKind,
@@ -38,6 +41,8 @@ import {
   asMergeable,
   asPRState,
   asRetryReason,
+  asWakeKind,
+  asWakeStatus,
   DISCUSSION_STAGE,
   REVIEW_STAGE,
 } from "@/lib/wails";
@@ -53,6 +58,7 @@ export type MarkerIcon =
   | "compact"
   | "pause"
   | "retry"
+  | "woke"
   | "check"
   | "problem"
   | "ban"
@@ -510,12 +516,19 @@ function decidedViews(
 
 // authorsOf are the authors of some commits, each once, in order: "rsouza and tchen", "a, b and c".
 function authorsOf(commits: readonly { author: string }[]): string {
-  const names = [...new Set(commits.map((commit) => commit.author).filter((name) => name !== ""))];
-  const last = names.pop();
+  return andList([
+    ...new Set(commits.map((commit) => commit.author).filter((name) => name !== "")),
+  ]);
+}
+
+// andList joins some items the way a sentence does: "a", "a and b", "a, b and c".
+function andList(items: readonly string[]): string {
+  const rest = [...items];
+  const last = rest.pop();
   if (last === undefined) {
     return "";
   }
-  return names.length === 0 ? last : `${names.join(", ")} and ${last}`;
+  return rest.length === 0 ? last : `${rest.join(", ")} and ${last}`;
 }
 
 // NEW_COMMITS_SHOWN is how many commits the line of new commits lists.
@@ -561,6 +574,75 @@ function retriedLine(marker: MarkerEntry): MarkerView {
     marker.attempts > 0 ? counted(marker.attempts, "attempt") : "",
   );
   return { ...line("retry", "Retried on its own", complement), timeHidden: true };
+}
+
+// WAKE_SUBJECTS are what a line calls the tasks whose return woke the agent, in the singular and the plural.
+const WAKE_SUBJECTS: Record<WakeKind, readonly [string, string]> = {
+  agent: ["Agent", "Agents"],
+  command: ["Background command", "Background commands"],
+  monitor: ["Monitor", "Monitors"],
+};
+
+// WAKE_VERBS are how each kind of task ended, in the singular and the plural; a failed command adds its code.
+const WAKE_VERBS: Record<WakeKind, Record<WakeStatus, readonly [string, string]>> = {
+  agent: {
+    completed: ["finished", "finished"],
+    failed: ["failed", "failed"],
+    stopped: ["was stopped", "were stopped"],
+  },
+  command: {
+    completed: ["completed", "completed"],
+    failed: ["failed", "failed"],
+    stopped: ["was stopped", "were stopped"],
+  },
+  monitor: {
+    completed: ["ended", "ended"],
+    failed: ["failed", "failed"],
+    stopped: ["was stopped", "were stopped"],
+  },
+};
+
+// WakeGroup is the returns of one kind that ended the same way.
+type WakeGroup = { kind: WakeKind; status: WakeStatus; exitCode: number; names: string[] };
+
+// wakeGroupsOf groups the returns by kind, end and code, in the order of the first of each group; a
+// return of a kind or an end the app does not know is left out.
+function wakeGroupsOf(wakes: readonly Wake[]): WakeGroup[] {
+  const groups: WakeGroup[] = [];
+  for (const wake of wakes) {
+    const kind = asWakeKind(wake.kind);
+    const status = asWakeStatus(wake.status);
+    if (kind === null || status === null) {
+      continue;
+    }
+    const exitCode = kind === "command" && status === "failed" ? wake.exitCode : -1;
+    const group = groups.find(
+      (g) => g.kind === kind && g.status === status && g.exitCode === exitCode,
+    );
+    if (group === undefined) {
+      groups.push({ kind, status, exitCode, names: [wake.name] });
+    } else {
+      group.names.push(wake.name);
+    }
+  }
+  return groups;
+}
+
+// wakeSentence is what one group of returns says: `Agents "A" and "B" finished`.
+function wakeSentence({ kind, status, exitCode, names }: WakeGroup): string {
+  const plural = names.length > 1 ? 1 : 0;
+  const verb = WAKE_VERBS[kind][status][plural];
+  const code = exitCode >= 0 ? ` with exit code ${exitCode}` : "";
+  const quoted = andList(names.map((name) => `"${name}"`));
+  return `${WAKE_SUBJECTS[kind][plural]} ${quoted} ${verb}${code}`;
+}
+
+// wokeLine is what woke the agent: the returns in the background, or nothing the CLI says.
+function wokeLine(marker: MarkerEntry): MarkerView {
+  const [first, ...others] = wakeGroupsOf(marker.wakes ?? []).map(wakeSentence);
+  return first === undefined
+    ? line("woke", "The agent resumed on its own")
+    : line("woke", first, parts(...others));
 }
 
 function planInvalidLine(marker: MarkerEntry): MarkerView {
@@ -638,6 +720,8 @@ export function markerOf(
       return line("pause", "Paused by you");
     case "retried":
       return retriedLine(marker);
+    case "woke":
+      return wokeLine(marker);
     case "draft_approved": {
       const draft = ctx.task?.pr?.draft ?? null;
       return line(

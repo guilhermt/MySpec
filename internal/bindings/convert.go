@@ -1026,6 +1026,7 @@ func FromEntry(e session.Entry) Entry {
 			Added:         e.Marker.Added,
 			Dropped:       e.Marker.Dropped,
 			Before:        fromDraftBefore(e.Marker.Before),
+			Wakes:         fromWakes(e.Marker.Wakes),
 		}
 		if e.Marker.Findings != nil {
 			converted.Marker.Findings = *e.Marker.Findings
@@ -2406,6 +2407,19 @@ func fromMarkerCommits(commits []session.MarkerCommit) []MarkerCommit {
 	out := make([]MarkerCommit, 0, len(commits))
 	for _, commit := range commits {
 		out = append(out, MarkerCommit{SHA: commit.SHA, Subject: commit.Subject, Author: commit.Author})
+	}
+	return out
+}
+
+// fromWakes converts the returns of a woke marker; never nil, ExitCode -1 when unknown.
+func fromWakes(wakes []session.Wake) []Wake {
+	out := make([]Wake, 0, len(wakes))
+	for _, wake := range wakes {
+		exitCode := -1
+		if wake.ExitCode != nil {
+			exitCode = *wake.ExitCode
+		}
+		out = append(out, Wake{Kind: string(wake.Kind), Name: wake.Name, Status: string(wake.Status), ExitCode: exitCode})
 	}
 	return out
 }

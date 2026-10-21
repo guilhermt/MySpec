@@ -34,6 +34,7 @@ import type {
   PullRequest,
   TaskSummary,
   UserEntry,
+  Wake,
 } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
 import {
@@ -92,6 +93,7 @@ const MARKER: MarkerEntry = {
   minimal: false,
   url: "",
   commits: [],
+  wakes: [],
   count: 0,
   board: "",
   epics: [],
@@ -115,6 +117,12 @@ const USER: UserEntry = {
   appCount: 0,
 };
 
+const wake = (kind: string, name: string, status: string, exitCode = -1): Wake => ({
+  kind,
+  name,
+  status,
+  exitCode,
+});
 const marker = (fields: Partial<MarkerEntry>): MarkerEntry => ({ ...MARKER, ...fields });
 const markerEntry = (fields: Partial<MarkerEntry>): Entry =>
   makeEntry("marker", { marker: marker(fields) });
@@ -690,6 +698,81 @@ describe("markerOf", () => {
         complement: "the API refused the request · 3 attempts",
         timeHidden: true,
       }),
+    ],
+    [
+      "the return of a subagent",
+      { type: "woke", wakes: [wake("agent", "Survey the repository", "completed")] },
+      ctx("step:3"),
+      view("woke", 'Agent "Survey the repository" finished'),
+    ],
+    [
+      "a command that failed with its code",
+      { type: "woke", wakes: [wake("command", "Run the tests", "failed", 1)] },
+      ctx("step:3"),
+      view("woke", 'Background command "Run the tests" failed with exit code 1'),
+    ],
+    [
+      "a command that failed with no code",
+      { type: "woke", wakes: [wake("command", "Run the tests", "failed")] },
+      ctx("step:3"),
+      view("woke", 'Background command "Run the tests" failed'),
+    ],
+    [
+      "two subagents that finished together",
+      {
+        type: "woke",
+        wakes: [wake("agent", "A", "completed"), wake("agent", "B", "completed")],
+      },
+      ctx("step:3"),
+      view("woke", 'Agents "A" and "B" finished'),
+    ],
+    [
+      "three commands that were stopped",
+      {
+        type: "woke",
+        wakes: [
+          wake("command", "A", "stopped"),
+          wake("command", "B", "stopped"),
+          wake("command", "C", "stopped"),
+        ],
+      },
+      ctx("step:3"),
+      view("woke", 'Background commands "A", "B" and "C" were stopped'),
+    ],
+    [
+      "a monitor that ended",
+      { type: "woke", wakes: [wake("monitor", "Tick watcher", "completed")] },
+      ctx("step:3"),
+      view("woke", 'Monitor "Tick watcher" ended'),
+    ],
+    [
+      "returns of different kinds",
+      {
+        type: "woke",
+        wakes: [
+          wake("agent", "Survey the repository", "completed"),
+          wake("command", "Run the tests", "failed", 1),
+        ],
+      },
+      ctx("step:3"),
+      view("woke", 'Agent "Survey the repository" finished', {
+        complement: 'Background command "Run the tests" failed with exit code 1',
+      }),
+    ],
+    [
+      "the agent resuming with no return",
+      { type: "woke", wakes: [] },
+      ctx("step:3"),
+      view("woke", "The agent resumed on its own"),
+    ],
+    [
+      "a return of a kind the app does not know",
+      {
+        type: "woke",
+        wakes: [{ kind: "teleport", name: "X", status: "completed", exitCode: -1 }],
+      },
+      ctx("step:3"),
+      view("woke", "The agent resumed on its own"),
     ],
     [
       "the draft approved",

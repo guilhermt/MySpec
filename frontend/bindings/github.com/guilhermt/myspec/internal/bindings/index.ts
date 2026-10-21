@@ -141,6 +141,7 @@ export type {
     UpdateRelease,
     UpdateWorking,
     UserEntry,
+    Wake,
     WorktreePreview,
     WritingDiscussion
 } from "./models.js";

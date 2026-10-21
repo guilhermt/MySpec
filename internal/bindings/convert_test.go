@@ -1194,11 +1194,16 @@ func markerDTO(m bindings.MarkerEntry) *bindings.MarkerEntry {
 	if m.Before == nil {
 		m.Before = []bindings.DraftBefore{}
 	}
+	if m.Wakes == nil {
+		m.Wakes = []bindings.Wake{}
+	}
 	return &m
 }
 
 func TestFromEntryCarriesTheNewMarkerFields(t *testing.T) {
 	t.Parallel()
+
+	exitOne := 1
 
 	cases := map[string]struct {
 		marker *session.MarkerEntry
@@ -1285,6 +1290,26 @@ func TestFromEntryCarriesTheNewMarkerFields(t *testing.T) {
 				Type: "new_commits", Findings: -1, Count: -1,
 				Commits: []bindings.MarkerCommit{{SHA: "c19f02e", Subject: "Fix the time zone rule", Author: "rsouza"}},
 			}),
+		},
+		"woke": {
+			marker: &session.MarkerEntry{
+				Type: session.MarkerWoke,
+				Wakes: []session.Wake{
+					{Kind: session.WakeCommand, Name: "Run the tests", Status: session.WakeFailed, ExitCode: &exitOne},
+					{Kind: session.WakeAgent, Name: "Survey the repository", Status: session.WakeCompleted},
+				},
+			},
+			want: markerDTO(bindings.MarkerEntry{
+				Type: "woke", Findings: -1,
+				Wakes: []bindings.Wake{
+					{Kind: "command", Name: "Run the tests", Status: "failed", ExitCode: 1},
+					{Kind: "agent", Name: "Survey the repository", Status: "completed", ExitCode: -1},
+				},
+			}),
+		},
+		"woke without a return": {
+			marker: &session.MarkerEntry{Type: session.MarkerWoke},
+			want:   markerDTO(bindings.MarkerEntry{Type: "woke", Findings: -1}),
 		},
 		"discussion_started": {
 			marker: &session.MarkerEntry{

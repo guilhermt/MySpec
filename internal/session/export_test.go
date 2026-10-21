@@ -11,3 +11,6 @@ var RetryReasonOf = retryReasonOf
 
 // ArtifactOf exposes artifactOf to the external tests of the package.
 var ArtifactOf = artifactOf
+
+// WakeOf exposes wakeOf to the external tests of the package.
+var WakeOf = wakeOf

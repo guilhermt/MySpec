@@ -53,6 +53,10 @@ func (s *Service) handle(k Key, gen int, ev claude.Event) {
 		r.idleTimer.Reset(s.idleTimeout)
 	}
 
+	if r.turn == nil && !r.stopping && opensTurn(ev) {
+		s.openAgentTurnLocked(ctx, r, n)
+	}
+
 	switch ev.Type {
 	case "system":
 		s.handleSystem(ctx, r, ev, n)
@@ -74,6 +78,29 @@ func (s *Service) handle(k Key, gen int, ev claude.Event) {
 	default:
 		s.log.Debug("claude event ignored", "task", r.task.ID, "type", ev.Type, "subtype", ev.Subtype)
 	}
+}
+
+// opensTurn reports whether an event is work only a turn does: a request to
+// the API, a retry or a compaction of it, or a message or a tool result of the
+// main thread. Init is not one: the CLI also opens the empty turns it runs on
+// its own with it.
+func opensTurn(ev claude.Event) bool {
+	switch ev.Type {
+	case "system":
+		switch ev.Subtype {
+		case "status":
+			return ev.Status != nil && ev.Status.Status == "requesting"
+		case "api_retry", "compact_boundary":
+			return true
+		}
+	case "stream_event":
+		return ev.Stream != nil && deref(ev.Stream.ParentToolUseID) == ""
+	case "assistant":
+		return ev.Assistant != nil && deref(ev.Assistant.ParentToolUseID) == ""
+	case "user":
+		return ev.User != nil && deref(ev.User.ParentToolUseID) == ""
+	}
+	return false
 }
 
 // handleSystem applies a system event.
@@ -112,9 +139,92 @@ func (s *Service) handleSystem(ctx context.Context, r *run, ev claude.Event, n *
 			PreTokens: pre,
 			Percent:   percent,
 		}}, n)
+	case "task_started":
+		s.handleTaskStarted(r, ev.TaskStarted)
+	case "task_notification":
+		s.handleTaskNotification(ctx, r, ev.TaskNotification, n)
 	default:
 		s.log.Debug("claude event ignored", "task", r.task.ID, "type", ev.Type, "subtype", ev.Subtype)
 	}
+}
+
+// handleTaskStarted keeps a task the CLI runs in the background, with what the
+// conversation calls it. A task in the foreground, and one of a type the
+// conversation does not name, is not kept.
+func (s *Service) handleTaskStarted(r *run, ev *claude.TaskStartedEvent) {
+	if !ev.IsBackgrounded {
+		return
+	}
+	kind := taskKindOf(r, ev)
+	if kind == "" {
+		return
+	}
+	r.tasks[ev.TaskID] = &backgroundTask{kind: kind, name: ev.Description, runID: ev.RunID}
+}
+
+// taskKindOf is what the conversation calls a task: a monitor when the call
+// that started it was the Monitor tool, whose task type is a command's too.
+func taskKindOf(r *run, ev *claude.TaskStartedEvent) WakeKind {
+	if r.turn != nil {
+		if e := r.turn.actions[ev.ToolUseID]; e != nil && e.Action.Tool == "Monitor" {
+			return WakeMonitor
+		}
+	}
+	switch ev.TaskType {
+	case "local_bash":
+		return WakeCommand
+	case "local_agent":
+		return WakeAgent
+	}
+	return ""
+}
+
+// handleTaskNotification records the return of a task in the background: a
+// woke marker where it arrives when a turn is in progress, the next turn's
+// first line otherwise.
+func (s *Service) handleTaskNotification(ctx context.Context, r *run, ev *claude.TaskNotificationEvent, n *notes) {
+	task := r.tasks[ev.TaskID]
+	if task == nil {
+		return
+	}
+	w, ok := wakeOf(task.kind, task.name, ev)
+	if !ok {
+		return
+	}
+	task.wake = &w
+	if r.turn == nil {
+		r.wakes = append(r.wakes, w)
+		return
+	}
+	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: MarkerWoke, Wakes: []Wake{w}}}, n)
+}
+
+// exitCodeIn is the code a failed background command's summary names.
+var exitCodeIn = regexp.MustCompile(`\bexit code (-?\d+)`)
+
+// wakeOf reads the return of a task in the background: how it ended and, for a
+// command that failed, the code it exited with. ok is false for an end the
+// conversation does not name.
+func wakeOf(kind WakeKind, name string, ev *claude.TaskNotificationEvent) (w Wake, ok bool) {
+	w = Wake{Kind: kind, Name: name}
+	switch ev.Status {
+	case "completed":
+		w.Status = WakeCompleted
+	case "failed":
+		w.Status = WakeFailed
+	case "stopped", "killed":
+		w.Status = WakeStopped
+	default:
+		return Wake{}, false
+	}
+	if kind == WakeCommand && w.Status == WakeFailed {
+		if match := exitCodeIn.FindStringSubmatch(ev.Summary); match != nil {
+			if code, err := strconv.Atoi(match[1]); err == nil {
+				w.ExitCode = &code
+			}
+		}
+	}
+	return w, true
 }
 
 // handleStream applies a partial message event to the turn in progress.
@@ -432,8 +542,18 @@ func stripANSI(text string) string {
 
 // handleResult ends the turn.
 func (s *Service) handleResult(ctx context.Context, r *run, ev *claude.ResultEvent, n *notes) {
+	if emptyTurn(ev, r) {
+		s.log.Debug("claude empty turn ignored", "task", r.task.ID, "stage", r.rec.Stage)
+		return // an empty turn the CLI ran on its own: it ends no turn
+	}
 	aborted := ev.TerminalReason == abortedReason || r.interruptReq != ""
 	hadTurn := r.turn != nil
+	if t := r.turn; t != nil && t.opener != nil && len(t.opener.Marker.Wakes) == 0 {
+		if w := originWake(r, ev.Origin); w != nil {
+			t.opener.Marker.Wakes = []Wake{*w}
+			s.updateLocked(ctx, r, t.opener, n)
+		}
+	}
 	if hadTurn {
 		s.closeTurnLocked(ctx, r, aborted, interruptedByUser, n)
 	}
@@ -456,6 +576,38 @@ func (s *Service) handleResult(ctx context.Context, r *run, ev *claude.ResultEve
 	if !s.flushPendingLocked(ctx, r, n) {
 		s.armIdleLocked(r)
 	}
+}
+
+// emptyTurn reports whether a result closes a turn the CLI opened on its own
+// and ran without a single request to the API, which ends no turn of the app.
+func emptyTurn(ev *claude.ResultEvent, r *run) bool {
+	return ev.NumTurns == 0 && ev.Origin != nil && !ev.IsError &&
+		ev.TerminalReason != abortedReason && r.interruptReq == ""
+}
+
+// originWake is the return the origin of a result points at, when it is one
+// of a task of the current process that already came back; nil otherwise, as
+// for the event of a monitor, whose origin names no run.
+func originWake(r *run, origin *claude.ResultOrigin) *Wake {
+	if origin == nil {
+		return nil
+	}
+	switch origin.Kind {
+	case "task-notification":
+		if origin.RunID == "" {
+			return nil
+		}
+		for _, task := range r.tasks {
+			if task.runID == origin.RunID {
+				return task.wake
+			}
+		}
+	case "peer":
+		if task := r.tasks[origin.SenderTaskID]; task != nil {
+			return task.wake
+		}
+	}
+	return nil
 }
 
 // closeTurnLocked brings every entry of the turn to rest: streaming text is
@@ -548,6 +700,8 @@ func (s *Service) processExited(k Key, gen int, exit claude.ExitInfo) {
 		return
 	}
 	r.proc = nil
+	clear(r.tasks)
+	r.wakes = nil
 	r.stopTimer(&r.startTimer)
 	r.stopTimer(&r.idleTimer)
 	r.stopTimer(&r.flushTimer)

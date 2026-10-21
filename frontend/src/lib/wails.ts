@@ -119,6 +119,7 @@ import type {
   UpdateRelease,
   UpdateWorking,
   UserEntry,
+  Wake,
   WorktreePreview,
   WritingDiscussion,
 } from "@bindings/models";
@@ -247,6 +248,7 @@ export type {
   UpdateRelease,
   UpdateWorking,
   UserEntry,
+  Wake,
   WorktreePreview,
   WritingDiscussion,
 };
@@ -400,6 +402,7 @@ export type MarkerType =
   | "compacted"
   | "interrupted"
   | "retried"
+  | "woke"
   | "committed"
   | "pr_opened"
   | "checks_read"
@@ -424,6 +427,10 @@ export type AppKind =
 export type InterruptedBy = "" | "user" | "crash";
 /** RetryReason is why an API call the CLI retries failed; "" without a retry. */
 export type RetryReason = "" | "overloaded" | "rate_limit" | "server" | "connection" | "other";
+/** WakeKind is the kind of task in the background whose return woke the agent. */
+export type WakeKind = "agent" | "command" | "monitor";
+/** WakeStatus is how a task in the background ended. */
+export type WakeStatus = "completed" | "failed" | "stopped";
 export type ErrorKind =
   | "process_exit"
   | "start_failed"
@@ -1077,6 +1084,7 @@ export function asMarkerType(value: string): MarkerType {
     case "compacted":
     case "interrupted":
     case "retried":
+    case "woke":
     case "committed":
     case "pr_opened":
     case "checks_read":
@@ -1128,6 +1136,28 @@ export function asRetryReason(value: string): RetryReason {
       return value;
     default:
       return "other";
+  }
+}
+
+export function asWakeKind(value: string): WakeKind | null {
+  switch (value) {
+    case "agent":
+    case "command":
+    case "monitor":
+      return value;
+    default:
+      return null;
+  }
+}
+
+export function asWakeStatus(value: string): WakeStatus | null {
+  switch (value) {
+    case "completed":
+    case "failed":
+    case "stopped":
+      return value;
+    default:
+      return null;
   }
 }
 

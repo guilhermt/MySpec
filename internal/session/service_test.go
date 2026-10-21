@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -3142,5 +3143,325 @@ func TestThePRFixesProduceNoArtifact(t *testing.T) {
 
 	if got := session.ArtifactOf(prompts.StagePRFix); got != "" {
 		t.Errorf("artifactOf(pr_fix) = %q, want none", got)
+	}
+}
+
+// waitSaid waits until the agent has said text and returns that entry.
+func waitSaid(t *testing.T, f *fixture, k session.Key, text string) session.Entry {
+	t.Helper()
+
+	var said session.Entry
+	waitFor(t, "the agent to say "+text, func() bool {
+		for _, e := range f.entriesOf(t, k, session.KindAssistant) {
+			if e.Assistant.Text == text {
+				said = e
+				return true
+			}
+		}
+		return false
+	})
+	return said
+}
+
+// waitWokeWith waits until the n-th woke marker of a session names wakes.
+func waitWokeWith(t *testing.T, f *fixture, k session.Key, n int, wakes []session.Wake) session.Entry {
+	t.Helper()
+
+	var woke session.Entry
+	waitFor(t, "the woke marker to name its returns", func() bool {
+		markers := wokeMarkers(t, f, k)
+		if len(markers) <= n || !cmp.Equal(wakes, markers[n].Marker.Wakes) {
+			return false
+		}
+		woke = markers[n]
+		return true
+	})
+	return woke
+}
+
+// commandWake is the return of the command the background scenario leaves
+// running, which fails.
+func commandWake() session.Wake {
+	code := claudetest.BackgroundExitCode
+	return session.Wake{
+		Kind:     session.WakeCommand,
+		Name:     claudetest.BackgroundCommandDescription,
+		Status:   session.WakeFailed,
+		ExitCode: &code,
+	}
+}
+
+// agentWake is the return of the subagent the background scenario leaves
+// running, which reports back.
+func agentWake() session.Wake {
+	return session.Wake{
+		Kind:   session.WakeAgent,
+		Name:   claudetest.BackgroundAgentDescription,
+		Status: session.WakeCompleted,
+	}
+}
+
+func TestAReturnDuringATurnIsMarkedWhereItArrives(t *testing.T) {
+	t.Parallel()
+
+	f, open := newGatedFixtureOf(t, "background")
+	f.start(t, taskInfo(t, "t1"))
+	open("1-1")
+	f.waitIdle(t, prd("t1"))
+
+	tr := f.transcript(t, prd("t1"))
+	var woke []session.Entry
+	wokeAt, lastAction, answerAt := -1, -1, -1
+	for i, e := range tr.Entries {
+		switch {
+		case e.Kind == session.KindMarker && e.Marker.Type == session.MarkerWoke:
+			woke, wokeAt = append(woke, e), i
+		case e.Kind == session.KindAction:
+			lastAction = i
+		case e.Kind == session.KindAssistant:
+			answerAt = i
+		}
+	}
+	if len(woke) != 1 {
+		t.Fatalf("woke markers = %+v, want the one return of the command and none for the foreground one", woke)
+	}
+	if wokeAt < lastAction || wokeAt > answerAt {
+		t.Errorf("woke at %d, want it after the last action (%d) and before the answer (%d)", wokeAt, lastAction, answerAt)
+	}
+	if got := len(f.entriesOf(t, prd("t1"), session.KindAction)); got != 3 {
+		t.Errorf("actions = %d, want the three of the turn", got)
+	}
+	if want := f.entriesOf(t, prd("t1"), session.KindUser)[0].ID; woke[0].TurnID != want {
+		t.Errorf("woke TurnID = %q, want %q, the message that opened the turn", woke[0].TurnID, want)
+	}
+	if diff := cmp.Diff([]session.Wake{commandWake()}, woke[0].Marker.Wakes); diff != "" {
+		t.Errorf("wakes mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestATurnTheAgentOpensWorksLikeAnyOther(t *testing.T) {
+	t.Parallel()
+
+	f, open := newGatedFixtureOf(t, "background")
+	f.start(t, taskInfo(t, "t1"))
+	open("1-1", "1-2", "1-3")
+	f.waitIdle(t, prd("t1"))
+
+	f.advance(time.Minute)
+	open("1-4")
+	said := waitSaid(t, f, prd("t1"), claudetest.BackgroundAgentText)
+
+	sum := f.summary(t, prd("t1"))
+	if sum.Status != session.StatusWorking || !sum.TurnRunning {
+		t.Errorf("summary = %+v, want a working session with a running turn", sum)
+	}
+	if want := base.Add(time.Minute); !sum.TurnStartedAt.Equal(want) {
+		t.Errorf("TurnStartedAt = %v, want %v, when the agent resumed", sum.TurnStartedAt, want)
+	}
+	woke := waitWokeWith(t, f, prd("t1"), 2, []session.Wake{agentWake()})
+	if woke.TurnID != said.TurnID {
+		t.Errorf("woke TurnID = %q, want %q, the turn of what the agent said", woke.TurnID, said.TurnID)
+	}
+	if want := f.entriesOf(t, prd("t1"), session.KindUser)[0].ID; said.TurnID == want {
+		t.Errorf("TurnID = %q, want a turn of its own, not the one of the message", said.TurnID)
+	}
+
+	open("1-5")
+	f.waitIdle(t, prd("t1"))
+	if said := waitSaid(t, f, prd("t1"), claudetest.BackgroundAgentText); !said.Assistant.Complete {
+		t.Errorf("assistant = %+v, want the text complete", said.Assistant)
+	}
+}
+
+func TestTheAgentResumingWithoutAReturnIsExplainedByTheResult(t *testing.T) {
+	t.Parallel()
+
+	f, open := newGatedFixtureOf(t, "background")
+	f.start(t, taskInfo(t, "t1"))
+	open("1-1", "1-2")
+	waitSaid(t, f, prd("t1"), claudetest.BackgroundResumeText)
+
+	markers := wokeMarkers(t, f, prd("t1"))
+	if len(markers) != 2 || len(markers[1].Marker.Wakes) != 0 {
+		t.Fatalf("woke markers = %+v, want the return of the first turn and one without returns", markers)
+	}
+
+	open("1-3")
+	waitWokeWith(t, f, prd("t1"), 1, []session.Wake{commandWake()})
+}
+
+func TestAMessageDuringATurnTheAgentOpenedWaitsForItsEnd(t *testing.T) {
+	t.Parallel()
+
+	f, open := newGatedFixtureOf(t, "background")
+	f.start(t, taskInfo(t, "t1"))
+	open("1-1", "1-2", "1-3", "1-4")
+	waitSaid(t, f, prd("t1"), claudetest.BackgroundAgentText)
+
+	f.send(t, prd("t1"), "still there?")
+	if sum := f.summary(t, prd("t1")); sum.PendingCount != 1 {
+		t.Fatalf("PendingCount = %d, want the message queued behind the turn of the agent", sum.PendingCount)
+	}
+
+	open("1-5")
+	actions := f.waitEntries(t, prd("t1"), session.KindAction, 4)
+	var asked session.Entry
+	for _, e := range f.entriesOf(t, prd("t1"), session.KindUser) {
+		if e.User.Text == "still there?" {
+			asked = e
+		}
+	}
+	if last := actions[3]; last.Action.Target != "go test ./..." || last.TurnID != asked.ID {
+		t.Errorf("action = %+v, want the Bash of the second turn in the turn of the message %q", last, asked.ID)
+	}
+	if sum := f.summary(t, prd("t1")); !sum.TurnRunning || sum.PendingCount != 0 {
+		t.Errorf("summary = %+v, want the turn of the message running, the empty turn having closed none", sum)
+	}
+	for _, e := range wokeMarkers(t, f, prd("t1"))[2:] {
+		if len(e.Marker.Wakes) == 0 {
+			t.Errorf("woke marker %+v, want none without returns after the message", e)
+		}
+	}
+	said := 0
+	for _, e := range f.entriesOf(t, prd("t1"), session.KindAssistant) {
+		if e.Assistant.Text == claudetest.BackgroundAgentText {
+			said++
+		}
+	}
+	if said != 1 {
+		t.Errorf("the agent's text appears %d times, want 1", said)
+	}
+}
+
+func TestStopInterruptsATurnTheAgentOpened(t *testing.T) {
+	t.Parallel()
+
+	f, open := newGatedFixtureOf(t, "background")
+	f.start(t, taskInfo(t, "t1"))
+	open("1-1", "1-2", "1-3", "1-4")
+	said := waitSaid(t, f, prd("t1"), claudetest.BackgroundAgentText)
+
+	if err := f.service.Interrupt(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Interrupt() = %v, want nil", err)
+	}
+	f.waitIdle(t, prd("t1"))
+
+	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
+	last := markers[len(markers)-1]
+	want := &session.MarkerEntry{Type: session.MarkerInterrupted, InterruptedBy: "user"}
+	if diff := cmp.Diff(want, last.Marker); diff != "" {
+		t.Errorf("last marker mismatch (-want +got):\n%s", diff)
+	}
+	if last.TurnID != said.TurnID {
+		t.Errorf("interrupted TurnID = %q, want %q, the turn of the agent", last.TurnID, said.TurnID)
+	}
+}
+
+func TestACrashDuringATurnTheAgentOpenedEndsIt(t *testing.T) {
+	t.Parallel()
+
+	f, open := newGatedFixtureOf(t, "background")
+	f.start(t, taskInfo(t, "t1"))
+	open("1-1", "1-2", "1-3", "1-4")
+	waitSaid(t, f, prd("t1"), claudetest.BackgroundAgentText)
+
+	f.launcher.kill(t)
+	sum := f.waitStatus(t, prd("t1"), "the error", func(s session.Summary) bool { return s.Status == session.StatusError })
+	if sum.TurnRunning {
+		t.Errorf("summary = %+v, want no turn running after the crash", sum)
+	}
+	entries := f.transcript(t, prd("t1")).Entries
+	last := entries[len(entries)-1]
+	if last.Kind != session.KindError || last.Error.Kind != session.ErrorProcessExit {
+		t.Errorf("last entry = %+v, want the process exit error after what the agent said", last)
+	}
+}
+
+func TestTheIdleTimerLeavesATurnTheAgentOpenedAlone(t *testing.T) {
+	dir := t.TempDir()
+	f := newFixtureWith(t, &fakeLauncher{
+		scenario: "background",
+		env:      []string{claudetest.EnvGates + "=" + dir},
+	}, 200*time.Millisecond)
+	f.start(t, taskInfo(t, "t1"))
+	for _, g := range []string{"1-1", "1-2", "1-3", "1-4"} {
+		if err := os.WriteFile(filepath.Join(dir, g), nil, 0o600); err != nil {
+			t.Fatalf("open gate %s: %v", g, err)
+		}
+	}
+	waitSaid(t, f, prd("t1"), claudetest.BackgroundAgentText)
+
+	// Nothing is expected to happen, so there is nothing to wait for.
+	time.Sleep(600 * time.Millisecond)
+
+	if sum := f.summary(t, prd("t1")); !sum.ProcessRunning || !sum.TurnRunning {
+		t.Errorf("summary = %+v, want the process running and the turn open", sum)
+	}
+}
+
+func TestAReturnReadsItsStatusAndExitCode(t *testing.T) {
+	t.Parallel()
+
+	code := func(n int) *int { return &n }
+	tests := []struct {
+		name    string
+		kind    session.WakeKind
+		status  string
+		summary string
+		want    session.Wake
+		wantOK  bool
+	}{
+		{
+			name: "a command that completed", kind: session.WakeCommand, status: "completed",
+			summary: `Background command "Run the tests" completed (exit code 0)`,
+			want:    session.Wake{Kind: session.WakeCommand, Name: "Run the tests", Status: session.WakeCompleted},
+			wantOK:  true,
+		},
+		{
+			name: "a command that failed with a code", kind: session.WakeCommand, status: "failed",
+			summary: `Background command "Run the tests" failed with exit code 3`,
+			want:    session.Wake{Kind: session.WakeCommand, Name: "Run the tests", Status: session.WakeFailed, ExitCode: code(3)},
+			wantOK:  true,
+		},
+		{
+			name: "a subagent that failed", kind: session.WakeAgent, status: "failed",
+			summary: "exit code 2",
+			want:    session.Wake{Kind: session.WakeAgent, Name: "Run the tests", Status: session.WakeFailed},
+			wantOK:  true,
+		},
+		{
+			name: "a monitor that was stopped", kind: session.WakeMonitor, status: "stopped",
+			summary: `Monitor "Run the tests" stopped`,
+			want:    session.Wake{Kind: session.WakeMonitor, Name: "Run the tests", Status: session.WakeStopped},
+			wantOK:  true,
+		},
+		{
+			name: "a task that was killed reads as stopped", kind: session.WakeCommand, status: "killed",
+			want:   session.Wake{Kind: session.WakeCommand, Name: "Run the tests", Status: session.WakeStopped},
+			wantOK: true,
+		},
+		{
+			name: "a command that failed without a code", kind: session.WakeCommand, status: "failed",
+			summary: `Background command "Run the tests" failed`,
+			want:    session.Wake{Kind: session.WakeCommand, Name: "Run the tests", Status: session.WakeFailed},
+			wantOK:  true,
+		},
+		{
+			name: "an unknown status", kind: session.WakeCommand, status: "paused",
+			wantOK: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := session.WakeOf(tt.kind, "Run the tests", &claude.TaskNotificationEvent{Status: tt.status, Summary: tt.summary})
+			if ok != tt.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, tt.wantOK)
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("wake mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
