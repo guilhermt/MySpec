@@ -494,6 +494,83 @@ func TestDecodeTaskNotification(t *testing.T) {
 	}
 }
 
+func TestDecodeTaskUpdated(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		line string
+		want *bool
+	}{
+		{
+			name: "moved to the background",
+			line: `{"type":"system","subtype":"task_updated","task_id":"b1","patch":{"is_backgrounded":true}}`,
+			want: new(true),
+		},
+		{
+			name: "a patch that does not say",
+			line: `{"type":"system","subtype":"task_updated","task_id":"b1","patch":{"status":"running"}}`,
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			event, err := claude.Decode([]byte(tt.line))
+			if err != nil {
+				t.Fatalf("Decode() = %v, want nil", err)
+			}
+			if event.TaskUpdated == nil {
+				t.Fatal("TaskUpdated is nil, want the change of the task")
+			}
+			if event.TaskUpdated.TaskID != "b1" {
+				t.Errorf("TaskID = %q, want b1", event.TaskUpdated.TaskID)
+			}
+			if diff := cmp.Diff(tt.want, event.TaskUpdated.Patch.IsBackgrounded); diff != "" {
+				t.Errorf("IsBackgrounded mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestDecodeBackgroundTasks(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		line string
+		want []string
+	}{
+		{
+			name: "one task",
+			line: `{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"b1","task_type":"local_bash","description":"x"}]}`,
+			want: []string{"b1"},
+		},
+		{
+			name: "none",
+			line: `{"type":"system","subtype":"background_tasks_changed","tasks":[]}`,
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			event, err := claude.Decode([]byte(tt.line))
+			if err != nil {
+				t.Fatalf("Decode() = %v, want nil", err)
+			}
+			if event.BackgroundTasks == nil {
+				t.Fatal("BackgroundTasks is nil, want the set of tasks")
+			}
+			var got []string
+			for _, task := range event.BackgroundTasks.Tasks {
+				got = append(got, task.TaskID)
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("task ids mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestDecodeResultOrigin(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

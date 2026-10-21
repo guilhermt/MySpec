@@ -127,6 +127,21 @@ const (
 	BackgroundAgentText          = "The repository holds one module."
 )
 
+// The scenarios of the work in the background.
+const (
+	BackgroundAgentA     = "Survey the API"
+	BackgroundAgentB     = "Survey the store"
+	BackgroundAgentAText = "The API is done."
+	BackgroundAgentBText = "Both surveys are done."
+	BackgroundServer     = "Start the dev server"
+	MonitorTimed         = "Wait for CI"
+	MonitorTimedMS       = 1000
+	MonitorPersistent    = "Watch the logs"
+	MonitorEventText     = "CI moved on."
+	MonitorDoneText      = "CI is green."
+	PromotedDescription  = "Run the long build"
+)
+
 // Capabilities is what the fake announces in system/init.
 var Capabilities = []string{"interrupt_receipt_v1", "interrupt_cancel_queued_v1", "msg_lifecycle_v1"}
 
@@ -373,6 +388,22 @@ func (f *fake) answerListModels(requestID string) {
 }
 
 // play runs one turn of the scenario per user message, until stdin ends.
+//
+// The bg_* scenarios leave work in the background; each gate is a file named
+// "<turn>-<k>" in EnvGates:
+//   - bg_agents: two subagents, A and B; gate 1 returns A and the agent resumes
+//     for it, gate 2 returns B, then the CLI runs an empty turn.
+//   - bg_command: a command that never ends; no gates.
+//   - bg_monitor: a monitor with a timeout and a persistent one; gate 1 is an
+//     event of a monitor, gate 2 the end of the timed one and its empty turn.
+//   - bg_permission: a subagent; gate 1 opens a turn that asks permission for
+//     a command, gate 2 returns the subagent and its empty turn.
+//   - bg_silent: a subagent; gate 1 ends it with no turn after, gate 2 is the
+//     empty turn alone.
+//   - bg_level: a command; gate 1 reports the set of background tasks empty,
+//     with no task_notification.
+//   - bg_promoted: a command that starts in the foreground and is moved to the
+//     background; gate 1 ends it and the agent resumes for it.
 func (f *fake) play(scenario string) int {
 	for text := range f.users {
 		f.turns++
@@ -401,6 +432,20 @@ func (f *fake) play(scenario string) int {
 			f.subagentTurn(text)
 		case "background":
 			f.backgroundTurn(text)
+		case "bg_agents":
+			f.bgAgentsTurn(text)
+		case "bg_command":
+			f.bgCommandTurn(text)
+		case "bg_monitor":
+			f.bgMonitorTurn(text)
+		case "bg_permission":
+			f.bgPermissionTurn(text)
+		case "bg_silent":
+			f.bgSilentTurn(text)
+		case "bg_level":
+			f.bgLevelTurn(text)
+		case "bg_promoted":
+			f.bgPromotedTurn(text)
 		case "bash_fail":
 			f.bashFailTurn(text)
 		case "writer":
@@ -606,6 +651,33 @@ func (f *fake) permissionTurn() {
 	input := map[string]any{"command": BashCommand, "description": "Create hello.txt with the word hi"}
 	f.streamToolUse(0, messageID, toolUseID, "Bash", input)
 
+	f.askBash(toolUseID, input)
+
+	answer, ok := f.awaitPermission()
+	if !ok {
+		return
+	}
+
+	reply := "done"
+	if answer.Behavior == "allow" {
+		f.silentBashResult(toolUseID)
+		// The app's rewrite of the suggestions is echoed so a test can read it.
+		if len(answer.UpdatedPermissions) > 0 {
+			reply += " " + string(answer.UpdatedPermissions)
+		}
+	} else {
+		reply = "denied: " + answer.Message
+	}
+
+	f.streamText(1, reply)
+	f.endMessage()
+	f.assistantText(messageID, reply)
+	f.result("success", false, reply, "completed")
+}
+
+// askBash asks the app to allow a Bash call, with the suggestions of a rule for
+// the command and of access to the folder.
+func (f *fake) askBash(toolUseID string, input map[string]any) {
 	requestID := f.nextID("req")
 	f.emitRaw(map[string]any{
 		"type":       "control_request",
@@ -633,27 +705,6 @@ func (f *fake) permissionTurn() {
 			"tool_use_id":  toolUseID,
 		},
 	})
-
-	answer, ok := f.awaitPermission()
-	if !ok {
-		return
-	}
-
-	reply := "done"
-	if answer.Behavior == "allow" {
-		f.silentBashResult(toolUseID)
-		// The app's rewrite of the suggestions is echoed so a test can read it.
-		if len(answer.UpdatedPermissions) > 0 {
-			reply += " " + string(answer.UpdatedPermissions)
-		}
-	} else {
-		reply = "denied: " + answer.Message
-	}
-
-	f.streamText(1, reply)
-	f.endMessage()
-	f.assistantText(messageID, reply)
-	f.result("success", false, reply, "completed")
 }
 
 // questionsInput is what the question scenario asks the user.
@@ -975,6 +1026,266 @@ func (f *fake) backgroundTurn(text string) {
 
 	f.emitInit()
 	f.originResult("", 0, map[string]any{"kind": "task-notification", "producer": "session-task", "runId": agentRun})
+}
+
+// bgLaunchAgent starts a subagent in the background from the tool call at the
+// given block index of the message, and returns its task and run ids.
+func (f *fake) bgLaunchAgent(index int, messageID, description, name string) (taskID, runID, toolUseID string) {
+	taskID, runID = fmt.Sprintf("task-%d-%s", f.turns, name), fmt.Sprintf("run-%d-%s", f.turns, name)
+	toolUseID = f.nextID("toolu")
+	f.streamToolUse(index, messageID, toolUseID, "Agent", map[string]any{
+		"description":       description,
+		"subagent_type":     SubagentType,
+		"prompt":            description + ".",
+		"run_in_background": true,
+	})
+	f.taskStarted(taskID, runID, toolUseID, description, "local_agent", true)
+	f.toolResult(toolUseID, "Async agent launched successfully.")
+	return taskID, runID, toolUseID
+}
+
+// bgLaunchCommand starts a command in the background, as bgLaunchAgent does a
+// subagent.
+func (f *fake) bgLaunchCommand(index int, messageID string) {
+	taskID, runID := fmt.Sprintf("task-%d-cmd", f.turns), fmt.Sprintf("run-%d-cmd", f.turns)
+	toolUseID := f.nextID("toolu")
+	f.streamToolUse(index, messageID, toolUseID, "Bash", map[string]any{
+		"command":           "npm run dev",
+		"description":       BackgroundServer,
+		"run_in_background": true,
+	})
+	f.taskStarted(taskID, runID, toolUseID, BackgroundServer, "local_bash", true)
+	f.toolResult(toolUseID, "Command running in background with ID: "+taskID+".")
+}
+
+// bgClose says the text of the turn and closes it.
+func (f *fake) bgClose(messageID string, index int, text string) {
+	f.streamText(index, text)
+	f.endMessage()
+	f.assistantText(messageID, text)
+	f.result("success", false, text, "completed")
+}
+
+// bgResume is a turn the agent opens on its own: it says the text, and the
+// result names what opened it.
+func (f *fake) bgResume(text string, origin map[string]any) {
+	f.emitInit()
+	f.status()
+	messageID := f.nextID("msg")
+	f.messageStart(messageID)
+	f.streamText(0, text)
+	f.endMessage()
+	f.assistantText(messageID, text)
+	f.originResult(text, 1, origin)
+}
+
+// bgReturn is the end of a task and the turn the agent opens for it.
+func (f *fake) bgReturn(taskID, runID, toolUseID, text string) {
+	f.taskNotification(taskID, runID, toolUseID, "completed", "The task is done.")
+	f.bgResume(text, map[string]any{"kind": "task-notification", "producer": "session-task", "runId": runID})
+}
+
+// bgEmptyTurn is the turn the CLI runs on its own after a task ends, with
+// nothing to say.
+func (f *fake) bgEmptyTurn(runID string) {
+	f.emitInit()
+	f.originResult("", 0, map[string]any{"kind": "task-notification", "producer": "session-task", "runId": runID})
+}
+
+// bgAgentsTurn launches two subagents and ends. Gate 1: A returns and the agent
+// resumes for it. Gate 2: B returns, and the CLI runs an empty turn.
+func (f *fake) bgAgentsTurn(text string) {
+	n := f.turns
+	gate := func(k int) bool { return f.awaitGate(fmt.Sprintf("%d-%d", n, k)) }
+
+	f.emitInit()
+	f.status()
+	m1 := f.nextID("msg")
+	f.messageStart(m1)
+	a, aRun, aUse := f.bgLaunchAgent(0, m1, BackgroundAgentA, "a")
+	b, bRun, bUse := f.bgLaunchAgent(1, m1, BackgroundAgentB, "b")
+	f.bgClose(m1, 2, text)
+
+	if !gate(1) {
+		return
+	}
+	f.bgReturn(a, aRun, aUse, BackgroundAgentAText)
+
+	if !gate(2) {
+		return
+	}
+	f.bgReturn(b, bRun, bUse, BackgroundAgentBText)
+	f.bgEmptyTurn(bRun)
+}
+
+// bgCommandTurn launches a command that never ends and ends the turn.
+func (f *fake) bgCommandTurn(text string) {
+	f.emitInit()
+	f.status()
+	m1 := f.nextID("msg")
+	f.messageStart(m1)
+	f.bgLaunchCommand(0, m1)
+	f.bgClose(m1, 1, text)
+}
+
+// bgMonitorTurn starts a monitor with a timeout and a persistent one and ends
+// the turn. Gate 1: an event of a monitor opens a turn. Gate 2: the timed one
+// ends, the agent resumes for it, and the CLI runs an empty turn.
+func (f *fake) bgMonitorTurn(text string) {
+	n := f.turns
+	gate := func(k int) bool { return f.awaitGate(fmt.Sprintf("%d-%d", n, k)) }
+
+	f.emitInit()
+	f.status()
+	m1 := f.nextID("msg")
+	f.messageStart(m1)
+
+	timed, timedRun := fmt.Sprintf("task-%d-timed", n), fmt.Sprintf("run-%d-timed", n)
+	timedUse := f.nextID("toolu")
+	f.streamToolUse(0, m1, timedUse, "Monitor", map[string]any{
+		"description": MonitorTimed,
+		"timeout_ms":  MonitorTimedMS,
+		"command":     "gh run watch",
+	})
+	f.taskStarted(timed, timedRun, timedUse, MonitorTimed, "local_bash", true)
+	f.toolResult(timedUse, "Monitor started with ID: "+timed+".")
+
+	persistent, persistentRun := fmt.Sprintf("task-%d-persistent", n), fmt.Sprintf("run-%d-persistent", n)
+	persistentUse := f.nextID("toolu")
+	f.streamToolUse(1, m1, persistentUse, "Monitor", map[string]any{
+		"description": MonitorPersistent,
+		"persistent":  true,
+		"command":     "tail -f app.log",
+	})
+	f.taskStarted(persistent, persistentRun, persistentUse, MonitorPersistent, "local_bash", true)
+	f.toolResult(persistentUse, "Monitor started with ID: "+persistent+".")
+	f.bgClose(m1, 2, text)
+
+	if !gate(1) {
+		return
+	}
+	f.bgResume(MonitorEventText, map[string]any{"kind": "task-notification"})
+
+	if !gate(2) {
+		return
+	}
+	f.bgReturn(timed, timedRun, timedUse, MonitorDoneText)
+	f.bgEmptyTurn(timedRun)
+}
+
+// bgPermissionTurn launches a subagent and ends the turn. Gate 1: a turn the
+// agent opens asks permission to run a command. Gate 2: the subagent returns,
+// and the CLI runs an empty turn.
+func (f *fake) bgPermissionTurn(text string) {
+	n := f.turns
+	gate := func(k int) bool { return f.awaitGate(fmt.Sprintf("%d-%d", n, k)) }
+
+	f.emitInit()
+	f.status()
+	m1 := f.nextID("msg")
+	f.messageStart(m1)
+	a, aRun, aUse := f.bgLaunchAgent(0, m1, BackgroundAgentA, "a")
+	f.bgClose(m1, 1, text)
+
+	if !gate(1) {
+		return
+	}
+	f.emitInit()
+	f.status()
+	m2 := f.nextID("msg")
+	f.messageStart(m2)
+	toolUseID := f.nextID("toolu")
+	input := map[string]any{"command": BashCommand, "description": "Create hello.txt with the word hi"}
+	f.streamToolUse(0, m2, toolUseID, "Bash", input)
+	f.askBash(toolUseID, input)
+
+	answer, ok := f.awaitPermission()
+	if !ok {
+		return
+	}
+	reply := "done"
+	if answer.Behavior == "allow" {
+		f.silentBashResult(toolUseID)
+	} else {
+		reply = "denied: " + answer.Message
+	}
+	f.streamText(1, reply)
+	f.endMessage()
+	f.assistantText(m2, reply)
+	f.result("success", false, reply, "completed")
+
+	if !gate(2) {
+		return
+	}
+	f.bgReturn(a, aRun, aUse, BackgroundAgentAText)
+	f.bgEmptyTurn(aRun)
+}
+
+// bgSilentTurn launches a subagent and ends the turn. Gate 1: the subagent
+// ends and nothing follows. Gate 2: the CLI runs an empty turn.
+func (f *fake) bgSilentTurn(text string) {
+	n := f.turns
+	gate := func(k int) bool { return f.awaitGate(fmt.Sprintf("%d-%d", n, k)) }
+
+	f.emitInit()
+	f.status()
+	m1 := f.nextID("msg")
+	f.messageStart(m1)
+	a, aRun, aUse := f.bgLaunchAgent(0, m1, BackgroundAgentA, "a")
+	f.bgClose(m1, 1, text)
+
+	if !gate(1) {
+		return
+	}
+	f.taskNotification(a, aRun, aUse, "completed", "The task is done.")
+
+	if !gate(2) {
+		return
+	}
+	f.bgEmptyTurn(aRun)
+}
+
+// bgLevelTurn launches a command and ends the turn. Gate 1: the CLI reports no
+// task in the background, and sends no task_notification.
+func (f *fake) bgLevelTurn(text string) {
+	n := f.turns
+
+	f.emitInit()
+	f.status()
+	m1 := f.nextID("msg")
+	f.messageStart(m1)
+	f.bgLaunchCommand(0, m1)
+	f.bgClose(m1, 1, text)
+
+	if !f.awaitGate(fmt.Sprintf("%d-1", n)) {
+		return
+	}
+	f.backgroundTasks()
+}
+
+// bgPromotedTurn runs a command in the foreground that the CLI moves to the
+// background, and ends the turn. Gate 1: the command ends and the agent resumes
+// for it, then the CLI runs an empty turn.
+func (f *fake) bgPromotedTurn(text string) {
+	n := f.turns
+	cmd, cmdRun := fmt.Sprintf("task-%d-cmd", n), fmt.Sprintf("run-%d-cmd", n)
+
+	f.emitInit()
+	f.status()
+	m1 := f.nextID("msg")
+	f.messageStart(m1)
+	cmdUse := f.nextID("toolu")
+	f.streamToolUse(0, m1, cmdUse, "Bash", map[string]any{"command": "make build", "description": PromotedDescription})
+	f.taskStarted(cmd, cmdRun, cmdUse, PromotedDescription, "local_bash", false)
+	f.taskUpdated(cmd, cmdRun, true)
+	f.toolResult(cmdUse, "Command was moved to the background with ID: "+cmd+".")
+	f.bgClose(m1, 1, text)
+
+	if !f.awaitGate(fmt.Sprintf("%d-1", n)) {
+		return
+	}
+	f.bgReturn(cmd, cmdRun, cmdUse, text)
+	f.bgEmptyTurn(cmdRun)
 }
 
 // awaitGate waits for the named file in EnvGates, reporting false when an
@@ -1396,6 +1707,27 @@ func (f *fake) taskNotification(taskID, runID, toolUseID, status, summary string
 		"summary":     summary,
 		"output_file": "",
 	})
+}
+
+// taskUpdated announces a change of a task: its move to or from the background.
+func (f *fake) taskUpdated(taskID, runID string, backgrounded bool) {
+	f.emit(map[string]any{
+		"type":    "system",
+		"subtype": "task_updated",
+		"task_id": taskID,
+		"run_id":  runID,
+		"patch":   map[string]any{"is_backgrounded": backgrounded},
+	})
+}
+
+// backgroundTasks announces every task running in the background; with no id,
+// none.
+func (f *fake) backgroundTasks(taskIDs ...string) {
+	tasks := make([]any, 0, len(taskIDs))
+	for _, id := range taskIDs {
+		tasks = append(tasks, map[string]any{"task_id": id, "task_type": "local_bash", "description": ""})
+	}
+	f.emit(map[string]any{"type": "system", "subtype": "background_tasks_changed", "tasks": tasks})
 }
 
 // streamEvent wraps a partial message event in its envelope.
