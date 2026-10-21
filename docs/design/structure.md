@@ -62,7 +62,7 @@ Duas linhas, e uma terceira só enquanto o agente trabalha.
 |---|---|
 | 1 | Glifo de tipo e nome, com a largura inteira da linha para o nome. `repo#card`, `repo#PR` ou `#cards`, e `One-Shot`, aparecem à direita em hover, no foco e na linha aberta, e só quando cabem ao lado do nome inteiro; quando não cabem, ficam no tooltip do nome. O nome nunca perde largura para eles, e eles estão sempre no nome acessível. Na linha que `Ctrl+J` abriria, a marca `Ctrl J` fica à direita em qualquer largura |
 | 2 | Glifo de gravidade ou de estado; o que o item pede ou onde está, **sempre com a posição**; `+N` quando há mais de uma situação; na borda direita, o tempo |
-| 3 | Só com o agente rodando: a ação em curso, em fonte monoespaçada, com o verbo primeiro, e o medidor de contexto com a porcentagem. Sem ação em curso, a palavra da atividade da conversa: `Starting session…`, `Thinking…`, `Retrying · attempt N` |
+| 3 | Só com o agente rodando: a ação em curso, em fonte monoespaçada, com o verbo primeiro, e o medidor de contexto com a porcentagem. Sem ação em curso, a palavra da atividade da conversa: `Starting session…`, `Thinking…`, `Working in the background…` (sem turno, com trabalho em segundo plano) ou `Retrying · attempt N` |
 
 **Por tipo de item**, a posição é:
 
