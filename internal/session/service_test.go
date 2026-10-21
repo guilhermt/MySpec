@@ -3746,7 +3746,7 @@ func TestAnEmptyTurnAnswersAReturn(t *testing.T) {
 func TestATaskMissingFromTheCLIListStopsCounting(t *testing.T) {
 	t.Parallel()
 
-	f, open := bgScenarioRun(t, "bg_level", 0, limits{})
+	f, open := bgScenarioRun(t, "bg_level", 0, limits{ret: 50 * time.Millisecond})
 	f.waitBackground(t, prd("t1"))
 
 	open("1-1")

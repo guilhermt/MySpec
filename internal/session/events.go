@@ -323,16 +323,23 @@ func (s *Service) returnExpired(k Key, gen int) {
 
 // handleBackgroundTasks stops counting the tasks the CLI no longer lists among
 // the ones it runs in the background, so that a lost task_notification never
-// holds the session at work.
+// holds the session at work. A task that counted and leaves the list with no
+// turn open is a return the CLI may still answer, often after its
+// task_notification: the session waits for it as for any return.
 func (s *Service) handleBackgroundTasks(ctx context.Context, r *run, ev *claude.BackgroundTasksEvent, n *notes) {
 	live := make(map[string]bool, len(ev.Tasks))
 	for _, t := range ev.Tasks {
 		live[t.TaskID] = true
 	}
+	left := false
 	for id, t := range r.tasks {
 		if t.backgrounded && !live[id] {
+			left = left || t.counts()
 			t.gone = true
 		}
+	}
+	if left && r.turn == nil {
+		s.awaitReturnLocked(r)
 	}
 	s.settleWorkLocked(ctx, r, n)
 }

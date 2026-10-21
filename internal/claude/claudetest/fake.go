@@ -392,7 +392,8 @@ func (f *fake) answerListModels(requestID string) {
 // The bg_* scenarios leave work in the background; each gate is a file named
 // "<turn>-<k>" in EnvGates:
 //   - bg_agents: two subagents, A and B; gate 1 returns A and the agent resumes
-//     for it, gate 2 returns B, then the CLI runs an empty turn.
+//     for it, gate 2 returns B, then the CLI runs an empty turn. Each return
+//     comes after the set of background tasks without the task.
 //   - bg_command: a command that never ends; no gates.
 //   - bg_monitor: a monitor with a timeout and a persistent one; gate 1 is an
 //     event of a monitor, gate 2 the end of the timed one and its empty turn.
@@ -1092,8 +1093,9 @@ func (f *fake) bgEmptyTurn(runID string) {
 	f.originResult("", 0, map[string]any{"kind": "task-notification", "producer": "session-task", "runId": runID})
 }
 
-// bgAgentsTurn launches two subagents and ends. Gate 1: A returns and the agent
-// resumes for it. Gate 2: B returns, and the CLI runs an empty turn.
+// bgAgentsTurn launches two subagents and ends. Gate 1: A leaves the set of
+// background tasks, returns, and the agent resumes for it. Gate 2: B leaves the
+// set, returns, and the CLI runs an empty turn.
 func (f *fake) bgAgentsTurn(text string) {
 	n := f.turns
 	gate := func(k int) bool { return f.awaitGate(fmt.Sprintf("%d-%d", n, k)) }
@@ -1109,11 +1111,13 @@ func (f *fake) bgAgentsTurn(text string) {
 	if !gate(1) {
 		return
 	}
+	f.backgroundTasks(b)
 	f.bgReturn(a, aRun, aUse, BackgroundAgentAText)
 
 	if !gate(2) {
 		return
 	}
+	f.backgroundTasks()
 	f.bgReturn(b, bRun, bUse, BackgroundAgentBText)
 	f.bgEmptyTurn(bRun)
 }
