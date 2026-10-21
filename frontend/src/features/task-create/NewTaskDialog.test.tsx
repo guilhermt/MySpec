@@ -200,6 +200,8 @@ describe("NewTaskDialog", () => {
       reviewMode: "manual",
       prReviewMode: "manual",
       card: null,
+      images: [],
+      cardImages: [],
     });
     expect(useAppStore.getState().newTaskOpen).toBe(false);
     expect(useAppStore.getState().lastRepositoryId).toBe("repo-2");
@@ -261,6 +263,8 @@ describe("NewTaskDialog", () => {
       reviewMode: "manual",
       prReviewMode: "manual",
       card: null,
+      images: [],
+      cardImages: [],
     });
   });
 
@@ -281,6 +285,8 @@ describe("NewTaskDialog", () => {
         reviewMode: "manual",
         prReviewMode: "manual",
         card: null,
+        images: [],
+        cardImages: [],
       });
     });
   });
@@ -320,6 +326,8 @@ describe("NewTaskDialog", () => {
         reviewMode: "agent",
         prReviewMode: "manual",
         card: null,
+        images: [],
+        cardImages: [],
       });
     });
   });
@@ -490,6 +498,8 @@ describe("NewTaskDialog", () => {
         reviewMode: "manual",
         prReviewMode: "manual",
         card: null,
+        images: [],
+        cardImages: [],
       });
     });
   });
@@ -803,6 +813,8 @@ describe("NewTaskDialog", () => {
         reviewMode: "manual",
         prReviewMode: "manual",
         card: CARD_REF,
+        images: [],
+        cardImages: [],
       });
       expect(useAppStore.getState().newTaskCard).toBeNull();
     });

@@ -582,10 +582,12 @@ describe("api", () => {
       reviewMode: "",
       prReviewMode: "",
       card: null,
+      images: [],
+      cardImages: [],
     });
     await wails.api.deleteTask("task-1");
     await wails.api.getTranscript("task-1", "prd");
-    await wails.api.sendMessage("task-1", "prd", "go on");
+    await wails.api.sendMessage("task-1", "prd", "go on", ["aGk="]);
     await wails.api.removePending("task-1", "prd", "entry-1");
     await wails.api.interrupt("task-1", "prd");
     await wails.api.pause("task-1", "prd");
@@ -674,6 +676,8 @@ describe("api", () => {
       cards: ["dev/web#12"],
       model: "claude-fable-5-1",
       effort: "high",
+      images: [],
+      cardImages: [],
     });
     await wails.api.discussionContext({
       boardId: "board-1",

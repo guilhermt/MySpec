@@ -211,6 +211,8 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
       reviewMode,
       prReviewMode,
       card: origin === null ? null : { boardId: origin.boardId, key: origin.card.key },
+      images: [],
+      cardImages: [],
     })
       .then((id) => {
         rememberRepository(repositoryId);

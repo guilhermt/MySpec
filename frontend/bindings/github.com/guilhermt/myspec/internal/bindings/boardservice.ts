@@ -37,6 +37,16 @@ export function CardContext(boardID: string, key: string): $CancellablePromise<s
 }
 
 /**
+ * CardImages reads the images of the bodies of the cards with the given keys
+ * and of their epics, which is what a creation shows and starts with. The
+ * failures are part of the answer: an image that can't be read doesn't fail
+ * the call.
+ */
+export function CardImages(boardID: string, keys: string[] | null): $CancellablePromise<$models.CardImages> {
+    return $Call.ByID(566557063, boardID, keys);
+}
+
+/**
  * CheckBoardRepository checks a repository the user typed as owner/name for the
  * board of boardID, "" for a board not registered yet.
  */

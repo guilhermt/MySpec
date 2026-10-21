@@ -1108,7 +1108,7 @@ func TestFromDeleteResultCarriesWhatStayedOfEachPart(t *testing.T) {
 func TestFromEntryCarriesTheStepOfAMarker(t *testing.T) {
 	t.Parallel()
 
-	got := bindings.FromEntry(session.Entry{
+	got := bindings.FromEntry("t1", session.Entry{
 		Kind:   session.KindMarker,
 		Marker: &session.MarkerEntry{Type: session.MarkerStepStarted, Step: 2, Restarted: true},
 	})
@@ -1150,7 +1150,7 @@ func TestFromEntryCarriesTheFieldsOfAnAction(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			got := bindings.FromEntry(session.Entry{Kind: session.KindAction, Action: tc.action})
+			got := bindings.FromEntry("t1", session.Entry{Kind: session.KindAction, Action: tc.action})
 			if diff := cmp.Diff(tc.want, got.Action); diff != "" {
 				t.Errorf("action mismatch (-want +got):\n%s", diff)
 			}
@@ -1161,14 +1161,14 @@ func TestFromEntryCarriesTheFieldsOfAnAction(t *testing.T) {
 func TestFromEntryCarriesWhoInterrupted(t *testing.T) {
 	t.Parallel()
 
-	text := bindings.FromEntry(session.Entry{
+	text := bindings.FromEntry("t1", session.Entry{
 		Kind:      session.KindAssistant,
 		Assistant: &session.AssistantEntry{Text: "half", Complete: true, Interrupted: true, InterruptedBy: "crash"},
 	})
 	if got := text.Assistant.InterruptedBy; got != "crash" {
 		t.Errorf("assistant InterruptedBy = %q, want crash", got)
 	}
-	action := bindings.FromEntry(session.Entry{
+	action := bindings.FromEntry("t1", session.Entry{
 		Kind:   session.KindAction,
 		Action: &session.ActionEntry{Tool: "Read", Status: session.ActionInterrupted, InterruptedBy: "user"},
 	})
@@ -1366,7 +1366,7 @@ func TestFromEntryCarriesTheNewMarkerFields(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			got := bindings.FromEntry(session.Entry{Kind: session.KindMarker, Marker: tc.marker})
+			got := bindings.FromEntry("t1", session.Entry{Kind: session.KindMarker, Marker: tc.marker})
 			if diff := cmp.Diff(tc.want, got.Marker); diff != "" {
 				t.Errorf("marker mismatch (-want +got):\n%s", diff)
 			}
@@ -1378,14 +1378,14 @@ func TestFromEntryCarriesWhenAQuestionWasAnswered(t *testing.T) {
 	t.Parallel()
 
 	answeredAt := time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC)
-	answered := bindings.FromEntry(session.Entry{
+	answered := bindings.FromEntry("t1", session.Entry{
 		Kind:     session.KindQuestion,
 		Question: &session.QuestionEntry{Status: session.PermissionAllowed, AnsweredAt: &answeredAt},
 	})
 	if got := answered.Question.AnsweredAt; got != "2026-09-06T12:00:00Z" {
 		t.Errorf("AnsweredAt = %q, want 2026-09-06T12:00:00Z", got)
 	}
-	pending := bindings.FromEntry(session.Entry{
+	pending := bindings.FromEntry("t1", session.Entry{
 		Kind:     session.KindQuestion,
 		Question: &session.QuestionEntry{Status: session.PermissionPending},
 	})
@@ -1397,7 +1397,7 @@ func TestFromEntryCarriesWhenAQuestionWasAnswered(t *testing.T) {
 func TestFromEntryCarriesTheSubagentOfAText(t *testing.T) {
 	t.Parallel()
 
-	got := bindings.FromEntry(session.Entry{
+	got := bindings.FromEntry("t1", session.Entry{
 		Kind:      session.KindAssistant,
 		Assistant: &session.AssistantEntry{Text: "done", Complete: true, ParentToolUseID: "toolu_1"},
 	})
@@ -1431,7 +1431,7 @@ func TestFromEntryCarriesTheVerdictOfAStepReviewMarker(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			got := bindings.FromEntry(session.Entry{Kind: session.KindMarker, Marker: tc.marker})
+			got := bindings.FromEntry("t1", session.Entry{Kind: session.KindMarker, Marker: tc.marker})
 			if diff := cmp.Diff(tc.want, got.Marker); diff != "" {
 				t.Errorf("marker mismatch (-want +got):\n%s", diff)
 			}
@@ -1469,7 +1469,9 @@ func TestFromEntryCarriesTheMessageOfTheAppAndThePromptSent(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			got := bindings.FromEntry(session.Entry{Kind: session.KindUser, User: tc.user})
+			got := bindings.FromEntry("t1", session.Entry{Kind: session.KindUser, User: tc.user})
+			// The images of a message are never null for the frontend.
+			tc.want.Images = []bindings.Image{}
 			if diff := cmp.Diff(tc.want, got.User); diff != "" {
 				t.Errorf("user mismatch (-want +got):\n%s", diff)
 			}

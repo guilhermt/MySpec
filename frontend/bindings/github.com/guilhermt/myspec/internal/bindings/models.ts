@@ -711,6 +711,86 @@ export interface CardField {
 }
 
 /**
+ * CardImage is an image read from the body of a card or of its epic, in the cache.
+ */
+export interface CardImage {
+    /**
+     * the cache id
+     */
+    "id": string;
+
+    /**
+     * CardImagesRoute + id
+     */
+    "url": string;
+
+    /**
+     * card or epic
+     */
+    "origin": string;
+
+    /**
+     * owner/name#number of the card or the epic
+     */
+    "issue": string;
+
+    /**
+     * the number of that issue
+     */
+    "number": number;
+    "alt": string;
+
+    /**
+     * its place among the images of the body, from 1
+     */
+    "position": number;
+
+    /**
+     * how many images the body has
+     */
+    "count": number;
+}
+
+/**
+ * CardImageFailure is an image of a body that couldn't be read; URL "" says
+ * the body itself couldn't be read.
+ */
+export interface CardImageFailure {
+    /**
+     * card or epic
+     */
+    "origin": string;
+    "issue": string;
+    "number": number;
+
+    /**
+     * the src of the image in the body
+     */
+    "url": string;
+    "alt": string;
+
+    /**
+     * a clause in lower case: "it's over 20 MB"
+     */
+    "reason": string;
+}
+
+/**
+ * CardImages is what reading the images of the cards of a creation gave.
+ */
+export interface CardImages {
+    /**
+     * never nil
+     */
+    "images": CardImage[] | null;
+
+    /**
+     * never nil
+     */
+    "failures": CardImageFailure[] | null;
+}
+
+/**
  * CardIssue is an issue of GitHub a board shows.
  */
 export interface CardIssue {
@@ -857,6 +937,18 @@ export interface CreateTaskRequest {
      * added.
      */
     "card": CreateTaskCard | null;
+
+    /**
+     * Images are the images the user attached, in base64, in the order they
+     * reach the agent.
+     */
+    "images": string[] | null;
+
+    /**
+     * CardImages are the images read from the card and from its epic, as
+     * BoardService.CardImages gave them; ignored without a Card.
+     */
+    "cardImages": CardImage[] | null;
 }
 
 /**
@@ -1475,6 +1567,34 @@ export interface HistorySummary {
      * RFC 3339; History, ReviewHistory and DiscussionHistory hold what was archived from it on
      */
     "windowStart": string;
+}
+
+/**
+ * Image is an image given to the agent, stored with the item of its conversation.
+ */
+export interface Image {
+    "id": string;
+
+    /**
+     * what the webview loads
+     */
+    "url": string;
+
+    /**
+     * user, card or epic
+     */
+    "origin": string;
+
+    /**
+     * owner/name#number of the card or the epic; "" for the user's
+     */
+    "issue": string;
+
+    /**
+     * the number of that issue; 0 for the user's
+     */
+    "number": number;
+    "alt": string;
 }
 
 /**
@@ -3118,6 +3238,18 @@ export interface StartDiscussionRequest {
     "cards": string[] | null;
     "model": string;
     "effort": string;
+
+    /**
+     * Images are the images the user attached, in base64, in the order they
+     * reach the agent.
+     */
+    "images": string[] | null;
+
+    /**
+     * CardImages are the images read from the cards and from their epics, as
+     * BoardService.CardImages gave them.
+     */
+    "cardImages": CardImage[] | null;
 }
 
 /**
@@ -3957,6 +4089,11 @@ export interface UpdateWorking {
  */
 export interface UserEntry {
     "text": string;
+
+    /**
+     * Images went with the message, never nil.
+     */
+    "images": Image[] | null;
     "pending": boolean;
     "prompt": boolean;
     "app": boolean;

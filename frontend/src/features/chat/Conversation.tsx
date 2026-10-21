@@ -92,6 +92,7 @@ function useCardFlash(itemId: string): "question" | "permission" | null {
 function messageOf(text: string): UserEntry {
   return {
     text,
+    images: [],
     pending: false,
     prompt: false,
     app: false,

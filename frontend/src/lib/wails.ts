@@ -26,6 +26,9 @@ import type {
   CardAssignee,
   CardDependency,
   CardField,
+  CardImage,
+  CardImageFailure,
+  CardImages,
   CardIssue,
   CardPullRequest,
   CardRelated,
@@ -51,6 +54,7 @@ import type {
   HistoryPage,
   HistoryRequest,
   HistorySummary,
+  Image,
   Leftover,
   LeftoverBranch,
   LeftoverWorktree,
@@ -155,6 +159,9 @@ export type {
   CardAssignee,
   CardDependency,
   CardField,
+  CardImage,
+  CardImageFailure,
+  CardImages,
   CardIssue,
   CardPullRequest,
   CardRelated,
@@ -180,6 +187,7 @@ export type {
   HistoryPage,
   HistoryRequest,
   HistorySummary,
+  Image,
   Leftover,
   LeftoverBranch,
   LeftoverWorktree,
@@ -1594,6 +1602,10 @@ export const api = {
     BoardService.RefreshCard(boardId, key),
   cardContext: (boardId: string, key: string): Promise<string> =>
     BoardService.CardContext(boardId, key),
+  cardImages: async (boardId: string, keys: string[]): Promise<CardImages> => {
+    const read = await BoardService.CardImages(boardId, keys);
+    return { ...read, images: read.images ?? [], failures: read.failures ?? [] };
+  },
   addRepositoryToBoard: (boardId: string, choice: BoardRepositoryChoice): Promise<void> =>
     BoardService.AddRepositoryToBoard(boardId, choice),
   setTheme: (preference: ThemePreference): Promise<void> => SettingsService.SetTheme(preference),
@@ -1620,8 +1632,8 @@ export const api = {
     TaskService.GetTranscript(taskId, stage),
   getActionOutput: (itemId: string, stage: string, entryId: string): Promise<ActionOutput> =>
     TaskService.GetActionOutput(itemId, stage, entryId),
-  sendMessage: (taskId: string, stage: string, text: string): Promise<void> =>
-    TaskService.SendMessage(taskId, stage, text),
+  sendMessage: (taskId: string, stage: string, text: string, images: string[]): Promise<void> =>
+    TaskService.SendMessage(taskId, stage, text, images),
   removePending: (taskId: string, stage: string, entryId: string): Promise<void> =>
     TaskService.RemovePending(taskId, stage, entryId),
   interrupt: (taskId: string, stage: string): Promise<void> => TaskService.Interrupt(taskId, stage),

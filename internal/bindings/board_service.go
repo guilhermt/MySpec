@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/cardimages"
+	"github.com/guilhermt/myspec/internal/images"
 )
 
 // boardCallTimeout bounds a call that reads GitHub and scans the home folder.
@@ -17,6 +19,7 @@ type BoardService struct {
 	late      late[BoardService]
 	boards    *board.Service
 	documents func(owner, name string, number int) (string, bool)
+	images    *cardimages.Service
 	log       *slog.Logger
 }
 
@@ -26,12 +29,13 @@ type BoardService struct {
 func NewBoardService(
 	boards *board.Service,
 	documents func(owner, name string, number int) (string, bool),
+	images *cardimages.Service,
 	log *slog.Logger,
 ) *BoardService {
 	if documents == nil {
 		documents = func(string, string, int) (string, bool) { return "", false }
 	}
-	return &BoardService{boards: boards, documents: documents, log: log}
+	return &BoardService{boards: boards, documents: documents, images: images, log: log}
 }
 
 // PreviewBoard reads the board at url for registering it: its statuses, with
@@ -188,6 +192,33 @@ func (s *BoardService) CardContext(boardID, key string) (string, error) {
 		return "", s.fail("CardContext", err)
 	}
 	return text, nil
+}
+
+// CardImages reads the images of the bodies of the cards with the given keys
+// and of their epics, which is what a creation shows and starts with. The
+// failures are part of the answer: an image that can't be read doesn't fail
+// the call.
+func (s *BoardService) CardImages(boardID string, keys []string) (CardImages, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return CardImages{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), boardCallTimeout)
+	defer cancel()
+
+	var issues []cardimages.Issue
+	for _, key := range keys {
+		card, ok := s.boards.Card(boardID, key)
+		if !ok {
+			return CardImages{}, s.fail("CardImages", fmt.Errorf("images of card %s: %w", key, board.ErrCardNotFound))
+		}
+		issues = append(issues, cardimages.Issue{Owner: card.Owner, Name: card.Name, Number: card.Number, Origin: images.OriginCard})
+		if card.Epic != nil {
+			e := card.Epic.Issue
+			issues = append(issues, cardimages.Issue{Owner: e.Owner, Name: e.Name, Number: e.Number, Origin: images.OriginEpic})
+		}
+	}
+	return fromCardImages(s.images.Read(ctx, issues)), nil
 }
 
 // AddRepositoryToBoard ties one more repository to a board.

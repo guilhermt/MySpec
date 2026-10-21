@@ -511,6 +511,7 @@ function talk(ask: string, answer: string, ...rest: Entry[]): Entry[] {
     makeEntry("user", {
       user: {
         text: ask,
+        images: [],
         pending: false,
         prompt: true,
         app: false,
@@ -557,6 +558,7 @@ function fixTalk(...rest: Entry[]): Entry[] {
 // USER is the user entry of a message: the fields none of them sets.
 const USER = {
   text: "",
+  images: [],
   pending: false,
   prompt: false,
   app: false,
@@ -586,7 +588,7 @@ function productMessage(
   appKind: string,
   text: string,
   minutes: number,
-  fields: Partial<NonNullable<Entry["user"]>> = {},
+  fields: Partial<Omit<NonNullable<Entry["user"]>, "images">> = {},
 ): Entry {
   return makeEntry("user", {
     createdAt: at(minutes),

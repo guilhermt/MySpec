@@ -85,7 +85,7 @@ describe("Composer", () => {
     await user.click(field());
     await user.keyboard("{Enter}");
 
-    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "ship it");
+    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "ship it", []);
     await waitFor(() => expect(useAppStore.getState().drafts["task-1|prd"]).toBe(""));
   });
 
@@ -118,7 +118,7 @@ describe("Composer", () => {
     await user.type(input, "hi");
     await user.keyboard("{Enter}");
 
-    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "step:1", "hi");
+    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "step:1", "hi", []);
     expect(useAppStore.getState().drafts["task-1|prd"]).toBe("ship it");
   });
 
@@ -186,7 +186,7 @@ describe("Composer", () => {
     expect(send).toHaveAttribute("data-variant", "secondary");
     await user.click(send);
 
-    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "ship it");
+    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "ship it", []);
   });
 
   it("says what a paused conversation resumes", () => {
@@ -206,7 +206,9 @@ describe("Composer", () => {
     await user.click(field());
     await user.keyboard("{Enter}");
 
-    await waitFor(() => expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "ship it"));
+    await waitFor(() =>
+      expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "ship it", []),
+    );
     expect(api.resume).toHaveBeenCalledWith("task-1", "prd");
     expect(vi.mocked(api.resume).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(api.sendMessage).mock.invocationCallOrder[0] ?? 0,
@@ -329,7 +331,7 @@ describe("Composer", () => {
     expect(field()).toHaveAttribute("placeholder", "Answer a or b, or reply to the PRD agent…");
     await user.click(screen.getByRole("button", { name: "b · Per plan" }));
 
-    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "b");
+    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "b", []);
     expect(field()).toHaveValue("ship it");
   });
 

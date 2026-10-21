@@ -170,6 +170,8 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
       cards: cards.map((card) => card.key),
       model: choice.model,
       effort: choice.effort,
+      images: [],
+      cardImages: [],
     })
       .then((id) => {
         closeNewDiscussion();

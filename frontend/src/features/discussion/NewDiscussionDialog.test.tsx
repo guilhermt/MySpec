@@ -206,6 +206,8 @@ describe("NewDiscussionDialog", () => {
         cards: ["dev/web#12"],
         model: "claude-fable-5-1",
         effort: "high",
+        images: [],
+        cardImages: [],
       });
     });
     expect(useAppStore.getState().location).toEqual({ kind: "discussion", id: "discussion-1" });

@@ -66,6 +66,7 @@ describe("applyEvent", () => {
       seq: 1,
       user: {
         text: "later",
+        images: [],
         pending: true,
         prompt: false,
         app: false,
@@ -90,6 +91,7 @@ describe("applyEvent", () => {
       seq: 1,
       user: {
         text: "later",
+        images: [],
         pending: true,
         prompt: false,
         app: false,
@@ -105,6 +107,7 @@ describe("applyEvent", () => {
       ...queued,
       user: {
         text: "later",
+        images: [],
         pending: false,
         prompt: false,
         app: false,
@@ -130,6 +133,7 @@ describe("applyEvent", () => {
       seq: 1,
       user: {
         text: "one",
+        images: [],
         pending: true,
         prompt: false,
         app: false,
@@ -146,6 +150,7 @@ describe("applyEvent", () => {
       seq: 2,
       user: {
         text: "two",
+        images: [],
         pending: true,
         prompt: false,
         app: false,
@@ -203,6 +208,7 @@ describe("applyEvent", () => {
       seq: 2,
       user: {
         text: "later",
+        images: [],
         pending: true,
         prompt: false,
         app: false,

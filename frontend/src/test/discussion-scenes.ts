@@ -1130,6 +1130,7 @@ function settled(drafts: readonly Draft[], publishing: boolean): Draft[] {
 
 const USER: UserEntry = {
   text: "",
+  images: [],
   pending: false,
   prompt: false,
   app: false,

@@ -553,7 +553,7 @@ export async function sendMessageInPlace(
   stage: string,
   text: string,
 ): Promise<string> {
-  return (await inPlace(() => api.sendMessage(taskId, stage, text))) ?? "";
+  return (await inPlace(() => api.sendMessage(taskId, stage, text, []))) ?? "";
 }
 
 export async function removePending(taskId: string, stage: string, entryId: string): Promise<void> {

@@ -126,6 +126,7 @@ const QUEUED: Record<string, TranscriptState> = {
       makeEntry("user", {
         user: {
           text: "and dark mode",
+          images: [],
           pending: true,
           prompt: false,
           app: false,

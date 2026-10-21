@@ -143,6 +143,8 @@ O History do estado é só a janela dos últimos 90 dias (`bindings.HistoryDays`
 
 Os enums dos DTOs viajam como `string`, com um comentário listando os valores, para que os bindings gerados não emitam enums TypeScript; o frontend estreita com funções `asX` em `lib/wails.ts`.
 
+As imagens não passam pelo estado nem pelos eventos: o `UserEntry` de uma conversa traz `images`, uma lista (nunca `null`) de `Image`, cada uma com o `id`, a `url` por onde o webview a carrega (`bindings.ImagesRoute` + id do item + `/` + id da imagem + extensão), a `origin` (`user`, `card` ou `epic`), o `issue` e o `number` do card ou do épico de onde veio (`""` e `0` para uma imagem do usuário) e o `alt`. A conversa guarda só o registro, e o arquivo fica na pasta de artefatos do item. `BoardService.CardImages(boardId, keys)` lê as imagens do corpo de cada card e do épico dele pelo `cardimages` e devolve `CardImages`: as `images` lidas (`CardImage`, com a `url` do cache em `bindings.CardImagesRoute`, a posição no corpo e quantas o corpo tem) e as `failures` (`CardImageFailure`, com a razão e, sem `url`, a leitura do corpo inteiro que falhou). Uma falha não derruba a chamada. As imagens de um card voltam ao Go no `CreateTaskRequest` e no `StartDiscussionRequest` (`cardImages`), junto das que o usuário anexou (`images`, em base64), e `SendMessage` leva as da mensagem do compositor da mesma forma; o Go confere formato e tamanho de cada uma antes de gravar.
+
 ### Eventos
 
 Cinco eventos tipados, registrados em `bindings.RegisterEvents` antes de `application.New`:
@@ -201,7 +203,7 @@ A implementação de uma task One-Shot não tem caminho próprio em `flow`. A in
 
 ### Fronteira com o Go
 
-`lib/wails.ts` é o único arquivo que importa os bindings gerados e o runtime do Wails. Ele reexporta os tipos dos DTOs, define as uniões de strings e as funções `asX` que estreitam os enums, expõe o objeto `api` com uma função por método dos services e as funções `onX` que assinam os eventos. Tudo que está fora de `lib/wails.ts` fala com o Go por essas funções, e os testes substituem só elas.
+`lib/wails.ts` é o único arquivo que importa os bindings gerados e o runtime do Wails. Ele reexporta os tipos dos DTOs, define as uniões de strings e as funções `asX` que estreitam os enums, expõe o objeto `api` com uma função por método dos services e as funções `onX` que assinam os eventos. Tudo que está fora de `lib/wails.ts` fala com o Go por essas funções, e os testes substituem só elas. `api.sendMessage` leva as imagens da mensagem em base64, e `api.cardImages` devolve `images` e `failures` sempre como listas.
 
 O que está além da janela vem do `HistoryService`, que lê a memória dos três services de domínio e converte só sob demanda. `ListArchived` devolve uma página de 50 itens do History inteiro, a janela incluída, depois de um cursor `(arquivamento, id)` em segundos inteiros, filtrada por busca e por repositório (a busca é o nome ou o título sem diferenciar maiúsculas e, num número com ou sem `#`, também o número da pull request, do card ou do review), com `matched`, quantos itens do History inteiro casam. `GetArchived` devolve um arquivado pelo id, seja qual for o tipo. O frontend guarda as páginas e os itens pedidos num cache do store, descrito em [Store](#store).
 

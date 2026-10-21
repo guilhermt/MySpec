@@ -299,10 +299,10 @@ export function ReviewStepMyself(taskID: string): $CancellablePromise<void> {
 
 /**
  * SendMessage queues a message for the agent, delivered right away when the
- * session is free.
+ * session is free. images are the ones attached to it, in base64.
  */
-export function SendMessage(taskID: string, stage: string, text: string): $CancellablePromise<void> {
-    return $Call.ByID(2431074491, taskID, stage, text);
+export function SendMessage(taskID: string, stage: string, text: string, images: string[] | null): $CancellablePromise<void> {
+    return $Call.ByID(2431074491, taskID, stage, text, images);
 }
 
 /**

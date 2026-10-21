@@ -90,6 +90,7 @@ function speech(at: string, text: string, rest: Partial<AssistantEntry> = {}): E
 
 const USER: UserEntry = {
   text: "",
+  images: [],
   pending: false,
   prompt: false,
   app: false,

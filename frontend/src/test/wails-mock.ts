@@ -13,6 +13,7 @@ import type {
   BoardRemoval,
   BoardRepositoryChoice,
   BoardRepositoryOption,
+  CardImages,
   CatalogModel,
   CloseResult,
   CreateTaskRequest,
@@ -121,6 +122,9 @@ export const api = {
   cardContext: vi.fn<(boardId: string, key: string) => Promise<string>>(() =>
     Promise.resolve("### Card: Add the login screen\n"),
   ),
+  cardImages: vi.fn<(boardId: string, keys: string[]) => Promise<CardImages>>(() =>
+    Promise.resolve({ images: [], failures: [] }),
+  ),
   addRepositoryToBoard: vi.fn<(boardId: string, choice: BoardRepositoryChoice) => Promise<void>>(
     () => Promise.resolve(),
   ),
@@ -164,9 +168,9 @@ export const api = {
   getActionOutput: vi.fn<(itemId: string, stage: string, entryId: string) => Promise<ActionOutput>>(
     () => Promise.resolve({ text: "", lines: 0, truncated: false }),
   ),
-  sendMessage: vi.fn<(taskId: string, stage: string, text: string) => Promise<void>>(() =>
-    Promise.resolve(),
-  ),
+  sendMessage: vi.fn<
+    (taskId: string, stage: string, text: string, images: string[]) => Promise<void>
+  >(() => Promise.resolve()),
   removePending: vi.fn<(taskId: string, stage: string, entryId: string) => Promise<void>>(() =>
     Promise.resolve(),
   ),
@@ -1523,6 +1527,7 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
         ...empty,
         user: {
           text: "Add a login screen",
+          images: [],
           pending: false,
           prompt: false,
           app: false,
@@ -1724,6 +1729,7 @@ export function resetWailsMock(): void {
   api.checkBoardRepository.mockImplementation(() => Promise.resolve(makeBoardRepositoryOption()));
   api.previewRemoveBoard.mockImplementation(() => Promise.resolve(makeBoardRemoval()));
   api.cardContext.mockImplementation(() => Promise.resolve("### Card: Add the login screen\n"));
+  api.cardImages.mockImplementation(() => Promise.resolve({ images: [], failures: [] }));
   api.createTask.mockImplementation(() => Promise.resolve("task-1"));
   api.startReview.mockImplementation(() => Promise.resolve("review-1"));
   api.startDiscussion.mockImplementation(() => Promise.resolve("discussion-1"));

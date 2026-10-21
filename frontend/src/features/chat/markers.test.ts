@@ -106,6 +106,7 @@ const MARKER: MarkerEntry = {
 };
 const USER: UserEntry = {
   text: "",
+  images: [],
   pending: false,
   prompt: false,
   app: false,
