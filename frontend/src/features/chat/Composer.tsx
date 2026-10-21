@@ -24,6 +24,7 @@ import {
 import { voiceInSentence, voiceOf } from "@/features/chat/markers";
 import type { SessionState } from "@/features/chat/session";
 import { AttachedImages } from "@/features/images/AttachedImages";
+import { DropHint } from "@/features/images/DropHint";
 import { pasteImages } from "@/features/images/pasteImages";
 import { useImageDrop } from "@/features/images/useImageDrop";
 import { ModelChip } from "@/features/models/ModelChip";
@@ -122,9 +123,9 @@ export function Composer({
   const emptyReasonId = useId();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  // refusal is why the last images weren't attached; imagesHeld, that a question holds the images back.
+  // refusal is why the last images weren't attached; heldBy, the question that held the images back.
   const [refusal, setRefusal] = useState<string | null>(null);
-  const [imagesHeld, setImagesHeld] = useState(false);
+  const [heldBy, setHeldBy] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
   const [saving, setSaving] = useState(false);
   // backToCard counts the texts that left the card incomplete: after each one is drawn on the card,
@@ -258,7 +259,7 @@ export function Composer({
     }
     const text = draft.trim();
     if (question !== null && attachments.length > 0) {
-      setImagesHeld(true);
+      setHeldBy(question.requestId);
       return;
     }
     if (question !== null) {
@@ -301,7 +302,7 @@ export function Composer({
   const footLine =
     error !== ""
       ? `Not sent · ${error}`
-      : imagesHeld && attachments.length > 0 && question !== null
+      : heldBy === requestId && attachments.length > 0
         ? QUESTION_WITH_IMAGES
         : (refusal ?? "");
   const sendLabel = error === "" ? "Send" : "Send again";
@@ -342,11 +343,7 @@ export function Composer({
         )}
         {...drop.handlers}
       >
-        {drop.dragging && (
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-surface-input/80 text-(length:--text-meta) leading-(--leading-meta) text-ink-2">
-            Drop images to attach
-          </div>
-        )}
+        {drop.dragging && <DropHint rounded="lg" />}
         {(starters.length > 0 || chips.length > 0) && (
           <div className="flex min-w-0 flex-wrap items-center gap-(--space-1-5) px-(--space-3) pt-(--space-2)">
             {starters.length > 0 && (
@@ -399,7 +396,7 @@ export function Composer({
               attachments={attachments}
               onRemove={(id) => {
                 removeAttachment(taskId, stage, id);
-                setImagesHeld(false);
+                setHeldBy(null);
               }}
             />
           </div>

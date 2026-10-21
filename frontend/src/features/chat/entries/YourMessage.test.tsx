@@ -3,16 +3,9 @@ import { describe, expect, it } from "vitest";
 import { YourMessage } from "@/features/chat/entries/YourMessage";
 import { clockTime } from "@/lib/when";
 import { renderWithStore } from "@/test/render";
-import { makeEntry } from "@/test/wails-mock";
+import { makeEntry, makeImage } from "@/test/wails-mock";
 
-const IMAGE = {
-  id: "a",
-  url: "/myspec/images/task-1/a.png",
-  origin: "user",
-  issue: "",
-  number: 0,
-  alt: "",
-};
+const IMAGE = makeImage();
 
 describe("YourMessage", () => {
   it("shows what the user wrote, as written, named with its time", () => {

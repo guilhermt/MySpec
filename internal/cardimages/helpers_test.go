@@ -28,7 +28,10 @@ type fakeGitHub struct {
 	release chan struct{}
 }
 
-func (f *fakeGitHub) GraphQL(_ context.Context, query string, _ gh.Vars) (gh.Response, error) {
+func (f *fakeGitHub) GraphQL(ctx context.Context, query string, _ gh.Vars) (gh.Response, error) {
+	if err := ctx.Err(); err != nil {
+		return gh.Response{}, err
+	}
 	f.mu.Lock()
 	f.queries = append(f.queries, query)
 	f.mu.Unlock()

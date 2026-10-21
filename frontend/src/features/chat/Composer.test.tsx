@@ -788,6 +788,24 @@ describe("Composer", () => {
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
 
+    it("doesn't hold the images back from the next question once the held ones went", async () => {
+      const { user, rerender } = renderWithStore(composer(makeTask(), { question: asking() }));
+      paste([png()]);
+      await screen.findByRole("list", { name: "Attached images" });
+      await user.click(screen.getByRole("button", { name: /Send/ }));
+      expect(await screen.findByRole("alert")).toBeInTheDocument();
+
+      // The card answers the question, and the images go in a message of their own.
+      rerender(composer(makeTask(), { question: null }));
+      await user.click(screen.getByRole("button", { name: /Send/ }));
+      await waitFor(() => expect(attached()).toHaveLength(0));
+      rerender(composer(makeTask(), { question: { ...asking(), requestId: "req-2" } }));
+      paste([png("next.png")]);
+      await screen.findByRole("list", { name: "Attached images" });
+
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
     it("sends a quick reply without the images", async () => {
       const chips = [{ key: "a", text: "Per key" }];
       const { user } = renderWithStore(composer(makeTask(), { chips }));

@@ -22,7 +22,8 @@ export interface Refusal {
   reason: "format" | "size";
 }
 
-// The routes repeat ImagesRoute and CardImagesRoute of internal/bindings/images.go.
+// The route repeats CardImagesRoute of internal/bindings/images.go; the URLs of stored images come
+// ready in the DTOs.
 const CARD_IMAGES_ROUTE = "/myspec/card-images/";
 
 const PASTED_NAME = "pasted image";
@@ -180,8 +181,8 @@ export function cardBodyImageUrl(issue: string, src: string): string {
   return `${CARD_IMAGES_ROUTE}body?issue=${encodeURIComponent(issue)}&src=${encodeURIComponent(src)}`;
 }
 
-// carriesFiles says whether a drag brings files.
-function carriesFiles(event: DragEvent): boolean {
+/** carriesFiles says whether a drag, of the DOM or of React, brings files, and not text or a link. */
+export function carriesFiles(event: { dataTransfer: DataTransfer | null }): boolean {
   return Array.from(event.dataTransfer?.types ?? []).includes("Files");
 }
 

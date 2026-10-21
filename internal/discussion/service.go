@@ -14,10 +14,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/guilhermt/myspec/internal/images"
-
 	"github.com/google/uuid"
 
+	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/task"
 )
 

@@ -61,6 +61,7 @@ type turn struct {
 	actions   map[string]*Entry // tool_use_id -> action entry
 	partial   map[int][]byte    // accumulated input_json_delta per block (kept for future use; not rendered)
 	finalized map[int]bool      // block index -> its assistant event has arrived
+	thinking  map[int]string    // block index -> text a thinking block streamed so far, thinking blocks only
 }
 
 // backgroundTask is a task the current process runs in the background: what
@@ -111,6 +112,7 @@ func newTurn(id string, startedAt time.Time) *turn {
 		actions:   map[string]*Entry{},
 		partial:   map[int][]byte{},
 		finalized: map[int]bool{},
+		thinking:  map[int]string{},
 	}
 }
 

@@ -4,7 +4,7 @@ import { QueuedMessage } from "@/features/chat/entries/QueuedMessage";
 import { IDLE_SESSION, type SessionState } from "@/features/chat/session";
 import { api, type UserEntry } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeEntry } from "@/test/wails-mock";
+import { makeEntry, makeImage } from "@/test/wails-mock";
 
 function queued(session: SessionState = IDLE_SESSION) {
   const user = makeEntry("user").user as UserEntry;
@@ -65,16 +65,7 @@ describe("QueuedMessage", () => {
           ...user,
           text: "",
           pending: true,
-          images: [
-            {
-              id: "a",
-              url: "/myspec/images/task-1/a.png",
-              origin: "user",
-              issue: "",
-              number: 0,
-              alt: "Logo",
-            },
-          ],
+          images: [makeImage({ alt: "Logo" })],
         }}
         session={IDLE_SESSION}
       />,

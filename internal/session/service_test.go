@@ -166,6 +166,7 @@ func TestSubagentActionsAndTextCarryTheirParent(t *testing.T) {
 			Kind: session.KindAction, Tool: "Bash", Target: "ls -1", Parent: agentID, Description: "List the files", CommandLines: 1,
 			OutputTail: "hello.txt",
 		},
+		{Kind: session.KindAssistant, Text: claudetest.SubagentNarration, Parent: agentID},
 		{Kind: session.KindAssistant, Text: claudetest.SubagentText, Parent: agentID},
 	}
 	if len(got) != len(want)+1 {
@@ -176,6 +177,53 @@ func TestSubagentActionsAndTextCarryTheirParent(t *testing.T) {
 	}
 	if answer := got[len(want)]; answer.Kind != session.KindAssistant || answer.Parent != "" {
 		t.Errorf("last entry = %+v, want the answer of the main thread", answer)
+	}
+}
+
+func TestNarrationIsASpeechInItsPlace(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "narration")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+
+	tr := f.transcript(t, prd("t1"))
+	kinds := make([]session.Kind, 0, len(tr.Entries))
+	for _, e := range tr.Entries {
+		kinds = append(kinds, e.Kind)
+	}
+	wantKinds := []session.Kind{session.KindMarker, session.KindUser, session.KindAssistant, session.KindAssistant}
+	if diff := cmp.Diff(wantKinds, kinds); diff != "" {
+		t.Fatalf("kinds mismatch (-want +got):\n%s", diff)
+	}
+
+	messageID := tr.Entries[2].Assistant.MessageID
+	want := []*session.AssistantEntry{
+		{MessageID: messageID, BlockIndex: 3, Text: claudetest.Narration, Complete: true},
+		{MessageID: messageID, BlockIndex: 4, Text: claudetest.NarrationAnswer, Complete: true},
+	}
+	if diff := cmp.Diff(want, []*session.AssistantEntry{tr.Entries[2].Assistant, tr.Entries[3].Assistant}); diff != "" {
+		t.Errorf("speeches mismatch (-want +got):\n%s", diff)
+	}
+
+	// Neither the internal reasoning, the blank block nor the redacted one
+	// left a speech, not even for a moment.
+	ids := map[string]bool{}
+	for _, ev := range f.eventsOf(prd("t1"), session.EventEntry) {
+		if ev.Entry.Kind == session.KindAssistant {
+			ids[ev.Entry.ID] = true
+		}
+	}
+	if len(ids) != 2 {
+		t.Errorf("assistant entries emitted = %d, want only the narration and the text", len(ids))
+	}
+
+	if got, want := f.service.LastReply(prd("t1")), claudetest.Narration+"\n\n"+claudetest.NarrationAnswer; got != want {
+		t.Errorf("LastReply() = %q, want %q", got, want)
+	}
+
+	if diff := cmp.Diff(tr.Entries, f.entries.list(t, tr.SessionID)); diff != "" {
+		t.Errorf("stored entries mismatch (-memory +stored):\n%s", diff)
 	}
 }
 
@@ -597,6 +645,38 @@ func TestInterruptEndsTheTurn(t *testing.T) {
 	f.waitEntries(t, prd("t1"), session.KindAssistant, 2)
 	if starts := f.launcher.started(); len(starts) != 1 {
 		t.Errorf("starts = %d, want the same process to take the next message", len(starts))
+	}
+}
+
+func TestStoppingANarrationInterruptsIt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow_narration")
+	f.start(t, taskInfo(t, "t1"))
+	entry := waitStreaming(t, f, prd("t1"))
+
+	if err := f.service.Interrupt(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Interrupt() = %v, want nil", err)
+	}
+	f.waitIdle(t, prd("t1"))
+
+	texts := f.textsOf(prd("t1"), entry.ID)
+	for i := 1; i < len(texts); i++ {
+		if !strings.HasPrefix(texts[i], texts[i-1]) || len(texts[i]) < len(texts[i-1]) {
+			t.Errorf("text events %q then %q, want growing narration", texts[i-1], texts[i])
+		}
+	}
+
+	assistants := f.entriesOf(t, prd("t1"), session.KindAssistant)
+	if len(assistants) != 1 {
+		t.Fatalf("speeches = %d, want only the narration", len(assistants))
+	}
+	got := assistants[0].Assistant
+	if !got.Complete || !got.Interrupted || got.InterruptedBy != "user" || !strings.HasPrefix(got.Text, "tick ") {
+		t.Errorf("assistant = %+v, want a complete narration the user interrupted, with the ticks", got)
+	}
+	if markers := f.entriesOf(t, prd("t1"), session.KindMarker); len(markers) != 1 {
+		t.Errorf("markers = %+v, want only the stage marker when the narration was interrupted", markers)
 	}
 }
 
@@ -2678,6 +2758,27 @@ func TestACrashCutsTheTextShort(t *testing.T) {
 	got := f.entriesOf(t, prd("t1"), session.KindAssistant)[0].Assistant
 	if !got.Complete || !got.Interrupted || got.InterruptedBy != "crash" {
 		t.Errorf("assistant = %+v, want a complete entry the crash interrupted", got)
+	}
+	if markers := f.entriesOf(t, prd("t1"), session.KindMarker); len(markers) != 1 {
+		t.Errorf("markers = %+v, want only the stage marker", markers)
+	}
+}
+
+func TestACrashCutsTheNarrationShort(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow_narration")
+	f.start(t, taskInfo(t, "t1"))
+	waitStreaming(t, f, prd("t1"))
+
+	f.launcher.kill(t)
+	f.waitStatus(t, prd("t1"), "the crash", func(s session.Summary) bool {
+		return s.Status == session.StatusError
+	})
+
+	got := f.entriesOf(t, prd("t1"), session.KindAssistant)[0].Assistant
+	if !got.Complete || !got.Interrupted || got.InterruptedBy != "crash" {
+		t.Errorf("assistant = %+v, want a complete narration the crash interrupted", got)
 	}
 	if markers := f.entriesOf(t, prd("t1"), session.KindMarker); len(markers) != 1 {
 		t.Errorf("markers = %+v, want only the stage marker", markers)

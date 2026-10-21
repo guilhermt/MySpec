@@ -48,10 +48,12 @@ func bodyBatch(issues []Issue) string {
 
 // Read downloads the images of the bodies of issues into the cache. An issue
 // that repeats is read once; the images come in the order of the issues and,
-// in each, of the body.
+// in each, of the body. Only the issues whose body was read count as read for
+// Serve.
 func (s *Service) Read(ctx context.Context, issues []Issue) Reading {
 	var jobs []job
 	var reading Reading
+	var read []Issue
 	for chunk := range slices.Chunk(dedupe(issues), batchSize) {
 		bodies, failures := s.readBodies(ctx, chunk)
 		reading.Failures = append(reading.Failures, failures...)
@@ -59,6 +61,7 @@ func (s *Service) Read(ctx context.Context, issues []Issue) Reading {
 			if bodies[i] == nil {
 				continue
 			}
+			read = append(read, is)
 			found := imagesOf(*bodies[i])
 			for n, f := range found {
 				jobs = append(jobs, job{issue: is, found: f, position: n + 1, count: len(found)})
@@ -75,7 +78,7 @@ func (s *Service) Read(ctx context.Context, issues []Issue) Reading {
 	}
 	now := s.now()
 	s.mu.Lock()
-	for _, is := range dedupe(issues) {
+	for _, is := range read {
 		s.readAt[is.Key()] = now
 	}
 	s.mu.Unlock()
@@ -256,14 +259,11 @@ func (s *Service) fetch(ctx context.Context, j *job) {
 
 	mediaType, ok := s.cached(id)
 	if !ok {
-		data, reason := s.download(ctx, j.found.src)
+		var data []byte
+		var reason string
+		data, mediaType, reason = s.download(ctx, j.found.src)
 		if reason != "" {
 			fail(reason)
-			return
-		}
-		var err error
-		if mediaType, err = images.Sniff(data); err != nil {
-			fail(reasonOfImage(err))
 			return
 		}
 		if err := s.store(id, data); err != nil {
@@ -282,19 +282,20 @@ func reasonOfImage(err error) string {
 	return "it isn't PNG, JPEG, GIF or WebP"
 }
 
-// download is the bytes at src, or the reason it couldn't be had.
-func (s *Service) download(ctx context.Context, src string) ([]byte, string) {
+// download is the bytes at src and their media type, or the reason they
+// couldn't be had.
+func (s *Service) download(ctx context.Context, src string) ([]byte, string, string) {
 	ctx, cancel := context.WithTimeout(ctx, downloadTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src, nil)
 	if err != nil {
-		return nil, "it couldn't be downloaded"
+		return nil, "", "it couldn't be downloaded"
 	}
 	req.Header.Set("User-Agent", s.agent)
 	resp, err := s.client.Do(req)
 	if err != nil {
 		s.log.Debug("card image not downloaded", "error", err)
-		return nil, "it couldn't be downloaded"
+		return nil, "", "it couldn't be downloaded"
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
@@ -302,16 +303,17 @@ func (s *Service) download(ctx context.Context, src string) ([]byte, string) {
 		if host := req.URL.Hostname(); strings.HasSuffix(host, "github.com") || strings.HasSuffix(host, "githubusercontent.com") {
 			who = "GitHub"
 		}
-		return nil, fmt.Sprintf("%s answered %d", who, resp.StatusCode)
+		return nil, "", fmt.Sprintf("%s answered %d", who, resp.StatusCode)
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, images.MaxSize+1))
 	if err != nil {
-		return nil, "it couldn't be downloaded"
+		return nil, "", "it couldn't be downloaded"
 	}
-	if _, err := images.Check(data); err != nil {
-		return nil, reasonOfImage(err)
+	mediaType, err := images.Check(data)
+	if err != nil {
+		return nil, "", reasonOfImage(err)
 	}
-	return data, ""
+	return data, mediaType, ""
 }
 
 // store writes data as the cache file id, through a temporary file.

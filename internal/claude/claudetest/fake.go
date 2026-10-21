@@ -101,11 +101,21 @@ const BashCommand = `echo "hi" > hello.txt`
 const (
 	SubagentType        = "general-purpose"
 	SubagentDescription = "Inspect the folder"
+	SubagentNarration   = "Let me look at the folder first."
 	SubagentText        = "The folder holds hello.txt."
 	SubagentReport      = "hello.txt says hi."
 	FailingCommand      = "go test ./...\ngo vet ./..."
 	FailingDescription  = "Run the tests"
 )
+
+// The narration scenario: what the agent narrates, then says.
+const (
+	Narration       = "Two things don't match: the card says weekly, the spec says daily."
+	NarrationAnswer = "Which one is right?"
+)
+
+// fakeSignature is the signature the thinking blocks of the fake carry.
+const fakeSignature = "c2lnbmF0dXJl"
 
 // The background scenario: a command and a subagent it leaves running, a
 // command in the foreground, and what the agent says when it resumes.
@@ -124,7 +134,7 @@ var Capabilities = []string{"interrupt_receipt_v1", "interrupt_cancel_queued_v1"
 // deltaChunks is how many text deltas a streamed text block is cut into.
 const deltaChunks = 3
 
-// tickInterval is how often the slow scenario emits a text delta.
+// tickInterval is how often the slow scenarios emit a delta.
 const tickInterval = 100 * time.Millisecond
 
 // gatePoll is how often the actions scenario looks for its next gate.
@@ -392,7 +402,11 @@ func (f *fake) play(scenario string) int {
 		case "question":
 			f.questionTurn()
 		case "slow":
-			f.slowTurn()
+			f.slowTurn(false)
+		case "slow_narration":
+			f.slowTurn(true)
+		case "narration":
+			f.narrationTurn()
 		case "spawn":
 			f.spawnTurn()
 		case "actions":
@@ -721,12 +735,34 @@ func (f *fake) questionTurn() {
 	f.result("success", false, reply, "completed")
 }
 
+// narrationTurn narrates, then asks, in one message: block 0 is internal
+// reasoning, with only its signature; block 1 is a thinking block of blanks;
+// block 2 is redacted; block 3 is the narration and block 4 the text.
+func (f *fake) narrationTurn() {
+	f.emitInit()
+	messageID := f.nextID("msg")
+	f.messageStart(messageID)
+	f.streamThinking(0, messageID, "")
+	f.streamThinking(1, messageID, " \n\t ")
+	f.redactedThinking(2, messageID)
+	f.streamThinking(3, messageID, Narration)
+	f.streamText(4, NarrationAnswer)
+	f.endMessage()
+	f.assistantText(messageID, NarrationAnswer)
+	f.result("success", false, NarrationAnswer, "completed")
+}
+
 // slowTurn streams forever and only stops on an interrupt, which leaves the
-// session alive for the next message.
-func (f *fake) slowTurn() {
+// session alive for the next message. With thinking, what grows is a
+// narration instead of a text.
+func (f *fake) slowTurn(thinking bool) {
 	f.emitInit()
 	f.messageStart(f.nextID("msg"))
-	f.blockStart(0, map[string]any{"type": "text", "text": ""})
+	if thinking {
+		f.blockStart(0, map[string]any{"type": "thinking", "thinking": "", "signature": ""})
+	} else {
+		f.blockStart(0, map[string]any{"type": "text", "text": ""})
+	}
 
 	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
@@ -749,7 +785,11 @@ func (f *fake) slowTurn() {
 			f.result("error_during_execution", true, "", "aborted_streaming")
 			return
 		case <-ticker.C:
-			f.textDelta(0, "tick ")
+			if thinking {
+				f.thinkingDelta(0, "tick ")
+			} else {
+				f.textDelta(0, "tick ")
+			}
 		}
 	}
 }
@@ -807,8 +847,8 @@ func (f *fake) actionsTurn(text string) {
 	f.result("success", false, text, "completed")
 }
 
-// subagentTurn delegates to a subagent that reads a file, runs a command and
-// says what it found, then answers with the text it was given. The subagent
+// subagentTurn delegates to a subagent that reads a file, runs a command,
+// narrates and then says what it found, then answers with the text it was given. The subagent
 // streams a text delta the app ignores; its blocks arrive whole.
 func (f *fake) subagentTurn(text string) {
 	f.emitInit()
@@ -833,6 +873,7 @@ func (f *fake) subagentTurn(text string) {
 	f.toolResultWithParent(readID, "1\thi\n", agentID)
 	f.toolUseWithParent(subMessageID, bashID, "Bash", map[string]any{"command": "ls -1", "description": "List the files"}, agentID)
 	f.toolResultWithParent(bashID, "hello.txt", agentID)
+	f.assistantThinkingWithParent(subMessageID, SubagentNarration, agentID)
 	f.assistantTextWithParent(subMessageID, SubagentText, agentID)
 	f.subagentResult(agentID, SubagentReport)
 
@@ -1045,6 +1086,26 @@ func (f *fake) streamText(index int, text string) {
 	f.blockStop(index)
 }
 
+// streamThinking streams a thinking block in deltaChunks pieces, in the order
+// of the real CLI: the assistant event of the block comes before its stop.
+func (f *fake) streamThinking(index int, messageID, text string) {
+	f.blockStart(index, map[string]any{"type": "thinking", "thinking": "", "signature": ""})
+	for _, chunk := range splitWords(text, deltaChunks) {
+		f.thinkingDelta(index, chunk)
+	}
+	f.signatureDelta(index)
+	f.assistantBlock(messageID, map[string]any{"type": "thinking", "thinking": text, "signature": fakeSignature})
+	f.blockStop(index)
+}
+
+// redactedThinking streams a redacted thinking block, which has no text.
+func (f *fake) redactedThinking(index int, messageID string) {
+	block := map[string]any{"type": "redacted_thinking", "data": fakeSignature}
+	f.blockStart(index, block)
+	f.assistantBlock(messageID, block)
+	f.blockStop(index)
+}
+
 // streamToolUse streams a tool_use block and the assistant event that closes it.
 func (f *fake) streamToolUse(index int, messageID, toolUseID, name string, input map[string]any) {
 	f.blockStart(index, map[string]any{
@@ -1096,8 +1157,32 @@ func (f *fake) textDelta(index int, text string) {
 	})
 }
 
+// thinkingDelta streams one piece of a thinking block.
+func (f *fake) thinkingDelta(index int, text string) {
+	f.streamEvent(map[string]any{
+		"type":  "content_block_delta",
+		"index": index,
+		"delta": map[string]any{"type": "thinking_delta", "thinking": text},
+	})
+}
+
+// signatureDelta streams the signature of a thinking block.
+func (f *fake) signatureDelta(index int) {
+	f.streamEvent(map[string]any{
+		"type":  "content_block_delta",
+		"index": index,
+		"delta": map[string]any{"type": "signature_delta", "signature": fakeSignature},
+	})
+}
+
 // assistantText emits the authoritative version of a text block.
 func (f *fake) assistantText(messageID, text string) {
+	f.assistantBlock(messageID, map[string]any{"type": "text", "text": text})
+}
+
+// assistantBlock emits the authoritative version of one block of the main
+// thread.
+func (f *fake) assistantBlock(messageID string, block map[string]any) {
 	f.emit(map[string]any{
 		"type": "assistant",
 		"message": map[string]any{
@@ -1105,7 +1190,7 @@ func (f *fake) assistantText(messageID, text string) {
 			"model":   Model,
 			"role":    "assistant",
 			"type":    "message",
-			"content": []any{map[string]any{"type": "text", "text": text}},
+			"content": []any{block},
 		},
 		"parent_tool_use_id": nil,
 	})
@@ -1136,6 +1221,21 @@ func (f *fake) assistantTextWithParent(messageID, text, parent string) {
 			"role":    "assistant",
 			"type":    "message",
 			"content": []any{map[string]any{"type": "text", "text": text}},
+		},
+		"parent_tool_use_id": parent,
+	})
+}
+
+// assistantThinkingWithParent emits a whole thinking block of a subagent.
+func (f *fake) assistantThinkingWithParent(messageID, text, parent string) {
+	f.emit(map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":      messageID,
+			"model":   Model,
+			"role":    "assistant",
+			"type":    "message",
+			"content": []any{map[string]any{"type": "thinking", "thinking": text, "signature": fakeSignature}},
 		},
 		"parent_tool_use_id": parent,
 	})

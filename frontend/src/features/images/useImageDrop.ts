@@ -1,5 +1,5 @@
 import { type DragEvent, useState } from "react";
-import { imageFiles } from "@/lib/images";
+import { carriesFiles, imageFiles } from "@/lib/images";
 
 export interface ImageDrop {
   /** dragging says files are over the target. */
@@ -10,11 +10,6 @@ export interface ImageDrop {
     onDragLeave: (event: DragEvent) => void;
     onDrop: (event: DragEvent) => void;
   };
-}
-
-// carriesFiles says whether a drag brings files, and not text or a link.
-function carriesFiles(event: DragEvent): boolean {
-  return Array.from(event.dataTransfer.types).includes("Files");
 }
 
 /**

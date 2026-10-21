@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/guilhermt/myspec/internal/images"
-
 	"github.com/guilhermt/myspec/internal/task"
 )
 

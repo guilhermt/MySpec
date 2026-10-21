@@ -253,6 +253,7 @@ func (s *Service) handleStream(ctx context.Context, r *run, ev *claude.StreamEve
 		t.toolNames = map[int]string{}
 		t.partial = map[int][]byte{}
 		t.finalized = map[int]bool{}
+		t.thinking = map[int]string{}
 		r.rec.ContextTokens = event.Message.Usage.ContextTokens()
 		n.state(r.key())
 	case "content_block_start":
@@ -275,8 +276,10 @@ func (s *Service) handleStream(ctx context.Context, r *run, ev *claude.StreamEve
 			s.armFlushLocked(r)
 		case "input_json_delta":
 			t.partial[event.Index] = append(t.partial[event.Index], event.Delta.PartialJSON...)
+		case "thinking_delta":
+			s.streamThinking(ctx, r, event.Index, event.Delta.Thinking, n)
 		default:
-			// Thinking and signature deltas carry nothing to show.
+			// Signature deltas carry nothing to show.
 		}
 	case "content_block_stop":
 		e := t.blocks[event.Index]
@@ -315,9 +318,41 @@ func (s *Service) startBlock(ctx context.Context, r *run, index int, block claud
 		t.blocks[index] = e
 		t.actions[block.ID] = e
 		n.state(r.key())
+	case "thinking":
+		t.thinking[index] = ""
+		s.streamThinking(ctx, r, index, block.Thinking, n)
 	default:
-		// Thinking blocks are not shown.
+		// A redacted thinking block has no text to show.
 	}
+}
+
+// streamThinking adds a piece to a thinking block of the current message. The
+// block is narration, a speech like a text, from the first piece that makes
+// its text not blank on; internal reasoning, which never gets readable text,
+// leaves nothing in the conversation.
+func (s *Service) streamThinking(ctx context.Context, r *run, index int, piece string, n *notes) {
+	t := r.turn
+	text, ok := t.thinking[index]
+	if !ok {
+		return // not a thinking block of the current message
+	}
+	text += piece
+	t.thinking[index] = text
+	if e := t.blocks[index]; e != nil {
+		e.Assistant.Text = text
+		r.dirty[e.ID] = struct{}{}
+		s.armFlushLocked(r)
+		return
+	}
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	// The entry event already carries the text, so the entry is not dirty.
+	t.blocks[index] = s.appendLocked(ctx, r, Entry{Kind: KindAssistant, Assistant: &AssistantEntry{
+		MessageID:  t.messageID,
+		BlockIndex: index,
+		Text:       text,
+	}}, n)
 }
 
 // handleAssistant applies the authoritative version of a content block.
@@ -331,11 +366,12 @@ func (s *Service) handleAssistant(ctx context.Context, r *run, ev *claude.Assist
 	for i, block := range ev.Message.Content {
 		switch block.Type {
 		case "text":
-			e := s.textEntry(ctx, r, ev.Message.ID, i, parent, n)
-			e.Assistant.Text = block.Text
-			e.Assistant.Complete = true
-			delete(r.dirty, e.ID)
-			s.updateLocked(ctx, r, e, n)
+			s.finishSpeech(ctx, r, ev.Message.ID, i, parent, false, block.Text, n)
+		case "thinking":
+			if strings.TrimSpace(block.Thinking) == "" {
+				continue // internal reasoning: only the signature
+			}
+			s.finishSpeech(ctx, r, ev.Message.ID, i, parent, true, block.Thinking, n)
 		case "tool_use":
 			if block.Name == askUserQuestionTool {
 				continue
@@ -359,20 +395,31 @@ func (s *Service) handleAssistant(ctx context.Context, r *run, ev *claude.Assist
 			s.updateLocked(ctx, r, e, n)
 			n.state(r.key())
 		default:
-			// Thinking blocks are not shown.
+			// A redacted thinking block has no text to show.
 		}
 	}
 }
 
-// textEntry finds the streamed entry an assistant text block is the final
-// version of: the first text block of the message not yet finalized, in block
-// order. When the stream did not announce the block, the entry is created now,
-// with the subagent that wrote it.
-func (s *Service) textEntry(ctx context.Context, r *run, messageID string, position int, parent string, n *notes) *Entry {
+// finishSpeech applies the authoritative version of a speech: a text block or,
+// with thinking, the narration of a thinking block.
+func (s *Service) finishSpeech(ctx context.Context, r *run, messageID string, position int, parent string, thinking bool, text string, n *notes) {
+	e := s.textEntry(ctx, r, messageID, position, parent, thinking, n)
+	e.Assistant.Text = text
+	e.Assistant.Complete = true
+	delete(r.dirty, e.ID)
+	s.updateLocked(ctx, r, e, n)
+}
+
+// textEntry finds the streamed entry a speech block is the final version of:
+// the first block of the message of the same kind, text or thinking, not yet
+// finalized, in block order. When the stream did not announce the block, the
+// entry is created now, with the subagent that wrote it.
+func (s *Service) textEntry(ctx context.Context, r *run, messageID string, position int, parent string, thinking bool, n *notes) *Entry {
 	t := r.turn
 	indexes := make([]int, 0, len(t.blocks))
 	for index, e := range t.blocks {
-		if e.Kind == KindAssistant && e.Assistant.MessageID == messageID && !t.finalized[index] {
+		_, isThinking := t.thinking[index]
+		if e.Kind == KindAssistant && e.Assistant.MessageID == messageID && !t.finalized[index] && isThinking == thinking {
 			indexes = append(indexes, index)
 		}
 	}

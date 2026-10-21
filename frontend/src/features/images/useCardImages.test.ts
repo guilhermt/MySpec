@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { useCardImages } from "@/features/images/useCardImages";
 import { api } from "@/lib/wails";
@@ -67,8 +67,11 @@ describe("useCardImages", () => {
 
     rerender({ again: 1 });
     await waitFor(() => expect(result.current.images).toHaveLength(1));
-    first({ images: [makeCardImage({ alt: "First" })], failures: [] });
-    await Promise.resolve();
+    // The stale result reaches setRead only after several microtasks: the queue empties first.
+    await act(async () => {
+      first({ images: [makeCardImage({ alt: "First" })], failures: [] });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
 
     expect(api.cardImages).toHaveBeenCalledTimes(2);
     expect(result.current.images[0]?.alt).toBe("Second");

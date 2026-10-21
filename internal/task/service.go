@@ -15,11 +15,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/guilhermt/myspec/internal/images"
-
 	"github.com/google/uuid"
 
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/repository"

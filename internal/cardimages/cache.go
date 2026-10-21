@@ -24,6 +24,8 @@ const (
 	// freshFor is how long after a reading of an issue a missing image is
 	// taken as not in its body, or failed, rather than read again.
 	freshFor = 5 * time.Minute
+	// serveTimeout bounds the reading Serve does on demand.
+	serveTimeout = 2 * time.Minute
 )
 
 var idPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -84,9 +86,13 @@ func (s *Service) Serve(ctx context.Context, issueKey, src string) (string, erro
 	if read && s.now().Sub(at) < freshFor {
 		return "", ErrNotCached
 	}
-	// A body with 5 images asks for 5 URLs at once, and one reading serves them all.
+	// A body with 5 images asks for 5 URLs at once, and one reading serves them
+	// all. It outlives the request that started it, which the webview may cancel
+	// while the others still wait.
 	_, _, _ = s.group.Do(issue.Key(), func() (any, error) {
-		return s.Read(ctx, []Issue{issue}), nil
+		readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), serveTimeout)
+		defer cancel()
+		return s.Read(readCtx, []Issue{issue}), nil
 	})
 	if exists(path) {
 		return path, nil

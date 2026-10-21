@@ -6,10 +6,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/guilhermt/myspec/internal/images"
-
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/discussion"
+	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/repository"
@@ -27,7 +26,7 @@ type StartParams struct {
 	Text    string   // what the user wrote; "" for none
 	Cards   []string // the keys of the cards of the stored reading
 	Choice  models.Choice
-	Images  []images.Upload // the images the user attached, in the order they reach the agent
+	Images  []images.Upload // the images of the initial context, in the order they reach the agent
 }
 
 // Start opens a discussion of a demand of a board: it builds the initial

@@ -35,7 +35,7 @@ type EntryRepository interface {
 // Process is the running CLI, as internal/claude provides it.
 type Process interface {
 	Events() <-chan claude.Event
-	Send(text string, images []claude.Image) error
+	Send(text string, imgs []claude.Image) error
 	Interrupt() (string, error)
 	Respond(requestID string, resp claude.PermissionResponse) error
 	CloseInput() error

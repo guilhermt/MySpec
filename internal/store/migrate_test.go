@@ -1291,6 +1291,16 @@ func TestTheInitialImagesMigrationGivesEveryTaskAndDiscussionAnEmptyList(t *test
 	t.Parallel()
 
 	db := openAt(t, prReviewFixesVersion)
+	if _, err := db.ExecContext(t.Context(), `INSERT INTO repositories (id, owner, name, path, created_at)
+		VALUES ('repo-1', 'acme', 'api', '/code/api', '2026-09-06T10:00:00Z')`); err != nil {
+		t.Fatalf("insert repository: %v", err)
+	}
+	if _, err := db.ExecContext(t.Context(), `INSERT INTO tasks
+		(id, repository_id, name, initial_context, stage, artifacts_dir, created_at, updated_at)
+		VALUES ('t-1', 'repo-1', 'task', 'context', 'prd', '/data/x',
+			'2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`); err != nil {
+		t.Fatalf("insert task: %v", err)
+	}
 	if _, err := db.ExecContext(t.Context(), `INSERT INTO discussions
 		(id, board_id, board_title, title, initial_context, artifacts_dir, created_at, updated_at)
 		VALUES ('d-1', 'board-1', 'Board', 'Discussion', 'context', '/data/discussions/x',
@@ -1302,6 +1312,9 @@ func TestTheInitialImagesMigrationGivesEveryTaskAndDiscussionAnEmptyList(t *test
 		t.Fatalf("migrate() = %v, want nil", err)
 	}
 
+	if got := readOne(t, db, `SELECT initial_images FROM tasks WHERE id = 't-1'`); got != "[]" {
+		t.Errorf("initial_images of the task = %q, want %q", got, "[]")
+	}
 	if got := readOne(t, db, `SELECT initial_images FROM discussions WHERE id = 'd-1'`); got != "[]" {
 		t.Errorf("initial_images of the discussion = %q, want %q", got, "[]")
 	}

@@ -370,7 +370,8 @@ func (a *App) runInBackground() {
 	// The pull requests the app waits for are merged outside it, so it asks
 	// GitHub about them on a timer of its own for as long as it runs.
 	go a.pollPRs(a.pollCtx)
-	// The cache of the images of the cards drops what wasn't used in a month.
+	// The cache of the images of the cards drops what was downloaded over 30
+	// days ago, used or not.
 	go a.cardImages.Prune()
 }
 

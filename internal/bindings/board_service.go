@@ -16,11 +16,11 @@ const boardCallTimeout = 3 * time.Minute
 
 // BoardService is the board API the frontend calls.
 type BoardService struct {
-	late      late[BoardService]
-	boards    *board.Service
-	documents func(owner, name string, number int) (string, bool)
-	images    *cardimages.Service
-	log       *slog.Logger
+	late       late[BoardService]
+	boards     *board.Service
+	documents  func(owner, name string, number int) (string, bool)
+	cardImages *cardimages.Service
+	log        *slog.Logger
 }
 
 // NewBoardService builds the service over the board domain. documents is the
@@ -29,13 +29,13 @@ type BoardService struct {
 func NewBoardService(
 	boards *board.Service,
 	documents func(owner, name string, number int) (string, bool),
-	images *cardimages.Service,
+	cardImages *cardimages.Service,
 	log *slog.Logger,
 ) *BoardService {
 	if documents == nil {
 		documents = func(string, string, int) (string, bool) { return "", false }
 	}
-	return &BoardService{boards: boards, documents: documents, images: images, log: log}
+	return &BoardService{boards: boards, documents: documents, cardImages: cardImages, log: log}
 }
 
 // PreviewBoard reads the board at url for registering it: its statuses, with
@@ -218,7 +218,7 @@ func (s *BoardService) CardImages(boardID string, keys []string) (CardImages, er
 			issues = append(issues, cardimages.Issue{Owner: e.Owner, Name: e.Name, Number: e.Number, Origin: images.OriginEpic})
 		}
 	}
-	return fromCardImages(s.images.Read(ctx, issues)), nil
+	return fromCardImages(s.cardImages.Read(ctx, issues)), nil
 }
 
 // AddRepositoryToBoard ties one more repository to a board.

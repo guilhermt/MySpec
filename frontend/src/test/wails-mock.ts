@@ -33,6 +33,7 @@ import type {
   HistoryPage,
   HistoryRequest,
   HistorySummary,
+  Image,
   Leftover,
   Machine,
   MachineItem,
@@ -566,6 +567,18 @@ export function makeBoard(overrides: Partial<Board> = {}): Board {
     viewer: "dev",
     cards: [],
     newCardStatus: "",
+    ...overrides,
+  };
+}
+
+export function makeImage(overrides: Partial<Image> = {}): Image {
+  return {
+    id: "a",
+    url: "/myspec/images/task-1/a.png",
+    origin: "user",
+    issue: "",
+    number: 0,
+    alt: "",
     ...overrides,
   };
 }

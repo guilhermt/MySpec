@@ -1477,8 +1477,9 @@ func TestCreateRefusesABadImageWithoutCreatingTheFolder(t *testing.T) {
 		t.Fatalf("Create() = %v, want ErrFormat", err)
 	}
 
-	if dir := task.ArtifactsDir(f.dataDir, "dev", "web", "add-login"); exists(dir) {
-		t.Errorf("artifacts directory %s exists after a refused create", dir)
+	// Nothing at all is created: not the folder, nor the parents MkdirAll would make.
+	if entries, err := os.ReadDir(filepath.Join(f.dataDir, "tasks")); err == nil && len(entries) > 0 {
+		t.Errorf("folders = %d, want none", len(entries))
 	}
 }
 

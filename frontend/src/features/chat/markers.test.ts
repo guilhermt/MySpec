@@ -42,6 +42,7 @@ import {
   makeDraft,
   makeDraftRef,
   makeEntry,
+  makeImage,
   makeMarkerCommit,
   makePRCheck,
   makePRReport,
@@ -1408,14 +1409,13 @@ describe("discussionOpeningOf", () => {
   });
 
   it("splits the images: the user's are the message's, the rest are the context's", () => {
-    const image = (origin: string, id: string) => ({
-      id,
-      url: `/myspec/images/d/${id}.png`,
-      origin,
-      issue: origin === "user" ? "" : "acme/api#455",
-      number: origin === "user" ? 0 : 455,
-      alt: "",
-    });
+    const image = (origin: string, id: string) =>
+      makeImage({
+        id,
+        url: `/myspec/images/d/${id}.png`,
+        origin,
+        ...(origin === "user" ? {} : { issue: "acme/api#455", number: 455 }),
+      });
     const opening = discussionOpeningOf(
       {
         ...prompt({ text: "The context." }),

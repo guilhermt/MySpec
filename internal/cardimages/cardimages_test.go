@@ -1,6 +1,7 @@
 package cardimages_test
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -276,6 +277,42 @@ func TestServeDoesNotReadAgainAnIssueReadAMomentAgo(t *testing.T) {
 	_, err = f.service.Serve(t.Context(), "owner/name#1", srv.URL+"/gone.png")
 	if !errors.Is(err, cardimages.ErrNotCached) || f.github.queryCount() != 2 {
 		t.Errorf("after 6 minutes: Serve = %v, queries = %d, want ErrNotCached and 2", err, f.github.queryCount())
+	}
+}
+
+func TestServeReadsAgainAnIssueWhoseBodyWasNotRead(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := assets(t, map[string][]byte{"/a.png": png})
+	f := newFixture(t, cardimages.Deps{})
+	f.github.bodies["owner/name#1"] = img(srv.URL+"/a.png", "")
+	f.github.err = gh.ErrRateLimited
+
+	_, err := f.service.Serve(t.Context(), "owner/name#1", srv.URL+"/a.png")
+	if !errors.Is(err, cardimages.ErrNotCached) {
+		t.Fatalf("Serve with the query failing = %v, want ErrNotCached", err)
+	}
+
+	f.github.err = nil
+	path, err := f.service.Serve(t.Context(), "owner/name#1", srv.URL+"/a.png")
+	if err != nil || path == "" || f.github.queryCount() != 2 {
+		t.Errorf("Serve = %q, %v, queries = %d, want the file and 2", path, err, f.github.queryCount())
+	}
+}
+
+func TestServeFinishesTheReadingWhenTheRequestIsCanceled(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := assets(t, map[string][]byte{"/a.png": png})
+	f := newFixture(t, cardimages.Deps{})
+	f.github.bodies["owner/name#1"] = img(srv.URL+"/a.png", "")
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	path, err := f.service.Serve(ctx, "owner/name#1", srv.URL+"/a.png")
+
+	if err != nil || path == "" {
+		t.Errorf("Serve = %q, %v, want the file", path, err)
 	}
 }
 

@@ -8,6 +8,7 @@ import { clockTime } from "@/lib/when";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import {
+  makeImage,
   makePRCheck,
   makeReviewPass,
   makeReviewSummary,
@@ -561,8 +562,8 @@ describe("MarkerLine", () => {
 
   it("opens the Markdown with its images below, with their captions, and its image links as markers", async () => {
     const images = [
-      { id: "a", url: "/i/a.png", origin: "card", issue: "acme/api#474", number: 474, alt: "" },
-      { id: "b", url: "/i/b.png", origin: "user", issue: "", number: 0, alt: "" },
+      makeImage({ id: "a", url: "/i/a.png", origin: "card", issue: "acme/api#474", number: 474 }),
+      makeImage({ id: "b", url: "/i/b.png" }),
     ];
     const { user } = line(
       view({
@@ -587,7 +588,7 @@ describe("MarkerLine", () => {
 
   it("opens the context of a discussion with the images of its cards", async () => {
     const images = [
-      { id: "a", url: "/i/a.png", origin: "epic", issue: "acme/api#470", number: 470, alt: "" },
+      makeImage({ id: "a", url: "/i/a.png", origin: "epic", issue: "acme/api#470", number: 470 }),
     ];
     const { user } = line(
       view({
