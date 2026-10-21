@@ -20,7 +20,7 @@ type DiscussionsRepo struct{ db *sql.DB }
 
 // discussionColumns is the column list every discussion query selects, in scan
 // order.
-const discussionColumns = `id, board_id, board_title, title, text, initial_context, artifacts_dir,
+const discussionColumns = `id, board_id, board_title, title, text, initial_context, initial_images, artifacts_dir,
 	drafts_read, drafts_revision, archived_at, created_at, updated_at`
 
 // discussionCardColumns is the column list every card query selects, in scan
@@ -118,8 +118,12 @@ func (r *DiscussionsRepo) cards(ctx context.Context, discussionID string) ([]dis
 // Insert stores a new discussion with the cards it started from.
 func (r *DiscussionsRepo) Insert(ctx context.Context, d discussion.Discussion) error {
 	const stmt = `INSERT INTO discussions (` + discussionColumns + `)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
+	encodedImages, err := encodeImages(d.InitialImages)
+	if err != nil {
+		return fmt.Errorf("insert discussion %s: %w", d.ID, err)
+	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin insert discussion %s: %w", d.ID, err)
@@ -127,7 +131,7 @@ func (r *DiscussionsRepo) Insert(ctx context.Context, d discussion.Discussion) e
 	defer func() { _ = tx.Rollback() }()
 
 	_, err = tx.ExecContext(ctx, stmt, d.ID, d.BoardID, d.BoardTitle, d.Title, d.Text,
-		d.InitialContext, d.ArtifactsDir, d.DraftsRead, d.DraftsRevision,
+		d.InitialContext, encodedImages, d.ArtifactsDir, d.DraftsRead, d.DraftsRevision,
 		nullTime(d.ArchivedAt), formatTime(d.CreatedAt), formatTime(d.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("insert discussion %s: %w", d.ID, err)
@@ -396,14 +400,18 @@ func scanDiscussion(row scanner) (discussion.Discussion, error) {
 		d                    discussion.Discussion
 		archivedAt           sql.NullString
 		createdAt, updatedAt string
+		encodedImages        string
 	)
-	err := row.Scan(&d.ID, &d.BoardID, &d.BoardTitle, &d.Title, &d.Text, &d.InitialContext,
+	err := row.Scan(&d.ID, &d.BoardID, &d.BoardTitle, &d.Title, &d.Text, &d.InitialContext, &encodedImages,
 		&d.ArtifactsDir, &d.DraftsRead, &d.DraftsRevision, &archivedAt, &createdAt, &updatedAt)
 	if err != nil {
 		return discussion.Discussion{}, fmt.Errorf("scan discussion: %w", err)
 	}
 
 	subject := "discussion " + d.ID
+	if d.InitialImages, err = decodeImages(encodedImages); err != nil {
+		return discussion.Discussion{}, fmt.Errorf("read %s: %w", subject, err)
+	}
 	if archivedAt.Valid {
 		if d.ArchivedAt, err = parseTime(archivedAt.String, subject); err != nil {
 			return discussion.Discussion{}, err

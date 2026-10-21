@@ -51,7 +51,7 @@ const (
 	roundsVersion        = 24
 	savedStatusesVersion = 25
 	prReviewFixesVersion = 26
-	latestVersion        = 26
+	latestVersion        = 27
 )
 
 // upgradeTime is the instant the repositories of the fake upgrades are stamped
@@ -1284,6 +1284,26 @@ func TestTheChainMigrationTakesBackTheApprovalOfAnEpicNeverStarted(t *testing.T)
 		if got := readOne(t, db, query); got != want {
 			t.Errorf("decision|publish_error of %s = %q, want %q", id, got, want)
 		}
+	}
+}
+
+func TestTheInitialImagesMigrationGivesEveryTaskAndDiscussionAnEmptyList(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, prReviewFixesVersion)
+	if _, err := db.ExecContext(t.Context(), `INSERT INTO discussions
+		(id, board_id, board_title, title, initial_context, artifacts_dir, created_at, updated_at)
+		VALUES ('d-1', 'board-1', 'Board', 'Discussion', 'context', '/data/discussions/x',
+			'2026-09-06T10:00:00Z', '2026-09-06T10:00:00Z')`); err != nil {
+		t.Fatalf("insert discussion: %v", err)
+	}
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), carryOver(t)); err != nil {
+		t.Fatalf("migrate() = %v, want nil", err)
+	}
+
+	if got := readOne(t, db, `SELECT initial_images FROM discussions WHERE id = 'd-1'`); got != "[]" {
+		t.Errorf("initial_images of the discussion = %q, want %q", got, "[]")
 	}
 }
 

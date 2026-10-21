@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"slices"
 	"time"
+
+	"github.com/guilhermt/myspec/internal/images"
 )
 
 // Stage is how far a task has gone in the workflow.
@@ -53,6 +55,7 @@ type Task struct {
 	Name            string
 	Mode            Mode // how the task is conducted; chosen at creation, never changed
 	InitialContext  string
+	InitialImages   []images.Image // the images of the initial context, in the order they reach the agent
 	Stage           Stage
 	Revisiting      bool
 	ArtifactsDir    string

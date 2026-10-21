@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/reviewmode"
 	"github.com/guilhermt/myspec/internal/session"
@@ -28,6 +29,47 @@ func TestTasksInsertAndGet(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Get() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestTasksKeepTheInitialImagesInOrder(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	want := newTask("task-1", webRepo, "one", fixedTime)
+	want.InitialImages = []images.Image{
+		{ID: "b", MediaType: images.PNG, Origin: images.OriginCard, Issue: "dev/web#1", Alt: "a chart", Position: 1, Count: 2},
+		{ID: "a", MediaType: images.JPEG, Origin: images.OriginUser},
+	}
+	if err := s.Tasks.Insert(t.Context(), want); err != nil {
+		t.Fatalf("Insert() = %v, want nil", err)
+	}
+
+	got, err := s.Tasks.Get(t.Context(), want.ID)
+	if err != nil {
+		t.Fatalf("Get() = %v, want nil", err)
+	}
+	if diff := cmp.Diff(want.InitialImages, got.InitialImages); diff != "" {
+		t.Errorf("InitialImages mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestTasksReadNoInitialImagesAsNil(t *testing.T) {
+	t.Parallel()
+	s := newStoreWithRepositories(t)
+
+	want := newTask("task-1", webRepo, "one", fixedTime)
+	want.InitialImages = []images.Image{}
+	if err := s.Tasks.Insert(t.Context(), want); err != nil {
+		t.Fatalf("Insert() = %v, want nil", err)
+	}
+
+	got, err := s.Tasks.Get(t.Context(), want.ID)
+	if err != nil {
+		t.Fatalf("Get() = %v, want nil", err)
+	}
+	if got.InitialImages != nil {
+		t.Errorf("InitialImages = %v, want nil", got.InitialImages)
 	}
 }
 

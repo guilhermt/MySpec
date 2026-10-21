@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/images"
+
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -309,6 +311,7 @@ type Discussion struct {
 	Title          string
 	Text           string // what the user wrote when creating it; "" for none
 	InitialContext string
+	InitialImages  []images.Image // the images of the initial context, in the order they reach the agent
 	ArtifactsDir   string
 	Cards          []InputCard
 	DraftsRead     bool // a readable drafts artifact was recorded

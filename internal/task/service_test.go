@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/reviewmode"
@@ -1415,4 +1416,155 @@ func TestRemoveArtifactsOfAFolderAlreadyEmpty(t *testing.T) {
 		t.Errorf("RemoveArtifacts() = %v, want nil", err)
 	}
 	wantErrIs(t, f.service.RemoveArtifacts(t.Context(), "nope", task.StagePRD), task.ErrNotFound)
+}
+
+var pngData = append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 8)...)
+
+func TestCreateStoresTheImagesOfTheContext(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created, err := f.service.Create(t.Context(), task.CreateParams{
+		Name:           "add-login",
+		RepositoryID:   repoID,
+		InitialContext: "a login screen",
+		Images: []images.Upload{
+			{Image: images.Image{Origin: images.OriginUser}, Data: pngData},
+			{Image: images.Image{Origin: images.OriginUser, Alt: "second"}, Data: pngData},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Create() = %v, want nil", err)
+	}
+
+	if got := len(created.InitialImages); got != 2 {
+		t.Fatalf("InitialImages has %d images, want 2", got)
+	}
+	for _, img := range created.InitialImages {
+		if img.MediaType != images.PNG {
+			t.Errorf("media type = %q, want %q", img.MediaType, images.PNG)
+		}
+		if !exists(images.Path(created.ArtifactsDir, img)) {
+			t.Errorf("file of image %s does not exist", img.ID)
+		}
+	}
+	if created.InitialImages[1].Alt != "second" {
+		t.Errorf("second image alt = %q, want %q", created.InitialImages[1].Alt, "second")
+	}
+	stored, err := f.repo.Get(t.Context(), created.ID)
+	if err != nil {
+		t.Fatalf("repo.Get() = %v, want nil", err)
+	}
+	if diff := cmp.Diff(created.InitialImages, stored.InitialImages); diff != "" {
+		t.Errorf("stored InitialImages mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestCreateRefusesABadImageWithoutCreatingTheFolder(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	_, err := f.service.Create(t.Context(), task.CreateParams{
+		Name:           "add-login",
+		RepositoryID:   repoID,
+		InitialContext: "a login screen",
+		Images: []images.Upload{
+			{Data: pngData},
+			{Data: []byte("%PDF-1.7 not an image")},
+		},
+	})
+	if !errors.Is(err, images.ErrFormat) {
+		t.Fatalf("Create() = %v, want ErrFormat", err)
+	}
+
+	if dir := task.ArtifactsDir(f.dataDir, "dev", "web", "add-login"); exists(dir) {
+		t.Errorf("artifacts directory %s exists after a refused create", dir)
+	}
+}
+
+func TestCreateDoesNotTakeImagesAloneAsContext(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	_, err := f.service.Create(t.Context(), task.CreateParams{
+		Name:         "add-login",
+		RepositoryID: repoID,
+		Images:       []images.Upload{{Data: pngData}},
+	})
+	if !errors.Is(err, task.ErrEmptyContext) {
+		t.Errorf("Create() = %v, want ErrEmptyContext", err)
+	}
+}
+
+func TestCreateRemovesTheImagesWhenTheTaskCannotBeStored(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.repo.insertErr = errors.New("database is locked")
+
+	if _, err := f.service.Create(t.Context(), task.CreateParams{
+		Name:           "add-login",
+		RepositoryID:   repoID,
+		InitialContext: "a login screen",
+		Images:         []images.Upload{{Data: pngData}},
+	}); err == nil {
+		t.Fatal("Create() = nil, want an error")
+	}
+
+	if dir := task.ArtifactsDir(f.dataDir, "dev", "web", "add-login"); exists(dir) {
+		t.Errorf("artifacts directory %s survived a failed create", dir)
+	}
+}
+
+func TestCreateKeepsTheFolderItDidNotMakeButRemovesItsImagesWhenTheTaskCannotBeStored(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	dir := task.ArtifactsDir(f.dataDir, "dev", "web", "add-login")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	f.repo.insertErr = errors.New("database is locked")
+
+	if _, err := f.service.Create(t.Context(), task.CreateParams{
+		Name:           "add-login",
+		RepositoryID:   repoID,
+		InitialContext: "a login screen",
+		Images:         []images.Upload{{Data: pngData}},
+	}); err == nil {
+		t.Fatal("Create() = nil, want an error")
+	}
+
+	if !exists(dir) {
+		t.Fatal("the folder of the earlier create was removed")
+	}
+	entries, err := os.ReadDir(filepath.Join(dir, images.DirName))
+	if err != nil {
+		t.Fatalf("read images dir: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("images left behind = %d, want 0", len(entries))
+	}
+}
+
+func TestDeleteTakesTheImagesOfTheTaskWithIt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created, err := f.service.Create(t.Context(), task.CreateParams{
+		Name:           "add-login",
+		RepositoryID:   repoID,
+		InitialContext: "a login screen",
+		Images:         []images.Upload{{Data: pngData}},
+	})
+	if err != nil {
+		t.Fatalf("Create() = %v, want nil", err)
+	}
+
+	if err := f.service.Delete(t.Context(), created.ID); err != nil {
+		t.Fatalf("Delete() = %v, want nil", err)
+	}
+	if exists(created.ArtifactsDir) {
+		t.Errorf("artifacts directory %s still exists", created.ArtifactsDir)
+	}
 }

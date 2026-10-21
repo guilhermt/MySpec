@@ -12,6 +12,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/discussion"
+	"github.com/guilhermt/myspec/internal/images"
 )
 
 func TestCreatingADiscussionWritesTheContextInItsOwnFolder(t *testing.T) {
@@ -1064,5 +1065,112 @@ func TestGroupingInTheRound2TakesTheHighestRoundWhateverTheOrderOfTheDrafts(t *t
 	}
 	if got := f.draft(d.ID, epic.ID); got.Round != 2 {
 		t.Errorf("round of the epic = %d, want 2", got.Round)
+	}
+}
+
+var pngData = append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 8)...)
+
+func createWithImages(f *fixture, uploads ...images.Upload) (discussion.Discussion, error) {
+	return f.service.Create(f.t.Context(), discussion.CreateParams{
+		BoardOwner: "acme", BoardNumber: 7, Title: "Invoices", Text: "Export invoices", Images: uploads,
+	})
+}
+
+func TestCreatingADiscussionStoresTheImagesOfTheContext(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d, err := createWithImages(f,
+		images.Upload{Image: images.Image{Origin: images.OriginUser}, Data: pngData},
+		images.Upload{Image: images.Image{Origin: images.OriginUser, Alt: "second"}, Data: pngData})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if len(d.InitialImages) != 2 {
+		t.Fatalf("images = %d, want 2", len(d.InitialImages))
+	}
+	for _, img := range d.InitialImages {
+		if _, err := os.Stat(images.Path(d.ArtifactsDir, img)); err != nil {
+			t.Errorf("file of image %s: %v", img.ID, err)
+		}
+	}
+	if d.InitialImages[1].Alt != "second" {
+		t.Errorf("second image alt = %q, want %q", d.InitialImages[1].Alt, "second")
+	}
+	if got, _ := f.service.Lookup(d.ID); !slices.Equal(got.InitialImages, d.InitialImages) {
+		t.Errorf("lookup images = %+v, want %+v", got.InitialImages, d.InitialImages)
+	}
+}
+
+func TestACopyOfADiscussionDoesNotShareItsImages(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d, err := createWithImages(f, images.Upload{Data: pngData})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	got, _ := f.service.Lookup(d.ID)
+	got.InitialImages[0].Alt = "changed"
+	if again, _ := f.service.Lookup(d.ID); again.InitialImages[0].Alt != "" {
+		t.Error("changing a copy changed the discussion")
+	}
+}
+
+func TestABadImageRefusesTheDiscussionWithoutCreatingTheFolder(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	_, err := createWithImages(f, images.Upload{Data: pngData}, images.Upload{Data: []byte("%PDF-1.7 not an image")})
+	if !errors.Is(err, images.ErrFormat) {
+		t.Fatalf("error = %v, want ErrFormat", err)
+	}
+
+	if entries, err := os.ReadDir(filepath.Join(f.dataDir, "discussions")); err == nil && len(entries) > 0 {
+		t.Errorf("folders = %d, want none", len(entries))
+	}
+}
+
+func TestImagesAloneAreNotSomethingToDiscuss(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	_, err := f.service.Create(t.Context(), discussion.CreateParams{
+		Title: "Invoices", Images: []images.Upload{{Data: pngData}},
+	})
+	if !errors.Is(err, discussion.ErrNothingToDiscuss) {
+		t.Errorf("error = %v, want ErrNothingToDiscuss", err)
+	}
+}
+
+func TestAFailedInsertTakesTheImagesWithIt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.store.insertErr = os.ErrPermission
+
+	if _, err := createWithImages(f, images.Upload{Data: pngData}); !errors.Is(err, os.ErrPermission) {
+		t.Fatalf("error = %v, want the error of the store", err)
+	}
+	if entries, err := os.ReadDir(filepath.Join(f.dataDir, "discussions", "acme", "7")); err == nil && len(entries) > 0 {
+		t.Errorf("folders = %d, want none left behind", len(entries))
+	}
+}
+
+func TestDeletingADiscussionTakesItsImagesWithIt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d, err := createWithImages(f, images.Upload{Data: pngData})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := f.service.Delete(t.Context(), d.ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := os.Stat(images.Path(d.ArtifactsDir, d.InitialImages[0])); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("stat image = %v, want it gone", err)
 	}
 }

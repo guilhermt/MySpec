@@ -14,6 +14,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/guilhermt/myspec/internal/images"
+
 	"github.com/google/uuid"
 
 	"github.com/guilhermt/myspec/internal/task"
@@ -188,6 +190,7 @@ type CreateParams struct {
 	Text           string
 	InitialContext string
 	Cards          []InputCard
+	Images         []images.Upload // the images of the initial context, in the order they reach the agent
 }
 
 // Create validates, creates the artifact folder with the initial context in it
@@ -203,6 +206,11 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Discussion, error
 	text := strings.TrimSpace(p.Text)
 	if text == "" && len(p.Cards) == 0 {
 		return Discussion{}, fmt.Errorf("create discussion: %w", ErrNothingToDiscuss)
+	}
+	for i, u := range p.Images {
+		if _, err := images.Check(u.Data); err != nil {
+			return Discussion{}, fmt.Errorf("create discussion: image %d: %w", i+1, err)
+		}
 	}
 
 	now := s.now().UTC()
@@ -228,6 +236,12 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Discussion, error
 		s.remove(d.ArtifactsDir)
 		return Discussion{}, err
 	}
+	saved, err := images.Save(d.ArtifactsDir, p.Images)
+	if err != nil {
+		s.remove(d.ArtifactsDir)
+		return Discussion{}, err
+	}
+	d.InitialImages = saved
 	if err := s.store.Insert(ctx, d); err != nil {
 		s.remove(d.ArtifactsDir)
 		return Discussion{}, err
@@ -905,6 +919,7 @@ func cloneAll(discussions []Discussion) []Discussion {
 // reaches what a caller holds.
 func cloneDiscussion(d Discussion) Discussion {
 	d.Cards = slices.Clone(d.Cards)
+	d.InitialImages = slices.Clone(d.InitialImages)
 	return d
 }
 
