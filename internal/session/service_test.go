@@ -756,7 +756,7 @@ func TestPauseStopsAndResumeContinues(t *testing.T) {
 	if !got.Complete || !got.Interrupted {
 		t.Errorf("assistant = %+v, want completed as interrupted", got)
 	}
-	wantErrIs(t, f.service.Send(t.Context(), prd("t1"), "later"), session.ErrPaused)
+	wantErrIs(t, f.service.Send(t.Context(), prd("t1"), "later", nil), session.ErrPaused)
 	if rec := f.sessions.get(t, "t1", string(prompts.StagePRD)); !rec.Paused {
 		t.Errorf("record paused = false, want true")
 	}
@@ -1211,7 +1211,7 @@ func TestCloseForgetsTheTask(t *testing.T) {
 	if _, ok := f.service.Summary(prd("t1")); ok {
 		t.Error("Summary() found the task after Close")
 	}
-	wantErrIs(t, f.service.Send(t.Context(), prd("t1"), "hi"), session.ErrNotFound)
+	wantErrIs(t, f.service.Send(t.Context(), prd("t1"), "hi", nil), session.ErrNotFound)
 
 	// Closing what is not open is not an error.
 	if err := f.service.Close(t.Context(), prd("t1")); err != nil {
@@ -1258,8 +1258,8 @@ func TestSendValidation(t *testing.T) {
 	f := newFixture(t, "echo")
 	f.open(t, taskInfo(t, "t1"))
 
-	wantErrIs(t, f.service.Send(t.Context(), prd("t1"), "   "), session.ErrEmptyMessage)
-	wantErrIs(t, f.service.Send(t.Context(), prd("missing"), "hi"), session.ErrNotFound)
+	wantErrIs(t, f.service.Send(t.Context(), prd("t1"), "   ", nil), session.ErrEmptyMessage)
+	wantErrIs(t, f.service.Send(t.Context(), prd("missing"), "hi", nil), session.ErrNotFound)
 	wantErrIs(t, f.service.Pause(t.Context(), prd("missing")), session.ErrNotFound)
 	wantErrIs(t, f.service.Resume(t.Context(), prd("missing")), session.ErrNotFound)
 	wantErrIs(t, f.service.Retry(t.Context(), prd("missing")), session.ErrNotFound)
@@ -1788,7 +1788,7 @@ func TestTwoLiveSessionsOfATaskDoNotInterfere(t *testing.T) {
 	if err := f.service.Pause(t.Context(), prd("t1")); err != nil {
 		t.Fatalf("Pause() = %v, want nil", err)
 	}
-	wantErrIs(t, f.service.Send(t.Context(), prd("t1"), "held"), session.ErrPaused)
+	wantErrIs(t, f.service.Send(t.Context(), prd("t1"), "held", nil), session.ErrPaused)
 	f.send(t, spec.Key(), "for the tech spec")
 	f.waitIdle(t, spec.Key())
 	if users := f.entriesOf(t, spec.Key(), session.KindUser); len(users) != 2 {

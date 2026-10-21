@@ -858,7 +858,7 @@ func TestResultContextWindowTakesTheLargest(t *testing.T) {
 func TestUserMessageIsWhatTheCLIExpects(t *testing.T) {
 	t.Parallel()
 
-	line := claude.UserMessage("write the PRD")
+	line := claude.UserMessage("write the PRD", nil)
 	if strings.ContainsAny(string(line), "\n") {
 		t.Errorf("UserMessage() = %s, want no newline", line)
 	}
@@ -866,6 +866,47 @@ func TestUserMessageIsWhatTheCLIExpects(t *testing.T) {
 	want := `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"write the PRD"}]},"parent_tool_use_id":null}`
 	if string(line) != want {
 		t.Errorf("UserMessage() = %s, want %s", line, want)
+	}
+}
+
+func TestUserMessageWithImages(t *testing.T) {
+	t.Parallel()
+
+	png := claude.Image{MediaType: "image/png", Data: []byte("abc")}
+	labelled := claude.Image{MediaType: "image/jpeg", Data: []byte("xyz"), Label: "Image 2: attached by the user."}
+
+	tests := []struct {
+		name   string
+		text   string
+		images []claude.Image
+		want   string
+	}{
+		{
+			name:   "image and text",
+			text:   "what is this?",
+			images: []claude.Image{png},
+			want:   `{"type":"user","message":{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"YWJj"}},{"type":"text","text":"what is this?"}]},"parent_tool_use_id":null}`,
+		},
+		{
+			name:   "images only has no text block",
+			images: []claude.Image{png},
+			want:   `{"type":"user","message":{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"YWJj"}}]},"parent_tool_use_id":null}`,
+		},
+		{
+			name:   "label comes before its image",
+			text:   "go",
+			images: []claude.Image{labelled},
+			want:   `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Image 2: attached by the user."},{"type":"image","source":{"type":"base64","media_type":"image/jpeg","data":"eHl6"}},{"type":"text","text":"go"}]},"parent_tool_use_id":null}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := claude.UserMessage(tt.text, tt.images); string(got) != tt.want {
+				t.Errorf("UserMessage() = %s, want %s", got, tt.want)
+			}
+		})
 	}
 }
 

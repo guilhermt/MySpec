@@ -16,6 +16,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 )
@@ -34,7 +35,7 @@ type EntryRepository interface {
 // Process is the running CLI, as internal/claude provides it.
 type Process interface {
 	Events() <-chan claude.Event
-	Send(text string) error
+	Send(text string, images []claude.Image) error
 	Interrupt() (string, error)
 	Respond(requestID string, resp claude.PermissionResponse) error
 	CloseInput() error
@@ -68,6 +69,7 @@ type TaskInfo struct {
 	StepsDir       string
 	OneShotPath    string // One-Shot tasks only: the document the prompts point to; "" for a Structured task
 	InitialContext string
+	InitialImages  []images.Image // the images of the initial context, in the order they reach the agent
 	// ImplementerReply is what the implementer of a step said last, which the
 	// prompt of its reviewer ends with; step review sessions only.
 	ImplementerReply string
@@ -160,9 +162,12 @@ type Deps struct {
 // The errors the service reports to its callers.
 var (
 	ErrEmptyMessage = errors.New("session: message is empty")
-	ErrPaused       = errors.New("session: paused")
-	ErrNoRequest    = errors.New("session: no pending request with that id")
-	ErrNotPending   = errors.New("session: entry is not pending")
+	// ErrNoImagesFolder means images came to a session whose task has no
+	// artifacts folder to keep them in.
+	ErrNoImagesFolder = errors.New("the session has no folder for images")
+	ErrPaused         = errors.New("session: paused")
+	ErrNoRequest      = errors.New("session: no pending request with that id")
+	ErrNotPending     = errors.New("session: entry is not pending")
 
 	// ErrProductMessage marks a message of the product, the prompt that opens a session or one
 	// the workflow sends, which is never the user's to remove.
@@ -439,6 +444,7 @@ func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 	switch t.Prompt {
 	case prompts.StagePRD, prompts.StageOneShot, prompts.StageDiscussion:
 		entry.Text = t.InitialContext
+		entry.Images = slices.Clone(t.InitialImages)
 	case prompts.StageStepReview:
 		entry.Text, entry.App = t.ImplementerReply, true
 	case prompts.StagePRReview:
@@ -458,9 +464,11 @@ func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 }
 
 // Send queues a message and delivers it right away when the session is free.
-func (s *Service) Send(ctx context.Context, k Key, text string) error {
+// The uploads are the images attached to it; they are checked and stored with
+// the session before anything is queued.
+func (s *Service) Send(ctx context.Context, k Key, text string, uploads [][]byte) error {
 	text = strings.TrimSpace(text)
-	if text == "" {
+	if text == "" && len(uploads) == 0 {
 		return ErrEmptyMessage
 	}
 
@@ -476,12 +484,31 @@ func (s *Service) Send(ctx context.Context, k Key, text string) error {
 	if r.rec.Paused {
 		return fmt.Errorf("send to task %s: %w", k.TaskID, ErrPaused)
 	}
-	if err := s.enqueueLocked(ctx, r, &UserEntry{Text: text}, n); err != nil {
+	var saved []images.Image
+	if len(uploads) > 0 {
+		if r.task.ArtifactsDir == "" {
+			return fmt.Errorf("send to task %s: %w", k.TaskID, ErrNoImagesFolder)
+		}
+		if saved, err = images.Save(r.task.ArtifactsDir, userUploads(uploads)); err != nil {
+			return err
+		}
+	}
+	if err := s.enqueueLocked(ctx, r, &UserEntry{Text: text, Images: saved}, n); err != nil {
+		images.Remove(r.task.ArtifactsDir, saved)
 		return err
 	}
 	r.stopTimer(&r.idleTimer)
 	s.flushPendingLocked(ctx, r, n)
 	return nil
+}
+
+// userUploads is an upload for each image the user attached.
+func userUploads(data [][]byte) []images.Upload {
+	uploads := make([]images.Upload, len(data))
+	for i, d := range data {
+		uploads[i] = images.Upload{Image: images.Image{Origin: images.OriginUser}, Data: d}
+	}
+	return uploads
 }
 
 // SendFromApp queues a message the app wrote for the agent.
@@ -579,10 +606,14 @@ func (s *Service) RemovePending(ctx context.Context, k Key, entryID string) erro
 		return fmt.Errorf("remove entry %s: %w", entryID, ErrProductMessage)
 	}
 
+	removed := r.pending[index]
 	r.pending = slices.Delete(r.pending, index, index+1)
 	delete(r.byID, entryID)
 	if err := s.entries.Delete(ctx, entryID); err != nil {
 		return err
+	}
+	if removed.User != nil {
+		images.Remove(r.task.ArtifactsDir, removed.User.Images)
 	}
 	n.remove(k, entryID)
 	n.state(k)
@@ -1529,6 +1560,7 @@ func cloneEntry(e *Entry) Entry {
 	c := *e
 	if e.User != nil {
 		v := *e.User
+		v.Images = slices.Clone(e.User.Images)
 		c.User = &v
 	}
 	if e.Assistant != nil {

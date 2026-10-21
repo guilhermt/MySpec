@@ -6,6 +6,7 @@ package claudetest
 
 import (
 	"bufio"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -134,7 +135,7 @@ const gatePoll = 5 * time.Millisecond
 const queueSize = 16
 
 // maxLine is the largest stdin line the fake accepts.
-const maxLine = 16 << 20
+const maxLine = 64 << 20
 
 // Run plays the scenario named by EnvScenario against stdin and stdout and
 // returns the exit code the fake CLI should end with.
@@ -285,7 +286,12 @@ type stdinLine struct {
 	RequestID string `json:"request_id"`
 	Message   struct {
 		Content []struct {
-			Text string `json:"text"`
+			Type   string `json:"type"`
+			Text   string `json:"text"`
+			Source struct {
+				MediaType string `json:"media_type"`
+				Data      string `json:"data"`
+			} `json:"source"`
 		} `json:"content"`
 	} `json:"message"`
 	Request struct {
@@ -317,6 +323,14 @@ func (f *fake) read(input *os.File) {
 		case "user":
 			text := make([]string, 0, len(line.Message.Content))
 			for _, block := range line.Message.Content {
+				if block.Type == "image" {
+					size := base64.StdEncoding.DecodedLen(len(block.Source.Data))
+					if decoded, err := base64.StdEncoding.DecodeString(block.Source.Data); err == nil {
+						size = len(decoded)
+					}
+					text = append(text, fmt.Sprintf("[image %s %d]", block.Source.MediaType, size))
+					continue
+				}
 				text = append(text, block.Text)
 			}
 			f.users <- strings.Join(text, "")

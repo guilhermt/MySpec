@@ -890,7 +890,7 @@ func (s *TaskService) SendMessage(taskID, stage, text string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
-	if err := s.sessions.Send(ctx, session.Key{TaskID: taskID, Stage: stage}, text); err != nil {
+	if err := s.sessions.Send(ctx, session.Key{TaskID: taskID, Stage: stage}, text, nil); err != nil {
 		return s.fail("SendMessage", err)
 	}
 	return nil

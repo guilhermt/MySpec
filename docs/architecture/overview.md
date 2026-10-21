@@ -21,6 +21,7 @@ internal/                todo o código Go
   prreview/              os reviews de pull request: registro, relatórios, apontamentos, decisões e o que foi publicado
   discussion/            as discussões: registro, cards de entrada, rascunhos, edições, decisões e o que foi publicado
   pulls/                 a leitura das pull requests abertas dos repositórios cadastrados, os filtros e a regra de pendente
+  images/                as imagens dadas ao agente: os formatos, o limite de tamanho, o registro que a conversa e o item guardam e os arquivos na pasta de artefatos
   attention/             as situações que esperam pelo usuário
   prompts/               prompts padrão embutidos e os editados
   models/                o catálogo de modelos e esforços lido do Claude Code instalado, e os padrões
@@ -63,7 +64,7 @@ Só dois pacotes conhecem o Wails: `internal/app`, que compõe tudo e abre a jan
 
 Os pacotes de domínio se organizam em camadas, de baixo para cima:
 
-1. **Plataforma e binários**: `platform/*`, `git`, `gh`, `editor`, `frontmatter`. Cada um sabe fazer uma coisa e nada sobre o produto.
+1. **Plataforma e binários**: `platform/*`, `git`, `gh`, `editor`, `frontmatter`, `images`. Cada um sabe fazer uma coisa e nada sobre o produto.
 2. **Estado**: `store`, com um repositório por tabela, e `models`, `reviewmode`, `theme`, `prompts`.
 3. **Domínio**: `task`, `prreport`, `prreview`, `discussion`, `pulls`, `session`, `worktree`, `review`, `repository`, `board`, `update`, `attention`. Cada um é dono de um conceito, guarda o seu estado pelo `store` e reporta o que mudou por callbacks. Nenhum deles decide o que fazer com a mudança.
 4. **Orquestração**: `flow`, `reviewflow` e `discussionflow`. `flow` ouve as mudanças de tasks e sessões, decide o que a etapa atual precisa e age: inicia a etapa seguinte, corrige um plano, inicia um step, conduz o review pelo agente, cria uma worktree, aprova, abre a etapa de PR, encerra a task. `reviewflow` faz o mesmo para os reviews de pull request: inicia, pede passadas, registra relatórios, publica, aplica, percebe commits novos, encerra e apaga. `discussionflow` faz o mesmo para as discussões: inicia a conversa (se ela não começa, a discussão criada é apagada e o erro diz que foi desfeita), lê os rascunhos ao fim de cada turno, publica no GitHub o que foi aprovado, retoma uma publicação pela metade, arquiva e apaga.

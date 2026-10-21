@@ -148,9 +148,9 @@ func (p *Process) Events() <-chan Event {
 	return p.events
 }
 
-// Send writes a user message. It fails once the input is closed.
-func (p *Process) Send(text string) error {
-	if err := p.write(UserMessage(text)); err != nil {
+// Send writes a user message, with its images. It fails once the input is closed.
+func (p *Process) Send(text string, images []Image) error {
+	if err := p.write(UserMessage(text, images)); err != nil {
 		return fmt.Errorf("send user message: %w", err)
 	}
 	return nil

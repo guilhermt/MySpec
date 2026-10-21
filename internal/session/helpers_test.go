@@ -724,8 +724,18 @@ func (f *fixture) open(t *testing.T, info session.TaskInfo) {
 func (f *fixture) send(t *testing.T, k session.Key, text string) {
 	t.Helper()
 
-	if err := f.service.Send(t.Context(), k, text); err != nil {
+	if err := f.service.Send(t.Context(), k, text, nil); err != nil {
 		t.Fatalf("Send(%v, %q) = %v, want nil", k, text, err)
+	}
+}
+
+// sendImages queues a message with images, failing the test when the service
+// refuses it.
+func (f *fixture) sendImages(t *testing.T, k session.Key, text string, uploads ...[]byte) {
+	t.Helper()
+
+	if err := f.service.Send(t.Context(), k, text, uploads); err != nil {
+		t.Fatalf("Send(%v, %q, %d images) = %v, want nil", k, text, len(uploads), err)
 	}
 }
 

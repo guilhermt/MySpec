@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/guilhermt/myspec/internal/claude"
+	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 )
@@ -416,7 +417,8 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 		}
 	}
 
-	if err := r.proc.Send(text); err != nil {
+	sent := s.imagesOf(r, e.User)
+	if err := r.proc.Send(text, sent); err != nil {
 		// The process is gone or going; its exit reports the failure.
 		s.log.Warn("send to claude failed", "task", r.task.ID, "error", err)
 		if err := r.proc.Terminate(); err != nil {
@@ -587,4 +589,28 @@ func wait(ch <-chan struct{}, timeout time.Duration) bool {
 	case <-timer.C:
 		return false
 	}
+}
+
+// imagesOf reads the files of the images of a user message. One that is gone or
+// unreadable is logged and left out, and the rest go. In a prompt entry each
+// image carries the label that says where it came from, numbered among those
+// that go.
+func (s *Service) imagesOf(r *run, u *UserEntry) []claude.Image {
+	if u == nil || len(u.Images) == 0 {
+		return nil
+	}
+	sent := make([]claude.Image, 0, len(u.Images))
+	for _, img := range u.Images {
+		data, err := images.Read(r.task.ArtifactsDir, img)
+		if err != nil {
+			s.log.Warn("image left out", "task", r.task.ID, "stage", r.rec.Stage, "image", img.ID, "error", err)
+			continue
+		}
+		out := claude.Image{MediaType: img.MediaType, Data: data}
+		if u.Prompt {
+			out.Label = images.Label(len(sent)+1, img)
+		}
+		sent = append(sent, out)
+	}
+	return sent
 }
