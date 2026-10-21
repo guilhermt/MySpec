@@ -30,6 +30,7 @@ internal/                todo o código Go
   reviewmode/            quem revisa os steps e a pull request de uma task e os padrões do app
   repository/            os repositórios cadastrados: identidade no GitHub, clone, board, filtro, a varredura da home e a clonagem
   board/                 os boards cadastrados, a leitura dos cards pelo gh e o contexto de uma task criada de um card
+  cardimages/            as imagens do corpo de um card e do épico: a leitura do bodyHTML pelo gh, o download das URLs assinadas e o cache em disco
   upgrade/               leva as tasks de um banco com áreas de trabalho para os repositórios
   release/               publica uma versão: as conferências, o bump de VERSION, o commit, a tag e o push
   frontmatter/           lê o cabeçalho --- dos documentos que os agentes escrevem
@@ -66,7 +67,7 @@ Os pacotes de domínio se organizam em camadas, de baixo para cima:
 
 1. **Plataforma e binários**: `platform/*`, `git`, `gh`, `editor`, `frontmatter`, `images`. Cada um sabe fazer uma coisa e nada sobre o produto.
 2. **Estado**: `store`, com um repositório por tabela, e `models`, `reviewmode`, `theme`, `prompts`.
-3. **Domínio**: `task`, `prreport`, `prreview`, `discussion`, `pulls`, `session`, `worktree`, `review`, `repository`, `board`, `update`, `attention`. Cada um é dono de um conceito, guarda o seu estado pelo `store` e reporta o que mudou por callbacks. Nenhum deles decide o que fazer com a mudança.
+3. **Domínio**: `task`, `prreport`, `prreview`, `discussion`, `pulls`, `session`, `worktree`, `review`, `repository`, `board`, `cardimages`, `update`, `attention`. Cada um é dono de um conceito, guarda o seu estado pelo `store` e reporta o que mudou por callbacks. Nenhum deles decide o que fazer com a mudança.
 4. **Orquestração**: `flow`, `reviewflow` e `discussionflow`. `flow` ouve as mudanças de tasks e sessões, decide o que a etapa atual precisa e age: inicia a etapa seguinte, corrige um plano, inicia um step, conduz o review pelo agente, cria uma worktree, aprova, abre a etapa de PR, encerra a task. `reviewflow` faz o mesmo para os reviews de pull request: inicia, pede passadas, registra relatórios, publica, aplica, percebe commits novos, encerra e apaga. `discussionflow` faz o mesmo para as discussões: inicia a conversa (se ela não começa, a discussão criada é apagada e o erro diz que foi desfeita), lê os rascunhos ao fim de cada turno, publica no GitHub o que foi aprovado, retoma uma publicação pela metade, arquiva e apaga.
 5. **Exposição**: `bindings` converte o domínio em DTOs e recebe as chamadas do frontend; `app` liga tudo e publica o estado.
 

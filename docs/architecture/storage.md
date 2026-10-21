@@ -11,12 +11,17 @@ icons/myspec.png                       a imagem das notificações
 myspec.db                              o banco SQLite
 prompts/<nome>.md                      só os prompts editados pelo usuário
 sounds/chime.wav                       o som das notificações
+card-images/<id>                       o cache das imagens dos corpos dos cards
 tasks/<dono>/<nome>/<task>/            os artefatos de cada task
 reviews/<dono>/<nome>/pr-<n>-<id>/     os artefatos de cada review de pull request
 discussions/<dono do board>/<n>/<id>/  os artefatos de cada discussão
 worktrees/<dono>/<nome>/<task>/        a worktree de cada task
 worktrees/<dono>/<nome>/pr_<n>/        a worktree de cada review de pull request ativo
 ```
+
+### Imagens dos cards
+
+`card-images/` é o cache das imagens que o app lê do corpo de um card e do épico dele. O corpo em Markdown aponta para `https://github.com/user-attachments/assets/<uuid>`, que num repositório privado só abre com o cookie do navegador; por isso o app lê o `bodyHTML` da issue pelo `gh`, que traz cada imagem com uma URL assinada, baixável sem autenticação por uns 5 minutos, e baixa na hora. Cada arquivo se chama pelo hash SHA-256, em hexadecimal, da chave da issue (`dono/nome#número`, em minúsculas) e da chave da origem da imagem, o UUID do anexo ou a URL inteira, e guarda os bytes como vieram, num arquivo `0600` escrito por um temporário e um rename. O conteúdo de um anexo nunca muda para o mesmo UUID, então um arquivo no cache vale para sempre. A poda roda no início do app e remove os arquivos sem escrita há mais de 30 dias e os temporários que sobraram. O cache não é do item: a task e a discussão guardam a própria cópia das imagens que receberam, na pasta de artefatos.
 
 ### Banco
 
