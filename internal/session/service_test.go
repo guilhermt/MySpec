@@ -3144,3 +3144,70 @@ func TestThePRFixesProduceNoArtifact(t *testing.T) {
 		t.Errorf("artifactOf(pr_fix) = %q, want none", got)
 	}
 }
+
+func TestAReturnReadsItsStatusAndExitCode(t *testing.T) {
+	t.Parallel()
+
+	code := func(n int) *int { return &n }
+	tests := []struct {
+		name    string
+		kind    session.WakeKind
+		status  string
+		summary string
+		want    session.Wake
+		wantOK  bool
+	}{
+		{
+			name: "a command that completed", kind: session.WakeCommand, status: "completed",
+			summary: `Background command "Run the tests" completed (exit code 0)`,
+			want:    session.Wake{Kind: session.WakeCommand, Name: "Run the tests", Status: session.WakeCompleted},
+			wantOK:  true,
+		},
+		{
+			name: "a command that failed with a code", kind: session.WakeCommand, status: "failed",
+			summary: `Background command "Run the tests" failed with exit code 3`,
+			want:    session.Wake{Kind: session.WakeCommand, Name: "Run the tests", Status: session.WakeFailed, ExitCode: code(3)},
+			wantOK:  true,
+		},
+		{
+			name: "a subagent that failed", kind: session.WakeAgent, status: "failed",
+			summary: "exit code 2",
+			want:    session.Wake{Kind: session.WakeAgent, Name: "Run the tests", Status: session.WakeFailed},
+			wantOK:  true,
+		},
+		{
+			name: "a monitor that was stopped", kind: session.WakeMonitor, status: "stopped",
+			summary: `Monitor "Run the tests" stopped`,
+			want:    session.Wake{Kind: session.WakeMonitor, Name: "Run the tests", Status: session.WakeStopped},
+			wantOK:  true,
+		},
+		{
+			name: "a task that was killed reads as stopped", kind: session.WakeCommand, status: "killed",
+			want:   session.Wake{Kind: session.WakeCommand, Name: "Run the tests", Status: session.WakeStopped},
+			wantOK: true,
+		},
+		{
+			name: "a command that failed without a code", kind: session.WakeCommand, status: "failed",
+			summary: `Background command "Run the tests" failed`,
+			want:    session.Wake{Kind: session.WakeCommand, Name: "Run the tests", Status: session.WakeFailed},
+			wantOK:  true,
+		},
+		{
+			name: "an unknown status", kind: session.WakeCommand, status: "paused",
+			wantOK: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := session.WakeOf(tt.kind, "Run the tests", &claude.TaskNotificationEvent{Status: tt.status, Summary: tt.summary})
+			if ok != tt.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, tt.wantOK)
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("wake mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}

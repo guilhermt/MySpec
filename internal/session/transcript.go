@@ -27,7 +27,7 @@ const (
 type Entry struct {
 	ID        string
 	Seq       int
-	TurnID    string // id of the user entry that started the turn this entry belongs to
+	TurnID    string // the turn this entry belongs to: the id of the user entry that started it, or a fresh one for a turn the agent opened
 	Kind      Kind
 	CreatedAt time.Time
 
@@ -237,6 +237,7 @@ const (
 	MarkerCompacted          MarkerType = "compacted"
 	MarkerInterrupted        MarkerType = "interrupted"
 	MarkerRetried            MarkerType = "retried"
+	MarkerWoke               MarkerType = "woke"
 	MarkerCommitted          MarkerType = "committed"
 	MarkerPROpened           MarkerType = "pr_opened"
 	MarkerChecksRead         MarkerType = "checks_read"
@@ -308,6 +309,9 @@ type MarkerEntry struct {
 	Reason   string `json:"reason"`
 	// InterruptedBy is who interrupted the turn, interrupted only: "user".
 	InterruptedBy string `json:"interruptedBy"`
+	// Wakes are the returns in the background a woke marker names, in the
+	// order they arrived; none when the agent resumed on its own.
+	Wakes []Wake `json:"wakes,omitempty"`
 
 	SHA      string        `json:"sha"`      // committed
 	Subject  string        `json:"subject"`  // committed
@@ -354,6 +358,36 @@ type MarkerCommit struct {
 	SHA     string `json:"sha"`
 	Subject string `json:"subject"`
 	Author  string `json:"author"`
+}
+
+// WakeKind is what a return in the background comes from.
+type WakeKind string
+
+// The tasks whose return the conversation names.
+const (
+	WakeAgent   WakeKind = "agent"   // a subagent
+	WakeCommand WakeKind = "command" // a background command
+	WakeMonitor WakeKind = "monitor" // a monitor
+)
+
+// WakeStatus is how a task in the background ended.
+type WakeStatus string
+
+// The ends of a task in the background.
+const (
+	WakeCompleted WakeStatus = "completed"
+	WakeFailed    WakeStatus = "failed"
+	WakeStopped   WakeStatus = "stopped"
+)
+
+// Wake is the return of a task in the background, as a woke marker names it.
+type Wake struct {
+	Kind   WakeKind   `json:"kind"`
+	Name   string     `json:"name"` // the description the CLI gives the task
+	Status WakeStatus `json:"status"`
+	// ExitCode is the code a failed command exited with, nil when the CLI does
+	// not say or the task is not a failed command.
+	ExitCode *int `json:"exitCode"`
 }
 
 // DraftBefore is a draft of a round as it was before a revision, or one the

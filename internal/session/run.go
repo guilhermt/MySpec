@@ -38,6 +38,9 @@ type run struct {
 	retryReason  string    // retryReasonOf the error
 	turnFailed   bool      // the last turn ended in an error; the next turn clears it
 
+	tasks map[string]*backgroundTask // task_id -> the tasks the current process runs in the background
+	wakes []Wake                     // the returns that arrived with no turn, for the marker that opens the next one
+
 	idleTimer  *time.Timer
 	flushTimer *time.Timer
 	dirty      map[string]struct{} // ids of streaming entries with unsent text
@@ -49,6 +52,7 @@ type run struct {
 // turn is the state of the turn in progress.
 type turn struct {
 	id        string            // the user entry that started it
+	opener    *Entry            // the woke marker that opened a turn the agent opened; nil for one a message opened
 	startedAt time.Time         // when the message that opened the turn went to the CLI
 	messageID string            // current API message id
 	blocks    map[int]*Entry    // content block index -> assistant or action entry of the current message
@@ -56,6 +60,15 @@ type turn struct {
 	actions   map[string]*Entry // tool_use_id -> action entry
 	partial   map[int][]byte    // accumulated input_json_delta per block (kept for future use; not rendered)
 	finalized map[int]bool      // block index -> its assistant event has arrived
+}
+
+// backgroundTask is a task the current process runs in the background: what
+// the conversation calls it, and its return once it came.
+type backgroundTask struct {
+	kind  WakeKind
+	name  string
+	runID string
+	wake  *Wake // nil until its task_notification arrives
 }
 
 // graces are how long stopProcess waits at each step before escalating.
@@ -81,6 +94,7 @@ func newRun(t TaskInfo, rec Record, nextSeq int) *run {
 		byID:    map[string]*Entry{},
 		nextSeq: nextSeq,
 		dirty:   map[string]struct{}{},
+		tasks:   map[string]*backgroundTask{},
 	}
 }
 
@@ -242,6 +256,8 @@ func (s *Service) ensureProcessLocked(ctx context.Context, r *run, n *notes) err
 	r.stopTimer(&r.startTimer)
 	r.stopTimer(&r.flushTimer)
 	clear(r.dirty)
+	clear(r.tasks)
+	r.wakes = nil
 	if r.rec.LastError != "" {
 		r.rec.LastError = ""
 		_ = s.persistRecord(ctx, r)
@@ -418,12 +434,36 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 	s.updateLocked(ctx, r, e, n)
 
 	r.turn = newTurn(e.ID, s.now().UTC())
+	if len(r.wakes) > 0 {
+		s.wakeMarkerLocked(ctx, r, n)
+	}
 	r.turnFailed = false
 	r.turnDone = make(chan struct{})
 	r.stopTimer(&r.idleTimer)
 	s.armStartLocked(r)
 	n.state(r.key())
 	return true
+}
+
+// openAgentTurnLocked starts a turn the CLI opened on its own, with the woke
+// marker that says what woke the agent as its first entry. The caller holds
+// the mutex and r.turn is nil.
+func (s *Service) openAgentTurnLocked(ctx context.Context, r *run, n *notes) {
+	r.turn = newTurn(s.newID(), s.now().UTC())
+	r.turnFailed = false
+	r.turnDone = make(chan struct{})
+	r.stopTimer(&r.idleTimer)
+	r.turn.opener = s.wakeMarkerLocked(ctx, r, n)
+	n.state(r.key())
+}
+
+// wakeMarkerLocked records the returns that arrived with no turn in one woke
+// marker, none when no return waits, and forgets them. The caller holds the
+// mutex and r.turn is set.
+func (s *Service) wakeMarkerLocked(ctx context.Context, r *run, n *notes) *Entry {
+	e := s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: MarkerWoke, Wakes: r.wakes}}, n)
+	r.wakes = nil
+	return e
 }
 
 // armIdleLocked schedules the stop of a process that has nothing to do.
