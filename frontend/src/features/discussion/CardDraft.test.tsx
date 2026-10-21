@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CardDraft } from "@/features/discussion/CardDraft";
 import { cardEntries } from "@/features/discussion/drafts-card";
 import { STALE_CARD_MS } from "@/lib/boards";
+import { cardBodyImageUrl } from "@/lib/images";
 import { api, type DiscussionSummary, type Draft, type DraftCurrent } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
 import { makeDiscussion, makeDiscussionCard, makeDraft, makeState } from "@/test/wails-mock";
@@ -110,6 +111,22 @@ describe("CardDraft, Body and Changes", () => {
 
     expect(screen.getByText("A button that exports the list.")).toBeInTheDocument();
     expect(screen.queryByRole("radiogroup", { name: "What to read" })).not.toBeInTheDocument();
+  });
+
+  it("loads the images of an update through the issue of its card, and leaves the others alone", () => {
+    const { unmount } = draw([
+      update({ body: "![chart](https://github.com/user-attachments/assets/abc)" }),
+    ]);
+
+    expect(screen.getByRole("img", { name: "chart" })).toHaveAttribute(
+      "src",
+      cardBodyImageUrl("dev/web#12", "https://github.com/user-attachments/assets/abc"),
+    );
+    unmount();
+
+    draw([makeDraft({ body: "![chart](https://github.com/user-attachments/assets/abc)" })]);
+
+    expect(screen.queryByRole("button", { name: "Open the image chart" })).not.toBeInTheDocument();
   });
 
   it("offers Changes on an update, with what it adds and takes away", async () => {

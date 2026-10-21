@@ -198,7 +198,12 @@ export function BoardCardPanel({
               No description.
             </p>
           ) : (
-            <Markdown className="card-body ui-headings">{model.body}</Markdown>
+            <Markdown
+              className="card-body ui-headings"
+              images={{ kind: "card", issue: model.issue }}
+            >
+              {model.body}
+            </Markdown>
           )}
         </div>
         <RelationList

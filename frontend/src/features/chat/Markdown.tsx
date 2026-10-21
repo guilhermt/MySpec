@@ -2,6 +2,7 @@ import { code } from "@streamdown/code";
 import { type ReactNode, useMemo, useState } from "react";
 import { Streamdown } from "streamdown";
 import { Button } from "@/components/system/Button";
+import { CardBodyImage } from "@/features/chat/CardBodyImage";
 import { CodeFrame } from "@/features/chat/CodeFrame";
 import {
   CUT_ABOVE,
@@ -32,8 +33,10 @@ const COMPONENTS = { a: ExternalLink } as const;
 
 /** MarkdownImages says how the images of the text are drawn. */
 export type MarkdownImages =
+  /** card loads them through the product, from the body of the card issue (owner/name#number). */
+  | { kind: "card"; issue: string }
   /** omit draws each as a marker with its alt text and its link: the images come below the text. */
-  { kind: "omit" };
+  | { kind: "omit" };
 
 export interface MarkdownProps {
   children: string;
@@ -61,10 +64,27 @@ interface BlockProps {
   images: MarkdownImages | undefined;
 }
 
+// withImages is the components of a text, with its images drawn as the text asks.
+function withImages(kind: MarkdownImages["kind"] | undefined, issue: string) {
+  if (kind === undefined) {
+    return COMPONENTS;
+  }
+  if (kind === "omit") {
+    return { ...COMPONENTS, img: ImageMarker };
+  }
+  const Image = ({ src, alt }: { src?: string | undefined; alt?: string | undefined }) => (
+    <CardBodyImage src={src} alt={alt} issue={issue} />
+  );
+  return { ...COMPONENTS, img: Image };
+}
+
 // Block is one Streamdown over a piece of the text.
 function Block({ children, streaming, className, renderInlineCode, images }: BlockProps) {
+  // The parent builds images anew on each render: the memo follows what it says.
+  const kind = images?.kind;
+  const issue = images?.kind === "card" ? images.issue : "";
   const components = useMemo(() => {
-    const base = images === undefined ? COMPONENTS : { ...COMPONENTS, img: ImageMarker };
+    const base = withImages(kind, issue);
     if (renderInlineCode === undefined) {
       return base;
     }
@@ -76,7 +96,7 @@ function Block({ children, streaming, className, renderInlineCode, images }: Blo
       </>
     );
     return { ...base, inlineCode: InlineCode };
-  }, [renderInlineCode, images]);
+  }, [renderInlineCode, kind, issue]);
 
   return (
     <Streamdown

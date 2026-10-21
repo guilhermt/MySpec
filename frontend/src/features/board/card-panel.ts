@@ -75,6 +75,8 @@ export interface CardPanelModel {
   /** fields are those of the card in the order they came, Assignees last. */
   fields: { key: string; value: string }[];
   body: string;
+  /** issue is the card issue, owner/name#number: where the images of the body load from. */
+  issue: string;
   relations: BoardRelationGroup[];
 }
 
@@ -364,6 +366,7 @@ export function cardPanelModel(card: BoardCard, ctx: CardPanelContext): CardPane
     discussions: discussionsOf(card, ctx.app),
     fields: fieldsOf(card),
     body: card.body,
+    issue: card.key,
     relations: boardRelations(card, ctx),
   };
 }

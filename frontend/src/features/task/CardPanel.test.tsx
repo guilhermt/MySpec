@@ -1,6 +1,7 @@
 import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { CardPanel } from "@/features/task/CardPanel";
+import { cardBodyImageUrl } from "@/lib/images";
 import { api, type Board } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
@@ -101,6 +102,19 @@ describe("CardPanel", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Email and password.")).toBeInTheDocument();
     expect(screen.getByRole("status")).toBeEmptyDOMElement();
+  });
+
+  it("loads the images of the body through the card issue", () => {
+    panel([
+      makeBoard({
+        cards: [{ ...READ_CARD, body: "![chart](https://github.com/user-attachments/assets/abc)" }],
+      }),
+    ]);
+
+    expect(screen.getByRole("img", { name: "chart" })).toHaveAttribute(
+      "src",
+      cardBodyImageUrl("dev/web#12", "https://github.com/user-attachments/assets/abc"),
+    );
   });
 
   it("opens the card on GitHub", async () => {

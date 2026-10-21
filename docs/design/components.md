@@ -622,6 +622,7 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 |---|---|
 | Anatomia | O Markdown de leitura (a fala do agente, um documento, um relatório, o corpo de um card ou de uma PR, um prompt) com o bloco de código, a tabela e o diagrama do system |
 | Títulos | Sob um título próprio, os títulos do Markdown ficam em `--text-ui` e peso 600, abaixo do título que se lê primeiro: em todo painel (`Artifacts`, `Details`, `Documents`, o painel do card e o da PR), no corpo de um marco aberto, no prompt, no rascunho e no arquivado. A fala do agente, que não tem título acima, mantém os seus. É a classe `.ui-headings`, fora de camada, para vencer as classes que o Streamdown põe nos títulos |
+| Imagem de um card | No corpo de um card (o painel do board, o painel **Card** da task e o rascunho de atualização), a imagem aparece no texto, no máximo da largura do corpo e com raio `--radius-md`, dentro de um botão (`Open the image <alt>`) que abre a **Imagem grande** com o alt como título (`Image` sem ele). A imagem que não carrega vira o marcador: o ícone de imagem, o alt (ou `Image`) e um link `link` para a origem, em `--text-meta` `--ink-3`. O marcador também é o que um texto com as imagens abaixo dele desenha no lugar delas |
 | Não faça | Não deixe um título do Markdown maior que o título do lugar ou do painel em que ele está |
 
 ### Bloco de código · `features/chat/CodeFrame`, `MermaidBlock`

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BoardCardPanel } from "@/features/board/BoardCardPanel";
 import { BoardView } from "@/features/board/BoardView";
 import { useStartCard } from "@/features/board/useStartCard";
+import { cardBodyImageUrl } from "@/lib/images";
 import { api, type Board, type BoardCard, type Repository } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
@@ -87,6 +88,18 @@ describe("BoardCardPanel", () => {
     expect(screen.getByText("Priority")).toBeInTheDocument();
     expect(screen.getByText("Assignees")).toBeInTheDocument();
     expect(screen.getByText("Email and password.")).toBeInTheDocument();
+  });
+
+  it("loads the images of the body through the card issue", () => {
+    const card = makeBoardCard({
+      body: "![chart](https://github.com/user-attachments/assets/abc)",
+    });
+    panel(card);
+
+    expect(screen.getByRole("img", { name: "chart" })).toHaveAttribute(
+      "src",
+      cardBodyImageUrl(card.key, "https://github.com/user-attachments/assets/abc"),
+    );
   });
 
   it("says No description for a card without a body", () => {

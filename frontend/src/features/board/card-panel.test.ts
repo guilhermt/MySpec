@@ -412,6 +412,7 @@ describe("the fields and the body", () => {
       { key: "Assignees", value: "tchen, ana" },
     ]);
     expect(model.body).toBe("Alert at 80%.");
+    expect(model.issue).toBe(card.key);
   });
 
   it("has no field without fields and assignees", () => {

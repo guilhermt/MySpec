@@ -163,7 +163,13 @@ export function CardDraft({
         warnings={warningsOf(draft, reading)}
         refreshing={reading.kind === "refreshing"}
         body={
-          <Markdown cutCode className="ui-headings">
+          <Markdown
+            cutCode
+            className="ui-headings"
+            {...(kind === "update" && card !== null
+              ? { images: { kind: "card" as const, issue: card.key } }
+              : {})}
+          >
             {draft.body}
           </Markdown>
         }
