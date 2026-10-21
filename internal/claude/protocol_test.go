@@ -392,6 +392,110 @@ func TestDecodeAPIRetry(t *testing.T) {
 	}
 }
 
+func TestDecodeTaskStarted(t *testing.T) {
+	t.Parallel()
+	line := `{"type":"system","subtype":"task_started","task_id":"biljvaodh","run_id":"0mvheofjs-97cbf413",` +
+		`"tool_use_id":"toolu_01J9","description":"Wait a bit","is_backgrounded":true,"task_type":"local_bash"}`
+
+	event, err := claude.Decode([]byte(line))
+	if err != nil {
+		t.Fatalf("Decode() = %v, want nil", err)
+	}
+	if event.TaskStarted == nil {
+		t.Fatal("TaskStarted is nil, want the task details")
+	}
+	want := claude.TaskStartedEvent{
+		TaskID:         "biljvaodh",
+		RunID:          "0mvheofjs-97cbf413",
+		ToolUseID:      "toolu_01J9",
+		Description:    "Wait a bit",
+		TaskType:       "local_bash",
+		IsBackgrounded: true,
+	}
+	if diff := cmp.Diff(want, *event.TaskStarted); diff != "" {
+		t.Errorf("TaskStarted mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestDecodeTaskNotification(t *testing.T) {
+	t.Parallel()
+	line := `{"type":"system","subtype":"task_notification","task_id":"bio6sm37m","run_id":"0mvhet102-d66ee8fa",` +
+		`"tool_use_id":"toolu_01NE","status":"failed","output_file":"/tmp/x.output",` +
+		`"summary":"Background command \"Fail soon\" failed with exit code 3"}`
+
+	event, err := claude.Decode([]byte(line))
+	if err != nil {
+		t.Fatalf("Decode() = %v, want nil", err)
+	}
+	if event.TaskNotification == nil {
+		t.Fatal("TaskNotification is nil, want the end of the task")
+	}
+	want := claude.TaskNotificationEvent{
+		TaskID:    "bio6sm37m",
+		RunID:     "0mvhet102-d66ee8fa",
+		ToolUseID: "toolu_01NE",
+		Status:    "failed",
+		Summary:   `Background command "Fail soon" failed with exit code 3`,
+	}
+	if diff := cmp.Diff(want, *event.TaskNotification); diff != "" {
+		t.Errorf("TaskNotification mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestDecodeResultOrigin(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name         string
+		line         string
+		wantNumTurns int
+		wantOrigin   *claude.ResultOrigin
+	}{
+		{
+			name:         "a turn a message of the app opened has no origin",
+			line:         `{"type":"result","subtype":"success","is_error":false,"num_turns":1,"result":"ok"}`,
+			wantNumTurns: 1,
+		},
+		{
+			name: "a turn a return in the background opened",
+			line: `{"type":"result","subtype":"success","is_error":false,"num_turns":1,"result":"ok",` +
+				`"origin":{"kind":"task-notification","producer":"session-task","runId":"0mvhet102-d66ee8fa"}}`,
+			wantNumTurns: 1,
+			wantOrigin:   &claude.ResultOrigin{Kind: "task-notification", RunID: "0mvhet102-d66ee8fa"},
+		},
+		{
+			name: "a turn the report of a subagent opened",
+			line: `{"type":"result","subtype":"success","is_error":false,"num_turns":1,"result":"ok",` +
+				`"origin":{"kind":"peer","from":"aef07d","senderTaskId":"aef07d","name":"general-purpose","handback":true}}`,
+			wantNumTurns: 1,
+			wantOrigin:   &claude.ResultOrigin{Kind: "peer", SenderTaskID: "aef07d"},
+		},
+		{
+			name: "an empty turn the CLI ran on its own",
+			line: `{"type":"result","subtype":"success","is_error":false,"num_turns":0,"result":"",` +
+				`"origin":{"kind":"task-notification","producer":"session-task"}}`,
+			wantOrigin: &claude.ResultOrigin{Kind: "task-notification"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			event, err := claude.Decode([]byte(tt.line))
+			if err != nil {
+				t.Fatalf("Decode() = %v, want nil", err)
+			}
+			if event.Result == nil {
+				t.Fatal("Result is nil, want the result")
+			}
+			if event.Result.NumTurns != tt.wantNumTurns {
+				t.Errorf("NumTurns = %d, want %d", event.Result.NumTurns, tt.wantNumTurns)
+			}
+			if diff := cmp.Diff(tt.wantOrigin, event.Result.Origin); diff != "" {
+				t.Errorf("Origin mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 // Fact 7: the result closes a turn with its outcome and its cost.
 func TestDecodeResultClosesTheTurn(t *testing.T) {
 	t.Parallel()

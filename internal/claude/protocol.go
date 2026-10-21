@@ -20,19 +20,21 @@ type Envelope struct {
 // Event is one decoded stdout line. Exactly one pointer field is set; Raw is
 // always the original line.
 type Event struct {
-	Type            string
-	Subtype         string
-	Init            *InitEvent
-	Status          *StatusEvent
-	CompactBoundary *CompactBoundaryEvent
-	APIRetry        *APIRetryEvent
-	Stream          *StreamEvent
-	Assistant       *AssistantEvent
-	User            *UserEvent
-	Result          *ResultEvent
-	ControlRequest  *ControlRequestEvent
-	ControlResponse *ControlResponseEvent
-	Raw             json.RawMessage
+	Type             string
+	Subtype          string
+	Init             *InitEvent
+	Status           *StatusEvent
+	CompactBoundary  *CompactBoundaryEvent
+	APIRetry         *APIRetryEvent
+	TaskStarted      *TaskStartedEvent
+	TaskNotification *TaskNotificationEvent
+	Stream           *StreamEvent
+	Assistant        *AssistantEvent
+	User             *UserEvent
+	Result           *ResultEvent
+	ControlRequest   *ControlRequestEvent
+	ControlResponse  *ControlResponseEvent
+	Raw              json.RawMessage
 }
 
 // InitEvent opens every turn and describes the session the CLI is running.
@@ -65,6 +67,34 @@ type APIRetryEvent struct {
 	MaxRetries   int    `json:"max_retries"`
 	RetryDelayMS int    `json:"retry_delay_ms"`
 	Error        string `json:"error"`
+}
+
+// TaskStartedEvent is a task the CLI starts for a tool call: a background
+// command, monitor or subagent, and also one in the foreground.
+type TaskStartedEvent struct {
+	TaskID         string `json:"task_id"`
+	RunID          string `json:"run_id"`
+	ToolUseID      string `json:"tool_use_id"`     // the call that started it
+	Description    string `json:"description"`     // the name the agent gave it
+	TaskType       string `json:"task_type"`       // local_bash (a command or a monitor), local_agent, ...
+	IsBackgrounded bool   `json:"is_backgrounded"` // false for a task the turn waits for
+}
+
+// TaskNotificationEvent is the end of a task the CLI started.
+type TaskNotificationEvent struct {
+	TaskID    string `json:"task_id"`
+	RunID     string `json:"run_id"`
+	ToolUseID string `json:"tool_use_id"`
+	Status    string `json:"status"`  // completed | failed | stopped
+	Summary   string `json:"summary"` // `Background command "X" failed with exit code 1`, ...
+}
+
+// ResultOrigin is what opened the turn a result closes; the result of a turn a
+// message of the app opened has none.
+type ResultOrigin struct {
+	Kind         string `json:"kind"`         // task-notification | peer | ...
+	RunID        string `json:"runId"`        // task-notification: the run of the task, "" for a monitor event
+	SenderTaskID string `json:"senderTaskId"` // peer: the task of the subagent whose report it was
 }
 
 // Usage counts the tokens of one request.
@@ -181,14 +211,15 @@ func (u UserEvent) ToolResults() []ToolResult {
 
 // ResultEvent closes a turn.
 type ResultEvent struct {
-	Subtype        string  `json:"subtype"`
-	IsError        bool    `json:"is_error"`
-	Result         string  `json:"result"`
-	StopReason     *string `json:"stop_reason"`
-	TerminalReason string  `json:"terminal_reason"`
-	NumTurns       int     `json:"num_turns"`
-	TotalCostUSD   float64 `json:"total_cost_usd"`
-	Usage          Usage   `json:"usage"`
+	Subtype        string        `json:"subtype"`
+	IsError        bool          `json:"is_error"`
+	Result         string        `json:"result"`
+	StopReason     *string       `json:"stop_reason"`
+	TerminalReason string        `json:"terminal_reason"`
+	Origin         *ResultOrigin `json:"origin"`
+	NumTurns       int           `json:"num_turns"`
+	TotalCostUSD   float64       `json:"total_cost_usd"`
+	Usage          Usage         `json:"usage"`
 	ModelUsage     map[string]struct {
 		ContextWindow int `json:"contextWindow"`
 	} `json:"modelUsage"`
@@ -286,6 +317,10 @@ func decodeSystem(line []byte, event *Event) error {
 		event.CompactBoundary, err = decodePayload[CompactBoundaryEvent](line, "system/compact_boundary")
 	case "api_retry":
 		event.APIRetry, err = decodePayload[APIRetryEvent](line, "system/api_retry")
+	case "task_started":
+		event.TaskStarted, err = decodePayload[TaskStartedEvent](line, "system/task_started")
+	case "task_notification":
+		event.TaskNotification, err = decodePayload[TaskNotificationEvent](line, "system/task_notification")
 	default:
 		// Unknown subtypes keep Type, Subtype and Raw, and nothing else.
 	}
