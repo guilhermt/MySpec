@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { readStoredPreference } from "@/features/theme/theme";
 import { boardOfRepository, findBoard } from "@/lib/boards";
+import { type Attachment, revokeAttachments } from "@/lib/images";
 import {
   type FreshItem,
   type GoneLocation,
@@ -234,6 +235,8 @@ export interface AppStore {
   /** transcripts and drafts are keyed by sessionKey: a task has one per stage. */
   transcripts: Record<string, TranscriptState>;
   drafts: Record<string, string>;
+  /** attachments are the images attached to the message being written, by the same key as drafts; they stay in memory. */
+  attachments: Record<string, Attachment[]>;
   /** markerRequest is a marker of a task the conversation opens and focuses: the last one of its type. */
   markerRequest: { taskId: string; type: MarkerType } | null;
   /**
@@ -407,6 +410,11 @@ export interface AppStore {
   failTranscript: (taskId: string, stage: string, message: string) => void;
   dropTranscript: (taskId: string, stage: string) => void;
   setDraft: (taskId: string, stage: string, text: string) => void;
+  addAttachments: (taskId: string, stage: string, list: readonly Attachment[]) => void;
+  /** removeAttachment takes one image off the message and frees its URL. */
+  removeAttachment: (taskId: string, stage: string, id: string) => void;
+  /** removeAttachments takes the images with the ids off the message and frees their URLs; the others stay. */
+  removeAttachments: (taskId: string, stage: string, ids: readonly string[]) => void;
   selectStepTab: (taskId: string, step: number, tab: StepTab) => void;
   setPrDraft: (taskId: string, draft: PrDraft) => void;
   /** setQuestionChoices keeps what the card of a pending question has chosen. */
@@ -720,6 +728,7 @@ function initialTaskUi(): Pick<
   AppStore,
   | "transcripts"
   | "drafts"
+  | "attachments"
   | "markerRequest"
   | "draftRequest"
   | "boardCardRequest"
@@ -746,6 +755,7 @@ function initialTaskUi(): Pick<
   return {
     transcripts: {},
     drafts: {},
+    attachments: {},
     markerRequest: null,
     draftRequest: null,
     boardCardRequest: null,
@@ -1337,6 +1347,32 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     setDraft: (taskId, stage, text) =>
       set((state) => ({ drafts: { ...state.drafts, [sessionKey(taskId, stage)]: text } })),
+    addAttachments: (taskId, stage, list) =>
+      set((state) => {
+        const key = sessionKey(taskId, stage);
+        return {
+          attachments: {
+            ...state.attachments,
+            [key]: [...(state.attachments[key] ?? []), ...list],
+          },
+        };
+      }),
+    removeAttachment: (taskId, stage, id) =>
+      set((state) => {
+        const key = sessionKey(taskId, stage);
+        const all = state.attachments[key] ?? [];
+        revokeAttachments(all.filter((one) => one.id === id));
+        return { attachments: { ...state.attachments, [key]: all.filter((one) => one.id !== id) } };
+      }),
+    removeAttachments: (taskId, stage, ids) =>
+      set((state) => {
+        const key = sessionKey(taskId, stage);
+        const all = state.attachments[key] ?? [];
+        revokeAttachments(all.filter((one) => ids.includes(one.id)));
+        return {
+          attachments: { ...state.attachments, [key]: all.filter((one) => !ids.includes(one.id)) },
+        };
+      }),
 
     selectStepTab: (taskId, step, tab) =>
       set((state) => ({ openStepTab: { ...state.openStepTab, [stepTabKey(taskId, step)]: tab } })),
@@ -1690,6 +1726,12 @@ export function useTask(id: string | null): TaskSummary | null {
 
 export function useTranscript(taskId: string, stage: string): TranscriptState | null {
   return useAppStore((state) => state.transcripts[sessionKey(taskId, stage)] ?? null);
+}
+
+const NO_ATTACHMENTS: Attachment[] = [];
+
+export function useAttachments(taskId: string, stage: string): Attachment[] {
+  return useAppStore((state) => state.attachments[sessionKey(taskId, stage)] ?? NO_ATTACHMENTS);
 }
 
 export function useDraft(taskId: string, stage: string): string {

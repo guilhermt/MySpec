@@ -499,6 +499,24 @@ A seção de um painel tem a legenda em caixa alta de `--text-caps`, que a nomei
 | Faça | Deixe a ação que resolve aqui e em nenhum outro lugar, fora as exceções de [structure.md](./structure.md) §3 |
 | Não faça | Não repita o comando nem a pergunta: a barra é a chamada, o cartão é o conteúdo |
 
+### Miniatura de imagem · `ImageThumb`, `ImageStrip`
+
+| | |
+|---|---|
+| Anatomia | Um botão quadrado que abre a imagem: `--size-thumb` (64 px, `sm`) ou `--size-thumb-lg` (96 px, `md`), raio `--radius-md`, borda `--line-2`, fundo `--surface-0`, a imagem em `object-cover`. `ImageStrip` é a lista (`ul` com nome) que as quebra em linhas com `--space-2` |
+| Variantes | Com `×` (um `IconButton` `xs` no canto superior direito, sobre um véu `--surface-3`), para o que ainda pode ser retirado; com legenda embaixo (`Card #474`, `Epic #470`, `Your text`), em `--text-meta` `--ink-3`, cortada numa linha |
+| Estados | Hover (borda mais forte), foco (anel), imagem que não carrega (o ícone de imagem em `--ink-4` no lugar dela) |
+| Acessibilidade | O botão tem nome (`Image 2 of 3, print.png`), o `×` também (`Remove image 2, print.png`), e a imagem dentro dele tem `alt` vazio |
+| Não faça | Não ponha o `×` onde a imagem já foi enviada nem enquanto um diálogo cria o item |
+
+### Imagem grande · `ImageViewer`
+
+| | |
+|---|---|
+| Anatomia | O diálogo `full` do sistema com o título da imagem (o nome do arquivo, ou `From the card #474`), e a imagem inteira, centrada, em `object-contain` sobre `--surface-0`, sem rolagem |
+| Teclado | `Esc` e o `×` fecham, e o foco volta à miniatura que abriu |
+| Acessibilidade | Diálogo modal nomeado pelo título; a imagem leva o `alt` do registro |
+
 ### Compositor · `features/chat/Composer`
 
 | | |
@@ -506,8 +524,9 @@ A seção de um painel tem a legenda em caixa alta de `--text-caps`, que a nomei
 | Anatomia | Caixa `--surface-input` com borda `--line-3`, raio `--radius-lg` e `--shadow-xs`, na coluna da conversa (`--measure-conversation`), com as mesmas bordas das entradas: as pastilhas (quando há), a textarea em 15/22, e o rodapé com o seletor de modelo e esforço da sessão à esquerda e, à direita, **Send**, ou `◌ Working · 3m 40s` e **Stop** |
 | Quando existe | Sempre que a conversa na tela tem uma sessão aberta. Sem ela (ainda não aberta, ou fechada pelo produto, como o review da PR depois de um review limpo), sai, e o vazio ou o bloco de erro dizem por quê |
 | Placeholder | Diz a quem se responde e como: `Answer with 1–3, or reply to the reviewer…`, `Queue a message for the implementer…`, `Sending restarts the reviewer's session…`, `Reply to the reviewer to go on…` (um turno que falhou), `Ask the reviewer to add, change or drop a finding…`, `Ask the implementer for a change…` (na aba do implementador do review da pull request), `Ask for changes: add, change or drop a draft…`, `Sending resumes the task…` |
+| Imagens | Entre as pastilhas e a textarea, só com anexos: uma fileira de **Miniatura de imagem** `sm`, cada uma com o `×` que a retira. Colar uma imagem ou soltar arquivos na caixa anexa; a caixa só reage a arraste de arquivos |
 | Pastilhas | **Resposta rápida**: uma pastilha por opção de uma pergunta em texto (`a · Yes. Read the limits from the plans table…`), que envia a letra. **Começo de mensagem**: **Ask for changes**, **Ask to fix the drafts**, que põem no começo da caixa `Change the drafts: ` ou `drafts.md can't be read: <razão> Rewrite it in the format MySpec reads. `, a menos que ela já comece por ele, com o foco no fim do texto. Contornadas por `--line-2`, `--text-meta`, raio `--radius-pill`; hover, foco, pressionada |
-| Estados | Hover, foco (borda e halo), com texto (**Send** primário só se nada mais na tela espera uma resposta), enviando (**Send** diz `Sending…` e o texto fica), erro (o texto fica, `Not sent · <razão>` no rodapé e **Send again**), agente trabalhando (`◌ Working · 3m 40s` e **Stop**; com texto, **Send** secundário antes dele, e a mensagem entra na fila), pausado (enviar retoma a sessão). A caixa cresce até `--size-composer-max` e depois rola |
+| Estados | Hover, foco (borda e halo), com texto (**Send** primário só se nada mais na tela espera uma resposta), enviando (**Send** diz `Sending…` e o texto fica), erro (o texto e as imagens ficam, `Not sent · <razão>` no rodapé e **Send again**), arrastando (a borda vira tracejada em `--focus` e `Drop images to attach` fica centrado sobre a caixa, em `--text-meta` `--ink-2`, sem pegar o ponteiro), com recusa (`Not attached · <arquivo> <razão>` no rodapé, em `--state-error`, até o próximo anexo), com pergunta pendente e imagens (**Send** não envia e o rodapé diz `Images don't answer a question. Answer the card first, or remove the images.`; retirar as imagens apaga a linha). Com só imagens, **Send** habilita e é primário como com texto; o rodapé mostra uma linha por vez, o erro de envio antes da pergunta e dela antes da recusa, todas em `role="alert"`, agente trabalhando (`◌ Working · 3m 40s` e **Stop**; com texto, **Send** secundário antes dele, e a mensagem entra na fila), pausado (enviar retoma a sessão). A caixa cresce até `--size-composer-max` e depois rola |
 | Tokens | `--surface-input`, `--line-3`, `--focus`, `--focus-halo`, `--shadow-xs`, `--state-error`, `--size-composer-min` |
 | Teclado | `Enter` envia, `Shift+Enter` quebra a linha |
 | Acessibilidade | Rótulo que diz a quem se responde (`Reply to the implementer`) |
@@ -537,8 +556,8 @@ A conversa é uma coluna centrada de `--measure-conversation` (60rem, 960 px), e
 |---|---|
 | Fala do agente | Texto na página, sem cartão e sem fundo: a faixa de quem fala e o Markdown em `--text-body`/`--leading-body` (15/22) e `--ink-1`, com cabeçalhos, listas, tabelas, mermaid e código na largura da coluna. `Interrupted by you` é uma linha sob a fala interrompida por **Stop**; uma queda da sessão é o bloco de erro |
 | Streaming | A fala cresce e termina num cursor parado, em `--ink-3`. O spinner fica antes da palavra de quem fala; ele é o único laço da fala |
-| Mensagem do usuário | Na largura da coluna, em `--surface-user`, raio `--radius-lg`: `You`, a hora com hover e foco, e o texto em 15/22, sem Markdown. Sem destinatário. Enviando e não enviada são estados do compositor: a mensagem só existe depois que o envio deu certo |
-| Mensagem na fila | A mesma forma em `--surface-0`, com `Queued · sends when the turn ends` (com a sessão em erro, `sends after the retry`; pausada, `sends when the task resumes`) e **Remove** na cabeça. Sai da fila quando o turno acaba. Só a mensagem do usuário entra na fila: uma entrada do produto pendente (o prompt de uma etapa ou de um step, a instrução de uma passada) é o marco da mensagem do produto, sem **Remove**, e o produto não aceita apagá-la |
+| Mensagem do usuário | Na largura da coluna, em `--surface-user`, raio `--radius-lg`: `You`, a hora com hover e foco, e o texto em 15/22, sem Markdown; com imagens, **Miniatura de imagem** `md` depois do texto, sem legenda (uma mensagem só de imagens não desenha o texto). Sem destinatário. Enviando e não enviada são estados do compositor: a mensagem só existe depois que o envio deu certo |
+| Mensagem na fila | A mesma forma em `--surface-0`, com `Queued · sends when the turn ends` (com a sessão em erro, `sends after the retry`; pausada, `sends when the task resumes`) e **Remove** na cabeça, e as miniaturas `md` das imagens depois do texto. Sai da fila quando o turno acaba. Só a mensagem do usuário entra na fila: uma entrada do produto pendente (o prompt de uma etapa ou de um step, a instrução de uma passada) é o marco da mensagem do produto, sem **Remove**, e o produto não aceita apagá-la |
 | Atividade | Uma linha no fim, em `role="status"`, com o spinner: `Starting session…`, `Thinking…`, `Retrying · attempt 3 of 10 · the API is overloaded · next try in 8s` |
 | Ritmo | `--space-3` entre as entradas |
 | Acessibilidade | A conversa é um `feed`, e cada filho é um `article` com nome (`Implementer, 14:19`, `You, 14:28`, `14 actions, Read 8 · Searched 4 · git 2, started 13:48`) |

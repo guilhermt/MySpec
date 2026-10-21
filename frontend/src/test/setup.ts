@@ -32,7 +32,10 @@ vi.mock("streamdown", () => ({
     shikiTheme?: readonly (string | { name?: string })[];
     lineNumbers?: boolean;
     controls?: { code?: { copy?: boolean } };
-    components?: { inlineCode?: ComponentType<{ children?: ReactNode }> };
+    components?: {
+      inlineCode?: ComponentType<{ children?: ReactNode }>;
+      img?: ComponentType<{ src?: string | undefined; alt?: string | undefined }>;
+    };
   }) =>
     createElement(
       "div",
@@ -45,18 +48,55 @@ vi.mock("streamdown", () => ({
         "data-line-numbers": String(lineNumbers ?? true),
         "data-code-copy": String(controls?.code?.copy ?? true),
       },
-      // The inline code of the text goes through the component the caller gave for it.
-      components?.inlineCode === undefined
-        ? children
-        : children
-            .split(/`([^`\n]+)`/)
-            .map((piece, at) =>
-              at % 2 === 1 && components.inlineCode !== undefined
-                ? createElement(components.inlineCode, { key: at }, piece)
-                : piece,
-            ),
+      // The inline code and the images of the text go through the components the caller gave for them.
+      withImages(withInlineCode(children, components?.inlineCode), components?.img),
     ),
 }));
+
+type InlineCode = ComponentType<{ children?: ReactNode }>;
+type Img = ComponentType<{ src?: string | undefined; alt?: string | undefined }>;
+
+function withInlineCode(text: string, inlineCode: InlineCode | undefined): ReactNode[] | string {
+  return inlineCode === undefined
+    ? text
+    : text
+        .split(/`([^`\n]+)`/)
+        .map((piece, at) => (at % 2 === 1 ? createElement(inlineCode, { key: at }, piece) : piece));
+}
+
+// The image of Markdown, ![alt](src), and of HTML, <img src="…" alt="…">.
+const MARKDOWN_IMAGE = /!\[([^\]]*)\]\(([^)\s]+)\)/;
+const HTML_IMAGE = /<img\s[^>]*src="([^"]+)"[^>]*>/;
+
+function withImages(pieces: ReactNode[] | string, img: Img | undefined): ReactNode {
+  if (img === undefined) {
+    return pieces;
+  }
+  const text = typeof pieces === "string" ? [pieces] : pieces;
+  return text.flatMap((piece, at) => {
+    if (typeof piece !== "string") {
+      return [piece];
+    }
+    const out: ReactNode[] = [];
+    let rest = piece;
+    for (let n = 0; rest !== ""; n += 1) {
+      const markdown = MARKDOWN_IMAGE.exec(rest);
+      const html = HTML_IMAGE.exec(rest);
+      const found =
+        markdown !== null && (html === null || markdown.index <= html.index) ? markdown : html;
+      if (found === null) {
+        out.push(rest);
+        break;
+      }
+      const isMarkdown = found === markdown;
+      const src = isMarkdown ? found[2] : found[1];
+      const alt = isMarkdown ? found[1] : (/alt="([^"]*)"/.exec(found[0])?.[1] ?? "");
+      out.push(rest.slice(0, found.index), createElement(img, { key: `${at}-${n}`, src, alt }));
+      rest = rest.slice(found.index + found[0].length);
+    }
+    return out;
+  });
+}
 vi.mock("@streamdown/code", () => ({ code: {} }));
 vi.mock("@streamdown/mermaid", () => ({ createMermaidPlugin: () => ({}) }));
 
@@ -68,6 +108,10 @@ class ResizeObserverStub implements ResizeObserver {
   disconnect(): void {}
 }
 vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+
+// jsdom has no object URLs: an attachment gets one to draw its thumbnail.
+URL.createObjectURL = vi.fn(() => "blob:test");
+URL.revokeObjectURL = vi.fn();
 
 // Base UI closes its popups only after their exit animation has finished; jsdom
 // paints nothing, so the flag it reads for tests keeps that synchronous.

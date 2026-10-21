@@ -187,4 +187,17 @@ describe("ExternalLink", () => {
 
     expect(screen.getByTestId("markdown")).toHaveClass("markdown-rail-last");
   });
+
+  it("draws the images of the text as markers with omit, with the link of each", () => {
+    renderWithStore(
+      <Markdown images={{ kind: "omit" }}>
+        {"See ![Logo](https://x/logo.png) and ![](https://x/two.png)"}
+      </Markdown>,
+    );
+
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.getByText("Logo")).toBeInTheDocument();
+    expect(screen.getByText("Image")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "link" })).toHaveLength(2);
+  });
 });

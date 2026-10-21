@@ -53,7 +53,7 @@ import { useAutoScroll } from "@/features/chat/useAutoScroll";
 import { type FeedUnits, useFeed } from "@/features/chat/useFeed";
 import { decidedMarkerIds, reportMarkerIds } from "@/features/reviews/review-conversation";
 import { bottomPadding } from "@/lib/reveal";
-import { asSituationKind, asTaskMode, type Entry, type UserEntry } from "@/lib/wails";
+import { asSituationKind, asTaskMode, type Entry, type Image, type UserEntry } from "@/lib/wails";
 import { useAppStore, useFlashing, useReview, useTask, useTranscript } from "@/store/app-store";
 
 const NO_ENTRIES: readonly Entry[] = [];
@@ -89,10 +89,10 @@ function useCardFlash(itemId: string): "question" | "permission" | null {
 }
 
 // messageOf is what the user wrote at the start of a discussion, as an entry of the conversation.
-function messageOf(text: string): UserEntry {
+function messageOf(text: string, images: Image[]): UserEntry {
   return {
     text,
-    images: [],
+    images,
     pending: false,
     prompt: false,
     app: false,
@@ -190,8 +190,8 @@ const RowView = memo(function RowView({
               discussion={ctx.discussion}
             />
           )}
-          {opening.message !== "" && (
-            <YourMessage user={messageOf(opening.message)} createdAt={createdAt} />
+          {(opening.message !== "" || opening.images.length > 0) && (
+            <YourMessage user={messageOf(opening.message, opening.images)} createdAt={createdAt} />
           )}
         </>
       );

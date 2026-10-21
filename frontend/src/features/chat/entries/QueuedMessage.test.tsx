@@ -53,4 +53,33 @@ describe("QueuedMessage", () => {
     finish();
     expect(await screen.findByRole("button", { name: "Remove" })).toBeInTheDocument();
   });
+
+  it("shows the images of the queued message", () => {
+    const user = makeEntry("user").user as UserEntry;
+    renderWithStore(
+      <QueuedMessage
+        taskId="task-1"
+        stage="prd"
+        entryId="entry-9"
+        user={{
+          ...user,
+          text: "",
+          pending: true,
+          images: [
+            {
+              id: "a",
+              url: "/myspec/images/task-1/a.png",
+              origin: "user",
+              issue: "",
+              number: 0,
+              alt: "Logo",
+            },
+          ],
+        }}
+        session={IDLE_SESSION}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Image 1 of 1, Logo" })).toBeInTheDocument();
+  });
 });

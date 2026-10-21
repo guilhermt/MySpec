@@ -1,4 +1,5 @@
 import type { StoreApi } from "zustand";
+import { guardFileDrops } from "@/lib/images";
 import { modalOpen } from "@/lib/layers";
 import { announcement, FLASH_MS } from "@/lib/situations";
 import {
@@ -35,6 +36,7 @@ export async function bootstrap(store: StoreApi<AppStore>): Promise<() => void> 
   let stopConnected: (() => void) | null = null;
   let connecting = false;
   let stopped = false;
+  const stopGuard = guardFileDrops(window);
   const follow = (startup: Startup) => {
     store.getState().applyStartup(startup);
     if (asStartupPhase(startup.phase) === "ready" && !connecting) {
@@ -52,6 +54,7 @@ export async function bootstrap(store: StoreApi<AppStore>): Promise<() => void> 
   follow(await api.getStartup());
   return () => {
     stopped = true;
+    stopGuard();
     stopStartup();
     stopConnected?.();
   };

@@ -22,6 +22,7 @@ import { counted, lowerFirst } from "@/lib/situations";
 import { asLifecycleStage, stageLabel } from "@/lib/stages";
 import type {
   Entry,
+  Image,
   MarkerEntry,
   MarkerType,
   PlanProblem,
@@ -73,13 +74,18 @@ export type MarkerIcon =
  */
 export type MarkerBody =
   | { kind: "none" }
-  | { kind: "markdown"; text: string }
+  | { kind: "markdown"; text: string; images?: Image[] }
   | { kind: "artifact"; name: string; openIn: "artifacts" | "details" | "reports" }
   | { kind: "problems"; problems: PlanProblem[] }
   | { kind: "checks"; reading: ChecksReading; summary: string }
   | { kind: "findings"; pass: number; findings: FindingView[] }
   | { kind: "commits"; commits: { sha: string; subject: string }[]; more: number }
-  | { kind: "discussionDocument"; name: "context.md" | "discussion.md"; text: string | null }
+  | {
+      kind: "discussionDocument";
+      name: "context.md" | "discussion.md";
+      text: string | null;
+      images?: Image[];
+    }
   | { kind: "drafts"; rows: DraftRowView[] };
 
 /** MarkerView is a line of the conversation: a marker, a start line, a message of the product. */
@@ -158,8 +164,11 @@ function parts(...all: string[]): string {
 }
 
 // markdownOf is a text to open in place, nothing when it is empty.
-function markdownOf(text: string): MarkerBody {
-  return text.trim() === "" ? NONE : { kind: "markdown", text };
+function markdownOf(text: string, images?: Image[]): MarkerBody {
+  if (text.trim() === "") {
+    return NONE;
+  }
+  return images === undefined ? { kind: "markdown", text } : { kind: "markdown", text, images };
 }
 
 // line is a view that shows its time on hover and focus.
@@ -266,7 +275,10 @@ function stageStart(start: StartOf, prompt: UserEntry | null, ctx: MarkerContext
     "start",
     `${name} ${start.restarted ? "restarted" : "started"}`,
     stageComplement(stage, ctx.task),
-    markdownOf(opened ?? ""),
+    markdownOf(
+      opened ?? "",
+      stage === "prd" || stage === "one_shot" ? (prompt?.images ?? []) : undefined,
+    ),
   );
 }
 
@@ -791,19 +803,20 @@ function discussionLineOf(
 
 /**
  * discussionOpeningOf is what follows the start of a discussion: the line Context, from the prompt,
- * and what the user wrote, "" without. A conversation that isn't a discussion has neither.
+ * and what the user wrote, "" without, with the images they attached. A conversation that isn't a discussion has neither.
  */
 export function discussionOpeningOf(
   prompt: Entry | null,
   ctx: MarkerContext,
-): { context: MarkerView | null; message: string } {
+): { context: MarkerView | null; message: string; images: Image[] } {
   const { discussion } = ctx;
   if (discussion === null) {
-    return { context: null, message: "" };
+    return { context: null, message: "", images: [] };
   }
   return {
     context: contextLineOf(prompt?.user ?? null, discussion, discussion.folds.epics),
     message: discussion.text,
+    images: (prompt?.user?.images ?? []).filter((image) => image.origin === "user"),
   };
 }
 

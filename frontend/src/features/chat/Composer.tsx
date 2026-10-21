@@ -23,8 +23,12 @@ import {
 } from "@/features/chat/composer";
 import { voiceInSentence, voiceOf } from "@/features/chat/markers";
 import type { SessionState } from "@/features/chat/session";
+import { AttachedImages } from "@/features/images/AttachedImages";
+import { pasteImages } from "@/features/images/pasteImages";
+import { useImageDrop } from "@/features/images/useImageDrop";
 import { ModelChip } from "@/features/models/ModelChip";
 import { focusRequest } from "@/lib/focus";
+import { readAttachments, refusalText } from "@/lib/images";
 import { cn } from "@/lib/utils";
 import { asSessionStatus, type PermissionEntry, type QuestionEntry } from "@/lib/wails";
 import {
@@ -34,7 +38,7 @@ import {
   sendMessageInPlace,
   setSessionModel,
 } from "@/store/actions";
-import { useAppStore, useDraft } from "@/store/app-store";
+import { useAppStore, useAttachments, useDraft } from "@/store/app-store";
 
 const NO_CHOICES: QuestionChoices = {};
 const NO_CHIPS: QuickReply[] = [];
@@ -42,6 +46,10 @@ const NO_STARTERS: readonly ComposerStarter[] = [];
 
 // EMPTY_REASON is why Send is disabled with nothing written, in its tooltip and its description.
 const EMPTY_REASON = "Write a message";
+
+// QUESTION_WITH_IMAGES is why a pending question holds the images back: an answer is not a message.
+const QUESTION_WITH_IMAGES =
+  "Images don't answer a question. Answer the card first, or remove the images.";
 
 // SECOND is how often the time of the running turn is read again.
 const SECOND = 1000;
@@ -99,6 +107,10 @@ export function Composer({
 }: ComposerProps) {
   const draft = useDraft(taskId, stage);
   const setDraft = useAppStore((state) => state.setDraft);
+  const attachments = useAttachments(taskId, stage);
+  const addAttachments = useAppStore((state) => state.addAttachments);
+  const removeAttachment = useAppStore((state) => state.removeAttachment);
+  const removeAttachments = useAppStore((state) => state.removeAttachments);
   const choices = useAppStore((state) =>
     question === null ? NO_CHOICES : (state.questionChoices[question.requestId] ?? NO_CHOICES),
   );
@@ -110,6 +122,9 @@ export function Composer({
   const emptyReasonId = useId();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  // refusal is why the last images weren't attached; imagesHeld, that a question holds the images back.
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const [imagesHeld, setImagesHeld] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [saving, setSaving] = useState(false);
   // backToCard counts the texts that left the card incomplete: after each one is drawn on the card,
@@ -153,7 +168,7 @@ export function Composer({
   const who = context.who ?? (voiceInSentence(voiceOf(stage)) || "agent");
   const paused = asSessionStatus(session.sessionStatus) === "paused";
   const turnRunning = session.turnRunning;
-  const empty = draft.trim() === "";
+  const empty = draft.trim() === "" && attachments.length === 0;
   const placeholder = placeholderOf({
     paused,
     stopped: session.lastError !== "",
@@ -173,15 +188,31 @@ export function Composer({
   const deliver = async (text: string, clears: boolean) => {
     setSending(true);
     setError("");
+    const sent = clears ? attachments : [];
     const failure =
       (paused ? await resumeInPlace(taskId, stage) : "") ||
-      (await sendMessageInPlace(taskId, stage, text));
+      (await sendMessageInPlace(taskId, stage, text, sent));
     setSending(false);
     setError(failure);
     if (failure === "" && clears) {
       setDraft(taskId, stage, "");
+      // Only the images that went: one attached while the message was on its way stays.
+      removeAttachments(
+        taskId,
+        stage,
+        sent.map((one) => one.id),
+      );
+      setRefusal(null);
     }
   };
+
+  // attach reads the files into attachments; each new batch replaces the earlier refusal.
+  const attach = async (files: File[]) => {
+    const read = await readAttachments(files);
+    addAttachments(taskId, stage, read.attachments);
+    setRefusal(read.refusals.length > 0 ? refusalText(read.refusals) : null);
+  };
+  const drop = useImageDrop((files) => void attach(files), true);
 
   // answer puts the text of the field on the pending question, and sends the card once every
   // question has a choice; otherwise the text leaves the field and the focus goes back to the card.
@@ -226,13 +257,17 @@ export function Composer({
       return;
     }
     const text = draft.trim();
+    if (question !== null && attachments.length > 0) {
+      setImagesHeld(true);
+      return;
+    }
     if (question !== null) {
       if (text !== "" || answerWithText(question, choices, "").complete) {
         void answer(question, text);
       }
       return;
     }
-    if (text !== "") {
+    if (text !== "" || attachments.length > 0) {
       void deliver(text, true);
     }
   };
@@ -262,11 +297,18 @@ export function Composer({
     setSaving(false);
   };
 
+  // The foot says one thing at a time: the failure to send, the question holding the images, the refusal.
+  const footLine =
+    error !== ""
+      ? `Not sent · ${error}`
+      : imagesHeld && attachments.length > 0 && question !== null
+        ? QUESTION_WITH_IMAGES
+        : (refusal ?? "");
   const sendLabel = error === "" ? "Send" : "Send again";
   const sendButton = (
     <Button
       size="sm"
-      variant={!turnRunning && sendIsPrimary(draft, otherPrimary) ? "primary" : "secondary"}
+      variant={!turnRunning && sendIsPrimary(!empty, otherPrimary) ? "primary" : "secondary"}
       {...(turnRunning ? {} : { shortcut: "↵" })}
       {...(empty ? { disabled: true, reasonId: emptyReasonId } : {})}
       loading={sending || answerSending}
@@ -295,9 +337,16 @@ export function Composer({
         data-slot="composer"
         className={cn(
           COLUMN_CLASS,
-          "flex flex-col rounded-lg border border-line-3 bg-surface-input shadow-xs transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard has-[textarea:focus-visible]:field-focus!",
+          "relative flex flex-col rounded-lg border border-line-3 bg-surface-input shadow-xs transition-[border-color,box-shadow] duration-(--duration-fast) ease-standard has-[textarea:focus-visible]:field-focus!",
+          drop.dragging && "border-dashed border-focus",
         )}
+        {...drop.handlers}
       >
+        {drop.dragging && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-surface-input/80 text-(length:--text-meta) leading-(--leading-meta) text-ink-2">
+            Drop images to attach
+          </div>
+        )}
         {(starters.length > 0 || chips.length > 0) && (
           <div className="flex min-w-0 flex-wrap items-center gap-(--space-1-5) px-(--space-3) pt-(--space-2)">
             {starters.length > 0 && (
@@ -344,6 +393,17 @@ export function Composer({
             )}
           </div>
         )}
+        {attachments.length > 0 && (
+          <div className="px-(--space-3) pt-(--space-2)">
+            <AttachedImages
+              attachments={attachments}
+              onRemove={(id) => {
+                removeAttachment(taskId, stage, id);
+                setImagesHeld(false);
+              }}
+            />
+          </div>
+        )}
         <textarea
           ref={field}
           id="composer-input"
@@ -351,6 +411,7 @@ export function Composer({
           value={draft}
           onChange={(event) => setDraft(taskId, stage, event.target.value)}
           onKeyDown={onKeyDown}
+          onPaste={(event) => pasteImages(event, (files) => void attach(files))}
           placeholder={placeholder}
           className="field-sizing-content max-h-(--size-composer-max) min-h-(--size-composer-min) resize-none overflow-y-auto bg-transparent px-(--space-3) py-(--space-2) text-(length:--text-body) leading-(--leading-body) text-ink-1 outline-none placeholder:text-ink-4"
         />
@@ -366,9 +427,12 @@ export function Composer({
                 saving={saving}
               />
             )}
-            {error !== "" && (
-              <p className="text-(length:--text-meta) leading-(--leading-meta) text-state-error">
-                {`Not sent · ${error}`}
+            {footLine !== "" && (
+              <p
+                role="alert"
+                className="text-(length:--text-meta) leading-(--leading-meta) text-state-error"
+              >
+                {footLine}
               </p>
             )}
           </div>

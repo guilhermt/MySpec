@@ -558,4 +558,48 @@ describe("MarkerLine", () => {
       expect(api.openExternal).toHaveBeenCalledWith("https://github.com/acme/billing/issues/479");
     });
   });
+
+  it("opens the Markdown with its images below, with their captions, and its image links as markers", async () => {
+    const images = [
+      { id: "a", url: "/i/a.png", origin: "card", issue: "acme/api#474", number: 474, alt: "" },
+      { id: "b", url: "/i/b.png", origin: "user", issue: "", number: 0, alt: "" },
+    ];
+    const { user } = line(
+      view({
+        icon: "start",
+        text: "PRD started",
+        complement: "with your description",
+        body: { kind: "markdown", text: "Look ![Logo](https://x/y.png)", images },
+      }),
+    );
+
+    await user.click(screen.getByRole("button", { name: /PRD started/ }));
+
+    // The link of an image in the text is a marker: the images come below.
+    expect(screen.getByTestId("markdown")).not.toContainElement(screen.queryByRole("img"));
+    expect(screen.getByTestId("markdown")).toHaveTextContent("Logo");
+    expect(screen.getByText("Card #474")).toBeInTheDocument();
+    expect(screen.getByText("Your text")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Image 1 of 2" }));
+    expect(screen.getByRole("dialog", { name: "From the card #474" })).toBeInTheDocument();
+  });
+
+  it("opens the context of a discussion with the images of its cards", async () => {
+    const images = [
+      { id: "a", url: "/i/a.png", origin: "epic", issue: "acme/api#470", number: 470, alt: "" },
+    ];
+    const { user } = line(
+      view({
+        icon: "file",
+        text: "Context",
+        complement: "#455 · 12 characters · 1 image",
+        body: { kind: "discussionDocument", name: "context.md", text: "The context.", images },
+      }),
+    );
+
+    await user.click(screen.getByRole("button", { name: /Context/ }));
+
+    expect(screen.getByText("Epic #470")).toBeInTheDocument();
+  });
 });

@@ -4,6 +4,7 @@ import type { PreviewReading } from "@/features/task/deletion";
 import { draftTitle } from "@/lib/drafts";
 import { messageOf, noticeDetail, type Remedy } from "@/lib/errors";
 import { olderKey } from "@/lib/history";
+import { type Attachment, encodeImages } from "@/lib/images";
 import { locationTitle } from "@/lib/locations";
 import type { ModelChoice } from "@/lib/models";
 import {
@@ -552,8 +553,12 @@ export async function sendMessageInPlace(
   taskId: string,
   stage: string,
   text: string,
+  images: readonly Attachment[] = [],
 ): Promise<string> {
-  return (await inPlace(() => api.sendMessage(taskId, stage, text, []))) ?? "";
+  return (
+    (await inPlace(async () => api.sendMessage(taskId, stage, text, await encodeImages(images)))) ??
+    ""
+  );
 }
 
 export async function removePending(taskId: string, stage: string, entryId: string): Promise<void> {

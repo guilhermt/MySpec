@@ -3,6 +3,7 @@ import { holdStands } from "@/features/discussion/discussion-status";
 import { cardEntries, isBlocked } from "@/features/discussion/drafts-card";
 import { contextCharacters } from "@/features/discussion/new-discussion";
 import { draftTitle, publishedOutcome } from "@/lib/drafts";
+import { imagesPart } from "@/lib/images";
 import { shortName, shortRef } from "@/lib/repositories";
 import { counted, listed } from "@/lib/situations";
 import type {
@@ -188,11 +189,13 @@ export function contextLineOf(
   if (prompt === null) {
     return line("file", "Context", from);
   }
-  return line("file", "Context", `${from} · ${contextCharacters(prompt.text)}`, {
-    kind: "discussionDocument",
-    name: "context.md",
-    text: prompt.text,
-  });
+  const images = (prompt.images ?? []).filter((image) => image.origin !== "user");
+  return line(
+    "file",
+    "Context",
+    `${from} · ${contextCharacters(prompt.text)}${imagesPart(images.length, false)}`,
+    { kind: "discussionDocument", name: "context.md", text: prompt.text, images },
+  );
 }
 
 /** documentLineOf is the line of the document written or rewritten; only the latest opens it. */
