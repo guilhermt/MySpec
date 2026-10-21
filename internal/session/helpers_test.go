@@ -513,9 +513,17 @@ func (f *fixture) advance(d time.Duration) {
 func newGatedFixture(t *testing.T) (*fixture, func(gates ...string)) {
 	t.Helper()
 
+	return newGatedFixtureOf(t, "actions")
+}
+
+// newGatedFixtureOf builds a Service whose processes play a scenario held at
+// gates, each until the test opens it.
+func newGatedFixtureOf(t *testing.T, scenario string) (*fixture, func(gates ...string)) {
+	t.Helper()
+
 	dir := t.TempDir()
 	f := newFixtureWith(t, &fakeLauncher{
-		scenario: "actions",
+		scenario: scenario,
 		env:      []string{claudetest.EnvGates + "=" + dir},
 	}, 0)
 	open := func(gates ...string) {
@@ -751,6 +759,20 @@ func (f *fixture) entriesOf(t *testing.T, k session.Key, kind session.Kind) []se
 	var out []session.Entry
 	for _, e := range f.transcript(t, k).Entries {
 		if e.Kind == kind {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// wokeMarkers returns the woke markers of a session, in the order of the
+// conversation.
+func wokeMarkers(t *testing.T, f *fixture, k session.Key) []session.Entry {
+	t.Helper()
+
+	var out []session.Entry
+	for _, e := range f.entriesOf(t, k, session.KindMarker) {
+		if e.Marker.Type == session.MarkerWoke {
 			out = append(out, e)
 		}
 	}

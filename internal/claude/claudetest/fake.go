@@ -106,6 +106,17 @@ const (
 	FailingDescription  = "Run the tests"
 )
 
+// The background scenario: a command and a subagent it leaves running, a
+// command in the foreground, and what the agent says when it resumes.
+const (
+	BackgroundCommandDescription = "Run the tests"
+	BackgroundAgentDescription   = "Survey the repository"
+	ForegroundDescription        = "List the files"
+	BackgroundExitCode           = 1
+	BackgroundResumeText         = "Looking at the failed tests."
+	BackgroundAgentText          = "The repository holds one module."
+)
+
 // Capabilities is what the fake announces in system/init.
 var Capabilities = []string{"interrupt_receipt_v1", "interrupt_cancel_queued_v1", "msg_lifecycle_v1"}
 
@@ -374,6 +385,8 @@ func (f *fake) play(scenario string) int {
 			f.actionsTurn(text)
 		case "subagent":
 			f.subagentTurn(text)
+		case "background":
+			f.backgroundTurn(text)
 		case "bash_fail":
 			f.bashFailTurn(text)
 		case "writer":
@@ -835,6 +848,94 @@ func (f *fake) bashFailTurn(text string) {
 	f.result("success", false, text, "completed")
 }
 
+// backgroundTurn leaves a command and a subagent running in the background and
+// runs a command in the foreground, then plays what comes of them, stopping at
+// a gate after each stage: 1, the command fails while the turn is open and the
+// turn answers; 2, the agent resumes on its own, with no return waiting; 3, that
+// turn ends, its origin naming the command; 4, the subagent reports back and
+// the agent resumes for it; 5, that turn ends, and the CLI runs an empty turn
+// of its own. An interrupt at a gate aborts the scenario.
+func (f *fake) backgroundTurn(text string) {
+	n := f.turns
+	cmd, agent, fg := fmt.Sprintf("task-%d-cmd", n), fmt.Sprintf("task-%d-agent", n), fmt.Sprintf("task-%d-fg", n)
+	cmdRun, agentRun, fgRun := fmt.Sprintf("run-%d-cmd", n), fmt.Sprintf("run-%d-agent", n), fmt.Sprintf("run-%d-fg", n)
+	gate := func(k int) bool { return f.awaitGate(fmt.Sprintf("%d-%d", n, k)) }
+
+	f.emitInit()
+	f.status()
+	m1 := f.nextID("msg")
+	f.messageStart(m1)
+
+	cmdUse := f.nextID("toolu")
+	f.streamToolUse(0, m1, cmdUse, "Bash", map[string]any{
+		"command":           "go test ./...",
+		"description":       BackgroundCommandDescription,
+		"run_in_background": true,
+	})
+	f.taskStarted(cmd, cmdRun, cmdUse, BackgroundCommandDescription, "local_bash", true)
+	f.toolResult(cmdUse, "Command running in background with ID: "+cmd+".")
+
+	agentUse := f.nextID("toolu")
+	f.streamToolUse(1, m1, agentUse, "Agent", map[string]any{
+		"description":       BackgroundAgentDescription,
+		"subagent_type":     SubagentType,
+		"prompt":            "Survey the repository.",
+		"run_in_background": true,
+	})
+	f.taskStarted(agent, agentRun, agentUse, BackgroundAgentDescription, "local_agent", true)
+	f.toolResult(agentUse, "Async agent launched successfully.")
+
+	fgUse := f.nextID("toolu")
+	f.streamToolUse(2, m1, fgUse, "Bash", map[string]any{"command": "ls -1", "description": ForegroundDescription})
+	f.taskStarted(fg, fgRun, fgUse, ForegroundDescription, "local_bash", false)
+	f.taskNotification(fg, fgRun, fgUse, "completed", ForegroundDescription)
+	f.toolResult(fgUse, "hello.txt")
+	if !gate(1) {
+		return
+	}
+
+	f.taskNotification(cmd, cmdRun, cmdUse, "failed",
+		fmt.Sprintf("Background command %q failed with exit code %d", BackgroundCommandDescription, BackgroundExitCode))
+	f.streamText(3, text)
+	f.endMessage()
+	f.assistantText(m1, text)
+	f.result("success", false, text, "completed")
+
+	if !gate(2) {
+		return
+	}
+	f.emitInit()
+	f.status()
+	m2 := f.nextID("msg")
+	f.messageStart(m2)
+	f.streamText(0, BackgroundResumeText)
+	f.endMessage()
+	f.assistantText(m2, BackgroundResumeText)
+	if !gate(3) {
+		return
+	}
+	f.originResult(BackgroundResumeText, 1, map[string]any{"kind": "task-notification", "producer": "session-task", "runId": cmdRun})
+
+	if !gate(4) {
+		return
+	}
+	f.taskNotification(agent, agentRun, agentUse, "completed", "This agent's report was delivered to you as a message.")
+	f.emitInit()
+	f.status()
+	m3 := f.nextID("msg")
+	f.messageStart(m3)
+	f.streamText(0, BackgroundAgentText)
+	f.endMessage()
+	f.assistantText(m3, BackgroundAgentText)
+	if !gate(5) {
+		return
+	}
+	f.originResult(BackgroundAgentText, 1, map[string]any{"kind": "peer", "from": agent, "senderTaskId": agent})
+
+	f.emitInit()
+	f.originResult("", 0, map[string]any{"kind": "task-notification", "producer": "session-task", "runId": agentRun})
+}
+
 // awaitGate waits for the named file in EnvGates, reporting false when an
 // interrupt aborted the turn or stdin ended first.
 //
@@ -1137,18 +1238,63 @@ func (f *fake) userText(text string) {
 
 // result closes a turn.
 func (f *fake) result(subtype string, isError bool, text, terminalReason string) {
-	f.emit(map[string]any{
+	f.emit(f.resultLine(subtype, isError, text, terminalReason, f.turns))
+}
+
+// originResult closes a turn the agent opened, saying what opened it.
+func (f *fake) originResult(text string, numTurns int, origin map[string]any) {
+	line := f.resultLine("success", false, text, "completed", numTurns)
+	line["origin"] = origin
+	f.emit(line)
+}
+
+// resultLine is the result of a turn, before the fields every line carries.
+func (f *fake) resultLine(subtype string, isError bool, text, terminalReason string, numTurns int) map[string]any {
+	return map[string]any{
 		"type":               "result",
 		"subtype":            subtype,
 		"is_error":           isError,
 		"result":             text,
 		"stop_reason":        nil,
 		"terminal_reason":    terminalReason,
-		"num_turns":          f.turns,
+		"num_turns":          numTurns,
 		"total_cost_usd":     0.01,
 		"usage":              usage(64),
 		"modelUsage":         map[string]any{Model: map[string]any{"contextWindow": ContextWindow}},
 		"permission_denials": []any{},
+	}
+}
+
+// status announces that the CLI is calling the API, as it does after an init.
+func (f *fake) status() {
+	f.emit(map[string]any{"type": "system", "subtype": "status", "status": "requesting"})
+}
+
+// taskStarted announces a task the agent launched.
+func (f *fake) taskStarted(taskID, runID, toolUseID, description, taskType string, backgrounded bool) {
+	f.emit(map[string]any{
+		"type":            "system",
+		"subtype":         "task_started",
+		"task_id":         taskID,
+		"run_id":          runID,
+		"tool_use_id":     toolUseID,
+		"description":     description,
+		"task_type":       taskType,
+		"is_backgrounded": backgrounded,
+	})
+}
+
+// taskNotification announces the end of a task.
+func (f *fake) taskNotification(taskID, runID, toolUseID, status, summary string) {
+	f.emit(map[string]any{
+		"type":        "system",
+		"subtype":     "task_notification",
+		"task_id":     taskID,
+		"run_id":      runID,
+		"tool_use_id": toolUseID,
+		"status":      status,
+		"summary":     summary,
+		"output_file": "",
 	})
 }
 
