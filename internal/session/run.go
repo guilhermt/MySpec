@@ -38,8 +38,12 @@ type run struct {
 	retryReason  string    // retryReasonOf the error
 	turnFailed   bool      // the last turn ended in an error; the next turn clears it
 
-	tasks map[string]*backgroundTask // task_id -> the tasks the current process runs in the background
-	wakes []Wake                     // the returns that arrived with no turn, for the marker that opens the next one
+	tasks       map[string]*cliTask    // task_id -> the tasks the current process runs, in the foreground or the background
+	wakes       []Wake                 // the returns that arrived with no turn, for the marker that opens the next one
+	monitors    map[string]monitorCall // tool_use_id -> the Monitor calls of the current process, until their task starts
+	returnDue   bool                   // a task came back with no turn open, and the CLI has not answered it yet
+	returnTimer *time.Timer            // gives up on a return the CLI does not answer
+	lastTurnAt  time.Time              // when the last turn of the current process started
 
 	idleTimer  *time.Timer
 	flushTimer *time.Timer
@@ -63,13 +67,32 @@ type turn struct {
 	thinking  map[int]string    // block index -> text a thinking block streamed so far, thinking blocks only
 }
 
-// backgroundTask is a task the current process runs in the background: what
-// the conversation calls it, and its return once it came.
-type backgroundTask struct {
-	kind  WakeKind
-	name  string
-	runID string
-	wake  *Wake // nil until its task_notification arrives
+// cliTask is a task the current process runs for a tool call: what the
+// conversation calls it, whether it runs in the background, what it counts as
+// and its return once it came.
+type cliTask struct {
+	kind         WakeKind
+	name         string
+	runID        string
+	backgrounded bool        // the turn does not wait for it
+	persistent   bool        // a monitor with no deadline, which never counts
+	pastLimit    bool        // a command past CommandLimit, or a monitor past its deadline and the grace
+	gone         bool        // the CLI's list of background tasks no longer has it
+	limit        *time.Timer // ends what a command or a timed monitor counts; nil for the others
+	wake         *Wake       // nil until its task_notification arrives
+}
+
+// counts reports whether the task is work of the session: in the background,
+// not over and within its limit.
+func (t *cliTask) counts() bool {
+	return t.backgrounded && t.wake == nil && !t.gone && !t.pastLimit && !t.persistent
+}
+
+// monitorCall is what a Monitor call asked for: how long the monitor runs, or
+// that it runs for the whole session.
+type monitorCall struct {
+	timeout    time.Duration
+	persistent bool
 }
 
 // graces are how long stopProcess waits at each step before escalating.
@@ -90,12 +113,13 @@ const interruptReceiptCapability = "interrupt_receipt_v1"
 
 func newRun(t TaskInfo, rec Record, nextSeq int) *run {
 	return &run{
-		task:    t,
-		rec:     rec,
-		byID:    map[string]*Entry{},
-		nextSeq: nextSeq,
-		dirty:   map[string]struct{}{},
-		tasks:   map[string]*backgroundTask{},
+		task:     t,
+		rec:      rec,
+		byID:     map[string]*Entry{},
+		nextSeq:  nextSeq,
+		dirty:    map[string]struct{}{},
+		tasks:    map[string]*cliTask{},
+		monitors: map[string]monitorCall{},
 	}
 }
 
@@ -148,6 +172,39 @@ func (r *run) clearRetry() {
 	r.retryReason = ""
 }
 
+// backgroundWork reports whether the current process has work in the
+// background that counts: a task that counts, or a return the CLI is about to
+// answer.
+func (r *run) backgroundWork() bool {
+	if r.returnDue {
+		return true
+	}
+	for _, t := range r.tasks {
+		if t.counts() {
+			return true
+		}
+	}
+	return false
+}
+
+// answerReturn forgets a return the CLI answered, or gave up on.
+func (r *run) answerReturn() {
+	r.returnDue = false
+	r.stopTimer(&r.returnTimer)
+}
+
+// forgetTasks drops every task of the process that ran them, with their
+// timers: the work in the background is the process's, and goes with it.
+func (r *run) forgetTasks() {
+	for _, t := range r.tasks {
+		r.stopTimer(&t.limit)
+	}
+	clear(r.tasks)
+	clear(r.monitors)
+	r.wakes = nil
+	r.answerReturn()
+}
+
 // summary derives what the interface shows from the state of the run.
 func (r *run) summary() Summary {
 	sum := Summary{
@@ -176,7 +233,7 @@ func (r *run) summary() Summary {
 		sum.Status = StatusNeedsAnswer
 	case r.permission != nil:
 		sum.Status = StatusNeedsPermission
-	case r.turn != nil || r.startTimer != nil:
+	case r.turn != nil || r.startTimer != nil || r.backgroundWork():
 		sum.Status = StatusWorking
 	default:
 		sum.Status = StatusWaiting
@@ -187,6 +244,10 @@ func (r *run) summary() Summary {
 		if e := r.turn.runningAction(); e != nil {
 			sum.ActionLabel, sum.ActionTarget = e.Action.Label, e.Action.Target
 		}
+	}
+	if r.turn == nil && r.backgroundWork() {
+		// The clock of the work goes on from the turn that left it running.
+		sum.TurnStartedAt = r.lastTurnAt
 	}
 	return sum
 }
@@ -205,6 +266,10 @@ func (r *run) stopTimers() {
 	r.stopTimer(&r.interruptTmr)
 	r.stopTimer(&r.idleTimer)
 	r.stopTimer(&r.flushTimer)
+	r.stopTimer(&r.returnTimer)
+	for _, t := range r.tasks {
+		r.stopTimer(&t.limit)
+	}
 }
 
 // ensureProcessLocked starts the CLI when it is not running. A failure is
@@ -258,8 +323,8 @@ func (s *Service) ensureProcessLocked(ctx context.Context, r *run, n *notes) err
 	r.stopTimer(&r.startTimer)
 	r.stopTimer(&r.flushTimer)
 	clear(r.dirty)
-	clear(r.tasks)
-	r.wakes = nil
+	r.forgetTasks()
+	r.lastTurnAt = time.Time{}
 	if r.rec.LastError != "" {
 		r.rec.LastError = ""
 		_ = s.persistRecord(ctx, r)
@@ -337,6 +402,11 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 		return false
 	}
 	if r.proc != nil && r.procChoice != r.rec.Choice {
+		if r.backgroundWork() {
+			// Restarting would end the work in the background: the message waits
+			// for it.
+			return false
+		}
 		// The process runs with the model and effort the session had when it
 		// started. The message waits for one that runs with the ones it has now;
 		// stopping is set here so that no other flush starts a second restart and
@@ -436,6 +506,8 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 	s.updateLocked(ctx, r, e, n)
 
 	r.turn = newTurn(e.ID, s.now().UTC())
+	r.lastTurnAt = r.turn.startedAt
+	r.answerReturn()
 	if len(r.wakes) > 0 {
 		s.wakeMarkerLocked(ctx, r, n)
 	}
@@ -452,6 +524,8 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 // the mutex and r.turn is nil.
 func (s *Service) openAgentTurnLocked(ctx context.Context, r *run, n *notes) {
 	r.turn = newTurn(s.newID(), s.now().UTC())
+	r.lastTurnAt = r.turn.startedAt
+	r.answerReturn()
 	r.turnFailed = false
 	r.turnDone = make(chan struct{})
 	r.stopTimer(&r.idleTimer)
@@ -488,10 +562,24 @@ func (s *Service) idleExpired(k Key, gen int) {
 		return
 	}
 	r.idleTimer = nil
-	if r.proc == nil || r.stopping || r.turn != nil || r.permission != nil || len(r.pending) > 0 {
+	if r.proc == nil || r.stopping || r.turn != nil || r.permission != nil || len(r.pending) > 0 || r.backgroundWork() {
 		return
 	}
 	go s.stopProcess(k, gen, false, defaultGraces)
+}
+
+// settleWorkLocked brings the session up to a change of its work in the
+// background. Once no turn is open and nothing counts, the session is where
+// the end of a turn leaves it: the queue goes out, or the idle timer starts
+// over.
+func (s *Service) settleWorkLocked(ctx context.Context, r *run, n *notes) {
+	n.state(r.key())
+	if r.turn != nil || r.backgroundWork() {
+		return
+	}
+	if !s.flushPendingLocked(ctx, r, n) {
+		s.armIdleLocked(r)
+	}
 }
 
 // restartProcess stops a process whose model or effort is not the session's

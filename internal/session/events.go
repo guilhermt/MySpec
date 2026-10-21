@@ -66,6 +66,7 @@ func (s *Service) handle(k Key, gen int, ev claude.Event) {
 		}
 		s.handleStream(ctx, r, ev.Stream, n)
 	case "assistant":
+		s.noteMonitors(r, ev.Assistant)
 		s.handleAssistant(ctx, r, ev.Assistant, n)
 	case "user":
 		s.handleUser(ctx, r, ev.User, n)
@@ -140,33 +141,108 @@ func (s *Service) handleSystem(ctx context.Context, r *run, ev claude.Event, n *
 			Percent:   percent,
 		}}, n)
 	case "task_started":
-		s.handleTaskStarted(r, ev.TaskStarted)
+		s.handleTaskStarted(ctx, r, ev.TaskStarted, n)
+	case "task_updated":
+		s.handleTaskUpdated(ctx, r, ev.TaskUpdated, n)
 	case "task_notification":
 		s.handleTaskNotification(ctx, r, ev.TaskNotification, n)
+	case "background_tasks_changed":
+		s.handleBackgroundTasks(ctx, r, ev.BackgroundTasks, n)
 	default:
 		s.log.Debug("claude event ignored", "task", r.task.ID, "type", ev.Type, "subtype", ev.Subtype)
 	}
 }
 
-// handleTaskStarted keeps a task the CLI runs in the background, with what the
-// conversation calls it. A task in the foreground, and one of a type the
-// conversation does not name, is not kept.
-func (s *Service) handleTaskStarted(r *run, ev *claude.TaskStartedEvent) {
-	if !ev.IsBackgrounded {
-		return
+// monitorTool is the tool whose task is a monitor, though the CLI types it as
+// a command.
+const monitorTool = "Monitor"
+
+// monitorDefaultTimeout is how long a monitor runs when its call names no
+// deadline, the CLI's own default.
+const monitorDefaultTimeout = 5 * time.Minute
+
+// noteMonitors keeps what each Monitor call of a message asked for, for the
+// task it starts.
+func (s *Service) noteMonitors(r *run, ev *claude.AssistantEvent) {
+	for _, block := range ev.Message.Content {
+		if block.Type != "tool_use" || block.Name != monitorTool {
+			continue
+		}
+		var input struct {
+			TimeoutMS  int  `json:"timeout_ms"`
+			Persistent bool `json:"persistent"`
+		}
+		_ = json.Unmarshal(block.Input, &input) // a call that does not decode is a monitor with the default deadline
+		call := monitorCall{timeout: monitorDefaultTimeout, persistent: input.Persistent}
+		if input.TimeoutMS > 0 {
+			call.timeout = time.Duration(input.TimeoutMS) * time.Millisecond
+		}
+		r.monitors[block.ID] = call
 	}
+}
+
+// handleTaskStarted keeps a task the CLI runs for a tool call, with what the
+// conversation calls it and what it counts as. A task of a type the
+// conversation does not name is not kept.
+func (s *Service) handleTaskStarted(ctx context.Context, r *run, ev *claude.TaskStartedEvent, n *notes) {
 	kind := taskKindOf(r, ev)
 	if kind == "" {
 		return
 	}
-	r.tasks[ev.TaskID] = &backgroundTask{kind: kind, name: ev.Description, runID: ev.RunID}
+	t := &cliTask{kind: kind, name: ev.Description, runID: ev.RunID, backgrounded: ev.IsBackgrounded}
+	switch kind {
+	case WakeCommand:
+		s.armLimitLocked(r, ev.TaskID, t, s.commandLimit)
+	case WakeMonitor:
+		call, ok := r.monitors[ev.ToolUseID]
+		if !ok {
+			call = monitorCall{timeout: monitorDefaultTimeout}
+		}
+		delete(r.monitors, ev.ToolUseID)
+		t.persistent = call.persistent
+		if !call.persistent {
+			s.armLimitLocked(r, ev.TaskID, t, call.timeout+s.monitorGrace)
+		}
+	default:
+		// A subagent counts until it ends, with no limit.
+	}
+	r.tasks[ev.TaskID] = t
+	s.settleWorkLocked(ctx, r, n)
+}
+
+// armLimitLocked ends what a task counts after d.
+func (s *Service) armLimitLocked(r *run, id string, t *cliTask, d time.Duration) {
+	key, gen := r.key(), r.procGen
+	t.limit = time.AfterFunc(d, func() { s.limitReached(key, gen, id, t) })
+}
+
+// limitReached stops counting a task that ran past its limit: it goes on
+// running, but it is not the session's work any more.
+func (s *Service) limitReached(k Key, gen int, id string, t *cliTask) {
+	ctx, cancel := bgCtx()
+	defer cancel()
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r := s.runs[k]
+	if r == nil || r.procGen != gen || r.tasks[id] != t {
+		return
+	}
+	t.limit = nil
+	t.pastLimit = true
+	s.settleWorkLocked(ctx, r, n)
 }
 
 // taskKindOf is what the conversation calls a task: a monitor when the call
 // that started it was the Monitor tool, whose task type is a command's too.
 func taskKindOf(r *run, ev *claude.TaskStartedEvent) WakeKind {
+	if _, ok := r.monitors[ev.ToolUseID]; ok {
+		return WakeMonitor
+	}
 	if r.turn != nil {
-		if e := r.turn.actions[ev.ToolUseID]; e != nil && e.Action.Tool == "Monitor" {
+		if e := r.turn.actions[ev.ToolUseID]; e != nil && e.Action.Tool == monitorTool {
 			return WakeMonitor
 		}
 	}
@@ -179,9 +255,20 @@ func taskKindOf(r *run, ev *claude.TaskStartedEvent) WakeKind {
 	return ""
 }
 
+// handleTaskUpdated follows a task the CLI moved to the background, which
+// counts from then on.
+func (s *Service) handleTaskUpdated(ctx context.Context, r *run, ev *claude.TaskUpdatedEvent, n *notes) {
+	t := r.tasks[ev.TaskID]
+	if t == nil || ev.Patch.IsBackgrounded == nil {
+		return
+	}
+	t.backgrounded = *ev.Patch.IsBackgrounded
+	s.settleWorkLocked(ctx, r, n)
+}
+
 // handleTaskNotification records the return of a task in the background: a
 // woke marker where it arrives when a turn is in progress, the next turn's
-// first line otherwise.
+// first line otherwise. A task in the foreground only ends.
 func (s *Service) handleTaskNotification(ctx context.Context, r *run, ev *claude.TaskNotificationEvent, n *notes) {
 	task := r.tasks[ev.TaskID]
 	if task == nil {
@@ -192,11 +279,62 @@ func (s *Service) handleTaskNotification(ctx context.Context, r *run, ev *claude
 		return
 	}
 	task.wake = &w
-	if r.turn == nil {
+	r.stopTimer(&task.limit)
+	switch {
+	case !task.backgrounded:
+		// The turn waited for it: its result is the tool's, not a return.
+	case r.turn == nil:
 		r.wakes = append(r.wakes, w)
+		s.awaitReturnLocked(r)
+	default:
+		s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: MarkerWoke, Wakes: []Wake{w}}}, n)
+	}
+	s.settleWorkLocked(ctx, r, n)
+}
+
+// awaitReturnLocked holds the session at work until the CLI answers a return
+// that came with no turn: a turn it opens, an empty turn, or nothing within
+// ReturnTimeout.
+func (s *Service) awaitReturnLocked(r *run) {
+	r.returnDue = true
+	r.stopTimer(&r.returnTimer)
+	key, gen := r.key(), r.procGen
+	r.returnTimer = time.AfterFunc(s.returnTimeout, func() { s.returnExpired(key, gen) })
+}
+
+// returnExpired gives up on a return the CLI did not answer.
+func (s *Service) returnExpired(k Key, gen int) {
+	ctx, cancel := bgCtx()
+	defer cancel()
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r := s.runs[k]
+	if r == nil || r.procGen != gen || !r.returnDue {
 		return
 	}
-	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: MarkerWoke, Wakes: []Wake{w}}}, n)
+	r.returnTimer = nil
+	r.returnDue = false
+	s.log.Warn("claude return unanswered", "task", k.TaskID, "stage", k.Stage)
+	s.settleWorkLocked(ctx, r, n)
+}
+
+// handleBackgroundTasks stops counting the tasks the CLI no longer lists among
+// the ones it runs in the background, so that a lost task_notification never
+// holds the session at work.
+func (s *Service) handleBackgroundTasks(ctx context.Context, r *run, ev *claude.BackgroundTasksEvent, n *notes) {
+	live := make(map[string]bool, len(ev.Tasks))
+	for _, t := range ev.Tasks {
+		live[t.TaskID] = true
+	}
+	for id, t := range r.tasks {
+		if t.backgrounded && !live[id] {
+			t.gone = true
+		}
+	}
+	s.settleWorkLocked(ctx, r, n)
 }
 
 // exitCodeIn is the code a failed background command's summary names.
@@ -591,6 +729,11 @@ func stripANSI(text string) string {
 func (s *Service) handleResult(ctx context.Context, r *run, ev *claude.ResultEvent, n *notes) {
 	if emptyTurn(ev, r) {
 		s.log.Debug("claude empty turn ignored", "task", r.task.ID, "stage", r.rec.Stage)
+		if r.returnDue {
+			// The CLI answered the return without a request to the API.
+			r.answerReturn()
+			s.settleWorkLocked(ctx, r, n)
+		}
 		return // an empty turn the CLI ran on its own: it ends no turn
 	}
 	aborted := ev.TerminalReason == abortedReason || r.interruptReq != ""
@@ -747,8 +890,7 @@ func (s *Service) processExited(k Key, gen int, exit claude.ExitInfo) {
 		return
 	}
 	r.proc = nil
-	clear(r.tasks)
-	r.wakes = nil
+	r.forgetTasks()
 	r.stopTimer(&r.startTimer)
 	r.stopTimer(&r.idleTimer)
 	r.stopTimer(&r.flushTimer)

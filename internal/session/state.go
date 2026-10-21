@@ -146,7 +146,8 @@ type Summary struct {
 	RetryAt     time.Time
 	RetryReason string
 	// TurnStartedAt is when the message that opened the turn in progress went
-	// to the CLI; zero without a turn.
+	// to the CLI; with no turn and work in the background, when the last turn
+	// started; zero otherwise.
 	TurnStartedAt time.Time
 	PausedAt      time.Time // the moment the session was paused; zero when it is not, or when the time is unknown
 	// ActionLabel and ActionTarget are the action the turn runs now: the last
@@ -160,8 +161,8 @@ type Summary struct {
 	// TurnFailed says the last turn ended in an error the CLI survived, and no
 	// turn has run since. The session is at rest all the same.
 	TurnFailed bool
-	// Idle is the session at rest: no turn, no pending message, no request, no
-	// pause and no error.
+	// Idle is the session at rest: no turn, no work in the background, no pending
+	// message, no request, no pause and no error.
 	Idle bool
 }
 
