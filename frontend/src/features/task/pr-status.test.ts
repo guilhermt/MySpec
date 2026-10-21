@@ -248,7 +248,18 @@ describe("reviewAgainRefusal", () => {
     const task = taskOf({
       status: "awaiting_decision",
       prNumber: 12,
-      implementer: makePRImplementer({ turnRunning: true }),
+      implementer: makePRImplementer({ sessionStatus: "working", turnRunning: true }),
+    });
+
+    expect(reviewAgainRefusal(task)).toBe("The implementer is still working.");
+    expect(canReviewAgain(task)).toBe(false);
+  });
+
+  it("refuses while the implementer works in the background", () => {
+    const task = taskOf({
+      status: "awaiting_decision",
+      prNumber: 12,
+      implementer: makePRImplementer({ sessionStatus: "working", turnRunning: false }),
     });
 
     expect(reviewAgainRefusal(task)).toBe("The implementer is still working.");

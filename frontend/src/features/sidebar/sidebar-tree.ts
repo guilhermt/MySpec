@@ -723,8 +723,11 @@ function activity(session: ItemSession): { row: string; spoken: string } {
       spoken: `retrying, attempt ${session.retryAttempt}`,
     };
   }
-  if (!session.turnRunning) {
+  if (!session.processRunning) {
     return { row: "Starting session…", spoken: "starting session" };
+  }
+  if (!session.turnRunning) {
+    return { row: "Working in the background…", spoken: "working in the background" };
   }
   return { row: "Thinking…", spoken: "thinking" };
 }
