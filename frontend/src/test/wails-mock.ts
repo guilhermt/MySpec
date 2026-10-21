@@ -13,6 +13,9 @@ import type {
   BoardRemoval,
   BoardRepositoryChoice,
   BoardRepositoryOption,
+  CardImage,
+  CardImageFailure,
+  CardImages,
   CatalogModel,
   CloseResult,
   CreateTaskRequest,
@@ -30,6 +33,7 @@ import type {
   HistoryPage,
   HistoryRequest,
   HistorySummary,
+  Image,
   Leftover,
   Machine,
   MachineItem,
@@ -121,6 +125,9 @@ export const api = {
   cardContext: vi.fn<(boardId: string, key: string) => Promise<string>>(() =>
     Promise.resolve("### Card: Add the login screen\n"),
   ),
+  cardImages: vi.fn<(boardId: string, keys: string[]) => Promise<CardImages>>(() =>
+    Promise.resolve({ images: [], failures: [] }),
+  ),
   addRepositoryToBoard: vi.fn<(boardId: string, choice: BoardRepositoryChoice) => Promise<void>>(
     () => Promise.resolve(),
   ),
@@ -164,9 +171,9 @@ export const api = {
   getActionOutput: vi.fn<(itemId: string, stage: string, entryId: string) => Promise<ActionOutput>>(
     () => Promise.resolve({ text: "", lines: 0, truncated: false }),
   ),
-  sendMessage: vi.fn<(taskId: string, stage: string, text: string) => Promise<void>>(() =>
-    Promise.resolve(),
-  ),
+  sendMessage: vi.fn<
+    (taskId: string, stage: string, text: string, images: string[]) => Promise<void>
+  >(() => Promise.resolve()),
   removePending: vi.fn<(taskId: string, stage: string, entryId: string) => Promise<void>>(() =>
     Promise.resolve(),
   ),
@@ -560,6 +567,44 @@ export function makeBoard(overrides: Partial<Board> = {}): Board {
     viewer: "dev",
     cards: [],
     newCardStatus: "",
+    ...overrides,
+  };
+}
+
+export function makeImage(overrides: Partial<Image> = {}): Image {
+  return {
+    id: "a",
+    url: "/myspec/images/task-1/a.png",
+    origin: "user",
+    issue: "",
+    number: 0,
+    alt: "",
+    ...overrides,
+  };
+}
+
+export function makeCardImage(overrides: Partial<CardImage> = {}): CardImage {
+  return {
+    id: "a".repeat(64),
+    url: `/myspec/card-images/${"a".repeat(64)}`,
+    origin: "card",
+    issue: "dev/web#12",
+    number: 12,
+    alt: "Logo",
+    position: 1,
+    count: 1,
+    ...overrides,
+  };
+}
+
+export function makeCardImageFailure(overrides: Partial<CardImageFailure> = {}): CardImageFailure {
+  return {
+    origin: "card",
+    issue: "dev/web#12",
+    number: 12,
+    url: "https://github.com/user-attachments/assets/1",
+    alt: "Logo",
+    reason: "it's over 20 MB",
     ...overrides,
   };
 }
@@ -1523,6 +1568,7 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
         ...empty,
         user: {
           text: "Add a login screen",
+          images: [],
           pending: false,
           prompt: false,
           app: false,
@@ -1724,6 +1770,7 @@ export function resetWailsMock(): void {
   api.checkBoardRepository.mockImplementation(() => Promise.resolve(makeBoardRepositoryOption()));
   api.previewRemoveBoard.mockImplementation(() => Promise.resolve(makeBoardRemoval()));
   api.cardContext.mockImplementation(() => Promise.resolve("### Card: Add the login screen\n"));
+  api.cardImages.mockImplementation(() => Promise.resolve({ images: [], failures: [] }));
   api.createTask.mockImplementation(() => Promise.resolve("task-1"));
   api.startReview.mockImplementation(() => Promise.resolve("review-1"));
   api.startDiscussion.mockImplementation(() => Promise.resolve("discussion-1"));

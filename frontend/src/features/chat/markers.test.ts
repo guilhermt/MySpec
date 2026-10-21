@@ -42,6 +42,7 @@ import {
   makeDraft,
   makeDraftRef,
   makeEntry,
+  makeImage,
   makeMarkerCommit,
   makePRCheck,
   makePRReport,
@@ -106,6 +107,7 @@ const MARKER: MarkerEntry = {
 };
 const USER: UserEntry = {
   text: "",
+  images: [],
   pending: false,
   prompt: false,
   app: false,
@@ -212,7 +214,7 @@ describe("startLineOf", () => {
       ctx("prd"),
       view("start", "PRD started", {
         complement: "with the card acme/api#412",
-        body: { kind: "markdown", text: "Limit each API key." },
+        body: { kind: "markdown", text: "Limit each API key.", images: [] },
       }),
     ],
     [
@@ -222,7 +224,7 @@ describe("startLineOf", () => {
       ctx("prd", { task: makeTask() }),
       view("start", "PRD restarted", {
         complement: "with your description",
-        body: { kind: "markdown", text: "Limit each API key." },
+        body: { kind: "markdown", text: "Limit each API key.", images: [] },
       }),
     ],
     [
@@ -392,7 +394,7 @@ describe("startLineOf", () => {
       ctx("prd"),
       view("start", "PRD started", {
         complement: "with the card acme/api#412",
-        body: { kind: "markdown", text: "Limit each API key." },
+        body: { kind: "markdown", text: "Limit each API key.", images: [] },
       }),
     ],
     [
@@ -1360,7 +1362,12 @@ describe("contextLineOf", () => {
     expect(contextLineOf(prompted, input({ cards }), epics)).toEqual(
       view("file", "Context", {
         complement: `${complement} · 5,690 characters`,
-        body: { kind: "discussionDocument", name: "context.md", text: "a".repeat(5690) },
+        body: {
+          kind: "discussionDocument",
+          name: "context.md",
+          text: "a".repeat(5690),
+          images: [],
+        },
       }),
     );
   });
@@ -1391,9 +1398,38 @@ describe("discussionOpeningOf", () => {
     expect(opening.context).toEqual(
       view("file", "Context", {
         complement: "#455 and its epic · 12 characters",
-        body: { kind: "discussionDocument", name: "context.md", text: "The context." },
+        body: {
+          kind: "discussionDocument",
+          name: "context.md",
+          text: "The context.",
+          images: [],
+        },
       }),
     );
+  });
+
+  it("splits the images: the user's are the message's, the rest are the context's", () => {
+    const image = (origin: string, id: string) =>
+      makeImage({
+        id,
+        url: `/myspec/images/d/${id}.png`,
+        origin,
+        ...(origin === "user" ? {} : { issue: "acme/api#455", number: 455 }),
+      });
+    const opening = discussionOpeningOf(
+      {
+        ...prompt({ text: "The context." }),
+        user: user({ text: "The context.", images: [image("card", "a"), image("user", "b")] }),
+      },
+      discussionCtx([]),
+    );
+
+    expect(opening.images.map((one) => one.id)).toEqual(["b"]);
+    expect(opening.context?.complement).toBe("the board and your text · 12 characters · 1 image");
+    expect(opening.context?.body).toMatchObject({
+      kind: "discussionDocument",
+      images: [image("card", "a")],
+    });
   });
 
   it("has no message when the user wrote nothing", () => {
@@ -1413,6 +1449,7 @@ describe("discussionOpeningOf", () => {
     expect(discussionOpeningOf(prompt({ text: "x" }), ctx("prd"))).toEqual({
       context: null,
       message: "",
+      images: [],
     });
   });
 });

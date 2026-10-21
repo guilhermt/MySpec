@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/guilhermt/myspec/internal/images"
 )
 
 // Kind says which payload an entry carries.
@@ -43,10 +45,14 @@ type Entry struct {
 // UserEntry is a message sent to the agent: one the user wrote, or one the app
 // sent on their behalf.
 type UserEntry struct {
-	Text    string `json:"text"`
-	Pending bool   `json:"pending"` // queued, not yet delivered to the CLI
-	Prompt  bool   `json:"prompt"`  // the first message of a stage: Text is the initial context, the CLI got the rendered prompt
-	App     bool   `json:"app"`     // the app wrote it, not the user
+	Text string `json:"text"`
+	// Images are what went with the message: the ones the user attached, or,
+	// in the prompt entry of the PRD, of the One-Shot planning and of a
+	// discussion, the images of the initial context. nil for none.
+	Images  []images.Image `json:"images,omitempty"`
+	Pending bool           `json:"pending"` // queued, not yet delivered to the CLI
+	Prompt  bool           `json:"prompt"`  // the first message of a stage: Text is the initial context, the CLI got the rendered prompt
+	App     bool           `json:"app"`     // the app wrote it, not the user
 	// Sent is the rendered prompt the CLI got, for a prompt entry of the tech
 	// spec, the plan, the pull request and the pull request review; "" for
 	// every other entry.

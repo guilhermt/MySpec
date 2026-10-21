@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -15,12 +16,12 @@ import (
 type TasksRepo struct{ db *sql.DB }
 
 // taskColumns is the column list every task query selects, in scan order.
-const taskColumns = `id, repository_id, name, initial_context, stage, revisiting,
+const taskColumns = `id, repository_id, name, initial_context, initial_images, stage, revisiting,
 	artifacts_dir, artifact_version, archived_at, created_at, updated_at, models, review_modes, mode`
 
 // taskSelect selects the task columns, qualified, followed by the columns of
 // its card, which are all NULL for a task without one.
-const taskSelect = `SELECT tasks.id, tasks.repository_id, tasks.name, tasks.initial_context, tasks.stage,
+const taskSelect = `SELECT tasks.id, tasks.repository_id, tasks.name, tasks.initial_context, tasks.initial_images, tasks.stage,
 	tasks.revisiting, tasks.artifacts_dir, tasks.artifact_version, tasks.archived_at, tasks.created_at,
 	tasks.updated_at, tasks.models, tasks.review_modes, tasks.mode,
 	c.board_id, c.owner, c.name, c.number, c.title, c.body, c.url, c.status, c.state, c.epic, c.read_at
@@ -83,7 +84,7 @@ func (r *TasksRepo) Get(ctx context.Context, id string) (task.Task, error) {
 func (r *TasksRepo) Insert(ctx context.Context, t task.Task) error {
 	const taken = `SELECT 1 FROM tasks WHERE repository_id = ? AND name = ?`
 	const stmt = `INSERT INTO tasks (` + taskColumns + `)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	const insertCard = `INSERT INTO task_cards
 		(task_id, board_id, owner, name, number, title, body, url, status, state, epic, read_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -93,6 +94,10 @@ func (r *TasksRepo) Insert(ctx context.Context, t task.Task) error {
 		return fmt.Errorf("insert task %s: %w", t.Name, err)
 	}
 	encodedReviewModes, err := encodeReviewModes(t.ReviewModes)
+	if err != nil {
+		return fmt.Errorf("insert task %s: %w", t.Name, err)
+	}
+	encodedImages, err := encodeImages(t.InitialImages)
 	if err != nil {
 		return fmt.Errorf("insert task %s: %w", t.Name, err)
 	}
@@ -119,7 +124,7 @@ func (r *TasksRepo) Insert(ctx context.Context, t task.Task) error {
 	}
 
 	_, err = tx.ExecContext(ctx, stmt,
-		t.ID, t.RepositoryID, t.Name, t.InitialContext, string(t.Stage), t.Revisiting,
+		t.ID, t.RepositoryID, t.Name, t.InitialContext, encodedImages, string(t.Stage), t.Revisiting,
 		t.ArtifactsDir, t.ArtifactVersion, nullTime(t.ArchivedAt),
 		formatTime(t.CreatedAt), formatTime(t.UpdatedAt), encodedModels, encodedReviewModes, string(t.Mode))
 	if err != nil {
@@ -233,11 +238,12 @@ func scanTask(row scanner) (task.Task, error) {
 		archivedAt           sql.NullString
 		createdAt, updatedAt string
 		encodedModels        string
+		encodedImages        string
 		encodedReviewModes   string
 		mode                 string
 		card                 cardColumns
 	)
-	err := row.Scan(&t.ID, &repositoryID, &t.Name, &t.InitialContext, &stage, &t.Revisiting,
+	err := row.Scan(&t.ID, &repositoryID, &t.Name, &t.InitialContext, &encodedImages, &stage, &t.Revisiting,
 		&t.ArtifactsDir, &t.ArtifactVersion, &archivedAt, &createdAt, &updatedAt, &encodedModels,
 		&encodedReviewModes, &mode,
 		&card.boardID, &card.owner, &card.name, &card.number, &card.title, &card.body, &card.url,
@@ -262,6 +268,9 @@ func scanTask(row scanner) (task.Task, error) {
 	}
 	if t.UpdatedAt, err = parseTime(updatedAt, "task "+t.ID); err != nil {
 		return task.Task{}, err
+	}
+	if t.InitialImages, err = decodeImages(encodedImages); err != nil {
+		return task.Task{}, fmt.Errorf("read task %s: %w", t.ID, err)
 	}
 	if t.Models, err = decodeModels(encodedModels); err != nil {
 		return task.Task{}, fmt.Errorf("read task %s: %w", t.ID, err)
@@ -369,4 +378,29 @@ func decodeReviewModes(value string) (task.ReviewModes, error) {
 		return task.ReviewModes{}, fmt.Errorf("decode review modes: %w", err)
 	}
 	return m, nil
+}
+
+// encodeImages is the JSON of the initial images of a task or a discussion;
+// "[]" for none.
+func encodeImages(imgs []images.Image) (string, error) {
+	if len(imgs) == 0 {
+		return "[]", nil
+	}
+	encoded, err := json.Marshal(imgs)
+	if err != nil {
+		return "", fmt.Errorf("encode images: %w", err)
+	}
+	return string(encoded), nil
+}
+
+// decodeImages reads the JSON back; nil for an empty list.
+func decodeImages(value string) ([]images.Image, error) {
+	var imgs []images.Image
+	if err := json.Unmarshal([]byte(value), &imgs); err != nil {
+		return nil, fmt.Errorf("decode images: %w", err)
+	}
+	if len(imgs) == 0 {
+		return nil, nil
+	}
+	return imgs, nil
 }

@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Composer, type ComposerProps } from "@/features/chat/Composer";
 import { QuestionCard } from "@/features/chat/entries/QuestionCard";
@@ -85,7 +85,7 @@ describe("Composer", () => {
     await user.click(field());
     await user.keyboard("{Enter}");
 
-    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "ship it");
+    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "ship it", []);
     await waitFor(() => expect(useAppStore.getState().drafts["task-1|prd"]).toBe(""));
   });
 
@@ -118,7 +118,7 @@ describe("Composer", () => {
     await user.type(input, "hi");
     await user.keyboard("{Enter}");
 
-    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "step:1", "hi");
+    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "step:1", "hi", []);
     expect(useAppStore.getState().drafts["task-1|prd"]).toBe("ship it");
   });
 
@@ -186,7 +186,7 @@ describe("Composer", () => {
     expect(send).toHaveAttribute("data-variant", "secondary");
     await user.click(send);
 
-    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "ship it");
+    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "ship it", []);
   });
 
   it("says what a paused conversation resumes", () => {
@@ -206,7 +206,9 @@ describe("Composer", () => {
     await user.click(field());
     await user.keyboard("{Enter}");
 
-    await waitFor(() => expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "ship it"));
+    await waitFor(() =>
+      expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "ship it", []),
+    );
     expect(api.resume).toHaveBeenCalledWith("task-1", "prd");
     expect(vi.mocked(api.resume).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(api.sendMessage).mock.invocationCallOrder[0] ?? 0,
@@ -329,7 +331,7 @@ describe("Composer", () => {
     expect(field()).toHaveAttribute("placeholder", "Answer a or b, or reply to the PRD agent…");
     await user.click(screen.getByRole("button", { name: "b · Per plan" }));
 
-    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "b");
+    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "b", []);
     expect(field()).toHaveValue("ship it");
   });
 
@@ -649,5 +651,171 @@ describe("Composer", () => {
 
     const box = field().closest("div.shrink-0");
     expect(box).toHaveClass("pt-(--space-2)", "pb-(--space-4)");
+  });
+
+  describe("images", () => {
+    const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0];
+    const png = (name = "shot.png") => new File([new Uint8Array(PNG)], name, { type: "image/png" });
+    const pdf = () =>
+      new File([new Uint8Array([...Buffer.from("%PDF-1.7")])], "doc.pdf", {
+        type: "application/pdf",
+      });
+    const paste = (files: File[], text = "") =>
+      fireEvent.paste(field(), { clipboardData: { files, getData: () => text, types: [] } });
+    const box = () => field().closest<HTMLElement>("[data-slot=composer]") as HTMLElement;
+    const attached = () => useAppStore.getState().attachments["task-1|prd"] ?? [];
+
+    it("attaches a pasted image and lets Send go with only images", async () => {
+      renderWithStore(composer());
+      expect(screen.getByRole("button", { name: /Send/ })).toHaveAttribute("aria-disabled", "true");
+
+      paste([png()]);
+
+      expect(await screen.findByRole("list", { name: "Attached images" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Image 1 of 1, shot.png" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Send/ })).toHaveAttribute(
+        "aria-disabled",
+        "false",
+      );
+    });
+
+    it("leaves a paste of text as text", () => {
+      renderWithStore(composer());
+
+      const notPrevented = fireEvent.paste(field(), {
+        clipboardData: { files: [], getData: () => "hello", types: ["text/plain"] },
+      });
+
+      expect(notPrevented).toBe(true);
+      expect(attached()).toEqual([]);
+    });
+
+    it("refuses a dropped PDF by its format and leaves the text alone", async () => {
+      renderWithStore(composer(), { ui: { drafts: DRAFT } });
+
+      fireEvent.drop(box(), { dataTransfer: { types: ["Files"], files: [pdf()] } });
+
+      expect(
+        await screen.findByText("Not attached · doc.pdf isn't PNG, JPEG, GIF or WebP"),
+      ).toBeInTheDocument();
+      expect(attached()).toEqual([]);
+      expect(field()).toHaveValue("ship it");
+    });
+
+    it("says it takes the images while files are dragged over the box", () => {
+      renderWithStore(composer());
+
+      fireEvent.dragEnter(box(), { dataTransfer: { types: ["Files"] } });
+      expect(screen.getByText("Drop images to attach")).toBeInTheDocument();
+      expect(box()).toHaveClass("border-dashed");
+
+      fireEvent.dragLeave(box(), { dataTransfer: { types: ["Files"] } });
+      expect(screen.queryByText("Drop images to attach")).not.toBeInTheDocument();
+    });
+
+    it("sends the images with the text, in base64, and clears them", async () => {
+      const { user } = renderWithStore(composer(), { ui: { drafts: DRAFT } });
+      paste([png()]);
+      await screen.findByRole("list", { name: "Attached images" });
+
+      await user.click(screen.getByRole("button", { name: /Send/ }));
+
+      await waitFor(() => expect(api.sendMessage).toHaveBeenCalledTimes(1));
+      const [, , text, images] = vi.mocked(api.sendMessage).mock.calls[0] ?? [];
+      expect(text).toBe("ship it");
+      expect(images).toEqual([Buffer.from(PNG).toString("base64")]);
+      await waitFor(() => expect(attached()).toEqual([]));
+      expect(screen.queryByRole("list", { name: "Attached images" })).not.toBeInTheDocument();
+    });
+
+    it("keeps an image attached while the message is on its way", async () => {
+      let finish = () => {};
+      vi.mocked(api.sendMessage).mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const { user } = renderWithStore(composer(), { ui: { drafts: DRAFT } });
+      paste([png()]);
+      await screen.findByRole("list", { name: "Attached images" });
+      await user.click(screen.getByRole("button", { name: /Send/ }));
+      paste([png("late.png")]);
+      await waitFor(() => expect(attached()).toHaveLength(2));
+
+      finish();
+
+      await waitFor(() => expect(attached().map((one) => one.name)).toEqual(["late.png"]));
+    });
+
+    it("keeps the text and the images when the message is not sent", async () => {
+      vi.mocked(api.sendMessage).mockRejectedValueOnce(new Error("the session is gone"));
+      const { user } = renderWithStore(composer(), { ui: { drafts: DRAFT } });
+      paste([png()]);
+      await screen.findByRole("list", { name: "Attached images" });
+
+      await user.click(screen.getByRole("button", { name: /Send/ }));
+
+      expect(await screen.findByText("Not sent · the session is gone")).toBeInTheDocument();
+      expect(field()).toHaveValue("ship it");
+      expect(attached()).toHaveLength(1);
+    });
+
+    it("removes an image with its ×", async () => {
+      const { user } = renderWithStore(composer());
+      paste([png(), png("two.png")]);
+      await screen.findByRole("button", { name: "Image 2 of 2, two.png" });
+
+      await user.click(screen.getByRole("button", { name: "Remove image 1, shot.png" }));
+
+      expect(attached().map((one) => one.name)).toEqual(["two.png"]);
+      expect(URL.revokeObjectURL).toHaveBeenCalled();
+    });
+
+    it("holds the images back from a pending question until they are removed", async () => {
+      const { user } = renderWithStore(composer(makeTask(), { question: asking() }));
+      paste([png()]);
+      await screen.findByRole("list", { name: "Attached images" });
+
+      await user.click(screen.getByRole("button", { name: /Send/ }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Images don't answer a question. Answer the card first, or remove the images.",
+      );
+      expect(api.sendMessage).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole("button", { name: "Remove image 1, shot.png" }));
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("doesn't hold the images back from the next question once the held ones went", async () => {
+      const { user, rerender } = renderWithStore(composer(makeTask(), { question: asking() }));
+      paste([png()]);
+      await screen.findByRole("list", { name: "Attached images" });
+      await user.click(screen.getByRole("button", { name: /Send/ }));
+      expect(await screen.findByRole("alert")).toBeInTheDocument();
+
+      // The card answers the question, and the images go in a message of their own.
+      rerender(composer(makeTask(), { question: null }));
+      await user.click(screen.getByRole("button", { name: /Send/ }));
+      await waitFor(() => expect(attached()).toHaveLength(0));
+      rerender(composer(makeTask(), { question: { ...asking(), requestId: "req-2" } }));
+      paste([png("next.png")]);
+      await screen.findByRole("list", { name: "Attached images" });
+
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("sends a quick reply without the images", async () => {
+      const chips = [{ key: "a", text: "Per key" }];
+      const { user } = renderWithStore(composer(makeTask(), { chips }));
+      paste([png()]);
+      await screen.findByRole("list", { name: "Attached images" });
+
+      await user.click(screen.getByRole("button", { name: "a · Per key" }));
+
+      expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "a", []);
+      expect(attached()).toHaveLength(1);
+    });
   });
 });

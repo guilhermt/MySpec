@@ -12,12 +12,14 @@ import (
 	"time"
 
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/cardimages"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/editor"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
+	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreport"
@@ -52,6 +54,7 @@ type TaskService struct {
 	reviewModes     *reviewmode.Service
 	repositories    *repository.Service
 	boards          *board.Service
+	cardImages      *cardimages.Service
 	editor          Editor
 	documents       func(owner, name string, number int) (string, bool)
 	hasConversation func(id string) bool
@@ -72,6 +75,7 @@ func NewTaskService(
 	reviewModes *reviewmode.Service,
 	repositories *repository.Service,
 	boards *board.Service,
+	cardImages *cardimages.Service,
 	editor Editor,
 	documents func(owner, name string, number int) (string, bool),
 	hasConversation func(id string) bool,
@@ -91,6 +95,7 @@ func NewTaskService(
 		reviewModes:     reviewModes,
 		repositories:    repositories,
 		boards:          boards,
+		cardImages:      cardImages,
 		editor:          editor,
 		documents:       documents,
 		hasConversation: hasConversation,
@@ -153,6 +158,14 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 			ReadAt:  card.ReadAt,
 		}
 	}
+	var cardImages []CardImage
+	if req.Card != nil {
+		cardImages = req.CardImages
+	}
+	uploads, err := creationUploads(s.cardImages, s.log, cardImages, req.Images)
+	if err != nil {
+		return "", s.fail("CreateTask", err)
+	}
 	repo, ok := s.repositories.Get(repositoryID)
 	if !ok {
 		return "", s.fail("CreateTask", task.ErrUnknownRepository)
@@ -171,6 +184,7 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 		ReviewMode:     reviewMode,
 		PRReviewMode:   prReviewMode,
 		Card:           taskCard,
+		Images:         uploads,
 	})
 	if errors.Is(err, task.ErrNameTaken) {
 		// A name the user can see is taken is their mistake, with the repository
@@ -881,16 +895,20 @@ func (s *TaskService) RefreshPR(taskID string) error {
 }
 
 // SendMessage queues a message for the agent, delivered right away when the
-// session is free.
-func (s *TaskService) SendMessage(taskID, stage, text string) error {
+// session is free. images are the ones attached to it, in base64.
+func (s *TaskService) SendMessage(taskID, stage, text string, images []string) error {
 	s, err := s.late.resolve(s)
 	if err != nil {
 		return err
 	}
+	uploads, err := uploadsOf(images)
+	if err != nil {
+		return s.fail("SendMessage", err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
-	if err := s.sessions.Send(ctx, session.Key{TaskID: taskID, Stage: stage}, text); err != nil {
+	if err := s.sessions.Send(ctx, session.Key{TaskID: taskID, Stage: stage}, text, uploads); err != nil {
 		return s.fail("SendMessage", err)
 	}
 	return nil
@@ -1093,6 +1111,9 @@ var userMessages = []struct {
 	{reviewmode.ErrUnknownMode, "Unknown review mode."},
 	{session.ErrEmptyMessage, "Write a message first."},
 	{session.ErrPaused, "Resume the task to send messages."},
+	{session.ErrNoImagesFolder, "This conversation can't take images."},
+	{images.ErrFormat, "An image isn't PNG, JPEG, GIF or WebP."},
+	{images.ErrTooLarge, "An image is over 20 MB."},
 	{session.ErrNotFound, "This conversation has ended."},
 	{flow.ErrInvalidTarget, "This stage can't be reached from here."},
 	{flow.ErrNotRevisiting, "The task isn't revisiting a stage."},

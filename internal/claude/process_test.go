@@ -79,7 +79,7 @@ func start(t *testing.T, cfg claude.Config) *claude.Process {
 func send(t *testing.T, p *claude.Process, text string) {
 	t.Helper()
 
-	if err := p.Send(text); err != nil {
+	if err := p.Send(text, nil); err != nil {
 		t.Fatalf("Send(%q) = %v, want nil", text, err)
 	}
 }
@@ -428,7 +428,7 @@ func TestCloseInputEndsTheProcessAndRefusesWrites(t *testing.T) {
 		t.Errorf("CloseInput() twice = %v, want nil", err)
 	}
 
-	if err := p.Send("too late"); !errors.Is(err, claude.ErrInputClosed) {
+	if err := p.Send("too late", nil); !errors.Is(err, claude.ErrInputClosed) {
 		t.Errorf("Send() = %v, want ErrInputClosed", err)
 	}
 	if _, err := p.Interrupt(); !errors.Is(err, claude.ErrInputClosed) {

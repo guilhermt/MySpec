@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { NewDiscussionDialog } from "@/features/discussion/NewDiscussionDialog";
 import { api, type Repository } from "@/lib/wails";
@@ -7,6 +7,8 @@ import { renderWithStore } from "@/test/render";
 import {
   makeBoard,
   makeBoardCard,
+  makeCardImage,
+  makeCardImageFailure,
   makeDiscussion,
   makeRepository,
   makeState,
@@ -206,6 +208,8 @@ describe("NewDiscussionDialog", () => {
         cards: ["dev/web#12"],
         model: "claude-fable-5-1",
         effort: "high",
+        images: [],
+        cardImages: [],
       });
     });
     expect(useAppStore.getState().location).toEqual({ kind: "discussion", id: "discussion-1" });
@@ -455,6 +459,138 @@ describe("NewDiscussionDialog", () => {
       expect(screen.getByRole("button", { name: "Board: Alpha" })).toBeInTheDocument();
       expect(screen.getByLabelText("Title")).toHaveValue("Billing");
       expect(screen.getByLabelText(/^What to discuss/)).toHaveValue("The invoices are late");
+    });
+  });
+
+  describe("images", () => {
+    const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0];
+    const PNG_BASE64 = Buffer.from(PNG).toString("base64");
+    const png = (name = "shot.png") => new File([new Uint8Array(PNG)], name, { type: "image/png" });
+    const bmp = () => new File([new Uint8Array([0x42, 0x4d, 0, 0, 0, 0])], "pic.bmp");
+    const paste = (files: File[]) =>
+      fireEvent.paste(screen.getByLabelText(/^What to discuss/), {
+        clipboardData: { files, getData: () => "", types: [] },
+      });
+
+    it("attaches a pasted image, and starts the discussion with it and the images of the cards", async () => {
+      const read = makeCardImage();
+      vi.mocked(api.cardImages).mockResolvedValue({ images: [read], failures: [] });
+      const { user } = open(["dev/web#12"]);
+      await screen.findByText(/· 1 image$/);
+
+      paste([png()]);
+
+      expect(await screen.findByRole("button", { name: "Image 1 of 1, shot.png" })).toBeVisible();
+      expect(screen.getByText(/· 2 images$/)).toBeVisible();
+      await user.click(screen.getByRole("button", { name: "Start discussion" }));
+
+      await waitFor(() => expect(api.startDiscussion).toHaveBeenCalledOnce());
+      expect(api.startDiscussion).toHaveBeenCalledWith(
+        expect.objectContaining({ text: "", images: [PNG_BASE64], cardImages: [read] }),
+      );
+      expect(api.cardImages).toHaveBeenCalledWith("board-1", ["dev/web#12"]);
+    });
+
+    it("says the images are being read, and which could not be", async () => {
+      let finish: (value: {
+        images: [];
+        failures: ReturnType<typeof makeCardImageFailure>[];
+      }) => void = () => {};
+      vi.mocked(api.cardImages).mockReturnValue(
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      );
+      open(["dev/web#12"]);
+
+      expect(await screen.findByText(/· reading images…/)).toBeVisible();
+      finish({ images: [], failures: [makeCardImageFailure()] });
+
+      expect(
+        await screen.findByText(/The image "Logo" of the card #12 couldn't be read/),
+      ).toBeVisible();
+    });
+
+    it("shows the Images section on Show", async () => {
+      vi.mocked(api.cardImages).mockResolvedValue({ images: [makeCardImage()], failures: [] });
+      const { user } = open(["dev/web#12"]);
+      await screen.findByText(/· 1 image$/);
+      paste([png()]);
+      await screen.findByText(/· 2 images$/);
+
+      await user.click(screen.getByRole("button", { name: "Show" }));
+
+      expect(screen.getByText("Images")).toBeVisible();
+      expect(screen.getByRole("button", { name: "Image 1 of 2, Logo" })).toBeVisible();
+      expect(screen.getByRole("button", { name: "Image 2 of 2, shot.png" })).toBeVisible();
+    });
+
+    it("refuses a dropped file that isn't an image, and removes an attached one", async () => {
+      const { user } = open(["dev/web#12"]);
+      const target = screen.getByLabelText(/^What to discuss/).parentElement?.parentElement;
+
+      fireEvent.drop(target as HTMLElement, { dataTransfer: { types: ["Files"], files: [bmp()] } });
+      expect(
+        await screen.findByText("Not attached · pic.bmp isn't PNG, JPEG, GIF or WebP"),
+      ).toBeVisible();
+
+      paste([png()]);
+      await user.click(await screen.findByRole("button", { name: "Remove image 1, shot.png" }));
+
+      expect(screen.queryByRole("button", { name: /^Image 1/ })).not.toBeInTheDocument();
+    });
+
+    it("does not let an image alone start a discussion without cards", async () => {
+      renderWithStore(<NewDiscussionDialog />, {
+        state: makeState({
+          boards: [makeBoard({ cards: [LOGIN], repositoryIds: ["repo-1"] })],
+          repositories: [makeRepository()],
+        }),
+        ui: { newDiscussion: { boardId: "board-1", cardKeys: [], askBoard: false } },
+      });
+
+      paste([png()]);
+      await screen.findByRole("button", { name: "Image 1 of 1, shot.png" });
+
+      expect(screen.getByRole("button", { name: "Start discussion" })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+    });
+
+    it("keeps everything when the start fails", async () => {
+      vi.mocked(api.startDiscussion).mockRejectedValueOnce(new Error("The board is gone."));
+      const { user } = open(["dev/web#12"]);
+      paste([png()]);
+      await screen.findByRole("button", { name: "Image 1 of 1, shot.png" });
+
+      await user.click(screen.getByRole("button", { name: "Start discussion" }));
+
+      expect(await screen.findByText("The board is gone.")).toBeVisible();
+      expect(screen.getByRole("button", { name: "Image 1 of 1, shot.png" })).toBeVisible();
+    });
+
+    it("waits for the reading, and attaches and removes nothing while it starts", async () => {
+      let finish: (value: { images: []; failures: [] }) => void = () => {};
+      vi.mocked(api.cardImages).mockReturnValue(
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      );
+      vi.mocked(api.startDiscussion).mockReturnValue(new Promise(() => {}));
+      const { user } = open(["dev/web#12"]);
+      paste([png()]);
+      await screen.findByRole("button", { name: "Image 1 of 1, shot.png" });
+
+      await user.click(screen.getByRole("button", { name: "Start discussion" }));
+      await screen.findByRole("button", { name: "Starting…" });
+      expect(api.startDiscussion).not.toHaveBeenCalled();
+      paste([png("late.png")]);
+      finish({ images: [], failures: [] });
+
+      await waitFor(() => expect(api.startDiscussion).toHaveBeenCalledOnce());
+      expect(screen.queryByRole("button", { name: /^Remove image/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /late\.png/ })).not.toBeInTheDocument();
     });
   });
 });

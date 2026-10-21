@@ -36,6 +36,7 @@ const BOTH_READY: Record<string, TranscriptState> = {
       makeEntry("user", {
         user: {
           text: "Check the login form",
+          images: [],
           pending: false,
           prompt: false,
           app: false,
@@ -119,7 +120,12 @@ describe("StepPane", () => {
 
     await user.type(screen.getByRole("textbox"), "The test is missing{Enter}");
 
-    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "step_review:1", "The test is missing");
+    expect(api.sendMessage).toHaveBeenCalledWith(
+      "task-1",
+      "step_review:1",
+      "The test is missing",
+      [],
+    );
   });
 
   it("shows only the conversation of the implementer while the step has no reviewer", () => {

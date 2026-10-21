@@ -4,6 +4,7 @@ package claude
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -368,10 +369,31 @@ type textBlock struct {
 	Text string `json:"text"`
 }
 
+// Image is an image of a user message: its media type, its bytes and, when it
+// has one, the text block that introduces it to the agent.
+type Image struct {
+	MediaType string
+	Data      []byte
+	Label     string // "" for none
+}
+
+// imageSource is the base64 source of an image block.
+type imageSource struct {
+	Type      string `json:"type"` // base64
+	MediaType string `json:"media_type"`
+	Data      string `json:"data"`
+}
+
+// imageBlock is an image block of a message written to the CLI.
+type imageBlock struct {
+	Type   string      `json:"type"` // image
+	Source imageSource `json:"source"`
+}
+
 // userMessageBody is the message field of a user input line.
 type userMessageBody struct {
-	Role    string      `json:"role"`
-	Content []textBlock `json:"content"`
+	Role    string `json:"role"`
+	Content []any  `json:"content"`
 }
 
 // userMessageLine is a whole user input line.
@@ -381,14 +403,30 @@ type userMessageLine struct {
 	ParentToolUseID *string         `json:"parent_tool_use_id"`
 }
 
-// UserMessage is what the app writes to ask for a turn.
-func UserMessage(text string) []byte {
+// UserMessage is what the app writes to ask for a turn. The images come first,
+// each introduced by its label when it has one, and the text last, only when
+// there is some: the API refuses an empty text block.
+func UserMessage(text string, images []Image) []byte {
+	content := make([]any, 0, 2*len(images)+1)
+	for _, img := range images {
+		if img.Label != "" {
+			content = append(content, textBlock{Type: "text", Text: img.Label})
+		}
+		content = append(content, imageBlock{
+			Type: "image",
+			Source: imageSource{
+				Type:      "base64",
+				MediaType: img.MediaType,
+				Data:      base64.StdEncoding.EncodeToString(img.Data),
+			},
+		})
+	}
+	if text != "" {
+		content = append(content, textBlock{Type: "text", Text: text})
+	}
 	return mustMarshal("user message", userMessageLine{
-		Type: "user",
-		Message: userMessageBody{
-			Role:    "user",
-			Content: []textBlock{{Type: "text", Text: text}},
-		},
+		Type:    "user",
+		Message: userMessageBody{Role: "user", Content: content},
 	})
 }
 
@@ -473,8 +511,8 @@ func ControlResponse(requestID string, resp PermissionResponse) ([]byte, error) 
 	return line, nil
 }
 
-// mustMarshal encodes a line whose every field is a string, which json cannot
-// fail on. A failure here is a bug in this package, not a runtime condition.
+// mustMarshal encodes a line whose fields are strings, slices of strings and
+// the block structs above, none of which json can fail on. A failure here is a bug in this package, not a runtime condition.
 func mustMarshal(what string, value any) []byte {
 	line, err := json.Marshal(value)
 	if err != nil {

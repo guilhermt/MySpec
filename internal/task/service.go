@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/repository"
@@ -245,6 +246,7 @@ type CreateParams struct {
 	PRReviewMode   reviewmode.Mode // who reviews its pull request: the default, or what the user picked
 	Mode           Mode            // the mode of the task; "" is Structured
 	Card           *Card           // the card the task is created from; nil for none
+	Images         []images.Upload // the images of the initial context, in the order they reach the agent
 }
 
 // Create validates, creates the artifact folder, persists and watches the task.
@@ -256,6 +258,11 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 	initialContext := strings.TrimSpace(p.InitialContext)
 	if initialContext == "" && p.Card == nil {
 		return Task{}, ErrEmptyContext
+	}
+	for i, u := range p.Images {
+		if _, err := images.Check(u.Data); err != nil {
+			return Task{}, fmt.Errorf("image %d: %w", i+1, err)
+		}
 	}
 
 	mode := cmp.Or(p.Mode, ModeStructured)
@@ -307,11 +314,24 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Task, error) {
 		ours = false
 	}
 
-	if err := s.repo.Insert(ctx, t); err != nil {
+	saved, err := images.Save(t.ArtifactsDir, p.Images)
+	if err != nil {
 		if ours {
-			if rmErr := os.Remove(t.ArtifactsDir); rmErr != nil {
+			if rmErr := os.RemoveAll(t.ArtifactsDir); rmErr != nil {
 				s.log.Warn("remove artifacts directory failed", "path", t.ArtifactsDir, "error", rmErr)
 			}
+		}
+		return Task{}, err
+	}
+	t.InitialImages = saved
+
+	if err := s.repo.Insert(ctx, t); err != nil {
+		if ours {
+			if rmErr := os.RemoveAll(t.ArtifactsDir); rmErr != nil {
+				s.log.Warn("remove artifacts directory failed", "path", t.ArtifactsDir, "error", rmErr)
+			}
+		} else {
+			images.Remove(t.ArtifactsDir, saved)
 		}
 		return Task{}, err
 	}

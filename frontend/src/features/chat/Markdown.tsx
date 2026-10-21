@@ -2,6 +2,7 @@ import { code } from "@streamdown/code";
 import { type ReactNode, useMemo, useState } from "react";
 import { Streamdown } from "streamdown";
 import { Button } from "@/components/system/Button";
+import { CardBodyImage } from "@/features/chat/CardBodyImage";
 import { CodeFrame } from "@/features/chat/CodeFrame";
 import {
   CUT_ABOVE,
@@ -12,6 +13,7 @@ import {
 } from "@/features/chat/code-cut";
 import { CODE_THEMES } from "@/features/chat/code-theme";
 import { ExternalLink } from "@/features/chat/ExternalLink";
+import { ImageMarker } from "@/features/chat/ImageMarker";
 import { MermaidBlock } from "@/features/chat/MermaidBlock";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +31,13 @@ const LINK_SAFETY = { enabled: false } as const;
 
 const COMPONENTS = { a: ExternalLink } as const;
 
+/** MarkdownImages says how the images of the text are drawn. */
+export type MarkdownImages =
+  /** card loads them through the product, from the body of the card issue (owner/name#number). */
+  | { kind: "card"; issue: string }
+  /** omit draws each as a marker with its alt text and its link: the images come below the text. */
+  | { kind: "omit" };
+
 export interface MarkdownProps {
   children: string;
   /** streaming keeps the caret and the block animation while text still grows. */
@@ -42,6 +51,8 @@ export interface MarkdownProps {
    * The prompt page draws its placeholders with it.
    */
   renderInlineCode?: (code: string) => ReactNode | null;
+  /** images says how the images of the text are drawn; without it the text draws them as they are. */
+  images?: MarkdownImages;
   className?: string;
 }
 
@@ -50,13 +61,32 @@ interface BlockProps {
   streaming: boolean;
   className: string | undefined;
   renderInlineCode: MarkdownProps["renderInlineCode"];
+  images: MarkdownImages | undefined;
+}
+
+// withImages is the components of a text, with its images drawn as the text asks.
+function withImages(kind: MarkdownImages["kind"] | undefined, issue: string) {
+  if (kind === undefined) {
+    return COMPONENTS;
+  }
+  if (kind === "omit") {
+    return { ...COMPONENTS, img: ImageMarker };
+  }
+  const Image = ({ src, alt }: { src?: string | undefined; alt?: string | undefined }) => (
+    <CardBodyImage src={src} alt={alt} issue={issue} />
+  );
+  return { ...COMPONENTS, img: Image };
 }
 
 // Block is one Streamdown over a piece of the text.
-function Block({ children, streaming, className, renderInlineCode }: BlockProps) {
+function Block({ children, streaming, className, renderInlineCode, images }: BlockProps) {
+  // The parent builds images anew on each render: the memo follows what it says.
+  const kind = images?.kind;
+  const issue = images?.kind === "card" ? images.issue : "";
   const components = useMemo(() => {
+    const base = withImages(kind, issue);
     if (renderInlineCode === undefined) {
-      return COMPONENTS;
+      return base;
     }
     const InlineCode = ({ children: code }: { children?: ReactNode }) => (
       <>
@@ -65,8 +95,8 @@ function Block({ children, streaming, className, renderInlineCode }: BlockProps)
         )}
       </>
     );
-    return { ...COMPONENTS, inlineCode: InlineCode };
-  }, [renderInlineCode]);
+    return { ...base, inlineCode: InlineCode };
+  }, [renderInlineCode, kind, issue]);
 
   return (
     <Streamdown
@@ -124,6 +154,7 @@ function CodeBlock({ part, streaming, cutCode, className }: CodeBlockProps) {
         streaming={streaming && !part.closed}
         className={className}
         renderInlineCode={undefined}
+        images={undefined}
       >
         {codeMarkdown(part, cut && !open ? CUT_SHOWN : total)}
       </Block>
@@ -156,6 +187,7 @@ export function Markdown({
   cutCode = false,
   railLast = false,
   renderInlineCode,
+  images,
   className,
 }: MarkdownProps) {
   const parts = useMemo(() => codeParts(children), [children]);
@@ -173,6 +205,7 @@ export function Markdown({
           streaming={streaming}
           className={cn(railLast && RAIL, caretInText && CARET, className)}
           renderInlineCode={renderInlineCode}
+          images={images}
         >
           {children}
         </Block>
@@ -193,6 +226,7 @@ export function Markdown({
               streaming={streaming && last}
               className={cn(partClass, last && caretInText && CARET)}
               renderInlineCode={renderInlineCode}
+              images={images}
             >
               {part.text}
             </Block>

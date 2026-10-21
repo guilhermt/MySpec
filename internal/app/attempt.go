@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"time"
 
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/cardimages"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/editor"
@@ -212,6 +214,9 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 		return fmt.Errorf("read sessions: %w", err)
 	}
 	ghRunner := gh.New(gh.Deps{Log: log, Binary: a.deps.ghBinary})
+	cardImages := cardimages.New(cardimages.Deps{
+		GitHub: ghRunner, Dir: filepath.Join(a.dirs.Data, "card-images"), UserAgent: "MySpec/" + a.version, Log: log,
+	})
 	machineSvc := machine.New(machine.Deps{
 		Claude:   claudeLauncher{log: log, effort: modelsSvc.ProcessEffort},
 		GitHub:   ghRunner,
@@ -321,6 +326,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	a.reviewModes, a.boards = reviewModesSvc, boards
 	a.pulls, a.prReviews, a.reviewFlow = pullRequests, prReviews, reviewFlow
 	a.discussions, a.discussionFlow = discussions, discussionFlow
+	a.cardImages = cardImages
 
 	if err = a.read(ctx); err != nil {
 		return fmt.Errorf("load tasks: %w", err)
@@ -338,9 +344,10 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 
 	a.resume(ctx)
 
+	a.images.Store(&imageFiles{artifactsDir: a.artifactsDirOf, cards: cardImages})
 	a.services.Bind(a.bound(
 		repositories, boards, themeSvc, modelsSvc, reviewModesSvc, tasks, sessions, flowSvc,
-		a.dirs.Data, log,
+		cardImages, a.dirs.Data, log,
 	))
 	a.markReady()
 	a.deps.background()
@@ -363,6 +370,9 @@ func (a *App) runInBackground() {
 	// The pull requests the app waits for are merged outside it, so it asks
 	// GitHub about them on a timer of its own for as long as it runs.
 	go a.pollPRs(a.pollCtx)
+	// The cache of the images of the cards drops what was downloaded over 30
+	// days ago, used or not.
+	go a.cardImages.Prune()
 }
 
 // bound are the services the interface calls, built over the ones the attempt
@@ -376,6 +386,7 @@ func (a *App) bound(
 	tasks *task.Service,
 	sessions *session.Service,
 	flowSvc *flow.Service,
+	cardImages *cardimages.Service,
 	dataDir string,
 	log *slog.Logger,
 ) bindings.Services {
@@ -385,14 +396,14 @@ func (a *App) bound(
 		Settings: bindings.NewSettingsService(themeSvc, modelsSvc, reviewModesSvc, a.checkMachine,
 			bindings.UpdateActions{Check: a.checkForUpdates, Install: a.installUpdate, Restart: a.restartForUpdate}, dataDir, log),
 		Task: bindings.NewTaskService(
-			tasks, sessions, flowSvc, modelsSvc, reviewModesSvc, repositories, boards, editor.Open,
+			tasks, sessions, flowSvc, modelsSvc, reviewModesSvc, repositories, boards, cardImages, editor.Open,
 			a.discussions.DocumentOfCard, a.hasConversation, log,
 		),
-		Board: bindings.NewBoardService(boards, a.discussions.DocumentOfCard, log),
+		Board: bindings.NewBoardService(boards, a.discussions.DocumentOfCard, cardImages, log),
 		Review: bindings.NewReviewService(
 			a.reviewFlow, a.prReviews, a.pulls, a.worktrees, editor.Open, log,
 		),
-		Discussion: bindings.NewDiscussionService(a.discussionFlow, a.discussions, repositories, log),
+		Discussion: bindings.NewDiscussionService(a.discussionFlow, a.discussions, repositories, cardImages, log),
 		Attention:  bindings.NewAttentionService(a.attention),
 		History:    bindings.NewHistoryService(a.historySources(), log),
 	}

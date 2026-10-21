@@ -875,8 +875,8 @@ func FromTranscript(tr session.Transcript) Transcript {
 		TaskID:    tr.TaskID,
 		SessionID: tr.SessionID,
 		Stage:     tr.Stage,
-		Entries:   fromEntries(tr.Entries),
-		Pending:   fromEntries(tr.Pending),
+		Entries:   fromEntries(tr.TaskID, tr.Entries),
+		Pending:   fromEntries(tr.TaskID, tr.Pending),
 	}
 }
 
@@ -890,17 +890,17 @@ func FromTranscriptEvent(ev session.TranscriptEvent) TranscriptEvent {
 		Text:    ev.Text,
 	}
 	if ev.Entry != nil {
-		entry := FromEntry(*ev.Entry)
+		entry := FromEntry(ev.TaskID, *ev.Entry)
 		converted.Entry = &entry
 	}
 	return converted
 }
 
-// fromEntries converts a list of entries.
-func fromEntries(entries []session.Entry) []Entry {
+// fromEntries converts a list of entries of the conversation of itemID.
+func fromEntries(itemID string, entries []session.Entry) []Entry {
 	converted := make([]Entry, len(entries))
 	for i, e := range entries {
-		converted[i] = FromEntry(e)
+		converted[i] = FromEntry(itemID, e)
 	}
 	return converted
 }
@@ -935,8 +935,9 @@ func fromAction(a *session.ActionEntry) *ActionEntry {
 	return converted
 }
 
-// FromEntry converts one entry with the payload matching its kind.
-func FromEntry(e session.Entry) Entry {
+// FromEntry converts one entry of the conversation of itemID with the payload
+// matching its kind. The item says where the webview loads its images from.
+func FromEntry(itemID string, e session.Entry) Entry {
 	converted := Entry{
 		ID:        e.ID,
 		Seq:       e.Seq,
@@ -947,6 +948,7 @@ func FromEntry(e session.Entry) Entry {
 	if e.User != nil {
 		converted.User = &UserEntry{
 			Text:    e.User.Text,
+			Images:  fromImages(itemID, e.User.Images),
 			Pending: e.User.Pending,
 			Prompt:  e.User.Prompt,
 			App:     e.User.App,

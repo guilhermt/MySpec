@@ -47,6 +47,7 @@ const BOTH_READY: Record<string, TranscriptState> = {
       makeEntry("user", {
         user: {
           text: "Check the login form",
+          images: [],
           pending: false,
           prompt: false,
           app: false,
@@ -571,6 +572,7 @@ describe("TaskView, earlier conversation", () => {
     makeEntry("user", {
       user: {
         text: "Implement step 1.",
+        images: [],
         pending: false,
         prompt: false,
         app: false,

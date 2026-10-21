@@ -3,12 +3,14 @@ package app
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"path/filepath"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"github.com/guilhermt/myspec/internal/bindings"
+	"github.com/guilhermt/myspec/internal/cardimages"
 	"github.com/guilhermt/myspec/internal/platform/notify"
 	"github.com/guilhermt/myspec/internal/platform/xdg"
 	"github.com/guilhermt/myspec/internal/store"
@@ -201,3 +203,18 @@ func (a *App) PublishNow() { a.publishNow() }
 
 // WorkingOf exposes workingOf to the external tests of the package.
 var WorkingOf = workingOf
+
+// ImagesHandler is the image middleware over next, with the files it reads from
+// set when ready is true, as they are once the services are up.
+func ImagesHandler(
+	next http.Handler,
+	artifactsDir func(itemID string) (string, bool),
+	cards *cardimages.Service,
+	ready bool,
+) http.Handler {
+	a := &App{}
+	if ready {
+		a.images.Store(&imageFiles{artifactsDir: artifactsDir, cards: cards})
+	}
+	return a.imagesMiddleware(next)
+}

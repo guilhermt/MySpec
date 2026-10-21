@@ -12,16 +12,17 @@ import { Shimmer } from "@/components/system/Shimmer";
 import { StateGlyph } from "@/components/system/StateGlyph";
 import type { DraftRowView } from "@/features/chat/discussion-markers";
 import { Chevron } from "@/features/chat/entries/Chevron";
-import { Markdown } from "@/features/chat/Markdown";
+import { Markdown, type MarkdownImages } from "@/features/chat/Markdown";
 import type { MarkerIcon, MarkerView } from "@/features/chat/markers";
 import { contextCharacters } from "@/features/discussion/new-discussion";
 import { useDiscussionArtifact } from "@/features/discussion/useDiscussionArtifact";
+import { StoredImages } from "@/features/images/StoredImages";
 import { useReviewArtifact } from "@/features/reviews/useReviewArtifact";
 import { useArtifact } from "@/features/task/useArtifact";
 import { splitFrontMatter } from "@/lib/front-matter";
 import { checkDuration, checkRows } from "@/lib/pull-requests";
 import { cn } from "@/lib/utils";
-import type { PlanProblem, ReviewSummary, TaskSummary } from "@/lib/wails";
+import type { Image, PlanProblem, ReviewSummary, TaskSummary } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
 import { openExternal, openFindingInEditor, openPRFindingInEditor } from "@/store/actions";
 import { type PanelId, useAppStore } from "@/store/app-store";
@@ -62,6 +63,12 @@ const ERROR_RAIL = "shadow-[inset_var(--error-rail)_0_0_var(--state-error)]";
 // SUNKEN is the block a marker opens into, in the width of the column; History draws it too.
 export const SUNKEN =
   "mt-(--space-1) rounded-md bg-surface-0 px-(--space-4) py-(--space-3) shadow-[inset_0_0_0_var(--border)_var(--line-1)]";
+
+// omitImages makes the Markdown draw the links of its images as markers when the images come below
+// the text; without images given, the text draws them as it is.
+function omitImages(images: Image[] | undefined): { images?: MarkdownImages } {
+  return images === undefined ? {} : { images: { kind: "omit" } };
+}
 
 function ProblemsBody({ problems }: { problems: readonly PlanProblem[] }) {
   return (
@@ -407,9 +414,14 @@ export function MarkerLine({
     case "markdown":
       content = (
         <div data-slot="marker-body" className={cn(SUNKEN, "select-text")}>
-          <Markdown cutCode className="ui-headings">
+          <Markdown cutCode className="ui-headings" {...omitImages(body.images)}>
             {body.text}
           </Markdown>
+          {body.images !== undefined && body.images.length > 0 && (
+            <div className="mt-(--space-2)">
+              <StoredImages images={body.images} size="md" captions />
+            </div>
+          )}
         </div>
       );
       break;
@@ -448,10 +460,15 @@ export function MarkerLine({
         ) : (
           <div data-slot="marker-body" className={SUNKEN}>
             <div className="select-text">
-              <Markdown cutCode className="ui-headings">
+              <Markdown cutCode className="ui-headings" {...omitImages(body.images)}>
                 {text}
               </Markdown>
             </div>
+            {body.images !== undefined && body.images.length > 0 && (
+              <div className="mt-(--space-2)">
+                <StoredImages images={body.images} size="md" captions />
+              </div>
+            )}
             <div className="mt-(--space-2) flex items-center gap-(--space-3)">
               <span className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
                 {contextCharacters(text)}

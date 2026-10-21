@@ -1,3 +1,4 @@
+import { StoredImages } from "@/features/images/StoredImages";
 import type { UserEntry } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
 
@@ -21,9 +22,14 @@ export function YourMessage({ user, createdAt }: YourMessageProps) {
         <span className="font-medium text-ink-2">You</span>
         <span className="entry-time text-ink-4 tabular-nums">{time}</span>
       </div>
-      <p className="text-(length:--text-body) leading-(--leading-body) break-words whitespace-pre-wrap text-ink-1 select-text">
-        {user.text}
-      </p>
+      {user.text !== "" && (
+        <p className="text-(length:--text-body) leading-(--leading-body) break-words whitespace-pre-wrap text-ink-1 select-text">
+          {user.text}
+        </p>
+      )}
+      {(user.images ?? []).length > 0 && (
+        <StoredImages images={user.images ?? []} size="md" captions={false} />
+      )}
     </article>
   );
 }

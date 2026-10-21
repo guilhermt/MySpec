@@ -8,6 +8,7 @@ import (
 	"log/slog"
 
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/cardimages"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/models"
@@ -27,6 +28,7 @@ type DiscussionService struct {
 	flow         *discussionflow.Service
 	discussions  *discussion.Service
 	repositories *repository.Service
+	cardImages   *cardimages.Service
 	log          *slog.Logger
 }
 
@@ -35,12 +37,14 @@ func NewDiscussionService(
 	flow *discussionflow.Service,
 	discussions *discussion.Service,
 	repositories *repository.Service,
+	cardImages *cardimages.Service,
 	log *slog.Logger,
 ) *DiscussionService {
 	return &DiscussionService{
 		flow:         flow,
 		discussions:  discussions,
 		repositories: repositories,
+		cardImages:   cardImages,
 		log:          log,
 	}
 }
@@ -58,6 +62,11 @@ func (s *DiscussionService) StartDiscussion(req StartDiscussionRequest) (string,
 		return "", s.fail("StartDiscussion", err)
 	}
 
+	uploads, err := creationUploads(s.cardImages, s.log, req.CardImages, req.Images)
+	if err != nil {
+		return "", s.fail("StartDiscussion", err)
+	}
+
 	// Starting a discussion reads the clones of the board, which is git work.
 	ctx, cancel := context.WithTimeout(context.Background(), gitCallTimeout)
 	defer cancel()
@@ -68,6 +77,7 @@ func (s *DiscussionService) StartDiscussion(req StartDiscussionRequest) (string,
 		Text:    req.Text,
 		Cards:   req.Cards,
 		Choice:  choice,
+		Images:  uploads,
 	})
 	if err != nil {
 		var undone *discussionflow.UndoneError

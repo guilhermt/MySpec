@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useId, useLayoutEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
 import {
   Collapsible,
@@ -18,6 +18,11 @@ import { SunkenLine } from "@/components/system/SunkenLine";
 import { Textarea } from "@/components/system/Textarea";
 import { unsatisfied } from "@/features/board/board-view";
 import { dependencyNotice } from "@/features/board/card-panel";
+import { AttachedImages } from "@/features/images/AttachedImages";
+import { DropHint } from "@/features/images/DropHint";
+import { pasteImages } from "@/features/images/pasteImages";
+import { useCardImages } from "@/features/images/useCardImages";
+import { useImageDrop } from "@/features/images/useImageDrop";
 import { ModelChip } from "@/features/models/ModelChip";
 import { CardContextLine } from "@/features/task-create/CardContextLine";
 import {
@@ -26,8 +31,16 @@ import {
   nameProblemText,
   repositoryOptions,
 } from "@/features/task-create/create-task";
+import { useCardRefresh } from "@/features/task-create/useCardRefresh";
 import { findBoard } from "@/lib/boards";
 import { messageOf } from "@/lib/errors";
+import {
+  type Attachment,
+  encodeImages,
+  readAttachments,
+  refusalText,
+  revokeAttachments,
+} from "@/lib/images";
 import {
   adjustmentSummary,
   choiceLabel,
@@ -41,6 +54,7 @@ import { defaultRepositoryId, findRepository, takenNames } from "@/lib/repositor
 import { prReviewModeHint, reviewModeHint, reviewModeLabel } from "@/lib/review-modes";
 import { TASK_MODES, taskModeHint, taskModeLabel } from "@/lib/task-modes";
 import { isValidTaskName, suggestTaskName, taskNameProblem } from "@/lib/task-name";
+import { cn } from "@/lib/utils";
 import {
   asReviewMode,
   type BoardCard,
@@ -52,6 +66,7 @@ import { cloneRepository, createTask } from "@/store/actions";
 import { useAppStore, useModelCatalog, useOpenTaskId } from "@/store/app-store";
 
 const NO_MODELS: readonly StageModel[] = [];
+const NO_KEYS: readonly string[] = [];
 
 const NAME_HELP = "Lowercase letters, digits and hyphens. It names the branch and the worktree.";
 const MODE_FIXED = "Fixed once the task exists.";
@@ -145,6 +160,8 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
   const repositoryId = origin?.card.repositoryId ?? chosenRepositoryId;
   const [name, setName] = useState(() => origin?.card.suggestedName ?? "");
   const [context, setContext] = useState("");
+  const [images, setImages] = useState<Attachment[]>([]);
+  const [imageRefusal, setImageRefusal] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   // A clone that could not start, by repository id: the dialog covers the banner that would say so.
@@ -162,6 +179,13 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
   // The choices hold every stage, so an adjustment to a stage both modes have
   // survives a change of mode; the list and its summary show the mode's own.
   const modelStages = modelStagesOf(mode);
+  const refresh = useCardRefresh(origin?.boardId ?? "", origin?.card ?? null);
+  const cardImages = useCardImages(
+    origin?.boardId ?? "",
+    origin === null ? NO_KEYS : [origin.card.key],
+    !refresh.refreshing,
+    refresh.version,
+  );
 
   // The cursor starts after the name a card suggests, ready to add to it.
   useLayoutEffect(() => {
@@ -196,22 +220,50 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
     setChosenRepositoryId(id);
   };
 
+  const attach = (files: File[]) => {
+    if (creating) {
+      return;
+    }
+    void readAttachments(files).then(({ attachments, refusals }) => {
+      setImages((current) => [...current, ...attachments]);
+      setImageRefusal(refusals.length > 0 ? refusalText(refusals) : null);
+    });
+  };
+  const removeImage = (id: string) => {
+    if (creating) {
+      return;
+    }
+    revokeAttachments(images.filter((image) => image.id === id));
+    setImages(images.filter((image) => image.id !== id));
+  };
+  // The object URLs go with the form.
+  const held = useRef(images);
+  held.current = images;
+  useEffect(() => () => revokeAttachments(held.current), []);
+  const drop = useImageDrop(attach, !creating);
+
   const create = () => {
     if (block !== null || creating) {
       return;
     }
     setCreating(true);
     setError(null);
-    void createTask({
-      name,
-      repositoryId,
-      initialContext: context,
-      mode,
-      models: choices,
-      reviewMode,
-      prReviewMode,
-      card: origin === null ? null : { boardId: origin.boardId, key: origin.card.key },
-    })
+    void (async () => {
+      // The task starts with the images the card has, so it waits for their reading.
+      const read = await cardImages.settled();
+      return createTask({
+        name,
+        repositoryId,
+        initialContext: context,
+        mode,
+        models: choices,
+        reviewMode,
+        prReviewMode,
+        card: origin === null ? null : { boardId: origin.boardId, key: origin.card.key },
+        images: await encodeImages(images),
+        cardImages: read.images,
+      });
+    })()
       .then((id) => {
         rememberRepository(repositoryId);
         closeNewTask();
@@ -323,14 +375,29 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
         </div>
 
         {origin === null ? (
-          <Field label="Context" help={CONTEXT_HELP}>
-            <Textarea
-              rows={4}
-              value={context}
-              readOnly={creating}
-              onChange={(event) => changeContext(event.target.value)}
-            />
-          </Field>
+          <div className="relative flex flex-col gap-(--space-2)" {...drop.handlers}>
+            <Field
+              label="Context"
+              help={CONTEXT_HELP}
+              {...(imageRefusal !== null ? { error: imageRefusal } : {})}
+            >
+              <Textarea
+                rows={4}
+                value={context}
+                readOnly={creating}
+                onChange={(event) => changeContext(event.target.value)}
+                onPaste={(event) => !creating && pasteImages(event, attach)}
+                className={cn(drop.dragging && "border-dashed border-focus")}
+              />
+            </Field>
+            {drop.dragging && <DropHint />}
+            {images.length > 0 && (
+              <AttachedImages
+                attachments={images}
+                {...(creating ? {} : { onRemove: removeImage })}
+              />
+            )}
+          </div>
         ) : (
           <CardContextLine
             boardId={origin.boardId}
@@ -338,6 +405,12 @@ function NewTaskFields({ origin }: NewTaskFieldsProps) {
             additional={context}
             onAdditionalChange={changeContext}
             readOnly={creating}
+            refresh={refresh}
+            cardImages={cardImages}
+            images={images}
+            onAttach={attach}
+            {...(creating ? {} : { onRemoveImage: removeImage })}
+            imageRefusal={imageRefusal}
           />
         )}
 

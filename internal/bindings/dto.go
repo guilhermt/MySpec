@@ -732,10 +732,12 @@ type DeleteResult struct {
 // UserEntry is a message sent to the agent: one the user wrote, or one the app
 // sent on their behalf.
 type UserEntry struct {
-	Text    string `json:"text"`
-	Pending bool   `json:"pending"`
-	Prompt  bool   `json:"prompt"`
-	App     bool   `json:"app"`
+	Text string `json:"text"`
+	// Images went with the message, never nil.
+	Images  []Image `json:"images"`
+	Pending bool    `json:"pending"`
+	Prompt  bool    `json:"prompt"`
+	App     bool    `json:"app"`
 	// Sent is the rendered prompt the CLI got, for a prompt entry of the tech
 	// spec, the plan, the pull request and the pull request review; "" for
 	// every other entry.
@@ -752,6 +754,45 @@ type UserEntry struct {
 	AppRound  int    `json:"appRound"`
 	AppRounds int    `json:"appRounds"`
 	AppCount  int    `json:"appCount"`
+}
+
+// Image is an image given to the agent, stored with the item of its conversation.
+type Image struct {
+	ID     string `json:"id"`
+	URL    string `json:"url"`    // what the webview loads
+	Origin string `json:"origin"` // user, card or epic
+	Issue  string `json:"issue"`  // owner/name#number of the card or the epic; "" for the user's
+	Number int    `json:"number"` // the number of that issue; 0 for the user's
+	Alt    string `json:"alt"`
+}
+
+// CardImages is what reading the images of the cards of a creation gave.
+type CardImages struct {
+	Images   []CardImage        `json:"images"`   // never nil
+	Failures []CardImageFailure `json:"failures"` // never nil
+}
+
+// CardImage is an image read from the body of a card or of its epic, in the cache.
+type CardImage struct {
+	ID       string `json:"id"`     // the cache id
+	URL      string `json:"url"`    // CardImagesRoute + id
+	Origin   string `json:"origin"` // card or epic
+	Issue    string `json:"issue"`  // owner/name#number of the card or the epic
+	Number   int    `json:"number"` // the number of that issue
+	Alt      string `json:"alt"`
+	Position int    `json:"position"` // its place among the images of the body, from 1
+	Count    int    `json:"count"`    // how many images the body has
+}
+
+// CardImageFailure is an image of a body that couldn't be read; URL "" says
+// the body itself couldn't be read.
+type CardImageFailure struct {
+	Origin string `json:"origin"` // card or epic
+	Issue  string `json:"issue"`
+	Number int    `json:"number"`
+	URL    string `json:"url"` // the src of the image in the body
+	Alt    string `json:"alt"`
+	Reason string `json:"reason"` // a clause in lower case: "it's over 20 MB"
 }
 
 // AssistantEntry is one content block of an assistant message.
@@ -1198,6 +1239,12 @@ type CreateTaskRequest struct {
 	// a card, RepositoryID is ignored, and InitialContext is the text the user
 	// added.
 	Card *CreateTaskCard `json:"card"`
+	// Images are the images the user attached, in base64, in the order they
+	// reach the agent.
+	Images []string `json:"images"`
+	// CardImages are the images read from the card and from its epic, as
+	// BoardService.CardImages gave them; ignored without a Card.
+	CardImages []CardImage `json:"cardImages"`
 }
 
 // CreateTaskCard is the card of a board a task is created from.
@@ -1912,6 +1959,12 @@ type StartDiscussionRequest struct {
 	Cards   []string `json:"cards"` // the keys of the cards of the board
 	Model   string   `json:"model"`
 	Effort  string   `json:"effort"`
+	// Images are the images the user attached, in base64, in the order they
+	// reach the agent.
+	Images []string `json:"images"`
+	// CardImages are the images read from the cards and from their epics, as
+	// BoardService.CardImages gave them.
+	CardImages []CardImage `json:"cardImages"`
 }
 
 // DiscussionContextRequest is what the dialog of a discussion shows the

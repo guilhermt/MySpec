@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/discussion"
+	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/store"
 )
 
@@ -388,5 +389,47 @@ func TestDeletingADiscussionTakesItsCardsDraftsAndDependencies(t *testing.T) {
 	}
 	if got := draftsOf(t, s, d.ID); len(got) != 0 {
 		t.Errorf("Drafts() = %v, want the drafts gone with the discussion", got)
+	}
+}
+
+func TestDiscussionsKeepTheInitialImagesInOrder(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+
+	d := newDiscussion("d-1", "board-1", fixedTime)
+	d.InitialImages = []images.Image{
+		{ID: "b", MediaType: images.WebP, Origin: images.OriginCard, Issue: "dev/web#1", Position: 1, Count: 1},
+		{ID: "a", MediaType: images.GIF, Origin: images.OriginUser, Alt: "a diagram"},
+	}
+	if err := s.Discussions.Insert(t.Context(), d); err != nil {
+		t.Fatalf("Insert() = %v, want nil", err)
+	}
+
+	list, err := s.Discussions.ListActive(t.Context())
+	if err != nil || len(list) != 1 {
+		t.Fatalf("ListActive() = %v, %v, want one discussion", list, err)
+	}
+	got := list[0]
+	if diff := cmp.Diff(d.InitialImages, got.InitialImages); diff != "" {
+		t.Errorf("InitialImages mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestDiscussionsReadNoInitialImagesAsNil(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+
+	d := newDiscussion("d-1", "board-1", fixedTime)
+	if err := s.Discussions.Insert(t.Context(), d); err != nil {
+		t.Fatalf("Insert() = %v, want nil", err)
+	}
+
+	list, err := s.Discussions.ListActive(t.Context())
+	if err != nil || len(list) != 1 {
+		t.Fatalf("ListActive() = %v, %v, want one discussion", list, err)
+	}
+	got := list[0]
+	if got.InitialImages != nil {
+		t.Errorf("InitialImages = %v, want nil", got.InitialImages)
 	}
 }

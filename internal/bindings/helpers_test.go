@@ -18,6 +18,7 @@ import (
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/cardimages"
 	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/claude/claudetest"
 	"github.com/guilhermt/myspec/internal/discussion"
@@ -370,6 +371,7 @@ type fixture struct {
 	repositories   *repository.Service
 	boards         *board.Service
 	github         *fakeGitHub
+	cardImages     *cardimages.Service
 	theme          *theme.Service
 	models         *models.Service
 	reviewModes    *reviewmode.Service
@@ -562,16 +564,19 @@ func newFixture(t *testing.T) *fixture {
 	f.state = bindings.NewStateService(f.snapshot)
 	f.repoService = bindings.NewRepositoryService(f.repositories, f.picker, log)
 	f.settings = bindings.NewSettingsService(f.theme, f.models, f.reviewModes, nil, bindings.UpdateActions{}, f.dataDir, log)
+	f.cardImages = cardimages.New(cardimages.Deps{
+		GitHub: f.github, Dir: filepath.Join(t.TempDir(), "card-images"), UserAgent: "MySpec/test", Log: log,
+	})
 	f.tasks = bindings.NewTaskService(
-		f.taskSvc, f.sessions, f.flow, f.models, f.reviewModes, f.repositories, f.boards, f.editor.open,
+		f.taskSvc, f.sessions, f.flow, f.models, f.reviewModes, f.repositories, f.boards, f.cardImages, f.editor.open,
 		f.discussions.DocumentOfCard, f.hasConversation, log,
 	)
-	f.boardService = bindings.NewBoardService(f.boards, f.discussions.DocumentOfCard, log)
+	f.boardService = bindings.NewBoardService(f.boards, f.discussions.DocumentOfCard, f.cardImages, log)
 	f.reviewSvc = bindings.NewReviewService(
 		f.reviewFlow, f.prReviews, f.pullRequests, f.worktrees, f.editor.open, log,
 	)
 	f.discussionSvc = bindings.NewDiscussionService(
-		f.discussionFlow, f.discussions, f.repositories, log,
+		f.discussionFlow, f.discussions, f.repositories, f.cardImages, log,
 	)
 	return f
 }

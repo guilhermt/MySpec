@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/system/Button";
 import { Tooltip } from "@/components/system/Tooltip";
 import type { SessionState } from "@/features/chat/session";
+import { StoredImages } from "@/features/images/StoredImages";
 import { asSessionStatus, type UserEntry } from "@/lib/wails";
 import { removePending } from "@/store/actions";
 
@@ -57,9 +58,14 @@ export function QueuedMessage({ taskId, stage, entryId, user, session }: QueuedM
           </Button>
         </Tooltip>
       </div>
-      <p className="text-(length:--text-body) leading-(--leading-body) break-words whitespace-pre-wrap text-ink-2 select-text">
-        {user.text}
-      </p>
+      {user.text !== "" && (
+        <p className="text-(length:--text-body) leading-(--leading-body) break-words whitespace-pre-wrap text-ink-2 select-text">
+          {user.text}
+        </p>
+      )}
+      {(user.images ?? []).length > 0 && (
+        <StoredImages images={user.images ?? []} size="md" captions={false} />
+      )}
     </article>
   );
 }

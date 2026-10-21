@@ -8,6 +8,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/discussion"
+	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/repository"
@@ -25,6 +26,7 @@ type StartParams struct {
 	Text    string   // what the user wrote; "" for none
 	Cards   []string // the keys of the cards of the stored reading
 	Choice  models.Choice
+	Images  []images.Upload // the images of the initial context, in the order they reach the agent
 }
 
 // Start opens a discussion of a demand of a board: it builds the initial
@@ -46,6 +48,7 @@ func (s *Service) Start(ctx context.Context, p StartParams) (string, error) {
 		Text:           p.Text,
 		InitialContext: initial,
 		Cards:          inputCards(cards),
+		Images:         p.Images,
 	})
 	if err != nil {
 		return "", err
@@ -197,6 +200,7 @@ func (s *Service) info(d discussion.Discussion, choice models.Choice) session.Ta
 		Stage:          session.DiscussionStage,
 		Prompt:         prompts.StageDiscussion,
 		InitialContext: d.InitialContext,
+		InitialImages:  d.InitialImages,
 		DocumentPath:   d.DocumentPath(),
 		DraftsPath:     d.DraftsPath(),
 		Board:          section,

@@ -353,7 +353,7 @@ describe("sendMessageInPlace", () => {
   it("sends the message and answers nothing", async () => {
     await expect(sendMessageInPlace("task-1", "prd", "go on")).resolves.toBe("");
 
-    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "go on");
+    expect(api.sendMessage).toHaveBeenCalledWith("task-1", "prd", "go on", []);
   });
 
   it("answers the reason of a failure without the app notice", async () => {
@@ -921,6 +921,8 @@ describe("createTask", () => {
       reviewMode: "",
       prReviewMode: "",
       card: null,
+      images: [],
+      cardImages: [],
     });
 
     expect(id).toBe("task-9");
@@ -939,6 +941,8 @@ describe("createTask", () => {
         reviewMode: "",
         prReviewMode: "",
         card: null,
+        images: [],
+        cardImages: [],
       }),
     ).rejects.toThrow("claude is not logged in");
     expect(useAppStore.getState().error).toBeNull();
@@ -1271,6 +1275,8 @@ describe("discussion actions shown in place", () => {
     cards: ["dev/web#12"],
     model: "claude-opus-5-5[1m]",
     effort: "high",
+    images: [],
+    cardImages: [],
   };
 
   it("delegate to the matching binding and answer what it says", async () => {

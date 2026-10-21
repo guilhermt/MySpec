@@ -269,6 +269,7 @@ func TaskInfo(t task.Task, a task.Artifacts, repo repository.Repository) session
 		OneShotPath:    oneShotPath(t),
 		Repository:     repo.FullName(),
 		InitialContext: t.InitialContext,
+		InitialImages:  t.InitialImages,
 		ArtifactExists: a.Done(t.Stage),
 		Choice:         t.Models.Stage(models.Stage(t.Stage)),
 	}

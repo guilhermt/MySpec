@@ -102,6 +102,7 @@ describe("Conversation", () => {
       makeEntry("user", {
         user: {
           text: "The plan is not valid yet.",
+          images: [],
           pending: false,
           prompt: false,
           app: true,
@@ -133,6 +134,7 @@ describe("Conversation", () => {
       makeEntry("user", {
         user: {
           text: "",
+          images: [],
           pending: false,
           prompt: true,
           app: false,
@@ -160,6 +162,7 @@ describe("Conversation", () => {
       makeEntry("user", {
         user: {
           text: "Add a login screen",
+          images: [],
           pending: false,
           prompt: true,
           app: false,
@@ -209,6 +212,7 @@ describe("Conversation", () => {
       makeEntry("user", {
         user: {
           text: "and dark mode",
+          images: [],
           pending: true,
           prompt: false,
           app: false,
@@ -237,6 +241,7 @@ describe("Conversation", () => {
       makeEntry("user", {
         user: {
           text: "",
+          images: [],
           pending: true,
           prompt: true,
           app: false,
@@ -263,6 +268,7 @@ describe("Conversation", () => {
       makeEntry("user", {
         user: {
           text: "Review the step again.",
+          images: [],
           pending: true,
           prompt: false,
           app: true,
@@ -446,6 +452,7 @@ describe("Conversation", () => {
       makeEntry("user", {
         user: {
           text: "and dark mode",
+          images: [],
           pending: true,
           prompt: false,
           app: false,
@@ -936,6 +943,7 @@ describe("Conversation after", () => {
     const prompt = makeEntry("user", {
       user: {
         text: "The context.",
+        images: [],
         pending: false,
         prompt: true,
         app: false,

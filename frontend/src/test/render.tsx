@@ -27,6 +27,7 @@ export interface StoreOptions {
       | "machineNoticeDismissed"
       | "transcripts"
       | "drafts"
+      | "attachments"
       | "markerRequest"
       | "draftRequest"
       | "boardCardRequest"
@@ -85,6 +86,7 @@ export function resetAppStore(options: StoreOptions = {}): void {
     updateLater: options.ui?.updateLater ?? false,
     transcripts: options.ui?.transcripts ?? {},
     drafts: options.ui?.drafts ?? {},
+    attachments: options.ui?.attachments ?? {},
     markerRequest: options.ui?.markerRequest ?? null,
     draftRequest: options.ui?.draftRequest ?? null,
     boardCardRequest: options.ui?.boardCardRequest ?? null,

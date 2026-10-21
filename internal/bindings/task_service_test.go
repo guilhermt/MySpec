@@ -629,7 +629,7 @@ func TestSetSessionModelIsWhatTheNextMessageRunsWith(t *testing.T) {
 
 	// The next message runs with the new choice, which the session reaches by
 	// stopping the idle process and starting it again with --resume.
-	if err := f.tasks.SendMessage(id, "prd", "add a remember me box"); err != nil {
+	if err := f.tasks.SendMessage(id, "prd", "add a remember me box", nil); err != nil {
 		t.Fatalf("SendMessage(%s) = %v, want nil", id, err)
 	}
 	waitAssistantText(t, f, id, "prd", "add a remember me box")
@@ -803,7 +803,7 @@ func TestSendMessageQueuesAnotherTurn(t *testing.T) {
 
 	f, _, id := createdTask(t)
 
-	if err := f.tasks.SendMessage(id, "prd", "add a remember me box"); err != nil {
+	if err := f.tasks.SendMessage(id, "prd", "add a remember me box", nil); err != nil {
 		t.Fatalf("SendMessage(%s) = %v, want nil", id, err)
 	}
 	f.waitForStatus(t, id, "waiting")
@@ -822,7 +822,7 @@ func TestSendMessageReportsWhatTheUserGotWrong(t *testing.T) {
 
 	f, _, id := createdTask(t)
 
-	if err := f.tasks.SendMessage(id, "prd", "  "); err == nil || err.Error() != "Write a message first." {
+	if err := f.tasks.SendMessage(id, "prd", "  ", nil); err == nil || err.Error() != "Write a message first." {
 		t.Errorf("SendMessage() error = %v, want the empty message notice", err)
 	}
 
@@ -832,7 +832,7 @@ func TestSendMessageReportsWhatTheUserGotWrong(t *testing.T) {
 	if status := f.taskOf(t, id).SessionStatus; status != "paused" {
 		t.Errorf("sessionStatus = %q, want paused", status)
 	}
-	if err := f.tasks.SendMessage(id, "prd", "hello"); err == nil || err.Error() != "Resume the task to send messages." {
+	if err := f.tasks.SendMessage(id, "prd", "hello", nil); err == nil || err.Error() != "Resume the task to send messages." {
 		t.Errorf("SendMessage() error = %v, want the paused notice", err)
 	}
 
@@ -870,7 +870,7 @@ func TestInterruptAndRetryLeaveTheSessionUsable(t *testing.T) {
 	if err := f.tasks.Retry(id, "prd"); err != nil {
 		t.Fatalf("Retry(%s) = %v, want nil", id, err)
 	}
-	if err := f.tasks.SendMessage(id, "prd", "carry on"); err != nil {
+	if err := f.tasks.SendMessage(id, "prd", "carry on", nil); err != nil {
 		t.Fatalf("SendMessage(%s) = %v, want nil", id, err)
 	}
 	f.waitForStatus(t, id, "waiting")

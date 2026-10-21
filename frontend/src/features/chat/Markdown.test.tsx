@@ -1,7 +1,8 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ExternalLink } from "@/features/chat/ExternalLink";
 import { Markdown } from "@/features/chat/Markdown";
+import { cardBodyImageUrl } from "@/lib/images";
 import { api } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
 
@@ -186,5 +187,49 @@ describe("ExternalLink", () => {
     renderWithStore(<Markdown railLast>{"Which one?\n\na) This\nb) That"}</Markdown>);
 
     expect(screen.getByTestId("markdown")).toHaveClass("markdown-rail-last");
+  });
+
+  it("draws the images of the text as markers with omit, with the link of each", () => {
+    renderWithStore(
+      <Markdown images={{ kind: "omit" }}>
+        {"See ![Logo](https://x/logo.png) and ![](https://x/two.png)"}
+      </Markdown>,
+    );
+
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.getByText("Logo")).toBeInTheDocument();
+    expect(screen.getByText("Image")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "link" })).toHaveLength(2);
+  });
+});
+
+describe("Markdown, the images of a card body", () => {
+  const BODY = "![chart](https://github.com/user-attachments/assets/abc)";
+
+  it("loads an image through the product and opens it large on a click", async () => {
+    const { user } = renderWithStore(
+      <Markdown images={{ kind: "card", issue: "dev/web#12" }}>{BODY}</Markdown>,
+    );
+
+    const image = screen.getByRole("img", { name: "chart" });
+    expect(image).toHaveAttribute(
+      "src",
+      cardBodyImageUrl("dev/web#12", "https://github.com/user-attachments/assets/abc"),
+    );
+    expect(image).toHaveAttribute("loading", "lazy");
+
+    await user.click(screen.getByRole("button", { name: "Open the image chart" }));
+
+    expect(await screen.findByRole("dialog", { name: "chart" })).toBeInTheDocument();
+  });
+
+  it("falls back to the marker with its link when the image doesn't load", () => {
+    renderWithStore(<Markdown images={{ kind: "card", issue: "dev/web#12" }}>{BODY}</Markdown>);
+
+    fireEvent.error(screen.getByRole("img", { name: "chart" }));
+
+    expect(screen.queryByRole("img", { name: "chart" })).not.toBeInTheDocument();
+    expect(screen.getByText("chart")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "link" })).toBeInTheDocument();
   });
 });

@@ -478,12 +478,11 @@ describe("answersOf", () => {
 
 describe("sendIsPrimary", () => {
   it.each([
-    ["with text and nothing else primary", "Go on", false, true],
-    ["with text and another primary on the screen", "Go on", true, false],
-    ["without text", "", false, false],
-    ["with blank text", "  \n", false, false],
-  ])("decides Send %s", (_name, text, otherPrimary, primary) => {
-    expect(sendIsPrimary(text, otherPrimary)).toBe(primary);
+    ["with content and nothing else primary", true, false, true],
+    ["with content and another primary on the screen", true, true, false],
+    ["without content", false, false, false],
+  ])("decides Send %s", (_name, hasContent, otherPrimary, primary) => {
+    expect(sendIsPrimary(hasContent, otherPrimary)).toBe(primary);
   });
 });
 

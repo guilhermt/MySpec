@@ -65,7 +65,12 @@ export function CardPanel({ task }: CardPanelProps) {
         </div>
         {card.body !== "" && (
           <div className="select-text">
-            <Markdown className="ui-headings">{card.body}</Markdown>
+            <Markdown
+              className="ui-headings"
+              images={{ kind: "card", issue: `${card.repository}#${card.number}` }}
+            >
+              {card.body}
+            </Markdown>
           </div>
         )}
         <RelationList

@@ -350,11 +350,12 @@ export function answersOf(q: QuestionEntry, choices: QuestionChoices): Record<st
 }
 
 /**
- * sendIsPrimary reports whether Send is the primary: with text, and no other primary drawn on the
- * screen, enabled or dashed (Answer or Allow of a pending card, the primary of the bar, Approve draft).
+ * sendIsPrimary reports whether Send is the primary: with something to send (text or images), and no
+ * other primary drawn on the screen, enabled or dashed (Answer or Allow of a pending card, the
+ * primary of the bar, Approve draft).
  */
-export function sendIsPrimary(text: string, otherPrimary: boolean): boolean {
-  return text.trim() !== "" && !otherPrimary;
+export function sendIsPrimary(hasContent: boolean, otherPrimary: boolean): boolean {
+  return hasContent && !otherPrimary;
 }
 
 /**

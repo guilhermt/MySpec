@@ -4,6 +4,7 @@ import type { PreviewReading } from "@/features/task/deletion";
 import { draftTitle } from "@/lib/drafts";
 import { messageOf, noticeDetail, type Remedy } from "@/lib/errors";
 import { olderKey } from "@/lib/history";
+import { type Attachment, encodeImages } from "@/lib/images";
 import { locationTitle } from "@/lib/locations";
 import type { ModelChoice } from "@/lib/models";
 import {
@@ -22,6 +23,7 @@ import type {
   BoardRemoval,
   BoardRepositoryChoice,
   BoardRepositoryOption,
+  CardImages,
   CreateTaskRequest,
   DiscussionContextRequest,
   DraftDecision,
@@ -235,6 +237,14 @@ export async function refreshBoard(id: string): Promise<void> {
   await run(fail(withItem("Couldn't refresh the board", boardTitle(id)), GH), () =>
     api.refreshBoard(id),
   );
+}
+
+/**
+ * readCardImages reads the images of the cards from GitHub into the cache. It does not swallow its
+ * failure: the dialog that asked shows it where the images are.
+ */
+export function readCardImages(boardId: string, keys: string[]): Promise<CardImages> {
+  return api.cardImages(boardId, keys);
 }
 
 /** cardContext is the context a task created from a card starts with; "" when it could not be read. */
@@ -552,8 +562,12 @@ export async function sendMessageInPlace(
   taskId: string,
   stage: string,
   text: string,
+  images: readonly Attachment[] = [],
 ): Promise<string> {
-  return (await inPlace(() => api.sendMessage(taskId, stage, text))) ?? "";
+  return (
+    (await inPlace(async () => api.sendMessage(taskId, stage, text, await encodeImages(images)))) ??
+    ""
+  );
 }
 
 export async function removePending(taskId: string, stage: string, entryId: string): Promise<void> {
