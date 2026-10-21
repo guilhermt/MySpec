@@ -861,7 +861,7 @@ type MarkerEntry struct {
 	// pr_review_written, pr_review_revised, findings_decided,
 	// review_published, new_commits, step_review_started,
 	// step_review_written, review_started, discussion_started, stage_started,
-	// step_started, compacted, interrupted, retried, committed, pr_opened,
+	// step_started, compacted, interrupted, retried, woke, committed, pr_opened,
 	// checks_read, draft_approved, changes_approved, paused, plan_invalid,
 	// discussion_document, drafts_written, drafts_revised, drafts_unreadable
 	// or drafts_published.
@@ -932,6 +932,9 @@ type MarkerEntry struct {
 	Added   int           `json:"added"`   // drafts_revised
 	Dropped int           `json:"dropped"` // drafts_revised
 	Before  []DraftBefore `json:"before"`  // drafts_revised; never nil
+	// Wakes belongs to woke: the returns in the background it names, in order;
+	// never nil, empty when the agent resumed on its own.
+	Wakes []Wake `json:"wakes"`
 }
 
 // DraftBefore is a draft of a round as it was before a revision, or one the
@@ -953,6 +956,14 @@ type MarkerCommit struct {
 	SHA     string `json:"sha"`
 	Subject string `json:"subject"`
 	Author  string `json:"author"`
+}
+
+// Wake is a return in the background a woke marker names.
+type Wake struct {
+	Kind     string `json:"kind"`     // agent, command or monitor
+	Name     string `json:"name"`     // the description the CLI gives the task
+	Status   string `json:"status"`   // completed, failed or stopped
+	ExitCode int    `json:"exitCode"` // the code a failed command exited with, -1 when unknown
 }
 
 // ErrorEntry is a failure shown in the conversation.

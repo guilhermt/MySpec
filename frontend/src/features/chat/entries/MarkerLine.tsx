@@ -37,6 +37,7 @@ const MARKER_ICONS: Record<MarkerIcon, IconMeaning> = {
   compact: "compact",
   pause: "pause",
   retry: "retry",
+  woke: "woke",
   check: "done",
   problem: "problem",
   ban: "ban",

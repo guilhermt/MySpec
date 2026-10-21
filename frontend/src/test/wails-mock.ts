@@ -1634,6 +1634,7 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
           minimal: false,
           url: "",
           commits: [],
+          wakes: [],
           count: 0,
           board: "",
           epics: [],

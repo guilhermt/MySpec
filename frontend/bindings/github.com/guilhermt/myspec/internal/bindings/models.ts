@@ -1631,7 +1631,7 @@ export interface MarkerEntry {
      * pr_review_written, pr_review_revised, findings_decided,
      * review_published, new_commits, step_review_started,
      * step_review_written, review_started, discussion_started, stage_started,
-     * step_started, compacted, interrupted, retried, committed, pr_opened,
+     * step_started, compacted, interrupted, retried, woke, committed, pr_opened,
      * checks_read, draft_approved, changes_approved, paused, plan_invalid,
      * discussion_document, drafts_written, drafts_revised, drafts_unreadable
      * or drafts_published.
@@ -1743,6 +1743,12 @@ export interface MarkerEntry {
      * drafts_revised; never nil
      */
     "before": DraftBefore[] | null;
+
+    /**
+     * Wakes belongs to woke: the returns in the background it names, in order;
+     * never nil, empty when the agent resumed on its own.
+     */
+    "wakes": Wake[] | null;
 }
 
 /**
@@ -3976,6 +3982,31 @@ export interface UserEntry {
     "appRound": number;
     "appRounds": number;
     "appCount": number;
+}
+
+/**
+ * Wake is a return in the background a woke marker names.
+ */
+export interface Wake {
+    /**
+     * agent, command or monitor
+     */
+    "kind": string;
+
+    /**
+     * the description the CLI gives the task
+     */
+    "name": string;
+
+    /**
+     * completed, failed or stopped
+     */
+    "status": string;
+
+    /**
+     * the code a failed command exited with, -1 when unknown
+     */
+    "exitCode": number;
 }
 
 /**
