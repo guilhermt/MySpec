@@ -29,7 +29,10 @@ export function useDiscussionContext(
   cards: readonly BoardCard[],
 ): DiscussionContext {
   const [context, setContext] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  // Stale cards are refreshing from the first render, so nothing is read from them before.
+  const [refreshing, setRefreshing] = useState(() =>
+    cards.some((card) => Date.now() - Date.parse(card.readAt) > STALE_CARD_MS),
+  );
   const [failure, setFailure] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const [debouncedText, setDebouncedText] = useState(text);

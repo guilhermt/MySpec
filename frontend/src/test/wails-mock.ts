@@ -13,6 +13,8 @@ import type {
   BoardRemoval,
   BoardRepositoryChoice,
   BoardRepositoryOption,
+  CardImage,
+  CardImageFailure,
   CardImages,
   CatalogModel,
   CloseResult,
@@ -564,6 +566,32 @@ export function makeBoard(overrides: Partial<Board> = {}): Board {
     viewer: "dev",
     cards: [],
     newCardStatus: "",
+    ...overrides,
+  };
+}
+
+export function makeCardImage(overrides: Partial<CardImage> = {}): CardImage {
+  return {
+    id: "a".repeat(64),
+    url: `/myspec/card-images/${"a".repeat(64)}`,
+    origin: "card",
+    issue: "dev/web#12",
+    number: 12,
+    alt: "Logo",
+    position: 1,
+    count: 1,
+    ...overrides,
+  };
+}
+
+export function makeCardImageFailure(overrides: Partial<CardImageFailure> = {}): CardImageFailure {
+  return {
+    origin: "card",
+    issue: "dev/web#12",
+    number: 12,
+    url: "https://github.com/user-attachments/assets/1",
+    alt: "Logo",
+    reason: "it's over 20 MB",
     ...overrides,
   };
 }

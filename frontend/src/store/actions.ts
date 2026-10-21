@@ -23,6 +23,7 @@ import type {
   BoardRemoval,
   BoardRepositoryChoice,
   BoardRepositoryOption,
+  CardImages,
   CreateTaskRequest,
   DiscussionContextRequest,
   DraftDecision,
@@ -236,6 +237,14 @@ export async function refreshBoard(id: string): Promise<void> {
   await run(fail(withItem("Couldn't refresh the board", boardTitle(id)), GH), () =>
     api.refreshBoard(id),
   );
+}
+
+/**
+ * readCardImages reads the images of the cards from GitHub into the cache. It does not swallow its
+ * failure: the dialog that asked shows it where the images are.
+ */
+export function readCardImages(boardId: string, keys: string[]): Promise<CardImages> {
+  return api.cardImages(boardId, keys);
 }
 
 /** cardContext is the context a task created from a card starts with; "" when it could not be read. */

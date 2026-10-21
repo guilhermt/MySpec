@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { NewTaskDialog } from "@/features/task-create/NewTaskDialog";
 import { api, type State } from "@/lib/wails";
@@ -8,6 +8,8 @@ import {
   makeArchivedTask,
   makeBoard,
   makeBoardCard,
+  makeCardImage,
+  makeCardImageFailure,
   makeModelDefaults,
   makeRepository,
   makeState,
@@ -830,6 +832,192 @@ describe("NewTaskDialog", () => {
       expect(
         await screen.findByText("Card #12 already has an active task: login."),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe("images", () => {
+    const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0];
+    const PNG_BASE64 = Buffer.from(PNG).toString("base64");
+    const png = (name = "shot.png") => new File([new Uint8Array(PNG)], name, { type: "image/png" });
+    const bmp = () => new File([new Uint8Array([0x42, 0x4d, 0, 0, 0, 0])], "pic.bmp");
+    const paste = (field: HTMLElement, files: File[]) =>
+      fireEvent.paste(field, { clipboardData: { files, getData: () => "", types: [] } });
+    const CARD_REF = { boardId: "board-1", key: "dev/web#12" };
+    const fresh = () => ({ ...makeBoardCard(), readAt: new Date().toISOString() });
+    const openCard = () =>
+      open({ boards: [makeBoard({ cards: [fresh()] })] }, { newTaskCard: CARD_REF });
+
+    it("attaches a pasted image to the context and sends it with the task", async () => {
+      vi.mocked(api.createTask).mockResolvedValue("task-9");
+      const { user } = open();
+
+      await user.type(screen.getByLabelText("Name"), "fix-header");
+      paste(screen.getByLabelText("Context"), [png()]);
+
+      expect(await screen.findByRole("button", { name: "Image 1 of 1, shot.png" })).toBeVisible();
+      expect(screen.getByLabelText("Context")).toHaveValue("");
+      // Images alone don't stand for the context.
+      expect(screen.getByRole("button", { name: "Create" })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+
+      await user.type(screen.getByLabelText("Context"), "See the shot");
+      await user.click(screen.getByRole("button", { name: "Create" }));
+
+      await waitFor(() => expect(api.createTask).toHaveBeenCalledOnce());
+      expect(api.createTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          initialContext: "See the shot",
+          images: [PNG_BASE64],
+          cardImages: [],
+        }),
+      );
+    });
+
+    it("takes a dropped image, and refuses a dropped file that isn't one", async () => {
+      open();
+      const context = screen.getByLabelText("Context");
+      const target = context.parentElement?.parentElement as HTMLElement;
+
+      fireEvent.drop(target, { dataTransfer: { types: ["Files"], files: [bmp()] } });
+
+      expect(
+        await screen.findByText("Not attached · pic.bmp isn't PNG, JPEG, GIF or WebP"),
+      ).toBeVisible();
+      expect(screen.queryByRole("list", { name: "Attached images" })).not.toBeInTheDocument();
+
+      fireEvent.drop(target, { dataTransfer: { types: ["Files"], files: [png()] } });
+
+      expect(await screen.findByRole("button", { name: "Image 1 of 1, shot.png" })).toBeVisible();
+      expect(screen.queryByText(/Not attached/)).not.toBeInTheDocument();
+    });
+
+    it("removes an attached image", async () => {
+      const { user } = open();
+      paste(screen.getByLabelText("Context"), [png()]);
+
+      await user.click(await screen.findByRole("button", { name: "Remove image 1, shot.png" }));
+
+      expect(screen.queryByRole("button", { name: /^Image 1/ })).not.toBeInTheDocument();
+    });
+
+    it("keeps the text and the images when the creation fails", async () => {
+      vi.mocked(api.createTask).mockRejectedValue(
+        new Error("A task with this name already exists."),
+      );
+      const { user } = open();
+      await user.type(screen.getByLabelText("Name"), "add-login");
+      await user.type(screen.getByLabelText("Context"), "A login screen");
+      paste(screen.getByLabelText("Context"), [png()]);
+      await screen.findByRole("button", { name: "Image 1 of 1, shot.png" });
+
+      await user.click(screen.getByRole("button", { name: "Create" }));
+
+      expect(await screen.findByText("A task with this name already exists.")).toBeVisible();
+      expect(screen.getByLabelText("Context")).toHaveValue("A login screen");
+      expect(screen.getByRole("button", { name: "Image 1 of 1, shot.png" })).toBeVisible();
+    });
+
+    it("attaches and removes nothing while the task is created", async () => {
+      vi.mocked(api.createTask).mockReturnValue(new Promise(() => {}));
+      const { user } = open();
+      await user.type(screen.getByLabelText("Name"), "add-login");
+      await user.type(screen.getByLabelText("Context"), "A login screen");
+      paste(screen.getByLabelText("Context"), [png()]);
+      await screen.findByRole("button", { name: "Image 1 of 1, shot.png" });
+
+      await user.click(screen.getByRole("button", { name: "Create" }));
+      await screen.findByRole("button", { name: "Creating…" });
+      paste(screen.getByLabelText("Context"), [png("late.png")]);
+
+      expect(screen.queryByRole("button", { name: /^Remove image/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /late\.png/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Image 1 of 1, shot.png" })).toBeVisible();
+    });
+
+    it("sends the images of the card read, and the user's, from a card", async () => {
+      vi.mocked(api.createTask).mockResolvedValue("task-9");
+      const read = makeCardImage();
+      vi.mocked(api.cardImages).mockResolvedValue({ images: [read], failures: [] });
+      const { user } = openCard();
+      await screen.findByText(/· 1 image$/);
+
+      await user.click(screen.getByRole("button", { name: "Add to it" }));
+      paste(screen.getByLabelText(/Additional context/), [png()]);
+      await screen.findByText(/· 2 images$/);
+      await user.click(screen.getByRole("button", { name: "Create" }));
+
+      await waitFor(() => expect(api.createTask).toHaveBeenCalledOnce());
+      expect(api.createTask).toHaveBeenCalledWith(
+        expect.objectContaining({ card: CARD_REF, images: [PNG_BASE64], cardImages: [read] }),
+      );
+    });
+
+    it("waits for the reading of the card images before it creates", async () => {
+      vi.mocked(api.createTask).mockResolvedValue("task-9");
+      let finish: (value: { images: ReturnType<typeof makeCardImage>[]; failures: [] }) => void =
+        () => {};
+      vi.mocked(api.cardImages).mockReturnValue(
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      );
+      const { user } = openCard();
+      await screen.findByText(/· reading images…/);
+
+      await user.click(screen.getByRole("button", { name: "Create" }));
+
+      await screen.findByRole("button", { name: "Creating…" });
+      expect(api.createTask).not.toHaveBeenCalled();
+
+      const read = makeCardImage();
+      finish({ images: [read], failures: [] });
+
+      await waitFor(() => expect(api.createTask).toHaveBeenCalledOnce());
+      expect(api.createTask).toHaveBeenCalledWith(expect.objectContaining({ cardImages: [read] }));
+    });
+
+    it("waits for the card to be read again, and then for its images, before it creates", async () => {
+      vi.mocked(api.createTask).mockResolvedValue("task-9");
+      let finish = () => {};
+      vi.mocked(api.refreshCard).mockReturnValue(
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+      );
+      const read = makeCardImage();
+      vi.mocked(api.cardImages).mockResolvedValue({ images: [read], failures: [] });
+      const stale = {
+        ...makeBoardCard(),
+        readAt: new Date(Date.now() - 10 * 60_000).toISOString(),
+      };
+      const { user } = open({ boards: [makeBoard({ cards: [stale] })] }, { newTaskCard: CARD_REF });
+
+      await user.click(screen.getByRole("button", { name: "Create" }));
+      await screen.findByRole("button", { name: "Creating…" });
+      expect(api.createTask).not.toHaveBeenCalled();
+      finish();
+
+      await waitFor(() => expect(api.createTask).toHaveBeenCalledOnce());
+      expect(api.createTask).toHaveBeenCalledWith(expect.objectContaining({ cardImages: [read] }));
+    });
+
+    it("shows the images read on Show, and what could not be read", async () => {
+      vi.mocked(api.cardImages).mockResolvedValue({
+        images: [makeCardImage()],
+        failures: [makeCardImageFailure({ alt: "" })],
+      });
+      const { user } = openCard();
+      await screen.findByText(/· 1 image$/);
+
+      await user.click(screen.getByRole("button", { name: "Show" }));
+
+      expect(screen.getByText("Images")).toBeVisible();
+      expect(screen.getByRole("button", { name: "Image 1 of 1, Logo" })).toBeVisible();
+      expect(
+        screen.getByText(/An image of the card #12 couldn't be read: it's over 20 MB\./),
+      ).toBeVisible();
     });
   });
 });

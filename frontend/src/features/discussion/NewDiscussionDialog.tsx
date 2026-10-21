@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { CutText } from "@/components/system/CutText";
 import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
@@ -29,11 +29,27 @@ import {
 } from "@/features/discussion/new-discussion";
 import { UnclonedRepository } from "@/features/discussion/UnclonedRepository";
 import { useDiscussionContext } from "@/features/discussion/useDiscussionContext";
+import { AttachedImages } from "@/features/images/AttachedImages";
+import { CardImageFailures } from "@/features/images/CardImageFailures";
+import { ContextImages } from "@/features/images/ContextImages";
+import { DropHint } from "@/features/images/DropHint";
+import { pasteImages } from "@/features/images/pasteImages";
+import { useCardImages } from "@/features/images/useCardImages";
+import { useImageDrop } from "@/features/images/useImageDrop";
 import { ModelChip } from "@/features/models/ModelChip";
 import { issueLabel } from "@/lib/boards";
 import { messageOf } from "@/lib/errors";
+import {
+  type Attachment,
+  encodeImages,
+  imagesPart,
+  readAttachments,
+  refusalText,
+  revokeAttachments,
+} from "@/lib/images";
 import { choiceOf, type ModelChoice } from "@/lib/models";
 import { sharedAmong, shortName } from "@/lib/repositories";
+import { cn } from "@/lib/utils";
 import type { Board, BoardCard, StageModel } from "@/lib/wails";
 import { startDiscussion } from "@/store/actions";
 import {
@@ -143,12 +159,41 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
   );
   const [title, setTitle] = useState(() => suggestedTitle(cards));
   const [text, setText] = useState("");
+  const [images, setImages] = useState<Attachment[]>([]);
+  const [imageRefusal, setImageRefusal] = useState<string | null>(null);
   const [choice, setChoice] = useState<ModelChoice>(() => choiceOf(defaults, "discussion"));
   const [refusal, setRefusal] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [showContext, setShowContext] = useState(false);
   const context = useDiscussionContext(board.id, text, cards);
   const failureArrived = useArrivedLater(context.failure !== null);
+  const cardImages = useCardImages(
+    board.id,
+    cards.map((card) => card.key),
+    !context.refreshing,
+  );
+
+  const attach = (files: File[]) => {
+    if (starting) {
+      return;
+    }
+    void readAttachments(files).then(({ attachments, refusals }) => {
+      setImages((current) => [...current, ...attachments]);
+      setImageRefusal(refusals.length > 0 ? refusalText(refusals) : null);
+    });
+  };
+  const removeImage = (id: string) => {
+    if (starting) {
+      return;
+    }
+    revokeAttachments(images.filter((image) => image.id === id));
+    setImages(images.filter((image) => image.id !== id));
+  };
+  // The object URLs go with the form.
+  const held = useRef(images);
+  held.current = images;
+  useEffect(() => () => revokeAttachments(held.current), []);
+  const drop = useImageDrop(attach, !starting);
 
   const reason = startReason({ board: board.id, title, text, cards: cards.length });
   const uncloned = unclonedRepositories(board, repositories);
@@ -163,16 +208,20 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
     }
     setStarting(true);
     setRefusal(null);
-    startDiscussion({
-      boardId: board.id,
-      title: title.trim(),
-      text,
-      cards: cards.map((card) => card.key),
-      model: choice.model,
-      effort: choice.effort,
-      images: [],
-      cardImages: [],
-    })
+    void (async () => {
+      // The discussion starts with the images the cards have, so it waits for their reading.
+      const read = await cardImages.settled();
+      return startDiscussion({
+        boardId: board.id,
+        title: title.trim(),
+        text,
+        cards: cards.map((card) => card.key),
+        model: choice.model,
+        effort: choice.effort,
+        images: await encodeImages(images),
+        cardImages: read.images,
+      });
+    })()
       .then((id) => {
         closeNewDiscussion();
         go({ kind: "discussion", id }, { focus: "title" });
@@ -240,16 +289,30 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
           />
         </Field>
 
-        <Field label="What to discuss" complement={whatHint(cards.length)}>
-          <Textarea
-            rows={3}
-            value={text}
-            disabled={starting}
-            onChange={(event) => setText(event.target.value)}
-            // field-sizing-content ignores rows: the field holds three lines at least, nine at most.
-            className="min-h-[calc(var(--leading-body)*3+var(--space-2)*2+var(--border)*2)] max-h-[calc(9*var(--leading-body)+var(--space-4))] field-sizing-content"
-          />
-        </Field>
+        <div className="relative flex flex-col gap-(--space-2)" {...drop.handlers}>
+          <Field
+            label="What to discuss"
+            complement={whatHint(cards.length)}
+            {...(imageRefusal !== null ? { error: imageRefusal } : {})}
+          >
+            <Textarea
+              rows={3}
+              value={text}
+              disabled={starting}
+              onChange={(event) => setText(event.target.value)}
+              onPaste={(event) => pasteImages(event, attach)}
+              // field-sizing-content ignores rows: the field holds three lines at least, nine at most.
+              className={cn(
+                "min-h-[calc(var(--leading-body)*3+var(--space-2)*2+var(--border)*2)] max-h-[calc(9*var(--leading-body)+var(--space-4))] field-sizing-content",
+                drop.dragging && "border-dashed border-focus",
+              )}
+            />
+          </Field>
+          {drop.dragging && <DropHint />}
+          {images.length > 0 && (
+            <AttachedImages attachments={images} {...(starting ? {} : { onRemove: removeImage })} />
+          )}
+        </div>
 
         {cards.length > 0 && (
           <div className="flex flex-col gap-(--space-1)">
@@ -329,8 +392,10 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
                   </Button>
                 }
               >
-                {contextLine(cards, context.text)}
+                {contextLine(cards, context.text) +
+                  imagesPart(cardImages.images.length + images.length, cardImages.reading)}
               </SunkenLine>
+              <CardImageFailures failures={cardImages.failures} />
             </>
           )}
           {showContext && (
@@ -341,7 +406,10 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
               tabIndex={0}
               className="max-h-[calc(9*var(--leading-body))] overflow-y-auto rounded-sm border border-line-1 px-(--space-3) py-(--space-2) text-(length:--text-body) leading-(--leading-body) text-ink-2 select-text focus-visible:focus-ring"
             >
-              <Markdown>{context.text ?? ""}</Markdown>
+              <Markdown images={{ kind: "omit" }}>{context.text ?? ""}</Markdown>
+              {cardImages.images.length + images.length > 0 && (
+                <ContextImages read={cardImages.images} attached={images} />
+              )}
             </section>
           )}
         </div>
