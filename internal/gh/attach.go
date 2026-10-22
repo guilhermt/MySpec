@@ -45,10 +45,20 @@ func (e *AttachError) Error() string {
 	return "gh: attach " + e.Path + ": " + e.Detail
 }
 
-// Unwrap gives up the gh error underneath.
-func (e *AttachError) Unwrap() error { return e.Err }
+// Unwrap gives up the gh error underneath, nil when there is none: a nil *Error
+// as an error would not be nil.
+func (e *AttachError) Unwrap() error {
+	if e.Err == nil {
+		return nil
+	}
+	return e.Err
+}
 
 const noWriteStatement = "attaching files requires write access"
+
+// ErrNoIssueURL is an issue create that ended without printing the url of the
+// issue: the issue may exist, but which one can't be told.
+var ErrNoIssueURL = errors.New("gh: issue create printed no issue url")
 
 var (
 	issueURLPattern = regexp.MustCompile(`https://github\.com/[^/\s]+/[^/\s]+/issues/\d+`)
@@ -67,7 +77,7 @@ func (r *Runner) CreateIssueAttached(ctx context.Context, dir, repo, title, body
 	}
 	url := issueURLPattern.FindString(out)
 	if url == "" {
-		return "", fmt.Errorf("gh: issue create printed no issue url: %q", out)
+		return "", fmt.Errorf("%w: %q", ErrNoIssueURL, out)
 	}
 	return url, nil
 }

@@ -345,13 +345,14 @@ type memGH struct {
 	held         map[string]chan struct{} // by title: the issues waiting to be created
 	blockedByErr error
 
-	version        *gh.Version // what gh --version says; nil is a current gh
-	versionErr     error
-	versionReads   int
-	attached       []attachCall      // the writes with attachments, in order
-	attachFailures []*gh.AttachError // one per write with attachments, first in first out
-	bodies         map[string]string // the body on GitHub of each issue the fake wrote, by node id
-	nextIssue      int
+	version           *gh.Version // what gh --version says; nil is a current gh
+	versionErr        error
+	versionReads      int
+	attached          []attachCall      // the writes with attachments, in order
+	attachFailures    []*gh.AttachError // one per write with attachments, first in first out
+	createAttachedErr error             // what the next creation with attachments answers instead of an issue
+	bodies            map[string]string // the body on GitHub of each issue the fake wrote, by node id
+	nextIssue         int
 }
 
 // attachCall is a write with attachments the fake was asked for.
@@ -371,6 +372,15 @@ func (m *memGH) failAttach(err *gh.AttachError) {
 	defer m.mu.Unlock()
 
 	m.attachFailures = append(m.attachFailures, err)
+}
+
+// failCreateAttached makes the next creation with attachments answer err and
+// write nothing, as gh ending without the url of the issue does.
+func (m *memGH) failCreateAttached(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.createAttachedErr = err
 }
 
 // setVersion makes gh answer that version.
@@ -588,6 +598,10 @@ func (m *memGH) CreateIssueAttached(_ context.Context, dir, repo, title, body st
 	defer m.mu.Unlock()
 
 	m.attached = append(m.attached, attachCall{Dir: dir, Repo: repo, Title: title, Body: body, Files: slices.Clone(files)})
+	if err := m.createAttachedErr; err != nil {
+		m.createAttachedErr = nil
+		return "", err
+	}
 	kept, failure := m.attach(body, files)
 	if failure != nil && !failure.Written {
 		return "", failure

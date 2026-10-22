@@ -199,9 +199,20 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
     bodyRequired,
   );
 
-  // addImages stores the images put in the body and writes their references where the cursor is;
-  // what it can't attach is said in a line below the field.
+  // bodyNow is the body as the last render has it: an upload lasts long enough for the user to type
+  // in the meantime, and the references go into that text, not the one of the paste.
+  const bodyNow = useRef(body.value);
+  useLayoutEffect(() => {
+    bodyNow.current = body.value;
+  });
+
+  // addImages stores the images put in the body and writes their references where the cursor was
+  // as they came in; what it can't attach is said in a line below the field.
   const addImages = async (files: File[]) => {
+    const field = bodyField.current;
+    const pasted = bodyNow.current;
+    const start = field?.selectionStart ?? pasted.length;
+    const end = field?.selectionEnd ?? start;
     const read = await readAttachments(files, MAX_CARD_IMAGE_BYTES);
     const refusals: string[] = [];
     const refs: string[] = [];
@@ -217,12 +228,18 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
     revokeAttachments(read.attachments);
     if (refs.length > 0) {
       const inserted = refs.join("\n\n");
-      const field = bodyField.current;
-      const start = field?.selectionStart ?? body.value.length;
-      const end = field?.selectionEnd ?? start;
-      body.onChange(body.value.slice(0, start) + inserted + body.value.slice(end));
+      const now = bodyNow.current;
+      // What was typed during the upload stays: the references take the place of the selection
+      // only in the text as it was, and the cursor stays where the user is typing.
+      const unchanged = now === pasted;
+      const at = Math.min(start, now.length);
+      const moved = (position: number) => (position >= at ? position + inserted.length : position);
+      const caret = unchanged
+        ? [at + inserted.length, at + inserted.length]
+        : [moved(field?.selectionStart ?? now.length), moved(field?.selectionEnd ?? now.length)];
+      body.onChange(now.slice(0, at) + inserted + now.slice(unchanged ? end : at));
       requestAnimationFrame(() => {
-        field?.setSelectionRange(start + inserted.length, start + inserted.length);
+        field?.setSelectionRange(caret[0] ?? 0, caret[1] ?? 0);
       });
     }
     // refusalText carries the "Not attached" lead for the files refused by format or size.

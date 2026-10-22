@@ -1096,6 +1096,23 @@ func TestAFailureThatWroteNothingLeavesNothingAndTheDraftCanBeDiscarded(t *testi
 	f.decide(id, "invoice-report", discussion.DecisionDiscarded)
 }
 
+func TestAnIssueGhPrintedNoURLOfSaysItCouldntBeRead(t *testing.T) {
+	t.Parallel()
+
+	f, id := withImages(t, bodyWithTwoImages, imgA, imgB)
+	f.gh.failCreateAttached(fmt.Errorf("%w: %q", gh.ErrNoIssueURL, "done"))
+
+	f.approve(id, "invoice-report")
+
+	failed := f.waitFailed(id, "invoice-report")
+	if !strings.HasPrefix(failed.PublishError, "Couldn't read the issue GitHub CLI created: ") {
+		t.Errorf("the card says %q, want the issue that couldn't be read", failed.PublishError)
+	}
+	if failed.Published.Outcome != "" || failed.Published.Number != 0 {
+		t.Errorf("the publication is %+v, want nothing recorded", failed.Published)
+	}
+}
+
 func TestEveryFailureOfAnImageSaysItInItsOwnWords(t *testing.T) {
 	t.Parallel()
 

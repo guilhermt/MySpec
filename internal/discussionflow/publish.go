@@ -551,7 +551,7 @@ func (p *publication) createAttached(ctx context.Context, target *discussion.Dra
 		written, url = true, attach.URL
 	}
 	if !written {
-		if strings.Contains(err.Error(), "printed no issue url") {
+		if errors.Is(err, gh.ErrNoIssueURL) {
 			return newStepError(msgNoIssueURL + err.Error())
 		}
 		return newStepError(p.attachMessage(err, target.FullName(), imgs))

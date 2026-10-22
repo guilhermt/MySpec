@@ -390,6 +390,27 @@ describe("DraftEditor, images", () => {
     );
   });
 
+  it("keeps what is typed while an image uploads, the image where the cursor was", async () => {
+    let upload: (ref: string) => void = () => {};
+    vi.mocked(api.addDraftImage).mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          upload = resolve;
+        }),
+    );
+    const { user } = draw(makeDraft({ body: "Look" }));
+    body().focus();
+    (body() as HTMLTextAreaElement).setSelectionRange(4, 4);
+
+    paste([png()]);
+    await waitFor(() => expect(api.addDraftImage).toHaveBeenCalledTimes(1));
+    await user.keyboard(" here");
+    expect(body()).toHaveValue("Look here");
+    upload(REF);
+
+    await waitFor(() => expect(body()).toHaveValue(`Look![shot](${REF}) here`));
+  });
+
   it("writes Image as the alt of a paste without a name", async () => {
     draw(makeDraft({ body: "" }));
 

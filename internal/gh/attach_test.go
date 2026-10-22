@@ -41,7 +41,7 @@ func TestCreateIssueAttachedWithoutUrlIsAnError(t *testing.T) {
 	r, _ := runner(t, map[string]ghtest.Reply{"issue": {Stdout: "done"}})
 
 	_, err := r.CreateIssueAttached(t.Context(), t.TempDir(), "acme/web", "t", "b", nil)
-	if err == nil || !strings.Contains(err.Error(), "printed no issue url") {
+	if !errors.Is(err, gh.ErrNoIssueURL) {
 		t.Errorf("CreateIssueAttached() = %v, want the missing url", err)
 	}
 }
@@ -221,5 +221,13 @@ func TestIssueNumber(t *testing.T) {
 		if got := gh.IssueNumber(url); got != want {
 			t.Errorf("IssueNumber(%q) = %d, want %d", url, got, want)
 		}
+	}
+}
+
+func TestAnAttachErrorWithoutAGhErrorUnwrapsToNothing(t *testing.T) {
+	t.Parallel()
+
+	if err := (&gh.AttachError{Failure: gh.AttachOther}).Unwrap(); err != nil {
+		t.Errorf("Unwrap() = %#v, want nil", err)
 	}
 }
