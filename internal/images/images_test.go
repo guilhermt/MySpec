@@ -201,6 +201,8 @@ func TestLabel(t *testing.T) {
 		{"card", 1, images.Image{Origin: images.OriginCard, Issue: "owner/name#474", Position: 1, Count: 2}, "Image 1: image 1 of 2 in the body of the card owner/name#474."},
 		{"epic", 2, images.Image{Origin: images.OriginEpic, Issue: "owner/name#470", Position: 1, Count: 1}, "Image 2: image 1 of 1 in the body of the epic owner/name#470."},
 		{"card with alt", 1, images.Image{Origin: images.OriginCard, Issue: "owner/name#474", Position: 1, Count: 2, Alt: "Logo do MySpec"}, `Image 1: image 1 of 2 in the body of the card owner/name#474 (alt text: "Logo do MySpec").`},
+		{"draft", 2, images.Image{Origin: images.OriginDraft, Draft: "d-1"}, "Image 2: put by the user in the body of the draft d-1 while editing it."},
+		{"draft with alt", 1, images.Image{Origin: images.OriginDraft, Draft: "d-1", Alt: "x"}, `Image 1: put by the user in the body of the draft d-1 while editing it (alt text: "x").`},
 		{"user with alt", 1, images.Image{Origin: images.OriginUser, Alt: "x"}, `Image 1: attached by the user (alt text: "x").`},
 	}
 	for _, tt := range tests {
@@ -211,5 +213,57 @@ func TestLabel(t *testing.T) {
 				t.Errorf("Label() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+const refID = "0b6c3c1e-2f8a-4c7e-9b1d-2a4f5e6d7c8b"
+
+func TestRef(t *testing.T) {
+	t.Parallel()
+
+	got := images.Ref(images.Image{ID: refID, MediaType: images.JPEG})
+	if want := "images/" + refID + ".jpg"; got != want {
+		t.Errorf("Ref() = %q, want %q", got, want)
+	}
+}
+
+func TestParseRef(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		dest string
+		want images.Image
+		ok   bool
+	}{
+		{"relative", "images/" + refID + ".png", images.Image{ID: refID, MediaType: images.PNG}, true},
+		{"dot slash", "./images/" + refID + ".webp", images.Image{ID: refID, MediaType: images.WebP}, true},
+		{"jpg", "images/" + refID + ".jpg", images.Image{ID: refID, MediaType: images.JPEG}, true},
+		{"gif", "images/" + refID + ".gif", images.Image{ID: refID, MediaType: images.GIF}, true},
+		{"upper case id", "images/" + strings.ToUpper(refID) + ".png", images.Image{}, false},
+		{"unknown extension", "images/" + refID + ".bmp", images.Image{}, false},
+		{"parent folder", "../images/" + refID + ".png", images.Image{}, false},
+		{"not an id", "images/x.png", images.Image{}, false},
+		{"remote", "https://example.com/images/" + refID + ".png", images.Image{}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := images.ParseRef(tt.dest)
+			if ok != tt.ok || got != tt.want {
+				t.Errorf("ParseRef(%q) = %+v, %v, want %+v, %v", tt.dest, got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}
+
+func TestReferenceLabel(t *testing.T) {
+	t.Parallel()
+
+	img := images.Image{ID: refID, MediaType: images.PNG, Origin: images.OriginUser}
+	want := "Image 1: attached by the user. In a draft it is images/" + refID + ".png."
+	if got := images.ReferenceLabel(1, img); got != want {
+		t.Errorf("ReferenceLabel() = %q, want %q", got, want)
 	}
 }

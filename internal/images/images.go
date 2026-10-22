@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"github.com/google/uuid"
 )
@@ -16,6 +17,10 @@ import (
 // MaxSize is the most bytes an image may have: a limit of the product, since
 // Claude Code shrinks a larger one by itself and the product keeps the original.
 const MaxSize = 20 << 20
+
+// MaxPublishSize is the most bytes an image published on GitHub may have: the
+// limit GitHub puts on an attachment of an issue.
+const MaxPublishSize = 10 << 20
 
 // DirName is the folder, inside the artifacts folder of an item, that holds its images.
 const DirName = "images"
@@ -32,6 +37,8 @@ const (
 var (
 	ErrFormat   = errors.New("the image isn't PNG, JPEG, GIF or WebP")
 	ErrTooLarge = errors.New("the image is over 20 MB")
+	// ErrTooLargeToPublish is an image GitHub doesn't take as an attachment.
+	ErrTooLargeToPublish = errors.New("the image is over 10 MB")
 )
 
 // Origin is where an image given to the agent came from.
@@ -42,6 +49,8 @@ const (
 	OriginUser Origin = "user" // attached by the user
 	OriginCard Origin = "card" // read from the body of a card
 	OriginEpic Origin = "epic" // read from the body of the epic of a card
+	// OriginDraft is put by the user in the body of a draft while editing it.
+	OriginDraft Origin = "draft"
 )
 
 // Image is an image stored with an item: the file images/<ID><ext> in its
@@ -59,6 +68,8 @@ type Image struct {
 	// how many the body has; 0 for one the user attached.
 	Position int `json:"position,omitempty"`
 	Count    int `json:"count,omitempty"`
+	// Draft is the draft whose body has an image of OriginDraft; "" otherwise.
+	Draft string `json:"draft,omitempty"`
 }
 
 // Upload is an image to store: what it is, without ID and MediaType, and its bytes.
@@ -105,6 +116,41 @@ func Ext(mediaType string) string {
 		return ".webp"
 	}
 	return ""
+}
+
+// mediaTypeOf is the media type of a file extension, without the dot: the
+// inverse of Ext.
+func mediaTypeOf(ext string) string {
+	switch ext {
+	case "png":
+		return PNG
+	case "jpg":
+		return JPEG
+	case "gif":
+		return GIF
+	case "webp":
+		return WebP
+	}
+	return ""
+}
+
+// refPattern is how a draft references an image of its discussion.
+var refPattern = regexp.MustCompile(`^(?:\./)?images/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(png|jpg|gif|webp)$`)
+
+// Ref is how the body of a draft references img: its path inside the artifacts
+// folder, with / on every platform because it is Markdown text.
+func Ref(img Image) string {
+	return DirName + "/" + img.ID + Ext(img.MediaType)
+}
+
+// ParseRef reads the reference of a draft, images/<id>.<ext> or ./images/<id>.<ext>,
+// into the ID and the media type of the file it names. Any other form is false.
+func ParseRef(dest string) (Image, bool) {
+	m := refPattern.FindStringSubmatch(dest)
+	if m == nil {
+		return Image{}, false
+	}
+	return Image{ID: m[1], MediaType: mediaTypeOf(m[2])}, true
 }
 
 // Path is where the file of img is under the artifacts folder of its item.
@@ -170,6 +216,8 @@ func Label(n int, img Image) string {
 		what = fmt.Sprintf("image %d of %d in the body of the card %s", img.Position, img.Count, img.Issue)
 	case OriginEpic:
 		what = fmt.Sprintf("image %d of %d in the body of the epic %s", img.Position, img.Count, img.Issue)
+	case OriginDraft:
+		what = "put by the user in the body of the draft " + img.Draft + " while editing it"
 	default:
 		what = "attached by the user"
 	}
@@ -177,4 +225,9 @@ func Label(n int, img Image) string {
 		what += fmt.Sprintf(" (alt text: %q)", img.Alt)
 	}
 	return fmt.Sprintf("Image %d: %s.", n, what)
+}
+
+// ReferenceLabel is Label followed by the reference a draft uses for the image.
+func ReferenceLabel(n int, img Image) string {
+	return Label(n, img) + " In a draft it is " + Ref(img) + "."
 }
