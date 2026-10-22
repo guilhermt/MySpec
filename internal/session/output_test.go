@@ -233,3 +233,63 @@ func TestAnOutputKeepsItsLast64KiB(t *testing.T) {
 		t.Errorf("kept %d bytes, truncated %v; want the last %d, truncated", len(got.Text), got.Truncated, kept)
 	}
 }
+
+func TestFileOutputReadsTheEndOfTheFileTheCLIKept(t *testing.T) {
+	t.Parallel()
+
+	write := func(t *testing.T, content string) string {
+		t.Helper()
+
+		path := filepath.Join(t.TempDir(), "output")
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("write output file: %v", err)
+		}
+		return path
+	}
+	long := strings.Repeat("a", 50) + "\n" + strings.Repeat("é", session.OutputLimit/2) + "x"
+	cases := map[string]struct {
+		path string
+		want session.Output
+		ok   bool
+	}{
+		"no path": {path: ""},
+		"a short file": {
+			path: write(t, "line 1\nline 2\n"),
+			want: session.Output{Text: "line 1\nline 2", Lines: 2}, ok: true,
+		},
+		"escapes are stripped": {
+			path: write(t, "\x1b[31mred\x1b[0m\n"),
+			want: session.Output{Text: "red", Lines: 1}, ok: true,
+		},
+		"an empty file": {path: write(t, "\n")},
+		"above the limit the end is kept from a line and a rune": {
+			path: write(t, long),
+			want: session.Output{Text: strings.Repeat("é", session.OutputLimit/2-1) + "x", Lines: 1, Truncated: true}, ok: true,
+		},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok, err := session.FileOutput(c.path)
+			if err != nil {
+				t.Fatalf("FileOutput() error = %v", err)
+			}
+			if ok != c.ok {
+				t.Fatalf("FileOutput() ok = %v, want %v", ok, c.ok)
+			}
+			if diff := cmp.Diff(c.want, got); diff != "" {
+				t.Errorf("FileOutput() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFileOutputReportsAFileItCannotRead(t *testing.T) {
+	t.Parallel()
+
+	_, ok, err := session.FileOutput(filepath.Join(t.TempDir(), "missing"))
+	if ok || err == nil {
+		t.Errorf("FileOutput() = ok %v, error %v, want a read error", ok, err)
+	}
+}

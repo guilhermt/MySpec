@@ -56,10 +56,12 @@ import type {
   ModelCatalog,
   Place,
   PromptStage,
+  QuitRequest,
   Repository,
   ReviewCenter,
   ReviewSummary,
   ReviewVerdict,
+  RunningTask,
   Situation,
   Startup,
   State,
@@ -180,6 +182,21 @@ export interface EarlierConversation {
   from: "panel" | null;
 }
 
+/**
+ * SubagentConversation is the conversation of a subagent read in place of the one it came from.
+ */
+export interface SubagentConversation {
+  itemId: string;
+  stage: string;
+  /** toolUseId is the Agent/Task call that started the subagent. */
+  toolUseId: string;
+  /** offset is where the subagent row was from the top of the conversation, px; null when it opened from the list. */
+  offset: number | null;
+}
+
+/** SubagentReturn is where the conversation of an item goes back to after a subagent was read. */
+export type SubagentReturn = SubagentConversation;
+
 /** AppError is what the app notice says of an action that failed: which action, and what happened. */
 export interface AppError {
   /** label is the action that failed, with its item: "Couldn't pause Rate limit per API key". */
@@ -214,6 +231,16 @@ export interface AppStore {
    * Details; every navigation clears it, and it is never stacked nor stored.
    */
   earlierConversation: EarlierConversation | null;
+  /**
+   * subagentConversation is the conversation of a subagent, read in place of the one it came from;
+   * every navigation clears it, and it is never stacked nor stored.
+   */
+  subagentConversation: SubagentConversation | null;
+  /**
+   * subagentReturn is where the conversation the subagent was read from goes back to: the call and
+   * the distance of its row from the top. The conversation that finds it takes it, once.
+   */
+  subagentReturn: SubagentReturn | null;
   /**
    * pendingFocus is where the focus goes once the new place is on screen: its title, the back or
    * forward button, what the situation of a task or a review asks (request), which the screen of
@@ -367,6 +394,12 @@ export interface AppStore {
   openEarlierConversation: (taskId: string, stage: string, fromPanel: boolean) => void;
   /** closeEarlierConversation brings back the conversation of the place. */
   closeEarlierConversation: () => void;
+  /** openSubagentConversation puts the conversation of a subagent in place of the one it came from. */
+  openSubagentConversation: (value: SubagentConversation) => void;
+  /** closeSubagentConversation brings back the conversation the subagent came from, and keeps where to land in it. */
+  closeSubagentConversation: () => void;
+  /** clearSubagentReturn drops where the conversation was to land, once it did. */
+  clearSubagentReturn: () => void;
   toggleSidebarRail: () => void;
   /** announce has the live region say a text, even the same one again. */
   announce: (text: string) => void;
@@ -789,6 +822,8 @@ type Navigation = Pick<
   | "forward"
   | "panel"
   | "earlierConversation"
+  | "subagentConversation"
+  | "subagentReturn"
   | "pendingFocus"
   | "promptEdit"
   | "boardCardRequest"
@@ -819,6 +854,8 @@ function navigate(
     location,
     panel: null,
     earlierConversation: null,
+    subagentConversation: null,
+    subagentReturn: null,
     pendingFocus: focus,
     promptEdit: null,
     boardCardRequest: null,
@@ -883,6 +920,8 @@ function travel(
     forward: beside(direction === "back" ? behind : rest, location),
     panel: null,
     earlierConversation: null,
+    subagentConversation: null,
+    subagentReturn: null,
     pendingFocus: focus,
     promptEdit: null,
     boardCardRequest: null,
@@ -900,6 +939,27 @@ function keptEarlier(next: State, earlier: EarlierConversation | null): EarlierC
     (conversation) => conversation.stage === earlier.stage,
   );
   return kept ? earlier : null;
+}
+
+// itemExists tells whether the state has the task, the review or the discussion.
+function itemExists(state: State, id: string): boolean {
+  return (
+    findTask(state, id) !== null ||
+    findReview(state, id) !== null ||
+    findDiscussion(state, id) !== null
+  );
+}
+
+// keptConversations is the conversation of a subagent, and where one that was read lands, once a
+// new state arrives: they go with their item, which may have left the window.
+function keptConversations(
+  next: State,
+  conversation: SubagentConversation | null,
+  landing: SubagentReturn | null,
+): { subagentConversation: SubagentConversation | null; subagentReturn: SubagentReturn | null } {
+  const there = (value: SubagentConversation | null) =>
+    value !== null && itemExists(next, value.itemId) ? value : null;
+  return { subagentConversation: there(conversation), subagentReturn: there(landing) };
 }
 
 // gone is the page of an item that left, with what the state no longer has of
@@ -1025,6 +1085,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
     panel: null,
     panelDocument: null,
     earlierConversation: null,
+    subagentConversation: null,
+    subagentReturn: null,
     pendingFocus: null,
     sidebarRail: readStored(SIDEBAR_RAIL_KEY, false, isBoolean),
     toasts: [],
@@ -1063,6 +1125,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
             forward: state.forward.filter(keep),
             panel: null,
             earlierConversation: null,
+            subagentConversation: null,
+            subagentReturn: null,
             announcement:
               updated === null
                 ? state.announcement
@@ -1128,6 +1192,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
           forward: moved ? beside(state.forward, location) : state.forward,
           panel: moved ? null : state.panel,
           earlierConversation: keptEarlier(next, state.earlierConversation),
+          ...keptConversations(next, state.subagentConversation, state.subagentReturn),
           toasts,
           announcement,
           expectGone: arrived === null ? state.expectGone : null,
@@ -1184,6 +1249,13 @@ export const useAppStore = create<AppStore>()((set, get) => {
       set({ earlierConversation: { taskId, stage, from: fromPanel ? "panel" : null } }),
 
     closeEarlierConversation: () => set({ earlierConversation: null }),
+
+    openSubagentConversation: (value) => set({ subagentConversation: value, subagentReturn: null }),
+
+    closeSubagentConversation: () =>
+      set((state) => ({ subagentConversation: null, subagentReturn: state.subagentConversation })),
+
+    clearSubagentReturn: () => set({ subagentReturn: null }),
 
     toggleSidebarRail: () =>
       set((state) => {
@@ -1656,6 +1728,41 @@ export function useEarlierConversation(taskId: string): EarlierConversation | nu
   );
 }
 
+/** useSubagentConversation is the conversation of a subagent on screen of an item, null when none is. */
+export function useSubagentConversation(itemId: string): SubagentConversation | null {
+  return useAppStore((state) =>
+    state.subagentConversation?.itemId === itemId ? state.subagentConversation : null,
+  );
+}
+
+/** useSubagentReturn is where the conversations of an item land after a subagent was read, null when none waits. */
+export function useSubagentReturn(itemId: string): SubagentReturn | null {
+  return useAppStore((state) =>
+    state.subagentReturn?.itemId === itemId ? state.subagentReturn : null,
+  );
+}
+
+/** useRunningTask is the task a subagent's call left running in a conversation of an item, null when it ended. */
+export function useRunningTask(
+  itemId: string,
+  stage: string,
+  toolUseId: string,
+): RunningTask | null {
+  return useAppStore((state) => {
+    const item =
+      findTask(state.app, itemId) ??
+      findReview(state.app, itemId) ??
+      findDiscussion(state.app, itemId);
+    const session = (item?.running ?? []).find((one) => one.stage === stage);
+    return (session?.tasks ?? []).find((task) => task.toolUseId === toolUseId) ?? null;
+  });
+}
+
+/** useQuitRequest is the confirmation of closing the app while subagents run, null when none is asked. */
+export function useQuitRequest(): QuitRequest | null {
+  return useAppStore((state) => state.app?.quit ?? null);
+}
+
 /** usePanel is the auxiliary panel open in the place on screen, null when none is. */
 export function usePanel(): PanelId | null {
   return useAppStore((state) => state.panel);
@@ -1765,9 +1872,9 @@ export function useOpenStepTab(taskId: string): StepTab {
 // The situation of the place on screen: the one of the open discussion or of
 // the open review, or, of the open task, the stage it is in, the conversation
 // of the step that runs whose tab is selected, or the pull request. An earlier
-// conversation on screen hides the one of the place, and its situation with it.
+// conversation or the one of a subagent on screen hides the one of the place, and its situation with it.
 function onScreenSituation(state: AppStore): Situation | null {
-  if (state.earlierConversation !== null) {
+  if (state.earlierConversation !== null || state.subagentConversation !== null) {
     return null;
   }
   const discussion = findDiscussion(state.app, openIdOf(state, "discussion"));

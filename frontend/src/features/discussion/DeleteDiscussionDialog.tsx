@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { BackgroundWorkList } from "@/components/BackgroundWorkList";
+import { endedBy } from "@/components/background-work";
 import { Button } from "@/components/system/Button";
 import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
 import { counted } from "@/lib/situations";
-import type { Draft } from "@/lib/wails";
+import type { Draft, SessionTasks } from "@/lib/wails";
 import { deleteArchivedInPlace, deleteDiscussionInPlace } from "@/store/actions";
 
 // archivedStays is what the deletion of an archived discussion leaves on GitHub: the issues it published.
@@ -17,7 +19,13 @@ function archivedStays(published: number): string {
 
 export interface DeleteDiscussionDialogProps {
   /** discussion is the active or the archived discussion to delete. */
-  discussion: { id: string; title: string; drafts: readonly Draft[] };
+  discussion: {
+    id: string;
+    title: string;
+    drafts: readonly Draft[];
+    /** running is what runs in its conversation; an archived discussion has none. */
+    running?: readonly SessionTasks[] | null;
+  };
   /** archived says the discussion is in History: the text is the one of an item that is only kept there. */
   archived?: boolean;
   /** neighbor is the entry of History that takes the place of an archived discussion: the focus goes to its row. */
@@ -39,6 +47,7 @@ export function DeleteDiscussionDialog({
 }: DeleteDiscussionDialogProps) {
   const [deleting, setDeleting] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
+  const ended = endedBy({ kind: "delete" }, discussion);
   const published = discussion.drafts.filter((draft) => draft.published).length;
 
   const remove = async () => {
@@ -97,6 +106,12 @@ export function DeleteDiscussionDialog({
             <p className="text-ink-3">
               A task started from one of its cards loses the document in its context.
             </p>
+          </>
+        )}
+        {ended.length > 0 && (
+          <>
+            <p>This stops what runs in the background.</p>
+            <BackgroundWorkList itemId={discussion.id} sessions={ended} />
           </>
         )}
       </DialogBody>

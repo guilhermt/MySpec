@@ -187,6 +187,9 @@ function action(
     outputLines,
     outputTail: out,
     outputTruncated: false,
+    background: false,
+    taskId: "",
+    prompt: "",
   };
   return makeEntry("action", { turnId, createdAt: startedAt, action: fields });
 }
@@ -999,6 +1002,7 @@ const ASK_IMPLEMENTER: Entry[] = [
       status: "pending",
       denyMessage: "",
       answeredAt: "",
+      parentToolUseId: "",
     },
   }),
 ];

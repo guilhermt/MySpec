@@ -575,7 +575,7 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatalf("reviewmode.New() = %v, want nil", err)
 	}
 
-	f.state = bindings.NewStateService(f.snapshot)
+	f.state = bindings.NewStateService(f.snapshot, bindings.QuitActions{})
 	f.repoService = bindings.NewRepositoryService(f.repositories, f.picker, log)
 	f.settings = bindings.NewSettingsService(f.theme, f.models, f.reviewModes, nil, bindings.UpdateActions{}, f.dataDir, log)
 	f.cardImages = cardimages.New(cardimages.Deps{

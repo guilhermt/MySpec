@@ -330,7 +330,8 @@ func (r *memEntries) indexOf(id string) int {
 // records every Config it started, and fails where a test tells it to.
 type fakeLauncher struct {
 	scenario string
-	env      []string // extra environment of the fake, as KEY=value
+	env      []string                              // extra environment of the fake, as KEY=value
+	wrap     func(session.Process) session.Process // wraps every process started; nil keeps it as it is
 
 	mu           sync.Mutex
 	locateErr    error
@@ -373,6 +374,9 @@ func (l *fakeLauncher) Start(ctx context.Context, cfg claude.Config) (session.Pr
 	l.mu.Lock()
 	l.procs = append(l.procs, p)
 	l.mu.Unlock()
+	if l.wrap != nil {
+		return l.wrap(p), nil
+	}
 	return p, nil
 }
 

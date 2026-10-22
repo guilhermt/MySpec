@@ -2,6 +2,7 @@ import { type KeyboardEvent, useId, useLayoutEffect, useRef, useState } from "re
 import { Button } from "@/components/system/Button";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
+import { LINK } from "@/components/system/Link";
 import { Tag } from "@/components/system/Tag";
 import { Textarea } from "@/components/system/Textarea";
 import { Tooltip } from "@/components/system/Tooltip";
@@ -16,6 +17,7 @@ import {
 } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
 import { answerPermissionInPlace } from "@/store/actions";
+import { useAppStore } from "@/store/app-store";
 
 const ANSWER_TEXT: Record<Exclude<PermissionStatus, "pending">, string> = {
   allowed: "Allowed",
@@ -84,6 +86,54 @@ function toolName(permission: PermissionEntry): string {
   return permission.displayName === "" ? permission.tool : permission.displayName;
 }
 
+/** PermissionRequester is the subagent a permission came from: its name and the call that started it. */
+export interface PermissionRequester {
+  name: string;
+  toolUseId: string;
+}
+
+// RequestedBy is the note that says which subagent asked, with the way to its conversation while the
+// card waits for the answer.
+function RequestedBy({
+  taskId,
+  stage,
+  requester,
+  open,
+  className,
+}: {
+  taskId: string;
+  stage: string;
+  requester: PermissionRequester;
+  open: boolean;
+  className?: string;
+}) {
+  const openSubagentConversation = useAppStore((state) => state.openSubagentConversation);
+  return (
+    <p className={cn(NOTE, className)}>
+      {`Requested by agent "${requester.name}"`}
+      {open && (
+        <>
+          {" · "}
+          <button
+            type="button"
+            className={LINK}
+            onClick={() =>
+              openSubagentConversation({
+                itemId: taskId,
+                stage,
+                toolUseId: requester.toolUseId,
+                offset: null,
+              })
+            }
+          >
+            Open conversation
+          </button>
+        </>
+      )}
+    </p>
+  );
+}
+
 export interface PermissionCardProps {
   taskId: string;
   stage: string;
@@ -94,6 +144,8 @@ export interface PermissionCardProps {
   readOnly?: boolean;
   /** flash blinks the pending card that was born with the screen open. */
   flash?: boolean;
+  /** requester is the subagent that asked, null when the agent of the conversation did. */
+  requester?: PermissionRequester | null;
 }
 
 /**
@@ -107,11 +159,18 @@ export function PermissionCard({
   createdAt,
   readOnly = false,
   flash = false,
+  requester = null,
 }: PermissionCardProps) {
   const status = asPermissionStatus(permission.status);
   if (status === "pending" && !readOnly) {
     return (
-      <PendingPermission taskId={taskId} stage={stage} permission={permission} flash={flash} />
+      <PendingPermission
+        taskId={taskId}
+        stage={stage}
+        permission={permission}
+        flash={flash}
+        requester={requester}
+      />
     );
   }
   const cancelled = status === "cancelled";
@@ -144,6 +203,15 @@ export function PermissionCard({
           </span>
         </span>
       </div>
+      {requester !== null && (
+        <RequestedBy
+          taskId={taskId}
+          stage={stage}
+          requester={requester}
+          open={false}
+          className="ml-[calc(var(--icon-sm)+var(--space-2))]"
+        />
+      )}
       {answer !== "" && (
         <p
           className={cn(
@@ -169,9 +237,16 @@ interface PendingPermissionProps {
   stage: string;
   permission: PermissionEntry;
   flash: boolean;
+  requester: PermissionRequester | null;
 }
 
-function PendingPermission({ taskId, stage, permission, flash }: PendingPermissionProps) {
+function PendingPermission({
+  taskId,
+  stage,
+  permission,
+  flash,
+  requester,
+}: PendingPermissionProps) {
   const titleId = useId();
   const denyRef = useRef<HTMLTextAreaElement>(null);
   const denyButtonRef = useRef<HTMLButtonElement>(null);
@@ -265,6 +340,9 @@ function PendingPermission({ taskId, stage, permission, flash }: PendingPermissi
           <Tag>{toolName(permission)}</Tag>
           {permission.description !== "" && <span>{permission.description}</span>}
         </div>
+        {requester !== null && (
+          <RequestedBy taskId={taskId} stage={stage} requester={requester} open />
+        )}
         <Detail tool={permission.tool} input={permission.input} />
         {permission.decisionReason !== "" && <p className={NOTE}>{permission.decisionReason}</p>}
         {permission.blockedPath !== "" && (

@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +13,31 @@ import (
 
 // ErrNotFound is returned when a task has no persisted session.
 var ErrNotFound = errors.New("session: not found")
+
+// ErrNoAnswer is returned when Claude Code does not answer a request of the
+// app, or answers it with an error.
+var ErrNoAnswer = errors.New("session: Claude Code did not answer")
+
+// StopRefusal is a stop of a task the CLI refused or did not answer: the
+// reasons in the CLI's words, which the interface shows as they are.
+type StopRefusal struct{ Reasons []string }
+
+// Message is the sentence the interface shows after its own "Couldn't stop
+// it": each reason once, joined into one sentence with one final period.
+func (e *StopRefusal) Message() string {
+	reasons := make([]string, 0, len(e.Reasons))
+	for _, reason := range e.Reasons {
+		reason = strings.TrimSuffix(reason, ".")
+		if !slices.Contains(reasons, reason) {
+			reasons = append(reasons, reason)
+		}
+	}
+	return strings.Join(reasons, "; ") + "."
+}
+
+func (e *StopRefusal) Error() string {
+	return "session: stop refused: " + strings.Join(e.Reasons, "; ")
+}
 
 // Key identifies one session: a task and the stage it belongs to.
 type Key struct {
@@ -163,7 +189,29 @@ type Summary struct {
 	TurnFailed bool
 	// Idle is the session at rest: no turn, no work in the background, no pending
 	// message, no request, no pause and no error.
-	Idle bool
+	Idle  bool
+	Tasks []RunningTask // the live tasks of the process, by start; never nil
+}
+
+// RunningTask is a task the CLI runs for a call of the session: a subagent,
+// a command or a monitor, in the background or, for a subagent, in the
+// foreground of the turn.
+type RunningTask struct {
+	TaskID     string
+	Kind       WakeKind
+	Name       string // the description the agent gave it; without one, the command or the subagent type
+	ToolUseID  string // the call that started it
+	EntryID    string // its action in the conversation; "" when none
+	StartedAt  time.Time
+	Background bool   // false for a subagent the turn waits for
+	Counts     bool   // it is work of the session (cliTask.counts)
+	Stopping   bool   // a stop_task is in flight
+	StopError  string // why the last stop failed; "" when it did not
+	// Actions and ActionLabel/ActionTarget are a subagent's progress: how
+	// many actions it made and the one it runs now ("" when none runs).
+	Actions      int
+	ActionLabel  string
+	ActionTarget string
 }
 
 // Transcript is the whole conversation of a task.

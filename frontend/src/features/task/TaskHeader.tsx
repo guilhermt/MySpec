@@ -15,7 +15,13 @@ import {
   waitingSession,
 } from "@/features/task/task-session";
 import { asSessionStatus, asTaskMode, type TaskCard, type TaskSummary } from "@/lib/wails";
-import { useAppStore, useEarlierConversation, useOpenStepTab, usePanel } from "@/store/app-store";
+import {
+  useAppStore,
+  useEarlierConversation,
+  useOpenStepTab,
+  usePanel,
+  useSubagentConversation,
+} from "@/store/app-store";
 
 export interface TaskHeaderProps {
   /** task is null in the instant before the first snapshot that brings a new task. */
@@ -127,9 +133,11 @@ function TaskTools({ task, now }: { task: TaskSummary; now: number }) {
   const panel = usePanel();
   const openPanel = useAppStore((state) => state.openPanel);
   const earlier = useEarlierConversation(task.id);
+  const subagent = useSubagentConversation(task.id);
   const panels = asTaskMode(task.mode) === "one_shot" ? ONE_SHOT_PANELS : STRUCTURED_PANELS;
-  // An earlier conversation on screen is not the one the meter measures, so it steps aside.
-  const onScreen = earlier === null ? screenSession(task, tab) : null;
+  // An earlier conversation or a subagent's on screen is not the one the meter measures, so it
+  // steps aside.
+  const onScreen = earlier === null && subagent === null ? screenSession(task, tab) : null;
 
   return (
     <>
@@ -147,6 +155,7 @@ function TaskTools({ task, now }: { task: TaskSummary; now: number }) {
         item="the task"
         session={waitingSession(task)}
         refusal={(session) => pauseRefusal(task, session)}
+        running={task.running}
         now={now}
       />
       <PanelGroup

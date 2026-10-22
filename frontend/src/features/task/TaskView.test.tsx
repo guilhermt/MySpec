@@ -8,6 +8,7 @@ import { useAppStore } from "@/store/app-store";
 import type { TranscriptState } from "@/store/transcript";
 import { renderWithStore } from "@/test/render";
 import {
+  makeAction,
   makeEntry,
   makePRImplementer,
   makePRReport,
@@ -704,6 +705,35 @@ describe("TaskView, earlier conversation", () => {
 
     expect(screen.getByRole("button", { name: "Back to the plan" })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("lands back on the row of a subagent read from it", async () => {
+    const call = "toolu_survey";
+    loop({
+      ui: {
+        transcripts: {
+          ...LOOP_TRANSCRIPTS,
+          "task-1|step:1": read([
+            ...EARLIER_ENTRIES,
+            makeEntry("action", {
+              action: makeAction({
+                toolUseId: call,
+                tool: "Agent",
+                description: "Survey the repository",
+              }),
+            }),
+          ]),
+        },
+        earlierConversation: { taskId: "task-1", stage: "step:1", from: null },
+        subagentReturn: { itemId: "task-1", stage: "step:1", toolUseId: call, offset: null },
+      },
+    });
+
+    const open = await screen.findByRole("button", {
+      name: "Open the conversation of Survey the repository",
+    });
+    expect(open).toHaveFocus();
+    expect(useAppStore.getState().subagentReturn).toBeNull();
   });
 
   it("leaves the conversation of the task on screen until the earlier one is read", () => {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/flow"
+	"github.com/guilhermt/myspec/internal/session"
 )
 
 func TestARunningPublicationGetsItsSentence(t *testing.T) {
@@ -67,5 +68,37 @@ func TestThePullRequestReviewRefusalsGetTheirSentences(t *testing.T) {
 		if got := failure(slog.New(slog.DiscardHandler), "ReviewPRMyself", wrapped); got == nil || got.Error() != tt.want {
 			t.Errorf("failure(%v) = %v, want %q", tt.err, got, tt.want)
 		}
+	}
+}
+
+func TestARefusedStopGetsTheReasonsOfTheCLI(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		reasons []string
+		want    string
+	}{
+		{[]string{"Task cannot be stopped", "No task found with ID: x"}, "Task cannot be stopped; No task found with ID: x."},
+		{[]string{"Claude Code did not answer."}, "Claude Code did not answer."},
+		{[]string{"Claude Code is not running.", "Claude Code is not running."}, "Claude Code is not running."},
+	}
+	for _, tt := range tests {
+		wrapped := fmt.Errorf("stop: %w", &session.StopRefusal{Reasons: tt.reasons})
+
+		err := failure(slog.New(slog.DiscardHandler), "StopTasks", wrapped)
+
+		if err == nil || err.Error() != tt.want {
+			t.Errorf("failure(StopRefusal%q) = %v, want %q", tt.reasons, err, tt.want)
+		}
+	}
+}
+
+func TestAnUnansweredRequestGetsItsSentence(t *testing.T) {
+	t.Parallel()
+
+	err := failure(slog.New(slog.DiscardHandler), "GetTaskOutput", fmt.Errorf("output of task a1: %w", session.ErrNoAnswer))
+
+	if want := "Claude Code did not answer."; err == nil || err.Error() != want {
+		t.Errorf("failure(ErrNoAnswer) = %v, want %q", err, want)
 	}
 }

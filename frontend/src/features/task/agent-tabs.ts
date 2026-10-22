@@ -1,4 +1,6 @@
+import { countOf } from "@/components/background-work";
 import type { SessionState } from "@/features/chat/session";
+import { stepStage } from "@/features/task/step-status";
 import type { StepperGlyph } from "@/features/task/stepper";
 import { hasReviewConversation, isReviewed } from "@/lib/pull-requests";
 import {
@@ -29,8 +31,8 @@ export interface AgentTabModel {
   tab: StepTab;
   name: "Implementer" | "Reviewer";
   glyph: StepperGlyph | "idle";
-  /** word is said only on the tab not chosen: waits, error, or nothing. */
-  word: "" | "waits" | "error";
+  /** word is said only on the tab not chosen: waits, error, background, or nothing. */
+  word: "" | "waits" | "error" | "background";
   /** disabled is a tab before its session: Reviewer · starts with pass 1. */
   disabled: boolean;
   /** disabledLabel is what a disabled tab says it waits for: "starts with pass 1". */
@@ -84,11 +86,21 @@ function tabOf(
   situation: Situation | null,
   chosen: StepTab,
   now: number,
+  background: number,
 ): AgentTabModel {
   const name = tab === "reviewer" ? "Reviewer" : "Implementer";
   const glyph = glyphOf(session, situation);
   const waits = situation !== null && asSituationGroup(situation.group) !== "error";
-  const word = tab === chosen ? "" : waits ? "waits" : glyph === "error" ? "error" : "";
+  const word =
+    tab === chosen
+      ? ""
+      : waits
+        ? "waits"
+        : glyph === "error"
+          ? "error"
+          : situation === null && background > 0
+            ? "background"
+            : "";
   return {
     tab,
     name,
@@ -96,7 +108,7 @@ function tabOf(
     word,
     disabled: false,
     disabledLabel: "",
-    label: `${name}: ${stateOf(session, situation, now)}`,
+    label: `${name}: ${stateOf(session, situation, now)}${background > 0 ? `, ${background} in the background` : ""}`,
     situationId: situation?.id ?? null,
   };
 }
@@ -126,7 +138,14 @@ export function agentTabsOf(
   if (step.reviewer === null && status !== "agent_review") {
     return null;
   }
-  const implementer = tabOf("implementer", task, implementerSituation(task, step), chosen, now);
+  const implementer = tabOf(
+    "implementer",
+    task,
+    implementerSituation(task, step),
+    chosen,
+    now,
+    countOf(task.running, stepStage(step.number)),
+  );
   const reviewer =
     step.reviewer === null
       ? {
@@ -139,7 +158,14 @@ export function agentTabsOf(
           label: "Reviewer: starts with pass 1",
           situationId: null,
         }
-      : tabOf("reviewer", step.reviewer, reviewerSituation(task, step.number), chosen, now);
+      : tabOf(
+          "reviewer",
+          step.reviewer,
+          reviewerSituation(task, step.number),
+          chosen,
+          now,
+          countOf(task.running, step.reviewer.sessionStage),
+        );
   return [implementer, reviewer];
 }
 
@@ -175,10 +201,18 @@ export function prAgentTabsOf(
     ofPR !== null && isSessionKind(ofPR) ? ofPR : null,
     chosen,
     now,
+    countOf(task.running, pr.sessionStage),
   );
   let implementer: AgentTabModel;
   if (pr.implementer !== null) {
-    implementer = tabOf("implementer", pr.implementer, prFixSituation(task), chosen, now);
+    implementer = tabOf(
+      "implementer",
+      pr.implementer,
+      prFixSituation(task),
+      chosen,
+      now,
+      countOf(task.running, "pr_fix"),
+    );
   } else if (pr.implementerStarted) {
     implementer = {
       tab: "implementer",

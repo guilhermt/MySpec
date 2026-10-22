@@ -1,8 +1,10 @@
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { ActionNode } from "@/features/chat/conversation";
 import { SubagentRow } from "@/features/chat/entries/SubagentRow";
 import type { ActionEntry } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import { makeAction, makeEntry } from "@/test/wails-mock";
 
@@ -35,7 +37,7 @@ describe("SubagentRow", () => {
     );
 
     // The line is the stop of the walk, the one element with the name and the state of the fold.
-    const toggle = screen.getByRole("button");
+    const toggle = screen.getByRole("button", { name: /^Delegated/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(toggle).toHaveAttribute("data-feed-item");
     expect(toggle).toHaveAccessibleName(/^Delegated · Check how others evict idle entries/);
@@ -71,5 +73,86 @@ describe("SubagentRow", () => {
 
     await user.click(screen.getByRole("button", { name: /Show 4 earlier actions/ }));
     expect(screen.getByText("src/file0.ts")).toBeInTheDocument();
+  });
+
+  it("shows what a subagent that works does now, with its count", () => {
+    renderSubagent(
+      node({ toolUseId: "toolu_a", tool: "Agent", status: "running", startedAt: "" }, [
+        node({ toolUseId: "c1", tool: "Read", status: "done" }),
+        node({
+          toolUseId: "c2",
+          tool: "Bash",
+          status: "running",
+          label: "Running",
+          target: "go test ./internal/ratelimit",
+        }),
+      ]),
+    );
+
+    const toggle = screen.getByRole("button", { name: /^Delegated/ });
+    expect(toggle).toHaveTextContent(/2 actions\s*·\s*Running go test …\/ratelimit/);
+    expect(toggle).toHaveAccessibleName(/2 actions · Running go test …\/ratelimit$/);
+  });
+
+  it("says Thinking… when a subagent that works runs no action", () => {
+    renderSubagent(
+      node({ toolUseId: "toolu_a", tool: "Agent", status: "running", startedAt: "" }, [
+        node({ toolUseId: "c1", tool: "Read", status: "done" }),
+      ]),
+    );
+
+    expect(screen.getByRole("button", { name: /^Delegated/ })).toHaveTextContent(
+      /1 action\s*·\s*Thinking…/,
+    );
+  });
+
+  it("says Thinking… before the first action of a subagent", () => {
+    renderSubagent(node({ toolUseId: "toolu_a", tool: "Agent", status: "running", startedAt: "" }));
+
+    expect(screen.getByRole("listitem")).toHaveTextContent("Thinking…");
+  });
+
+  it("shows a subagent stopped by the agent", () => {
+    renderSubagent(
+      node({
+        tool: "Agent",
+        status: "interrupted",
+        interruptedBy: "agent",
+        background: true,
+      }),
+    );
+
+    expect(screen.getByRole("listitem")).toHaveTextContent("stopped by the agent");
+  });
+
+  it("opens the conversation of the subagent, from a row with actions or without", async () => {
+    const user = userEvent.setup();
+    const subagent = node(
+      { toolUseId: "toolu_a", tool: "Agent", description: "Survey the repository" },
+      reads(2),
+    );
+    renderSubagent(subagent);
+
+    const open = screen.getByRole("button", {
+      name: "Open the conversation of Survey the repository",
+    });
+    expect(open).toHaveAttribute("data-feed-item");
+    expect(screen.getByRole("listitem")).toHaveAttribute("data-subagent", "toolu_a");
+    await user.click(open);
+
+    expect(useAppStore.getState().subagentConversation).toMatchObject({
+      itemId: "task-1",
+      stage: "step:3",
+      toolUseId: "toolu_a",
+    });
+  });
+
+  it("opens the conversation of a subagent that has no actions yet", async () => {
+    const user = userEvent.setup();
+    renderSubagent(node({ toolUseId: "toolu_b", tool: "Agent", status: "running", startedAt: "" }));
+
+    await user.click(screen.getByRole("button", { name: /^Open the conversation of/ }));
+
+    expect(useAppStore.getState().subagentConversation?.toolUseId).toBe("toolu_b");
   });
 });

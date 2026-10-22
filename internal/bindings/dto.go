@@ -168,6 +168,8 @@ type State struct {
 	DiscussionHistory []ArchivedDiscussion `json:"discussionHistory"`
 	// HistorySummary is the whole History in numbers.
 	HistorySummary HistorySummary `json:"historySummary"`
+	// Quit is the close of the window the app held back; null without one.
+	Quit *QuitRequest `json:"quit"`
 	// CloneFolder is where new clones go; "" until chosen.
 	CloneFolder string `json:"cloneFolder"`
 }
@@ -523,11 +525,14 @@ type SituationOpen struct {
 
 // TaskSummary is an active task with the state of its session.
 type TaskSummary struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	RepositoryID string    `json:"repositoryId"`
-	Repository   string    `json:"repository"` // owner/name
-	Card         *TaskCard `json:"card"`       // nil for a task without one
+	// Running are the open conversations of the item with something alive, in
+	// the order of its stages; never nil.
+	Running      []SessionTasks `json:"running"`
+	ID           string         `json:"id"`
+	Name         string         `json:"name"`
+	RepositoryID string         `json:"repositoryId"`
+	Repository   string         `json:"repository"` // owner/name
+	Card         *TaskCard      `json:"card"`       // nil for a task without one
 	// Mode is structured or one_shot, a string for the same reason as
 	// State.Theme.
 	Mode string `json:"mode"`
@@ -836,9 +841,17 @@ type ActionEntry struct {
 	OutputTail string `json:"outputTail"`
 	// OutputTruncated says the whole output is only the end of a longer one.
 	OutputTruncated bool `json:"outputTruncated"`
-	// InterruptedBy is user or crash when the status is interrupted, ""
+	// InterruptedBy is user, crash or agent when the status is interrupted, ""
 	// otherwise.
 	InterruptedBy string `json:"interruptedBy"`
+	// Background says the call runs in the background and stays running until
+	// its task ends.
+	Background bool `json:"background"`
+	// TaskID is the id the CLI gave the task of the call; "" when none.
+	TaskID string `json:"taskId"`
+	// Prompt is the task an Agent/Task call gave its subagent; "" for any other
+	// call.
+	Prompt string `json:"prompt"`
 }
 
 // ActionOutput is the whole output of a tool call: ANSI stripped, at most its
@@ -868,6 +881,9 @@ type PermissionEntry struct {
 	Status      string `json:"status"`
 	DenyMessage string `json:"denyMessage"`
 	AnsweredAt  string `json:"answeredAt"` // "" while pending
+	// ParentToolUseID is the Agent/Task action of the subagent that asks; ""
+	// for the main thread.
+	ParentToolUseID string `json:"parentToolUseId"`
 }
 
 // QuestionOption is one answer offered for a question.
@@ -904,8 +920,8 @@ type MarkerEntry struct {
 	// step_review_written, review_started, discussion_started, stage_started,
 	// step_started, compacted, interrupted, retried, woke, committed, pr_opened,
 	// checks_read, draft_approved, changes_approved, paused, plan_invalid,
-	// discussion_document, drafts_written, drafts_revised, drafts_unreadable
-	// or drafts_published.
+	// background_stopped, background_lost, discussion_document,
+	// drafts_written, drafts_revised, drafts_unreadable or drafts_published.
 	Type      string `json:"type"`
 	PreTokens int    `json:"preTokens"`
 	// Stage belongs to stage_started alone, Step to the markers of a step
@@ -976,6 +992,15 @@ type MarkerEntry struct {
 	// Wakes belongs to woke: the returns in the background it names, in order;
 	// never nil, empty when the agent resumed on its own.
 	Wakes []Wake `json:"wakes"`
+	// Background belongs to background_stopped and background_lost: the work
+	// they name, in the order it started; never nil.
+	Background []BackgroundItem `json:"background"`
+}
+
+// BackgroundItem is a task in the background a marker names.
+type BackgroundItem struct {
+	Kind string `json:"kind"` // agent, command or monitor
+	Name string `json:"name"`
 }
 
 // DraftBefore is a draft of a round as it was before a revision, or one the
@@ -1005,6 +1030,41 @@ type Wake struct {
 	Name     string `json:"name"`     // the description the CLI gives the task
 	Status   string `json:"status"`   // completed, failed or stopped
 	ExitCode int    `json:"exitCode"` // the code a failed command exited with, -1 when unknown
+}
+
+// RunningTask is a task the agent left running, or a subagent of the turn.
+type RunningTask struct {
+	TaskID       string `json:"taskId"`
+	Kind         string `json:"kind"` // agent | command | monitor; a string for the same reason as State.Theme
+	Name         string `json:"name"`
+	ToolUseID    string `json:"toolUseId"`
+	EntryID      string `json:"entryId"`    // "" when the conversation has no action for it
+	StartedAt    string `json:"startedAt"`  // RFC 3339
+	Background   bool   `json:"background"` // false for a subagent the turn waits for
+	Stopping     bool   `json:"stopping"`
+	StopError    string `json:"stopError"`    // "" when the last stop did not fail
+	Actions      int    `json:"actions"`      // a subagent's actions; 0 for the others
+	ActionLabel  string `json:"actionLabel"`  // what a subagent runs now; "" when none
+	ActionTarget string `json:"actionTarget"` // its target
+}
+
+// SessionTasks is what runs in one conversation of an item.
+type SessionTasks struct {
+	Stage string        `json:"stage"`
+	Tasks []RunningTask `json:"tasks"` // never nil, never empty
+}
+
+// QuitRequest is a close of the window the app held back because a subagent
+// runs: what runs, by item and conversation.
+type QuitRequest struct {
+	Sessions []QuitSession `json:"sessions"` // never nil
+}
+
+// QuitSession is what runs in one conversation, for the quit warning.
+type QuitSession struct {
+	ItemID string        `json:"itemId"`
+	Stage  string        `json:"stage"`
+	Tasks  []RunningTask `json:"tasks"` // never nil
 }
 
 // ErrorEntry is a failure shown in the conversation.
@@ -1623,16 +1683,19 @@ type ReviewPass struct {
 // ReviewSummary is an active review of a pull request, with the state of its
 // conversation.
 type ReviewSummary struct {
-	ID           string `json:"id"`
-	RepositoryID string `json:"repositoryId"`
-	Repository   string `json:"repository"` // owner/name
-	Number       int    `json:"number"`
-	Title        string `json:"title"`
-	Author       string `json:"author"`
-	URL          string `json:"url"`
-	HeadBranch   string `json:"headBranch"`
-	BaseBranch   string `json:"baseBranch"` // as GitHub names it, without origin/
-	Own          bool   `json:"own"`        // the author is the account of gh
+	// Running are the open conversations of the item with something alive, in
+	// the order of its stages; never nil.
+	Running      []SessionTasks `json:"running"`
+	ID           string         `json:"id"`
+	RepositoryID string         `json:"repositoryId"`
+	Repository   string         `json:"repository"` // owner/name
+	Number       int            `json:"number"`
+	Title        string         `json:"title"`
+	Author       string         `json:"author"`
+	URL          string         `json:"url"`
+	HeadBranch   string         `json:"headBranch"`
+	BaseBranch   string         `json:"baseBranch"` // as GitHub names it, without origin/
+	Own          bool           `json:"own"`        // the author is the account of gh
 	// Mode is publish or apply, a string for the same reason as State.Theme.
 	Mode string `json:"mode"`
 	// Status is reviewing, waiting_checks, pass_blocked, awaiting_reply,
@@ -1873,11 +1936,14 @@ type DiscussionRepository struct {
 // DiscussionSummary is an active discussion of a demand of a board, as the
 // interface shows it.
 type DiscussionSummary struct {
-	ID      string `json:"id"`
-	BoardID string `json:"boardId"`
-	Board   string `json:"board"` // the title of the board
-	Title   string `json:"title"`
-	Text    string `json:"text"` // what the user wrote when creating it; "" for none
+	// Running are the open conversations of the item with something alive, in
+	// the order of its stages; never nil.
+	Running []SessionTasks `json:"running"`
+	ID      string         `json:"id"`
+	BoardID string         `json:"boardId"`
+	Board   string         `json:"board"` // the title of the board
+	Title   string         `json:"title"`
+	Text    string         `json:"text"` // what the user wrote when creating it; "" for none
 	// Status is discussing, awaiting_drafts, deciding, publishing, publish_failed,
 	// epic_discarded, epic_cant_publish or ready_to_archive, a string for the
 	// same reason as State.Theme.

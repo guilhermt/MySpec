@@ -42,6 +42,7 @@ const MARKER_ICONS: Record<MarkerIcon, IconMeaning> = {
   check: "done",
   problem: "problem",
   ban: "ban",
+  lost: "lost",
   merge: "merge",
 };
 
@@ -193,6 +194,26 @@ function DraftsBody({ rows }: { rows: readonly DraftRowView[] }) {
           >
             <StatusText row={row} />
           </CutText>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ListBody({ items }: { items: readonly string[] }) {
+  return (
+    <ul
+      data-slot="marker-body"
+      className={cn(
+        SUNKEN,
+        "flex flex-col gap-(--space-1) text-(length:--text-body) leading-(--leading-body) text-ink-1 select-text",
+      )}
+    >
+      {items.map((item, index) => (
+        // The same name can run twice: the line is its position.
+        // biome-ignore lint/suspicious/noArrayIndexKey: a list of lines that never reorders
+        <li key={`${index}:${item}`} className="break-words">
+          {item}
         </li>
       ))}
     </ul>
@@ -439,6 +460,9 @@ export function MarkerLine({
       break;
     case "drafts":
       content = <DraftsBody rows={body.rows} />;
+      break;
+    case "list":
+      content = <ListBody items={body.items} />;
       break;
     case "discussionDocument": {
       const text =

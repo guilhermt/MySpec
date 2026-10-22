@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ArchiveDiscussionDialog } from "@/features/discussion/ArchiveDiscussionDialog";
 import { api } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeDraft, makeState } from "@/test/wails-mock";
+import { makeDraft, makeRunningTask, makeState } from "@/test/wails-mock";
 
 function dialog() {
   const onOpenChange = vi.fn();
@@ -91,5 +91,29 @@ describe("ArchiveDiscussionDialog", () => {
 
     finish();
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  });
+
+  it("lists what runs in the conversation and stops it before archiving", async () => {
+    const onOpenChange = vi.fn();
+    const { user } = renderWithStore(
+      <ArchiveDiscussionDialog
+        discussion={{
+          id: "discussion-1",
+          title: "Invoices",
+          drafts: [],
+          running: [{ stage: "discussion", tasks: [makeRunningTask({ taskId: "a" })] }],
+        }}
+        open
+        onOpenChange={onOpenChange}
+      />,
+      { state: makeState() },
+    );
+
+    expect(screen.getByRole("list", { name: "What runs" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Stop and archive" }));
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(api.stopTasks).toHaveBeenCalledWith("discussion-1", "discussion", ["a"]);
+    expect(api.archiveDiscussion).toHaveBeenCalledWith("discussion-1");
   });
 });

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { endedBy, hasSubagent } from "@/components/background-work";
+import { StopBackgroundDialog } from "@/components/StopBackgroundDialog";
 import { OtherConversationBar, RequestBar } from "@/components/system/RequestBar";
 import { CleanAndStartDialog } from "@/features/task/CleanAndStartDialog";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
@@ -19,6 +21,7 @@ import {
   approveStep,
   changeClonePath,
   closeTask,
+  closeTaskInPlace,
   continueStage,
   discardDraft,
   openExternal,
@@ -91,6 +94,7 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
   const [discarding, setDiscarding] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [cleaning, setCleaning] = useState(false);
+  const [closing, setClosing] = useState(false);
   const edited = usePrDraft(task.id);
   const flashing = useFlashing();
   const selectStepTab = useAppStore((state) => state.selectStepTab);
@@ -101,6 +105,7 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
   const step = currentStepOf(task);
 
   const approveRest = useFocusAfterApproveRest(request);
+  const ended = endedBy({ kind: "closeTask" }, task);
 
   if (request === null) {
     if (other === null) {
@@ -133,6 +138,13 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
       case "cleanAndStart":
         setCleaning(true);
         return;
+      case "closeTask":
+        // A subagent that runs in the pull request does not resume: closing asks first.
+        if (hasSubagent(ended)) {
+          setClosing(true);
+          return;
+        }
+        break;
       case "show":
         focusRequest(request.focus);
         return;
@@ -195,6 +207,14 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
         </>
       )}
       <DeleteTaskDialog task={task} open={deleting} onOpenChange={setDeleting} />
+      <StopBackgroundDialog
+        open={closing}
+        onOpenChange={setClosing}
+        verb="close"
+        itemId={task.id}
+        sessions={ended}
+        onConfirm={() => closeTaskInPlace(task.id)}
+      />
     </div>
   );
 }

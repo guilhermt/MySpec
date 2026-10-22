@@ -14,3 +14,6 @@ var ArtifactOf = artifactOf
 
 // WakeOf exposes wakeOf to the external tests of the package.
 var WakeOf = wakeOf
+
+// FileOutput exposes fileOutput.
+var FileOutput = fileOutput

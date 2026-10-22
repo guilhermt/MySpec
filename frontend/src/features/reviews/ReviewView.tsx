@@ -1,7 +1,11 @@
 import { type KeyboardEvent, type ReactNode, useEffect, useRef } from "react";
 import { ArrivalFocus } from "@/components/ArrivalFocus";
+import { BackgroundWork } from "@/components/BackgroundWork";
+import { backgroundOf } from "@/components/background-work";
 import { PanelLayout } from "@/components/system/AuxPanel";
 import { Conversation } from "@/features/chat/Conversation";
+import { voiceOf } from "@/features/chat/markers";
+import { SubagentConversation } from "@/features/chat/SubagentConversation";
 import { CheckStrip } from "@/features/reviews/CheckStrip";
 import { ReportsPanel } from "@/features/reviews/ReportsPanel";
 import { ReviewComposer } from "@/features/reviews/ReviewComposer";
@@ -23,7 +27,13 @@ import { focusFindingToDecide } from "@/lib/focus";
 import { modalOpen } from "@/lib/layers";
 import { REVIEW_STAGE, type ReviewSummary, sessionKey } from "@/lib/wails";
 import { loadTranscript, refreshReviewPR } from "@/store/actions";
-import { useAppStore, usePanel, useReview } from "@/store/app-store";
+import {
+  useAppStore,
+  usePanel,
+  useReview,
+  useSubagentConversation,
+  useSubagentReturn,
+} from "@/store/app-store";
 
 // fixedOf is the fixed card at the end of the conversation of the review, if any.
 function fixedOf(review: ReviewSummary): ReactNode {
@@ -48,6 +58,7 @@ function fixedOf(review: ReviewSummary): ReactNode {
 // being decided, the decisions of the passes it never recorded, and the card that is fixed at its end.
 function ReviewConversation({ review }: { review: ReviewSummary }) {
   const anchors = useConversationAnchors(review);
+  const subagentReturn = useSubagentReturn(review.id);
   return (
     <Conversation
       key="conversation:review"
@@ -56,6 +67,7 @@ function ReviewConversation({ review }: { review: ReviewSummary }) {
       session={review}
       after={anchors}
       fixed={fixedOf(review)}
+      anchor={subagentReturn}
       replyWaiting={false}
     />
   );
@@ -76,6 +88,7 @@ export interface ReviewViewProps {
 export function ReviewView({ reviewId }: ReviewViewProps) {
   const review = useReview(reviewId);
   const panel = usePanel();
+  const subagent = useSubagentConversation(reviewId);
   const openReviewDialog = useAppStore((state) => state.openReviewDialog);
   const rescue = useRef<HTMLElement>(null);
   useFocusRescue(rescue);
@@ -158,10 +171,28 @@ export function ReviewView({ reviewId }: ReviewViewProps) {
           ) : null
         }
       >
-        <CheckStrip review={review} />
-        <ReviewConversation review={review} />
-        <ReviewRequest review={review} />
-        {hasReviewComposer(review) && <ReviewComposer review={review} />}
+        {subagent !== null ? (
+          <SubagentConversation
+            key={subagent.toolUseId}
+            itemId={review.id}
+            stage={subagent.stage}
+            toolUseId={subagent.toolUseId}
+            voice={voiceOf(subagent.stage)}
+            sessionOpen={review.processRunning}
+          />
+        ) : (
+          <>
+            <CheckStrip review={review} />
+            <ReviewConversation review={review} />
+            <ReviewRequest review={review} />
+            <BackgroundWork
+              itemId={review.id}
+              stage={REVIEW_STAGE}
+              tasks={backgroundOf(review.running, REVIEW_STAGE)}
+            />
+            {hasReviewComposer(review) && <ReviewComposer review={review} />}
+          </>
+        )}
       </PanelLayout>
     </section>
   );

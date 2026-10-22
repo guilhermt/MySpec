@@ -11,6 +11,7 @@ import {
 } from "react";
 import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
 import { useWindowedRows } from "@/components/system/useWindowedRows";
+import { actionLabel } from "@/features/chat/actions";
 import { ConversationColumn } from "@/features/chat/ConversationColumn";
 import { type Pending, pendingOf } from "@/features/chat/composer";
 import {
@@ -19,6 +20,7 @@ import {
   foldableStretches,
   lastMarkerOf,
   type Row,
+  rowOfCall,
   stretchFoldOf,
   waitingToolUseId,
 } from "@/features/chat/conversation";
@@ -33,7 +35,7 @@ import { BackToEnd } from "@/features/chat/entries/BackToEnd";
 import { ErrorBlock } from "@/features/chat/entries/ErrorBlock";
 import { Group } from "@/features/chat/entries/Group";
 import { MarkerLine } from "@/features/chat/entries/MarkerLine";
-import { PermissionCard } from "@/features/chat/entries/PermissionCard";
+import { PermissionCard, type PermissionRequester } from "@/features/chat/entries/PermissionCard";
 import { QuestionCard } from "@/features/chat/entries/QuestionCard";
 import { QueuedMessage } from "@/features/chat/entries/QueuedMessage";
 import { Speech } from "@/features/chat/entries/Speech";
@@ -48,16 +50,31 @@ import {
   voiceInSentence,
   voiceOf,
 } from "@/features/chat/markers";
-import type { SessionState } from "@/features/chat/session";
+import { IDLE_SESSION, type SessionState } from "@/features/chat/session";
+import type { SubagentModel } from "@/features/chat/subagent";
 import { useAutoScroll } from "@/features/chat/useAutoScroll";
 import { type FeedUnits, useFeed } from "@/features/chat/useFeed";
 import { decidedMarkerIds, reportMarkerIds } from "@/features/reviews/review-conversation";
 import { bottomPadding } from "@/lib/reveal";
 import { asSituationKind, asTaskMode, type Entry, type Image, type UserEntry } from "@/lib/wails";
-import { useAppStore, useFlashing, useReview, useTask, useTranscript } from "@/store/app-store";
+import {
+  type SubagentConversation,
+  useAppStore,
+  useFlashing,
+  useReview,
+  useTask,
+  useTranscript,
+} from "@/store/app-store";
 
 const NO_ENTRIES: readonly Entry[] = [];
+const NO_REQUESTERS: ReadonlyMap<string, PermissionRequester> = new Map();
 const NO_FOLDS: ReadonlySet<string> = new Set();
+
+/** SUBAGENT_VOICE is who talks in the conversation of a subagent. */
+const SUBAGENT_VOICE = "Subagent";
+
+/** SUBAGENT_WORKING is the session a subagent that runs stands for: it works, and it says so in the silence. */
+const SUBAGENT_WORKING: SessionState = { ...IDLE_SESSION, turnRunning: true, processRunning: true };
 
 const LOADING_WIDTHS = ["w-3/4", "w-full", "w-1/2"];
 
@@ -122,6 +139,32 @@ function useSteady<T>(value: T, sign: (value: T) => string): T {
   return steady.current.value;
 }
 
+// requestersOf names the subagent behind each Agent/Task call, the call a permission of a subagent
+// names: a subagent inside a subagent answers with the first, whose conversation holds it. Only the
+// calls enter, so the map changes with a new subagent and not with every action of one.
+function requestersOf(entries: readonly Entry[]): Map<string, PermissionRequester> {
+  const requesters = new Map<string, PermissionRequester>();
+  for (const entry of entries) {
+    const action = entry.action;
+    if (entry.kind !== "action" || action === null || action === undefined) {
+      continue;
+    }
+    if (action.tool !== "Agent" && action.tool !== "Task") {
+      continue;
+    }
+    if (action.parentToolUseId === "") {
+      const name = action.description || action.target || actionLabel(action).label;
+      requesters.set(action.toolUseId, { name, toolUseId: action.toolUseId });
+      continue;
+    }
+    const root = requesters.get(action.parentToolUseId);
+    if (root !== undefined) {
+      requesters.set(action.toolUseId, root);
+    }
+  }
+  return requesters;
+}
+
 interface RowViewProps {
   taskId: string;
   stage: string;
@@ -139,6 +182,10 @@ interface RowViewProps {
   onRequested: () => void;
   /** flash is the kind of the pending card that blinks, null for none. */
   flash: "question" | "permission" | null;
+  /** requesters name the subagent behind each call, for the permission a subagent asked. */
+  requesters: ReadonlyMap<string, PermissionRequester>;
+  /** landing is the call of the subagent whose row the reader comes back to, null for none. */
+  landing: string | null;
 }
 
 const RowView = memo(function RowView({
@@ -153,6 +200,8 @@ const RowView = memo(function RowView({
   requested,
   onRequested,
   flash,
+  requesters,
+  landing,
 }: RowViewProps) {
   switch (row.kind) {
     case "speech":
@@ -227,6 +276,7 @@ const RowView = memo(function RowView({
           stage={stage}
           group={row.group}
           waitingToolUseId={waitingToolUseId}
+          landed={landing !== null && row.group.nodes.some((n) => n.action.toolUseId === landing)}
         />
       );
     case "question":
@@ -249,6 +299,7 @@ const RowView = memo(function RowView({
           createdAt={row.entry.createdAt}
           readOnly={readOnly}
           flash={flash === "permission"}
+          requester={requesters.get(row.entry.permission.parentToolUseId) ?? null}
         />
       );
     case "error":
@@ -366,6 +417,18 @@ export interface ConversationProps {
   replyWaiting?: boolean;
   /** endRoom leaves room at the end as high as the way back to the end: a discussion, whose card of drafts ends its conversation. */
   endRoom?: boolean;
+  /**
+   * subagent is the conversation of a subagent, read in place of the transcript: its entries, with
+   * no cards, no queue and no markers of the product. It opens at the end and follows it while the
+   * subagent runs, and opens at the start when it doesn't.
+   */
+  subagent?: SubagentModel;
+  /**
+   * anchor is where the conversation lands when a subagent that was read is left: the group of its
+   * call opens, with every action, and the row of the call goes back to `offset` px from the top
+   * (centered when null), with the focus on it. The conversation does not begin at its end.
+   */
+  anchor?: Pick<SubagentConversation, "stage" | "toolUseId" | "offset"> | null;
   /** pillAvoids is a selector: the way back to the end isn't drawn while an element that matches crosses the strip it floats in. */
   pillAvoids?: string;
 }
@@ -429,12 +492,15 @@ export function Conversation({
   activity,
   replyWaiting = false,
   endRoom = false,
+  subagent,
+  anchor = null,
   pillAvoids,
 }: ConversationProps) {
   const transcript = useTranscript(taskId, stage);
   const task = useTask(taskId);
   const review = useReview(taskId);
   const markerRequest = useAppStore((state) => state.markerRequest);
+  const clearSubagentReturn = useAppStore((state) => state.clearSubagentReturn);
   const clearMarkerRequest = useAppStore((state) => state.clearMarkerRequest);
   const flash = useCardFlash(taskId);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -445,9 +511,20 @@ export function Conversation({
   // currentUnit is the unit that holds the tab stop of the feed, -1 for the tail: it stays mounted.
   const [currentUnit, setCurrentUnit] = useState(-1);
 
-  const entries = transcript?.entries ?? NO_ENTRIES;
-  const pending = transcript?.pending ?? NO_ENTRIES;
-  const voice = voiceOf(stage);
+  // The place to land on is the one the conversation found when it mounted; the store forgets it.
+  const [landing] = useState(anchor?.stage === stage ? anchor : null);
+  useEffect(() => {
+    if (landing !== null) {
+      clearSubagentReturn();
+    }
+  }, [landing, clearSubagentReturn]);
+
+  const read = transcript?.entries ?? NO_ENTRIES;
+  const entries = subagent?.entries ?? read;
+  const pending = subagent === undefined ? (transcript?.pending ?? NO_ENTRIES) : NO_ENTRIES;
+  const voice = subagent === undefined ? voiceOf(stage) : SUBAGENT_VOICE;
+  // The end is followed by the live conversation and by a subagent that runs.
+  const following = !readOnly && (subagent === undefined || subagent.status === "running");
   const built = useRef<ConversationModel | null>(null);
   const model = useMemo(() => buildConversation(entries, voice, built.current), [entries, voice]);
   built.current = model;
@@ -461,14 +538,19 @@ export function Conversation({
     contentRef,
     [entries.length, pending.length, last?.assistant?.text ?? ""],
     rowKeys,
-    !readOnly,
+    following,
+    landing === null,
   );
   // A reload keeps what is on screen, so the scroll has nothing to lose.
   const loading =
     transcript === null ||
-    (transcript.status === "loading" && entries.length === 0 && pending.length === 0);
+    (transcript.status === "loading" && read.length === 0 && pending.length === 0);
   const railKey = replyWaiting ? lastCompleteSpeech(rows) : "";
   const waiting = useMemo(() => waitingToolUseId(entries), [entries]);
+  const requesters = useSteady(
+    subagent === undefined ? requestersOf(entries) : NO_REQUESTERS,
+    signature,
+  );
   // What the lines of the conversation read of it keeps its identity while it holds the same,
   // so the text that grows does not redraw them all.
   const latestReport = useSteady(reportMarkerIds(entries), signature);
@@ -510,9 +592,21 @@ export function Conversation({
     });
   // The live conversation of a task settles what its request bar asked to open: the last marker of
   // the type, its stretch unfolded; without one, the request is dropped.
-  const asking = markerRequest !== null && markerRequest.taskId === taskId && !readOnly && !loading;
+  const asking =
+    markerRequest !== null &&
+    markerRequest.taskId === taskId &&
+    !readOnly &&
+    subagent === undefined &&
+    !loading;
   const asked = asking ? lastMarkerOf(model, markerRequest.type) : null;
   const askedStretch = asked?.stretch ?? null;
+  // The row of the call a left subagent came from: its stretch opens, and its unit stays mounted.
+  const landed = useMemo(
+    () => (landing === null ? null : rowOfCall(model, landing.toolUseId)),
+    [model, landing],
+  );
+  const landedStretch = landed?.stretch ?? null;
+  const [landedOnce, setLandedOnce] = useState(false);
 
   useEffect(() => {
     if (!asking) {
@@ -524,6 +618,14 @@ export function Conversation({
     }
     setOpenFolds((folds) => (folds.has(askedStretch) ? folds : new Set(folds).add(askedStretch)));
   }, [asking, askedStretch, clearMarkerRequest]);
+
+  useEffect(() => {
+    if (landedStretch !== null) {
+      setOpenFolds((folds) =>
+        folds.has(landedStretch) ? folds : new Set(folds).add(landedStretch),
+      );
+    }
+  }, [landedStretch]);
 
   const units = useMemo(
     () =>
@@ -551,13 +653,14 @@ export function Conversation({
         (isPendingRow(unit.row, pendingCards) ||
           before?.has(unit.row.key) ||
           after?.has(unit.row.key) ||
-          unit.row.key === asked?.row)
+          unit.row.key === asked?.row ||
+          unit.row.key === landed?.row)
       ) {
         out.add(index);
       }
     });
     return [...out].sort((a, b) => a - b);
-  }, [units, currentUnit, before, after, asked?.row, pendingCards]);
+  }, [units, currentUnit, before, after, asked?.row, landed?.row, pendingCards]);
   const { parts, measureRef, scrollToIndex, attached } = useWindowedRows({
     count: units.length,
     keyOf: (index) => units[index]?.key ?? String(index),
@@ -571,8 +674,8 @@ export function Conversation({
     scrollRef: viewportRef,
     listRef: feedRef,
     overscan: WINDOW_OVERSCAN,
-    keepEnd: readOnly ? undefined : followingEnd,
-    startAtEnd: !readOnly,
+    keepEnd: following ? followingEnd : undefined,
+    startAtEnd: following && landing === null,
   });
   // It is new each time the window mounts other units: the feed syncs what came in.
   const mountedKey = parts.map((part) => part.key).join("|");
@@ -586,6 +689,27 @@ export function Conversation({
     [units.length, scrollToIndex, mountedKey],
   );
   useFeed(feedRef, feedUnits);
+
+  // Back from a subagent, the row of its call returns to where it was, once it is mounted, and
+  // takes the focus.
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    if (landing === null || landedOnce || viewport === null || loading || !attached) {
+      return;
+    }
+    const row = feedRef.current?.querySelector<HTMLElement>(
+      `[data-subagent="${CSS.escape(landing.toolUseId)}"]`,
+    );
+    if (row === null || row === undefined) {
+      return;
+    }
+    const box = viewport.getBoundingClientRect();
+    const at = row.getBoundingClientRect();
+    const wanted = landing.offset ?? Math.max(0, (box.height - at.height) / 2);
+    viewport.scrollTo({ top: Math.max(0, viewport.scrollTop + (at.top - box.top) - wanted) });
+    row.querySelector<HTMLElement>("[data-open-conversation]")?.focus({ preventScroll: true });
+    setLandedOnce(true);
+  });
 
   // The articles of the top level are numbered over the whole conversation: the units that are
   // mounted by what comes before them, and the tail after the units.
@@ -697,7 +821,9 @@ export function Conversation({
                           waitingToolUseId={waiting}
                           requested={unit.row.key === asked?.row}
                           onRequested={clearMarkerRequest}
-                          flash={readOnly ? null : flash}
+                          flash={readOnly || subagent !== undefined ? null : flash}
+                          requesters={requesters}
+                          landing={landing?.toolUseId ?? null}
                         />
                         {after?.get(unit.row.key)}
                       </>
@@ -747,7 +873,12 @@ export function Conversation({
                   );
                 })}
               {!readOnly &&
-                (activity !== undefined ? (
+                (subagent !== undefined ? (
+                  <Activity
+                    session={subagent.status === "running" ? SUBAGENT_WORKING : IDLE_SESSION}
+                    entries={entries}
+                  />
+                ) : activity !== undefined ? (
                   <Activity text={activity} />
                 ) : (
                   <Activity session={session} entries={entries} />
@@ -760,7 +891,13 @@ export function Conversation({
         <BackToEnd
           newCount={newCount}
           voice={voice}
-          work={streaming ? "writing" : session.turnRunning ? "working" : null}
+          work={
+            streaming
+              ? "writing"
+              : (subagent === undefined ? session.turnRunning : subagent.status === "running")
+                ? "working"
+                : null
+          }
           // To the end of what scrolls, the tail included: the units that come into view measure
           // themselves and the scroll follows the end as they do.
           onClick={scrollToBottom}

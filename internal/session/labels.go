@@ -33,6 +33,7 @@ var labels = map[string]string{
 	"WebSearch":    "Searching the web",
 	"Task":         "Delegating",
 	"Agent":        "Delegating",
+	"Monitor":      "Watching",
 	"Skill":        "Using skill",
 	"TodoWrite":    "Planning",
 	"TaskCreate":   "Planning",
@@ -56,6 +57,8 @@ func Label(tool string) string {
 type Described struct {
 	Label, Target, Description string
 	CommandLines               int
+	Prompt                     string // the task an Agent/Task call gives its subagent
+	Background                 bool   // the call runs in the background
 }
 
 // For describes a call once its input is complete. dir is the session
@@ -81,6 +84,12 @@ func For(tool string, input json.RawMessage, dir string) Described {
 		d.Target = firstLine(str("command"))
 		d.Description = str("description")
 		d.CommandLines = lineCount(str("command"))
+		d.Background = fields["run_in_background"] == true
+	case "Monitor":
+		d.Target = firstLine(str("command"))
+		d.Description = str("description")
+		d.CommandLines = lineCount(str("command"))
+		d.Background = true
 	case "Glob", "Grep":
 		d.Target = str("pattern")
 	case "WebFetch":
@@ -90,6 +99,8 @@ func For(tool string, input json.RawMessage, dir string) Described {
 	case "Task", "Agent":
 		d.Target = str("subagent_type")
 		d.Description = str("description")
+		d.Prompt = str("prompt")
+		d.Background = fields["run_in_background"] == true
 	case "Skill":
 		d.Target = str("skill")
 	default:

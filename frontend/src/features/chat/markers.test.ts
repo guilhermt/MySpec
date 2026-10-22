@@ -25,6 +25,7 @@ import {
   voiceOf,
 } from "@/features/chat/markers";
 import type {
+  BackgroundItem,
   DiscussionCard,
   Draft,
   DraftBefore,
@@ -95,6 +96,7 @@ const MARKER: MarkerEntry = {
   url: "",
   commits: [],
   wakes: [],
+  background: [],
   count: 0,
   board: "",
   epics: [],
@@ -125,6 +127,7 @@ const wake = (kind: string, name: string, status: string, exitCode = -1): Wake =
   status,
   exitCode,
 });
+const item = (kind: string, name: string): BackgroundItem => ({ kind, name });
 const marker = (fields: Partial<MarkerEntry>): MarkerEntry => ({ ...MARKER, ...fields });
 const markerEntry = (fields: Partial<MarkerEntry>): Entry =>
   makeEntry("marker", { marker: marker(fields) });
@@ -766,6 +769,42 @@ describe("markerOf", () => {
       { type: "woke", wakes: [] },
       ctx("step:3"),
       view("woke", "The agent resumed on its own"),
+    ],
+    [
+      "one task stopped by you",
+      { type: "background_stopped", background: [item("agent", "Survey the repository")] },
+      ctx("step:3"),
+      view("ban", "Stopped by you", { complement: 'agent "Survey the repository"' }),
+    ],
+    [
+      "two tasks stopped by you",
+      {
+        type: "background_stopped",
+        background: [item("agent", "Survey"), item("command", "Run the dev server")],
+      },
+      ctx("step:3"),
+      view("ban", "Stopped by you", {
+        complement: "1 agent, 1 command",
+        body: { kind: "list", items: ['agent "Survey"', 'command "Run the dev server"'] },
+      }),
+    ],
+    [
+      "three tasks lost with the session",
+      {
+        type: "background_lost",
+        background: [item("command", "A"), item("monitor", "B"), item("command", "C")],
+      },
+      ctx("step:3"),
+      view("lost", "Lost when the session stopped", {
+        complement: "2 commands, 1 monitor",
+        body: { kind: "list", items: ['command "A"', 'monitor "B"', 'command "C"'] },
+      }),
+    ],
+    [
+      "one task lost with the session",
+      { type: "background_lost", background: [item("monitor", "Tick watcher")] },
+      ctx("step:3"),
+      view("lost", "Lost when the session stopped", { complement: 'monitor "Tick watcher"' }),
     ],
     [
       "a return of a kind the app does not know",
@@ -2163,6 +2202,15 @@ describe("roundFolds", () => {
   it("has no epics without a start", () => {
     expect(roundFolds([], []).epics).toBeNull();
   });
+});
+
+describe("markerOf for the work in the background", () => {
+  it.each(["background_stopped", "background_lost"])(
+    "draws nothing for %s without items",
+    (type) => {
+      expect(markerOf(marker({ type, background: [] }), ctx("step:3"), "e", NOW)).toBeNull();
+    },
+  );
 });
 
 describe("markerOf in a discussion", () => {

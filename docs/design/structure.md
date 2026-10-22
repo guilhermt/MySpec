@@ -56,13 +56,13 @@ A largura é contínua: `clamp(288px, 8vw + 200px, 380px)`.
 
 ### A linha de um item
 
-Duas linhas, e uma terceira só enquanto o agente trabalha.
+Duas linhas, e uma terceira enquanto o agente trabalha ou algo roda em segundo plano.
 
 | Linha | Conteúdo |
 |---|---|
 | 1 | Glifo de tipo e nome, com a largura inteira da linha para o nome. `repo#card`, `repo#PR` ou `#cards`, e `One-Shot`, aparecem à direita em hover, no foco e na linha aberta, e só quando cabem ao lado do nome inteiro; quando não cabem, ficam no tooltip do nome. O nome nunca perde largura para eles, e eles estão sempre no nome acessível. Na linha que `Ctrl+J` abriria, a marca `Ctrl J` fica à direita em qualquer largura |
 | 2 | Glifo de gravidade ou de estado; o que o item pede ou onde está, **sempre com a posição**; `+N` quando há mais de uma situação; na borda direita, o tempo |
-| 3 | Só com o agente rodando: a ação em curso, em fonte monoespaçada, com o verbo primeiro, e o medidor de contexto com a porcentagem. Sem ação em curso, a palavra da atividade da conversa: `Starting session…`, `Thinking…`, `Working in the background…` (sem turno, com trabalho em segundo plano) ou `Retrying · attempt N` |
+| 3 | Com o agente rodando: a ação em curso, em fonte monoespaçada, com o verbo primeiro, e o medidor de contexto com a porcentagem. Sem ação em curso, a palavra da atividade da conversa: `Starting session…`, `Thinking…`, `Working in the background…` (sem turno, com trabalho em segundo plano) ou `Retrying · attempt N`. Sem o agente rodando e com trabalho em segundo plano, o que roda (`2 agents · 1 monitor running`). À direita da linha, com trabalho em segundo plano, o ícone `background` e o número de tarefas, também na lateral estreita |
 
 **Por tipo de item**, a posição é:
 
@@ -204,6 +204,7 @@ Task, review de PR e discussão têm a mesma forma. De cima para baixo:
 - **as abas `Implementer` e `Reviewer`**, num step `Agent`, da primeira passada do revisor até o commit, e na etapa de PR, da primeira passada do review da pull request em diante, também depois dele;
 - **a conversa do lugar atual**, que rola;
 - **a barra do pedido**, enquanto o item pede algo;
+- **a linha do trabalho em segundo plano**, enquanto algo roda em segundo plano na conversa;
 - **o compositor**, enquanto a conversa na tela tem uma sessão aberta.
 
 Todo o resto fica fechado, nos painéis ou no menu `⋯`. Um painel aberto fica à direita.
@@ -229,7 +230,7 @@ Enquanto o item tem uma situação, o topo e o cartão não a repetem: a pílula
 
 ### Abas `Implementer` e `Reviewer`
 
-Duas abas de texto sobre um fio, cada uma com o glifo da sua sessão. A escolhida é sublinhada. A de fora diz a palavra só quando espera ou falhou (`Implementer · waits`, `Reviewer · error`), com o que pede e o tempo no tooltip e no nome acessível. A aba não tem chip de tempo. Abre a conversa de quem tem a vez; com as duas esperando, a do pedido mais antigo. O produto nunca troca de aba sozinho.
+Duas abas de texto sobre um fio, cada uma com o glifo da sua sessão. A escolhida é sublinhada. A de fora diz a palavra só quando espera ou falhou (`Implementer · waits`, `Reviewer · error`) ou, sem nada a pedir, quando tem trabalho em segundo plano (`Reviewer · background`, quieta), com o que pede e o tempo no tooltip e no nome acessível. A aba não tem chip de tempo. Abre a conversa de quem tem a vez; com as duas esperando, a do pedido mais antigo. O produto nunca troca de aba sozinho.
 
 No review da pull request as abas existem da primeira passada em diante e ficam quando o review acaba, com as duas conversas somente leitura. Antes de o implementador ter conversa, a aba dele fica desabilitada com o que a espera: `Implementer · starts with round 1`, `Implementer · starts with Apply approved` ou, com o review encerrado sem ele, `Implementer · never started`. Sem situação, a aba escolhida na primeira vez é a do implementador enquanto ele aplica ou commita, e a do revisor no resto. Os apontamentos, as mudanças, o merge, o problema e o bloqueio aparecem nas duas abas; a pergunta, a permissão e o erro de uma sessão aparecem só na aba dela.
 
@@ -243,6 +244,7 @@ No review da pull request as abas existem da primeira passada em diante e ficam 
 - Um bloco de erro diz a razão e o detalhe (a saída do git, o código de saída), e marca o erro pelo trilho. Não tem botão: a ação fica na barra do pedido.
 - **Sem conversa ainda** (a PR antes da primeira passada, o step bloqueado antes de abrir), o lugar mostra o vazio que diz o que espera (`The review starts when the checks finish.`, com os checks pelo nome) ou o bloco de erro.
 - **Conversas anteriores.** Voltar a uma conversa de outra etapa ou de outro step não acontece na tela: as conversas e os relatórios anteriores ficam em `Details`. Aberta de lá, a conversa anterior toma o lugar da atual, somente leitura, com uma faixa no lugar do compositor e a volta ao lugar atual; `Esc` volta.
+- **Conversa do subagente.** Cada subagente tem uma conversa própria, aberta pelo botão **Open conversation** da linha dele na conversa, pelo link do cartão de permissão que ele pediu ou pela lista do que roda em segundo plano. Ela toma o lugar da conversa da task, da review ou da discussão, como a conversa anterior, somente leitura e ao vivo, com a tarefa que ele recebeu, as falas, as ações e o fim, e uma faixa no lugar do compositor com **Stop** e a volta. A barra do pedido, o medidor de contexto e a situação da conversa de origem saem enquanto se lê; um pedido de permissão do subagente continua na conversa de origem. Na volta, essa conversa reabre com a linha do subagente onde estava. Veja a entrada **Conversa do subagente** em [components.md](./components.md).
 
 ### A barra do pedido
 
@@ -291,6 +293,10 @@ Tem quatro formas: **quieta**, quando um cartão na conversa tem o conteúdo e a
 **Botões desabilitados.** Um botão desabilitado, na barra ou em qualquer lugar, tem borda tracejada, também o fantasma, que em repouso não tem borda. A razão fica ao lado, e `aria-describedby` aponta para ela.
 
 **Papel.** A barra é `role="region"` com nome acessível. O texto de estado dela é `role="status"` (seção 2, Situação nova).
+
+### O trabalho em segundo plano
+
+Uma linha na coluna da conversa, entre a barra do pedido e o compositor, enquanto subagentes, comandos ou monitores rodam em segundo plano na conversa na tela: `Background · 2 agents · 1 command`. Abre no lugar a lista do que roda, com o progresso de cada subagente, a duração, **Stop** em cada item e **Stop all** no pé. É a única superfície que mostra o que roda; a conversa só mostra o que cada tarefa fez. Veja a entrada **Trabalho em segundo plano** em [components.md](./components.md).
 
 ### O compositor
 
@@ -350,7 +356,7 @@ Sob o cabeçalho, na medida da conversa, quando algo bloqueia sem ser a situaç�
 | `Ctrl+J` | Qualquer lugar | Abre o próximo item que espera, no lugar da situação, com o foco no que ele pede (seção 1) |
 | `Ctrl+,` | Qualquer lugar, as boas-vindas incluídas | Abre ou fecha Settings |
 | `Alt+←`, `Alt+→` | Qualquer lugar | Volta e avança no histórico |
-| `Esc` | Qualquer lugar | Fecha o `listbox`, o menu, o popover, o diálogo, a edição, o painel, sai de uma conversa anterior e fecha Settings, nesta ordem |
+| `Esc` | Qualquer lugar | Fecha o `listbox`, o menu, o popover, o diálogo, a edição, o painel, sai da conversa de um subagente, sai de uma conversa anterior e fecha Settings, nesta ordem |
 | ↑↓ ←→ `Home` `End` `Enter` | Árvore | Percorre, recolhe e expande, abre |
 | `Enter` | Home | Abre **Continue** |
 | ↑↓ `Home` `End` | Lista (board, Reviews, History) | Percorrem as linhas e os cabeçalhos visíveis |
@@ -380,7 +386,7 @@ Sob o cabeçalho, na medida da conversa, quando algo bloqueia sem ser a situaç�
 
 `Cmd` vale no lugar de `Ctrl`. Os atalhos globais ficam inertes com os diálogos de criação abertos. As teclas de uma letra valem só fora de um campo de texto.
 
-**Ordem de Tab:** topo da lateral, filtro, árvore (uma parada), rodapé, cabeçalho (navegação, breadcrumb, progresso, ferramentas), abas, faixa de aviso, conversa (uma parada: a entrada atual e os controles dela), barra do pedido, compositor, painel. Nas listas: cabeçalho, barra de filtros, a lista (uma parada), o painel.
+**Ordem de Tab:** topo da lateral, filtro, árvore (uma parada), rodapé, cabeçalho (navegação, breadcrumb, progresso, ferramentas), abas, faixa de aviso, conversa (uma parada: a entrada atual e os controles dela), barra do pedido, linha do trabalho em segundo plano (e a lista, aberta), compositor, painel. Nas listas: cabeçalho, barra de filtros, a lista (uma parada), o painel.
 
 ## 6. Larguras
 

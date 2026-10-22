@@ -1,7 +1,11 @@
 import { type KeyboardEvent, useEffect, useMemo, useRef } from "react";
 import { ArrivalFocus } from "@/components/ArrivalFocus";
+import { BackgroundWork } from "@/components/BackgroundWork";
+import { backgroundOf } from "@/components/background-work";
 import { PanelLayout } from "@/components/system/AuxPanel";
 import { Conversation } from "@/features/chat/Conversation";
+import { voiceOf } from "@/features/chat/markers";
+import { SubagentConversation } from "@/features/chat/SubagentConversation";
 import { DiscussionComposer } from "@/features/discussion/DiscussionComposer";
 import { DiscussionDetails } from "@/features/discussion/DiscussionDetails";
 import { DiscussionDialogs } from "@/features/discussion/DiscussionDialogs";
@@ -19,7 +23,13 @@ import { modalOpen } from "@/lib/layers";
 import { discussionSituation } from "@/lib/situations";
 import { asSituationKind, DISCUSSION_STAGE, type DiscussionSummary, sessionKey } from "@/lib/wails";
 import { loadTranscript } from "@/store/actions";
-import { useAppStore, useDiscussion, usePanel } from "@/store/app-store";
+import {
+  useAppStore,
+  useDiscussion,
+  usePanel,
+  useSubagentConversation,
+  useSubagentReturn,
+} from "@/store/app-store";
 
 // DiscussionConversation is the conversation of a discussion, with what its markers know of it.
 function DiscussionConversation({ discussion }: { discussion: DiscussionSummary }) {
@@ -39,6 +49,7 @@ function DiscussionConversation({ discussion }: { discussion: DiscussionSummary 
     [discussion, target],
   );
   const { after, before } = useDiscussionAnchors(discussion, card);
+  const subagentReturn = useSubagentReturn(discussion.id);
   return (
     <Conversation
       key="conversation:discussion"
@@ -48,6 +59,7 @@ function DiscussionConversation({ discussion }: { discussion: DiscussionSummary 
       discussion={input}
       after={after}
       before={before}
+      anchor={subagentReturn}
       replyWaiting={replyWaiting}
       endRoom
       pillAvoids="[data-current]"
@@ -76,6 +88,7 @@ export interface DiscussionViewProps {
 export function DiscussionView({ discussionId }: DiscussionViewProps) {
   const discussion = useDiscussion(discussionId);
   const panel = usePanel();
+  const subagent = useSubagentConversation(discussionId);
   const rescue = useRef<HTMLElement>(null);
   useFocusRescue(rescue);
   // A conversation that couldn't be read is settled too: the focus lands without it.
@@ -136,9 +149,27 @@ export function DiscussionView({ discussionId }: DiscussionViewProps) {
           ) : null
         }
       >
-        <DiscussionConversation discussion={discussion} />
-        <DiscussionRequest discussion={discussion} />
-        <DiscussionComposer discussion={discussion} />
+        {subagent !== null ? (
+          <SubagentConversation
+            key={subagent.toolUseId}
+            itemId={discussion.id}
+            stage={subagent.stage}
+            toolUseId={subagent.toolUseId}
+            voice={voiceOf(subagent.stage)}
+            sessionOpen={discussion.processRunning}
+          />
+        ) : (
+          <>
+            <DiscussionConversation discussion={discussion} />
+            <DiscussionRequest discussion={discussion} />
+            <BackgroundWork
+              itemId={discussion.id}
+              stage={DISCUSSION_STAGE}
+              tasks={backgroundOf(discussion.running, DISCUSSION_STAGE)}
+            />
+            <DiscussionComposer discussion={discussion} />
+          </>
+        )}
       </PanelLayout>
       <DiscussionDialogs discussion={discussion} />
     </section>

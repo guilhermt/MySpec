@@ -23,6 +23,8 @@ export interface ActionRowsProps {
   waitingToolUseId: string | null;
   /** nested is the list of a subagent: a subagent in it is one of its commands. */
   nested?: boolean;
+  /** revealed starts the list with every row shown, as after Show earlier actions. */
+  revealed?: boolean;
   className?: string;
 }
 
@@ -33,9 +35,10 @@ export function ActionRows({
   nodes,
   waitingToolUseId,
   nested = false,
+  revealed = false,
   className,
 }: ActionRowsProps) {
-  const [all, setAll] = useState(false);
+  const [all, setAll] = useState(revealed);
   // reveal is Show earlier having held the focus as it went: the first row it shows takes it,
   // before anything sees the focus fall to the body.
   const reveal = useRef(false);

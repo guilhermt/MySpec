@@ -8,7 +8,7 @@ import { DiscussionMenu } from "@/features/discussion/DiscussionMenu";
 import { discussionPauseRefusal, discussionStepper } from "@/features/discussion/discussion-header";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { asSessionStatus, DISCUSSION_STAGE, type DiscussionSummary, sessionKey } from "@/lib/wails";
-import { useAppStore, usePanel } from "@/store/app-store";
+import { useAppStore, usePanel, useSubagentConversation } from "@/store/app-store";
 
 /** PANELS are the panels of a discussion, in their order, each with what it shows. */
 const PANELS = [
@@ -37,6 +37,7 @@ export interface DiscussionHeaderProps {
  * DiscussionHeader is the header of the place of a discussion: the title, the pill of its round, and
  * on the right the context meter, Pause or Resume, the panels and the ⋯. The meter and Pause are
  * there only while the discussion has a session.
+ * A subagent's conversation on screen is not the one the meter measures, so the meter steps aside.
  */
 export function DiscussionHeader({ discussion }: DiscussionHeaderProps) {
   const now = useNow(MINUTE, true);
@@ -49,6 +50,7 @@ export function DiscussionHeader({ discussion }: DiscussionHeaderProps) {
   });
   const stepper = discussionStepper(discussion, now);
   const hasSession = discussion.sessionStage !== "";
+  const subagent = useSubagentConversation(discussion.id);
 
   return (
     <LocationHeader
@@ -63,7 +65,7 @@ export function DiscussionHeader({ discussion }: DiscussionHeaderProps) {
         />
       }
     >
-      {hasSession && (
+      {hasSession && subagent === null && (
         <ContextMeter
           percent={discussion.contextPercent === 0 ? null : discussion.contextPercent}
           paused={asSessionStatus(discussion.sessionStatus) === "paused"}
@@ -85,6 +87,7 @@ export function DiscussionHeader({ discussion }: DiscussionHeaderProps) {
             : null
         }
         refusal={() => discussionPauseRefusal(discussion)}
+        running={discussion.running}
         now={now}
       />
       <PanelGroup panels={PANELS} open={panel} onOpenChange={openPanel} />

@@ -1,3 +1,5 @@
+import { isWindowsPath } from "@/lib/paths";
+import { counted } from "@/lib/situations";
 import type { ActionEntry } from "@/lib/wails";
 import { asActionStatus, asInterruptedBy } from "@/lib/wails";
 import { duration } from "@/lib/when";
@@ -49,6 +51,7 @@ const TOOL_CATEGORIES: Record<string, ActionCategory> = {
   WebSearch: "Web",
   Agent: "Delegated",
   Task: "Delegated",
+  Monitor: "Ran",
 };
 
 // The commands of the table Categorias. A command of two words is matched
@@ -218,7 +221,7 @@ export function actionLabel(action: ActionEntry): ActionLabel {
       tooltip: "",
     };
   }
-  if (action.tool === "Bash") {
+  if (action.tool === "Bash" || action.tool === "Monitor") {
     const lines = action.commandLines > 1 ? ` · ${action.commandLines} lines` : "";
     const tooltip = action.target !== "" ? `${action.target}${lines}` : "";
     return action.description !== ""
@@ -230,6 +233,65 @@ export function actionLabel(action: ActionEntry): ActionLabel {
     command: action.target,
     mono: false,
     tooltip: action.target,
+  };
+}
+
+/** shortAction is the target of an action cut to what tells it apart: the command and its subcommand, or the last segment of a path. */
+export function shortAction(label: string, target: string): string {
+  if (label === "Running") {
+    const [command = "", ...rest] = target.split(" ").filter((term) => term !== "");
+    const parts = [command];
+    const [second] = rest;
+    if (second !== undefined && !second.startsWith("-") && !isPath(second)) {
+      parts.push(second);
+    }
+    const path = rest.find((term) => isPath(term) && !term.startsWith("-"));
+    if (path !== undefined) {
+      parts.push(cutPath(path));
+    }
+    return parts.join(" ");
+  }
+  return isPath(target) ? cutPath(target) : target;
+}
+
+// isPath says whether a term is a path: it has a slash or it is a Windows one, with a drive letter.
+function isPath(term: string): boolean {
+  return term.includes("/") || isWindowsPath(term);
+}
+
+// cutPath is a path cut to its last segment that tells it apart, `…/ratelimit`: the empty ones, `.`
+// and the `...` of a Go package pattern say nothing, and a path of nothing else stays whole. A Windows
+// path breaks at either slash; elsewhere a backslash is an escape in a command, not a separator.
+function cutPath(path: string): string {
+  const last = path
+    .split(isWindowsPath(path) ? /[\\/]/ : "/")
+    .filter((segment) => segment !== "" && segment !== "." && segment !== "...")
+    .at(-1);
+  return last === undefined ? path : `…/${last}`;
+}
+
+/** SubagentProgress is what a subagent that works shows in its row. */
+export interface SubagentProgress {
+  /** count is "14 actions"; "" before its first. */
+  count: string;
+  /** doing is the action it runs now in its short form, "Running go test …/ratelimit", or "Thinking…" when none runs. */
+  doing: string;
+  /** acting says an action runs: the row draws the spinner. */
+  acting: boolean;
+}
+
+/** progressOf is the progress of a subagent from its actions: how many, and the last that runs. */
+export function progressOf(actions: readonly ActionEntry[]): SubagentProgress {
+  const running = actions.filter((action) => asActionStatus(action.status) === "running").at(-1);
+  return {
+    count: actions.length === 0 ? "" : counted(actions.length, "action"),
+    doing:
+      running === undefined
+        ? "Thinking…"
+        : [running.label, shortAction(running.label, running.target)]
+            .filter((part) => part !== "")
+            .join(" "),
+    acting: running !== undefined,
   };
 }
 
@@ -323,6 +385,21 @@ function elapsed(from: string, to: string): number | null {
   return Number.isNaN(start) || Number.isNaN(end) ? null : end - start;
 }
 
+// stoppedText is how an interrupted action reads: work in the background was lost with the
+// session or stopped by you, and the agent can stop it too.
+function stoppedText(action: ActionEntry): string {
+  switch (asInterruptedBy(action.interruptedBy)) {
+    case "crash":
+      return action.background ? "lost" : "stopped with the session";
+    case "user":
+      return action.background ? "stopped by you" : "stopped";
+    case "agent":
+      return "stopped by the agent";
+    default:
+      return "stopped";
+  }
+}
+
 /** actionRight is the right column of a command (P6), running from now. */
 export function actionRight(
   action: ActionEntry,
@@ -348,12 +425,6 @@ export function actionRight(
       return Number.isNaN(started) ? null : { text: formatDuration(now - started), tone: "live" };
     }
     case "interrupted":
-      return {
-        text:
-          asInterruptedBy(action.interruptedBy) === "crash"
-            ? "stopped with the session"
-            : "stopped",
-        tone: "meta",
-      };
+      return { text: stoppedText(action), tone: "meta" };
   }
 }

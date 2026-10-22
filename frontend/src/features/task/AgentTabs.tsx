@@ -23,6 +23,9 @@ export function useStoredFirstTab(taskId: string, slot: number, decided: boolean
   }, [decided, stored, selectStepTab, taskId, slot, first]);
 }
 
+// WORD_TONES is the tone of the word a tab says: background work is no state of the user's to attend.
+const WORD_TONES = { waits: "wait", error: "error", background: "quiet" } as const;
+
 export interface AgentTabsProps {
   task: TaskSummary;
   tabs: AgentTabModel[];
@@ -58,9 +61,7 @@ export function AgentTabs({ task, tabs, chosen, onSelect }: AgentTabsProps) {
         id: tab.tab,
         label: tab.name,
         glyph: tab.glyph !== null && <StateGlyph state={tab.glyph} size="sm" />,
-        ...(tab.word !== ""
-          ? { word: { text: tab.word, tone: tab.word === "error" ? "error" : "wait" } as const }
-          : {}),
+        ...(tab.word !== "" ? { word: { text: tab.word, tone: WORD_TONES[tab.word] } } : {}),
         disabled: tab.disabled,
         ...(tab.disabled ? { disabledLabel: tab.disabledLabel } : {}),
         accessibleName: tab.label,

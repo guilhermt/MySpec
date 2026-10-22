@@ -108,6 +108,10 @@ type App struct {
 
 	restarting atomic.Bool // a restart for an update was asked and started the installed version
 
+	quitMu        sync.Mutex
+	quitAsked     bool // the window was asked to close while a subagent runs, and the warning waits for the user
+	quitConfirmed bool // the user confirmed the close: the window closes without a warning
+
 	backdrop backdrop // the colour behind the webview, painted once the webview takes it
 
 	publishMu sync.Mutex // keeps concurrent publishes from interleaving

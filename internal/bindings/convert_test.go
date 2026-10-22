@@ -1197,6 +1197,9 @@ func markerDTO(m bindings.MarkerEntry) *bindings.MarkerEntry {
 	if m.Wakes == nil {
 		m.Wakes = []bindings.Wake{}
 	}
+	if m.Background == nil {
+		m.Background = []bindings.BackgroundItem{}
+	}
 	return &m
 }
 
@@ -4238,5 +4241,116 @@ func TestFromMachineCarriesTheClaudeOverride(t *testing.T) {
 
 	if got := bindings.FromMachine(machine.Status{}).ClaudeOverride; got != "/opt/claude" {
 		t.Errorf("ClaudeOverride = %q, want /opt/claude", got)
+	}
+}
+
+func TestFromRunningTaskCarriesTheTaskAndWhenItStarted(t *testing.T) {
+	t.Parallel()
+
+	started := time.Date(2026, time.October, 21, 10, 30, 0, 0, time.UTC)
+	got := bindings.FromRunningTask(session.RunningTask{
+		TaskID: "a1", Kind: session.WakeAgent, Name: "Survey the API", ToolUseID: "toolu_1", EntryID: "e1",
+		StartedAt: started, Background: true, Stopping: true, StopError: "No task found",
+		Actions: 3, ActionLabel: "Reading", ActionTarget: "main.go",
+	})
+
+	want := bindings.RunningTask{
+		TaskID: "a1", Kind: "agent", Name: "Survey the API", ToolUseID: "toolu_1", EntryID: "e1",
+		StartedAt: "2026-10-21T10:30:00Z", Background: true, Stopping: true, StopError: "No task found",
+		Actions: 3, ActionLabel: "Reading", ActionTarget: "main.go",
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("FromRunningTask() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestRunningOfGathersTheLiveConversationsOfAnItemInStageOrder(t *testing.T) {
+	t.Parallel()
+
+	live := []session.RunningTask{{TaskID: "a1", Kind: session.WakeCommand}}
+	sums := map[session.Key]session.Summary{
+		{TaskID: "t1", Stage: "pr"}:             {Tasks: live},
+		{TaskID: "t1", Stage: "step_review:2"}:  {Tasks: live},
+		{TaskID: "t1", Stage: "step:10"}:        {Tasks: live},
+		{TaskID: "t1", Stage: "step:2"}:         {Tasks: live},
+		{TaskID: "t1", Stage: "zeta"}:           {Tasks: live},
+		{TaskID: "t1", Stage: "alpha"}:          {Tasks: live},
+		{TaskID: "t1", Stage: "prd"}:            {Tasks: live},
+		{TaskID: "t1", Stage: "plan"}:           {},
+		{TaskID: "other", Stage: "tech_spec"}:   {Tasks: live},
+		{TaskID: "t1", Stage: "tech_spec"}:      {Tasks: live},
+		{TaskID: "t1", Stage: "implementation"}: {},
+	}
+
+	running := bindings.RunningOf("t1", sums)
+	stages := make([]string, 0, len(running))
+	for _, s := range running {
+		stages = append(stages, s.Stage)
+		if len(s.Tasks) != 1 || s.Tasks[0].Kind != "command" {
+			t.Errorf("tasks of %s = %+v, want the one command", s.Stage, s.Tasks)
+		}
+	}
+
+	want := []string{"prd", "tech_spec", "step:2", "step_review:2", "step:10", "pr", "alpha", "zeta"}
+	if diff := cmp.Diff(want, stages); diff != "" {
+		t.Errorf("stages mismatch (-want +got):\n%s", diff)
+	}
+	if none := bindings.RunningOf("nobody", sums); none == nil || len(none) != 0 {
+		t.Errorf("RunningOf(nobody) = %#v, want an empty slice", none)
+	}
+}
+
+func TestFromQuitOrdersTheSessionsByItemAndStage(t *testing.T) {
+	t.Parallel()
+
+	tasks := []session.RunningTask{{TaskID: "a1", Kind: session.WakeAgent}}
+	got := bindings.FromQuit(map[session.Key][]session.RunningTask{
+		{TaskID: "t2", Stage: "prd"}:       tasks,
+		{TaskID: "t1", Stage: "step:1"}:    tasks,
+		{TaskID: "t1", Stage: "tech_spec"}: tasks,
+	})
+
+	order := make([]string, 0, len(got.Sessions))
+	for _, s := range got.Sessions {
+		order = append(order, s.ItemID+"/"+s.Stage)
+		if len(s.Tasks) != 1 || s.Tasks[0].Kind != "agent" {
+			t.Errorf("tasks of %s/%s = %+v, want the one subagent", s.ItemID, s.Stage, s.Tasks)
+		}
+	}
+	if diff := cmp.Diff([]string{"t1/tech_spec", "t1/step:1", "t2/prd"}, order); diff != "" {
+		t.Errorf("sessions mismatch (-want +got):\n%s", diff)
+	}
+	if empty := bindings.FromQuit(nil); empty == nil || empty.Sessions == nil {
+		t.Errorf("FromQuit(nil) = %#v, want an empty request", empty)
+	}
+}
+
+func TestFromEntryCarriesTheBackgroundFieldsOfActionsPermissionsAndMarkers(t *testing.T) {
+	t.Parallel()
+
+	action := bindings.FromEntry("t1", session.Entry{Kind: session.KindAction, Action: &session.ActionEntry{
+		Tool: "Agent", Background: true, TaskID: "a1", Prompt: "Survey the API", InterruptedBy: "agent",
+	}})
+	if got := action.Action; !got.Background || got.TaskID != "a1" || got.Prompt != "Survey the API" || got.InterruptedBy != "agent" {
+		t.Errorf("action = %+v, want the background, task id, prompt and agent stop", got)
+	}
+
+	permission := bindings.FromEntry("t1", session.Entry{Kind: session.KindPermission, Permission: &session.PermissionEntry{
+		ParentToolUseID: "toolu_1",
+	}})
+	if got := permission.Permission.ParentToolUseID; got != "toolu_1" {
+		t.Errorf("permission parent = %q, want toolu_1", got)
+	}
+
+	marker := bindings.FromEntry("t1", session.Entry{Kind: session.KindMarker, Marker: &session.MarkerEntry{
+		Type:       session.MarkerBackgroundLost,
+		Background: []session.BackgroundItem{{Kind: session.WakeMonitor, Name: "Watch the logs"}},
+	}})
+	want := []bindings.BackgroundItem{{Kind: "monitor", Name: "Watch the logs"}}
+	if diff := cmp.Diff(want, marker.Marker.Background); diff != "" {
+		t.Errorf("marker background mismatch (-want +got):\n%s", diff)
+	}
+	if none := bindings.FromEntry("t1", session.Entry{Kind: session.KindMarker, Marker: &session.MarkerEntry{}}); none.Marker.Background == nil {
+		t.Error("a marker without background work has nil Background, want an empty list")
 	}
 }

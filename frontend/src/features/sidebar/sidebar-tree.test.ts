@@ -10,7 +10,6 @@ import {
   nodesOfItem,
   type RowTone,
   reviewRow,
-  shortAction,
   sidebarTree,
   TONE_RANK,
   type TreeNode,
@@ -32,6 +31,7 @@ import {
   makeReviewFinding,
   makeReviewPass,
   makeReviewSummary,
+  makeRunningTask,
   makeSituation,
   makeState,
   makeStep,
@@ -1062,6 +1062,70 @@ describe("line 3", () => {
   });
 });
 
+describe("line 3 with work in the background", () => {
+  const ofStage = (stage: string, tasks = [makeRunningTask({ kind: "monitor" })]) => [
+    { stage, tasks },
+  ];
+  const idle = { sessionStatus: "waiting", turnRunning: false, processRunning: true };
+
+  it("says what runs when the agent does not work, with the count", () => {
+    const row = taskRow(
+      makeState(),
+      taskWith({ ...idle, stage: "prd", running: ofStage("prd") }),
+      NOW,
+    );
+
+    expect(row.line3).toEqual({
+      kind: "background",
+      long: "1 monitor running",
+      short: "1 monitor running",
+      count: 1,
+    });
+    expect(row.background).toBe(1);
+    expect(row.label).toContain("1 running in the background.");
+  });
+
+  it("keeps the action of the agent that works and adds the count", () => {
+    const row = taskRow(
+      makeState(),
+      taskWith({
+        stage: "prd",
+        sessionStatus: "working",
+        turnRunning: true,
+        processRunning: true,
+        turnStartedAt: THREE_MINUTES_AGO,
+        actionLabel: "Editing",
+        actionTarget: "a/b.go",
+        running: ofStage("prd", [
+          makeRunningTask(),
+          makeRunningTask({ taskId: "x", kind: "command" }),
+        ]),
+      }),
+      NOW,
+    );
+
+    expect(row.line3).toMatchObject({ kind: "work", verb: "Editing" });
+    expect(row.background).toBe(2);
+  });
+
+  it("is absent without background tasks, or for tasks the turn waits for", () => {
+    const none = taskRow(makeState(), taskWith({ ...idle, stage: "prd" }), NOW);
+    const foreground = taskRow(
+      makeState(),
+      taskWith({
+        ...idle,
+        stage: "prd",
+        running: ofStage("prd", [makeRunningTask({ background: false })]),
+      }),
+      NOW,
+    );
+
+    expect(none.line3).toBeNull();
+    expect(none.background).toBe(0);
+    expect(foreground.line3).toBeNull();
+  });
+});
+
 describe("the accessible name", () => {
   it("tells a task with situations, each with its time, then the position and the meta", () => {
     const task = taskWith({
@@ -1155,23 +1219,6 @@ describe("a discussion ready to archive", () => {
 
   it("counts in a collapsed node as ready to close", () => {
     expect(nodeSummary([ready()])?.label).toBe("1 ready to close");
-  });
-});
-
-describe("shortAction", () => {
-  it.each([
-    ["Running", "go test ./internal/api/ratelimit", "go test …/ratelimit"],
-    ["Running", "go test ./internal/ratelimit/... -run TestBucket", "go test …/ratelimit"],
-    ["Running", "go vet ./...", "go vet ./..."],
-    ["Running", "pnpm vitest run src/lib/a.test.ts", "pnpm vitest …/a.test.ts"],
-    ["Running", "ls -la /tmp/x", "ls …/x"],
-    ["Running", "make", "make"],
-    ["Running", "go test C:\\Users\\dev\\code\\api\\ratelimit", "go test …/ratelimit"],
-    ["Editing", "frontend/src/app.tsx", "…/app.tsx"],
-    ["Reading", "C:\\Users\\dev\\code\\api\\main.go", "…/main.go"],
-    ["Searching", "TODO", "TODO"],
-  ])("cuts %s %s to %s", (label, target, expected) => {
-    expect(shortAction(label, target)).toBe(expected);
   });
 });
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/guilhermt/myspec/internal/claude"
@@ -39,12 +40,15 @@ type run struct {
 	retryReason  string    // retryReasonOf the error
 	turnFailed   bool      // the last turn ended in an error; the next turn clears it
 
-	tasks       map[string]*cliTask    // task_id -> the tasks the current process runs, in the foreground or the background
-	wakes       []Wake                 // the returns that arrived with no turn, for the marker that opens the next one
-	monitors    map[string]monitorCall // tool_use_id -> the Monitor calls of the current process, until their task starts
-	returnDue   bool                   // a task came back with no turn open, and the CLI has not answered it yet
-	returnTimer *time.Timer            // gives up on a return the CLI does not answer
-	lastTurnAt  time.Time              // when the last turn of the current process started
+	tasks       map[string]*cliTask        // task_id -> the tasks the current process runs, in the foreground or the background
+	wakes       []Wake                     // the returns that arrived with no turn, for the marker that opens the next one
+	monitors    map[string]monitorCall     // tool_use_id -> the Monitor calls of the current process, until their task starts
+	subagents   map[string]*subagent       // tool_use_id of the Agent/Task call -> its subagent, for the current process
+	actions     map[string]*Entry          // tool_use_id -> every action of the current process, main thread and subagents
+	requests    map[string]*controlRequest // request_id -> the control requests of the app awaiting their answer
+	returnDue   bool                       // a task came back with no turn open, and the CLI has not answered it yet
+	returnTimer *time.Timer                // gives up on a return the CLI does not answer
+	lastTurnAt  time.Time                  // when the last turn of the current process started
 
 	idleTimer  *time.Timer
 	flushTimer *time.Timer
@@ -81,12 +85,58 @@ type cliTask struct {
 	gone         bool        // the CLI's list of background tasks no longer has it
 	limit        *time.Timer // ends what a command or a timed monitor counts; nil for the others
 	wake         *Wake       // nil until its task_notification arrives
+	toolUseID    string      // the call that started it
+	startedAt    time.Time   // when task_started arrived
+	entry        *Entry      // the action of the call; nil when the conversation has none
+	stopReq      string      // the stop_task request in flight; "" when none
+	stopError    string      // why the last stop failed, in the CLI's words; "" when it did not
+}
+
+// subagent is an Agent/Task call of the current process and what its subagent
+// did: every entry it writes joins the turn the call was made in, whatever
+// turn is open when it arrives.
+type subagent struct {
+	entry   *Entry            // the Agent/Task action
+	turnID  string            // the turn the call was made in
+	actions map[string]*Entry // tool_use_id -> the actions of the subagent
+}
+
+// controlRequest is a control request of the app whose answer someone awaits:
+// a stop_task of a batch, or a get_task_output.
+type controlRequest struct {
+	taskID string
+	batch  *stopBatch                       // stop_task only
+	answer chan claude.ControlResponseEvent // get_task_output only, buffered 1
+}
+
+// stopBatch is the stops one gesture asked for: their marker is written once,
+// when every one is answered.
+type stopBatch struct {
+	pending int
+	stopped []BackgroundItem
+	failed  []string // the reasons, in the CLI's words
+	done    chan struct{}
+}
+
+// finish wakes whoever waits for the batch, once.
+func (b *stopBatch) finish() {
+	select {
+	case <-b.done:
+	default:
+		close(b.done)
+	}
 }
 
 // counts reports whether the task is work of the session: in the background,
 // not over and within its limit.
 func (t *cliTask) counts() bool {
 	return t.backgrounded && t.wake == nil && !t.gone && !t.pastLimit && !t.persistent
+}
+
+// live reports whether the task still runs: it has not ended and the CLI still
+// lists it.
+func (t *cliTask) live() bool {
+	return t.wake == nil && !t.gone
 }
 
 // monitorCall is what a Monitor call asked for: how long the monitor runs, or
@@ -114,13 +164,16 @@ const interruptReceiptCapability = "interrupt_receipt_v1"
 
 func newRun(t TaskInfo, rec Record, nextSeq int) *run {
 	return &run{
-		task:     t,
-		rec:      rec,
-		byID:     map[string]*Entry{},
-		nextSeq:  nextSeq,
-		dirty:    map[string]struct{}{},
-		tasks:    map[string]*cliTask{},
-		monitors: map[string]monitorCall{},
+		task:      t,
+		rec:       rec,
+		byID:      map[string]*Entry{},
+		nextSeq:   nextSeq,
+		dirty:     map[string]struct{}{},
+		tasks:     map[string]*cliTask{},
+		monitors:  map[string]monitorCall{},
+		subagents: map[string]*subagent{},
+		actions:   map[string]*Entry{},
+		requests:  map[string]*controlRequest{},
 	}
 }
 
@@ -155,12 +208,20 @@ func (t *turn) runningAction() *Entry {
 // newEntry stamps the envelope of an entry about to join the conversation: a
 // fresh id, the next position, the turn in progress and the time.
 func (r *run) newEntry(s *Service, e Entry) *Entry {
+	turnID := ""
+	if r.turn != nil {
+		turnID = r.turn.id
+	}
+	return r.newEntryIn(s, e, turnID)
+}
+
+// newEntryIn is newEntry for an entry that belongs to the given turn, whatever
+// turn is open.
+func (r *run) newEntryIn(s *Service, e Entry, turnID string) *Entry {
 	e.ID = s.newID()
 	e.Seq = r.nextSeq
 	r.nextSeq++
-	if r.turn != nil {
-		e.TurnID = r.turn.id
-	}
+	e.TurnID = turnID
 	e.CreatedAt = s.now().UTC()
 	return &e
 }
@@ -171,6 +232,20 @@ func (r *run) clearRetry() {
 	r.retryMax = 0
 	r.retryAt = time.Time{}
 	r.retryReason = ""
+}
+
+// backgroundAlive reports whether an action is a call in the background whose
+// task still runs, which makes it the process's and not its turn's: the action
+// of a live task, or one whose task_started has not arrived.
+func (r *run) backgroundAlive(e *Entry) bool {
+	if !e.Action.Background {
+		return false
+	}
+	if e.Action.TaskID == "" {
+		return true
+	}
+	t := r.tasks[e.Action.TaskID]
+	return t != nil && t.entry == e && t.live()
 }
 
 // backgroundWork reports whether the current process has work in the
@@ -195,13 +270,23 @@ func (r *run) answerReturn() {
 }
 
 // forgetTasks drops every task of the process that ran them, with their
-// timers: the work in the background is the process's, and goes with it.
+// timers: the work in the background is the process's, and goes with it. The
+// stops still awaiting an answer end failed, so nobody waits for one.
 func (r *run) forgetTasks() {
+	for _, req := range r.requests {
+		if req.batch != nil {
+			req.batch.failed = append(req.batch.failed, "the session stopped")
+			req.batch.finish()
+		}
+	}
 	for _, t := range r.tasks {
 		r.stopTimer(&t.limit)
 	}
 	clear(r.tasks)
 	clear(r.monitors)
+	clear(r.subagents)
+	clear(r.actions)
+	clear(r.requests)
 	r.wakes = nil
 	r.answerReturn()
 }
@@ -250,7 +335,48 @@ func (r *run) summary() Summary {
 		// The clock of the work goes on from the turn that left it running.
 		sum.TurnStartedAt = r.lastTurnAt
 	}
+	sum.Tasks = r.runningTasks()
 	return sum
+}
+
+// runningTasks lists what the process runs for the interface: every live task
+// in the background and every subagent the open turn waits for, by start.
+func (r *run) runningTasks() []RunningTask {
+	out := []RunningTask{}
+	for id, t := range r.tasks {
+		if !t.live() || (!t.backgrounded && (t.kind != WakeAgent || r.turn == nil)) {
+			continue
+		}
+		rt := RunningTask{
+			TaskID:     id,
+			Kind:       t.kind,
+			Name:       t.name,
+			ToolUseID:  t.toolUseID,
+			StartedAt:  t.startedAt,
+			Background: t.backgrounded,
+			Counts:     t.counts(),
+			Stopping:   t.stopReq != "",
+			StopError:  t.stopError,
+		}
+		if t.entry != nil {
+			rt.EntryID = t.entry.ID
+			if rt.Name == "" {
+				rt.Name = t.entry.Action.Target
+			}
+		}
+		if sub := r.subagents[t.toolUseID]; sub != nil && t.kind == WakeAgent {
+			rt.Actions = len(sub.actions)
+			for _, e := range slices.Backward(bySeq(sub.actions)) {
+				if e.Action.Status == ActionRunning {
+					rt.ActionLabel, rt.ActionTarget = e.Action.Label, e.Action.Target
+					break
+				}
+			}
+		}
+		out = append(out, rt)
+	}
+	slices.SortFunc(out, func(a, b RunningTask) int { return a.StartedAt.Compare(b.StartedAt) })
+	return out
 }
 
 // stopTimer stops a timer and forgets it.
@@ -317,6 +443,9 @@ func (s *Service) ensureProcessLocked(ctx context.Context, r *run, n *notes) err
 	}
 
 	r.proc = p
+	if err := p.Initialize(); err != nil {
+		s.log.Warn("initialize claude failed", "task", r.task.ID, "stage", r.rec.Stage, "error", err)
+	}
 	r.procChoice = r.rec.Choice
 	r.procGen++
 	r.stopping = false
@@ -609,6 +738,7 @@ func (s *Service) stopProcess(k Key, gen int, graceful bool, g graces) {
 	ctx, cancel := bgCtx()
 	defer cancel()
 
+	n := &notes{}
 	s.mu.Lock()
 	r := s.runs[k]
 	if r == nil || r.procGen != gen || r.proc == nil {
@@ -626,6 +756,7 @@ func (s *Service) stopProcess(k Key, gen int, graceful bool, g graces) {
 	stopped := make(chan struct{})
 	r.stopping = true
 	r.stopped = stopped
+	s.loseBackgroundLocked(ctx, r, n)
 	var turnDone chan struct{}
 	if graceful && r.turn != nil {
 		if r.interruptReq == "" {
@@ -638,12 +769,13 @@ func (s *Service) stopProcess(k Key, gen int, graceful bool, g graces) {
 		turnDone = r.turnDone
 	}
 	s.mu.Unlock()
+	s.flush(n)
 
 	if turnDone != nil {
 		wait(turnDone, InterruptTimeout)
 	}
 
-	n := &notes{}
+	n = &notes{}
 	s.mu.Lock()
 	if r.procGen == gen && r.turn != nil {
 		s.closeTurnLocked(ctx, r, true, interruptedByUser, n)

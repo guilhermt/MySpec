@@ -1,13 +1,20 @@
 import { useState } from "react";
+import { BackgroundWorkList } from "@/components/BackgroundWorkList";
+import { endedBy } from "@/components/background-work";
 import { Button } from "@/components/system/Button";
 import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
 import { SunkenLine } from "@/components/system/SunkenLine";
 import { archiveSummary } from "@/features/discussion/discussion-header";
-import type { Draft } from "@/lib/wails";
-import { archiveDiscussionInPlace } from "@/store/actions";
+import type { Draft, SessionTasks } from "@/lib/wails";
+import { archiveDiscussionInPlace, stopTasksOf } from "@/store/actions";
 
 export interface ArchiveDiscussionDialogProps {
-  discussion: { id: string; title: string; drafts: readonly Draft[] };
+  discussion: {
+    id: string;
+    title: string;
+    drafts: readonly Draft[];
+    running?: readonly SessionTasks[] | null;
+  };
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -23,6 +30,7 @@ export function ArchiveDiscussionDialog({
 }: ArchiveDiscussionDialogProps) {
   const [archiving, setArchiving] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
+  const ended = endedBy({ kind: "archive" }, discussion);
 
   const archive = async () => {
     if (archiving) {
@@ -30,6 +38,7 @@ export function ArchiveDiscussionDialog({
     }
     setArchiving(true);
     setRefusal(null);
+    await stopTasksOf(discussion.id, ended);
     const message = await archiveDiscussionInPlace(discussion.id);
     setArchiving(false);
     if (message === null) {
@@ -66,6 +75,12 @@ export function ArchiveDiscussionDialog({
           A task started from one of these cards gets the document in its context, also after the
           archive.
         </p>
+        {ended.length > 0 && (
+          <>
+            <p>This also stops what runs in the background. It won't resume.</p>
+            <BackgroundWorkList itemId={discussion.id} sessions={ended} />
+          </>
+        )}
       </DialogBody>
       <DialogFooter {...(refusal === null ? {} : { refusal })}>
         <DialogCancel disabled={archiving} />
@@ -76,7 +91,7 @@ export function ArchiveDiscussionDialog({
           loadingLabel="Archiving…"
           onClick={() => void archive()}
         >
-          Archive
+          {ended.length > 0 ? "Stop and archive" : "Archive"}
         </Button>
       </DialogFooter>
     </Dialog>

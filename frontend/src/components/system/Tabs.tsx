@@ -7,8 +7,8 @@ export interface TabItem<T extends string> {
   id: T;
   label: string;
   glyph?: ReactNode;
-  /** word follows the label on a tab that is not chosen: "waits", "error". */
-  word?: { text: string; tone: "wait" | "error" };
+  /** word follows the label on a tab that is not chosen: "waits", "error", or a quiet "background". */
+  word?: { text: string; tone: "wait" | "error" | "quiet" };
   disabled?: boolean;
   /** disabledLabel follows the label of a disabled tab: "starts with pass 1". */
   disabledLabel?: string;
@@ -30,6 +30,7 @@ export interface TabsProps<T extends string> {
 const WORD_TONES = {
   wait: "font-medium text-state-wait",
   error: "font-medium text-state-error",
+  quiet: "text-ink-3",
 } as const;
 
 /** tabId is the stable id of a tab button, for the panel it controls to point its aria-labelledby at. */

@@ -169,6 +169,7 @@ function task(of: BoardCard): TaskSummary {
     lastError: "",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    running: [],
   };
 }
 
@@ -287,5 +288,6 @@ export function largeBoardState(): State {
     discussionHistory: [],
     historySummary: { tasks: 0, reviews: 0, discussions: 0, oldest: "", windowStart: "" },
     cloneFolder: "",
+    quit: null,
   };
 }

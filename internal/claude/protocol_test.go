@@ -488,6 +488,8 @@ func TestDecodeTaskNotification(t *testing.T) {
 		ToolUseID: "toolu_01NE",
 		Status:    "failed",
 		Summary:   `Background command "Fail soon" failed with exit code 3`,
+
+		OutputFile: "/tmp/x.output",
 	}
 	if diff := cmp.Diff(want, *event.TaskNotification); diff != "" {
 		t.Errorf("TaskNotification mismatch (-want +got):\n%s", diff)
@@ -1056,6 +1058,72 @@ func TestListModelsRequestIsWhatTheCLIExpects(t *testing.T) {
 	want := `{"type":"control_request","request_id":"x","request":{"subtype":"list_models"}}`
 	if string(line) != want {
 		t.Errorf("ListModelsRequest() = %s, want %s", line, want)
+	}
+}
+
+func TestInitializeRequestIsWhatTheCLIExpects(t *testing.T) {
+	t.Parallel()
+
+	line := claude.InitializeRequest("x")
+	want := `{"type":"control_request","request_id":"x","request":{"subtype":"initialize",` +
+		`"perTaskStopAffordance":true,"forwardSubagentText":true}}`
+	if string(line) != want {
+		t.Errorf("InitializeRequest() = %s, want %s", line, want)
+	}
+}
+
+func TestStopTaskRequestIsWhatTheCLIExpects(t *testing.T) {
+	t.Parallel()
+
+	line := claude.StopTaskRequest("x", "bio6sm37m")
+	want := `{"type":"control_request","request_id":"x","request":{"subtype":"stop_task","task_id":"bio6sm37m"}}`
+	if string(line) != want {
+		t.Errorf("StopTaskRequest() = %s, want %s", line, want)
+	}
+}
+
+func TestTaskOutputRequestIsWhatTheCLIExpects(t *testing.T) {
+	t.Parallel()
+
+	line := claude.TaskOutputRequest("x", "bio6sm37m")
+	want := `{"type":"control_request","request_id":"x","request":{"subtype":"get_task_output","task_id":"bio6sm37m"}}`
+	if string(line) != want {
+		t.Errorf("TaskOutputRequest() = %s, want %s", line, want)
+	}
+}
+
+func TestDecodeTaskOutput(t *testing.T) {
+	t.Parallel()
+
+	got, err := claude.DecodeTaskOutput([]byte(`{"output":"\u001b[32mtick 1\u001b[0m\n","total_bytes":14,"truncated":true}`))
+	if err != nil {
+		t.Fatalf("DecodeTaskOutput() = %v, want nil", err)
+	}
+	want := claude.TaskOutput{Output: "\x1b[32mtick 1\x1b[0m\n", TotalBytes: 14, Truncated: true}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("TaskOutput mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestDecodeTaskOutputRejectsAnInvalidPayload(t *testing.T) {
+	t.Parallel()
+
+	if _, err := claude.DecodeTaskOutput([]byte(`{"output":7}`)); err == nil {
+		t.Error("DecodeTaskOutput() = nil, want an error")
+	}
+}
+
+func TestDecodePermissionRequestOfASubagentNamesIt(t *testing.T) {
+	t.Parallel()
+
+	line := `{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool",` +
+		`"tool_name":"Bash","tool_use_id":"toolu_1","agent_id":"a0fake"}}`
+	event, err := claude.Decode([]byte(line))
+	if err != nil {
+		t.Fatalf("Decode() = %v, want nil", err)
+	}
+	if got := event.ControlRequest.Request.AgentID; got != "a0fake" {
+		t.Errorf("AgentID = %q, want a0fake", got)
 	}
 }
 

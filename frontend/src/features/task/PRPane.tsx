@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { BackgroundWork } from "@/components/BackgroundWork";
+import { backgroundOf } from "@/components/background-work";
 import { tabId } from "@/components/system/Tabs";
 import { Conversation } from "@/features/chat/Conversation";
 import { MarkerLine } from "@/features/chat/entries/MarkerLine";
@@ -21,7 +23,7 @@ import { TaskRequest } from "@/features/task/TaskRequest";
 import { usePRConversationAnchors } from "@/features/task/usePRConversationAnchors";
 import { prChecks } from "@/lib/pull-requests";
 import { asPRState, asPRStatus, type PullRequest, type TaskSummary } from "@/lib/wails";
-import type { StepTab } from "@/store/app-store";
+import { type StepTab, useSubagentReturn } from "@/store/app-store";
 
 // fixedOf is the fixed card at the end of the conversation of the pull request, if any. The changed
 // files are the pull request's, on both tabs; the live checks are the reviewer's.
@@ -56,6 +58,7 @@ export interface PRPaneProps {
  */
 export function PRPane({ task, pr, tab }: PRPaneProps) {
   const anchors = usePRConversationAnchors(task, pr);
+  const subagentReturn = useSubagentReturn(task.id);
   const view = prPlaceOf(task, pr, hasReviewConversation(task));
   const request = <TaskRequest task={task} tab={tab} />;
   // The line of the merge says when it happened; the closing of the pull request has no time.
@@ -88,6 +91,7 @@ export function PRPane({ task, pr, tab }: PRPaneProps) {
               stage={stage}
               session={IDLE_SESSION}
               readOnly
+              anchor={subagentReturn}
               {...(onImplementer ? {} : { after: anchors })}
               endLine={
                 view.endLine === null ? undefined : (
@@ -112,6 +116,7 @@ export function PRPane({ task, pr, tab }: PRPaneProps) {
               stage={stage}
               session={session}
               fixed={fixedOf(task, pr, onImplementer)}
+              anchor={subagentReturn}
               {...(onImplementer ? {} : { after: anchors })}
               {...(closed ? { readOnly: true } : {})}
               {...(asPRStatus(pr.status) === "opening"
@@ -120,6 +125,11 @@ export function PRPane({ task, pr, tab }: PRPaneProps) {
               replyWaiting={screenSituationKindOf(task, tab) === "reply"}
             />
             {request}
+            <BackgroundWork
+              itemId={task.id}
+              stage={stage}
+              tasks={backgroundOf(task.running, stage)}
+            />
             {hasComposer(view) && !closed && (
               <TaskComposer
                 key={`composer:${stage}`}

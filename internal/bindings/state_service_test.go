@@ -57,3 +57,38 @@ func TestGetStateCountsTheTasksOfEachRepository(t *testing.T) {
 		t.Errorf("counts = %d active, %d archived, want 1 and 0", got[0].ActiveTasks, got[0].ArchivedTasks)
 	}
 }
+
+func TestTheQuitWarningAnswersThroughTheActionsOfTheApp(t *testing.T) {
+	t.Parallel()
+
+	var quit, cancelled int
+	service := bindings.NewStateService(func() bindings.State { return bindings.State{} }, bindings.QuitActions{
+		Quit:   func() { quit++ },
+		Cancel: func() { cancelled++ },
+	})
+
+	if err := service.QuitAnyway(); err != nil {
+		t.Fatalf("QuitAnyway() = %v, want nil", err)
+	}
+	if err := service.CancelQuit(); err != nil {
+		t.Fatalf("CancelQuit() = %v, want nil", err)
+	}
+	if err := service.CancelQuit(); err != nil {
+		t.Fatalf("CancelQuit() = %v, want nil", err)
+	}
+
+	if quit != 1 || cancelled != 2 {
+		t.Errorf("quit %d times and cancelled %d times, want 1 and 2", quit, cancelled)
+	}
+}
+
+func TestThePlaceholderOfTheStateAnswersThatTheAppIsStartingToTheQuitWarning(t *testing.T) {
+	t.Parallel()
+	state := bindings.NewWaitingServices().State
+
+	for name, call := range map[string]func() error{"QuitAnyway": state.QuitAnyway, "CancelQuit": state.CancelQuit} {
+		if err := call(); err == nil || err.Error() != startingMessage {
+			t.Errorf("%s() = %v, want %q", name, err, startingMessage)
+		}
+	}
+}

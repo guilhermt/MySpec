@@ -248,3 +248,46 @@ describe("PermissionCard settled", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });
+
+describe("PermissionCard of a subagent", () => {
+  const REQUESTER = { name: "Survey the repository", toolUseId: "toolu_agent" };
+
+  function requested(p: PermissionEntry) {
+    return renderWithStore(
+      <PermissionCard
+        stage="step:1"
+        taskId="task-1"
+        permission={p}
+        createdAt={AT}
+        requester={REQUESTER}
+      />,
+    );
+  }
+
+  it("says which subagent asked and opens its conversation while it waits", async () => {
+    const { user } = requested(permission({ parentToolUseId: "toolu_agent" }));
+
+    expect(screen.getByText(/Requested by agent "Survey the repository"/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open conversation" }));
+
+    expect(useAppStore.getState().subagentConversation).toEqual({
+      itemId: "task-1",
+      stage: "step:1",
+      toolUseId: "toolu_agent",
+      offset: null,
+    });
+  });
+
+  it("keeps the line, without the link, once it is answered", () => {
+    requested(permission({ status: "allowed", parentToolUseId: "toolu_agent" }));
+
+    expect(screen.getByText('Requested by agent "Survey the repository"')).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open conversation" })).not.toBeInTheDocument();
+  });
+
+  it("says nothing of a request of the agent of the conversation", () => {
+    card();
+
+    expect(screen.queryByText(/Requested by agent/)).not.toBeInTheDocument();
+  });
+});

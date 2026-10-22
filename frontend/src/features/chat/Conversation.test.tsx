@@ -1,5 +1,6 @@
 import { act, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { WINDOW_VIEWPORT } from "@/components/system/useWindowedRows";
 import { Conversation } from "@/features/chat/Conversation";
 import { IDLE_SESSION } from "@/features/chat/session";
 import { api, type Draft, type Entry, type MarkerEntry, type TaskSummary } from "@/lib/wails";
@@ -1186,5 +1187,207 @@ describe("Conversation after", () => {
 
     expect(screen.queryByRole("button", { name: /^Earlier:/ })).not.toBeInTheDocument();
     expect(screen.getByText("The derived line")).toBeInTheDocument();
+  });
+});
+
+describe("Conversation coming back from a subagent", () => {
+  const CALL = "toolu_agent";
+  const restore: (() => void)[] = [];
+
+  afterEach(() => {
+    for (const undo of restore.splice(0)) {
+      undo();
+    }
+  });
+
+  // layout gives jsdom the geometry it does not lay out: the viewport at the top of the window and
+  // the row of the subagent 500 px below it, and the scroll it is told to go to.
+  function layout() {
+    const scrollTo = vi.fn<(options: ScrollToOptions) => void>();
+    const rect = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        const top = this.dataset.subagent === CALL ? 500 : 0;
+        return {
+          top,
+          bottom: top + 24,
+          height: 24,
+          left: 0,
+          right: 0,
+          width: 0,
+          x: 0,
+          y: top,
+          toJSON() {},
+        };
+      });
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollTo");
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      value: scrollTo,
+      configurable: true,
+      writable: true,
+    });
+    restore.push(() => {
+      rect.mockRestore();
+      if (original === undefined) {
+        Reflect.deleteProperty(HTMLElement.prototype, "scrollTo");
+      } else {
+        Object.defineProperty(HTMLElement.prototype, "scrollTo", original);
+      }
+    });
+    return scrollTo;
+  }
+
+  // A group of ten actions with the subagent in the middle: closed, it shows one line.
+  function delegated(): Entry[] {
+    return [
+      ...Array.from({ length: 6 }, (_, i) => action("turn-1", `src/a${i}.ts`)),
+      makeEntry("action", {
+        turnId: "turn-1",
+        action: makeAction({
+          toolUseId: CALL,
+          tool: "Agent",
+          description: "Survey the repository",
+        }),
+      }),
+      ...Array.from({ length: 6 }, (_, i) => action("turn-1", `src/b${i}.ts`)),
+    ];
+  }
+
+  it("opens the group of the call, puts the row where it was and focuses it", async () => {
+    const scrollTo = layout();
+    renderWithStore(
+      <Conversation
+        stage="prd"
+        taskId="task-1"
+        session={makeTask()}
+        anchor={{ stage: "prd", toolUseId: CALL, offset: 120 }}
+      />,
+      { state: withTask(), ui: { transcripts: ready(delegated()) } },
+    );
+
+    const open = await screen.findByRole("button", {
+      name: "Open the conversation of Survey the repository",
+    });
+    // Every action of the group shows, though there are more than the list holds whole.
+    expect(screen.getByText("src/a0.ts")).toBeInTheDocument();
+    expect(screen.getByText("src/b5.ts")).toBeInTheDocument();
+    expect(open).toHaveFocus();
+    expect(scrollTo).toHaveBeenCalledWith({ top: 380 });
+    expect(document.querySelector(`[${WINDOW_VIEWPORT}]`)).not.toBeNull();
+  });
+
+  it("centers the row when the subagent was opened from the list", async () => {
+    const scrollTo = layout();
+    renderWithStore(
+      <Conversation
+        stage="prd"
+        taskId="task-1"
+        session={makeTask()}
+        anchor={{ stage: "prd", toolUseId: CALL, offset: null }}
+      />,
+      { state: withTask(), ui: { transcripts: ready(delegated()) } },
+    );
+
+    await screen.findByRole("button", { name: "Open the conversation of Survey the repository" });
+    // The viewport is 0 high in jsdom: centered, the row lands at its own top.
+    expect(scrollTo).toHaveBeenCalledWith({ top: 500 });
+  });
+
+  it("takes the place to land once, and does not start at the end", async () => {
+    const scrollTo = layout();
+    // What scrolls is far taller than the viewport, so the end is away from the top.
+    for (const [property, value] of [
+      ["scrollHeight", 5000],
+      ["clientHeight", 400],
+    ] as const) {
+      const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, property);
+      Object.defineProperty(HTMLElement.prototype, property, {
+        get: () => value,
+        configurable: true,
+      });
+      restore.push(() => {
+        if (original !== undefined) {
+          Object.defineProperty(HTMLElement.prototype, property, original);
+        }
+      });
+    }
+    useAppStore.setState({
+      subagentReturn: { itemId: "task-1", stage: "prd", toolUseId: CALL, offset: 10 },
+    });
+    renderWithStore(
+      <Conversation
+        stage="prd"
+        taskId="task-1"
+        session={makeTask()}
+        anchor={{ stage: "prd", toolUseId: CALL, offset: 10 }}
+      />,
+      {
+        state: withTask(),
+        ui: {
+          transcripts: ready(delegated()),
+          subagentReturn: { itemId: "task-1", stage: "prd", toolUseId: CALL, offset: 10 },
+        },
+      },
+    );
+
+    await screen.findByRole("button", { name: "Open the conversation of Survey the repository" });
+    expect(useAppStore.getState().subagentReturn).toBeNull();
+    // It scrolls to the row, and never to the end of what scrolls (5000 - 400).
+    const tops = scrollTo.mock.calls.map(([options]) => options.top ?? 0);
+    expect(tops).toContain(490);
+    expect(tops.filter((top) => top >= 4600)).toEqual([]);
+  });
+
+  it("ignores a place to land that belongs to another conversation", async () => {
+    const scrollTo = layout();
+    renderWithStore(
+      <Conversation
+        stage="prd"
+        taskId="task-1"
+        session={makeTask()}
+        anchor={{ stage: "step:1", toolUseId: CALL, offset: 10 }}
+      />,
+      { state: withTask(), ui: { transcripts: ready(delegated()) } },
+    );
+
+    await screen.findByRole("feed");
+    expect(scrollTo).not.toHaveBeenCalledWith({ top: 490 });
+    expect(screen.queryByText("src/a0.ts")).not.toBeInTheDocument();
+  });
+});
+
+describe("Conversation, the permission of a subagent", () => {
+  it("names the subagent that asks, a subagent inside one by the first", () => {
+    const asked = makeEntry("permission");
+    const entries = [
+      makeEntry("action", {
+        turnId: "turn-1",
+        action: makeAction({
+          toolUseId: "toolu_root",
+          tool: "Agent",
+          description: "Survey the repository",
+        }),
+      }),
+      makeEntry("action", {
+        turnId: "turn-1",
+        action: makeAction({
+          toolUseId: "toolu_nested",
+          tool: "Agent",
+          description: "Look deeper",
+          parentToolUseId: "toolu_root",
+        }),
+      }),
+      {
+        ...asked,
+        turnId: "turn-1",
+        permission: asked.permission && { ...asked.permission, parentToolUseId: "toolu_nested" },
+      },
+    ];
+    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
+      state: withTask(),
+      ui: { transcripts: ready(entries) },
+    });
+
+    expect(screen.getByText(/Requested by agent "Survey the repository"/)).toBeInTheDocument();
   });
 });

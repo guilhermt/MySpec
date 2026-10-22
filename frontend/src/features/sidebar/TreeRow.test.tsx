@@ -11,6 +11,7 @@ import {
   makePullRequest,
   makeReviewPass,
   makeReviewSummary,
+  makeRunningTask,
   makeSituation,
   makeState,
   makeStep,
@@ -429,5 +430,54 @@ describe("TreeRow", () => {
     await user.click(screen.getByRole("treeitem"));
 
     expect(useAppStore.getState().location).toEqual({ kind: "review", id: review.id });
+  });
+});
+
+describe("the count of what runs in the background", () => {
+  const running = (count: number) => [
+    {
+      stage: "prd",
+      tasks: Array.from({ length: count }, (_, index) => makeRunningTask({ taskId: `t${index}` })),
+    },
+  ];
+  const idle = { stage: "prd", sessionStatus: "waiting", turnRunning: false, processRunning: true };
+
+  it("is the icon and the number on line 3 of a row whose agent does not work", () => {
+    renderRow(rowOf(task({ ...idle, running: running(2) })));
+
+    const row = screen.getByRole("treeitem");
+    expect(row).toHaveAccessibleName(expect.stringContaining("2 running in the background."));
+    expect(within(row).getAllByText("2 agents running").length).toBeGreaterThan(0);
+    // The count is the icon and the number, hidden: the name of the row already says it.
+    expect(within(row).getByText("2", { selector: "[aria-hidden='true']" })).toBeInTheDocument();
+  });
+
+  it("follows the context meter on a row whose agent works", () => {
+    renderRow(
+      rowOf(
+        task({
+          ...idle,
+          sessionStatus: "working",
+          turnRunning: true,
+          turnStartedAt: THREE_MINUTES_AGO,
+          actionLabel: "Editing",
+          actionTarget: "a.go",
+          running: running(1),
+        }),
+      ),
+    );
+
+    const row = screen.getByRole("treeitem");
+    expect(within(row).getByText("Editing")).toBeInTheDocument();
+    expect(within(row).getByText("1", { selector: "[aria-hidden='true']" })).toBeInTheDocument();
+    expect(row).toHaveAccessibleName(expect.stringContaining("1 running in the background."));
+  });
+
+  it("is not there without background work", () => {
+    renderRow(rowOf(task({ ...idle })));
+
+    expect(screen.getByRole("treeitem")).not.toHaveAccessibleName(
+      expect.stringContaining("in the background"),
+    );
   });
 });

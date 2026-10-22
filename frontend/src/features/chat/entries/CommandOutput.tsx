@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { Shimmer } from "@/components/system/Shimmer";
+import { outputView } from "@/features/chat/output";
 import { cn } from "@/lib/utils";
 import { readActionOutput } from "@/store/actions";
 
@@ -22,9 +23,16 @@ export interface CommandOutputProps {
 // Reading is what the output shows: its tail, the whole on its way, a reading that failed, or the whole.
 type Reading = "tail" | "reading" | "failed" | "whole";
 
-// ROW is the line above the output: what it doesn't show and the way to show it.
-const ROW =
+/** OUTPUT_ROW is the line above an output: what it doesn't show and the way to show it. */
+export const OUTPUT_ROW =
   "flex min-h-(--size-control-xs) items-center gap-(--space-2) pr-(--space-1) text-(length:--text-micro) leading-(--leading-micro) text-ink-3";
+
+/** OUTPUT_FRAME is the box an output is drawn in. */
+export const OUTPUT_FRAME = "overflow-hidden rounded-sm bg-surface-1";
+
+/** OUTPUT_TEXT is the text of an output, in mono, selectable. */
+export const OUTPUT_TEXT =
+  "overflow-x-auto py-(--space-1-5) pr-(--space-3) font-mono text-(length:--text-micro) leading-(--leading-micro) whitespace-pre text-ink-2 [font-variant-ligatures:none] [tab-size:4] select-text";
 
 // focusIsIn says the focus is on the element or inside it.
 function focusIsIn(element: HTMLElement | null): boolean {
@@ -46,7 +54,8 @@ export function CommandOutput({
 }: CommandOutputProps) {
   const [reading, setReading] = useState<Reading>("tail");
   const [whole, setWhole] = useState<string | null>(null);
-  const above = Math.max(lines - tail.split("\n").length, 0);
+  const view = outputView(tail, lines);
+  const above = view.above;
   // The line above the output keeps the focus while the reading replaces its button; the button
   // that follows the reading takes it back.
   const rowRef = useRef<HTMLDivElement>(null);
@@ -90,19 +99,19 @@ export function CommandOutput({
     <div
       data-output
       className={cn(
-        "overflow-hidden rounded-sm bg-surface-1",
+        OUTPUT_FRAME,
         failed
           ? "shadow-[inset_var(--error-rail)_0_0_var(--state-error),inset_0_0_0_var(--border)_var(--line-1)]"
           : "shadow-[inset_0_0_0_var(--border)_var(--line-1)]",
       )}
     >
-      {truncated && <p className={cn(ROW, pad)}>Only the last 64 KiB was kept</p>}
+      {truncated && <p className={cn(OUTPUT_ROW, pad)}>Only the last 64 KiB was kept</p>}
       {(above > 0 || reading === "whole") && (
         <div
           ref={rowRef}
           tabIndex={-1}
           className={cn(
-            ROW,
+            OUTPUT_ROW,
             pad,
             "shadow-[inset_0_calc(var(--border)*-1)_0_var(--line-1)] outline-none",
           )}
@@ -138,13 +147,8 @@ export function CommandOutput({
           )}
         </div>
       )}
-      <pre
-        className={cn(
-          "overflow-x-auto py-(--space-1-5) pr-(--space-3) font-mono text-(length:--text-micro) leading-(--leading-micro) whitespace-pre text-ink-2 [font-variant-ligatures:none] [tab-size:4] select-text",
-          pad,
-        )}
-      >
-        {reading === "whole" && whole !== null ? whole : tail}
+      <pre className={cn(OUTPUT_TEXT, pad)}>
+        {reading === "whole" && whole !== null ? whole : view.text}
       </pre>
     </div>
   );

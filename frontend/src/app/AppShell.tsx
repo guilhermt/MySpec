@@ -10,6 +10,7 @@ import { HistoryView } from "@/features/history/HistoryView";
 import { Home } from "@/features/home/Home";
 import { GoneView } from "@/features/navigation/GoneView";
 import { AppNotices } from "@/features/notice/AppNotices";
+import { QuitDialog } from "@/features/notice/QuitDialog";
 import { ShellToasts } from "@/features/notice/ShellToasts";
 import { ReviewsView } from "@/features/reviews/ReviewsView";
 import { ReviewView } from "@/features/reviews/ReviewView";
@@ -77,6 +78,7 @@ export function AppShell() {
         <LocationView />
         <ShellToasts />
       </main>
+      <QuitDialog />
       <NewTaskDialog />
       <StartReviewDialog />
       <NewDiscussionDialog />

@@ -15,9 +15,24 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as $models from "./models.js";
 
 /**
+ * CancelQuit dismisses the quit warning and keeps the app open.
+ */
+export function CancelQuit(): $CancellablePromise<void> {
+    return $Call.ByID(1460058603);
+}
+
+/**
  * GetState returns the current snapshot. It is how the frontend gets its first
  * state; every later one arrives with EventStateChanged.
  */
 export function GetState(): $CancellablePromise<$models.State> {
     return $Call.ByID(2031471303);
+}
+
+/**
+ * QuitAnyway closes the app, stopping what runs in the background, after the
+ * user confirmed the quit warning.
+ */
+export function QuitAnyway(): $CancellablePromise<void> {
+    return $Call.ByID(3647643620);
 }

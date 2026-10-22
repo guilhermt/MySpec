@@ -39,6 +39,7 @@ import type {
   ReviewMode,
   ReviewVerdict,
   SaveBoardRequest,
+  SessionTasks,
   StartDiscussionRequest,
   StartReviewRequest,
   TaskStage,
@@ -555,6 +556,61 @@ export function readActionOutput(
 }
 
 /**
+ * readTaskOutput reads the end of the output of a command or monitor that still runs. Its failure
+ * has a place of its own, the output that asked for it, and never raises the app notice.
+ */
+export function readTaskOutput(
+  itemId: string,
+  stage: string,
+  taskId: string,
+): Promise<ActionOutput> {
+  return api.getTaskOutput(itemId, stage, taskId);
+}
+
+/**
+ * stopTasksInPlace stops tasks of a conversation, one by one or all of them, from the list that
+ * shows them. What the stop did, and what refused it, is in the state (stopping, stopError), which
+ * draws it where the task is; the value serves the callers that wait for it: null, or the reason.
+ */
+export function stopTasksInPlace(
+  itemId: string,
+  stage: string,
+  taskIds: string[],
+): Promise<string | null> {
+  return inPlace(() => api.stopTasks(itemId, stage, taskIds));
+}
+
+/**
+ * stopTasksOf is the first step of Stop and <gesture>: it stops what runs in the conversations the
+ * gesture ends, all of them at once and with no notice. What does not stop is lost with the
+ * process, and the session records it.
+ */
+export async function stopTasksOf(
+  itemId: string,
+  sessions: readonly SessionTasks[],
+): Promise<void> {
+  await Promise.allSettled(
+    sessions.map((session) =>
+      api.stopTasks(
+        itemId,
+        session.stage,
+        (session.tasks ?? []).map((task) => task.taskId),
+      ),
+    ),
+  );
+}
+
+/** quitAnyway closes the app, with what runs in the background lost. */
+export async function quitAnyway(): Promise<void> {
+  await run(fail("Couldn't quit", TRY), () => api.quitAnyway());
+}
+
+/** cancelQuit keeps the app open. */
+export async function cancelQuit(): Promise<void> {
+  await run(fail("Couldn't cancel", TRY), () => api.cancelQuit());
+}
+
+/**
  * sendMessageInPlace sends a message from the composer, whose failure has a place of its own under
  * the field: "" when it is sent, the reason when it is not.
  */
@@ -586,6 +642,11 @@ export async function pause(taskId: string, stage: string): Promise<void> {
   await run(fail(withItem("Couldn't pause", itemName(taskId)), TRY), () =>
     api.pause(taskId, stage),
   );
+}
+
+/** pauseInPlace pauses a session from a dialog that shows the refusal; it answers it, or null. */
+export function pauseInPlace(taskId: string, stage: string): Promise<string | null> {
+  return inPlace(() => api.pause(taskId, stage));
 }
 
 export async function resume(taskId: string, stage: string): Promise<void> {
@@ -769,6 +830,11 @@ export function closeTask(taskId: string): Promise<void> {
     fail(withItem("Couldn't close", itemName(taskId)), cloneRemedy(taskId, TRY)),
     () => api.closeTask(taskId),
   );
+}
+
+/** closeTaskInPlace closes the task from a dialog that shows the refusal; it answers it, or null. */
+export function closeTaskInPlace(taskId: string): Promise<string | null> {
+  return removalInPlace(taskId, () => api.closeTask(taskId));
 }
 
 /** openInEditor opens the worktree of the task in the editor of the user. */

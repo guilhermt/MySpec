@@ -38,9 +38,61 @@ func (a *App) openWindow(cfg Config, mode theme.Mode) {
 		a.backdrop.ready(func(colour application.RGBA) { window.SetBackgroundColour(colour) })
 	})
 
+	window.RegisterHook(events.Common.WindowClosing, a.onWindowClosing)
+
 	a.mu.Lock()
 	a.window = window
 	a.mu.Unlock()
+}
+
+// onWindowClosing holds the close of the window back while a subagent runs,
+// for the user to confirm it in the app.
+func (a *App) onWindowClosing(e *application.WindowEvent) {
+	if !a.isReady() || a.quitConfirmedNow() || !a.sessions.SubagentRunning() {
+		return
+	}
+	e.Cancel()
+	a.askQuit()
+}
+
+// quitConfirmedNow says the user already confirmed closing the app.
+func (a *App) quitConfirmedNow() bool {
+	a.quitMu.Lock()
+	defer a.quitMu.Unlock()
+	return a.quitConfirmed
+}
+
+// quitAskedNow says the close of the window is held back, waiting for the user.
+func (a *App) quitAskedNow() bool {
+	a.quitMu.Lock()
+	defer a.quitMu.Unlock()
+	return a.quitAsked
+}
+
+// askQuit shows the quit warning.
+func (a *App) askQuit() {
+	a.quitMu.Lock()
+	a.quitAsked = true
+	a.quitMu.Unlock()
+	a.publish()
+}
+
+// quitAnyway closes the app after the user confirmed the warning.
+func (a *App) quitAnyway() {
+	a.quitMu.Lock()
+	a.quitConfirmed, a.quitAsked = true, false
+	a.quitMu.Unlock()
+	if wails, _ := a.handles(); wails != nil {
+		go wails.Quit()
+	}
+}
+
+// cancelQuit dismisses the quit warning and keeps the app open.
+func (a *App) cancelQuit() {
+	a.quitMu.Lock()
+	a.quitAsked = false
+	a.quitMu.Unlock()
+	a.publish()
 }
 
 // bringForward shows the window in front of the user, restored when it was

@@ -67,13 +67,21 @@ func (s *Service) handle(k Key, gen int, ev claude.Event) {
 		s.handleStream(ctx, r, ev.Stream, n)
 	case "assistant":
 		s.noteMonitors(r, ev.Assistant)
-		s.handleAssistant(ctx, r, ev.Assistant, n)
+		if parent := deref(ev.Assistant.ParentToolUseID); parent != "" {
+			s.handleSubagentAssistant(ctx, r, parent, ev.Assistant, n)
+		} else {
+			s.handleAssistant(ctx, r, ev.Assistant, n)
+		}
 	case "user":
-		s.handleUser(ctx, r, ev.User, n)
+		if parent := deref(ev.User.ParentToolUseID); parent != "" {
+			s.handleSubagentUser(ctx, r, parent, ev.User, n)
+		} else {
+			s.handleUser(ctx, r, ev.User, n)
+		}
 	case "control_request":
 		s.handleControlRequest(ctx, r, ev.ControlRequest, n)
 	case "control_response":
-		// The interrupt receipt; the result closes the turn.
+		s.handleControlResponse(ctx, r, ev.ControlResponse, n)
 	case "result":
 		s.handleResult(ctx, r, ev.Result, n)
 	default:
@@ -189,7 +197,22 @@ func (s *Service) handleTaskStarted(ctx context.Context, r *run, ev *claude.Task
 	if kind == "" {
 		return
 	}
-	t := &cliTask{kind: kind, name: ev.Description, runID: ev.RunID, backgrounded: ev.IsBackgrounded}
+	t := &cliTask{
+		kind:         kind,
+		name:         ev.Description,
+		runID:        ev.RunID,
+		backgrounded: ev.IsBackgrounded,
+		toolUseID:    ev.ToolUseID,
+		startedAt:    s.now().UTC(),
+		entry:        r.actions[ev.ToolUseID],
+	}
+	if t.entry != nil {
+		t.entry.Action.TaskID = ev.TaskID
+		if ev.IsBackgrounded {
+			t.entry.Action.Background = true
+		}
+		s.updateLocked(ctx, r, t.entry, n)
+	}
 	switch kind {
 	case WakeCommand:
 		s.armLimitLocked(r, ev.TaskID, t, s.commandLimit)
@@ -263,6 +286,10 @@ func (s *Service) handleTaskUpdated(ctx context.Context, r *run, ev *claude.Task
 		return
 	}
 	t.backgrounded = *ev.Patch.IsBackgrounded
+	if t.backgrounded && t.entry != nil {
+		t.entry.Action.Background = true
+		s.updateLocked(ctx, r, t.entry, n)
+	}
 	s.settleWorkLocked(ctx, r, n)
 }
 
@@ -280,6 +307,11 @@ func (s *Service) handleTaskNotification(ctx context.Context, r *run, ev *claude
 	}
 	task.wake = &w
 	r.stopTimer(&task.limit)
+	// A call in the background ends with its task, also a subagent's, whose
+	// task the CLI does not mark as backgrounded.
+	if task.entry != nil && task.entry.Action.Background {
+		s.endBackgroundActionLocked(ctx, r, task, ev, n)
+	}
 	switch {
 	case !task.backgrounded:
 		// The turn waited for it: its result is the tool's, not a return.
@@ -290,6 +322,145 @@ func (s *Service) handleTaskNotification(ctx context.Context, r *run, ev *claude
 		s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: MarkerWoke, Wakes: []Wake{w}}}, n)
 	}
 	s.settleWorkLocked(ctx, r, n)
+}
+
+// endBackgroundActionLocked ends the action of a call in the background with
+// the end of its task: how it ended, who stopped it and the output it left. The
+// actions of a subagent that were still running end with it.
+func (s *Service) endBackgroundActionLocked(ctx context.Context, r *run, t *cliTask, ev *claude.TaskNotificationEvent, n *notes) {
+	a := t.entry.Action
+	now := s.now().UTC()
+	var by string
+	var closing ActionStatus
+	switch t.wake.Status {
+	case WakeCompleted:
+		a.Status, closing = ActionDone, ActionDone
+		a.FinishedAt = &now
+	case WakeFailed:
+		a.Status, closing, by = ActionError, ActionInterrupted, interruptedByCrash
+		a.FinishedAt = &now
+		a.ExitCode = t.wake.ExitCode
+	default:
+		by = interruptedByAgent
+		if t.stopReq != "" {
+			by = interruptedByUser
+		}
+		a.Status, closing = ActionInterrupted, ActionInterrupted
+		a.InterruptedBy = by
+	}
+
+	var o Output
+	var ok bool
+	if t.kind == WakeAgent {
+		o, ok = outputFromText(s.subagentReportLocked(r, t, ev))
+	} else {
+		var err error
+		o, ok, err = fileOutput(ev.OutputFile)
+		if err != nil {
+			s.log.Warn("background output unreadable",
+				"task", r.task.ID, "stage", r.rec.Stage, "path", ev.OutputFile, "error", err)
+		}
+	}
+	if ok {
+		s.saveOutputLocked(ctx, r, t.entry, o)
+	}
+
+	if sub := r.subagents[t.toolUseID]; sub != nil {
+		s.closeSubagentLocked(ctx, r, sub, closing, by, n)
+	}
+	s.updateLocked(ctx, r, t.entry, n)
+}
+
+// subagentReportLocked is the report of a subagent in the background: its last
+// complete speech, or the summary of its notification when it said nothing.
+func (s *Service) subagentReportLocked(r *run, t *cliTask, ev *claude.TaskNotificationEvent) string {
+	for _, e := range slices.Backward(r.entries) {
+		if e.Kind == KindAssistant && e.Assistant.Complete && e.Assistant.ParentToolUseID == t.toolUseID {
+			return e.Assistant.Text
+		}
+	}
+	return ev.Summary
+}
+
+// closeSubagentLocked brings the actions of a subagent that still run to rest,
+// all with the given status, interrupted ones by the given party.
+func (s *Service) closeSubagentLocked(ctx context.Context, r *run, sub *subagent, status ActionStatus, by string, n *notes) {
+	for _, e := range bySeq(sub.actions) {
+		if e.Action.Status != ActionRunning {
+			continue
+		}
+		e.Action.Status = status
+		if status == ActionInterrupted {
+			e.Action.InterruptedBy = by
+		}
+		s.updateLocked(ctx, r, e, n)
+	}
+}
+
+// loseBackgroundLocked records the work in the background that dies with the
+// process: its actions end interrupted by the crash, its tasks end stopped so
+// that no late notification treats them again, and one marker names them.
+func (s *Service) loseBackgroundLocked(ctx context.Context, r *run, n *notes) {
+	type lost struct {
+		item      BackgroundItem
+		entry     *Entry
+		toolUseID string
+		startedAt time.Time
+	}
+	var all []lost
+	known := make(map[string]bool, len(r.tasks))
+	for _, t := range r.tasks {
+		known[t.toolUseID] = true
+		if !t.live() || !t.backgrounded {
+			continue
+		}
+		t.wake = &Wake{Kind: t.kind, Name: s.taskNameOf(t), Status: WakeStopped}
+		all = append(all, lost{BackgroundItem{Kind: t.kind, Name: s.taskNameOf(t)}, t.entry, t.toolUseID, t.startedAt})
+	}
+	slices.SortStableFunc(all, func(a, b lost) int { return a.startedAt.Compare(b.startedAt) })
+	// A launch whose task_started never came has no task.
+	for _, e := range bySeq(r.actions) {
+		if !e.Action.Background || e.Action.Status != ActionRunning || known[e.Action.ToolUseID] {
+			continue
+		}
+		kind := kindOfAction(e.Action)
+		name := e.Action.Description
+		if name == "" {
+			name = e.Action.Target
+		}
+		all = append(all, lost{BackgroundItem{Kind: kind, Name: name}, e, e.Action.ToolUseID, time.Time{}})
+	}
+	if len(all) == 0 {
+		return
+	}
+
+	items := make([]BackgroundItem, 0, len(all))
+	for _, l := range all {
+		items = append(items, l.item)
+		if l.entry != nil && l.entry.Action.Status == ActionRunning {
+			l.entry.Action.Status = ActionInterrupted
+			l.entry.Action.InterruptedBy = interruptedByCrash
+			s.updateLocked(ctx, r, l.entry, n)
+		}
+		if sub := r.subagents[l.toolUseID]; sub != nil {
+			s.closeSubagentLocked(ctx, r, sub, ActionInterrupted, interruptedByCrash, n)
+		}
+	}
+	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{
+		Type:       MarkerBackgroundLost,
+		Background: items,
+	}}, n)
+}
+
+// kindOfAction is what a call in the background counts as in a marker.
+func kindOfAction(a *ActionEntry) WakeKind {
+	switch a.Tool {
+	case "Agent", "Task":
+		return WakeAgent
+	case monitorTool:
+		return WakeMonitor
+	}
+	return WakeCommand
 }
 
 // awaitReturnLocked holds the session at work until the CLI answers a return
@@ -462,6 +633,7 @@ func (s *Service) startBlock(ctx context.Context, r *run, index int, block claud
 		}}, n)
 		t.blocks[index] = e
 		t.actions[block.ID] = e
+		r.actions[block.ID] = e
 		n.state(r.key())
 	case "thinking":
 		t.thinking[index] = ""
@@ -507,16 +679,15 @@ func (s *Service) handleAssistant(ctx context.Context, r *run, ev *claude.Assist
 		return
 	}
 
-	parent := deref(ev.ParentToolUseID)
 	for i, block := range ev.Message.Content {
 		switch block.Type {
 		case "text":
-			s.finishSpeech(ctx, r, ev.Message.ID, i, parent, false, block.Text, n)
+			s.finishSpeech(ctx, r, ev.Message.ID, i, false, block.Text, n)
 		case "thinking":
 			if strings.TrimSpace(block.Thinking) == "" {
 				continue // internal reasoning: only the signature
 			}
-			s.finishSpeech(ctx, r, ev.Message.ID, i, parent, true, block.Thinking, n)
+			s.finishSpeech(ctx, r, ev.Message.ID, i, true, block.Thinking, n)
 		case "tool_use":
 			if block.Name == askUserQuestionTool {
 				continue
@@ -524,16 +695,21 @@ func (s *Service) handleAssistant(ctx context.Context, r *run, ev *claude.Assist
 			e := t.actions[block.ID]
 			if e == nil {
 				e = s.appendLocked(ctx, r, Entry{Kind: KindAction, Action: &ActionEntry{
-					ToolUseID:       block.ID,
-					Tool:            block.Name,
-					Status:          ActionRunning,
-					ParentToolUseID: parent,
+					ToolUseID: block.ID,
+					Tool:      block.Name,
+					Status:    ActionRunning,
 				}}, n)
 				t.actions[block.ID] = e
+			}
+			r.actions[block.ID] = e
+			if isSubagentTool(block.Name) && r.subagents[block.ID] == nil {
+				r.subagents[block.ID] = &subagent{entry: e, turnID: t.id, actions: map[string]*Entry{}}
 			}
 			d := For(block.Name, block.Input, r.task.Dir)
 			e.Action.Label, e.Action.Target = d.Label, d.Target
 			e.Action.Description, e.Action.CommandLines = d.Description, d.CommandLines
+			e.Action.Prompt = d.Prompt
+			e.Action.Background = e.Action.Background || d.Background
 			if e.Action.StartedAt == nil {
 				e.Action.StartedAt = new(s.now().UTC())
 			}
@@ -545,10 +721,69 @@ func (s *Service) handleAssistant(ctx context.Context, r *run, ev *claude.Assist
 	}
 }
 
+// isSubagentTool reports whether a tool starts a subagent.
+func isSubagentTool(tool string) bool {
+	return tool == "Agent" || tool == "Task"
+}
+
+// handleSubagentAssistant writes what a subagent said and did under the call
+// that started it, in the turn the call was made in: the turn open now is not
+// necessarily that one, and may be none.
+func (s *Service) handleSubagentAssistant(ctx context.Context, r *run, parent string, ev *claude.AssistantEvent, n *notes) {
+	sub := r.subagents[parent]
+	if sub == nil {
+		// A subagent of a subagent, or one from before this process.
+		s.log.Debug("claude subagent event ignored", "task", r.task.ID, "stage", r.rec.Stage)
+		return
+	}
+	for i, block := range ev.Message.Content {
+		switch block.Type {
+		case "text", "thinking":
+			text := block.Text
+			if block.Type == "thinking" {
+				text = block.Thinking
+				if strings.TrimSpace(text) == "" {
+					continue // internal reasoning: only the signature
+				}
+			}
+			s.appendInLocked(ctx, r, Entry{Kind: KindAssistant, Assistant: &AssistantEntry{
+				MessageID:       ev.Message.ID,
+				BlockIndex:      i,
+				Text:            text,
+				Complete:        true,
+				ParentToolUseID: parent,
+			}}, sub.turnID, n)
+		case "tool_use":
+			if block.Name == askUserQuestionTool {
+				continue
+			}
+			d := For(block.Name, block.Input, r.task.Dir)
+			e := s.appendInLocked(ctx, r, Entry{Kind: KindAction, Action: &ActionEntry{
+				ToolUseID:       block.ID,
+				Tool:            block.Name,
+				Label:           d.Label,
+				Target:          d.Target,
+				Description:     d.Description,
+				CommandLines:    d.CommandLines,
+				Prompt:          d.Prompt,
+				Background:      d.Background,
+				Status:          ActionRunning,
+				StartedAt:       new(s.now().UTC()),
+				ParentToolUseID: parent,
+			}}, sub.turnID, n)
+			sub.actions[block.ID] = e
+			r.actions[block.ID] = e
+		default:
+			// A redacted thinking block has no text to show.
+		}
+	}
+	n.state(r.key())
+}
+
 // finishSpeech applies the authoritative version of a speech: a text block or,
 // with thinking, the narration of a thinking block.
-func (s *Service) finishSpeech(ctx context.Context, r *run, messageID string, position int, parent string, thinking bool, text string, n *notes) {
-	e := s.textEntry(ctx, r, messageID, position, parent, thinking, n)
+func (s *Service) finishSpeech(ctx context.Context, r *run, messageID string, position int, thinking bool, text string, n *notes) {
+	e := s.textEntry(ctx, r, messageID, position, thinking, n)
 	e.Assistant.Text = text
 	e.Assistant.Complete = true
 	delete(r.dirty, e.ID)
@@ -558,8 +793,8 @@ func (s *Service) finishSpeech(ctx context.Context, r *run, messageID string, po
 // textEntry finds the streamed entry a speech block is the final version of:
 // the first block of the message of the same kind, text or thinking, not yet
 // finalized, in block order. When the stream did not announce the block, the
-// entry is created now, with the subagent that wrote it.
-func (s *Service) textEntry(ctx context.Context, r *run, messageID string, position int, parent string, thinking bool, n *notes) *Entry {
+// entry is created now.
+func (s *Service) textEntry(ctx context.Context, r *run, messageID string, position int, thinking bool, n *notes) *Entry {
 	t := r.turn
 	indexes := make([]int, 0, len(t.blocks))
 	for index, e := range t.blocks {
@@ -575,18 +810,14 @@ func (s *Service) textEntry(ctx context.Context, r *run, messageID string, posit
 	}
 
 	e := s.appendLocked(ctx, r, Entry{Kind: KindAssistant, Assistant: &AssistantEntry{
-		MessageID:       messageID,
-		BlockIndex:      position,
-		ParentToolUseID: parent,
+		MessageID:  messageID,
+		BlockIndex: position,
 	}}, n)
 	return e
 }
 
 // handleUser applies the tool results of a user event to their actions.
 func (s *Service) handleUser(ctx context.Context, r *run, ev *claude.UserEvent, n *notes) {
-	if r.turn == nil {
-		return
-	}
 	results := ev.ToolResults()
 	var useResult json.RawMessage
 	if len(results) == 1 {
@@ -594,32 +825,72 @@ func (s *Service) handleUser(ctx context.Context, r *run, ev *claude.UserEvent, 
 	}
 	changed := false
 	for _, result := range results {
-		e := r.turn.actions[result.ToolUseID]
+		var e *Entry
+		if r.turn != nil {
+			e = r.turn.actions[result.ToolUseID]
+		}
+		if e == nil {
+			e = r.actions[result.ToolUseID]
+		}
 		if e == nil {
 			continue
 		}
-		e.Action.Status = ActionDone
-		e.Action.FinishedAt = new(s.now().UTC())
-		if result.IsError {
-			e.Action.Status = ActionError
-			if e.Action.Tool == "Bash" {
-				e.Action.ExitCode = exitCode(result.Text())
-			}
-		}
-		if o, ok := outputOf(e.Action, result, useResult); ok {
-			if err := s.entries.SaveOutput(ctx, e.ID, o); err != nil {
-				s.log.Error("save output failed", "task", r.task.ID, "entry", e.ID, "error", err)
-			}
-			e.Action.OutputLines = o.Lines
-			e.Action.OutputTail = tailOf(o)
-			e.Action.OutputTruncated = o.Truncated
-		}
-		s.updateLocked(ctx, r, e, n)
-		changed = true
+		changed = s.finishActionLocked(ctx, r, e, result, useResult, n) || changed
 	}
 	if changed {
 		n.state(r.key())
 	}
+}
+
+// handleSubagentUser applies the tool results of a subagent to its actions.
+func (s *Service) handleSubagentUser(ctx context.Context, r *run, parent string, ev *claude.UserEvent, n *notes) {
+	sub := r.subagents[parent]
+	if sub == nil {
+		return
+	}
+	changed := false
+	for _, result := range ev.ToolResults() {
+		// The result of a subagent carries no tool_use_result.
+		if e := sub.actions[result.ToolUseID]; e != nil {
+			changed = s.finishActionLocked(ctx, r, e, result, nil, n) || changed
+		}
+	}
+	if changed {
+		n.state(r.key())
+	}
+}
+
+// finishActionLocked brings an action to the end its tool result gives it, and
+// reports whether it did. The result of a call in the background only says it
+// was launched: the action runs until its task ends.
+func (s *Service) finishActionLocked(ctx context.Context, r *run, e *Entry, result claude.ToolResult, useResult json.RawMessage, n *notes) bool {
+	if e.Action.Background && (!result.IsError || e.Action.TaskID != "") {
+		return false // launched; a launch that failed has no task to wait for
+	}
+	e.Action.Status = ActionDone
+	e.Action.FinishedAt = new(s.now().UTC())
+	if result.IsError {
+		e.Action.Status = ActionError
+		if e.Action.Tool == "Bash" {
+			e.Action.ExitCode = exitCode(result.Text())
+		}
+	}
+	if o, ok := outputOf(e.Action, result, useResult); ok {
+		s.saveOutputLocked(ctx, r, e, o)
+	}
+	s.updateLocked(ctx, r, e, n)
+	return true
+}
+
+// saveOutputLocked keeps the whole output of an action and its tail in the
+// entry.
+func (s *Service) saveOutputLocked(ctx context.Context, r *run, e *Entry, o Output) {
+	if err := s.entries.SaveOutput(ctx, e.ID, o); err != nil {
+		s.log.Error("save output failed", "task", r.task.ID, "entry", e.ID, "error", err)
+	}
+	e.Action.OutputLines = o.Lines
+	e.Action.OutputTail = tailOf(o)
+	e.Action.OutputTruncated = o.Truncated
 }
 
 // exitCodeLine is the first line of a failed Bash result that names the code.
@@ -671,10 +942,79 @@ func (s *Service) handleControlRequest(ctx context.Context, r *run, ev *claude.C
 			SuppressAlwaysAllow: req.SuppressAlwaysAllowRule,
 			DefaultToNo:         req.DefaultToNo,
 			Status:              PermissionPending,
+			ParentToolUseID:     requesterOf(r, req.ToolUseID, req.AgentID),
 		}}
 	}
 	r.permission = s.appendLocked(ctx, r, e, n)
 	n.state(r.key())
+}
+
+// requesterOf is the Agent/Task call of the subagent that asks for a
+// permission: the parent of the call it wants to make, or the call of the task
+// the CLI names; "" for the main thread.
+func requesterOf(r *run, toolUseID, agentID string) string {
+	if e := r.actions[toolUseID]; e != nil && e.Action.ParentToolUseID != "" {
+		return e.Action.ParentToolUseID
+	}
+	if t := r.tasks[agentID]; agentID != "" && t != nil && t.kind == WakeAgent {
+		return t.toolUseID
+	}
+	return ""
+}
+
+// handleControlResponse delivers the answer to a control request of the app:
+// the output a caller awaits, or the end of one stop of a batch. Any other
+// answer, the interrupt's receipt among them, needs nothing.
+func (s *Service) handleControlResponse(ctx context.Context, r *run, ev *claude.ControlResponseEvent, n *notes) {
+	id := ev.Response.RequestID
+	req := r.requests[id]
+	if req == nil {
+		return
+	}
+	delete(r.requests, id)
+	if req.answer != nil {
+		req.answer <- *ev
+		return
+	}
+
+	t := r.tasks[req.taskID]
+	if ev.Response.Subtype == "error" {
+		if t != nil {
+			t.stopReq, t.stopError = "", ev.Response.Error
+		}
+		req.batch.failed = append(req.batch.failed, ev.Response.Error)
+	} else if t != nil {
+		req.batch.stopped = append(req.batch.stopped, BackgroundItem{Kind: t.kind, Name: s.taskNameOf(t)})
+		if sub := r.subagents[t.toolUseID]; sub != nil && !t.backgrounded {
+			s.closeSubagentLocked(ctx, r, sub, ActionInterrupted, interruptedByUser, n)
+		}
+	}
+	req.batch.pending--
+	if req.batch.pending == 0 {
+		s.settleStopLocked(ctx, r, req.batch, n)
+	}
+	n.state(r.key())
+}
+
+// taskNameOf is the name a marker gives a task: the one the agent gave it or,
+// without one, the target of its call.
+func (s *Service) taskNameOf(t *cliTask) string {
+	if t.name == "" && t.entry != nil {
+		return t.entry.Action.Target
+	}
+	return t.name
+}
+
+// settleStopLocked ends a batch of stops: what stopped is recorded in one
+// marker and whoever waits for the batch is released.
+func (s *Service) settleStopLocked(ctx context.Context, r *run, b *stopBatch, n *notes) {
+	if len(b.stopped) > 0 {
+		s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{
+			Type:       MarkerBackgroundStopped,
+			Background: b.stopped,
+		}}, n)
+	}
+	b.finish()
 }
 
 // decodeQuestions reads the questions of an AskUserQuestion input.
@@ -697,10 +1037,12 @@ func rawOrNull(raw json.RawMessage) json.RawMessage {
 }
 
 // Who interrupted a turn: the user asked for it (Stop, Pause, Review myself,
-// discarding, closing), or the process died.
+// discarding, closing), the process died, or the agent itself stopped a task
+// in the background.
 const (
 	interruptedByUser  = "user"
 	interruptedByCrash = "crash"
+	interruptedByAgent = "agent"
 )
 
 // serverStatus is an HTTP 5xx status in an error text.
@@ -837,7 +1179,7 @@ func (s *Service) closeTurnLocked(ctx context.Context, r *run, aborted bool, by 
 	}
 
 	for _, e := range bySeq(t.actions) {
-		if e.Action.Status != ActionRunning {
+		if e.Action.Status != ActionRunning || r.backgroundAlive(e) {
 			continue
 		}
 		e.Action.Status = ActionDone
@@ -846,6 +1188,17 @@ func (s *Service) closeTurnLocked(ctx context.Context, r *run, aborted bool, by 
 			e.Action.InterruptedBy = by
 		}
 		s.updateLocked(ctx, r, e, n)
+	}
+	// What a subagent of the turn was doing ends with the turn, unless its call
+	// goes on in the background.
+	ended := ActionDone
+	if aborted {
+		ended = ActionInterrupted
+	}
+	for _, sub := range r.subagents {
+		if sub.turnID == t.id && sub.entry.Action.Status != ActionRunning {
+			s.closeSubagentLocked(ctx, r, sub, ended, by, n)
+		}
 	}
 
 	if e := r.permission; e != nil {
@@ -897,13 +1250,13 @@ func (s *Service) processExited(k Key, gen int, exit claude.ExitInfo) {
 		return
 	}
 	r.proc = nil
-	r.forgetTasks()
 	r.stopTimer(&r.startTimer)
 	r.stopTimer(&r.idleTimer)
 	r.stopTimer(&r.flushTimer)
 	s.flushTextLocked(r, n)
 
 	if r.stopping {
+		r.forgetTasks()
 		r.stopping = false
 		if r.stopped != nil {
 			close(r.stopped)
@@ -917,6 +1270,8 @@ func (s *Service) processExited(k Key, gen int, exit claude.ExitInfo) {
 		s.closeTurnLocked(ctx, r, true, interruptedByCrash, n)
 		s.resetTurnLocked(r, n)
 	}
+	s.loseBackgroundLocked(ctx, r, n)
+	r.forgetTasks()
 
 	message := fmt.Sprintf("Claude Code exited with code %d", exit.Code)
 	if exit.Signal != "" {

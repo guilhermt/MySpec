@@ -1,9 +1,13 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useRef } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { ArrivalFocus } from "@/components/ArrivalFocus";
+import { BackgroundWork } from "@/components/BackgroundWork";
+import { backgroundOf } from "@/components/background-work";
 import { PanelLayout } from "@/components/system/AuxPanel";
 import { useNow } from "@/features/attention/useNow";
 import { Conversation } from "@/features/chat/Conversation";
 import { COLUMN_CLASS } from "@/features/chat/ConversationColumn";
+import { voiceOf } from "@/features/chat/markers";
+import { SubagentConversation } from "@/features/chat/SubagentConversation";
 import { IDLE_SESSION } from "@/features/chat/session";
 import { AgentTabs, useStoredFirstTab } from "@/features/task/AgentTabs";
 import { ArtifactsPanel } from "@/features/task/ArtifactsPanel";
@@ -28,6 +32,7 @@ import { currentStepOf, hasStepSession } from "@/features/task/step-status";
 import { TaskComposer } from "@/features/task/TaskComposer";
 import { TaskHeader } from "@/features/task/TaskHeader";
 import { TaskRequest } from "@/features/task/TaskRequest";
+import { screenSession } from "@/features/task/task-session";
 import { useTaskRequest } from "@/features/task/useTaskRequest";
 import { focusFindingToDecide } from "@/lib/focus";
 import { modalOpen } from "@/lib/layers";
@@ -43,10 +48,13 @@ import { loadTranscript } from "@/store/actions";
 import {
   PR_TAB_SLOT,
   type StepTab,
+  type SubagentReturn,
   useAppStore,
   useEarlierConversation,
   useOpenStepTab,
   usePanel,
+  useSubagentConversation,
+  useSubagentReturn,
   useTask,
 } from "@/store/app-store";
 import { firstPRTab, firstPRTabDecided, firstTabDecided } from "@/store/step-tab";
@@ -116,16 +124,34 @@ export function PRTop({ task, pr }: { task: TaskSummary; pr: PullRequest }) {
   );
 }
 
+// sessionOpenOf says the process of the conversation of a stage is alive, so a task of it can be stopped.
+function sessionOpenOf(task: TaskSummary, tab: StepTab, stage: string): boolean {
+  const session = screenSession(task, tab);
+  return session?.stage === stage && session.processRunning;
+}
+
 /**
  * EarlierConversation is a conversation of the task read in place of the one of its place, from its
- * start and taking no message, with the strip that leads back. It takes the focus as it opens.
+ * start and taking no message, with the strip that leads back. It takes the focus as it opens; back
+ * from a subagent read from it, the row of that subagent takes it instead.
  */
-function EarlierConversation({ task, stage }: { task: TaskSummary; stage: string }) {
+function EarlierConversation({
+  task,
+  stage,
+  anchor,
+}: {
+  task: TaskSummary;
+  stage: string;
+  anchor: SubagentReturn | null;
+}) {
   const ref = useRef<HTMLElement>(null);
+  const [landing] = useState(anchor?.stage === stage);
 
   useEffect(() => {
-    ref.current?.focus();
-  }, []);
+    if (!landing) {
+      ref.current?.focus();
+    }
+  }, [landing]);
 
   return (
     <>
@@ -135,7 +161,13 @@ function EarlierConversation({ task, stage }: { task: TaskSummary; stage: string
         tabIndex={-1}
         className="flex min-h-0 flex-1 flex-col outline-none"
       >
-        <Conversation taskId={task.id} stage={stage} session={IDLE_SESSION} readOnly />
+        <Conversation
+          taskId={task.id}
+          stage={stage}
+          session={IDLE_SESSION}
+          anchor={anchor}
+          readOnly
+        />
       </section>
       <EarlierConversationFoot task={task} stage={stage} />
     </>
@@ -176,13 +208,16 @@ export interface TaskViewProps {
 
 /**
  * TaskView is the screen of one task: the conversation and what came out of it. An earlier
- * conversation, once read, takes the place of all of it but the header and the panels.
+ * conversation or the conversation of a subagent, once read, takes the place of all of it but the
+ * header and the panels.
  */
 export function TaskView({ taskId }: TaskViewProps) {
   const task = useTask(taskId);
   const stepTab = useOpenStepTab(taskId);
   const panel = usePanel();
   const earlier = useEarlierConversation(taskId);
+  const subagent = useSubagentConversation(taskId);
+  const subagentReturn = useSubagentReturn(taskId);
   const earlierReady = useAppStore(
     (state) =>
       earlier !== null && state.transcripts[sessionKey(taskId, earlier.stage)]?.status === "ready",
@@ -273,8 +308,22 @@ export function TaskView({ taskId }: TaskViewProps) {
           ) : null
         }
       >
-        {earlier !== null && earlierReady ? (
-          <EarlierConversation key={earlier.stage} task={task} stage={earlier.stage} />
+        {subagent !== null ? (
+          <SubagentConversation
+            key={subagent.toolUseId}
+            itemId={task.id}
+            stage={subagent.stage}
+            toolUseId={subagent.toolUseId}
+            voice={voiceOf(subagent.stage)}
+            sessionOpen={sessionOpenOf(task, stepTab, subagent.stage)}
+          />
+        ) : earlier !== null && earlierReady ? (
+          <EarlierConversation
+            key={earlier.stage}
+            task={task}
+            stage={earlier.stage}
+            anchor={subagentReturn}
+          />
         ) : implementing ? (
           <>
             {step !== null && <StepTop task={task} step={step} />}
@@ -294,9 +343,15 @@ export function TaskView({ taskId }: TaskViewProps) {
               taskId={task.id}
               stage={task.stage}
               session={task}
+              anchor={subagentReturn}
               replyWaiting={screenSituationKindOf(task, stepTab) === "reply"}
             />
             <TaskRequest task={task} tab={stepTab} />
+            <BackgroundWork
+              itemId={task.id}
+              stage={task.stage}
+              tasks={backgroundOf(task.running, task.stage)}
+            />
             <TaskComposer task={task} tab={stepTab} stage={task.stage} session={task} />
           </>
         )}

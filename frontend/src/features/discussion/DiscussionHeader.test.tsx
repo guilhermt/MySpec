@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { DiscussionHeader } from "@/features/discussion/DiscussionHeader";
 import { api, type DiscussionSummary } from "@/lib/wails";
@@ -77,6 +77,22 @@ describe("DiscussionHeader", () => {
       expect(await screen.findByRole("tooltip")).toHaveTextContent(
         "Context used by the discussion: 44%",
       );
+    });
+
+    it("steps aside while the conversation of a subagent is read", () => {
+      header({ contextPercent: 44 });
+      expect(meter()).toBeInTheDocument();
+
+      act(() =>
+        useAppStore.getState().openSubagentConversation({
+          itemId: makeDiscussion().id,
+          stage: "discussion",
+          toolUseId: "toolu_a",
+          offset: null,
+        }),
+      );
+
+      expect(screen.queryByRole("meter")).not.toBeInTheDocument();
     });
 
     it("is not there, nor Pause, before the discussion has a session", () => {

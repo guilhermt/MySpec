@@ -1,3 +1,5 @@
+import { backgroundOf, summaryOfRunning } from "@/components/background-work";
+import { shortAction } from "@/features/chat/actions";
 import { isDecided, roundDrafts } from "@/features/discussion/drafts-card";
 import { reviewChecks, reviewPass, VERDICT_WORDS } from "@/features/reviews/review-header";
 import {
@@ -9,7 +11,6 @@ import {
 } from "@/features/sidebar/sessions";
 import { currentReport } from "@/features/task/pr-findings";
 import { boardOfRepository } from "@/lib/boards";
-import { isWindowsPath } from "@/lib/paths";
 import { checkCounts, prChecks } from "@/lib/pull-requests";
 import { ALL_REPOSITORIES, findRepository, shortName, tasksInFilter } from "@/lib/repositories";
 import { compactWait, compareSituations, spokenWait } from "@/lib/situations";
@@ -57,6 +58,7 @@ export interface RowText {
 /** RowLine3 is the third line of a row: what the agent does, or the situation under a publication. */
 export type RowLine3 =
   | (RowText & { kind: "work"; verb: string; contextPercent: number })
+  | (RowText & { kind: "background"; count: number })
   | (RowText & { kind: "situation"; chip: Extract<RowClock, { kind: "chip" }> });
 
 /** ItemRow is one task, review or discussion of the tree, with everything its row reads. */
@@ -79,9 +81,12 @@ export interface ItemRow {
   /**
    * line3 is what the agent does now, with the context it used ("work"; verb is what both forms
    * start with: the action's verb, or the whole of what the conversation does), or the situation
-   * that stands while a discussion publishes, with its chip ("situation"); null otherwise.
+   * that stands while a discussion publishes, with its chip ("situation"), or what runs in the
+   * background while the agent does not work ("background"); null otherwise.
    */
   line3: RowLine3 | null;
+  /** background is how many tasks run in the background in the conversations of the item. */
+  background: number;
   situationIds: string[];
   /** repositoryId is the repository a task lives in, which the filter looks at; null for a review or a discussion. */
   repositoryId: string | null;
@@ -681,40 +686,6 @@ function discussionStanding(discussion: DiscussionSummary): Standing {
   return sessionStanding(discussionSessions(discussion), place, same(place));
 }
 
-/** shortAction is the target of an action cut to what tells it apart: the command and its subcommand, or the last segment of a path. */
-export function shortAction(label: string, target: string): string {
-  if (label === "Running") {
-    const [command = "", ...rest] = target.split(" ").filter((term) => term !== "");
-    const parts = [command];
-    const [second] = rest;
-    if (second !== undefined && !second.startsWith("-") && !isPath(second)) {
-      parts.push(second);
-    }
-    const path = rest.find((term) => isPath(term) && !term.startsWith("-"));
-    if (path !== undefined) {
-      parts.push(cutPath(path));
-    }
-    return parts.join(" ");
-  }
-  return isPath(target) ? cutPath(target) : target;
-}
-
-// isPath says whether a term is a path: it has a slash or it is a Windows one, with a drive letter.
-function isPath(term: string): boolean {
-  return term.includes("/") || isWindowsPath(term);
-}
-
-// cutPath is a path cut to its last segment that tells it apart, `…/ratelimit`: the empty ones, `.`
-// and the `...` of a Go package pattern say nothing, and a path of nothing else stays whole. A Windows
-// path breaks at either slash; elsewhere a backslash is an escape in a command, not a separator.
-function cutPath(path: string): string {
-  const last = path
-    .split(isWindowsPath(path) ? /[\\/]/ : "/")
-    .filter((segment) => segment !== "" && segment !== "." && segment !== "...")
-    .at(-1);
-  return last === undefined ? path : `…/${last}`;
-}
-
 // The words of line 3 and of the name without an action: what the conversation does.
 function activity(session: ItemSession): { row: string; spoken: string } {
   if (session.retryAttempt > 0) {
@@ -814,6 +785,13 @@ function buildRow(owner: Owner, parts: RowParts, now: number): ItemRow {
           };
   }
 
+  const background = parts.sessions.reduce((sum, one) => sum + one.background, 0);
+  if (background > 0 && line3 === null) {
+    const running = parts.sessions.flatMap((one) => backgroundOf(parts.item.running, one.stage));
+    const text = `${summaryOfRunning(running)} running`;
+    line3 = { kind: "background", ...same(text), count: background };
+  }
+
   const sentences = [`${KIND_WORDS[parts.itemKind]} ${parts.name}.`];
   if (main === undefined || publishing) {
     sentences.push(`${TONE_WORDS[tone]}, ${line2.long}.`);
@@ -834,6 +812,9 @@ function buildRow(owner: Owner, parts: RowParts, now: number): ItemRow {
       `${session.role} working for ${forWait(session.turnStartedAt, now)}: ${does}.`,
       `context ${session.contextPercent}% used.`,
     );
+  }
+  if (background > 0) {
+    sentences.push(`${background} running in the background.`);
   }
   if (parts.meta !== "") {
     sentences.push(`${parts.meta}.`);
@@ -862,6 +843,7 @@ function buildRow(owner: Owner, parts: RowParts, now: number): ItemRow {
           },
     clock,
     line3,
+    background,
     reading: main === undefined && parts.standing.reading === true,
     situationIds: situations.map((situation) => situation.id),
     repositoryId: parts.repositoryId,
