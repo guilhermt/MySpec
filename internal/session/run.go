@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/guilhermt/myspec/internal/claude"
@@ -39,14 +40,15 @@ type run struct {
 	retryReason  string    // retryReasonOf the error
 	turnFailed   bool      // the last turn ended in an error; the next turn clears it
 
-	tasks       map[string]*cliTask    // task_id -> the tasks the current process runs, in the foreground or the background
-	wakes       []Wake                 // the returns that arrived with no turn, for the marker that opens the next one
-	monitors    map[string]monitorCall // tool_use_id -> the Monitor calls of the current process, until their task starts
-	subagents   map[string]*subagent   // tool_use_id of the Agent/Task call -> its subagent, for the current process
-	actions     map[string]*Entry      // tool_use_id -> every action of the current process, main thread and subagents
-	returnDue   bool                   // a task came back with no turn open, and the CLI has not answered it yet
-	returnTimer *time.Timer            // gives up on a return the CLI does not answer
-	lastTurnAt  time.Time              // when the last turn of the current process started
+	tasks       map[string]*cliTask        // task_id -> the tasks the current process runs, in the foreground or the background
+	wakes       []Wake                     // the returns that arrived with no turn, for the marker that opens the next one
+	monitors    map[string]monitorCall     // tool_use_id -> the Monitor calls of the current process, until their task starts
+	subagents   map[string]*subagent       // tool_use_id of the Agent/Task call -> its subagent, for the current process
+	actions     map[string]*Entry          // tool_use_id -> every action of the current process, main thread and subagents
+	requests    map[string]*controlRequest // request_id -> the control requests of the app awaiting their answer
+	returnDue   bool                       // a task came back with no turn open, and the CLI has not answered it yet
+	returnTimer *time.Timer                // gives up on a return the CLI does not answer
+	lastTurnAt  time.Time                  // when the last turn of the current process started
 
 	idleTimer  *time.Timer
 	flushTimer *time.Timer
@@ -87,6 +89,7 @@ type cliTask struct {
 	startedAt    time.Time   // when task_started arrived
 	entry        *Entry      // the action of the call; nil when the conversation has none
 	stopReq      string      // the stop_task request in flight; "" when none
+	stopError    string      // why the last stop failed, in the CLI's words; "" when it did not
 }
 
 // subagent is an Agent/Task call of the current process and what its subagent
@@ -96,6 +99,32 @@ type subagent struct {
 	entry   *Entry            // the Agent/Task action
 	turnID  string            // the turn the call was made in
 	actions map[string]*Entry // tool_use_id -> the actions of the subagent
+}
+
+// controlRequest is a control request of the app whose answer someone awaits:
+// a stop_task of a batch, or a get_task_output.
+type controlRequest struct {
+	taskID string
+	batch  *stopBatch                       // stop_task only
+	answer chan claude.ControlResponseEvent // get_task_output only, buffered 1
+}
+
+// stopBatch is the stops one gesture asked for: their marker is written once,
+// when every one is answered.
+type stopBatch struct {
+	pending int
+	stopped []BackgroundItem
+	failed  []string // the reasons, in the CLI's words
+	done    chan struct{}
+}
+
+// finish wakes whoever waits for the batch, once.
+func (b *stopBatch) finish() {
+	select {
+	case <-b.done:
+	default:
+		close(b.done)
+	}
 }
 
 // counts reports whether the task is work of the session: in the background,
@@ -144,6 +173,7 @@ func newRun(t TaskInfo, rec Record, nextSeq int) *run {
 		monitors:  map[string]monitorCall{},
 		subagents: map[string]*subagent{},
 		actions:   map[string]*Entry{},
+		requests:  map[string]*controlRequest{},
 	}
 }
 
@@ -240,8 +270,15 @@ func (r *run) answerReturn() {
 }
 
 // forgetTasks drops every task of the process that ran them, with their
-// timers: the work in the background is the process's, and goes with it.
+// timers: the work in the background is the process's, and goes with it. The
+// stops still awaiting an answer end failed, so nobody waits for one.
 func (r *run) forgetTasks() {
+	for _, req := range r.requests {
+		if req.batch != nil {
+			req.batch.failed = append(req.batch.failed, "the session stopped")
+			req.batch.finish()
+		}
+	}
 	for _, t := range r.tasks {
 		r.stopTimer(&t.limit)
 	}
@@ -249,6 +286,7 @@ func (r *run) forgetTasks() {
 	clear(r.monitors)
 	clear(r.subagents)
 	clear(r.actions)
+	clear(r.requests)
 	r.wakes = nil
 	r.answerReturn()
 }
@@ -297,7 +335,48 @@ func (r *run) summary() Summary {
 		// The clock of the work goes on from the turn that left it running.
 		sum.TurnStartedAt = r.lastTurnAt
 	}
+	sum.Tasks = r.runningTasks()
 	return sum
+}
+
+// runningTasks lists what the process runs for the interface: every live task
+// in the background and every subagent the open turn waits for, by start.
+func (r *run) runningTasks() []RunningTask {
+	out := []RunningTask{}
+	for id, t := range r.tasks {
+		if !t.live() || (!t.backgrounded && (t.kind != WakeAgent || r.turn == nil)) {
+			continue
+		}
+		rt := RunningTask{
+			TaskID:     id,
+			Kind:       t.kind,
+			Name:       t.name,
+			ToolUseID:  t.toolUseID,
+			StartedAt:  t.startedAt,
+			Background: t.backgrounded,
+			Counts:     t.counts(),
+			Stopping:   t.stopReq != "",
+			StopError:  t.stopError,
+		}
+		if t.entry != nil {
+			rt.EntryID = t.entry.ID
+			if rt.Name == "" {
+				rt.Name = t.entry.Action.Target
+			}
+		}
+		if sub := r.subagents[t.toolUseID]; sub != nil && t.kind == WakeAgent {
+			rt.Actions = len(sub.actions)
+			for _, e := range slices.Backward(bySeq(sub.actions)) {
+				if e.Action.Status == ActionRunning {
+					rt.ActionLabel, rt.ActionTarget = e.Action.Label, e.Action.Target
+					break
+				}
+			}
+		}
+		out = append(out, rt)
+	}
+	slices.SortFunc(out, func(a, b RunningTask) int { return a.StartedAt.Compare(b.StartedAt) })
+	return out
 }
 
 // stopTimer stops a timer and forgets it.

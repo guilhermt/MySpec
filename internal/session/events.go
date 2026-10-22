@@ -81,7 +81,7 @@ func (s *Service) handle(k Key, gen int, ev claude.Event) {
 	case "control_request":
 		s.handleControlRequest(ctx, r, ev.ControlRequest, n)
 	case "control_response":
-		// The interrupt receipt; the result closes the turn.
+		s.handleControlResponse(ctx, r, ev.ControlResponse, n)
 	case "result":
 		s.handleResult(ctx, r, ev.Result, n)
 	default:
@@ -874,10 +874,79 @@ func (s *Service) handleControlRequest(ctx context.Context, r *run, ev *claude.C
 			SuppressAlwaysAllow: req.SuppressAlwaysAllowRule,
 			DefaultToNo:         req.DefaultToNo,
 			Status:              PermissionPending,
+			ParentToolUseID:     requesterOf(r, req.ToolUseID, req.AgentID),
 		}}
 	}
 	r.permission = s.appendLocked(ctx, r, e, n)
 	n.state(r.key())
+}
+
+// requesterOf is the Agent/Task call of the subagent that asks for a
+// permission: the parent of the call it wants to make, or the call of the task
+// the CLI names; "" for the main thread.
+func requesterOf(r *run, toolUseID, agentID string) string {
+	if e := r.actions[toolUseID]; e != nil && e.Action.ParentToolUseID != "" {
+		return e.Action.ParentToolUseID
+	}
+	if t := r.tasks[agentID]; agentID != "" && t != nil && t.kind == WakeAgent {
+		return t.toolUseID
+	}
+	return ""
+}
+
+// handleControlResponse delivers the answer to a control request of the app:
+// the output a caller awaits, or the end of one stop of a batch. Any other
+// answer, the interrupt's receipt among them, needs nothing.
+func (s *Service) handleControlResponse(ctx context.Context, r *run, ev *claude.ControlResponseEvent, n *notes) {
+	id := ev.Response.RequestID
+	req := r.requests[id]
+	if req == nil {
+		return
+	}
+	delete(r.requests, id)
+	if req.answer != nil {
+		req.answer <- *ev
+		return
+	}
+
+	t := r.tasks[req.taskID]
+	if ev.Response.Subtype == "error" {
+		if t != nil {
+			t.stopReq, t.stopError = "", ev.Response.Error
+		}
+		req.batch.failed = append(req.batch.failed, ev.Response.Error)
+	} else if t != nil {
+		req.batch.stopped = append(req.batch.stopped, BackgroundItem{Kind: t.kind, Name: s.taskNameOf(t)})
+		if sub := r.subagents[t.toolUseID]; sub != nil && !t.backgrounded {
+			s.closeSubagentLocked(ctx, r, sub, ActionInterrupted, interruptedByUser, n)
+		}
+	}
+	req.batch.pending--
+	if req.batch.pending == 0 {
+		s.settleStopLocked(ctx, r, req.batch, n)
+	}
+	n.state(r.key())
+}
+
+// taskNameOf is the name a marker gives a task: the one the agent gave it or,
+// without one, the target of its call.
+func (s *Service) taskNameOf(t *cliTask) string {
+	if t.name == "" && t.entry != nil {
+		return t.entry.Action.Target
+	}
+	return t.name
+}
+
+// settleStopLocked ends a batch of stops: what stopped is recorded in one
+// marker and whoever waits for the batch is released.
+func (s *Service) settleStopLocked(ctx context.Context, r *run, b *stopBatch, n *notes) {
+	if len(b.stopped) > 0 {
+		s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{
+			Type:       MarkerBackgroundStopped,
+			Background: b.stopped,
+		}}, n)
+	}
+	b.finish()
 }
 
 // decodeQuestions reads the questions of an AskUserQuestion input.

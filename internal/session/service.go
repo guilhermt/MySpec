@@ -198,6 +198,11 @@ const (
 	StartTimeout = 90 * time.Second
 	// InterruptTimeout is how long an interrupted turn has to end.
 	InterruptTimeout = 5 * time.Second
+	// StopTimeout is how long the app waits for the answer of a stop_task.
+	StopTimeout = 10 * time.Second
+	// TaskOutputTimeout is how long the app waits for the answer of a
+	// get_task_output.
+	TaskOutputTimeout = 5 * time.Second
 	// TextFlushInterval is how often streaming text reaches the interface.
 	TextFlushInterval = 40 * time.Millisecond
 	// graceInputClose is how long a process has to exit after its input closes.
@@ -1327,6 +1332,213 @@ func (s *Service) Summaries() map[Key]Summary {
 		out[k] = r.summary()
 	}
 	return out
+}
+
+// SubagentRunning reports whether any open session has a subagent alive, in
+// the foreground or the background.
+func (s *Service) SubagentRunning() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, r := range s.runs {
+		for _, t := range r.tasks {
+			if t.kind == WakeAgent && t.live() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// RunningTasks lists what runs in every open session that has something
+// alive, by key.
+func (s *Service) RunningTasks() map[Key][]RunningTask {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := map[Key][]RunningTask{}
+	for k, r := range s.runs {
+		if tasks := r.runningTasks(); len(tasks) > 0 {
+			out[k] = tasks
+		}
+	}
+	return out
+}
+
+// stopUnanswered is the reason of a stop the CLI did not answer.
+const stopUnanswered = "Claude Code did not answer."
+
+// StopTasks asks the CLI to stop tasks of the session and waits for its
+// answers. What stopped is recorded in one marker. A stop the CLI refused, or
+// did not answer within StopTimeout, comes back as a *StopRefusal and leaves
+// its task running with the reason.
+func (s *Service) StopTasks(_ context.Context, k Key, taskIDs []string) error {
+	b, err := s.requestStops(k, taskIDs)
+	if err != nil {
+		return err
+	}
+
+	// The caller's context does not cut the wait short: the answer records the
+	// marker by itself.
+	timer := time.NewTimer(StopTimeout)
+	defer timer.Stop()
+	select {
+	case <-b.done:
+	case <-timer.C:
+		s.expireStops(k, b)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(b.failed) > 0 {
+		return &StopRefusal{Reasons: slices.Clone(b.failed)}
+	}
+	return nil
+}
+
+// requestStops sends the stop of every live task not already stopping and
+// returns the batch that tracks them. A batch with nothing left to await is
+// done already.
+func (s *Service) requestStops(k Key, taskIDs []string) (*stopBatch, error) {
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(k)
+	if err != nil {
+		return nil, err
+	}
+	if r.proc == nil {
+		return nil, fmt.Errorf("session %s of task %s has no process: %w", k.Stage, k.TaskID, ErrNotFound)
+	}
+
+	b := &stopBatch{done: make(chan struct{})}
+	for _, id := range taskIDs {
+		t := r.tasks[id]
+		if t == nil || !t.live() || t.stopReq != "" {
+			continue
+		}
+		reqID, err := r.proc.StopTask(id)
+		if err != nil {
+			s.log.Warn("stop task failed", "task", k.TaskID, "stage", k.Stage, "error", err)
+			b.failed = append(b.failed, "Claude Code is not running.")
+			continue
+		}
+		t.stopReq, t.stopError = reqID, ""
+		r.requests[reqID] = &controlRequest{taskID: id, batch: b}
+		b.pending++
+	}
+	if b.pending == 0 {
+		b.finish()
+		return b, nil
+	}
+	n.state(k)
+	return b, nil
+}
+
+// expireStops gives up on the stops of a batch the CLI did not answer: their
+// tasks run on, with the reason.
+func (s *Service) expireStops(k Key, b *stopBatch) {
+	ctx, cancel := bgCtx()
+	defer cancel()
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r := s.runs[k]
+	if r == nil {
+		return
+	}
+	for id, req := range r.requests {
+		if req.batch != b {
+			continue
+		}
+		delete(r.requests, id)
+		if t := r.tasks[req.taskID]; t != nil {
+			t.stopReq, t.stopError = "", stopUnanswered
+		}
+		b.failed = append(b.failed, stopUnanswered)
+		b.pending--
+	}
+	if b.pending == 0 {
+		s.settleStopLocked(ctx, r, b, n)
+	}
+	n.state(k)
+}
+
+// TaskOutput reads the end of the output of a command or monitor the CLI
+// runs. ErrNoAnswer says the CLI did not answer, or answered with an error.
+func (s *Service) TaskOutput(ctx context.Context, k Key, taskID string) (Output, error) {
+	answer, err := s.requestOutput(k, taskID)
+	if err != nil {
+		return Output{}, err
+	}
+
+	timer := time.NewTimer(TaskOutputTimeout)
+	defer timer.Stop()
+	var ev claude.ControlResponseEvent
+	select {
+	case ev = <-answer.answer:
+	case <-timer.C:
+		s.forgetRequest(k, answer)
+		return Output{}, fmt.Errorf("output of task %s: %w", taskID, ErrNoAnswer)
+	case <-ctx.Done():
+		s.forgetRequest(k, answer)
+		return Output{}, fmt.Errorf("output of task %s: %w", taskID, ctx.Err())
+	}
+
+	if ev.Response.Subtype == "error" {
+		return Output{}, fmt.Errorf("output of task %s: %s: %w", taskID, ev.Response.Error, ErrNoAnswer)
+	}
+	out, err := claude.DecodeTaskOutput(ev.Response.Response)
+	if err != nil {
+		return Output{}, fmt.Errorf("output of task %s: %w", taskID, err)
+	}
+	text := strings.TrimRight(stripANSI(out.Output), "\n")
+	o := Output{Text: text, Truncated: out.Truncated}
+	if text != "" {
+		o.Lines = strings.Count(text, "\n") + 1
+	}
+	return o, nil
+}
+
+// requestOutput sends the get_task_output of a command or monitor of the
+// session and returns the request that awaits the answer.
+func (s *Service) requestOutput(k Key, taskID string) (*controlRequest, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, err := s.runOf(k)
+	if err != nil {
+		return nil, err
+	}
+	t := r.tasks[taskID]
+	if r.proc == nil || t == nil || t.kind == WakeAgent {
+		return nil, fmt.Errorf("task %s of session %s of task %s: %w", taskID, k.Stage, k.TaskID, ErrNotFound)
+	}
+	reqID, err := r.proc.TaskOutput(taskID)
+	if err != nil {
+		return nil, fmt.Errorf("output of task %s: %w: %w", taskID, ErrNoAnswer, err)
+	}
+	req := &controlRequest{taskID: taskID, answer: make(chan claude.ControlResponseEvent, 1)}
+	r.requests[reqID] = req
+	return req, nil
+}
+
+// forgetRequest drops a control request nobody awaits anymore.
+func (s *Service) forgetRequest(k Key, req *controlRequest) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if r := s.runs[k]; r != nil {
+		for id, other := range r.requests {
+			if other == req {
+				delete(r.requests, id)
+			}
+		}
+	}
 }
 
 // Exists reports whether a session was ever created for a key: open now, or
