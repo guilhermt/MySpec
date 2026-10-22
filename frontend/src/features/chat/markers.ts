@@ -21,6 +21,7 @@ import { baseName, type ChecksReading, checksSummary, prBaseName } from "@/lib/p
 import { counted, lowerFirst } from "@/lib/situations";
 import { asLifecycleStage, stageLabel } from "@/lib/stages";
 import type {
+  BackgroundItem,
   Entry,
   Image,
   MarkerEntry,
@@ -63,6 +64,7 @@ export type MarkerIcon =
   | "check"
   | "problem"
   | "ban"
+  | "lost"
   | "merge";
 
 /**
@@ -70,7 +72,8 @@ export type MarkerIcon =
  * message of the product); a document of the task or of the review, read on opening, with the panel
  * of its foot; the problems of a plan; the checks a pass started from; the findings a pass decided;
  * the commits that reached a pull request; or, in a discussion, a document of it (the context it
- * was given, or the one the agent wrote, which is read on opening) and a list of its drafts.
+ * was given, or the one the agent wrote, which is read on opening) and a list of its drafts; or
+ * a plain list of lines, the work in the background a marker names.
  */
 export type MarkerBody =
   | { kind: "none" }
@@ -86,7 +89,8 @@ export type MarkerBody =
       text: string | null;
       images?: Image[];
     }
-  | { kind: "drafts"; rows: DraftRowView[] };
+  | { kind: "drafts"; rows: DraftRowView[] }
+  | { kind: "list"; items: string[] };
 
 /** MarkerView is a line of the conversation: a marker, a start line, a message of the product. */
 export interface MarkerView {
@@ -657,9 +661,35 @@ function wokeLine(marker: MarkerEntry): MarkerView {
     : line("woke", first, parts(...others));
 }
 
-// backgroundNames is the work a background marker names: `"A" and "B"`.
-function backgroundNames(marker: MarkerEntry): string {
-  return andList((marker.background ?? []).map(({ name }) => `"${name}"`));
+// BACKGROUND_KINDS are the kinds of work in the background in the order a complement counts them.
+const BACKGROUND_KINDS: readonly WakeKind[] = ["agent", "command", "monitor"];
+
+// backgroundLine is a marker of the work in the background: one item reads `agent "Name"`; more
+// are counted by kind and listed in the body. Without items there is nothing to say.
+function backgroundLine(
+  icon: MarkerIcon,
+  text: string,
+  items: readonly BackgroundItem[],
+): MarkerView | null {
+  const named = items.flatMap((item) => {
+    const kind = asWakeKind(item.kind);
+    return kind === null ? [] : [{ kind, line: `${kind} "${item.name}"` }];
+  });
+  const [only, ...others] = named;
+  if (only === undefined) {
+    return null;
+  }
+  if (others.length === 0) {
+    return line(icon, text, only.line);
+  }
+  const counts = BACKGROUND_KINDS.flatMap((kind) => {
+    const count = named.filter((item) => item.kind === kind).length;
+    return count === 0 ? [] : [counted(count, kind)];
+  });
+  return line(icon, text, counts.join(", "), {
+    kind: "list",
+    items: named.map((item) => item.line),
+  });
 }
 
 function planInvalidLine(marker: MarkerEntry): MarkerView {
@@ -736,9 +766,9 @@ export function markerOf(
     case "paused":
       return line("pause", "Paused by you");
     case "background_stopped":
-      return line("ban", "Stopped by you", backgroundNames(marker));
+      return backgroundLine("ban", "Stopped by you", marker.background ?? []);
     case "background_lost":
-      return line("ban", "Lost when the session stopped", backgroundNames(marker));
+      return backgroundLine("lost", "Lost when the session stopped", marker.background ?? []);
     case "retried":
       return retriedLine(marker);
     case "woke":

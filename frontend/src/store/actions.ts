@@ -555,6 +555,18 @@ export function readActionOutput(
 }
 
 /**
+ * readTaskOutput reads the end of the output of a command or monitor that still runs. Its failure
+ * has a place of its own, the output that asked for it, and never raises the app notice.
+ */
+export function readTaskOutput(
+  itemId: string,
+  stage: string,
+  taskId: string,
+): Promise<ActionOutput> {
+  return api.getTaskOutput(itemId, stage, taskId);
+}
+
+/**
  * sendMessageInPlace sends a message from the composer, whose failure has a place of its own under
  * the field: "" when it is sent, the reason when it is not.
  */

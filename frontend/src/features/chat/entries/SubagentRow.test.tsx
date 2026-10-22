@@ -72,4 +72,46 @@ describe("SubagentRow", () => {
     await user.click(screen.getByRole("button", { name: /Show 4 earlier actions/ }));
     expect(screen.getByText("src/file0.ts")).toBeInTheDocument();
   });
+
+  it("shows what a subagent that works does now, with its count", () => {
+    renderSubagent(
+      node({ toolUseId: "toolu_a", tool: "Agent", status: "running", startedAt: "" }, [
+        node({ toolUseId: "c1", tool: "Read", status: "done" }),
+        node({ toolUseId: "c2", tool: "Grep", status: "running", label: "Searching" }),
+      ]),
+    );
+
+    const toggle = screen.getByRole("button");
+    expect(toggle).toHaveTextContent(/2 actions\s*·\s*Searching/);
+    expect(toggle).toHaveAccessibleName(/2 actions · Searching$/);
+  });
+
+  it("says Thinking… when a subagent that works runs no action", () => {
+    renderSubagent(
+      node({ toolUseId: "toolu_a", tool: "Agent", status: "running", startedAt: "" }, [
+        node({ toolUseId: "c1", tool: "Read", status: "done" }),
+      ]),
+    );
+
+    expect(screen.getByRole("button")).toHaveTextContent(/1 action\s*·\s*Thinking…/);
+  });
+
+  it("says Thinking… before the first action of a subagent", () => {
+    renderSubagent(node({ toolUseId: "toolu_a", tool: "Agent", status: "running", startedAt: "" }));
+
+    expect(screen.getByRole("listitem")).toHaveTextContent("Thinking…");
+  });
+
+  it("shows a subagent stopped by the agent", () => {
+    renderSubagent(
+      node({
+        tool: "Agent",
+        status: "interrupted",
+        interruptedBy: "agent",
+        background: true,
+      }),
+    );
+
+    expect(screen.getByRole("listitem")).toHaveTextContent("stopped by the agent");
+  });
 });

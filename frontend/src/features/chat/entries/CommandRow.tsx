@@ -7,6 +7,7 @@ import { useNow } from "@/features/attention/useNow";
 import { type ActionRight, actionLabel, actionRight } from "@/features/chat/actions";
 import { Chevron } from "@/features/chat/entries/Chevron";
 import { CommandOutput } from "@/features/chat/entries/CommandOutput";
+import { LiveOutput } from "@/features/chat/entries/LiveOutput";
 import { cn } from "@/lib/utils";
 import { type ActionEntry, type ActionStatus, asActionStatus, type Entry } from "@/lib/wails";
 
@@ -84,8 +85,15 @@ export interface CommandRowProps {
 export function CommandRow({ taskId, stage, entry, action, waiting }: CommandRowProps) {
   const status = asActionStatus(action.status);
   const now = useNow(1000, status === "running");
-  // The CLI sends the output only at the end: a running command has none yet.
+  // The CLI sends the output of a command only at the end: a running one has none recorded yet.
   const hasOutput = action.outputLines > 0 && status !== "running";
+  // A command or monitor in the background shows its output as it prints, read from the CLI.
+  const live =
+    (action.tool === "Bash" || action.tool === "Monitor") &&
+    action.background &&
+    status === "running" &&
+    action.taskId !== "";
+  const opens = hasOutput || live;
   const failed = status === "error" && hasOutput;
   const [open, setOpen] = useState(failed);
   // toggled is the user having opened or folded the output: a failure no longer opens it.
@@ -104,7 +112,7 @@ export function CommandRow({ taskId, stage, entry, action, waiting }: CommandRow
 
   const cells = (
     <>
-      {hasOutput ? <Chevron open={open} /> : <span />}
+      {opens ? <Chevron open={open} /> : <span />}
       <span className="grid w-(--icon-sm) place-items-center">
         <StateIcon status={status} waiting={waiting} />
       </span>
@@ -142,7 +150,7 @@ export function CommandRow({ taskId, stage, entry, action, waiting }: CommandRow
     </>
   );
 
-  if (!hasOutput) {
+  if (!opens) {
     return (
       <li
         data-feed-item
@@ -173,15 +181,19 @@ export function CommandRow({ taskId, stage, entry, action, waiting }: CommandRow
       </button>
       {open && (
         <div className={OUTPUT_INDENT}>
-          <CommandOutput
-            taskId={taskId}
-            stage={stage}
-            entryId={entry.id}
-            lines={action.outputLines}
-            tail={action.outputTail}
-            truncated={action.outputTruncated}
-            failed={status === "error"}
-          />
+          {live ? (
+            <LiveOutput itemId={taskId} stage={stage} taskId={action.taskId} />
+          ) : (
+            <CommandOutput
+              taskId={taskId}
+              stage={stage}
+              entryId={entry.id}
+              lines={action.outputLines}
+              tail={action.outputTail}
+              truncated={action.outputTruncated}
+              failed={status === "error"}
+            />
+          )}
         </div>
       )}
     </li>

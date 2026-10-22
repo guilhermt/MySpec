@@ -7,6 +7,7 @@ import {
   executableOf,
   failureNotes,
   formatDuration,
+  progressOf,
   summaryOf,
 } from "@/features/chat/actions";
 import type { ActionEntry } from "@/lib/wails";
@@ -49,6 +50,7 @@ describe("categoryOf", () => {
     ["WebSearch", "token bucket", "Web"],
     ["Agent", "general-purpose", "Delegated"],
     ["Task", "general-purpose", "Delegated"],
+    ["Monitor", "tail -f dev.log", "Ran"],
     ["Skill", "pdf", "Other"],
     ["mcp__github__get_issue", "github · get_issue", "Other"],
     ["TodoWrite", "", "Other"],
@@ -151,6 +153,21 @@ describe("actionLabel", () => {
       "a command without a description, as in an old transcript",
       { tool: "Bash", target: "git status --short" },
       { label: "git status --short", command: "", mono: true, tooltip: "git status --short" },
+    ],
+    [
+      "a monitor like a command",
+      {
+        tool: "Monitor",
+        target: "tail -f dev.log",
+        description: "Watch the dev log",
+        commandLines: 1,
+      },
+      {
+        label: "Watch the dev log",
+        command: "tail -f dev.log",
+        mono: false,
+        tooltip: "tail -f dev.log",
+      },
     ],
     [
       "a read",
@@ -423,6 +440,24 @@ describe("actionRight", () => {
       { text: "stopped with the session", tone: "meta" },
     ],
     [
+      "stopped by you for work in the background you stopped",
+      { status: "interrupted", interruptedBy: "user", background: true },
+      false,
+      { text: "stopped by you", tone: "meta" },
+    ],
+    [
+      "lost for work in the background a crash took",
+      { status: "interrupted", interruptedBy: "crash", background: true },
+      false,
+      { text: "lost", tone: "meta" },
+    ],
+    [
+      "stopped by the agent for a task the agent stopped",
+      { status: "interrupted", interruptedBy: "agent", background: true },
+      false,
+      { text: "stopped by the agent", tone: "meta" },
+    ],
+    [
       "stopped for a command stopped in an old transcript",
       { status: "interrupted" },
       false,
@@ -469,4 +504,25 @@ describe("the commands of the scenes", () => {
       expect(categoryOf(action)).toBe(category);
     },
   );
+});
+
+describe("progressOf", () => {
+  it("counts the actions and names the last that runs", () => {
+    const actions = [
+      makeAction({ status: "done" }),
+      makeAction({ status: "running", label: "Reading" }),
+      makeAction({ status: "running", label: "Searching" }),
+    ];
+
+    expect(progressOf(actions)).toEqual({ count: "3 actions", doing: "Searching", acting: true });
+  });
+
+  it("thinks when no action runs", () => {
+    expect(progressOf([makeAction({ status: "done" })])).toEqual({
+      count: "1 action",
+      doing: "Thinking…",
+      acting: false,
+    });
+    expect(progressOf([])).toEqual({ count: "", doing: "Thinking…", acting: false });
+  });
 });

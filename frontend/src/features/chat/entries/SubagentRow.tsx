@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
+import { Spinner } from "@/components/system/Spinner";
 import { useNow } from "@/features/attention/useNow";
-import { actionLabel, actionRight, summaryOf } from "@/features/chat/actions";
+import { actionLabel, actionRight, progressOf, summaryOf } from "@/features/chat/actions";
 import type { ActionNode } from "@/features/chat/conversation";
 import { ActionRows } from "@/features/chat/entries/ActionRows";
 import { Chevron } from "@/features/chat/entries/Chevron";
@@ -40,7 +41,12 @@ export function SubagentRow({ taskId, stage, node, waitingToolUseId }: SubagentR
   const status = asActionStatus(action.status);
   const now = useNow(1000, status === "running");
   const right = actionRight(action, false, now);
-  const summary = subagentSummary(node);
+  const live = status === "running";
+  const progress = progressOf(node.children.map((child) => child.action));
+  // A subagent that works shows how far it is and what it does; a finished one, what it did.
+  const summary = live
+    ? [progress.count, progress.doing].filter((part) => part !== "").join(" · ")
+    : subagentSummary(node);
   const hasReport = action.outputLines > 0 && status !== "running";
   const opens = node.children.length > 0 || hasReport;
   const name = [commandName(action, right, false), summary]
@@ -56,8 +62,16 @@ export function SubagentRow({ taskId, stage, node, waitingToolUseId }: SubagentR
       <span className={cn("truncate", status === "error" && "text-state-error")}>
         {actionLabel(action).label}
       </span>
-      <span className="min-w-0 truncate text-(length:--text-micro) leading-(--leading-micro) text-ink-3">
-        {summary}
+      <span className="flex min-w-0 items-center gap-(--space-1-5) text-(length:--text-micro) leading-(--leading-micro) text-ink-3">
+        {live ? (
+          <>
+            {progress.count !== "" && <span className="shrink-0">{progress.count} ·</span>}
+            {progress.acting && <Spinner />}
+            <span className="truncate">{progress.doing}</span>
+          </>
+        ) : (
+          <span className="truncate">{summary}</span>
+        )}
       </span>
       <span
         className={cn(

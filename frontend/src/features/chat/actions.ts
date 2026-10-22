@@ -1,3 +1,4 @@
+import { counted } from "@/lib/situations";
 import type { ActionEntry } from "@/lib/wails";
 import { asActionStatus, asInterruptedBy } from "@/lib/wails";
 import { duration } from "@/lib/when";
@@ -49,6 +50,7 @@ const TOOL_CATEGORIES: Record<string, ActionCategory> = {
   WebSearch: "Web",
   Agent: "Delegated",
   Task: "Delegated",
+  Monitor: "Ran",
 };
 
 // The commands of the table Categorias. A command of two words is matched
@@ -218,7 +220,7 @@ export function actionLabel(action: ActionEntry): ActionLabel {
       tooltip: "",
     };
   }
-  if (action.tool === "Bash") {
+  if (action.tool === "Bash" || action.tool === "Monitor") {
     const lines = action.commandLines > 1 ? ` · ${action.commandLines} lines` : "";
     const tooltip = action.target !== "" ? `${action.target}${lines}` : "";
     return action.description !== ""
@@ -230,6 +232,26 @@ export function actionLabel(action: ActionEntry): ActionLabel {
     command: action.target,
     mono: false,
     tooltip: action.target,
+  };
+}
+
+/** SubagentProgress is what a subagent that works shows in its row. */
+export interface SubagentProgress {
+  /** count is "14 actions"; "" before its first. */
+  count: string;
+  /** doing is the gerund of the action it runs now, or "Thinking…" when none runs. */
+  doing: string;
+  /** acting says an action runs: the row draws the spinner. */
+  acting: boolean;
+}
+
+/** progressOf is the progress of a subagent from its actions: how many, and the last that runs. */
+export function progressOf(actions: readonly ActionEntry[]): SubagentProgress {
+  const running = actions.filter((action) => asActionStatus(action.status) === "running").at(-1);
+  return {
+    count: actions.length === 0 ? "" : counted(actions.length, "action"),
+    doing: running === undefined ? "Thinking…" : running.label,
+    acting: running !== undefined,
   };
 }
 
@@ -323,6 +345,21 @@ function elapsed(from: string, to: string): number | null {
   return Number.isNaN(start) || Number.isNaN(end) ? null : end - start;
 }
 
+// stoppedText is how an interrupted action reads: work in the background was lost with the
+// session or stopped by you, and the agent can stop it too.
+function stoppedText(action: ActionEntry): string {
+  switch (asInterruptedBy(action.interruptedBy)) {
+    case "crash":
+      return action.background ? "lost" : "stopped with the session";
+    case "user":
+      return action.background ? "stopped by you" : "stopped";
+    case "agent":
+      return "stopped by the agent";
+    default:
+      return "stopped";
+  }
+}
+
 /** actionRight is the right column of a command (P6), running from now. */
 export function actionRight(
   action: ActionEntry,
@@ -348,12 +385,6 @@ export function actionRight(
       return Number.isNaN(started) ? null : { text: formatDuration(now - started), tone: "live" };
     }
     case "interrupted":
-      return {
-        text:
-          asInterruptedBy(action.interruptedBy) === "crash"
-            ? "stopped with the session"
-            : "stopped",
-        tone: "meta",
-      };
+      return { text: stoppedText(action), tone: "meta" };
   }
 }

@@ -99,12 +99,68 @@ function isPrompt(entry: Entry | undefined): boolean {
   return entry?.kind === "user" && entry.user?.prompt === true;
 }
 
-// keptEntries drops what the conversation never draws: the speech of a
-// subagent, and the empty prompt of a stage that has no marker before it.
+// Subagents are the actions of the subagents, taken out of the linear flow to hang under the
+// action of the main thread that started them, wherever in the transcript they arrived.
+interface Subagents {
+  /** children are the actions under each root, by the toolUseId of the root, in order. */
+  children: Map<string, Entry[]>;
+  /** rootIndex is where the root of each action of a subagent is in the entries. */
+  rootIndex: Map<string, number>;
+}
+
+// subagentsOf separates the actions of the subagents. An action of a subagent inside a subagent
+// resolves to the same root. One whose root is not in the transcript is left out.
+function subagentsOf(entries: readonly Entry[]): Subagents {
+  const children = new Map<string, Entry[]>();
+  const rootIndex = new Map<string, number>();
+  const rootOf = new Map<string, string>();
+  const indexOfRoot = new Map<string, number>();
+  entries.forEach((entry, index) => {
+    const action = entry.kind === "action" ? entry.action : null;
+    if (action === null || action === undefined) {
+      return;
+    }
+    if (action.parentToolUseId === "") {
+      rootOf.set(action.toolUseId, action.toolUseId);
+      indexOfRoot.set(action.toolUseId, index);
+      return;
+    }
+    const root = rootOf.get(action.parentToolUseId);
+    const at = root === undefined ? undefined : indexOfRoot.get(root);
+    if (root === undefined || at === undefined) {
+      return;
+    }
+    rootOf.set(action.toolUseId, root);
+    rootIndex.set(action.toolUseId, at);
+    children.set(root, [...(children.get(root) ?? []), entry]);
+  });
+  return { children, rootIndex };
+}
+
+// effectiveChange is the first index the rebuild must start from: the first change, or the root of
+// an action of a subagent that arrived after it, since that action redraws the group of its root.
+function effectiveChange(entries: readonly Entry[], change: number, subagents: Subagents): number {
+  let earliest = change;
+  for (let index = change; index < entries.length; index += 1) {
+    const toolUseId = entries[index]?.action?.toolUseId;
+    const root = toolUseId === undefined ? undefined : subagents.rootIndex.get(toolUseId);
+    if (root !== undefined && root < earliest) {
+      earliest = root;
+    }
+  }
+  return earliest;
+}
+
+// keptEntries drops what the conversation never draws: the speech and the actions of a subagent
+// (the actions are drawn under their root), and the empty prompt of a stage that has no marker
+// before it.
 function keptEntries(entries: readonly Entry[]): Entry[] {
   const kept: Entry[] = [];
   for (const entry of entries) {
     if (entry.kind === "assistant" && (entry.assistant?.parentToolUseId ?? "") !== "") {
+      continue;
+    }
+    if (entry.kind === "action" && (entry.action?.parentToolUseId ?? "") !== "") {
       continue;
     }
     const user = entry.kind === "user" ? entry.user : null;
@@ -171,12 +227,23 @@ interface Building {
   retried: number;
 }
 
-function addAction(group: Building, entry: Entry, action: ActionEntry): void {
+// addAction puts an action in the group. A subagent brings its children, which the map holds.
+function addAction(
+  group: Building,
+  entry: Entry,
+  action: ActionEntry,
+  children: ReadonlyMap<string, Entry[]>,
+): void {
   const node: ActionNode = { entry, action, children: [] };
   const root = action.parentToolUseId === "" ? undefined : group.roots.get(action.parentToolUseId);
   if (root === undefined) {
     group.nodes.push(node);
     group.roots.set(action.toolUseId, node);
+    for (const child of children.get(action.toolUseId) ?? []) {
+      if (child.action !== null) {
+        addAction(group, child, child.action, children);
+      }
+    }
     return;
   }
   // A subagent inside a subagent joins the first one: every action of it goes to the top-level node.
@@ -276,7 +343,12 @@ function markerRows(list: readonly Entry[], index: number): { rows: Row[]; taken
 
 // rowsOf turns the entries into rows: the actions of a turn grouped, the start
 // marker joined with its prompt, and the voice written where it changes.
-function rowsOf(list: readonly Entry[], voice: string, waiting: string | null): Row[] {
+function rowsOf(
+  list: readonly Entry[],
+  voice: string,
+  waiting: string | null,
+  children: ReadonlyMap<string, Entry[]>,
+): Row[] {
   const rows: Row[] = [];
   let group: Building | null = null;
   let newVoice = true;
@@ -309,7 +381,7 @@ function rowsOf(list: readonly Entry[], voice: string, waiting: string | null): 
         target = { turnId: entry.turnId, nodes: [], roots: new Map(), retried: 0 };
         group = target;
       }
-      addAction(target, entry, entry.action);
+      addAction(target, entry, entry.action, children);
       index += 1;
       continue;
     }
@@ -521,8 +593,9 @@ export function buildConversation(
   previous: ConversationModel | null = null,
 ): ConversationModel {
   const waiting = waitingToolUseId(entries);
+  const subagents = subagentsOf(entries);
   const whole = (): ConversationModel => ({
-    stretches: stretchesOf(rowsOf(keptEntries(entries), voice, waiting), voice),
+    stretches: stretchesOf(rowsOf(keptEntries(entries), voice, waiting, subagents.children), voice),
     entries,
     voice,
     waiting,
@@ -534,13 +607,13 @@ export function buildConversation(
   if (change === -1) {
     return previous;
   }
-  const resume = resumeAt(entries, previous, change);
+  const resume = resumeAt(entries, previous, effectiveChange(entries, change, subagents));
   if (resume === null) {
     return reuse(whole(), previous, 0);
   }
   const kept = previous.stretches.slice(0, resume.stretch);
   const rebuilt = stretchesOf(
-    rowsOf(keptEntries(entries.slice(resume.start)), voice, waiting),
+    rowsOf(keptEntries(entries.slice(resume.start)), voice, waiting, subagents.children),
     voice,
   );
   return reuse(

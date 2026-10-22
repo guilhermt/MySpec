@@ -301,12 +301,29 @@ describe("buildConversation groups", () => {
     ]);
   });
 
-  it("leaves an action loose when its subagent is not in the group, as in an old transcript", () => {
+  it("leaves out an action whose subagent is not in the transcript", () => {
     const model = buildConversation(
       [read("turn-1", "a", { parentToolUseId: "gone" }), read("turn-1", "b")],
       "Implementer",
     );
-    expect(groupsOf(model)[0]?.nodes.map((node) => node.children.length)).toEqual([0, 0]);
+    expect(groupsOf(model)[0]?.nodes.map((node) => node.action.toolUseId)).toEqual(["b"]);
+  });
+
+  it("hangs the actions of a subagent under it however late they arrive", () => {
+    const agent = act("turn-1", { toolUseId: "agent", tool: "Agent", status: "running" });
+    const model = buildConversation(
+      [
+        agent,
+        said("Done for now.", "msg_1", { turnId: "turn-1" }),
+        read("turn-2", "x"),
+        read("turn-1", "late", { parentToolUseId: "agent" }),
+      ],
+      "Implementer",
+    );
+    const [first, second] = groupsOf(model);
+
+    expect(first?.nodes[0]?.children.map((child) => child.action.toolUseId)).toEqual(["late"]);
+    expect(second?.nodes.map((node) => node.action.toolUseId)).toEqual(["x"]);
   });
 
   it("folds a retry between two actions of the group into it", () => {
@@ -576,6 +593,21 @@ describe("buildConversation from the previous model", () => {
       }
     }
     expect(after.stretches.slice(0, -1).every((s, i) => s === before.stretches[i])).toBe(true);
+  });
+
+  it("rebuilds the stretch of the root when an action of its subagent arrives late", () => {
+    const agent = act("turn-1", { toolUseId: "agent", tool: "Agent", status: "running" });
+    const entries = [
+      agent,
+      product({ appKind: "report", appPass: 1, appRound: 1, appRounds: 3, appCount: 1 }),
+      said("Next.", "msg_2"),
+    ];
+    const before = buildConversation(entries, "Implementer");
+    const grown = [...entries, read("turn-1", "late", { parentToolUseId: "agent" })];
+    const after = buildConversation(grown, "Implementer", before);
+
+    expect(whole(after)).toEqual(whole(buildConversation(grown, "Implementer")));
+    expect(groupsOf(after)[0]?.nodes[0]?.children).toHaveLength(1);
   });
 
   it("returns the previous model when nothing changed", () => {

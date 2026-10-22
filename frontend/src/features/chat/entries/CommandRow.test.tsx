@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { CommandRow } from "@/features/chat/entries/CommandRow";
 import type { ActionEntry } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
-import { makeAction, makeEntry } from "@/test/wails-mock";
+import { api, makeAction, makeEntry } from "@/test/wails-mock";
 
 const TESTS = {
   tool: "Bash",
@@ -131,5 +131,51 @@ describe("CommandRow", () => {
     const row = screen.getByRole("listitem");
     expect(row).toHaveTextContent("the command in the card below");
     expect(row).toHaveTextContent("waits for your permission");
+  });
+
+  it.each(["Bash", "Monitor"])(
+    "opens the live output of a %s running in the background",
+    async (tool) => {
+      api.getTaskOutput.mockResolvedValue({ text: "tick 1", lines: 1, truncated: false });
+      const { user } = renderRow({ ...RUNNING, tool, background: true, taskId: "b1x2" });
+
+      await user.click(screen.getByRole("button", { expanded: false }));
+
+      expect(await screen.findByText("tick 1")).toBeInTheDocument();
+      expect(api.getTaskOutput).toHaveBeenCalledWith("task-1", "step:3", "b1x2");
+    },
+  );
+
+  it("has no output to open for a running command in the foreground", () => {
+    renderRow({ ...RUNNING, background: false });
+
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("has no output to open before the task of a background command starts", () => {
+    renderRow({ ...RUNNING, background: true, taskId: "" });
+
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("returns to the output the product recorded when the task ends", async () => {
+    api.getTaskOutput.mockResolvedValue({ text: "tick 1", lines: 1, truncated: false });
+    const running = { ...RUNNING, background: true, taskId: "b1x2" };
+    const { user, rerender } = renderRow(running);
+    await user.click(screen.getByRole("button", { expanded: false }));
+    await screen.findByText("tick 1");
+
+    rerender(
+      row({
+        ...running,
+        status: "done",
+        finishedAt: "2026-09-05T10:00:08.2Z",
+        outputLines: 1,
+        outputTail: "line 1",
+      }),
+    );
+
+    expect(await screen.findByText("line 1")).toBeInTheDocument();
+    expect(screen.queryByText("tick 1")).not.toBeInTheDocument();
   });
 });
