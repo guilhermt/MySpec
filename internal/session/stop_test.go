@@ -180,3 +180,120 @@ func TestAPermissionOfASubagentNamesIt(t *testing.T) {
 		t.Errorf("permissions = %+v, want one asked by the Agent call %q", permissions, agent.Action.ToolUseID)
 	}
 }
+
+// markerTypes lists the types of the markers of a session, in order.
+func markerTypes(t *testing.T, f *fixture, k session.Key) []session.MarkerType {
+	t.Helper()
+
+	markers := f.entriesOf(t, k, session.KindMarker)
+	out := make([]session.MarkerType, 0, len(markers))
+	for _, e := range markers {
+		out = append(out, e.Marker.Type)
+	}
+	return out
+}
+
+func TestPausingWithWorkInTheBackgroundRecordsItLostBeforePaused(t *testing.T) {
+	t.Parallel()
+
+	f, _ := bgScenarioRun(t, "bg_live_agent", 0, limits{})
+	f.waitBackground(t, prd("t1"))
+
+	if err := f.service.Pause(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Pause() = %v, want nil", err)
+	}
+
+	types := markerTypes(t, f, prd("t1"))
+	if n := len(types); n < 2 || types[n-2] != session.MarkerBackgroundLost || types[n-1] != session.MarkerPaused {
+		t.Fatalf("markers = %v, want background_lost then paused last", types)
+	}
+	lost := markersOf(t, f, prd("t1"), session.MarkerBackgroundLost)
+	if len(lost) != 1 || len(lost[0].Marker.Background) != 2 {
+		t.Fatalf("lost markers = %+v, want one naming the subagent and the command", lost)
+	}
+	bash, _ := actionOf(t, f, prd("t1"), "Bash", "")
+	if bash.Action.Status != session.ActionInterrupted || bash.Action.InterruptedBy != "crash" {
+		t.Errorf("Bash action = %+v, want it interrupted by the crash", bash.Action)
+	}
+}
+
+func TestAProcessThatDiesLosesItsBackgroundWork(t *testing.T) {
+	t.Parallel()
+
+	f, _ := bgScenarioRun(t, "bg_live_agent", 0, limits{})
+	f.waitBackground(t, prd("t1"))
+
+	f.launcher.kill(t)
+	f.waitStatus(t, prd("t1"), "the crash", func(s session.Summary) bool {
+		return s.Status == session.StatusError
+	})
+
+	lost := markersOf(t, f, prd("t1"), session.MarkerBackgroundLost)
+	if len(lost) != 1 {
+		t.Fatalf("lost markers = %+v, want one", lost)
+	}
+	var lostSeq, errSeq int
+	lostSeq = lost[0].Seq
+	errs := f.entriesOf(t, prd("t1"), session.KindError)
+	if len(errs) != 1 {
+		t.Fatalf("errors = %+v, want one", errs)
+	}
+	errSeq = errs[0].Seq
+	if lostSeq >= errSeq {
+		t.Errorf("lost marker at %d, error at %d, want the loss first", lostSeq, errSeq)
+	}
+	bash, _ := actionOf(t, f, prd("t1"), "Bash", "")
+	if bash.Action.Status != session.ActionInterrupted || bash.Action.InterruptedBy != "crash" {
+		t.Errorf("Bash action = %+v, want it interrupted by the crash", bash.Action)
+	}
+	if tasks := f.summary(t, prd("t1")).Tasks; len(tasks) != 0 {
+		t.Errorf("tasks = %+v, want none", tasks)
+	}
+}
+
+func TestAConversationReopenedWithBackgroundWorkRunningRecordsItLost(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	rec := session.Record{ID: "sess-1", TaskID: "t1", Stage: "prd", Started: true, CreatedAt: base, UpdatedAt: base}
+	if err := f.sessions.Insert(t.Context(), rec); err != nil {
+		t.Fatalf("Insert() = %v, want nil", err)
+	}
+	f.entries.seed(
+		t, "sess-1",
+		session.Entry{
+			ID: "c1", Seq: 1, TurnID: "u1", Kind: session.KindAction, CreatedAt: base,
+			Action: &session.ActionEntry{
+				ToolUseID: "x", Tool: "Bash", Description: "Serve", Target: "serve", Label: "Running",
+				Status: session.ActionRunning, Background: true,
+			},
+		},
+		session.Entry{
+			ID: "c2", Seq: 2, TurnID: "u1", Kind: session.KindAction, CreatedAt: base,
+			Action: &session.ActionEntry{
+				ToolUseID: "y", Tool: "Monitor", Target: "tail -f log", Label: "Watching",
+				Status: session.ActionRunning, Background: true,
+			},
+		},
+		session.Entry{
+			ID: "c3", Seq: 3, TurnID: "u1", Kind: session.KindAction, CreatedAt: base,
+			Action: &session.ActionEntry{ToolUseID: "z", Tool: "Read", Label: "Reading", Status: session.ActionRunning},
+		},
+	)
+
+	f.open(t, taskInfo(t, "t1"))
+
+	lost := markersOf(t, f, prd("t1"), session.MarkerBackgroundLost)
+	want := []session.BackgroundItem{
+		{Kind: session.WakeCommand, Name: "Serve"},
+		{Kind: session.WakeMonitor, Name: "tail -f log"},
+	}
+	if len(lost) != 1 || !cmp.Equal(lost[0].Marker.Background, want) {
+		t.Fatalf("lost markers = %+v, want one naming %+v", lost, want)
+	}
+	for _, e := range f.entriesOf(t, prd("t1"), session.KindAction) {
+		if e.Action.Status != session.ActionInterrupted || e.Action.InterruptedBy != "crash" {
+			t.Errorf("action %s = %+v, want it interrupted by the crash", e.ID, e.Action)
+		}
+	}
+}

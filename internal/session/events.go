@@ -395,6 +395,72 @@ func (s *Service) closeSubagentLocked(ctx context.Context, r *run, sub *subagent
 	}
 }
 
+// loseBackgroundLocked records the work in the background that dies with the
+// process: its actions end interrupted by the crash, its tasks end stopped so
+// that no late notification treats them again, and one marker names them.
+func (s *Service) loseBackgroundLocked(ctx context.Context, r *run, n *notes) {
+	type lost struct {
+		item      BackgroundItem
+		entry     *Entry
+		toolUseID string
+		startedAt time.Time
+	}
+	var all []lost
+	known := make(map[string]bool, len(r.tasks))
+	for _, t := range r.tasks {
+		known[t.toolUseID] = true
+		if !t.live() || !t.backgrounded {
+			continue
+		}
+		t.wake = &Wake{Kind: t.kind, Name: s.taskNameOf(t), Status: WakeStopped}
+		all = append(all, lost{BackgroundItem{Kind: t.kind, Name: s.taskNameOf(t)}, t.entry, t.toolUseID, t.startedAt})
+	}
+	slices.SortStableFunc(all, func(a, b lost) int { return a.startedAt.Compare(b.startedAt) })
+	// A launch whose task_started never came has no task.
+	for _, e := range bySeq(r.actions) {
+		if !e.Action.Background || e.Action.Status != ActionRunning || known[e.Action.ToolUseID] {
+			continue
+		}
+		kind := kindOfAction(e.Action)
+		name := e.Action.Description
+		if name == "" {
+			name = e.Action.Target
+		}
+		all = append(all, lost{BackgroundItem{Kind: kind, Name: name}, e, e.Action.ToolUseID, time.Time{}})
+	}
+	if len(all) == 0 {
+		return
+	}
+
+	items := make([]BackgroundItem, 0, len(all))
+	for _, l := range all {
+		items = append(items, l.item)
+		if l.entry != nil && l.entry.Action.Status == ActionRunning {
+			l.entry.Action.Status = ActionInterrupted
+			l.entry.Action.InterruptedBy = interruptedByCrash
+			s.updateLocked(ctx, r, l.entry, n)
+		}
+		if sub := r.subagents[l.toolUseID]; sub != nil {
+			s.closeSubagentLocked(ctx, r, sub, ActionInterrupted, interruptedByCrash, n)
+		}
+	}
+	s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{
+		Type:       MarkerBackgroundLost,
+		Background: items,
+	}}, n)
+}
+
+// kindOfAction is what a call in the background counts as in a marker.
+func kindOfAction(a *ActionEntry) WakeKind {
+	switch a.Tool {
+	case "Agent", "Task":
+		return WakeAgent
+	case monitorTool:
+		return WakeMonitor
+	}
+	return WakeCommand
+}
+
 // awaitReturnLocked holds the session at work until the CLI answers a return
 // that came with no turn: a turn it opens, an empty turn, or nothing within
 // ReturnTimeout.
@@ -1182,13 +1248,13 @@ func (s *Service) processExited(k Key, gen int, exit claude.ExitInfo) {
 		return
 	}
 	r.proc = nil
-	r.forgetTasks()
 	r.stopTimer(&r.startTimer)
 	r.stopTimer(&r.idleTimer)
 	r.stopTimer(&r.flushTimer)
 	s.flushTextLocked(r, n)
 
 	if r.stopping {
+		r.forgetTasks()
 		r.stopping = false
 		if r.stopped != nil {
 			close(r.stopped)
@@ -1202,6 +1268,8 @@ func (s *Service) processExited(k Key, gen int, exit claude.ExitInfo) {
 		s.closeTurnLocked(ctx, r, true, interruptedByCrash, n)
 		s.resetTurnLocked(r, n)
 	}
+	s.loseBackgroundLocked(ctx, r, n)
+	r.forgetTasks()
 
 	message := fmt.Sprintf("Claude Code exited with code %d", exit.Code)
 	if exit.Signal != "" {

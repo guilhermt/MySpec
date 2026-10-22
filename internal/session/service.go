@@ -357,6 +357,7 @@ func (s *Service) load(ctx context.Context, t TaskInfo, n *notes) (*run, error) 
 		written = writtenMarker(kind)
 	}
 	marked := false
+	var orphaned []*Entry
 	for i := range stored {
 		e := &stored[i]
 		r.byID[e.ID] = e
@@ -368,13 +369,35 @@ func (s *Service) load(ctx context.Context, t TaskInfo, n *notes) (*run, error) 
 		if written != "" && e.Kind == KindMarker && e.Marker.Type == written {
 			marked = true
 		}
+		background := e.Kind == KindAction && e.Action.Background && e.Action.Status == ActionRunning
 		if settle(e) {
+			if background {
+				orphaned = append(orphaned, e)
+			}
 			if err := s.entries.Update(ctx, *e); err != nil {
 				return nil, err
 			}
 		}
 	}
 	r.turnFailed = lastTurnFailed(r.entries)
+
+	if len(orphaned) > 0 {
+		// The process that ran the work in the background is gone.
+		items := make([]BackgroundItem, 0, len(orphaned))
+		for _, e := range orphaned {
+			name := e.Action.Description
+			if name == "" {
+				name = e.Action.Target
+			}
+			items = append(items, BackgroundItem{Kind: kindOfAction(e.Action), Name: name})
+		}
+		e := r.newEntry(s, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: MarkerBackgroundLost, Background: items}})
+		r.entries = append(r.entries, e)
+		r.byID[e.ID] = e
+		if err := s.entries.Insert(ctx, rec.ID, *e); err != nil {
+			return nil, err
+		}
+	}
 
 	if t.ArtifactExists && !marked {
 		e := r.newEntry(s, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: written}})
@@ -712,6 +735,9 @@ func (s *Service) Pause(ctx context.Context, k Key) error {
 	r.rec.Paused = true
 	if err := s.persistRecord(ctx, r); err != nil {
 		return err
+	}
+	if r.proc != nil {
+		s.loseBackgroundLocked(ctx, r, n)
 	}
 	if !was {
 		s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: &MarkerEntry{Type: MarkerPaused}}, n)

@@ -738,6 +738,7 @@ func (s *Service) stopProcess(k Key, gen int, graceful bool, g graces) {
 	ctx, cancel := bgCtx()
 	defer cancel()
 
+	n := &notes{}
 	s.mu.Lock()
 	r := s.runs[k]
 	if r == nil || r.procGen != gen || r.proc == nil {
@@ -755,6 +756,7 @@ func (s *Service) stopProcess(k Key, gen int, graceful bool, g graces) {
 	stopped := make(chan struct{})
 	r.stopping = true
 	r.stopped = stopped
+	s.loseBackgroundLocked(ctx, r, n)
 	var turnDone chan struct{}
 	if graceful && r.turn != nil {
 		if r.interruptReq == "" {
@@ -767,12 +769,13 @@ func (s *Service) stopProcess(k Key, gen int, graceful bool, g graces) {
 		turnDone = r.turnDone
 	}
 	s.mu.Unlock()
+	s.flush(n)
 
 	if turnDone != nil {
 		wait(turnDone, InterruptTimeout)
 	}
 
-	n := &notes{}
+	n = &notes{}
 	s.mu.Lock()
 	if r.procGen == gen && r.turn != nil {
 		s.closeTurnLocked(ctx, r, true, interruptedByUser, n)
