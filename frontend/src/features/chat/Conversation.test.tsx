@@ -1294,7 +1294,23 @@ describe("Conversation coming back from a subagent", () => {
   });
 
   it("takes the place to land once, and does not start at the end", async () => {
-    layout();
+    const scrollTo = layout();
+    // What scrolls is far taller than the viewport, so the end is away from the top.
+    for (const [property, value] of [
+      ["scrollHeight", 5000],
+      ["clientHeight", 400],
+    ] as const) {
+      const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, property);
+      Object.defineProperty(HTMLElement.prototype, property, {
+        get: () => value,
+        configurable: true,
+      });
+      restore.push(() => {
+        if (original !== undefined) {
+          Object.defineProperty(HTMLElement.prototype, property, original);
+        }
+      });
+    }
     useAppStore.setState({
       subagentReturn: { itemId: "task-1", stage: "prd", toolUseId: CALL, offset: 10 },
     });
@@ -1316,6 +1332,10 @@ describe("Conversation coming back from a subagent", () => {
 
     await screen.findByRole("button", { name: "Open the conversation of Survey the repository" });
     expect(useAppStore.getState().subagentReturn).toBeNull();
+    // It scrolls to the row, and never to the end of what scrolls (5000 - 400).
+    const tops = scrollTo.mock.calls.map(([options]) => options.top ?? 0);
+    expect(tops).toContain(490);
+    expect(tops.filter((top) => top >= 4600)).toEqual([]);
   });
 
   it("ignores a place to land that belongs to another conversation", async () => {
@@ -1333,5 +1353,41 @@ describe("Conversation coming back from a subagent", () => {
     await screen.findByRole("feed");
     expect(scrollTo).not.toHaveBeenCalledWith({ top: 490 });
     expect(screen.queryByText("src/a0.ts")).not.toBeInTheDocument();
+  });
+});
+
+describe("Conversation, the permission of a subagent", () => {
+  it("names the subagent that asks, a subagent inside one by the first", () => {
+    const asked = makeEntry("permission");
+    const entries = [
+      makeEntry("action", {
+        turnId: "turn-1",
+        action: makeAction({
+          toolUseId: "toolu_root",
+          tool: "Agent",
+          description: "Survey the repository",
+        }),
+      }),
+      makeEntry("action", {
+        turnId: "turn-1",
+        action: makeAction({
+          toolUseId: "toolu_nested",
+          tool: "Agent",
+          description: "Look deeper",
+          parentToolUseId: "toolu_root",
+        }),
+      }),
+      {
+        ...asked,
+        turnId: "turn-1",
+        permission: asked.permission && { ...asked.permission, parentToolUseId: "toolu_nested" },
+      },
+    ];
+    renderWithStore(<Conversation stage="prd" taskId="task-1" session={makeTask()} />, {
+      state: withTask(),
+      ui: { transcripts: ready(entries) },
+    });
+
+    expect(screen.getByText(/Requested by agent "Survey the repository"/)).toBeInTheDocument();
   });
 });

@@ -5,10 +5,9 @@ import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import { LiveRegion } from "@/components/system/LiveRegion";
 import { useNow } from "@/features/attention/useNow";
-import { formatDuration } from "@/features/chat/actions";
+import { formatDuration, shortAction } from "@/features/chat/actions";
 import { COLUMN_CLASS } from "@/features/chat/ConversationColumn";
 import { LiveOutput } from "@/features/chat/entries/LiveOutput";
-import { shortAction } from "@/features/sidebar/sidebar-tree";
 import { cn } from "@/lib/utils";
 import { asRunningKind, type RunningKind, type RunningTask } from "@/lib/wails";
 import { stopTasksInPlace } from "@/store/actions";
@@ -187,7 +186,7 @@ export function BackgroundWork({ itemId, stage, tasks }: BackgroundWorkProps) {
   }, [itemId, stage, tasks]);
 
   // stop asks for the stop of tasks; a call that fails is told where the click was: under the item
-  // of one, at the foot of the list for all of them.
+  // of one, at the foot of the list for all of them, unless the items already tell their reasons.
   const stop = async (ids: string[], scope: string) => {
     setFailure(null);
     setRequested((was) => new Set([...was, ...ids]));
@@ -259,7 +258,7 @@ export function BackgroundWork({ itemId, stage, tasks }: BackgroundWorkProps) {
                 </ul>
                 <div className="flex items-center justify-end gap-(--space-2) px-(--space-1-5) pt-(--space-1)">
                   <LiveRegion kind="alert" as="div" className="empty:hidden">
-                    {failure?.scope === ALL && (
+                    {failure?.scope === ALL && !tasks.some((task) => task.stopError !== "") && (
                       <p className={cn(TEXT, "text-state-error")}>
                         {`Couldn't stop it · ${failure.reason}`}
                       </p>

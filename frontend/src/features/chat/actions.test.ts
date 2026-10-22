@@ -8,6 +8,7 @@ import {
   failureNotes,
   formatDuration,
   progressOf,
+  shortAction,
   summaryOf,
 } from "@/features/chat/actions";
 import type { ActionEntry } from "@/lib/wails";
@@ -506,15 +507,42 @@ describe("the commands of the scenes", () => {
   );
 });
 
+describe("shortAction", () => {
+  it.each([
+    ["Running", "go test ./internal/api/ratelimit", "go test …/ratelimit"],
+    ["Running", "go test ./internal/ratelimit/... -run TestBucket", "go test …/ratelimit"],
+    ["Running", "go vet ./...", "go vet ./..."],
+    ["Running", "pnpm vitest run src/lib/a.test.ts", "pnpm vitest …/a.test.ts"],
+    ["Running", "ls -la /tmp/x", "ls …/x"],
+    ["Running", "make", "make"],
+    ["Running", "go test C:\\Users\\dev\\code\\api\\ratelimit", "go test …/ratelimit"],
+    ["Editing", "frontend/src/app.tsx", "…/app.tsx"],
+    ["Reading", "C:\\Users\\dev\\code\\api\\main.go", "…/main.go"],
+    ["Searching", "TODO", "TODO"],
+  ])("cuts %s %s to %s", (label, target, expected) => {
+    expect(shortAction(label, target)).toBe(expected);
+  });
+});
+
 describe("progressOf", () => {
-  it("counts the actions and names the last that runs", () => {
+  it("counts the actions and names the last that runs, with its target in the short form", () => {
     const actions = [
       makeAction({ status: "done" }),
-      makeAction({ status: "running", label: "Reading" }),
-      makeAction({ status: "running", label: "Searching" }),
+      makeAction({ status: "running", label: "Reading", target: "internal/session/service.go" }),
+      makeAction({ status: "running", label: "Running", target: "go test ./internal/ratelimit" }),
     ];
 
-    expect(progressOf(actions)).toEqual({ count: "3 actions", doing: "Searching", acting: true });
+    expect(progressOf(actions)).toEqual({
+      count: "3 actions",
+      doing: "Running go test …/ratelimit",
+      acting: true,
+    });
+  });
+
+  it("names the action alone when it has no target", () => {
+    expect(
+      progressOf([makeAction({ status: "running", label: "Searching", target: "" })]).doing,
+    ).toBe("Searching");
   });
 
   it("thinks when no action runs", () => {

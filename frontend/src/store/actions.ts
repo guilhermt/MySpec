@@ -644,6 +644,11 @@ export async function pause(taskId: string, stage: string): Promise<void> {
   );
 }
 
+/** pauseInPlace pauses a session from a dialog that shows the refusal; it answers it, or null. */
+export function pauseInPlace(taskId: string, stage: string): Promise<string | null> {
+  return inPlace(() => api.pause(taskId, stage));
+}
+
 export async function resume(taskId: string, stage: string): Promise<void> {
   await run(fail(withItem("Couldn't resume", itemName(taskId)), TRY), () =>
     api.resume(taskId, stage),
@@ -825,6 +830,11 @@ export function closeTask(taskId: string): Promise<void> {
     fail(withItem("Couldn't close", itemName(taskId)), cloneRemedy(taskId, TRY)),
     () => api.closeTask(taskId),
   );
+}
+
+/** closeTaskInPlace closes the task from a dialog that shows the refusal; it answers it, or null. */
+export function closeTaskInPlace(taskId: string): Promise<string | null> {
+  return removalInPlace(taskId, () => api.closeTask(taskId));
 }
 
 /** openInEditor opens the worktree of the task in the editor of the user. */

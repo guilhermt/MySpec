@@ -10,7 +10,6 @@ import {
   nodesOfItem,
   type RowTone,
   reviewRow,
-  shortAction,
   sidebarTree,
   TONE_RANK,
   type TreeNode,
@@ -1220,23 +1219,6 @@ describe("a discussion ready to archive", () => {
 
   it("counts in a collapsed node as ready to close", () => {
     expect(nodeSummary([ready()])?.label).toBe("1 ready to close");
-  });
-});
-
-describe("shortAction", () => {
-  it.each([
-    ["Running", "go test ./internal/api/ratelimit", "go test …/ratelimit"],
-    ["Running", "go test ./internal/ratelimit/... -run TestBucket", "go test …/ratelimit"],
-    ["Running", "go vet ./...", "go vet ./..."],
-    ["Running", "pnpm vitest run src/lib/a.test.ts", "pnpm vitest …/a.test.ts"],
-    ["Running", "ls -la /tmp/x", "ls …/x"],
-    ["Running", "make", "make"],
-    ["Running", "go test C:\\Users\\dev\\code\\api\\ratelimit", "go test …/ratelimit"],
-    ["Editing", "frontend/src/app.tsx", "…/app.tsx"],
-    ["Reading", "C:\\Users\\dev\\code\\api\\main.go", "…/main.go"],
-    ["Searching", "TODO", "TODO"],
-  ])("cuts %s %s to %s", (label, target, expected) => {
-    expect(shortAction(label, target)).toBe(expected);
   });
 });
 

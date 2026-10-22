@@ -140,6 +140,21 @@ describe("BackgroundWork", () => {
     expect(screen.queryByText(/the backend is gone/)).not.toBeInTheDocument();
   });
 
+  it("does not repeat at the foot the reasons its items already show", async () => {
+    api.stopTasks.mockRejectedValueOnce(new Error("Task cannot be stopped."));
+    const { user, update } = render([agent, command]);
+    await user.click(screen.getByRole("button", { name: /^Background work/ }));
+
+    await user.click(screen.getByRole("button", { name: "Stop all" }));
+    update([
+      { ...agent, stopError: "Task cannot be stopped" },
+      { ...command, stopError: "Task cannot be stopped" },
+    ]);
+
+    expect(await screen.findAllByText("Couldn't stop it · Task cannot be stopped")).toHaveLength(2);
+    expect(screen.queryByText(/Task cannot be stopped\./)).not.toBeInTheDocument();
+  });
+
   it("stops all of them at the foot of the list", async () => {
     const { user } = render([agent, command, monitor]);
     await user.click(screen.getByRole("button", { name: /^Background work/ }));

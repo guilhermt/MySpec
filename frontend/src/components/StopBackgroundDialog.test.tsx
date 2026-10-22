@@ -13,7 +13,7 @@ const SESSIONS = [
   },
 ];
 
-function open(onConfirm = vi.fn(() => Promise.resolve())) {
+function open(onConfirm = vi.fn(() => Promise.resolve<string | null>(null))) {
   const onOpenChange = vi.fn();
   const task = makeTask();
   return {
@@ -65,7 +65,7 @@ describe("StopBackgroundDialog", () => {
     });
     const onConfirm = vi.fn(() => {
       order.push("gesture");
-      return Promise.resolve();
+      return Promise.resolve<string | null>(null);
     });
     const { user, onOpenChange } = open(onConfirm);
 
@@ -82,8 +82,8 @@ describe("StopBackgroundDialog", () => {
     const { user, onOpenChange } = open(
       vi.fn(
         () =>
-          new Promise<void>((settle) => {
-            finish = settle;
+          new Promise<string | null>((settle) => {
+            finish = () => settle(null);
           }),
       ),
     );
@@ -94,6 +94,21 @@ describe("StopBackgroundDialog", () => {
     expect(onOpenChange).not.toHaveBeenCalled();
     finish();
     await vi.waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  });
+
+  it("stays open with the reason in its footer when the gesture is refused", async () => {
+    const { user, onOpenChange } = open(
+      vi.fn(() => Promise.resolve<string | null>("The session is busy.")),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Stop and pause" }));
+
+    const dialog = screen.getByRole("alertdialog", { name: "Stop the work in the background?" });
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "Couldn't pause: The session is busy.",
+    );
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole("button", { name: "Stop and pause" })).toBeInTheDocument();
   });
 
   it("does the gesture even when a stop fails: what does not stop is lost with the process", async () => {

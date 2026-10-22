@@ -79,13 +79,19 @@ describe("SubagentRow", () => {
     renderSubagent(
       node({ toolUseId: "toolu_a", tool: "Agent", status: "running", startedAt: "" }, [
         node({ toolUseId: "c1", tool: "Read", status: "done" }),
-        node({ toolUseId: "c2", tool: "Grep", status: "running", label: "Searching" }),
+        node({
+          toolUseId: "c2",
+          tool: "Bash",
+          status: "running",
+          label: "Running",
+          target: "go test ./internal/ratelimit",
+        }),
       ]),
     );
 
     const toggle = screen.getByRole("button", { name: /^Delegated/ });
-    expect(toggle).toHaveTextContent(/2 actions\s*·\s*Searching/);
-    expect(toggle).toHaveAccessibleName(/2 actions · Searching$/);
+    expect(toggle).toHaveTextContent(/2 actions\s*·\s*Running go test …\/ratelimit/);
+    expect(toggle).toHaveAccessibleName(/2 actions · Running go test …\/ratelimit$/);
   });
 
   it("says Thinking… when a subagent that works runs no action", () => {

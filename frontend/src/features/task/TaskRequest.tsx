@@ -21,6 +21,7 @@ import {
   approveStep,
   changeClonePath,
   closeTask,
+  closeTaskInPlace,
   continueStage,
   discardDraft,
   openExternal,
@@ -212,7 +213,7 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
         verb="close"
         itemId={task.id}
         sessions={ended}
-        onConfirm={() => closeTask(task.id)}
+        onConfirm={() => closeTaskInPlace(task.id)}
       />
     </div>
   );

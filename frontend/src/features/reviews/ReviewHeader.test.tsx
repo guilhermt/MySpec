@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ReviewHeader } from "@/features/reviews/ReviewHeader";
 import { api, type ReviewSummary } from "@/lib/wails";
@@ -114,6 +114,22 @@ describe("ReviewHeader", () => {
       header({ sessionStatus: "paused", contextPercent: 44 });
 
       expect(meter()).toHaveTextContent("—");
+    });
+
+    it("steps aside while the conversation of a subagent is read", () => {
+      header({ contextPercent: 44 });
+      expect(meter()).toBeInTheDocument();
+
+      act(() =>
+        useAppStore.getState().openSubagentConversation({
+          itemId: makeReviewSummary().id,
+          stage: "review",
+          toolUseId: "toolu_a",
+          offset: null,
+        }),
+      );
+
+      expect(screen.queryByRole("meter")).not.toBeInTheDocument();
     });
 
     it("is not there, nor Pause, before the review has a session", () => {

@@ -74,13 +74,22 @@ func TestThePullRequestReviewRefusalsGetTheirSentences(t *testing.T) {
 func TestARefusedStopGetsTheReasonsOfTheCLI(t *testing.T) {
 	t.Parallel()
 
-	wrapped := fmt.Errorf("stop: %w", &session.StopRefusal{Reasons: []string{"Task cannot be stopped", "No task found with ID: x"}})
+	tests := []struct {
+		reasons []string
+		want    string
+	}{
+		{[]string{"Task cannot be stopped", "No task found with ID: x"}, "Task cannot be stopped; No task found with ID: x."},
+		{[]string{"Claude Code did not answer."}, "Claude Code did not answer."},
+		{[]string{"Claude Code is not running.", "Claude Code is not running."}, "Claude Code is not running."},
+	}
+	for _, tt := range tests {
+		wrapped := fmt.Errorf("stop: %w", &session.StopRefusal{Reasons: tt.reasons})
 
-	err := failure(slog.New(slog.DiscardHandler), "StopTasks", wrapped)
+		err := failure(slog.New(slog.DiscardHandler), "StopTasks", wrapped)
 
-	want := "Claude Code couldn't stop it: Task cannot be stopped; No task found with ID: x."
-	if err == nil || err.Error() != want {
-		t.Errorf("failure(StopRefusal) = %v, want %q", err, want)
+		if err == nil || err.Error() != tt.want {
+			t.Errorf("failure(StopRefusal%q) = %v, want %q", tt.reasons, err, tt.want)
+		}
 	}
 }
 

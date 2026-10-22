@@ -307,7 +307,9 @@ func (s *Service) handleTaskNotification(ctx context.Context, r *run, ev *claude
 	}
 	task.wake = &w
 	r.stopTimer(&task.limit)
-	if task.backgrounded && task.entry != nil {
+	// A call in the background ends with its task, also a subagent's, whose
+	// task the CLI does not mark as backgrounded.
+	if task.entry != nil && task.entry.Action.Background {
 		s.endBackgroundActionLocked(ctx, r, task, ev, n)
 	}
 	switch {

@@ -114,3 +114,22 @@ func TestABackgroundCallThatFailsToLaunchEndsWithItsError(t *testing.T) {
 		t.Errorf("output = %q, want the error of the result", bash.Action.OutputTail)
 	}
 }
+
+func TestACommandASubagentRunsInTheBackgroundEndsWithItsTask(t *testing.T) {
+	t.Parallel()
+
+	f, open := bgScenarioRun(t, "bg_sub_command", 0, limits{})
+	f.waitBackground(t, prd("t1"))
+
+	open("1-1")
+	bash := waitActionStatus(t, f, prd("t1"), "Bash", session.ActionDone)
+	if !bash.Action.Background || bash.Action.ParentToolUseID == "" {
+		t.Errorf("action = %+v, want the subagent's command in the background", bash.Action)
+	}
+	if bash.Action.OutputTail != "line 1\nline 2" {
+		t.Errorf("output = %q, want the content of the output file", bash.Action.OutputTail)
+	}
+	if agent, _ := actionOf(t, f, prd("t1"), "Agent", ""); agent.Action.Status != session.ActionRunning {
+		t.Errorf("Agent status = %q, want it running: its task did not end", agent.Action.Status)
+	}
+}

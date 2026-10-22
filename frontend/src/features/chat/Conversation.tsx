@@ -139,8 +139,9 @@ function useSteady<T>(value: T, sign: (value: T) => string): T {
   return steady.current.value;
 }
 
-// requestersOf names the subagent each action of one belongs to, by the call of the action: a
-// subagent inside a subagent answers with the first, whose conversation holds it.
+// requestersOf names the subagent behind each Agent/Task call, the call a permission of a subagent
+// names: a subagent inside a subagent answers with the first, whose conversation holds it. Only the
+// calls enter, so the map changes with a new subagent and not with every action of one.
 function requestersOf(entries: readonly Entry[]): Map<string, PermissionRequester> {
   const requesters = new Map<string, PermissionRequester>();
   for (const entry of entries) {
@@ -148,11 +149,12 @@ function requestersOf(entries: readonly Entry[]): Map<string, PermissionRequeste
     if (entry.kind !== "action" || action === null || action === undefined) {
       continue;
     }
+    if (action.tool !== "Agent" && action.tool !== "Task") {
+      continue;
+    }
     if (action.parentToolUseId === "") {
-      if (action.tool === "Agent" || action.tool === "Task") {
-        const name = action.description || action.target || actionLabel(action).label;
-        requesters.set(action.toolUseId, { name, toolUseId: action.toolUseId });
-      }
+      const name = action.description || action.target || actionLabel(action).label;
+      requesters.set(action.toolUseId, { name, toolUseId: action.toolUseId });
       continue;
     }
     const root = requesters.get(action.parentToolUseId);

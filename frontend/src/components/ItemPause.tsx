@@ -4,7 +4,7 @@ import { PauseButton } from "@/components/PauseButton";
 import { StopBackgroundDialog } from "@/components/StopBackgroundDialog";
 import { asSessionStatus, type SessionTasks } from "@/lib/wails";
 import { clockTime } from "@/lib/when";
-import { pause, resume } from "@/store/actions";
+import { pause, pauseInPlace, resume } from "@/store/actions";
 
 /** PausableSession is the part of a session Pause needs: which one it is, its state and since when it is paused. */
 export interface PausableSession {
@@ -77,7 +77,7 @@ export function ItemPause<S extends PausableSession>({
         verb="pause"
         itemId={id}
         sessions={ended}
-        onConfirm={() => pause(id, session.stage)}
+        onConfirm={() => pauseInPlace(id, session.stage)}
       />
     </>
   );

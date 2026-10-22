@@ -528,6 +528,8 @@ func (f *fake) answerListModels(requestID string) {
 //     task; no gates.
 //   - bg_permission_sub: a subagent that asks permission for a command, in the
 //     turn that launched it; no gates.
+//   - bg_sub_command: a subagent that never ends; gate 1 is a command the
+//     subagent runs in the background, from its launch to its end.
 func (f *fake) play(scenario string) int {
 	for text := range f.users {
 		f.turns++
@@ -576,6 +578,8 @@ func (f *fake) play(scenario string) int {
 			f.bgRefusedTurn(text)
 		case "bg_permission_sub":
 			f.bgPermissionSubTurn(text)
+		case "bg_sub_command":
+			f.bgSubCommandTurn(text)
 		case "bash_fail":
 			f.bashFailTurn(text)
 		case "writer":
@@ -1440,6 +1444,35 @@ func (f *fake) bgPermissionSubTurn(text string) {
 		reply = "denied: " + answer.Message
 	}
 	f.bgClose(m1, 1, reply)
+}
+
+// bgSubCommandTurn launches a subagent and ends the turn. Gate 1: the subagent
+// runs a command in the background, whose task the CLI does not mark as
+// backgrounded, and the command ends. The subagent lives until a stop_task.
+func (f *fake) bgSubCommandTurn(text string) {
+	n := f.turns
+
+	f.emitInit()
+	f.status()
+	m1 := f.nextID("msg")
+	f.messageStart(m1)
+	_, _, aUse := f.bgLaunchAgent(0, m1, BackgroundAgentA, "a")
+	f.bgClose(m1, 1, text)
+
+	if !f.awaitGate(fmt.Sprintf("%d-1", n)) {
+		return
+	}
+	cmd, cmdRun := fmt.Sprintf("task-%d-subcmd", n), fmt.Sprintf("run-%d-subcmd", n)
+	cmdUse := f.nextID("toolu")
+	f.toolUseWithParent(f.nextID("msg"), cmdUse, "Bash", map[string]any{
+		"command":           "go test ./...",
+		"description":       BackgroundServer,
+		"run_in_background": true,
+	}, aUse)
+	f.taskStarted(cmd, cmdRun, cmdUse, BackgroundServer, "local_bash", false)
+	f.keepLive(cmd, liveTask{runID: cmdRun, toolUseID: cmdUse, description: BackgroundServer, taskType: "local_bash"})
+	f.toolResultWithParent(cmdUse, "Command running in background with ID: "+cmd+".", aUse)
+	f.taskNotification(cmd, cmdRun, cmdUse, "completed", "The task is done.")
 }
 
 // bgSilentTurn launches a subagent and ends the turn. Gate 1: the subagent

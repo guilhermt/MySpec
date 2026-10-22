@@ -14,15 +14,15 @@ export interface StopBackgroundDialogProps {
   itemId: string;
   /** sessions are the conversations the gesture ends, with what runs in each. */
   sessions: readonly SessionTasks[];
-  /** onConfirm does the gesture, once what runs is stopped. */
-  onConfirm: () => Promise<void>;
+  /** onConfirm does the gesture, once what runs is stopped; it answers the refusal, or null. */
+  onConfirm: () => Promise<string | null>;
 }
 
 /**
  * StopBackgroundDialog is the confirmation of a gesture that has no dialog of its own, Pause and
  * Close task, when a subagent runs: it lists what runs, which does not resume, and stops it before
- * the gesture. The button says
- * Stopping… until the gesture is done.
+ * the gesture. The button says Stopping… until the gesture is done, and a gesture refused keeps the
+ * dialog open with the reason in its footer.
  */
 export function StopBackgroundDialog({
   open,
@@ -33,16 +33,22 @@ export function StopBackgroundDialog({
   onConfirm,
 }: StopBackgroundDialogProps) {
   const [working, setWorking] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
 
   const confirm = async () => {
     if (working) {
       return;
     }
     setWorking(true);
+    setRefusal(null);
     await stopTasksOf(itemId, sessions);
-    await onConfirm();
+    const message = await onConfirm();
     setWorking(false);
-    onOpenChange(false);
+    if (message === null) {
+      onOpenChange(false);
+    } else {
+      setRefusal(`Couldn't ${verb}: ${message}`);
+    }
   };
 
   const gerund = verb.endsWith("e") ? `${verb.slice(0, -1)}ing` : `${verb}ing`;
@@ -50,9 +56,12 @@ export function StopBackgroundDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        // While the gesture runs, the dialog stays.
+        // While the gesture runs, the dialog stays: a refusal that comes back has its footer.
         if (!next && working) {
           return;
+        }
+        if (!next) {
+          setRefusal(null);
         }
         onOpenChange(next);
       }}
@@ -64,7 +73,7 @@ export function StopBackgroundDialog({
         <p>{`${gerund.charAt(0).toUpperCase()}${gerund.slice(1)} stops what runs in the background. It won't resume.`}</p>
         <BackgroundWorkList itemId={itemId} sessions={sessions} />
       </DialogBody>
-      <DialogFooter>
+      <DialogFooter {...(refusal === null ? {} : { refusal })}>
         <DialogCancel disabled={working} />
         <Button
           variant="danger"

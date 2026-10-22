@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -21,9 +22,17 @@ var ErrNoAnswer = errors.New("session: Claude Code did not answer")
 // reasons in the CLI's words, which the interface shows as they are.
 type StopRefusal struct{ Reasons []string }
 
-// Message is the sentence the interface shows.
+// Message is the sentence the interface shows after its own "Couldn't stop
+// it": each reason once, joined into one sentence with one final period.
 func (e *StopRefusal) Message() string {
-	return "Claude Code couldn't stop it: " + strings.Join(e.Reasons, "; ") + "."
+	reasons := make([]string, 0, len(e.Reasons))
+	for _, reason := range e.Reasons {
+		reason = strings.TrimSuffix(reason, ".")
+		if !slices.Contains(reasons, reason) {
+			reasons = append(reasons, reason)
+		}
+	}
+	return strings.Join(reasons, "; ") + "."
 }
 
 func (e *StopRefusal) Error() string {

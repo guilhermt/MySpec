@@ -13,7 +13,7 @@ import {
   reviewStepper,
 } from "@/features/reviews/review-header";
 import type { ReviewSummary } from "@/lib/wails";
-import { useAppStore, usePanel } from "@/store/app-store";
+import { useAppStore, usePanel, useSubagentConversation } from "@/store/app-store";
 
 /** PANELS are the panels of a review, in their order, each with what it shows. */
 const PANELS = [
@@ -37,6 +37,7 @@ export interface ReviewHeaderProps {
  * ReviewHeader is the header of the place of a pull request under review: the title, the pill of its
  * pass, and on the right the context meter, Pause or Resume, the panels and the ⋯. The meter and Pause
  * are there only while the review has a session.
+ * A subagent's conversation on screen is not the one the meter measures, so the meter steps aside.
  */
 export function ReviewHeader({ review }: ReviewHeaderProps) {
   const now = useNow(MINUTE, true);
@@ -44,6 +45,7 @@ export function ReviewHeader({ review }: ReviewHeaderProps) {
   const openPanel = useAppStore((state) => state.openPanel);
   const stepper = reviewStepper(review, now);
   const hasSession = review.sessionStage !== "";
+  const subagent = useSubagentConversation(review.id);
 
   return (
     <LocationHeader
@@ -57,7 +59,7 @@ export function ReviewHeader({ review }: ReviewHeaderProps) {
         />
       }
     >
-      {hasSession && (
+      {hasSession && subagent === null && (
         <ContextMeter
           percent={review.contextPercent === 0 ? null : review.contextPercent}
           paused={isPausedReview(review)}

@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useRef } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { ArrivalFocus } from "@/components/ArrivalFocus";
 import { BackgroundWork } from "@/components/BackgroundWork";
 import { backgroundOf } from "@/components/background-work";
@@ -48,6 +48,7 @@ import { loadTranscript } from "@/store/actions";
 import {
   PR_TAB_SLOT,
   type StepTab,
+  type SubagentReturn,
   useAppStore,
   useEarlierConversation,
   useOpenStepTab,
@@ -131,14 +132,26 @@ function sessionOpenOf(task: TaskSummary, tab: StepTab, stage: string): boolean 
 
 /**
  * EarlierConversation is a conversation of the task read in place of the one of its place, from its
- * start and taking no message, with the strip that leads back. It takes the focus as it opens.
+ * start and taking no message, with the strip that leads back. It takes the focus as it opens; back
+ * from a subagent read from it, the row of that subagent takes it instead.
  */
-function EarlierConversation({ task, stage }: { task: TaskSummary; stage: string }) {
+function EarlierConversation({
+  task,
+  stage,
+  anchor,
+}: {
+  task: TaskSummary;
+  stage: string;
+  anchor: SubagentReturn | null;
+}) {
   const ref = useRef<HTMLElement>(null);
+  const [landing] = useState(anchor?.stage === stage);
 
   useEffect(() => {
-    ref.current?.focus();
-  }, []);
+    if (!landing) {
+      ref.current?.focus();
+    }
+  }, [landing]);
 
   return (
     <>
@@ -148,7 +161,13 @@ function EarlierConversation({ task, stage }: { task: TaskSummary; stage: string
         tabIndex={-1}
         className="flex min-h-0 flex-1 flex-col outline-none"
       >
-        <Conversation taskId={task.id} stage={stage} session={IDLE_SESSION} readOnly />
+        <Conversation
+          taskId={task.id}
+          stage={stage}
+          session={IDLE_SESSION}
+          anchor={anchor}
+          readOnly
+        />
       </section>
       <EarlierConversationFoot task={task} stage={stage} />
     </>
@@ -299,7 +318,12 @@ export function TaskView({ taskId }: TaskViewProps) {
             sessionOpen={sessionOpenOf(task, stepTab, subagent.stage)}
           />
         ) : earlier !== null && earlierReady ? (
-          <EarlierConversation key={earlier.stage} task={task} stage={earlier.stage} />
+          <EarlierConversation
+            key={earlier.stage}
+            task={task}
+            stage={earlier.stage}
+            anchor={subagentReturn}
+          />
         ) : implementing ? (
           <>
             {step !== null && <StepTop task={task} step={step} />}

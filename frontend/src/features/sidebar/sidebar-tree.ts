@@ -1,4 +1,5 @@
 import { backgroundOf, summaryOfRunning } from "@/components/background-work";
+import { shortAction } from "@/features/chat/actions";
 import { isDecided, roundDrafts } from "@/features/discussion/drafts-card";
 import { reviewChecks, reviewPass, VERDICT_WORDS } from "@/features/reviews/review-header";
 import {
@@ -10,7 +11,6 @@ import {
 } from "@/features/sidebar/sessions";
 import { currentReport } from "@/features/task/pr-findings";
 import { boardOfRepository } from "@/lib/boards";
-import { isWindowsPath } from "@/lib/paths";
 import { checkCounts, prChecks } from "@/lib/pull-requests";
 import { ALL_REPOSITORIES, findRepository, shortName, tasksInFilter } from "@/lib/repositories";
 import { compactWait, compareSituations, spokenWait } from "@/lib/situations";
@@ -684,40 +684,6 @@ function discussionStanding(discussion: DiscussionSummary): Standing {
     return appWork({ long: `${place} · publishing`, short: "publishing" });
   }
   return sessionStanding(discussionSessions(discussion), place, same(place));
-}
-
-/** shortAction is the target of an action cut to what tells it apart: the command and its subcommand, or the last segment of a path. */
-export function shortAction(label: string, target: string): string {
-  if (label === "Running") {
-    const [command = "", ...rest] = target.split(" ").filter((term) => term !== "");
-    const parts = [command];
-    const [second] = rest;
-    if (second !== undefined && !second.startsWith("-") && !isPath(second)) {
-      parts.push(second);
-    }
-    const path = rest.find((term) => isPath(term) && !term.startsWith("-"));
-    if (path !== undefined) {
-      parts.push(cutPath(path));
-    }
-    return parts.join(" ");
-  }
-  return isPath(target) ? cutPath(target) : target;
-}
-
-// isPath says whether a term is a path: it has a slash or it is a Windows one, with a drive letter.
-function isPath(term: string): boolean {
-  return term.includes("/") || isWindowsPath(term);
-}
-
-// cutPath is a path cut to its last segment that tells it apart, `…/ratelimit`: the empty ones, `.`
-// and the `...` of a Go package pattern say nothing, and a path of nothing else stays whole. A Windows
-// path breaks at either slash; elsewhere a backslash is an escape in a command, not a separator.
-function cutPath(path: string): string {
-  const last = path
-    .split(isWindowsPath(path) ? /[\\/]/ : "/")
-    .filter((segment) => segment !== "" && segment !== "." && segment !== "...")
-    .at(-1);
-  return last === undefined ? path : `…/${last}`;
 }
 
 // The words of line 3 and of the name without an action: what the conversation does.
