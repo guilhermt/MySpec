@@ -6,7 +6,7 @@ import { api, type DeletePreview } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { spoken } from "@/test/live";
 import { renderWithStore } from "@/test/render";
-import { makeDeletePreview, makeState, makeTask } from "@/test/wails-mock";
+import { makeDeletePreview, makeRunningTask, makeState, makeTask } from "@/test/wails-mock";
 
 const WORKTREE = {
   path: "/home/dev/.local/share/myspec/worktrees/dev/web/add-login",
@@ -211,5 +211,22 @@ describe("DeleteTaskDialog", () => {
 
     expect(screen.queryByText("The worktree is removed")).not.toBeInTheDocument();
     expect(api.previewDelete).toHaveBeenCalledTimes(2);
+  });
+
+  it("lists what runs and keeps its confirmation, with no stop before", async () => {
+    previewing({});
+    const { user } = dialog(
+      makeTask({
+        name: "Rate limit per API key",
+        running: [{ stage: "prd", tasks: [makeRunningTask({ taskId: "a" })] }],
+      }),
+    );
+
+    expect(screen.getByText("This stops what runs in the background.")).toBeVisible();
+    expect(screen.getByRole("list", { name: "What runs" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Delete task" }));
+
+    expect(api.stopTasks).not.toHaveBeenCalled();
+    expect(api.deleteTask).toHaveBeenCalledWith(TASK.id);
   });
 });

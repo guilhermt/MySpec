@@ -1,4 +1,6 @@
 import { useEffect, useId, useState } from "react";
+import { BackgroundWorkList } from "@/components/BackgroundWorkList";
+import { endedBy } from "@/components/background-work";
 import { Button } from "@/components/system/Button";
 import { Checkbox } from "@/components/system/Checkbox";
 import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
@@ -11,7 +13,7 @@ import {
 } from "@/features/task/deletion";
 import { usePreviewReading } from "@/features/task/usePreviewReading";
 import { asTaskMode, type Step, type TaskSummary } from "@/lib/wails";
-import { discardStepInPlace, focusRequestAfterRestart } from "@/store/actions";
+import { discardStepInPlace, focusRequestAfterRestart, stopTasksOf } from "@/store/actions";
 
 export interface DiscardStepDialogProps {
   task: TaskSummary;
@@ -34,6 +36,7 @@ export function DiscardStepDialog({ task, step, open, onOpenChange }: DiscardSte
   const texts = discardStepTexts(task, step, reading, clean);
   // other is what the box would say the other way, which keeps its room.
   const other = checkboxDescription(reading, !clean);
+  const ended = endedBy({ kind: "discardStep", number: step.number }, task);
   const subject =
     asTaskMode(task.mode) === "one_shot" ? "the implementation" : `step ${step.number}`;
 
@@ -51,6 +54,7 @@ export function DiscardStepDialog({ task, step, open, onOpenChange }: DiscardSte
     }
     setDiscarding(true);
     setRefusal(null);
+    await stopTasksOf(task.id, ended);
     const message = await discardStepInPlace(task.id, clean);
     setDiscarding(false);
     if (message === null) {
@@ -114,6 +118,12 @@ export function DiscardStepDialog({ task, step, open, onOpenChange }: DiscardSte
             {interruptedSentence(role)}
           </p>
         ))}
+        {ended.length > 0 && (
+          <>
+            <p>This also stops what runs in the background. It won't resume.</p>
+            <BackgroundWorkList itemId={task.id} sessions={ended} />
+          </>
+        )}
       </DialogBody>
       <DialogFooter {...(refusal === null ? {} : { refusal })}>
         <DialogCancel disabled={discarding} />
@@ -123,7 +133,7 @@ export function DiscardStepDialog({ task, step, open, onOpenChange }: DiscardSte
           loadingLabel="Discarding…"
           onClick={() => void discard()}
         >
-          {texts.confirm}
+          {ended.length > 0 ? "Stop and discard" : texts.confirm}
         </Button>
       </DialogFooter>
     </Dialog>

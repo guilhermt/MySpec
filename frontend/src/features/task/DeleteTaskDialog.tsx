@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { BackgroundWorkList } from "@/components/BackgroundWorkList";
+import { endedBy } from "@/components/background-work";
 import { Button } from "@/components/system/Button";
 import { DeletionPreview } from "@/components/system/DeletionPreview";
 import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
@@ -23,6 +25,7 @@ export function DeleteTaskDialog({ task, open, onOpenChange }: DeleteTaskDialogP
   const [deleting, setDeleting] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const reading = usePreviewReading(task.id, open);
+  const ended = endedBy({ kind: "delete" }, task);
 
   const remove = async () => {
     if (deleting) {
@@ -59,6 +62,12 @@ export function DeleteTaskDialog({ task, open, onOpenChange }: DeleteTaskDialogP
           This removes the documents, the steps and every record of the task. It can't be undone.
         </p>
         <DeletionPreview state={deletionLines(task, reading)} />
+        {ended.length > 0 && (
+          <>
+            <p>This stops what runs in the background.</p>
+            <BackgroundWorkList itemId={task.id} sessions={ended} />
+          </>
+        )}
       </DialogBody>
       <DialogFooter {...(refusal === null ? {} : { refusal })}>
         <DialogCancel disabled={deleting} />

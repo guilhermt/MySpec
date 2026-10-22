@@ -25,6 +25,7 @@ import {
   makeDraftRef,
   makeEntry,
   makeRepository,
+  makeRunningTask,
   makeSituation,
   makeState,
 } from "@/test/wails-mock";
@@ -1915,6 +1916,16 @@ describe("the primary of the discussion screen", () => {
 
       await screen.findByRole("alertdialog");
       expectPrimary(container, /^Archive$/);
+    });
+
+    it("has Stop and archive as the one primary of the archive with work in the background", async () => {
+      const running = [{ stage: "discussion", tasks: [makeRunningTask({ taskId: "a" })] }];
+      const { user, container } = view({ ...ARCHIVE, running }, { drafts: WRITTEN })();
+      await user.click(screen.getByRole("button", { name: "Archive…" }));
+
+      const dialog = await screen.findByRole("alertdialog");
+      expect(within(dialog).getByRole("list", { name: "What runs" })).toBeVisible();
+      expectPrimary(container, /^Stop and archive$/);
     });
 
     it("has no primary in the deletion, whose action is dangerous", async () => {

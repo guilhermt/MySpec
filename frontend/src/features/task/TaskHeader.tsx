@@ -155,6 +155,7 @@ function TaskTools({ task, now }: { task: TaskSummary; now: number }) {
         item="the task"
         session={waitingSession(task)}
         refusal={(session) => pauseRefusal(task, session)}
+        running={task.running}
         now={now}
       />
       <PanelGroup

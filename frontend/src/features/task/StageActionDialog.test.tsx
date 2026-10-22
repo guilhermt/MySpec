@@ -8,6 +8,7 @@ import { renderWithStore } from "@/test/render";
 import {
   makeDeletePreview,
   makePullRequest,
+  makeRunningTask,
   makeState,
   makeStep,
   makeTask,
@@ -244,5 +245,53 @@ describe("StageActionDialog", () => {
 
     await waitFor(() => expect(screen.getByRole("button", { name: "More actions" })).toHaveFocus());
     expect(api.backToStage).not.toHaveBeenCalled();
+  });
+
+  describe("with work in the background", () => {
+    const RUNNING = [
+      { stage: "tech_spec", tasks: [makeRunningTask({ taskId: "a" })] },
+      { stage: "prd", tasks: [makeRunningTask({ taskId: "p", name: "Read the PRD" })] },
+    ];
+
+    it("lists what runs in the conversations it ends, not in the stage it goes back to", () => {
+      previewing({});
+      dialog("back", "prd", { running: RUNNING });
+
+      const list = screen.getByRole("list", { name: "What runs" });
+      expect(within(list).getByText(/^agent · Survey the repository · /)).toBeVisible();
+      expect(within(list).queryByText(/Read the PRD/)).not.toBeInTheDocument();
+    });
+
+    it.each([
+      ["back", "Stop and go back", "backToStage"],
+      ["discard", "Stop and restart", "discardStage"],
+    ] as const)("%s: confirms with %s, which stops first", async (action, confirm, call) => {
+      previewing({});
+      const { user, onOpenChange } = dialog(action, "prd", { running: RUNNING });
+
+      await user.click(screen.getByRole("button", { name: confirm }));
+
+      await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+      expect(api.stopTasks).toHaveBeenCalledWith("task-1", "tech_spec", ["a"]);
+      expect(api[call]).toHaveBeenCalledWith("task-1", "prd");
+    });
+
+    it("restart ends every conversation", async () => {
+      previewing({});
+      const { user } = dialog("discard", "prd", { running: RUNNING });
+
+      await user.click(screen.getByRole("button", { name: "Stop and restart" }));
+
+      await waitFor(() => expect(api.discardStage).toHaveBeenCalled());
+      expect(api.stopTasks).toHaveBeenCalledWith("task-1", "prd", ["p"]);
+    });
+
+    it("keeps its confirmation as it is with nothing running", () => {
+      previewing({});
+      dialog("back", "prd");
+
+      expect(screen.queryByRole("list", { name: "What runs" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Back to the PRD" })).toBeVisible();
+    });
   });
 });

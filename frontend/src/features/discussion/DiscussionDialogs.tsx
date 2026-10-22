@@ -19,7 +19,12 @@ export function DiscussionDialogs({ discussion }: DiscussionDialogsProps) {
   useEffect(() => closeDiscussionDialog, [closeDiscussionDialog]);
 
   const kind = dialog?.discussionId === discussion.id ? dialog.kind : null;
-  const subject = { id: discussion.id, title: discussion.title, drafts: discussion.drafts ?? [] };
+  const subject = {
+    id: discussion.id,
+    title: discussion.title,
+    drafts: discussion.drafts ?? [],
+    running: discussion.running,
+  };
   const onOpenChange = (open: boolean) => {
     if (!open) {
       closeDiscussionDialog();

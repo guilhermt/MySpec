@@ -30,6 +30,7 @@ import {
   makeReviewFinding,
   makeReviewPass,
   makeReviewSummary,
+  makeRunningTask,
   makeSituation,
   makeState,
   makeTask,
@@ -1590,6 +1591,18 @@ describe("the dialogs", () => {
     await user.click(screen.getByRole("button", { name: "Review again…" }));
 
     oneIn(await screen.findByRole("dialog", { name: "Review web#31 again" }), /^Review again/);
+  });
+
+  it("keeps no primary in the deletion with work in the background, which it lists", async () => {
+    const { user } = review({
+      running: [{ stage: "review", tasks: [makeRunningTask({ taskId: "a" })] }],
+    })();
+    await moreActions(user);
+    await user.click(await screen.findByRole("menuitem", { name: "Delete review…" }));
+
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByRole("list", { name: "What runs" })).toBeVisible();
+    expect(dialog.querySelectorAll("button[data-variant=primary]")).toHaveLength(0);
   });
 
   it("has no primary in the deletion, whose action is dangerous", async () => {

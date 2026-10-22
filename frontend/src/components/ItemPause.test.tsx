@@ -1,8 +1,9 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ItemPause, type PausableSession } from "@/components/ItemPause";
-import { api } from "@/lib/wails";
+import { api, type SessionTasks } from "@/lib/wails";
 import { renderWithStore } from "@/test/render";
+import { makeRunningTask, makeState, makeTask } from "@/test/wails-mock";
 
 /** NOW is the clock the item is drawn at. */
 const NOW = Date.now();
@@ -10,6 +11,7 @@ const NOW = Date.now();
 function pauseOf(
   session: Partial<PausableSession> | null,
   refusal: (session: PausableSession) => string | null = () => null,
+  running: SessionTasks[] = [],
 ) {
   return renderWithStore(
     <ItemPause
@@ -21,8 +23,10 @@ function pauseOf(
           : { stage: "review", sessionStatus: "working", pausedAt: "", ...session }
       }
       refusal={refusal}
+      running={running}
       now={NOW}
     />,
+    { state: makeState({ tasks: [makeTask({ id: "review-1" })] }) },
   );
 }
 
@@ -104,5 +108,43 @@ describe("ItemPause", () => {
     pauseOf(null);
 
     expect(screen.queryByRole("button", { name: /Pause|Resume/ })).not.toBeInTheDocument();
+  });
+
+  it("asks first when a subagent runs in the conversation, and pauses after stopping it", async () => {
+    const { user } = pauseOf({}, () => null, [
+      { stage: "review", tasks: [makeRunningTask({ taskId: "a" })] },
+    ]);
+
+    await user.click(screen.getByRole("button", { name: "Pause" }));
+
+    expect(api.pause).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("alertdialog", { name: "Stop the work in the background?" });
+    expect(dialog).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Stop and pause" }));
+
+    expect(api.stopTasks).toHaveBeenCalledWith("review-1", "review", ["a"]);
+    expect(api.pause).toHaveBeenCalledWith("review-1", "review");
+    await vi.waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+  });
+
+  it("pauses at once when only a command runs in the conversation", async () => {
+    const { user } = pauseOf({}, () => null, [
+      { stage: "review", tasks: [makeRunningTask({ taskId: "c", kind: "command" })] },
+    ]);
+
+    await user.click(screen.getByRole("button", { name: "Pause" }));
+
+    expect(api.pause).toHaveBeenCalledWith("review-1", "review");
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("pauses at once when the subagent runs in another conversation", async () => {
+    const { user } = pauseOf({}, () => null, [
+      { stage: "pr", tasks: [makeRunningTask({ taskId: "a" })] },
+    ]);
+
+    await user.click(screen.getByRole("button", { name: "Pause" }));
+
+    expect(api.pause).toHaveBeenCalledWith("review-1", "review");
   });
 });

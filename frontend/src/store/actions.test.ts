@@ -16,6 +16,7 @@ import {
   askReviewAgain,
   backToStageInPlace,
   browseRepository,
+  cancelQuit,
   cardContext,
   changeClonePath,
   changeRepositoryPath,
@@ -57,6 +58,7 @@ import {
   previewEditBoard,
   previewRemoveBoard,
   publishReview,
+  quitAnyway,
   readActionOutput,
   readDeletePreview,
   readEarlierConversation,
@@ -100,6 +102,7 @@ import {
   startDiscussion,
   startReview,
   stopTasksInPlace,
+  stopTasksOf,
   tryStartupAgain,
   updateBoard,
 } from "@/store/actions";
@@ -125,6 +128,7 @@ import {
   makeRepository,
   makeReviewFilters,
   makeReviewSummary,
+  makeRunningTask,
   makeState,
   makeTask,
   makeTranscript,
@@ -364,6 +368,56 @@ describe("stopTasksInPlace", () => {
       "No task found with ID: x",
     );
     expect(useAppStore.getState().error).toBeNull();
+  });
+});
+
+describe("stopTasksOf", () => {
+  it("stops every conversation at once, with no notice", async () => {
+    await stopTasksOf("task-1", [
+      {
+        stage: "step:1",
+        tasks: [makeRunningTask({ taskId: "a" }), makeRunningTask({ taskId: "b" })],
+      },
+      { stage: "step_review:1", tasks: [makeRunningTask({ taskId: "c" })] },
+    ]);
+
+    expect(api.stopTasks).toHaveBeenCalledWith("task-1", "step:1", ["a", "b"]);
+    expect(api.stopTasks).toHaveBeenCalledWith("task-1", "step_review:1", ["c"]);
+  });
+
+  it("goes on when a stop is refused: what does not stop is lost with the process", async () => {
+    vi.mocked(api.stopTasks).mockRejectedValueOnce(new Error("No task found with ID: a"));
+
+    await expect(
+      stopTasksOf("task-1", [
+        { stage: "step:1", tasks: [makeRunningTask({ taskId: "a" })] },
+        { stage: "step_review:1", tasks: [makeRunningTask({ taskId: "c" })] },
+      ]),
+    ).resolves.toBeUndefined();
+
+    expect(api.stopTasks).toHaveBeenCalledTimes(2);
+    expect(useAppStore.getState().error).toBeNull();
+  });
+});
+
+describe("the answer to the quit warning", () => {
+  it("quits on Quit anyway and keeps the app open on Cancel", async () => {
+    await quitAnyway();
+    await cancelQuit();
+
+    expect(api.quitAnyway).toHaveBeenCalled();
+    expect(api.cancelQuit).toHaveBeenCalled();
+  });
+
+  it.each([
+    ["quitAnyway", quitAnyway, "Couldn't quit"],
+    ["cancelQuit", cancelQuit, "Couldn't cancel"],
+  ] as const)("%s: raises the app notice when the call fails", async (name, action, label) => {
+    vi.mocked(api[name]).mockRejectedValueOnce(new Error("no window"));
+
+    await action();
+
+    expect(useAppStore.getState().error).toEqual({ label, detail: "no window. Try again." });
   });
 });
 

@@ -4,7 +4,7 @@ import { DeleteReviewDialog } from "@/features/reviews/DeleteReviewDialog";
 import { api } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeLeftover, makeReviewSummary, makeState } from "@/test/wails-mock";
+import { makeLeftover, makeReviewSummary, makeRunningTask, makeState } from "@/test/wails-mock";
 
 function dialog(props: { archived?: boolean; neighbor?: string | null } = {}) {
   const onOpenChange = vi.fn();
@@ -138,5 +138,22 @@ describe("DeleteReviewDialog", () => {
 
     expect(api.deleteReview).not.toHaveBeenCalled();
     expect(onOpenChange.mock.calls[0]?.[0]).toBe(false);
+  });
+
+  it("lists what runs and keeps its confirmation, with no stop before", async () => {
+    const review = makeReviewSummary({
+      running: [{ stage: "review", tasks: [makeRunningTask({ taskId: "a" })] }],
+    });
+    const { user } = renderWithStore(
+      <DeleteReviewDialog review={review} open onOpenChange={vi.fn()} />,
+      { state: makeState() },
+    );
+
+    expect(screen.getByText("This stops what runs in the background.")).toBeVisible();
+    expect(screen.getByRole("list", { name: "What runs" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Delete review" }));
+
+    expect(api.stopTasks).not.toHaveBeenCalled();
+    expect(api.deleteReview).toHaveBeenCalledWith(review.id);
   });
 });

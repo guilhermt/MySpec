@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { TaskRequest } from "@/features/task/TaskRequest";
 import { api, type PullRequest, type Situation, type Step, type TaskSummary } from "@/lib/wails";
@@ -7,6 +7,7 @@ import { renderWithStore } from "@/test/render";
 import {
   makePullRequest,
   makeReview,
+  makeRunningTask,
   makeSituation,
   makeState,
   makeStep,
@@ -174,6 +175,45 @@ describe("TaskRequest", () => {
     await user.click(screen.getByRole("button", { name: "Close task" }));
 
     expect(api.closeTask).toHaveBeenCalledWith("task-1");
+  });
+
+  describe("closing a task with work in the background", () => {
+    const merged = (running: TaskSummary["running"]) => ({
+      stage: "pr" as const,
+      pr: makePullRequest({ status: "merged", prNumber: 12, canClose: true }),
+      situations: [onPR("merge", "close")],
+      running,
+    });
+
+    it("asks first when a subagent runs in the pull request, and stops it before closing", async () => {
+      const { user } = request(
+        merged([{ stage: "pr_review", tasks: [makeRunningTask({ taskId: "a" })] }]),
+      );
+
+      await user.click(screen.getByRole("button", { name: "Close task" }));
+
+      expect(api.closeTask).not.toHaveBeenCalled();
+      expect(
+        screen.getByText("Closing stops what runs in the background. It won't resume."),
+      ).toBeVisible();
+      await user.click(screen.getByRole("button", { name: "Stop and close" }));
+
+      await waitFor(() => expect(api.closeTask).toHaveBeenCalledWith("task-1"));
+      expect(api.stopTasks).toHaveBeenCalledWith("task-1", "pr_review", ["a"]);
+    });
+
+    it("closes at once when only a command runs there", async () => {
+      const { user } = request(
+        merged([
+          { stage: "pr_review", tasks: [makeRunningTask({ taskId: "c", kind: "command" })] },
+        ]),
+      );
+
+      await user.click(screen.getByRole("button", { name: "Close task" }));
+
+      expect(api.closeTask).toHaveBeenCalledWith("task-1");
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    });
   });
 
   it("asks for another pass on a pull request in trouble", async () => {

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { BackgroundWorkList } from "@/components/BackgroundWorkList";
+import { endedBy } from "@/components/background-work";
 import { Button } from "@/components/system/Button";
 import { Dialog, DialogBody, DialogCancel, DialogFooter } from "@/components/system/Dialog";
 import { ICONS } from "@/components/system/icons";
@@ -21,6 +23,7 @@ import {
   discardStageInPlace,
   focusRequestAfterRestart,
   openExternal,
+  stopTasksOf,
 } from "@/store/actions";
 
 export interface StageActionDialogProps {
@@ -51,6 +54,11 @@ export function StageActionDialog({
   const mode = asTaskMode(task.mode);
   const confirm = stageActionConfirm(action, mode, stage);
   const pr = openPR(task);
+  const ended = endedBy(
+    action === "back" ? { kind: "back", target: stage } : { kind: "restart" },
+    task,
+  );
+  const stops = ended.length > 0;
 
   const perform = async () => {
     if (working) {
@@ -58,6 +66,7 @@ export function StageActionDialog({
     }
     setWorking(true);
     setRefusal(null);
+    await stopTasksOf(task.id, ended);
     const message = await (action === "back" ? backToStageInPlace : discardStageInPlace)(
       task.id,
       stage,
@@ -127,6 +136,12 @@ export function StageActionDialog({
             {interruptedSentence(role)}
           </p>
         ))}
+        {stops && (
+          <>
+            <p>This also stops what runs in the background. It won't resume.</p>
+            <BackgroundWorkList itemId={task.id} sessions={ended} />
+          </>
+        )}
       </DialogBody>
       <DialogFooter {...(refusal === null ? {} : { refusal })}>
         <DialogCancel disabled={working} />
@@ -136,7 +151,7 @@ export function StageActionDialog({
           loadingLabel={stageActionLoading(action)}
           onClick={() => void perform()}
         >
-          {confirm}
+          {stops ? (action === "back" ? "Stop and go back" : "Stop and restart") : confirm}
         </Button>
       </DialogFooter>
     </Dialog>

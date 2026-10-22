@@ -79,6 +79,7 @@ export function ReviewHeader({ review }: ReviewHeaderProps) {
             : null
         }
         refusal={() => reviewPauseRefusal(review)}
+        running={review.running}
         now={now}
       />
       <PanelGroup panels={PANELS} open={panel} onOpenChange={openPanel} />

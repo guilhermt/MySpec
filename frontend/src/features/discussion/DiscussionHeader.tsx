@@ -85,6 +85,7 @@ export function DiscussionHeader({ discussion }: DiscussionHeaderProps) {
             : null
         }
         refusal={() => discussionPauseRefusal(discussion)}
+        running={discussion.running}
         now={now}
       />
       <PanelGroup panels={PANELS} open={panel} onOpenChange={openPanel} />

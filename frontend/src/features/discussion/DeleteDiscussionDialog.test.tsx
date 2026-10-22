@@ -4,7 +4,7 @@ import { DeleteDiscussionDialog } from "@/features/discussion/DeleteDiscussionDi
 import { api } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeDraft, makeState } from "@/test/wails-mock";
+import { makeDraft, makeRunningTask, makeState } from "@/test/wails-mock";
 
 function dialog(published = 2, archived = false, neighbor: string | null = null) {
   const onOpenChange = vi.fn();
@@ -152,5 +152,28 @@ describe("DeleteDiscussionDialog", () => {
 
     finish();
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  });
+
+  it("lists what runs and keeps its confirmation, with no stop before", async () => {
+    const { user } = renderWithStore(
+      <DeleteDiscussionDialog
+        discussion={{
+          id: "discussion-1",
+          title: "Invoices",
+          drafts: [],
+          running: [{ stage: "discussion", tasks: [makeRunningTask({ taskId: "a" })] }],
+        }}
+        open
+        onOpenChange={vi.fn()}
+      />,
+      { state: makeState() },
+    );
+
+    expect(screen.getByText("This stops what runs in the background.")).toBeVisible();
+    expect(screen.getByRole("list", { name: "What runs" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Delete discussion" }));
+
+    expect(api.stopTasks).not.toHaveBeenCalled();
+    expect(api.deleteDiscussion).toHaveBeenCalledWith("discussion-1");
   });
 });

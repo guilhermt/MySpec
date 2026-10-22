@@ -7,6 +7,7 @@ import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import {
   makeDeletePreview,
+  makeRunningTask,
   makeState,
   makeStep,
   makeStepReviewer,
@@ -271,5 +272,27 @@ describe("DiscardStepDialog", () => {
     await user.click(within(opened).getByRole("button", { name: "Cancel" }));
 
     await waitFor(() => expect(screen.getByRole("button", { name: "More actions" })).toHaveFocus());
+  });
+
+  it("lists the work of the step in the background and stops it before discarding", async () => {
+    previewing({ worktree: WORKTREE });
+    const { user } = dialog(
+      vi.fn(),
+      {},
+      {
+        running: [
+          { stage: "step:3", tasks: [makeRunningTask({ taskId: "a" })] },
+          { stage: "step:2", tasks: [makeRunningTask({ taskId: "o", name: "Other step" })] },
+        ],
+      },
+    );
+
+    const list = screen.getByRole("list", { name: "What runs" });
+    expect(within(list).getByText(/^agent · Survey the repository · /)).toBeVisible();
+    expect(within(list).queryByText(/Other step/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Stop and discard" }));
+
+    await waitFor(() => expect(api.discardStep).toHaveBeenCalledWith("task-1", true));
+    expect(api.stopTasks).toHaveBeenCalledWith("task-1", "step:3", ["a"]);
   });
 });

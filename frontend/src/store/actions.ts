@@ -39,6 +39,7 @@ import type {
   ReviewMode,
   ReviewVerdict,
   SaveBoardRequest,
+  SessionTasks,
   StartDiscussionRequest,
   StartReviewRequest,
   TaskStage,
@@ -577,6 +578,36 @@ export function stopTasksInPlace(
   taskIds: string[],
 ): Promise<string | null> {
   return inPlace(() => api.stopTasks(itemId, stage, taskIds));
+}
+
+/**
+ * stopTasksOf is the first step of Stop and <gesture>: it stops what runs in the conversations the
+ * gesture ends, all of them at once and with no notice. What does not stop is lost with the
+ * process, and the session records it.
+ */
+export async function stopTasksOf(
+  itemId: string,
+  sessions: readonly SessionTasks[],
+): Promise<void> {
+  await Promise.allSettled(
+    sessions.map((session) =>
+      api.stopTasks(
+        itemId,
+        session.stage,
+        (session.tasks ?? []).map((task) => task.taskId),
+      ),
+    ),
+  );
+}
+
+/** quitAnyway closes the app, with what runs in the background lost. */
+export async function quitAnyway(): Promise<void> {
+  await run(fail("Couldn't quit", TRY), () => api.quitAnyway());
+}
+
+/** cancelQuit keeps the app open. */
+export async function cancelQuit(): Promise<void> {
+  await run(fail("Couldn't cancel", TRY), () => api.cancelQuit());
 }
 
 /**

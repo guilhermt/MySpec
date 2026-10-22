@@ -56,6 +56,7 @@ import type {
   ModelCatalog,
   Place,
   PromptStage,
+  QuitRequest,
   Repository,
   ReviewCenter,
   ReviewSummary,
@@ -1753,6 +1754,11 @@ export function useRunningTask(
     const session = (item?.running ?? []).find((one) => one.stage === stage);
     return (session?.tasks ?? []).find((task) => task.toolUseId === toolUseId) ?? null;
   });
+}
+
+/** useQuitRequest is the confirmation of closing the app while subagents run, null when none is asked. */
+export function useQuitRequest(): QuitRequest | null {
+  return useAppStore((state) => state.app?.quit ?? null);
 }
 
 /** usePanel is the auxiliary panel open in the place on screen, null when none is. */

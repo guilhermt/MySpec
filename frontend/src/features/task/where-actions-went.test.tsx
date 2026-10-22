@@ -12,6 +12,7 @@ import {
   makeRepository,
   makeReview,
   makeReviewFinding,
+  makeRunningTask,
   makeSituation,
   makeState,
   makeStep,
@@ -1438,6 +1439,30 @@ const SEND_IS_PRIMARY: [string, TaskSummary][] = [
     ),
   ],
 ];
+
+describe("the confirmation of a gesture with work in the background", () => {
+  it("has no primary in Stop and go back, whose action is dangerous", async () => {
+    const task = makeTask({
+      stage: "plan",
+      running: [{ stage: "plan", tasks: [makeRunningTask({ taskId: "a" })] }],
+    });
+    const { user } = renderWithStore(<TaskView taskId={task.id} />, {
+      state: makeState({
+        tasks: [task],
+        repositories: [makeRepository({ id: task.repositoryId })],
+      }),
+      ui: { location: { kind: "task", id: task.id } },
+    });
+
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Back to Tech spec…" }));
+
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByRole("list", { name: "What runs" })).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "Stop and go back" })).toBeVisible();
+    expect(dialog.querySelectorAll("button[data-variant=primary]")).toHaveLength(0);
+  });
+});
 
 describe("Send, the primary where the bar has none", () => {
   it.each(SEND_IS_PRIMARY)("is the one primary in %s", async (_, task) => {
