@@ -30,6 +30,7 @@ type Sessions interface {
 	DiscardTask(ctx context.Context, taskID string) error
 	Summary(k session.Key) (session.Summary, bool)
 	Exists(ctx context.Context, k session.Key) (bool, error)
+	Transcript(ctx context.Context, k session.Key) (session.Transcript, error)
 }
 
 // Boards is what the discussions need from internal/board: the board a
@@ -53,6 +54,10 @@ type GH interface {
 	SetProjectSingleSelect(ctx context.Context, projectID, itemID, fieldID, optionID string) error
 	AddSubIssue(ctx context.Context, parentID, subIssueID string) error
 	AddBlockedBy(ctx context.Context, issueID, blockingIssueID string) error
+	Version(ctx context.Context) (gh.Version, error)
+	CreateIssueAttached(ctx context.Context, dir, repo, title, body string, files []string) (string, error)
+	EditIssueAttached(ctx context.Context, dir, repo string, number int, title, body string, files []string) error
+	IssueBody(ctx context.Context, issueID string) (string, error)
 }
 
 // Deps are what Service needs from the outside.

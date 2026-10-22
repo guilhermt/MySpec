@@ -684,7 +684,8 @@ func wait(ch <-chan struct{}, timeout time.Duration) bool {
 // imagesOf reads the files of the images of a user message. One that is gone or
 // unreadable is logged and left out, and the rest go. In a prompt entry each
 // image carries the label that says where it came from, numbered among those
-// that go.
+// that go; in a discussion every image does, with the reference a draft takes
+// it by.
 func (s *Service) imagesOf(r *run, u *UserEntry) []claude.Image {
 	if u == nil || len(u.Images) == 0 {
 		return nil
@@ -697,7 +698,10 @@ func (s *Service) imagesOf(r *run, u *UserEntry) []claude.Image {
 			continue
 		}
 		out := claude.Image{MediaType: img.MediaType, Data: data}
-		if u.Prompt {
+		switch {
+		case r.rec.Stage == string(prompts.StageDiscussion):
+			out.Label = images.ReferenceLabel(len(sent)+1, img)
+		case u.Prompt:
 			out.Label = images.Label(len(sent)+1, img)
 		}
 		sent = append(sent, out)

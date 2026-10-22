@@ -764,7 +764,7 @@ func (f *fixture) open(t *testing.T, info session.TaskInfo) {
 func (f *fixture) send(t *testing.T, k session.Key, text string) {
 	t.Helper()
 
-	if err := f.service.Send(t.Context(), k, text, nil); err != nil {
+	if err := f.service.Send(t.Context(), k, text, nil, nil); err != nil {
 		t.Fatalf("Send(%v, %q) = %v, want nil", k, text, err)
 	}
 }
@@ -774,7 +774,7 @@ func (f *fixture) send(t *testing.T, k session.Key, text string) {
 func (f *fixture) sendImages(t *testing.T, k session.Key, text string, uploads ...[]byte) {
 	t.Helper()
 
-	if err := f.service.Send(t.Context(), k, text, uploads); err != nil {
+	if err := f.service.Send(t.Context(), k, text, uploads, nil); err != nil {
 		t.Fatalf("Send(%v, %q, %d images) = %v, want nil", k, text, len(uploads), err)
 	}
 }

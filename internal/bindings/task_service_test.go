@@ -1,10 +1,12 @@
 package bindings_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/git/gittest"
+	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreport"
@@ -1766,5 +1769,69 @@ func TestOpeningAFindingOfAPullRequestThatIsGoneOrGeneralIsRefused(t *testing.T)
 	}
 	if opened := f.editor.opened(); len(opened) != 0 {
 		t.Errorf("the editor was asked to open %v, want nothing", opened)
+	}
+}
+
+func TestSendMessageOfADiscussionCarriesTheDraftImagesTheAgentHasNotSeen(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+	f.registerBoard(t, true, webCard(12))
+	id, err := f.discussionSvc.StartDiscussion(bindings.StartDiscussionRequest{
+		BoardID: testBoardID, Title: "Invoices", Text: "Bill them.",
+		Model: "claude-opus-5-5[1m]", Effort: "high",
+	})
+	if err != nil {
+		t.Fatalf("StartDiscussion() = %v, want nil", err)
+	}
+	unseen := images.Image{ID: "0b6c3c1e-2f8a-4c7e-9b1d-2a4f5e6d7c8b", MediaType: images.PNG, Origin: images.OriginDraft, Draft: "export"}
+	var asked []string
+	f.mu.Lock()
+	f.draftImages = func(_ context.Context, id string) []images.Image {
+		asked = append(asked, id)
+		return []images.Image{unseen}
+	}
+	f.mu.Unlock()
+
+	if err = f.tasks.SendMessage(id, "discussion", "see the new image", nil); err != nil {
+		t.Fatalf("SendMessage() = %v, want nil", err)
+	}
+
+	transcript, err := f.tasks.GetTranscript(id, "discussion")
+	if err != nil {
+		t.Fatalf("GetTranscript() = %v, want nil", err)
+	}
+	var sent []bindings.Image
+	for _, e := range append(transcript.Entries, transcript.Pending...) {
+		if e.User != nil && e.User.Text == "see the new image" {
+			sent = e.User.Images
+		}
+	}
+	if len(sent) != 1 || sent[0].ID != unseen.ID || sent[0].Origin != "draft" {
+		t.Errorf("images of the message = %+v, want the unseen draft image", sent)
+	}
+	if !slices.Equal(asked, []string{id}) {
+		t.Errorf("draft images asked for %v, want the discussion %s", asked, id)
+	}
+}
+
+func TestSendMessageOfATaskNeverAsksForDraftImages(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := createdTask(t)
+	called := false
+	f.mu.Lock()
+	f.draftImages = func(context.Context, string) []images.Image {
+		called = true
+		return nil
+	}
+	f.mu.Unlock()
+
+	if err := f.tasks.SendMessage(id, "prd", "hello", nil); err != nil {
+		t.Fatalf("SendMessage() = %v, want nil", err)
+	}
+	if called {
+		t.Error("the draft images were asked for a task")
 	}
 }

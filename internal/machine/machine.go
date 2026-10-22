@@ -1,6 +1,6 @@
 // Package machine checks what the app needs of the machine it runs on: Claude
-// Code found, logged in and recent enough, and the GitHub CLI found, signed in
-// and with the scopes the app uses. It informs and never blocks; nothing of it
+// Code found, logged in and recent enough, and the GitHub CLI found, signed in,
+// with the scopes the app uses and recent enough to publish images. It informs and never blocks; nothing of it
 // is persisted.
 package machine
 
@@ -26,10 +26,11 @@ const (
 	GHFound       ItemID = "gh_found"
 	GHLogin       ItemID = "gh_login"
 	GHScopes      ItemID = "gh_scopes"
+	GHVersion     ItemID = "gh_version"
 )
 
 // Order is the order the items are checked and shown in.
-var Order = []ItemID{ClaudeFound, ClaudeLogin, ClaudeVersion, GHFound, GHLogin, GHScopes}
+var Order = []ItemID{ClaudeFound, ClaudeLogin, ClaudeVersion, GHFound, GHLogin, GHScopes, GHVersion}
 
 // Result is how an item ended.
 type Result string
@@ -81,6 +82,7 @@ type Report struct {
 	ClaudePath    string   // where claude was found; "" when it was not
 	ClaudeVersion string   // as "2.1.291"; "" when it was not read
 	GHAccount     string   // the login of gh on github.com; "" when unknown
+	GHVersion     string   // as "2.102.0"; "" when it was not read
 	GHScopes      []string // the scopes of the login; nil when unknown
 	MissingScopes []string // of RequiredScopes, the ones the login lacks, in their order; nil when none or unknown
 }
@@ -131,6 +133,7 @@ type Claude interface {
 type GitHub interface {
 	SignedIn(ctx context.Context) error
 	Account(ctx context.Context) (gh.Account, error)
+	Version(ctx context.Context) (gh.Version, error)
 }
 
 // Deps are what the service needs.

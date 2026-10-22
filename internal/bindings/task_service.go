@@ -57,6 +57,7 @@ type TaskService struct {
 	cardImages      *cardimages.Service
 	editor          Editor
 	documents       func(owner, name string, number int) (string, bool)
+	draftImages     func(ctx context.Context, discussionID string) []images.Image
 	hasConversation func(id string) bool
 	log             *slog.Logger
 }
@@ -66,7 +67,9 @@ type TaskService struct {
 // conversation the frontend asks this service for, a review of a pull request
 // or a discussion; without it, only tasks have one. documents is the
 // understanding of the discussion that wrote a card, which the task created
-// from it starts with; without it, no card has one.
+// from it starts with; without it, no card has one. draftImages are the images
+// the user put in the drafts of a discussion that the agent hasn't seen, which
+// go with the next message of the discussion; without it, none go.
 func NewTaskService(
 	tasks *task.Service,
 	sessions *session.Service,
@@ -78,6 +81,7 @@ func NewTaskService(
 	cardImages *cardimages.Service,
 	editor Editor,
 	documents func(owner, name string, number int) (string, bool),
+	draftImages func(ctx context.Context, discussionID string) []images.Image,
 	hasConversation func(id string) bool,
 	log *slog.Logger,
 ) *TaskService {
@@ -98,6 +102,7 @@ func NewTaskService(
 		cardImages:      cardImages,
 		editor:          editor,
 		documents:       documents,
+		draftImages:     draftImages,
 		hasConversation: hasConversation,
 		log:             log,
 	}
@@ -895,20 +900,26 @@ func (s *TaskService) RefreshPR(taskID string) error {
 }
 
 // SendMessage queues a message for the agent, delivered right away when the
-// session is free. images are the ones attached to it, in base64.
-func (s *TaskService) SendMessage(taskID, stage, text string, images []string) error {
+// session is free. attached are the images of it, in base64. A message of a
+// discussion also takes the images the user put in the drafts that the agent
+// hasn't seen.
+func (s *TaskService) SendMessage(taskID, stage, text string, attached []string) error {
 	s, err := s.late.resolve(s)
 	if err != nil {
 		return err
 	}
-	uploads, err := uploadsOf(images)
+	uploads, err := uploadsOf(attached)
 	if err != nil {
 		return s.fail("SendMessage", err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
-	if err := s.sessions.Send(ctx, session.Key{TaskID: taskID, Stage: stage}, text, uploads); err != nil {
+	var stored []images.Image
+	if stage == string(prompts.StageDiscussion) && s.draftImages != nil {
+		stored = s.draftImages(ctx, taskID)
+	}
+	if err := s.sessions.Send(ctx, session.Key{TaskID: taskID, Stage: stage}, text, uploads, stored); err != nil {
 		return s.fail("SendMessage", err)
 	}
 	return nil
@@ -1114,6 +1125,7 @@ var userMessages = []struct {
 	{session.ErrNoImagesFolder, "This conversation can't take images."},
 	{images.ErrFormat, "An image isn't PNG, JPEG, GIF or WebP."},
 	{images.ErrTooLarge, "An image is over 20 MB."},
+	{images.ErrTooLargeToPublish, "GitHub takes images up to 10 MB."},
 	{session.ErrNotFound, "This conversation has ended."},
 	{flow.ErrInvalidTarget, "This stage can't be reached from here."},
 	{flow.ErrNotRevisiting, "The task isn't revisiting a stage."},
@@ -1184,6 +1196,8 @@ var userMessages = []struct {
 	{discussion.ErrDependencyLinked, "This dependency is already on GitHub."},
 	{discussion.ErrArchived, "This discussion is archived."},
 	{discussion.ErrUntitled, "Name the draft to approve it."},
+	{discussion.ErrImageMissing, "This draft references an image the discussion doesn't have. Take it out to approve the draft."},
+	{discussion.ErrImageTooLarge, "GitHub takes images up to 10 MB. Take the larger one out to approve the draft."},
 	{discussion.ErrEpicUntitled, "Name the epic to group the drafts."},
 	{discussion.ErrEpicTitleTooLong, "Use at most 256 characters in the title of the epic."},
 	{discussion.ErrNotGroupable, "One of the drafts can't go into an epic anymore."},

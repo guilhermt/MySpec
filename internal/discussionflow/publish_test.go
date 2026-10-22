@@ -2,6 +2,9 @@ package discussionflow_test
 
 import (
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -10,6 +13,8 @@ import (
 
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
+	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/images"
 )
 
 // errGitHub is what the fake gh answers with when a test asks it to refuse a
@@ -855,4 +860,378 @@ func repositoryOf(title string) string {
 		return "api"
 	}
 	return "web"
+}
+
+// The images of the tests with images: files the discussion holds, which the
+// bodies of the drafts reference.
+const (
+	imgA = "0b6c3c1e-2f8a-4c7e-9b1d-2a4f5e6d7c8b"
+	imgB = "1c7d4d2f-3a9b-4d8f-8c2e-3b5a6f7e8d9c"
+)
+
+// refOf is the reference to an image in the body of a draft.
+func refOf(uuid string) string { return "images/" + uuid + ".png" }
+
+// image puts the file of an image in the folder of a discussion.
+func (f *fixture) image(id, uuid string) {
+	f.t.Helper()
+
+	stored, ok := f.discussions.Get(id)
+	if !ok {
+		f.t.Fatalf("discussion %s is not there", id)
+	}
+	path := images.Path(stored.ArtifactsDir, images.Image{ID: uuid, MediaType: "image/png"})
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		f.t.Fatalf("make the images folder: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("png"), 0o600); err != nil {
+		f.t.Fatalf("write the image: %v", err)
+	}
+}
+
+// cardArtifact is a single new card of acme/api with that body.
+func cardArtifact(body string) string {
+	return "---\nstatus: drafts\n---\n\n## Draft: invoice-report\n- Kind: new\n- Repository: acme/api\n\n" +
+		"### Title\nInvoice report\n\n### Body\n" + body + "\n"
+}
+
+// withImages is a discussion with the card of cardArtifact and the files of the
+// images the body references.
+func withImages(t *testing.T, body string, uuids ...string) (*fixture, string) {
+	t.Helper()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	for _, uuid := range uuids {
+		f.image(id, uuid)
+	}
+	f.record(id, cardArtifact(body))
+	return f, id
+}
+
+// bodyWithTwoImages references the first image twice.
+const bodyWithTwoImages = "The report.\n\n![Print](images/" + imgA + ".png)\n\n![Second](images/" + imgB +
+	".png)\n\n![Print again](images/" + imgA + ".png)"
+
+func TestADraftWithoutALocalImageGoesByGraphQLWithoutReadingTheVersion(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, looseArtifact)
+
+	f.approve(id, "invoice-report")
+
+	f.waitPublished(id, "invoice-report")
+	if got := f.gh.versionCalls(); got != 0 {
+		t.Errorf("the version of gh was read %d times, want none", got)
+	}
+	if got := f.gh.attachedCalls(); len(got) != 0 {
+		t.Errorf("gh attached files for a draft without any: %v", got)
+	}
+}
+
+func TestAnUpdateWhoseImagesAreLinksOfTheCardGoesByGraphQL(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, "---\nstatus: drafts\n---\n\n## Draft: invoice-schema\n- Kind: update\n- Card: acme/web#12\n\n"+
+		"### Title\nInvoice schema\n\n### Body\n![Print](https://github.com/user-attachments/assets/"+imgA+")\n")
+
+	f.approve(id, "invoice-schema")
+
+	f.waitPublished(id, "invoice-schema")
+	if !slices.Contains(f.gh.made(), "updateIssue:I_acme/web#12") {
+		t.Errorf("the card was not rewritten by GraphQL: %v", f.gh.made())
+	}
+	if got := f.gh.versionCalls(); got != 0 {
+		t.Errorf("the version of gh was read %d times, want none", got)
+	}
+	if got := f.gh.attachedCalls(); len(got) != 0 {
+		t.Errorf("gh attached files for the links of a card: %v", got)
+	}
+}
+
+func TestACardWithImagesIsCreatedByGhWithEachFileOnce(t *testing.T) {
+	t.Parallel()
+
+	f, id := withImages(t, bodyWithTwoImages, imgA, imgB)
+
+	f.approve(id, "invoice-report")
+
+	card := f.waitPublished(id, "invoice-report")
+	calls := f.gh.attachedCalls()
+	if len(calls) != 1 {
+		t.Fatalf("gh was asked %d times to attach, want once: %v", len(calls), calls)
+	}
+	stored, _ := f.discussions.Get(id)
+	if calls[0].Dir != stored.ArtifactsDir || calls[0].Repo != "acme/api" || calls[0].Number != 0 {
+		t.Errorf("gh ran for %+v, want a creation in acme/api from the folder of the discussion", calls[0])
+	}
+	if diff := cmp.Diff([]string{refOf(imgA), refOf(imgB)}, calls[0].Files); diff != "" {
+		t.Errorf("the files gh attached differ (-want +got):\n%s", diff)
+	}
+	if card.Published.NodeID != "I_acme/api#101" || card.Published.Number != 101 || card.Published.ImagesPending {
+		t.Errorf("the publication is %+v, want the node of issue 101 and no image pending", card.Published)
+	}
+	if got := f.gh.versionCalls(); got != 1 {
+		t.Errorf("the version of gh was read %d times, want once", got)
+	}
+	if got := count(f.gh.made(), "createIssue:R_acme/api:Invoice report"); got != 0 {
+		t.Errorf("the issue was created by GraphQL as well")
+	}
+	if !slices.Contains(f.gh.made(), "addProjectItem:PVT_1:I_acme/api#101") {
+		t.Errorf("the issue gh created did not go on the board: %v", f.gh.made())
+	}
+}
+
+func TestAnUpdateWithANewImageIsEditedByGhWithTheTitle(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.image(id, imgA)
+	f.record(id, "---\nstatus: drafts\n---\n\n## Draft: invoice-schema\n- Kind: update\n- Card: acme/web#12\n\n"+
+		"### Title\nInvoice schema\n\n### Body\n![Print]("+refOf(imgA)+")\n")
+
+	f.approve(id, "invoice-schema")
+
+	card := f.waitPublished(id, "invoice-schema")
+	calls := f.gh.attachedCalls()
+	if len(calls) != 1 || calls[0].Number != 12 || calls[0].Title != "Invoice schema" || calls[0].Repo != "acme/web" {
+		t.Fatalf("gh was asked for %+v, want an edit of acme/web#12 with the title", calls)
+	}
+	if card.Published.NodeID != "I_acme/web#12" || card.Published.Outcome != discussion.OutcomeUpdated {
+		t.Errorf("the publication is %+v, want the update of the card", card.Published)
+	}
+}
+
+func TestAnOldGhStopsTheDraftWithImagesAndLetsTheOthersGo(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.image(id, imgA)
+	f.record(id, "---\nstatus: drafts\n---\n\n"+
+		"## Draft: invoice-report\n- Kind: new\n- Repository: acme/api\n\n### Title\nInvoice report\n\n### Body\n![Print]("+refOf(imgA)+")\n\n"+
+		"## Draft: audit-log\n- Kind: new\n- Repository: acme/api\n\n### Title\nAudit log\n\n### Body\nThe log.\n\n"+
+		"## Draft: audit-export\n- Kind: new\n- Repository: acme/api\n- Depends on: invoice-report\n\n### Title\nAudit export\n\n### Body\nThe export.\n")
+	f.gh.setVersion(gh.Version{Major: 2, Minor: 95})
+
+	f.approveQuietly(id, "invoice-report", "audit-log", "audit-export")
+	f.flow.Check(id)
+
+	failed := f.waitFailed(id, "invoice-report")
+	want := "Publishing images needs GitHub CLI 2.99.0 or newer, and this machine has 2.95.0. Update it the way you installed it, then retry."
+	if failed.PublishError != want {
+		t.Errorf("the card says %q, want %q", failed.PublishError, want)
+	}
+	if failed.Published.Outcome != "" {
+		t.Errorf("the card was written: %+v", failed.Published)
+	}
+	f.waitPublished(id, "audit-log")
+	if got := f.draftState(id, "audit-export").Hold; got.Reason != discussionflow.HoldDraft {
+		t.Errorf("the dependent card is held by %+v, want it to wait for the draft", got)
+	}
+	if got := f.gh.attachedCalls(); len(got) != 0 {
+		t.Errorf("gh was asked to attach with a version that can't: %v", got)
+	}
+}
+
+func TestAPartialFailureKeepsTheIssueAndARetryUploadsWhatIsLeft(t *testing.T) {
+	t.Parallel()
+
+	f, id := withImages(t, bodyWithTwoImages, imgA, imgB)
+	f.gh.failAttach(&gh.AttachError{
+		Path: refOf(imgB), Failure: gh.AttachRefused, Detail: "the file is not an image", Written: true,
+	})
+
+	f.approve(id, "invoice-report")
+
+	failed := f.waitFailed(id, "invoice-report")
+	if want := `GitHub refused the image "Second": the file is not an image.`; failed.PublishError != want {
+		t.Errorf("the card says %q, want %q", failed.PublishError, want)
+	}
+	published := failed.Published
+	if published.Outcome != discussion.OutcomeCreated || published.Number != 101 || !published.ImagesPending {
+		t.Fatalf("the publication is %+v, want the created issue with an image pending", published)
+	}
+	if published.NodeID != "" {
+		t.Errorf("the node id %q was read before the retry, want it empty until the node step", published.NodeID)
+	}
+
+	if err := f.flow.Retry(t.Context(), id, "invoice-report"); err != nil {
+		t.Fatalf("retry the card: %v", err)
+	}
+
+	card := f.waitPublished(id, "invoice-report")
+	if card.Published.ImagesPending {
+		t.Errorf("the image is still pending after the retry")
+	}
+	calls := f.gh.attachedCalls()
+	if len(calls) != 2 {
+		t.Fatalf("gh was asked %d times to attach, want the creation and one edit: %v", len(calls), calls)
+	}
+	if calls[1].Number != 101 || calls[1].Title != "" || !slices.Equal(calls[1].Files, []string{refOf(imgB)}) {
+		t.Errorf("the retry attached %+v, want only the missing file of issue 101, without a title", calls[1])
+	}
+	if got := f.gh.bodyOf("I_acme/api#101"); strings.Contains(got, "(images/") {
+		t.Errorf("the issue still references a file: %s", got)
+	}
+}
+
+func TestAFailureThatWroteNothingLeavesNothingAndTheDraftCanBeDiscarded(t *testing.T) {
+	t.Parallel()
+
+	f, id := withImages(t, bodyWithTwoImages, imgA, imgB)
+	f.gh.failAttach(&gh.AttachError{Path: refOf(imgA), Failure: gh.AttachNoWrite})
+
+	f.approve(id, "invoice-report")
+
+	failed := f.waitFailed(id, "invoice-report")
+	if failed.Published.Outcome != "" || failed.Published.Number != 0 {
+		t.Errorf("the publication is %+v, want nothing written", failed.Published)
+	}
+	f.decide(id, "invoice-report", discussion.DecisionDiscarded)
+}
+
+func TestAnIssueGhPrintedNoURLOfSaysItCouldntBeRead(t *testing.T) {
+	t.Parallel()
+
+	f, id := withImages(t, bodyWithTwoImages, imgA, imgB)
+	f.gh.failCreateAttached(fmt.Errorf("%w: %q", gh.ErrNoIssueURL, "done"))
+
+	f.approve(id, "invoice-report")
+
+	failed := f.waitFailed(id, "invoice-report")
+	if !strings.HasPrefix(failed.PublishError, "Couldn't read the issue GitHub CLI created: ") {
+		t.Errorf("the card says %q, want the issue that couldn't be read", failed.PublishError)
+	}
+	if failed.Published.Outcome != "" || failed.Published.Number != 0 {
+		t.Errorf("the publication is %+v, want nothing recorded", failed.Published)
+	}
+}
+
+func TestEveryFailureOfAnImageSaysItInItsOwnWords(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  gh.AttachError
+		want string
+	}{
+		{
+			"no write",
+			gh.AttachError{Path: refOf(imgA), Failure: gh.AttachNoWrite},
+			`Couldn't upload the image "Print": this account can't write to acme/api.`,
+		},
+		{
+			"no write without a file",
+			gh.AttachError{Failure: gh.AttachNoWrite},
+			"Couldn't upload the images: this account can't write to acme/api.",
+		},
+		{
+			"refused",
+			gh.AttachError{Path: refOf(imgA), Failure: gh.AttachRefused, Detail: "unsupported"},
+			`GitHub refused the image "Print": unsupported.`,
+		},
+		{
+			"rate limited",
+			gh.AttachError{Path: refOf(imgA), Failure: gh.AttachRateLimited},
+			`Couldn't upload the image "Print": GitHub's rate limit was reached. Try again in a few minutes.`,
+		},
+		{
+			"network",
+			gh.AttachError{Path: refOf(imgA), Failure: gh.AttachNetwork},
+			`Couldn't upload the image "Print": GitHub couldn't be reached.`,
+		},
+		{
+			"other",
+			gh.AttachError{Path: refOf(imgA), Failure: gh.AttachOther, Detail: "boom"},
+			`Couldn't upload the image "Print": boom`,
+		},
+		{
+			"other without a file",
+			gh.AttachError{Failure: gh.AttachOther, Detail: "boom"},
+			"Couldn't upload the images: boom",
+		},
+		{
+			"a file the body doesn't have",
+			gh.AttachError{Path: "images/other.png", Failure: gh.AttachNetwork},
+			`Couldn't upload the image "images/other.png": GitHub couldn't be reached.`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f, id := withImages(t, "![Print]("+refOf(imgA)+")", imgA)
+			failure := tt.err
+			f.gh.failAttach(&failure)
+
+			f.approve(id, "invoice-report")
+
+			if got := f.waitFailed(id, "invoice-report").PublishError; got != tt.want {
+				t.Errorf("the card says %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMoreFilesThanGhTakesGoInTheNextStepOfTheSameRun(t *testing.T) {
+	t.Parallel()
+
+	const total = gh.MaxAttachments + 1
+	var body strings.Builder
+	uuids := make([]string, 0, total)
+	for i := range total {
+		uuid := fmt.Sprintf("00000000-0000-4000-8000-%012d", i)
+		uuids = append(uuids, uuid)
+		fmt.Fprintf(&body, "![Image %d](%s)\n\n", i, refOf(uuid))
+	}
+	f, id := withImages(t, body.String(), uuids...)
+
+	f.approve(id, "invoice-report")
+
+	card := f.waitPublished(id, "invoice-report")
+	calls := f.gh.attachedCalls()
+	if len(calls) != 2 || len(calls[0].Files) != gh.MaxAttachments || len(calls[1].Files) != 1 {
+		t.Fatalf("gh attached %d + %d files in %d calls, want %d and 1", len(calls[0].Files), len(calls[1].Files), len(calls), gh.MaxAttachments)
+	}
+	if calls[1].Files[0] != refOf(uuids[total-1]) || calls[1].Title != "" {
+		t.Errorf("the second call is %+v, want the last file without a title", calls[1])
+	}
+	if card.Published.ImagesPending {
+		t.Errorf("an image is still pending")
+	}
+}
+
+func TestAWriteWithImagesNoWriteHeldIsRetriedIntoTheStoreAndContinuesAtTheImages(t *testing.T) {
+	t.Parallel()
+
+	f, id := withImages(t, bodyWithTwoImages, imgA, imgB)
+	f.gh.failAttach(&gh.AttachError{Path: refOf(imgB), Failure: gh.AttachNetwork, Written: true})
+	f.store.failWrites(2, errStore, onTheIssue)
+
+	f.approve(id, "invoice-report")
+	f.waitFor(id, func(s discussionflow.State) bool { return !s.Publishing && len(f.gh.attachedCalls()) > 0 })
+
+	card := f.draftState(id, "invoice-report").Draft
+	if !card.Published.ImagesPending || card.Published.Number != 101 || card.PublishError == "" {
+		t.Fatalf("the state forgot the issue gh wrote: %+v, %q", card.Published, card.PublishError)
+	}
+
+	if err := f.flow.Retry(t.Context(), id, "invoice-report"); err != nil {
+		t.Fatalf("retry the card: %v", err)
+	}
+
+	done := f.waitPublished(id, "invoice-report")
+	if done.Published.ImagesPending {
+		t.Errorf("the image is still pending after the retry")
+	}
+	calls := f.gh.attachedCalls()
+	if len(calls) != 2 || calls[1].Number != 101 || !slices.Equal(calls[1].Files, []string{refOf(imgB)}) {
+		t.Errorf("gh was asked for %+v, want the creation and an edit with the missing file", calls)
+	}
 }

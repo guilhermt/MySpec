@@ -3,6 +3,7 @@ package session_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -43,7 +44,7 @@ func TestSendWithAnImageStoresItAndHandsItToTheCLIBeforeTheText(t *testing.T) {
 	f.start(t, info)
 	f.waitIdle(t, prd("t1"))
 
-	if err := f.service.Send(t.Context(), prd("t1"), "what is this?", [][]byte{pngImage}); err != nil {
+	if err := f.service.Send(t.Context(), prd("t1"), "what is this?", [][]byte{pngImage}, nil); err != nil {
 		t.Fatalf("Send() = %v, want nil", err)
 	}
 	f.waitIdle(t, prd("t1"))
@@ -79,7 +80,7 @@ func TestSendWithOnlyAnImageIsAMessage(t *testing.T) {
 	if got, want := last[len(last)-1].Assistant.Text, "[image image/png 68][image image/jpeg 14]"; got != want {
 		t.Errorf("the CLI got %q, want %q", got, want)
 	}
-	wantErrIs(t, f.service.Send(t.Context(), prd("t1"), "  ", nil), session.ErrEmptyMessage)
+	wantErrIs(t, f.service.Send(t.Context(), prd("t1"), "  ", nil, nil), session.ErrEmptyMessage)
 }
 
 func TestSendRefusesABadImageWithoutQueueingOrStoring(t *testing.T) {
@@ -90,7 +91,7 @@ func TestSendRefusesABadImageWithoutQueueingOrStoring(t *testing.T) {
 	f.start(t, info)
 	f.waitIdle(t, prd("t1"))
 
-	err := f.service.Send(t.Context(), prd("t1"), "look", [][]byte{pngImage, []byte("%PDF-1.7 not an image")})
+	err := f.service.Send(t.Context(), prd("t1"), "look", [][]byte{pngImage, []byte("%PDF-1.7 not an image")}, nil)
 	wantErrIs(t, err, images.ErrFormat)
 
 	if got := imageFiles(t, info); len(got) != 0 {
@@ -113,7 +114,7 @@ func TestSendWithImagesNeedsAFolderForThem(t *testing.T) {
 	f.start(t, info)
 	f.waitIdle(t, prd("t1"))
 
-	wantErrIs(t, f.service.Send(t.Context(), prd("t1"), "look", [][]byte{pngImage}), session.ErrNoImagesFolder)
+	wantErrIs(t, f.service.Send(t.Context(), prd("t1"), "look", [][]byte{pngImage}, nil), session.ErrNoImagesFolder)
 }
 
 func TestAQueuedMessageWithAnImageGoesOutAtTheEndOfTheTurn(t *testing.T) {
@@ -215,5 +216,100 @@ func TestTheTranscriptDoesNotShareTheImagesOfAnEntry(t *testing.T) {
 	again := f.entriesOf(t, prd("t1"), session.KindUser)
 	if again[1].User.Images[0].ID == "changed" {
 		t.Error("a copy of the transcript shares the images of the entry")
+	}
+}
+
+func TestInADiscussionEveryImageCarriesTheLabelWithItsReference(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := atDiscussion(t, taskInfo(t, "d1"))
+	saved, err := images.Save(info.ArtifactsDir, []images.Upload{
+		{Image: images.Image{Origin: images.OriginCard, Issue: "dev/web#12", Position: 1, Count: 1}, Data: pngImage},
+	})
+	if err != nil {
+		t.Fatalf("Save() = %v", err)
+	}
+	info.InitialImages = saved
+	f.start(t, info)
+	f.waitIdle(t, info.Key())
+	f.sendImages(t, info.Key(), "look", jpegImage)
+	f.waitIdle(t, info.Key())
+
+	users := f.entriesOf(t, info.Key(), session.KindUser)
+	sent := users[1].User.Images[0]
+	assistant := f.entriesOf(t, info.Key(), session.KindAssistant)
+	if got, want := assistant[0].Assistant.Text, images.ReferenceLabel(1, saved[0])+"[image image/png 68]"; !strings.HasPrefix(got, want) {
+		t.Errorf("the prompt got %q, want it to start with %q", got, want)
+	}
+	if got, want := assistant[1].Assistant.Text, images.ReferenceLabel(1, sent)+"[image image/jpeg 14]look"; got != want {
+		t.Errorf("the message got %q, want %q", got, want)
+	}
+}
+
+func TestInATaskAMessageImageHasNoLabel(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+	f.sendImages(t, prd("t1"), "look", pngImage)
+	f.waitIdle(t, prd("t1"))
+
+	assistant := f.entriesOf(t, prd("t1"), session.KindAssistant)
+	if got, want := assistant[len(assistant)-1].Assistant.Text, "[image image/png 68]look"; got != want {
+		t.Errorf("the CLI got %q, want %q", got, want)
+	}
+}
+
+func TestSendWithStoredImagesRecordsBothListsInOrder(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := atDiscussion(t, taskInfo(t, "d1"))
+	f.start(t, info)
+	f.waitIdle(t, info.Key())
+	stored, err := images.Save(info.ArtifactsDir, []images.Upload{
+		{Image: images.Image{Origin: images.OriginDraft, Draft: "d-1"}, Data: jpegImage},
+	})
+	if err != nil {
+		t.Fatalf("Save() = %v", err)
+	}
+
+	if err := f.service.Send(t.Context(), info.Key(), "see", [][]byte{pngImage}, stored); err != nil {
+		t.Fatalf("Send() = %v, want nil", err)
+	}
+	f.waitIdle(t, info.Key())
+
+	got := f.entriesOf(t, info.Key(), session.KindUser)[1].User.Images
+	if len(got) != 2 || got[0].Origin != images.OriginUser || got[1].ID != stored[0].ID {
+		t.Fatalf("images = %+v, want the upload and then the stored one", got)
+	}
+	wantErrIs(t, f.service.Send(t.Context(), info.Key(), "", nil, stored), session.ErrEmptyMessage)
+}
+
+func TestRemovePendingKeepsTheFileOfADraftImage(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "slow")
+	info := atDiscussion(t, taskInfo(t, "d1"))
+	f.start(t, info)
+	waitStreaming(t, f, info.Key())
+	stored, err := images.Save(info.ArtifactsDir, []images.Upload{
+		{Image: images.Image{Origin: images.OriginDraft, Draft: "d-1"}, Data: jpegImage},
+	})
+	if err != nil {
+		t.Fatalf("Save() = %v", err)
+	}
+
+	if err := f.service.Send(t.Context(), info.Key(), "queued", [][]byte{pngImage}, stored); err != nil {
+		t.Fatalf("Send() = %v, want nil", err)
+	}
+	pending := f.transcript(t, info.Key()).Pending
+	if err := f.service.RemovePending(t.Context(), info.Key(), pending[0].ID); err != nil {
+		t.Fatalf("RemovePending() = %v, want nil", err)
+	}
+	if got := imageFiles(t, info); len(got) != 1 || got[0] != filepath.Base(images.Path(info.ArtifactsDir, stored[0])) {
+		t.Errorf("image files = %v, want only the one of the draft", got)
 	}
 }

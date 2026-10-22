@@ -302,6 +302,9 @@ export const api = {
   discussionContext: vi.fn<(req: DiscussionContextRequest) => Promise<string>>(() =>
     Promise.resolve("## Board\n"),
   ),
+  addDraftImage: vi.fn<(id: string, draftId: string, image: string) => Promise<string>>(() =>
+    Promise.resolve("images/0b6c3c1e-2f8a-4c7e-9b1d-2a4f5e6d7c8b.png"),
+  ),
   setDraftText: vi.fn<(id: string, draftId: string, title: string, body: string) => Promise<void>>(
     () => Promise.resolve(),
   ),
@@ -1124,6 +1127,7 @@ const MACHINE_ITEM_IDS: readonly MachineItemId[] = [
   "gh_found",
   "gh_login",
   "gh_scopes",
+  "gh_version",
 ];
 
 /** makeMachineItem is an item of the check that ended ok. */
@@ -1146,6 +1150,8 @@ export function makeMachine(overrides: Partial<Machine> = {}): Machine {
     claudeVersion: "2.1.291",
     minVersion: "2.1.291",
     ghAccount: "octocat",
+    ghVersion: "2.102.0",
+    ghMinVersion: "2.99.0",
     ghScopes: ["gist", "project", "read:org", "repo", "workflow"],
     missingScopes: [],
     ...overrides,
@@ -1501,6 +1507,7 @@ export function makeDraft(overrides: Partial<Draft> = {}): Draft {
     decision: "",
     revision: 1,
     warnings: [],
+    images: [],
     outcome: "",
     number: 0,
     url: "",

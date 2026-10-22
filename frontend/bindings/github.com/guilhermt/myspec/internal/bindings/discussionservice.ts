@@ -24,6 +24,14 @@ export function AddDraftDependency(id: string, draftID: string, ref: string): $C
 }
 
 /**
+ * AddDraftImage stores an image the user put in the body of a draft while
+ * editing it, in base64, and answers the reference the body takes it by.
+ */
+export function AddDraftImage(id: string, draftID: string, image: string): $CancellablePromise<string> {
+    return $Call.ByID(2832041470, id, draftID, image);
+}
+
+/**
  * ArchiveDiscussion takes a discussion out of the list and into the history,
  * with its conversation kept for the user to read.
  */

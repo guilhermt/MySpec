@@ -1116,7 +1116,7 @@ type PromptListing struct {
 	EditedAt string `json:"editedAt"` // RFC 3339; "" without an edit
 }
 
-// Machine is where the check of the machine stands: the six items in order,
+// Machine is where the check of the machine stands: the seven items in order,
 // with what the settings show of each tool. It is checked at every opening
 // and on Check again; nothing of it is persisted.
 type Machine struct {
@@ -1134,6 +1134,8 @@ type Machine struct {
 	ClaudeVersion  string `json:"claudeVersion"` // as "2.1.291"; "" when it was not read
 	MinVersion     string `json:"minVersion"`    // the oldest Claude Code the app supports
 	GHAccount      string `json:"ghAccount"`     // "" when unknown
+	GHVersion      string `json:"ghVersion"`     // as "2.102.0"; "" when it was not read
+	GHMinVersion   string `json:"ghMinVersion"`  // the oldest gh that publishes images
 	// GHScopes are the scopes of the login of gh and MissingScopes the ones
 	// the app needs that it lacks, project then repo; never nil.
 	GHScopes      []string `json:"ghScopes"`
@@ -1142,8 +1144,8 @@ type Machine struct {
 
 // MachineItem is one item of the check of the machine.
 type MachineItem struct {
-	// ID is claude_found, claude_login, claude_version, gh_found, gh_login or
-	// gh_scopes; Result is ok, missing or unchecked; Reason is "", depends,
+	// ID is claude_found, claude_login, claude_version, gh_found, gh_login,
+	// gh_scopes or gh_version; Result is ok, missing or unchecked; Reason is "", depends,
 	// timeout, unreadable, no_scopes, failed or invalid_token. Strings for the
 	// same reason as State.Theme.
 	ID     string `json:"id"`
@@ -1806,6 +1808,15 @@ type DraftHold struct {
 	Cards    int    `json:"cards"`    // epic_short: every card of the epic
 }
 
+// DraftImage is an image of the body of a draft, once per destination, in the
+// order of the body.
+type DraftImage struct {
+	Src string `json:"src"` // the destination as the body writes it
+	Alt string `json:"alt"`
+	// Problem is "", missing or too_large, a string for the same reason as State.Theme.
+	Problem string `json:"problem"`
+}
+
 // Draft is one card a discussion produced: as the user left it, and what
 // became of it on GitHub.
 type Draft struct {
@@ -1826,6 +1837,7 @@ type Draft struct {
 	Epic         *DraftRef         `json:"epic"`         // nil without an epic
 	Dependencies []DraftDependency `json:"dependencies"` // never nil
 	Current      *DraftCurrent     `json:"current"`      // update only; nil otherwise
+	Images       []DraftImage      `json:"images"`       // never nil
 	// Decision is "", approved or discarded, a string for the same reason as
 	// State.Theme.
 	Decision string   `json:"decision"`

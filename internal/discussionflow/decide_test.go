@@ -2,6 +2,7 @@ package discussionflow_test
 
 import (
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
+	"github.com/guilhermt/myspec/internal/images"
 )
 
 // epicArtifact holds an epic with two cards under it, the second one waiting
@@ -387,5 +389,60 @@ func (f *fixture) publish(id, draftID string) {
 	})
 	if err != nil {
 		f.t.Fatalf("record the publication of %s: %v", draftID, err)
+	}
+}
+
+func TestAddDraftImageStoresTheFileAndRefusesWhatEditsRefuse(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, looseArtifact)
+
+	img, err := f.flow.AddDraftImage(t.Context(), id, "invoice-report", pngData)
+	if err != nil {
+		t.Fatalf("add image: %v", err)
+	}
+	if _, statErr := os.Stat(images.Path(f.state(id).Discussion.ArtifactsDir, img)); statErr != nil {
+		t.Errorf("the file of the image: %v, want it stored", statErr)
+	}
+
+	release := f.gh.holdCreate("Invoice report")
+	t.Cleanup(release)
+	f.approve(id, "invoice-report")
+	f.waitFor(id, func(s discussionflow.State) bool { return s.Publishing })
+
+	_, err = f.flow.AddDraftImage(t.Context(), id, "invoice-report", pngData)
+	if !errors.Is(err, discussionflow.ErrPublishing) {
+		t.Errorf("add image while the publication is under way: got %v, want %v", err, discussionflow.ErrPublishing)
+	}
+	release()
+	f.waitPublished(id, "invoice-report")
+}
+
+func TestTheStateCarriesTheCheckedImagesOfEachBody(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.record(id, looseArtifact)
+	img := pasteImage(t, f, id, "invoice-report")
+	body := f.draftState(id, "invoice-report").Draft.Body + "\n\n![gone](images/0b6c3c1e-2f8a-4c7e-9b1d-2a4f5e6d7c8b.png)"
+	if err := f.discussions.SetDraftText(t.Context(), id, "invoice-report", "Invoice report", body); err != nil {
+		t.Fatalf("set text: %v", err)
+	}
+
+	got := f.draftState(id, "invoice-report").Images
+
+	want := []discussion.BodyImage{
+		{Src: images.Ref(img), Alt: "a screen", Local: true, Image: images.Image{ID: img.ID, MediaType: images.PNG}},
+		{
+			Src: "images/0b6c3c1e-2f8a-4c7e-9b1d-2a4f5e6d7c8b.png", Alt: "gone", Local: true,
+			Image:   images.Image{ID: "0b6c3c1e-2f8a-4c7e-9b1d-2a4f5e6d7c8b", MediaType: images.PNG},
+			Problem: discussion.ImageMissing,
+		},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("images mismatch (-want +got):\n%s", diff)
 	}
 }

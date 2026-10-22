@@ -997,6 +997,15 @@ export async function saveDraftText(
   );
 }
 
+/** addDraftImage stores an image the user put in the body of a draft; the error goes up for the editor to say why. */
+export function addDraftImage(
+  discussionId: string,
+  draftId: string,
+  data: string,
+): Promise<string> {
+  return api.addDraftImage(discussionId, draftId, data);
+}
+
 /** setDraftRepository chooses the repository a draft is published to. */
 export async function setDraftRepository(
   id: string,

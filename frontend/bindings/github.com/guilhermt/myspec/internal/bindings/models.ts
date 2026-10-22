@@ -1230,6 +1230,11 @@ export interface Draft {
     "current": DraftCurrent | null;
 
     /**
+     * never nil
+     */
+    "images": DraftImage[] | null;
+
+    /**
      * Decision is "", approved or discarded, a string for the same reason as
      * State.Theme.
      */
@@ -1422,6 +1427,23 @@ export interface DraftHold {
      * epic_short: every card of the epic
      */
     "cards": number;
+}
+
+/**
+ * DraftImage is an image of the body of a draft, once per destination, in the
+ * order of the body.
+ */
+export interface DraftImage {
+    /**
+     * the destination as the body writes it
+     */
+    "src": string;
+    "alt": string;
+
+    /**
+     * Problem is "", missing or too_large, a string for the same reason as State.Theme.
+     */
+    "problem": string;
 }
 
 /**
@@ -1655,7 +1677,7 @@ export interface LeftoverWorktree {
 }
 
 /**
- * Machine is where the check of the machine stands: the six items in order,
+ * Machine is where the check of the machine stands: the seven items in order,
  * with what the settings show of each tool. It is checked at every opening
  * and on Check again; nothing of it is persisted.
  */
@@ -1705,6 +1727,16 @@ export interface Machine {
     "ghAccount": string;
 
     /**
+     * as "2.102.0"; "" when it was not read
+     */
+    "ghVersion": string;
+
+    /**
+     * the oldest gh that publishes images
+     */
+    "ghMinVersion": string;
+
+    /**
      * GHScopes are the scopes of the login of gh and MissingScopes the ones
      * the app needs that it lacks, project then repo; never nil.
      */
@@ -1717,8 +1749,8 @@ export interface Machine {
  */
 export interface MachineItem {
     /**
-     * ID is claude_found, claude_login, claude_version, gh_found, gh_login or
-     * gh_scopes; Result is ok, missing or unchecked; Reason is "", depends,
+     * ID is claude_found, claude_login, claude_version, gh_found, gh_login,
+     * gh_scopes or gh_version; Result is ok, missing or unchecked; Reason is "", depends,
      * timeout, unreadable, no_scopes, failed or invalid_token. Strings for the
      * same reason as State.Theme.
      */

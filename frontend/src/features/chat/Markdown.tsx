@@ -2,7 +2,7 @@ import { code } from "@streamdown/code";
 import { type ReactNode, useMemo, useState } from "react";
 import { Streamdown } from "streamdown";
 import { Button } from "@/components/system/Button";
-import { CardBodyImage } from "@/features/chat/CardBodyImage";
+import { BodyImage } from "@/features/chat/BodyImage";
 import { CodeFrame } from "@/features/chat/CodeFrame";
 import {
   CUT_ABOVE,
@@ -15,6 +15,7 @@ import { CODE_THEMES } from "@/features/chat/code-theme";
 import { ExternalLink } from "@/features/chat/ExternalLink";
 import { ImageMarker } from "@/features/chat/ImageMarker";
 import { MermaidBlock } from "@/features/chat/MermaidBlock";
+import { cardBodyImageUrl, draftImageUrl } from "@/lib/images";
 import { cn } from "@/lib/utils";
 
 // Nothing here downloads a file: the webview has no download target. The Copy of a code block is the
@@ -35,6 +36,11 @@ const COMPONENTS = { a: ExternalLink } as const;
 export type MarkdownImages =
   /** card loads them through the product, from the body of the card issue (owner/name#number). */
   | { kind: "card"; issue: string }
+  /**
+   * draft loads the files of the discussion through the product, and the links of the card an
+   * update changes (issue, owner/name#number; null for a new card) as card does.
+   */
+  | { kind: "draft"; discussionId: string; issue: string | null }
   /** omit draws each as a marker with its alt text and its link: the images come below the text. */
   | { kind: "omit" };
 
@@ -65,26 +71,50 @@ interface BlockProps {
 }
 
 // withImages is the components of a text, with its images drawn as the text asks.
-function withImages(kind: MarkdownImages["kind"] | undefined, issue: string) {
-  if (kind === undefined) {
+function withImages(images: MarkdownImages | undefined) {
+  if (images === undefined) {
     return COMPONENTS;
   }
-  if (kind === "omit") {
+  if (images.kind === "omit") {
     return { ...COMPONENTS, img: ImageMarker };
   }
+  const urlOf = (src: string): string | null =>
+    images.kind === "card"
+      ? cardBodyImageUrl(images.issue, src)
+      : draftImageUrl(images.discussionId, images.issue, src);
   const Image = ({ src, alt }: { src?: string | undefined; alt?: string | undefined }) => (
-    <CardBodyImage src={src} alt={alt} issue={issue} />
+    <BodyImage src={src} alt={alt} url={src ? urlOf(src) : null} />
   );
   return { ...COMPONENTS, img: Image };
+}
+
+// imagesOf rebuilds how the images are drawn from the strings that tell it, which is what the memo
+// of a Block follows.
+function imagesOf(
+  kind: MarkdownImages["kind"] | undefined,
+  issue: string | null,
+  discussionId: string,
+): MarkdownImages | undefined {
+  switch (kind) {
+    case undefined:
+      return undefined;
+    case "omit":
+      return { kind };
+    case "card":
+      return { kind, issue: issue ?? "" };
+    case "draft":
+      return { kind, discussionId, issue };
+  }
 }
 
 // Block is one Streamdown over a piece of the text.
 function Block({ children, streaming, className, renderInlineCode, images }: BlockProps) {
   // The parent builds images anew on each render: the memo follows what it says.
   const kind = images?.kind;
-  const issue = images?.kind === "card" ? images.issue : "";
+  const issue = images !== undefined && images.kind !== "omit" ? images.issue : null;
+  const discussionId = images?.kind === "draft" ? images.discussionId : "";
   const components = useMemo(() => {
-    const base = withImages(kind, issue);
+    const base = withImages(imagesOf(kind, issue, discussionId));
     if (renderInlineCode === undefined) {
       return base;
     }
@@ -96,7 +126,7 @@ function Block({ children, streaming, className, renderInlineCode, images }: Blo
       </>
     );
     return { ...base, inlineCode: InlineCode };
-  }, [renderInlineCode, kind, issue]);
+  }, [renderInlineCode, kind, issue, discussionId]);
 
   return (
     <Streamdown

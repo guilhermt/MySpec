@@ -234,6 +234,8 @@ export function largeBoardState(): State {
       claudeVersion: "",
       minVersion: "",
       ghAccount: "",
+      ghVersion: "",
+      ghMinVersion: "",
       ghScopes: [],
       missingScopes: [],
     },

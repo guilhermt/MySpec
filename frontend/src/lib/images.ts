@@ -3,6 +3,9 @@ import type { CardImageFailure } from "@/lib/wails";
 /** MAX_IMAGE_BYTES is images.MaxSize: the most an image may have. */
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
+/** MAX_CARD_IMAGE_BYTES is images.MaxPublishSize: the most an image published on GitHub may have. */
+export const MAX_CARD_IMAGE_BYTES = 10 * 1024 * 1024;
+
 export type ImageMediaType = "image/png" | "image/jpeg" | "image/gif" | "image/webp";
 
 /** Attachment is an image attached and not yet sent. */
@@ -25,6 +28,13 @@ export interface Refusal {
 // The route repeats CardImagesRoute of internal/bindings/images.go; the URLs of stored images come
 // ready in the DTOs.
 const CARD_IMAGES_ROUTE = "/myspec/card-images/";
+
+// Repeats ImagesRoute of internal/bindings/images.go: where the files of a discussion load.
+const IMAGES_ROUTE = "/myspec/images/";
+
+// The reference of an image in a draft; the same pattern as images.ParseRef.
+const DRAFT_IMAGE =
+  /^(?:\.\/)?images\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:png|jpg|gif|webp))$/;
 
 const PASTED_NAME = "pasted image";
 
@@ -55,12 +65,13 @@ export function sniffImage(head: Uint8Array): ImageMediaType | null {
 /** readAttachments turns files into attachments, in order, and names those it refuses. */
 export async function readAttachments(
   files: readonly File[],
+  maxBytes = MAX_IMAGE_BYTES,
 ): Promise<{ attachments: Attachment[]; refusals: Refusal[] }> {
   const attachments: Attachment[] = [];
   const refusals: Refusal[] = [];
   for (const file of files) {
     const name = file.name === "" ? PASTED_NAME : file.name;
-    if (file.size > MAX_IMAGE_BYTES) {
+    if (file.size > maxBytes) {
       refusals.push({ name, reason: "size" });
       continue;
     }
@@ -82,10 +93,10 @@ export async function readAttachments(
 }
 
 /** refusalText is the line under the field for the images that weren't attached. */
-export function refusalText(refusals: readonly Refusal[]): string {
+export function refusalText(refusals: readonly Refusal[], maxMegabytes = 20): string {
   const each = refusals.map((refusal) =>
     refusal.reason === "size"
-      ? `${refusal.name} is over 20 MB`
+      ? `${refusal.name} is over ${maxMegabytes} MB`
       : `${refusal.name} isn't PNG, JPEG, GIF or WebP`,
   );
   return `Not attached · ${each.join(" · ")}`;
@@ -141,6 +152,8 @@ export function imageCaption(image: { origin: string; number: number }): string 
       return `Card #${image.number}`;
     case "epic":
       return `Epic #${image.number}`;
+    case "draft":
+      return "Your edit";
     default:
       return "Your text";
   }
@@ -153,6 +166,8 @@ export function imageTitle(image: { origin: string; number: number }): string {
       return `From the card #${image.number}`;
     case "epic":
       return `From the epic #${image.number}`;
+    case "draft":
+      return "From your edit of a draft";
     default:
       return "From your text";
   }
@@ -179,6 +194,31 @@ export function failureLine(failure: CardImageFailure): string {
 /** cardBodyImageUrl is where the webview loads an image of the body of a card issue (owner/name#number). */
 export function cardBodyImageUrl(issue: string, src: string): string {
   return `${CARD_IMAGES_ROUTE}body?issue=${encodeURIComponent(issue)}&src=${encodeURIComponent(src)}`;
+}
+
+/** isRemoteImage says whether the destination of an image is a link, not a path. */
+export function isRemoteImage(src: string): boolean {
+  return /^[a-z][a-z0-9+.-]+:/i.test(src) || src.startsWith("//");
+}
+
+/**
+ * draftImageUrl is where the webview loads an image of the body of a draft: a file of the
+ * discussion, a link of the card an update changes (issue, owner/name#number), or a link drawn as
+ * it is. Null for what it can't load.
+ */
+export function draftImageUrl(
+  discussionId: string,
+  issue: string | null,
+  src: string,
+): string | null {
+  const file = DRAFT_IMAGE.exec(src)?.[1];
+  if (file !== undefined) {
+    return `${IMAGES_ROUTE}${discussionId}/${file}`;
+  }
+  if (!isRemoteImage(src)) {
+    return null;
+  }
+  return issue !== null ? cardBodyImageUrl(issue, src) : src;
 }
 
 /** carriesFiles says whether a drag, of the DOM or of React, brings files, and not text or a link. */

@@ -450,6 +450,18 @@ describe("foldedLine2 and fieldsLine", () => {
     expect(foldedLine2(one, discussionOf([one]))).toBe("1 warning");
   });
 
+  it("counts the images before the warnings", () => {
+    const one = draft("d1", {
+      repository: "",
+      images: [
+        { src: "images/a.png", alt: "A", problem: "" },
+        { src: "images/b.png", alt: "B", problem: "missing" },
+      ],
+    });
+
+    expect(foldedLine2(one, discussionOf([one]))).toBe("2 images · 1 warning");
+  });
+
   it("counts the warning of a repository the board left", () => {
     const one = draft("d1", { repository: "acme/status-page", repositoryId: "" });
 
@@ -649,6 +661,25 @@ describe("onGitHub", () => {
   it("is empty without a card on GitHub or without a difference", () => {
     expect(onGitHub(draft("d1"))).toBe("");
     expect(onGitHub(draft("d1", { kind: "update", current: current([]) }))).toBe("");
+  });
+});
+
+describe("warningsOf, the images", () => {
+  it("warns of each image with a problem, in the order of the body, after the other warnings", () => {
+    const one = draft("d1", {
+      warnings: ["Careful."],
+      images: [
+        { src: "images/a.png", alt: "Print", problem: "missing" },
+        { src: "images/b.png", alt: "", problem: "too_large" },
+        { src: "images/c.png", alt: "Fine", problem: "" },
+      ],
+    });
+
+    expect(warningsOf(one, { kind: "fresh" })).toEqual([
+      "Careful.",
+      `The image "Print" isn't in this discussion.`,
+      "The image images/b.png is over 10 MB, which GitHub doesn't take.",
+    ]);
   });
 });
 
@@ -1001,6 +1032,34 @@ describe("decisionOf", () => {
     });
   });
 
+  it("stops Approve on an image with a problem, naming the first one", () => {
+    const missing = draft("d1", {
+      images: [
+        { src: "images/a.png", alt: "A", problem: "" },
+        { src: "images/b.png", alt: "Print", problem: "missing" },
+        { src: "images/c.png", alt: "", problem: "too_large" },
+      ],
+    });
+    const large = draft("d2", { images: [{ src: "images/c.png", alt: "", problem: "too_large" }] });
+
+    expect(decisionOf(missing, discussionOf([missing]), false)).toMatchObject({
+      approveReason: `Take out the image "Print": it isn't in this discussion.`,
+      discardReason: null,
+    });
+    expect(decisionOf(large, discussionOf([large]), false).approveReason).toBe(
+      "Take out the image images/c.png: GitHub takes images up to 10 MB.",
+    );
+  });
+
+  it("doesn't stop the undo of a decision with an image problem", () => {
+    const one = draft("d1", {
+      decision: "approved",
+      images: [{ src: "images/b.png", alt: "B", problem: "missing" }],
+    });
+
+    expect(decisionOf(one, discussionOf([one]), false).approveReason).toBeNull();
+  });
+
   it("doesn't stop the undo of a decision", () => {
     const one = draft("d1", { repositoryId: "", decision: "approved" });
 
@@ -1062,6 +1121,22 @@ describe("bodyDiff", () => {
     expect(bodyDiff("One\nTwo\n", "One\nTwo\n")).toEqual([
       { kind: "same", text: "One" },
       { kind: "same", text: "Two" },
+    ]);
+  });
+
+  it("writes the images of a line as readable text", () => {
+    expect(
+      bodyDiff("See ![old](images/a.png)\n", "See ![new](images/b.png) and ![](images/c.png)\n"),
+    ).toEqual([
+      { kind: "removed", text: "See [Image: old]" },
+      { kind: "added", text: "See [Image: new] and [Image]" },
+    ]);
+  });
+
+  it("shows an image swapped for another with the same alt as taken out and put in", () => {
+    expect(bodyDiff("![Print](images/a.png)\n", "![Print](images/b.png)\n")).toEqual([
+      { kind: "removed", text: "[Image: Print]" },
+      { kind: "added", text: "[Image: Print]" },
     ]);
   });
 

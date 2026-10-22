@@ -36,6 +36,14 @@ describe("MachineNoticeBar", () => {
     expect(notice).toHaveTextContent("Sessions won't start.");
   });
 
+  it("names the GitHub CLI out of date alone", () => {
+    bar(lacking({ gh_version: { result: "missing" } }));
+
+    const notice = screen.getByRole("status");
+    expect(notice).toHaveTextContent("The GitHub CLI is out of date");
+    expect(notice).toHaveTextContent("Cards with images won't publish.");
+  });
+
   it("counts the missing items when there are several", () => {
     bar(lacking({ claude_login: { result: "missing" }, gh_login: { result: "missing" } }));
 

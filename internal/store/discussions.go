@@ -32,7 +32,7 @@ const draftColumns = `discussion_id, draft_id, position, kind, source, owner, na
 	repository_original, card_number, card_title, card_url, title_original, title,
 	body_original, body, module_original, module, epic_original, epic, decision, revision,
 	warnings, publish_error, outcome, issue_number, issue_url, issue_node_id, item_id,
-	status_set, module_set, parent_set, published_at, round, revised_reading, approval_cleared`
+	status_set, module_set, parent_set, published_at, round, revised_reading, approval_cleared, images_pending`
 
 // dependencyColumns is the column list every dependency query selects, in scan
 // order.
@@ -304,7 +304,7 @@ func (r *DiscussionsRepo) WriteDrafts(ctx context.Context, discussionID string, 
 func insertDraft(ctx context.Context, db execer, discussionID string, draft discussion.Draft) error {
 	const stmt = `INSERT INTO discussion_drafts (` + draftColumns + `)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-			?, ?, ?, ?, ?, ?, ?, ?)`
+			?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	warnings, err := encodeWarnings(draft.Warnings)
 	if err != nil {
@@ -319,7 +319,7 @@ func insertDraft(ctx context.Context, db execer, discussionID string, draft disc
 		string(draft.Published.Outcome), draft.Published.Number, draft.Published.URL,
 		draft.Published.NodeID, draft.Published.ItemID, draft.Published.StatusSet,
 		draft.Published.ModuleSet, draft.Published.ParentSet, nullTime(draft.Published.At),
-		draft.Round, draft.RevisedReading, draft.ApprovalCleared)
+		draft.Round, draft.RevisedReading, draft.ApprovalCleared, draft.Published.ImagesPending)
 	if err != nil {
 		return fmt.Errorf("insert draft %s of discussion %s: %w", draft.ID, discussionID, err)
 	}
@@ -352,7 +352,7 @@ func (r *DiscussionsRepo) UpdateDraft(ctx context.Context, draft discussion.Draf
 		module = ?, epic_original = ?, epic = ?, decision = ?, revision = ?, warnings = ?,
 		publish_error = ?, outcome = ?, issue_number = ?, issue_url = ?, issue_node_id = ?,
 		item_id = ?, status_set = ?, module_set = ?, parent_set = ?, published_at = ?,
-		round = ?, revised_reading = ?, approval_cleared = ?
+		round = ?, revised_reading = ?, approval_cleared = ?, images_pending = ?
 		WHERE discussion_id = ? AND draft_id = ?`
 	const clearDependencies = `DELETE FROM discussion_dependencies
 		WHERE discussion_id = ? AND draft_id = ?`
@@ -377,7 +377,7 @@ func (r *DiscussionsRepo) UpdateDraft(ctx context.Context, draft discussion.Draf
 		draft.Published.URL, draft.Published.NodeID, draft.Published.ItemID,
 		draft.Published.StatusSet, draft.Published.ModuleSet, draft.Published.ParentSet,
 		nullTime(draft.Published.At), draft.Round, draft.RevisedReading, draft.ApprovalCleared,
-		draft.DiscussionID, draft.ID)
+		draft.Published.ImagesPending, draft.DiscussionID, draft.ID)
 	if err != nil {
 		return fmt.Errorf("update draft %s of discussion %s: %w", draft.ID, draft.DiscussionID, err)
 	}
@@ -438,7 +438,7 @@ func scanDraft(row scanner) (discussion.Draft, error) {
 		warnings               string
 		publishedAt            sql.NullString
 		statusSet, moduleSet   bool
-		parentSet              bool
+		parentSet, imagesPend  bool
 		issueNumber            int
 		issueURL, issueNode    string
 		itemID                 string
@@ -449,7 +449,7 @@ func scanDraft(row scanner) (discussion.Draft, error) {
 		&draft.ModuleOriginal, &draft.Module, &draft.EpicOriginal, &draft.Epic, &decision,
 		&draft.Revision, &warnings, &draft.PublishError, &outcome, &issueNumber, &issueURL,
 		&issueNode, &itemID, &statusSet, &moduleSet, &parentSet, &publishedAt, &draft.Round,
-		&draft.RevisedReading, &draft.ApprovalCleared)
+		&draft.RevisedReading, &draft.ApprovalCleared, &imagesPend)
 	if err != nil {
 		return discussion.Draft{}, fmt.Errorf("scan draft: %w", err)
 	}
@@ -465,6 +465,8 @@ func scanDraft(row scanner) (discussion.Draft, error) {
 		StatusSet: statusSet,
 		ModuleSet: moduleSet,
 		ParentSet: parentSet,
+
+		ImagesPending: imagesPend,
 	}
 	if cardNumber != 0 {
 		draft.Card = &discussion.InputCard{

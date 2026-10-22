@@ -1,24 +1,26 @@
 import { useState } from "react";
 import { ImageViewer } from "@/components/system/ImageViewer";
 import { ImageMarker } from "@/features/chat/ImageMarker";
-import { cardBodyImageUrl } from "@/lib/images";
+import { isRemoteImage } from "@/lib/images";
 
-export interface CardBodyImageProps {
+export interface BodyImageProps {
   src?: string | undefined;
   alt?: string | undefined;
-  /** issue is the card issue the body belongs to, owner/name#number. */
-  issue: string;
+  /** url is where the webview loads it; null draws the marker. */
+  url: string | null;
 }
 
-/** CardBodyImage is an image of the body of a card, loaded through the product; a click opens it large. */
-export function CardBodyImage({ src, alt, issue }: CardBodyImageProps) {
+/** BodyImage is an image of a body, loaded through the product; a click opens it large. */
+export function BodyImage({ src, alt, url }: BodyImageProps) {
   const [open, setOpen] = useState(false);
   const [failed, setFailed] = useState(false);
   const text = alt ?? "";
-  if (src === undefined || src === "" || failed) {
-    return <ImageMarker src={src} alt={alt} />;
+  if (url === null || failed) {
+    // The marker links only a remote image, never a path of the discussion.
+    return (
+      <ImageMarker src={src !== undefined && isRemoteImage(src) ? src : undefined} alt={alt} />
+    );
   }
-  const url = cardBodyImageUrl(issue, src);
 
   return (
     <>

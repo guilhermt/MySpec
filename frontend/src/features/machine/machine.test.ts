@@ -110,6 +110,19 @@ describe("missingViews", () => {
     expect(missingViews(machine)).toMatchObject([{ title, text, command }]);
   });
 
+  it("words the GitHub CLI out of date, with no command", () => {
+    const machine = { ...missing("gh_version"), ghVersion: "2.95.0" };
+    expect(missingViews(machine)).toMatchObject([
+      {
+        id: "gh_version",
+        result: "missing",
+        title: "The GitHub CLI is out of date",
+        text: "This machine has 2.95.0; publishing cards with images needs 2.99.0 or newer. Update it the way you installed it, then check again.",
+        command: "",
+      },
+    ]);
+  });
+
   it("keeps the order of the check and leaves unchecked items out", () => {
     const machine = withMachineItems(makeMachine(), {
       gh_scopes: { result: "missing" },
@@ -143,6 +156,12 @@ describe("itemViews", () => {
         title: "The GitHub CLI has the project and repo scopes",
         text: "Its login has gist, project, read:org, repo, workflow.",
       },
+      {
+        result: "ok",
+        title: "GitHub CLI 2.102.0",
+        text: "Publishing cards with images needs 2.99.0 or newer.",
+        command: "",
+      },
     ]);
     expect(itemViews({ ...machine, ghAccount: "" }, ["gh_login"])[0]?.text).toBe("");
   });
@@ -155,6 +174,7 @@ describe("itemViews", () => {
       gh_found: { result: "unchecked", reason: "failed" },
       gh_login: { result: "unchecked", reason: "depends" },
       gh_scopes: { result: "unchecked", reason: "no_scopes" },
+      gh_version: { result: "unchecked", reason: "unreadable", detail: "nonsense" },
     });
     expect(itemViews(machine, MACHINE_ITEMS)).toMatchObject([
       { title: "Couldn't look for Claude Code", text: "The check failed.", detail: "boom" },
@@ -177,6 +197,11 @@ describe("itemViews", () => {
         title: "The GitHub CLI's scopes weren't checked",
         text: "This login doesn't report its scopes, as a fine-grained token doesn't. MySpec can't tell whether it has project and repo.",
       },
+      {
+        title: "The GitHub CLI's version wasn't checked",
+        text: "MySpec couldn't read what the GitHub CLI answered.",
+        detail: "nonsense",
+      },
     ]);
   });
 
@@ -185,10 +210,14 @@ describe("itemViews", () => {
     const machine = withMachineItems(makeMachine(), {
       claude_login: depends,
       gh_scopes: depends,
+      gh_version: depends,
     });
-    expect(itemViews(machine, ["claude_login", "gh_scopes"]).map((view) => view.text)).toEqual([
+    expect(
+      itemViews(machine, ["claude_login", "gh_scopes", "gh_version"]).map((view) => view.text),
+    ).toEqual([
       "Checked once Claude Code is found.",
       "Checked once the GitHub CLI is signed in.",
+      "Checked once the GitHub CLI is installed.",
     ]);
     const failed = withMachineItems(makeMachine(), {
       gh_scopes: { result: "unchecked", reason: "failed" },
@@ -222,6 +251,10 @@ describe("noticeText", () => {
     expect(noticeText(missing("gh_scopes"))?.text).toBe(
       "Reading boards, publishing cards or pull requests may fail.",
     );
+    expect(noticeText(missing("gh_version"))).toEqual({
+      title: "The GitHub CLI is out of date",
+      text: "Cards with images won't publish.",
+    });
   });
 
   it.each([

@@ -94,9 +94,13 @@ type fakeGitHub struct {
 	signedInErr error
 	account     gh.Account
 	accountErr  error
+	version     gh.Version
+	versionErr  error
 
-	// accountBlock makes Account wait for it to close, or for its context to end.
+	// accountBlock and versionBlock make Account and Version wait for them to
+	// close, or for their context to end.
 	accountBlock chan struct{}
+	versionBlock chan struct{}
 
 	mu       sync.Mutex
 	signedIn int
@@ -122,6 +126,13 @@ func (f *fakeGitHub) Account(ctx context.Context) (gh.Account, error) {
 	return f.account, f.accountErr
 }
 
+func (f *fakeGitHub) Version(ctx context.Context) (gh.Version, error) {
+	if err := wait(ctx, f.versionBlock); err != nil {
+		return gh.Version{}, err
+	}
+	return f.version, f.versionErr
+}
+
 func (f *fakeGitHub) accountCalls() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -135,7 +146,10 @@ func goodClaude() *fakeClaude {
 }
 
 func goodGitHub() *fakeGitHub {
-	return &fakeGitHub{account: gh.Account{Login: "octocat", Scopes: []string{"gist", "project", "read:org", "repo"}}}
+	return &fakeGitHub{
+		account: gh.Account{Login: "octocat", Scopes: []string{"gist", "project", "read:org", "repo"}},
+		version: gh.Version{Major: 2, Minor: 102, Patch: 0},
+	}
 }
 
 // service is a machine.Service over the doubles, with what it tells.

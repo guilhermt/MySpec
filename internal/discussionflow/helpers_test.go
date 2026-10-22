@@ -3,10 +3,13 @@ package discussionflow_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -15,6 +18,7 @@ import (
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/session"
 )
@@ -45,13 +49,15 @@ var errSession = errors.New("session: the model is not there")
 // memSessions is an in-memory discussionflow.Sessions recording what it was
 // asked to do.
 type memSessions struct {
-	mu        sync.Mutex
-	summaries map[session.Key]session.Summary
-	infos     map[session.Key]session.TaskInfo
-	stored    map[session.Key]bool // the sessions ever created, open or not
-	calls     []string
-	startErr  error // returned by Start alone
-	markers   []session.MarkerEntry
+	mu            sync.Mutex
+	summaries     map[session.Key]session.Summary
+	infos         map[session.Key]session.TaskInfo
+	stored        map[session.Key]bool // the sessions ever created, open or not
+	calls         []string
+	startErr      error // returned by Start alone
+	transcripts   map[session.Key]session.Transcript
+	transcriptErr error // returned by Transcript
+	markers       []session.MarkerEntry
 }
 
 func newSessions() *memSessions {
@@ -154,6 +160,31 @@ func (m *memSessions) Exists(_ context.Context, k session.Key) (bool, error) {
 	defer m.mu.Unlock()
 
 	return m.stored[k], nil
+}
+
+func (m *memSessions) Transcript(_ context.Context, k session.Key) (session.Transcript, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.transcriptErr != nil {
+		return session.Transcript{}, m.transcriptErr
+	}
+	return m.transcripts[k], nil
+}
+
+// say puts a message of the user, with its images, in the conversation of a
+// discussion.
+func (m *memSessions) say(id string, imgs ...images.Image) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	k := session.Key{TaskID: id, Stage: session.DiscussionStage}
+	if m.transcripts == nil {
+		m.transcripts = map[session.Key]session.Transcript{}
+	}
+	t := m.transcripts[k]
+	t.Entries = append(t.Entries, session.Entry{Kind: session.KindUser, User: &session.UserEntry{Images: imgs}})
+	m.transcripts[k] = t
 }
 
 // idle leaves the conversation of a discussion resting, which is what an
@@ -313,6 +344,75 @@ type memGH struct {
 	createErr    map[string]error         // by title, and only the first time
 	held         map[string]chan struct{} // by title: the issues waiting to be created
 	blockedByErr error
+
+	version           *gh.Version // what gh --version says; nil is a current gh
+	versionErr        error
+	versionReads      int
+	attached          []attachCall      // the writes with attachments, in order
+	attachFailures    []*gh.AttachError // one per write with attachments, first in first out
+	createAttachedErr error             // what the next creation with attachments answers instead of an issue
+	bodies            map[string]string // the body on GitHub of each issue the fake wrote, by node id
+	nextIssue         int
+}
+
+// attachCall is a write with attachments the fake was asked for.
+type attachCall struct {
+	Dir, Repo string
+	Number    int // 0 for a creation
+	Title     string
+	Body      string
+	Files     []string
+}
+
+// failAttach makes the next write with attachments fail with err: gh stops at
+// err.Path, uploading the files before it, and writes the issue anyway when
+// err.Written says so. A nil err lets that write through.
+func (m *memGH) failAttach(err *gh.AttachError) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.attachFailures = append(m.attachFailures, err)
+}
+
+// failCreateAttached makes the next creation with attachments answer err and
+// write nothing, as gh ending without the url of the issue does.
+func (m *memGH) failCreateAttached(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.createAttachedErr = err
+}
+
+// setVersion makes gh answer that version.
+func (m *memGH) setVersion(v gh.Version) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.version = &v
+}
+
+// attachedCalls are the writes with attachments the fake was asked for.
+func (m *memGH) attachedCalls() []attachCall {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.attached)
+}
+
+// versionCalls is how many times the version was read.
+func (m *memGH) versionCalls() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.versionReads
+}
+
+// bodyOf is the body on GitHub of an issue the fake wrote.
+func (m *memGH) bodyOf(nodeID string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.bodies[nodeID]
 }
 
 // failCreate makes the next issue of that title fail, as GitHub refusing one
@@ -452,6 +552,105 @@ func (m *memGH) AddBlockedBy(_ context.Context, issueID, blockingIssueID string)
 	}
 	m.calls = append(m.calls, "addBlockedBy:"+issueID+":"+blockingIssueID)
 	return nil
+}
+
+func (m *memGH) Version(_ context.Context) (gh.Version, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.versionReads++
+	if m.versionErr != nil {
+		return gh.Version{}, m.versionErr
+	}
+	if m.version != nil {
+		return *m.version, nil
+	}
+	return gh.Version{Major: 2, Minor: 102}, nil
+}
+
+// attach simulates gh uploading files: it stops at the file of the failure,
+// and the references of the files it uploaded become the links GitHub gives.
+// It answers the body GitHub keeps, and the failure to report, if any.
+func (m *memGH) attach(body string, files []string) (string, *gh.AttachError) {
+	var failure *gh.AttachError
+	if len(m.attachFailures) > 0 {
+		failure, m.attachFailures = m.attachFailures[0], m.attachFailures[1:]
+	}
+	uploaded := files
+	if failure != nil {
+		uploaded = nil
+		for _, f := range files {
+			if f == failure.Path {
+				break
+			}
+			uploaded = append(uploaded, f)
+		}
+	}
+	for _, f := range uploaded {
+		id := strings.TrimSuffix(strings.TrimPrefix(f, "images/"), path.Ext(f))
+		body = strings.ReplaceAll(body, "("+f+")", "(https://github.com/user-attachments/assets/"+id+")")
+	}
+	return body, failure
+}
+
+func (m *memGH) CreateIssueAttached(_ context.Context, dir, repo, title, body string, files []string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.attached = append(m.attached, attachCall{Dir: dir, Repo: repo, Title: title, Body: body, Files: slices.Clone(files)})
+	if err := m.createAttachedErr; err != nil {
+		m.createAttachedErr = nil
+		return "", err
+	}
+	kept, failure := m.attach(body, files)
+	if failure != nil && !failure.Written {
+		return "", failure
+	}
+	m.nextIssue++
+	number := 100 + m.nextIssue
+	url := "https://github.com/" + repo + "/issues/" + strconv.Itoa(number)
+	if m.bodies == nil {
+		m.bodies = map[string]string{}
+	}
+	m.bodies["I_"+repo+"#"+strconv.Itoa(number)] = kept
+	if failure != nil {
+		written := *failure
+		written.URL = url
+		return "", &written
+	}
+	return url, nil
+}
+
+func (m *memGH) EditIssueAttached(_ context.Context, dir, repo string, number int, title, body string, files []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.attached = append(m.attached, attachCall{
+		Dir: dir, Repo: repo, Number: number, Title: title, Body: body, Files: slices.Clone(files),
+	})
+	kept, failure := m.attach(body, files)
+	if failure != nil && !failure.Written {
+		return failure
+	}
+	if m.bodies == nil {
+		m.bodies = map[string]string{}
+	}
+	m.bodies["I_"+repo+"#"+strconv.Itoa(number)] = kept
+	if failure != nil {
+		return failure
+	}
+	return nil
+}
+
+func (m *memGH) IssueBody(_ context.Context, issueID string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	body, ok := m.bodies[issueID]
+	if !ok {
+		return "", fmt.Errorf("%w: issue %s", gh.ErrNoSuchNode, issueID)
+	}
+	return body, nil
 }
 
 // fixture is a flow over in-memory dependencies, with the discussions of a

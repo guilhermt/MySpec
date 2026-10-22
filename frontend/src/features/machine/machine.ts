@@ -11,6 +11,7 @@ export const MACHINE_ITEMS: readonly MachineItemId[] = [
   "gh_found",
   "gh_login",
   "gh_scopes",
+  "gh_version",
 ];
 
 /** CLAUDE_ITEMS and GH_ITEMS are the items of each tool, in order. */
@@ -19,7 +20,12 @@ export const CLAUDE_ITEMS: readonly MachineItemId[] = [
   "claude_login",
   "claude_version",
 ];
-export const GH_ITEMS: readonly MachineItemId[] = ["gh_found", "gh_login", "gh_scopes"];
+export const GH_ITEMS: readonly MachineItemId[] = [
+  "gh_found",
+  "gh_login",
+  "gh_scopes",
+  "gh_version",
+];
 
 const SIGN_IN = "gh auth login";
 const REQUIRED_SCOPES = ["project", "repo"];
@@ -108,6 +114,12 @@ function missingWording(machine: Machine, item: MachineItem): Wording {
         command: `gh auth refresh -s ${lacking.join(",")}`,
       };
     }
+    case "gh_version":
+      return {
+        title: "The GitHub CLI is out of date",
+        text: `This machine has ${machine.ghVersion}; publishing cards with images needs ${machine.ghMinVersion} or newer. Update it the way you installed it, then check again.`,
+        command: "",
+      };
   }
 }
 
@@ -141,6 +153,12 @@ function okWording(machine: Machine, id: MachineItemId): Wording {
         text: `Its login has ${(machine.ghScopes ?? []).join(", ")}.`,
         command: "",
       };
+    case "gh_version":
+      return {
+        title: `GitHub CLI ${machine.ghVersion}`,
+        text: `Publishing cards with images needs ${machine.ghMinVersion} or newer.`,
+        command: "",
+      };
   }
 }
 
@@ -151,6 +169,7 @@ const UNCHECKED_TITLES: Record<MachineItemId, string> = {
   gh_found: "Couldn't look for the GitHub CLI",
   gh_login: "The GitHub CLI's login wasn't checked",
   gh_scopes: "The GitHub CLI's scopes weren't checked",
+  gh_version: "The GitHub CLI's version wasn't checked",
 };
 
 function uncheckedText(item: MachineItem): string {
@@ -163,7 +182,7 @@ function uncheckedText(item: MachineItem): string {
       if (claude) {
         return "Checked once Claude Code is found.";
       }
-      return id === "gh_login"
+      return id === "gh_login" || id === "gh_version"
         ? "Checked once the GitHub CLI is installed."
         : "Checked once the GitHub CLI is signed in.";
     case "timeout":
@@ -225,6 +244,7 @@ const CONSEQUENCES: Record<MachineItemId, string> = {
   gh_found: "Boards, pull requests and publishing cards don't work.",
   gh_login: "Boards, pull requests and publishing cards don't work.",
   gh_scopes: "Reading boards, publishing cards or pull requests may fail.",
+  gh_version: "Cards with images won't publish.",
 };
 
 /** noticeText is the notice at the top: the missing item, or how many; null with nothing missing. */

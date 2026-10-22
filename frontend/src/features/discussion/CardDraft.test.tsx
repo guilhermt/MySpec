@@ -113,20 +113,27 @@ describe("CardDraft, Body and Changes", () => {
     expect(screen.queryByRole("radiogroup", { name: "What to read" })).not.toBeInTheDocument();
   });
 
-  it("loads the images of an update through the issue of its card, and leaves the others alone", () => {
-    const { unmount } = draw([
-      update({ body: "![chart](https://github.com/user-attachments/assets/abc)" }),
-    ]);
+  it("draws a local image by the route of the discussion, a link of the card by the route of cards, and a bad path as a marker", () => {
+    const file = "0b6c3c1e-2f8a-4c7e-9b1d-2a4f5e6d7c8b.png";
+    draw(
+      [
+        update({
+          body: `![shot](images/${file})\n\n![chart](https://github.com/user-attachments/assets/abc)\n\n![bad](images/../x.png)`,
+        }),
+      ],
+      { id: "discussion-9" },
+    );
 
+    expect(screen.getByRole("img", { name: "shot" })).toHaveAttribute(
+      "src",
+      `/myspec/images/discussion-9/${file}`,
+    );
     expect(screen.getByRole("img", { name: "chart" })).toHaveAttribute(
       "src",
       cardBodyImageUrl("dev/web#12", "https://github.com/user-attachments/assets/abc"),
     );
-    unmount();
-
-    draw([makeDraft({ body: "![chart](https://github.com/user-attachments/assets/abc)" })]);
-
-    expect(screen.queryByRole("button", { name: "Open the image chart" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "bad" })).not.toBeInTheDocument();
+    expect(screen.getByText("bad")).toBeInTheDocument();
   });
 
   it("offers Changes on an update, with what it adds and takes away", async () => {

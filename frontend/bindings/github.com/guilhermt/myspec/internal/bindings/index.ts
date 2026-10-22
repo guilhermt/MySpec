@@ -70,6 +70,7 @@ export type {
     DraftCurrent,
     DraftDependency,
     DraftHold,
+    DraftImage,
     DraftRef,
     Entry,
     ErrorEntry,

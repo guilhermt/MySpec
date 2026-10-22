@@ -60,6 +60,8 @@ type DraftState struct {
 	DiscardPublishes []string
 	// ApproveHold is what would hold the draft once approved.
 	ApproveHold Hold
+	// Images are the images of its body, checked.
+	Images []discussion.BodyImage
 }
 
 // State is everything the app knows about a discussion: what it recorded, the
@@ -118,6 +120,9 @@ func (s *Service) State(id string) (State, bool) {
 
 	drafts := s.effectiveDrafts(id, s.discussions.Drafts(id))
 	settle(&state, drafts, running)
+	for i := range state.Drafts {
+		state.Drafts[i].Images = stored.DraftImages(state.Drafts[i].Draft.Body)
+	}
 	return state, true
 }
 

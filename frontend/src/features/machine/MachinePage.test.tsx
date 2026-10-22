@@ -22,7 +22,7 @@ describe("MachinePage", () => {
     expect(screen.queryByRole("heading", { level: 3 })).not.toBeInTheDocument();
   });
 
-  it("lists the three items of each tool when everything is right", () => {
+  it("lists the items of each tool when everything is right", () => {
     page();
 
     expect(screen.getByRole("heading", { level: 2, name: "Machine" })).toBeInTheDocument();
@@ -35,6 +35,24 @@ describe("MachinePage", () => {
     expect(screen.getByText("The GitHub CLI is signed in")).toBeInTheDocument();
     expect(screen.getByText("As octocat.")).toBeInTheDocument();
     expect(screen.getByText("The GitHub CLI has the project and repo scopes")).toBeInTheDocument();
+    expect(screen.getByText("GitHub CLI 2.102.0")).toBeInTheDocument();
+    expect(
+      screen.getByText("Publishing cards with images needs 2.99.0 or newer."),
+    ).toBeInTheDocument();
+  });
+
+  it("says the GitHub CLI is out of date, with no command", () => {
+    page(
+      withMachineItems(makeMachine({ ghVersion: "2.95.0" }), { gh_version: { result: "missing" } }),
+    );
+
+    expect(screen.getByText("The GitHub CLI is out of date")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This machine has 2.95.0; publishing cards with images needs 2.99.0 or newer. Update it the way you installed it, then check again.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /copy/i })).not.toBeInTheDocument();
   });
 
   it("says what is missing, with the command, and what was not checked", () => {

@@ -349,15 +349,16 @@ func TestUpdateDraftWritesWhatTheUserLeftAndWhatWasPublished(t *testing.T) {
 		Detail:   "gh: not found on GitHub",
 	}}
 	first.Published = discussion.Publication{
-		Outcome:   discussion.OutcomeCreated,
-		Number:    12,
-		URL:       "https://github.com/dev/api/issues/12",
-		NodeID:    "I_node",
-		ItemID:    "PVTI_item",
-		StatusSet: true,
-		ModuleSet: true,
-		ParentSet: true,
-		At:        published,
+		Outcome:       discussion.OutcomeCreated,
+		Number:        12,
+		URL:           "https://github.com/dev/api/issues/12",
+		NodeID:        "I_node",
+		ItemID:        "PVTI_item",
+		StatusSet:     true,
+		ModuleSet:     true,
+		ParentSet:     true,
+		ImagesPending: true,
+		At:            published,
 	}
 	if err := s.Discussions.UpdateDraft(t.Context(), first); err != nil {
 		t.Fatalf("UpdateDraft() = %v, want nil", err)

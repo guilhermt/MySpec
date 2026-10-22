@@ -3205,6 +3205,7 @@ func TestFromDiscussionsCarriesEveryDraftWithWhatTheReadingKnows(t *testing.T) {
 			Published:   true,
 			PublishedAt: readAt.Format(time.RFC3339),
 
+			Images:           []bindings.DraftImage{},
 			ApprovePublishes: []string{}, DiscardPublishes: []string{},
 		},
 		{
@@ -3220,6 +3221,7 @@ func TestFromDiscussionsCarriesEveryDraftWithWhatTheReadingKnows(t *testing.T) {
 			PublishError: "gh: the issue could not be created",
 			Hold:         bindings.DraftHold{Reason: "draft", Title: "Add the login screen"},
 
+			Images:           []bindings.DraftImage{},
 			ApprovePublishes: []string{}, DiscardPublishes: []string{},
 		},
 		{
@@ -3229,11 +3231,35 @@ func TestFromDiscussionsCarriesEveryDraftWithWhatTheReadingKnows(t *testing.T) {
 			Dependencies: []bindings.DraftDependency{},
 			Warnings:     []string{},
 
+			Images:           []bindings.DraftImage{},
 			ApprovePublishes: []string{}, DiscardPublishes: []string{},
 		},
 	}
 	if diff := cmp.Diff(want, got.Drafts); diff != "" {
 		t.Errorf("drafts (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromDiscussionsCarriesTheImagesOfTheBodyOfEachDraft(t *testing.T) {
+	t.Parallel()
+
+	drafts := discussionDrafts()
+	drafts[0].Images = []discussion.BodyImage{
+		{Src: "images/a.png", Alt: "Shot", Local: true},
+		{Src: "images/b.png", Local: true, Problem: discussion.ImageMissing},
+	}
+
+	got := convertDiscussion(discussionState(discussionflow.StatusDeciding, drafts...), discussionReading(), true, nil)
+
+	want := []bindings.DraftImage{
+		{Src: "images/a.png", Alt: "Shot"},
+		{Src: "images/b.png", Problem: "missing"},
+	}
+	if diff := cmp.Diff(want, got.Drafts[0].Images); diff != "" {
+		t.Errorf("images of the first draft (-want +got):\n%s", diff)
+	}
+	if got.Drafts[1].Images == nil || len(got.Drafts[1].Images) != 0 {
+		t.Errorf("images of a draft without any = %#v, want an empty list", got.Drafts[1].Images)
 	}
 }
 
@@ -4156,6 +4182,9 @@ func TestFromMachineOfNothingCheckedHasEmptyLists(t *testing.T) {
 	if got.MinVersion != claude.MinVersion {
 		t.Errorf("MinVersion = %q, want %q", got.MinVersion, claude.MinVersion)
 	}
+	if got.GHVersion != "" || got.GHMinVersion != "2.99.0" {
+		t.Errorf("GHVersion, GHMinVersion = %q, %q, want \"\", 2.99.0", got.GHVersion, got.GHMinVersion)
+	}
 }
 
 func TestFromMachineCarriesTheItemsInOrderAndCopiesTheLists(t *testing.T) {
@@ -4174,6 +4203,7 @@ func TestFromMachineCarriesTheItemsInOrderAndCopiesTheLists(t *testing.T) {
 			ClaudePath:    "/bin/claude",
 			ClaudeVersion: "2.1.291",
 			GHAccount:     "octocat",
+			GHVersion:     "2.102.0",
 			GHScopes:      scopes,
 			MissingScopes: []string{"project"},
 		},
@@ -4193,6 +4223,8 @@ func TestFromMachineCarriesTheItemsInOrderAndCopiesTheLists(t *testing.T) {
 		ClaudeVersion: "2.1.291",
 		MinVersion:    claude.MinVersion,
 		GHAccount:     "octocat",
+		GHVersion:     "2.102.0",
+		GHMinVersion:  "2.99.0",
 		GHScopes:      []string{"gist", "repo"},
 		MissingScopes: []string{"project"},
 	}

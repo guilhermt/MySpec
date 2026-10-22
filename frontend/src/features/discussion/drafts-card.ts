@@ -7,10 +7,11 @@ import type {
   GestureLineView,
 } from "@/components/system/draft-views";
 import { holdLabel, holdStands, kindLabel, refKey } from "@/features/discussion/discussion-status";
+import { readableImages } from "@/features/discussion/draft-images";
 import { draftTitle } from "@/lib/drafts";
 import { shortName, shortRef } from "@/lib/repositories";
 import { counted, listed } from "@/lib/situations";
-import type { DiscussionSummary, Draft, DraftDependency, DraftRef } from "@/lib/wails";
+import type { DiscussionSummary, Draft, DraftDependency, DraftImage, DraftRef } from "@/lib/wails";
 import { asDraftKind, asDraftOutcome, asHoldReason } from "@/lib/wails";
 import { shortTime } from "@/lib/when";
 
@@ -229,6 +230,7 @@ function pieces(...all: (string | null)[]): string {
 export function foldedLine2(draft: Draft, discussion: DiscussionSummary): string {
   const epic = existingEpic(draft);
   const depends = dependencyViews(draft, discussion).map((view) => view.title);
+  const imagesCount = (draft.images ?? []).length;
   const warnings = warningsOf(draft, { kind: "fresh" }).length;
   const current = draft.current;
   return pieces(
@@ -240,6 +242,7 @@ export function foldedLine2(draft: Draft, discussion: DiscussionSummary): string
       : null,
     epic === null ? null : `In ${epic}`,
     depends.length > 0 ? `Depends on ${depends.join(", ")}` : null,
+    imagesCount > 0 ? counted(imagesCount, "image") : null,
     warnings > 0 ? counted(warnings, "warning") : null,
   );
 }
@@ -312,6 +315,11 @@ export type CardRefresh =
   | { kind: "refreshing" }
   | { kind: "failed"; reason: string };
 
+// imageName is how a sentence names an image: its alt text in quotes, or its destination without one.
+function imageName(image: DraftImage): string {
+  return image.alt === "" ? image.src : JSON.stringify(image.alt);
+}
+
 /** warningsOf are the warnings of a draft, each one line (material §4.2, O aberto, Avisos). */
 export function warningsOf(draft: Draft, refresh: CardRefresh): string[] {
   const warnings: string[] = [];
@@ -319,6 +327,13 @@ export function warningsOf(draft: Draft, refresh: CardRefresh): string[] {
     warnings.push(`${draft.repository} is no longer managed by the board.`);
   }
   warnings.push(...(draft.warnings ?? []));
+  for (const image of draft.images ?? []) {
+    if (image.problem === "missing") {
+      warnings.push(`The image ${imageName(image)} isn't in this discussion.`);
+    } else if (image.problem === "too_large") {
+      warnings.push(`The image ${imageName(image)} is over 10 MB, which GitHub doesn't take.`);
+    }
+  }
   switch (refresh.kind) {
     case "missing":
       warnings.push("This card isn't in the last reading of the board.");
@@ -516,8 +531,21 @@ export function decisionOf(
     approveReason = "Name the draft to approve it.";
   } else if (isBlocked(draft)) {
     approveReason = blockedText(draft);
+  } else {
+    approveReason = imageReason(draft);
   }
   return { shown: true, approveReason, discardReason: null, editReason };
+}
+
+// imageReason is why an image keeps a draft from being approved; null without a problem.
+function imageReason(draft: Draft): string | null {
+  const image = (draft.images ?? []).find((candidate) => candidate.problem !== "");
+  if (image === undefined) {
+    return null;
+  }
+  return image.problem === "missing"
+    ? `Take out the image ${imageName(image)}: it isn't in this discussion.`
+    : `Take out the image ${imageName(image)}: GitHub takes images up to 10 MB.`;
 }
 
 /** advanceAfter says whether a decision moves on to the next draft to decide ("advance") or keeps the focus ("stay"), from the screen as it was at the gesture. */
@@ -559,7 +587,7 @@ function kindOf(change: { added?: boolean; removed?: boolean }): DiffLine["kind"
 export function bodyDiff(current: string, next: string): DiffLine[] {
   return diffLines(whole(current), whole(next)).flatMap((change) => {
     const kind = kindOf(change);
-    return linesOf(change.value).map((text): DiffLine => ({ kind, text }));
+    return linesOf(change.value).map((text): DiffLine => ({ kind, text: readableImages(text) }));
   });
 }
 

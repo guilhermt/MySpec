@@ -1174,3 +1174,148 @@ func TestDeletingADiscussionTakesItsImagesWithIt(t *testing.T) {
 		t.Errorf("stat image = %v, want it gone", err)
 	}
 }
+
+func TestApprovingADraftWithAnImageItCannotPublishIsRefused(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	present, absent, big := imageFiles(t, d)
+
+	cases := []struct {
+		name string
+		body string
+		want error
+	}{
+		{"the file is there", present, nil},
+		{"the file is gone", absent, discussion.ErrImageMissing},
+		{"the file is over 10 MB", big, discussion.ErrImageTooLarge},
+	}
+	for _, c := range cases {
+		f.record(d.ID, twoDrafts)
+		if err := f.service.SetDraftText(t.Context(), d.ID, "one", "One", c.body); err != nil {
+			t.Fatalf("%s: set text: %v", c.name, err)
+		}
+
+		err := f.service.Decide(t.Context(), d.ID, "one", discussion.DecisionApproved)
+
+		if !errors.Is(err, c.want) {
+			t.Errorf("%s: error = %v, want %v", c.name, err, c.want)
+		}
+	}
+}
+
+func TestAnEditThatBreaksAnImageTakesBackTheApproval(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	present, absent, _ := imageFiles(t, d)
+	f.record(d.ID, twoDrafts)
+	ctx := t.Context()
+	if err := f.service.SetDraftText(ctx, d.ID, "one", "One", present); err != nil {
+		t.Fatalf("set text: %v", err)
+	}
+	f.approve(d.ID, "one")
+
+	if err := f.service.SetDraftText(ctx, d.ID, "one", "One", present+" and "+absent); err != nil {
+		t.Fatalf("set text: %v", err)
+	}
+
+	if got := f.draft(d.ID, "one").Decision; got != discussion.DecisionNone {
+		t.Errorf("decision = %q, want the approval taken back", got)
+	}
+}
+
+func TestAReadingThatBreaksAnImageTakesBackTheApproval(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	_, absent, _ := imageFiles(t, d)
+	f.record(d.ID, twoDrafts)
+	f.approve(d.ID, "one", "two")
+
+	f.record(d.ID, withBody(twoDrafts, "one", absent))
+
+	one, _ := f.find(d.ID, "one")
+	two, _ := f.find(d.ID, "two")
+	if one.Decision != discussion.DecisionNone || !one.ApprovalCleared {
+		t.Errorf("draft one = %q cleared %v, want the approval taken back", one.Decision, one.ApprovalCleared)
+	}
+	if two.Decision != discussion.DecisionApproved {
+		t.Errorf("draft two = %q, want it approved", two.Decision)
+	}
+}
+
+func TestAPublishedDraftNeverLosesItsApprovalToAnImage(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.record(d.ID, twoDrafts)
+	f.approve(d.ID, "one")
+	f.start(d.ID, "one")
+	_, absent, _ := imageFiles(t, d)
+
+	f.record(d.ID, withBody(twoDrafts, "one", absent))
+
+	if got := f.draft(d.ID, "one").Decision; got != discussion.DecisionApproved {
+		t.Errorf("decision = %q, want it kept", got)
+	}
+}
+
+func TestSavingAnImageOfADraftWritesItInTheFolder(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.record(d.ID, twoDrafts)
+
+	img, err := f.service.SaveDraftImage(d.ID, "one", pngData)
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	if _, err := os.Stat(images.Path(d.ArtifactsDir, img)); err != nil {
+		t.Errorf("file of the image: %v", err)
+	}
+	if img.Origin != images.OriginUser || img.MediaType != "image/png" {
+		t.Errorf("image = %+v, want a PNG of the user", img)
+	}
+}
+
+func TestSavingAnImageOfADraftIsRefusedWhenItDoesNotFit(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+	f.record(d.ID, twoDrafts)
+	f.start(d.ID, "two")
+	big := make([]byte, images.MaxPublishSize+1)
+	copy(big, pngData)
+
+	cases := []struct {
+		name string
+		do   func() error
+		want error
+	}{
+		{"not an image", func() error { _, err := f.service.SaveDraftImage(d.ID, "one", []byte("text")); return err }, images.ErrFormat},
+		{"over 10 MB", func() error { _, err := f.service.SaveDraftImage(d.ID, "one", big); return err }, images.ErrTooLargeToPublish},
+		{"published draft", func() error { _, err := f.service.SaveDraftImage(d.ID, "two", pngData); return err }, discussion.ErrPublished},
+		{"unknown draft", func() error { _, err := f.service.SaveDraftImage(d.ID, "nope", pngData); return err }, discussion.ErrDraftNotFound},
+		{"unknown discussion", func() error { _, err := f.service.SaveDraftImage("nope", "one", pngData); return err }, discussion.ErrNotFound},
+	}
+	for _, c := range cases {
+		if err := c.do(); !errors.Is(err, c.want) {
+			t.Errorf("%s: error = %v, want %v", c.name, err, c.want)
+		}
+	}
+
+	if _, err := f.service.Archive(t.Context(), d.ID); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	if _, err := f.service.SaveDraftImage(d.ID, "one", pngData); !errors.Is(err, discussion.ErrArchived) {
+		t.Errorf("archived: error = %v, want ErrArchived", err)
+	}
+}

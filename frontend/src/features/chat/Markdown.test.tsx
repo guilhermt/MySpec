@@ -233,3 +233,56 @@ describe("Markdown, the images of a card body", () => {
     expect(screen.getByRole("link", { name: "link" })).toBeInTheDocument();
   });
 });
+
+describe("Markdown, the images of a draft body", () => {
+  const FILE = "0b6c3c1e-2f8a-4c7e-9b1d-2a4f5e6d7c8b.png";
+
+  it("loads a file of the discussion through the product", () => {
+    renderWithStore(
+      <Markdown images={{ kind: "draft", discussionId: "d-1", issue: null }}>
+        {`![shot](images/${FILE})`}
+      </Markdown>,
+    );
+
+    expect(screen.getByRole("img", { name: "shot" })).toHaveAttribute(
+      "src",
+      `/myspec/images/d-1/${FILE}`,
+    );
+  });
+
+  it("loads a link through the card of an update, and as it is for a new card", () => {
+    const body = "![chart](https://github.com/user-attachments/assets/abc)";
+    const { unmount } = renderWithStore(
+      <Markdown images={{ kind: "draft", discussionId: "d-1", issue: "dev/web#12" }}>
+        {body}
+      </Markdown>,
+    );
+
+    expect(screen.getByRole("img", { name: "chart" })).toHaveAttribute(
+      "src",
+      cardBodyImageUrl("dev/web#12", "https://github.com/user-attachments/assets/abc"),
+    );
+    unmount();
+
+    renderWithStore(
+      <Markdown images={{ kind: "draft", discussionId: "d-1", issue: null }}>{body}</Markdown>,
+    );
+
+    expect(screen.getByRole("img", { name: "chart" })).toHaveAttribute(
+      "src",
+      "https://github.com/user-attachments/assets/abc",
+    );
+  });
+
+  it("draws a path the discussion can't load as a marker without a link", () => {
+    renderWithStore(
+      <Markdown images={{ kind: "draft", discussionId: "d-1", issue: null }}>
+        {"![bad](foo.png)"}
+      </Markdown>,
+    );
+
+    expect(screen.queryByRole("img", { name: "bad" })).not.toBeInTheDocument();
+    expect(screen.getByText("bad")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "link" })).not.toBeInTheDocument();
+  });
+});

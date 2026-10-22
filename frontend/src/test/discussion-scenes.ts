@@ -934,6 +934,7 @@ function draftsOf(
       decision,
       revision: revised ? 2 : 1,
       warnings: spec.warnings ?? [],
+      images: [],
       outcome: time === undefined ? "" : spec.out.outcome,
       number: time === undefined ? 0 : spec.out.number,
       url: time === undefined ? "" : issueUrl(spec.out.repository, spec.out.number),
