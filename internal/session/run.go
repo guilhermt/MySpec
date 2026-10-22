@@ -42,6 +42,8 @@ type run struct {
 	tasks       map[string]*cliTask    // task_id -> the tasks the current process runs, in the foreground or the background
 	wakes       []Wake                 // the returns that arrived with no turn, for the marker that opens the next one
 	monitors    map[string]monitorCall // tool_use_id -> the Monitor calls of the current process, until their task starts
+	subagents   map[string]*subagent   // tool_use_id of the Agent/Task call -> its subagent, for the current process
+	actions     map[string]*Entry      // tool_use_id -> every action of the current process, main thread and subagents
 	returnDue   bool                   // a task came back with no turn open, and the CLI has not answered it yet
 	returnTimer *time.Timer            // gives up on a return the CLI does not answer
 	lastTurnAt  time.Time              // when the last turn of the current process started
@@ -81,12 +83,31 @@ type cliTask struct {
 	gone         bool        // the CLI's list of background tasks no longer has it
 	limit        *time.Timer // ends what a command or a timed monitor counts; nil for the others
 	wake         *Wake       // nil until its task_notification arrives
+	toolUseID    string      // the call that started it
+	startedAt    time.Time   // when task_started arrived
+	entry        *Entry      // the action of the call; nil when the conversation has none
+	stopReq      string      // the stop_task request in flight; "" when none
+}
+
+// subagent is an Agent/Task call of the current process and what its subagent
+// did: every entry it writes joins the turn the call was made in, whatever
+// turn is open when it arrives.
+type subagent struct {
+	entry   *Entry            // the Agent/Task action
+	turnID  string            // the turn the call was made in
+	actions map[string]*Entry // tool_use_id -> the actions of the subagent
 }
 
 // counts reports whether the task is work of the session: in the background,
 // not over and within its limit.
 func (t *cliTask) counts() bool {
 	return t.backgrounded && t.wake == nil && !t.gone && !t.pastLimit && !t.persistent
+}
+
+// live reports whether the task still runs: it has not ended and the CLI still
+// lists it.
+func (t *cliTask) live() bool {
+	return t.wake == nil && !t.gone
 }
 
 // monitorCall is what a Monitor call asked for: how long the monitor runs, or
@@ -114,13 +135,15 @@ const interruptReceiptCapability = "interrupt_receipt_v1"
 
 func newRun(t TaskInfo, rec Record, nextSeq int) *run {
 	return &run{
-		task:     t,
-		rec:      rec,
-		byID:     map[string]*Entry{},
-		nextSeq:  nextSeq,
-		dirty:    map[string]struct{}{},
-		tasks:    map[string]*cliTask{},
-		monitors: map[string]monitorCall{},
+		task:      t,
+		rec:       rec,
+		byID:      map[string]*Entry{},
+		nextSeq:   nextSeq,
+		dirty:     map[string]struct{}{},
+		tasks:     map[string]*cliTask{},
+		monitors:  map[string]monitorCall{},
+		subagents: map[string]*subagent{},
+		actions:   map[string]*Entry{},
 	}
 }
 
@@ -155,12 +178,20 @@ func (t *turn) runningAction() *Entry {
 // newEntry stamps the envelope of an entry about to join the conversation: a
 // fresh id, the next position, the turn in progress and the time.
 func (r *run) newEntry(s *Service, e Entry) *Entry {
+	turnID := ""
+	if r.turn != nil {
+		turnID = r.turn.id
+	}
+	return r.newEntryIn(s, e, turnID)
+}
+
+// newEntryIn is newEntry for an entry that belongs to the given turn, whatever
+// turn is open.
+func (r *run) newEntryIn(s *Service, e Entry, turnID string) *Entry {
 	e.ID = s.newID()
 	e.Seq = r.nextSeq
 	r.nextSeq++
-	if r.turn != nil {
-		e.TurnID = r.turn.id
-	}
+	e.TurnID = turnID
 	e.CreatedAt = s.now().UTC()
 	return &e
 }
@@ -171,6 +202,20 @@ func (r *run) clearRetry() {
 	r.retryMax = 0
 	r.retryAt = time.Time{}
 	r.retryReason = ""
+}
+
+// backgroundAlive reports whether an action is a call in the background whose
+// task still runs, which makes it the process's and not its turn's: the action
+// of a live task, or one whose task_started has not arrived.
+func (r *run) backgroundAlive(e *Entry) bool {
+	if !e.Action.Background {
+		return false
+	}
+	if e.Action.TaskID == "" {
+		return true
+	}
+	t := r.tasks[e.Action.TaskID]
+	return t != nil && t.entry == e && t.live()
 }
 
 // backgroundWork reports whether the current process has work in the
@@ -202,6 +247,8 @@ func (r *run) forgetTasks() {
 	}
 	clear(r.tasks)
 	clear(r.monitors)
+	clear(r.subagents)
+	clear(r.actions)
 	r.wakes = nil
 	r.answerReturn()
 }

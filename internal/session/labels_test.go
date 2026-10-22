@@ -34,6 +34,7 @@ func TestLabel(t *testing.T) {
 		"TaskUpdate":        "Planning",
 		"TaskList":          "Planning",
 		"TaskGet":           "Planning",
+		"Monitor":           "Watching",
 		"mcp__github__list": "Calling",
 		"Unknown":           "Unknown",
 	}
@@ -115,6 +116,22 @@ func TestFor(t *testing.T) {
 		"agent": {
 			tool: "Agent", input: `{"subagent_type":"general-purpose","description":"review"}`,
 			want: session.Described{Label: "Delegating", Target: "general-purpose", Description: "review"},
+		},
+		"agent in the background keeps its prompt": {
+			tool: "Agent", input: `{"subagent_type":"Explore","description":"survey","prompt":"Survey the API.","run_in_background":true}`,
+			want: session.Described{Label: "Delegating", Target: "Explore", Description: "survey", Prompt: "Survey the API.", Background: true},
+		},
+		"agent in the foreground": {
+			tool: "Agent", input: `{"subagent_type":"Explore","prompt":"Survey.","run_in_background":false}`,
+			want: session.Described{Label: "Delegating", Target: "Explore", Prompt: "Survey."},
+		},
+		"bash in the background": {
+			tool: "Bash", input: `{"command":"npm run dev","run_in_background":true}`,
+			want: session.Described{Label: "Running", Target: "npm run dev", CommandLines: 1, Background: true},
+		},
+		"monitor is always in the background": {
+			tool: "Monitor", input: `{"command":"tail -f log\ngrep x","description":"Watch the log"}`,
+			want: session.Described{Label: "Watching", Target: "tail -f log", Description: "Watch the log", CommandLines: 2, Background: true},
 		},
 		"skill": {
 			tool: "Skill", input: `{"skill":"gm-prd"}`,

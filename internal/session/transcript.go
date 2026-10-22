@@ -150,9 +150,21 @@ type ActionEntry struct {
 	OutputTail string `json:"outputTail"`
 	// OutputTruncated says the output kept is only the end of a longer one.
 	OutputTruncated bool `json:"outputTruncated"`
-	// InterruptedBy is who stopped the action, interrupted only: "user" or
-	// "crash".
+	// InterruptedBy is who stopped the action, interrupted only: "user",
+	// "crash" or "agent", this when the agent itself stopped a task in the
+	// background.
 	InterruptedBy string `json:"interruptedBy"`
+	// Background says the call runs in the background: a Bash or Agent/Task
+	// call with run_in_background, a Monitor call, or a call the CLI moved to the
+	// background. Such an action stays running until its task ends, not until
+	// its tool result, which only says it was launched.
+	Background bool `json:"background,omitempty"`
+	// TaskID is the id the CLI gave the task of the call (task_started); "" for
+	// a call with no task and in old transcripts.
+	TaskID string `json:"taskId,omitempty"`
+	// Prompt is the task an Agent/Task call gave its subagent; "" for any other
+	// call and in old transcripts.
+	Prompt string `json:"prompt,omitempty"`
 }
 
 // PermissionStatus is how a permission request or a question was answered.
@@ -183,6 +195,9 @@ type PermissionEntry struct {
 	Status              PermissionStatus `json:"status"`
 	DenyMessage         string           `json:"denyMessage"`
 	AnsweredAt          *time.Time       `json:"answeredAt"`
+	// ParentToolUseID is the Agent/Task action of the subagent that asks; "" for
+	// the main thread and in old transcripts.
+	ParentToolUseID string `json:"parentToolUseId,omitempty"`
 }
 
 // QuestionOption is one answer offered for a question.
@@ -251,6 +266,9 @@ const (
 	MarkerChangesApproved    MarkerType = "changes_approved"
 	MarkerPaused             MarkerType = "paused"
 	MarkerPlanInvalid        MarkerType = "plan_invalid"
+
+	MarkerBackgroundStopped MarkerType = "background_stopped" // the user stopped work in the background
+	MarkerBackgroundLost    MarkerType = "background_lost"    // work in the background died with the process
 )
 
 // ArtifactKind is the artifact a marker refers to. The values are the ones of
@@ -318,6 +336,9 @@ type MarkerEntry struct {
 	// Wakes are the returns in the background a woke marker names, in the
 	// order they arrived; none when the agent resumed on its own.
 	Wakes []Wake `json:"wakes,omitempty"`
+	// Background is the work a background_stopped or background_lost marker
+	// names, in the order it started.
+	Background []BackgroundItem `json:"background,omitempty"`
 
 	SHA      string        `json:"sha"`      // committed
 	Subject  string        `json:"subject"`  // committed
@@ -394,6 +415,13 @@ type Wake struct {
 	// ExitCode is the code a failed command exited with, nil when the CLI does
 	// not say or the task is not a failed command.
 	ExitCode *int `json:"exitCode"`
+}
+
+// BackgroundItem is a task in the background a marker names: what it is and
+// the name the agent gave it.
+type BackgroundItem struct {
+	Kind WakeKind `json:"kind"`
+	Name string   `json:"name"`
 }
 
 // DraftBefore is a draft of a round as it was before a revision, or one the

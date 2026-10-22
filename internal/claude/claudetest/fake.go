@@ -524,6 +524,8 @@ func (f *fake) answerListModels(requestID string) {
 //     background; gate 1 ends it and the agent resumes for it.
 //   - bg_live_agent: a subagent and a command that never ends; gate 1 is the
 //     narration and a Read of the subagent, gate 2 its report and its end.
+//   - bg_refused: a command in the background whose launch fails, so it has no
+//     task; no gates.
 //   - bg_permission_sub: a subagent that asks permission for a command, in the
 //     turn that launched it; no gates.
 func (f *fake) play(scenario string) int {
@@ -570,6 +572,8 @@ func (f *fake) play(scenario string) int {
 			f.bgPromotedTurn(text)
 		case "bg_live_agent":
 			f.bgLiveAgentTurn(text)
+		case "bg_refused":
+			f.bgRefusedTurn(text)
 		case "bg_permission_sub":
 			f.bgPermissionSubTurn(text)
 		case "bash_fail":
@@ -1394,6 +1398,23 @@ func (f *fake) bgLiveAgentTurn(text string) {
 	f.bgReturn(a, aRun, aUse, BackgroundAgentAText)
 }
 
+// bgRefusedTurn calls a command in the background that never launches: its
+// result is an error and no task starts.
+func (f *fake) bgRefusedTurn(text string) {
+	f.emitInit()
+	f.status()
+	m1 := f.nextID("msg")
+	f.messageStart(m1)
+	toolUseID := f.nextID("toolu")
+	f.streamToolUse(0, m1, toolUseID, "Bash", map[string]any{
+		"command":           "npm run dev",
+		"description":       BackgroundServer,
+		"run_in_background": true,
+	})
+	f.toolResultError(toolUseID, "Permission to use Bash has been denied.")
+	f.bgClose(m1, 1, text)
+}
+
 // bgPermissionSubTurn launches a subagent whose Bash call asks permission in the
 // turn that launched it, and ends the turn with the answer.
 func (f *fake) bgPermissionSubTurn(text string) {
@@ -1478,6 +1499,7 @@ func (f *fake) bgPromotedTurn(text string) {
 	f.streamToolUse(0, m1, cmdUse, "Bash", map[string]any{"command": "make build", "description": PromotedDescription})
 	f.taskStarted(cmd, cmdRun, cmdUse, PromotedDescription, "local_bash", false)
 	f.taskUpdated(cmd, cmdRun, true)
+	f.keepLive(cmd, liveTask{runID: cmdRun, toolUseID: cmdUse, description: PromotedDescription, taskType: "local_bash"})
 	f.toolResult(cmdUse, "Command was moved to the background with ID: "+cmd+".")
 	f.bgClose(m1, 1, text)
 
@@ -1881,12 +1903,19 @@ func (f *fake) status() {
 	f.emit(map[string]any{"type": "system", "subtype": "status", "status": "requesting"})
 }
 
+// keepLive records a task running in the background, for stop_task, the output
+// of the task and its notification.
+func (f *fake) keepLive(taskID string, task liveTask) {
+	f.liveMu.Lock()
+	defer f.liveMu.Unlock()
+
+	f.live[taskID] = task
+}
+
 // taskStarted announces a task the agent launched.
 func (f *fake) taskStarted(taskID, runID, toolUseID, description, taskType string, backgrounded bool) {
 	if backgrounded {
-		f.liveMu.Lock()
-		f.live[taskID] = liveTask{runID: runID, toolUseID: toolUseID, description: description, taskType: taskType}
-		f.liveMu.Unlock()
+		f.keepLive(taskID, liveTask{runID: runID, toolUseID: toolUseID, description: description, taskType: taskType})
 	}
 	f.emit(map[string]any{
 		"type":            "system",

@@ -2,6 +2,9 @@ package session
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
+	"os"
 	"strings"
 	"unicode/utf8"
 
@@ -42,6 +45,13 @@ func outputOf(action *ActionEntry, result claude.ToolResult, useResult json.RawM
 		text = result.Text()
 	}
 
+	return outputFromText(text)
+}
+
+// outputFromText is the output a text makes: without terminal escapes and
+// trailing newlines, and cut to its end above OutputLimit; false when nothing
+// is left.
+func outputFromText(text string) (Output, bool) {
 	text = strings.TrimRight(stripANSI(text), "\n")
 	if text == "" {
 		return Output{}, false
@@ -53,6 +63,46 @@ func outputOf(action *ActionEntry, result claude.ToolResult, useResult json.RawM
 	}
 	o.Lines = strings.Count(o.Text, "\n") + 1
 	return o, true
+}
+
+// fileOutput is the output of a background command or monitor as the CLI left
+// it in the file at path: the last OutputLimit bytes of it, false when the path
+// is empty, the file is unreadable (the error says why) or the text is empty.
+// The read is at most 64 KiB of a local disk, so it runs under the mutex.
+func fileOutput(path string) (Output, bool, error) {
+	if path == "" {
+		return Output{}, false, nil
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return Output{}, false, fmt.Errorf("open background output: %w", err)
+	}
+	defer func() { _ = file.Close() }()
+
+	info, err := file.Stat()
+	if err != nil {
+		return Output{}, false, fmt.Errorf("stat background output: %w", err)
+	}
+	cut := info.Size() > OutputLimit
+	if cut {
+		if _, err = file.Seek(info.Size()-OutputLimit, io.SeekStart); err != nil {
+			return Output{}, false, fmt.Errorf("seek background output: %w", err)
+		}
+	}
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return Output{}, false, fmt.Errorf("read background output: %w", err)
+	}
+
+	text := string(data)
+	if cut {
+		text = endOf(text, len(text))
+	}
+	text = strings.TrimRight(stripANSI(text), "\n")
+	if text == "" {
+		return Output{}, false, nil
+	}
+	return Output{Text: text, Lines: strings.Count(text, "\n") + 1, Truncated: cut}, true, nil
 }
 
 // silentBash is the text the CLI gives a command that printed nothing.

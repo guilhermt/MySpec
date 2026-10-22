@@ -1503,7 +1503,18 @@ func (s *Service) persistRecord(ctx context.Context, r *run) error {
 // appendLocked adds an entry to the end of the conversation, persists it and
 // emits it. The caller holds the mutex.
 func (s *Service) appendLocked(ctx context.Context, r *run, e Entry, n *notes) *Entry {
-	entry := r.newEntry(s, e)
+	return s.insertLocked(ctx, r, r.newEntry(s, e), n)
+}
+
+// appendInLocked is appendLocked for an entry that belongs to the given turn,
+// whatever turn is open: what a subagent writes after its turn ended.
+func (s *Service) appendInLocked(ctx context.Context, r *run, e Entry, turnID string, n *notes) *Entry {
+	return s.insertLocked(ctx, r, r.newEntryIn(s, e, turnID), n)
+}
+
+// insertLocked adds a stamped entry to the end of the conversation, persists it
+// and emits it. The caller holds the mutex.
+func (s *Service) insertLocked(ctx context.Context, r *run, entry *Entry, n *notes) *Entry {
 	r.entries = append(r.entries, entry)
 	r.byID[entry.ID] = entry
 	if err := s.entries.Insert(ctx, r.rec.ID, *entry); err != nil {
