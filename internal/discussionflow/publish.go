@@ -3,21 +3,24 @@ package discussionflow
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
 // publishTimeout bounds a run that writes on GitHub. The run has a goroutine of
 // its own, so it outlives the evaluation that started it.
-const publishTimeout = 3 * time.Minute
+const publishTimeout = 10 * time.Minute
 
 // The sentences a draft says about a publication that could not go on.
 const (
@@ -28,6 +31,22 @@ const (
 	msgNoRepositoryStart = "The repository "
 	msgNoRepositoryEnd   = " doesn't exist or this account can't write to it."
 	msgNotRecorded       = "Couldn't record the publication: "
+)
+
+// The sentences a draft says about the images of a publication.
+const (
+	msgOldGH             = "Publishing images needs GitHub CLI %s or newer, and this machine has %s. Update it the way you installed it, then retry."
+	msgAttachNoWrite     = "Couldn't upload the image %s: this account can't write to %s."
+	msgAttachNoWriteAll  = "Couldn't upload the images: this account can't write to %s."
+	msgAttachRefused     = "GitHub refused the image %s: %s."
+	msgAttachRateLimited = "Couldn't upload the image %s: GitHub's rate limit was reached. Try again in a few minutes."
+	msgAttachNetwork     = "Couldn't upload the image %s: GitHub couldn't be reached."
+	msgAttachOther       = "Couldn't upload the image %s: %s"
+	msgAttachOtherAll    = "Couldn't upload the images: %s"
+	msgImageMissing      = "The image %s isn't in this discussion."
+	msgImageTooLarge     = "The image %s is over 10 MB, which GitHub doesn't take."
+	msgNoIssueURL        = "Couldn't read the issue GitHub CLI created: "
+	msgVersionUnreadable = "Couldn't read the version of GitHub CLI."
 )
 
 // publishDue writes on GitHub what the chain of a discussion lets go. It
@@ -216,6 +235,9 @@ type publication struct {
 	issues  map[string]gh.IssueNode // task.IssueKey: the issue on GitHub
 	drafts  []discussion.Draft      // as the run left them
 	wrote   bool                    // something was written on GitHub
+
+	attachChecked bool  // the version of gh was read this run
+	attachErr     error // why this gh can't attach images; nil when it can
 }
 
 // publicationOf is the run of a discussion, with the board it writes cards for
@@ -325,7 +347,7 @@ func (p *publication) publish(ctx context.Context, target *discussion.Draft) err
 		return err
 	}
 	for _, step := range []func(context.Context, *discussion.Draft) error{
-		p.issue, p.item, p.status, p.module, p.parent, p.dependencies,
+		p.issue, p.node, p.images, p.item, p.status, p.module, p.parent, p.dependencies,
 	} {
 		if err := step(ctx, target); err != nil {
 			return err
@@ -368,15 +390,108 @@ func (p *publication) resolved(target discussion.Draft) error {
 }
 
 // issue creates the issue of a new card or of an epic, or rewrites the card an
-// update points at.
+// update points at. A draft with images to upload goes through gh, which
+// attaches them; any other goes through the GraphQL API.
 func (p *publication) issue(ctx context.Context, target *discussion.Draft) error {
 	if target.Published.Started() {
 		return nil
 	}
-	if target.Kind == discussion.KindUpdate {
-		return p.updateIssue(ctx, target)
+	imgs := p.stored.DraftImages(target.Body)
+	if err := imagesProblem(imgs); err != nil {
+		return err
 	}
-	return p.createIssue(ctx, target)
+	uploads := discussion.Uploads(imgs)
+	if len(uploads) == 0 {
+		if target.Kind == discussion.KindUpdate {
+			return p.updateIssue(ctx, target)
+		}
+		return p.createIssue(ctx, target)
+	}
+	if err := p.attachReady(ctx); err != nil {
+		return err
+	}
+	if target.Kind == discussion.KindUpdate {
+		return p.updateAttached(ctx, target, imgs, uploads)
+	}
+	return p.createAttached(ctx, target, imgs, uploads)
+}
+
+// attachReady says whether the gh of this machine can attach images, reading
+// its version once per run.
+func (p *publication) attachReady(ctx context.Context) error {
+	if !p.attachChecked {
+		p.attachChecked = true
+		v, err := p.service.gh.Version(ctx)
+		switch {
+		case err != nil:
+			p.attachErr = newStepError(publishError(err, "", onIssue))
+		case v.Less(gh.MinAttachVersion):
+			p.attachErr = newStepError(fmt.Sprintf(msgOldGH, gh.MinAttachVersion, v))
+		}
+	}
+	return p.attachErr
+}
+
+// imagesProblem is the first image of a body GitHub can't take. The approval
+// keeps a draft with one from being published, so this only defends.
+func imagesProblem(imgs []discussion.BodyImage) error {
+	for _, img := range imgs {
+		switch img.Problem {
+		case discussion.ImageMissing:
+			return newStepError(fmt.Sprintf(msgImageMissing, discussion.ImageName(img)))
+		case discussion.ImageTooLarge:
+			return newStepError(fmt.Sprintf(msgImageTooLarge, discussion.ImageName(img)))
+		case discussion.ImageOK:
+		}
+	}
+	return nil
+}
+
+// files are the images to attach as gh takes them, once each and in order.
+func files(uploads []discussion.BodyImage) []string {
+	var refs []string
+	for _, u := range uploads {
+		refs = appendOnce(refs, images.Ref(u.Image))
+	}
+	return refs
+}
+
+// attachMessage is what the user reads about an issue write with attachments
+// that failed.
+func (p *publication) attachMessage(err error, repo string, imgs []discussion.BodyImage) string {
+	var attach *gh.AttachError
+	if !errors.As(err, &attach) {
+		return publishError(err, repo, onIssue)
+	}
+	name := ""
+	if attach.Path != "" {
+		path := strings.TrimPrefix(attach.Path, "./")
+		name = strconv.Quote(attach.Path)
+		if i := slices.IndexFunc(imgs, func(img discussion.BodyImage) bool {
+			return img.Image.ID != "" && images.Ref(img.Image) == path
+		}); i >= 0 {
+			name = discussion.ImageName(imgs[i])
+		}
+	}
+	switch attach.Failure {
+	case gh.AttachNoWrite:
+		if name == "" {
+			return fmt.Sprintf(msgAttachNoWriteAll, repo)
+		}
+		return fmt.Sprintf(msgAttachNoWrite, name, repo)
+	case gh.AttachRefused:
+		return fmt.Sprintf(msgAttachRefused, name, attach.Detail)
+	case gh.AttachRateLimited:
+		return fmt.Sprintf(msgAttachRateLimited, name)
+	case gh.AttachNetwork:
+		return fmt.Sprintf(msgAttachNetwork, name)
+	case gh.AttachOther:
+		if name == "" {
+			return fmt.Sprintf(msgAttachOtherAll, attach.Detail)
+		}
+		return fmt.Sprintf(msgAttachOther, name, attach.Detail)
+	}
+	return publishError(err, repo, onIssue)
 }
 
 // createIssue opens the issue of a draft in the repository it names.
@@ -413,6 +528,141 @@ func (p *publication) updateIssue(ctx context.Context, target *discussion.Draft)
 		d.Published.URL = card.URL
 		d.Published.NodeID = node.ID
 	})
+}
+
+// createAttached opens the issue of a draft with gh, which uploads the images
+// the body references. gh stops at the first image it can't upload, and writes
+// the issue anyway when at least one went up: the publication keeps it, with
+// the images still to upload.
+func (p *publication) createAttached(ctx context.Context, target *discussion.Draft,
+	imgs, uploads []discussion.BodyImage,
+) error {
+	if _, ok := p.repos[strings.ToLower(target.FullName())]; !ok {
+		return newStepError(msgNoRepositoryStart + target.FullName() + msgNoRepositoryEnd)
+	}
+	all := files(uploads)
+	first := all[:min(len(all), gh.MaxAttachments)]
+	url, err := p.service.gh.CreateIssueAttached(ctx, p.stored.ArtifactsDir,
+		target.FullName(), target.Title, target.Body, first)
+
+	var attach *gh.AttachError
+	written := err == nil
+	if errors.As(err, &attach) && attach.Written {
+		written, url = true, attach.URL
+	}
+	if !written {
+		if strings.Contains(err.Error(), "printed no issue url") {
+			return newStepError(msgNoIssueURL + err.Error())
+		}
+		return newStepError(p.attachMessage(err, target.FullName(), imgs))
+	}
+
+	p.wrote = true
+	number := gh.IssueNumber(url)
+	pending := err != nil || len(all) > len(first)
+	if recErr := p.record(ctx, target, func(d *discussion.Draft) {
+		d.Published.Outcome = discussion.OutcomeCreated
+		d.Published.Number = number
+		d.Published.URL = url
+		d.Published.ImagesPending = pending
+	}); recErr != nil {
+		return recErr
+	}
+	if err != nil {
+		return newStepError(p.attachMessage(err, target.FullName(), imgs))
+	}
+	p.service.log.Info("discussion draft images attached", "discussion", p.stored.ID,
+		"draft", target.ID, "issue", target.Reference(), "images", len(first))
+	return nil
+}
+
+// updateAttached rewrites the card an update points at with gh, which uploads
+// the images the body references, as createAttached does.
+func (p *publication) updateAttached(ctx context.Context, target *discussion.Draft,
+	imgs, uploads []discussion.BodyImage,
+) error {
+	card := *target.Card
+	node := p.issues[card.Key()]
+	all := files(uploads)
+	first := all[:min(len(all), gh.MaxAttachments)]
+	err := p.service.gh.EditIssueAttached(ctx, p.stored.ArtifactsDir,
+		card.Owner+"/"+card.Name, card.Number, target.Title, target.Body, first)
+
+	var attach *gh.AttachError
+	written := err == nil || (errors.As(err, &attach) && attach.Written)
+	if !written {
+		return newStepError(p.attachMessage(err, card.Reference(), imgs))
+	}
+
+	p.wrote = true
+	pending := err != nil || len(all) > len(first)
+	if recErr := p.record(ctx, target, func(d *discussion.Draft) {
+		d.Published.Outcome = discussion.OutcomeUpdated
+		d.Published.Number = card.Number
+		d.Published.URL = card.URL
+		d.Published.NodeID = node.ID
+		d.Published.ImagesPending = pending
+	}); recErr != nil {
+		return recErr
+	}
+	if err != nil {
+		return newStepError(p.attachMessage(err, card.Reference(), imgs))
+	}
+	p.service.log.Info("discussion draft images attached", "discussion", p.stored.ID,
+		"draft", target.ID, "issue", target.Reference(), "images", len(first))
+	return nil
+}
+
+// node reads the node id of an issue gh created, which gh doesn't print.
+func (p *publication) node(ctx context.Context, target *discussion.Draft) error {
+	if !target.Published.Started() || target.Published.NodeID != "" {
+		return nil
+	}
+	ref := gh.IssueRef{Owner: target.Owner, Name: target.Name, Number: target.Published.Number}
+	found, err := p.service.gh.LookupIssues(ctx, []gh.IssueRef{ref})
+	if err != nil {
+		return newStepError(publishError(err, target.Reference(), onIssue))
+	}
+	issue, ok := found[ref]
+	if !ok {
+		return newStepError(missingIssue(target.Reference()))
+	}
+	return p.record(ctx, target, func(d *discussion.Draft) { d.Published.NodeID = issue.ID })
+}
+
+// images uploads the images an issue still lacks. It reads the body GitHub has,
+// where the images that went up already are links and the rest are still
+// references, and attaches those.
+func (p *publication) images(ctx context.Context, target *discussion.Draft) error {
+	for target.Published.ImagesPending {
+		body, err := p.service.gh.IssueBody(ctx, target.Published.NodeID)
+		if err != nil {
+			return newStepError(publishError(err, target.Reference(), onIssue))
+		}
+		imgs := p.stored.DraftImages(body)
+		all := files(discussion.Uploads(imgs))
+		if len(all) == 0 {
+			return p.record(ctx, target, func(d *discussion.Draft) { d.Published.ImagesPending = false })
+		}
+		if ready := p.attachReady(ctx); ready != nil {
+			return ready
+		}
+		first := all[:min(len(all), gh.MaxAttachments)]
+		err = p.service.gh.EditIssueAttached(ctx, p.stored.ArtifactsDir, target.FullName(),
+			target.Published.Number, "", body, first)
+		if err != nil {
+			var attach *gh.AttachError
+			if errors.As(err, &attach) && attach.Written {
+				p.wrote = true
+			}
+			return newStepError(p.attachMessage(err, target.FullName(), imgs))
+		}
+		p.wrote = true
+		if len(all) == len(first) {
+			return p.record(ctx, target, func(d *discussion.Draft) { d.Published.ImagesPending = false })
+		}
+	}
+	return nil
 }
 
 // item puts the issue on the board, which is where the discussion sends it.
@@ -757,6 +1007,8 @@ func publishError(err error, subject string, w where) string {
 		ghErr   *gh.Error
 	)
 	switch {
+	case errors.Is(err, gh.ErrVersionUnreadable):
+		return msgVersionUnreadable
 	case errors.Is(err, gh.ErrNotFound):
 		return "GitHub CLI was not found: gh isn't on the PATH."
 	case errors.Is(err, gh.ErrNotAuthenticated):

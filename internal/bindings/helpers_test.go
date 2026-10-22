@@ -359,6 +359,18 @@ func (offlineGH) AddSubIssue(context.Context, string, string) error { return err
 
 func (offlineGH) AddBlockedBy(context.Context, string, string) error { return errOffline }
 
+func (offlineGH) Version(context.Context) (gh.Version, error) { return gh.Version{}, errOffline }
+
+func (offlineGH) CreateIssueAttached(context.Context, string, string, string, string, []string) (string, error) {
+	return "", errOffline
+}
+
+func (offlineGH) EditIssueAttached(context.Context, string, string, int, string, string, []string) error {
+	return errOffline
+}
+
+func (offlineGH) IssueBody(context.Context, string) (string, error) { return "", errOffline }
+
 // fixture wires the services the way internal/app does, over an in-memory
 // database and a folder picker the test answers for.
 type fixture struct {

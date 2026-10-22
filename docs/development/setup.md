@@ -16,7 +16,7 @@ Cinco coisas são instaladas à mão; tudo o mais vem delas.
 
 3. **Claude Code.** O `claude` 2.1.291 ou mais novo (`claude update` atualiza), no `PATH` ou em `~/.local/bin` (no Windows, `%USERPROFILE%\.local\bin\claude.exe`), logado uma vez com `claude` num terminal. `MYSPEC_CLAUDE_PATH` fixa outro caminho. Essa versão é `claude.MinVersion`, a em que o app foi verificado, e sobe quando o app passa a usar um recurso novo do CLI.
 
-4. **git, gh e VS Code.** `git` no `PATH`, capaz de alcançar o `origin` dos repositórios sem pedir senha: o app roda com `GIT_TERMINAL_PROMPT=0`, e um fetch que peça senha falha em vez de pendurar. `gh` logado com os escopos `project` e `repo` (`gh auth refresh -s project,repo`), para os boards e para a etapa de PR. **Settings › Machine** mostra o que falta. `code` no `PATH` é o que **Abrir no VS Code** roda; sem ele o app avisa e o resto funciona.
+4. **git, gh e VS Code.** `git` no `PATH`, capaz de alcançar o `origin` dos repositórios sem pedir senha: o app roda com `GIT_TERMINAL_PROMPT=0`, e um fetch que peça senha falha em vez de pendurar. `gh` logado com os escopos `project` e `repo` (`gh auth refresh -s project,repo`), para os boards e para a etapa de PR. Publicar cards com imagens pede o `gh` 2.99 ou mais novo (`gh issue create` e `gh issue edit` com `--attach`); sem imagem, qualquer versão serve. **Settings › Machine** mostra o que falta. `code` no `PATH` é o que **Abrir no VS Code** roda; sem ele o app avisa e o resto funciona.
 
 5. **Um player de áudio.** `pw-play` (PipeWire), `paplay` (PulseAudio) ou `aplay` (alsa-utils) no `PATH`, para o som das notificações. Um desktop com PipeWire ou PulseAudio já traz um deles. Sem nenhum, as notificações aparecem mudas e o log diz por quê.
 
