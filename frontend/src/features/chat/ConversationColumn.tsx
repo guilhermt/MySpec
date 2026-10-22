@@ -10,6 +10,14 @@ import { cn } from "@/lib/utils";
 export const COLUMN_CLASS =
   "w-full max-w-(--measure-conversation) ml-[max(0px,round(down,calc((100%_-_var(--measure-conversation))/2),1px))]";
 
+/**
+ * conversationViewport is the region that scrolls the conversation an element is in: the viewport
+ * around the column. Null for an element outside a conversation.
+ */
+export function conversationViewport(from: Element): HTMLElement | null {
+  return from.closest('[data-slot="conversation"]')?.parentElement?.parentElement ?? null;
+}
+
 export interface ConversationColumnProps {
   children: ReactNode;
   label?: string;

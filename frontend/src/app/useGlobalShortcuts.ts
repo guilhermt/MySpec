@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { panelTriggerId } from "@/components/system/AuxPanel";
+import { leaveSubagentConversation } from "@/features/chat/subagent-conversation";
 import { leaveEarlierConversation } from "@/features/task/earlier-conversation";
 import { focusRequest } from "@/lib/focus";
 import { layerOpen, modalOpen } from "@/lib/layers";
@@ -106,11 +107,12 @@ export function useGlobalShortcuts(): void {
       }
     };
 
-    // Esc closes what the place on screen has open, the panel first and then an earlier
-    // conversation, once nothing closer to the user took it: the owners of Esc inside the screen
-    // (the message box, the search of a board, a draft) prevent its default, and a layer over the
-    // screen (a listbox, a popover, the ⋯ menu) closes first, on its own. With nothing to close,
-    // Esc in the conversation takes the focus to the composer, when there is one.
+    // Esc closes what the place on screen has open, the panel first, then the conversation of a
+    // subagent and then an earlier conversation, once nothing closer to the user took it: the
+    // owners of Esc inside the screen (the message box, the search of a board, a draft) prevent
+    // its default, and a layer over the screen (a listbox, a popover, the ⋯ menu) closes first, on
+    // its own. With nothing to close, Esc in the conversation takes the focus to the composer,
+    // when there is one.
     const onEscape = (event: KeyboardEvent) => {
       if (
         event.key !== "Escape" ||
@@ -128,6 +130,8 @@ export function useGlobalShortcuts(): void {
         const trigger = panelTriggerId(store.panel);
         store.openPanel(null);
         document.getElementById(trigger)?.focus();
+      } else if (store.subagentConversation !== null) {
+        leaveSubagentConversation();
       } else if (store.earlierConversation !== null) {
         leaveEarlierConversation();
       } else if (store.promptEdit !== null) {

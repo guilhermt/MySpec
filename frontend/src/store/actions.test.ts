@@ -99,6 +99,7 @@ import {
   setTheme,
   startDiscussion,
   startReview,
+  stopTasksInPlace,
   tryStartupAgain,
   updateBoard,
 } from "@/store/actions";
@@ -344,6 +345,23 @@ describe("answerPermissionInPlace", () => {
 
     await expect(answerPermissionInPlace("task-1", "prd", "req-1", "allow", "")).resolves.toBe(
       "the session stopped",
+    );
+    expect(useAppStore.getState().error).toBeNull();
+  });
+});
+
+describe("stopTasksInPlace", () => {
+  it("stops the tasks and answers nothing", async () => {
+    await expect(stopTasksInPlace("task-1", "step:1", ["task_a1", "task_a2"])).resolves.toBeNull();
+
+    expect(api.stopTasks).toHaveBeenCalledWith("task-1", "step:1", ["task_a1", "task_a2"]);
+  });
+
+  it("answers the reason of a refusal without the app notice", async () => {
+    vi.mocked(api.stopTasks).mockRejectedValueOnce(new Error("No task found with ID: x"));
+
+    await expect(stopTasksInPlace("task-1", "step:1", ["x"])).resolves.toBe(
+      "No task found with ID: x",
     );
     expect(useAppStore.getState().error).toBeNull();
   });

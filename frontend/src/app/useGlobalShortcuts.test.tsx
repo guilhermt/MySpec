@@ -7,8 +7,10 @@ import { useAppStore } from "@/store/app-store";
 import type { TranscriptState } from "@/store/transcript";
 import { renderWithStore, resetAppStore } from "@/test/render";
 import {
+  makeAction,
   makeBoard,
   makeDiscussion,
+  makeEntry,
   makeMigration,
   makePullRequestRow,
   makeReviewCenter,
@@ -774,5 +776,76 @@ describe("useGlobalShortcuts", () => {
         stop();
       }
     });
+  });
+});
+
+describe("with the conversation of a subagent on screen", () => {
+  const CALL = "toolu_agent";
+  const STATE = makeState({
+    tasks: [
+      makeTask({
+        stage: "tech_spec",
+        conversations: [makeTaskConversation({ stage: "tech_spec" })],
+      }),
+    ],
+  });
+  const ENTRIES = [
+    makeEntry("action", {
+      turnId: "turn-1",
+      action: makeAction({
+        toolUseId: CALL,
+        tool: "Agent",
+        description: "Survey the repository",
+        status: "done",
+      }),
+    }),
+    makeEntry("action", {
+      turnId: "turn-1",
+      action: makeAction({ toolUseId: "toolu_child", parentToolUseId: CALL }),
+    }),
+  ];
+  const TRANSCRIPT: TranscriptState = {
+    status: "ready",
+    error: "",
+    entries: ENTRIES,
+    pending: [],
+    buffered: [],
+  };
+
+  function reading() {
+    vi.mocked(api.getState).mockResolvedValue(STATE);
+    return renderWithStore(<App />, {
+      state: STATE,
+      ui: {
+        location: TASK,
+        transcripts: { "task-1|tech_spec": TRANSCRIPT },
+        subagentConversation: {
+          itemId: "task-1",
+          stage: "tech_spec",
+          toolUseId: CALL,
+          offset: null,
+        },
+      },
+    });
+  }
+
+  it("closes it on Esc and puts the focus on the row of the subagent", async () => {
+    reading();
+    expect(
+      await screen.findByRole("region", {
+        name: "Survey the repository, a subagent's conversation",
+      }),
+    ).toHaveFocus();
+
+    await act(async () => {
+      press({ key: "Escape" });
+    });
+
+    expect(useAppStore.getState().subagentConversation).toBeNull();
+    expect(
+      await screen.findByRole("button", {
+        name: "Open the conversation of Survey the repository",
+      }),
+    ).toHaveFocus();
   });
 });

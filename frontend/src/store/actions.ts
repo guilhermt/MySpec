@@ -567,6 +567,19 @@ export function readTaskOutput(
 }
 
 /**
+ * stopTasksInPlace stops tasks of a conversation, one by one or all of them, from the list that
+ * shows them. What the stop did, and what refused it, is in the state (stopping, stopError), which
+ * draws it where the task is; the value serves the callers that wait for it: null, or the reason.
+ */
+export function stopTasksInPlace(
+  itemId: string,
+  stage: string,
+  taskIds: string[],
+): Promise<string | null> {
+  return inPlace(() => api.stopTasks(itemId, stage, taskIds));
+}
+
+/**
  * sendMessageInPlace sends a message from the composer, whose failure has a place of its own under
  * the field: "" when it is sent, the reason when it is not.
  */

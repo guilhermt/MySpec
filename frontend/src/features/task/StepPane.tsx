@@ -10,7 +10,7 @@ import { currentStepOf, stepStage } from "@/features/task/step-status";
 import { TaskComposer } from "@/features/task/TaskComposer";
 import { TaskRequest } from "@/features/task/TaskRequest";
 import type { Step, TaskSummary } from "@/lib/wails";
-import { useOpenStepTab } from "@/store/app-store";
+import { useOpenStepTab, useSubagentReturn } from "@/store/app-store";
 
 interface StepConversationProps {
   task: TaskSummary;
@@ -24,6 +24,7 @@ interface StepConversationProps {
  */
 function StepConversation({ task, step, view }: StepConversationProps) {
   const tab = useOpenStepTab(task.id);
+  const subagentReturn = useSubagentReturn(task.id);
   const reviewer = tab === "reviewer" ? step.reviewer : null;
   const stage = reviewer === null ? stepStage(step.number) : reviewer.sessionStage;
   const session = reviewer ?? task;
@@ -42,6 +43,7 @@ function StepConversation({ task, step, view }: StepConversationProps) {
         stage={stage}
         session={session}
         fixed={fixed}
+        anchor={subagentReturn}
         replyWaiting={screenSituationKindOf(task, tab) === "reply"}
       />
       <TaskRequest task={task} tab={tab} />

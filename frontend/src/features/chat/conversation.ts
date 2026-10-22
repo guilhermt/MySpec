@@ -676,6 +676,20 @@ export function lastMarkerOf(model: ConversationModel, type: MarkerType): Marker
   return null;
 }
 
+/** rowOfCall is where the group that holds the call of a subagent is drawn, null when none does. */
+export function rowOfCall(model: ConversationModel, toolUseId: string): MarkerAt | null {
+  for (const stretch of model.stretches) {
+    const row = stretch.rows.find(
+      (one) =>
+        one.kind === "group" && one.group.nodes.some((node) => node.action.toolUseId === toolUseId),
+    );
+    if (row !== undefined) {
+      return { stretch: stretch.key, row: row.key };
+    }
+  }
+  return null;
+}
+
 /** StretchFoldView is the line a folded stretch is drawn as. */
 export interface StretchFoldView {
   /** text is "5 speeches · 71 actions". */

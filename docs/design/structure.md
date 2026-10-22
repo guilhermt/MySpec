@@ -243,6 +243,7 @@ No review da pull request as abas existem da primeira passada em diante e ficam 
 - Um bloco de erro diz a razão e o detalhe (a saída do git, o código de saída), e marca o erro pelo trilho. Não tem botão: a ação fica na barra do pedido.
 - **Sem conversa ainda** (a PR antes da primeira passada, o step bloqueado antes de abrir), o lugar mostra o vazio que diz o que espera (`The review starts when the checks finish.`, com os checks pelo nome) ou o bloco de erro.
 - **Conversas anteriores.** Voltar a uma conversa de outra etapa ou de outro step não acontece na tela: as conversas e os relatórios anteriores ficam em `Details`. Aberta de lá, a conversa anterior toma o lugar da atual, somente leitura, com uma faixa no lugar do compositor e a volta ao lugar atual; `Esc` volta.
+- **Conversa do subagente.** Cada subagente tem uma conversa própria, aberta pelo botão **Open conversation** da linha dele na conversa, pelo link do cartão de permissão que ele pediu ou pela lista do que roda em segundo plano. Ela toma o lugar da conversa da task, da review ou da discussão, como a conversa anterior, somente leitura e ao vivo, com a tarefa que ele recebeu, as falas, as ações e o fim, e uma faixa no lugar do compositor com **Stop** e a volta. A barra do pedido, o medidor de contexto e a situação da conversa de origem saem enquanto se lê; um pedido de permissão do subagente continua na conversa de origem. Na volta, essa conversa reabre com a linha do subagente onde estava. Veja a entrada **Conversa do subagente** em [components.md](./components.md).
 
 ### A barra do pedido
 
@@ -350,7 +351,7 @@ Sob o cabeçalho, na medida da conversa, quando algo bloqueia sem ser a situaç�
 | `Ctrl+J` | Qualquer lugar | Abre o próximo item que espera, no lugar da situação, com o foco no que ele pede (seção 1) |
 | `Ctrl+,` | Qualquer lugar, as boas-vindas incluídas | Abre ou fecha Settings |
 | `Alt+←`, `Alt+→` | Qualquer lugar | Volta e avança no histórico |
-| `Esc` | Qualquer lugar | Fecha o `listbox`, o menu, o popover, o diálogo, a edição, o painel, sai de uma conversa anterior e fecha Settings, nesta ordem |
+| `Esc` | Qualquer lugar | Fecha o `listbox`, o menu, o popover, o diálogo, a edição, o painel, sai da conversa de um subagente, sai de uma conversa anterior e fecha Settings, nesta ordem |
 | ↑↓ ←→ `Home` `End` `Enter` | Árvore | Percorre, recolhe e expande, abre |
 | `Enter` | Home | Abre **Continue** |
 | ↑↓ `Home` `End` | Lista (board, Reviews, History) | Percorrem as linhas e os cabeçalhos visíveis |

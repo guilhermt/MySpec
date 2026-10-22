@@ -19,6 +19,8 @@ export interface StoreOptions {
       | "panel"
       | "panelDocument"
       | "earlierConversation"
+      | "subagentConversation"
+      | "subagentReturn"
       | "pendingFocus"
       | "sidebarRail"
       | "toasts"
@@ -77,6 +79,8 @@ export function resetAppStore(options: StoreOptions = {}): void {
     panel: options.ui?.panel ?? null,
     panelDocument: options.ui?.panelDocument ?? null,
     earlierConversation: options.ui?.earlierConversation ?? null,
+    subagentConversation: options.ui?.subagentConversation ?? null,
+    subagentReturn: options.ui?.subagentReturn ?? null,
     pendingFocus: options.ui?.pendingFocus ?? null,
     sidebarRail: options.ui?.sidebarRail ?? false,
     toasts: options.ui?.toasts ?? [],

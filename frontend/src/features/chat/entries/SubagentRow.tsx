@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Icon } from "@/components/system/Icon";
+import { IconButton } from "@/components/system/IconButton";
 import { ICONS } from "@/components/system/icons";
 import { Spinner } from "@/components/system/Spinner";
 import { useNow } from "@/features/attention/useNow";
 import { actionLabel, actionRight, progressOf, summaryOf } from "@/features/chat/actions";
+import { conversationViewport } from "@/features/chat/ConversationColumn";
 import type { ActionNode } from "@/features/chat/conversation";
 import { ActionRows } from "@/features/chat/entries/ActionRows";
 import { Chevron } from "@/features/chat/entries/Chevron";
@@ -16,6 +18,7 @@ import {
 } from "@/features/chat/entries/CommandRow";
 import { cn } from "@/lib/utils";
 import { asActionStatus } from "@/lib/wails";
+import { useAppStore } from "@/store/app-store";
 
 // subagentSummary is "44 actions · Read 21 · Searched 14 · GitHub 9", "" without actions.
 function subagentSummary(node: ActionNode): string {
@@ -37,6 +40,7 @@ export interface SubagentRowProps {
 /** SubagentRow is a subagent the agent delegated to: folded, its commands and its report open. */
 export function SubagentRow({ taskId, stage, node, waitingToolUseId }: SubagentRowProps) {
   const [open, setOpen] = useState(false);
+  const openSubagentConversation = useAppStore((state) => state.openSubagentConversation);
   const { action } = node;
   const status = asActionStatus(action.status);
   const now = useNow(1000, status === "running");
@@ -52,6 +56,32 @@ export function SubagentRow({ taskId, stage, node, waitingToolUseId }: SubagentR
   const name = [commandName(action, right, false), summary]
     .filter((part) => part !== "")
     .join(", ");
+  const who = action.description || action.target || "the subagent";
+
+  // The row goes back to where it was when the conversation of the subagent is left.
+  const openConversation = (button: HTMLElement) => {
+    const row = button.closest("li");
+    const viewport = conversationViewport(button);
+    const offset =
+      row === null || viewport === null
+        ? null
+        : row.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
+    openSubagentConversation({ itemId: taskId, stage, toolUseId: action.toolUseId, offset });
+  };
+
+  const conversation = (
+    <IconButton
+      size="xs"
+      icon={ICONS.conversation}
+      label={`Open the conversation of ${who}`}
+      tooltip="Open conversation"
+      data-feed-item
+      data-open-conversation
+      tabIndex={-1}
+      className="shrink-0"
+      onClick={(event) => openConversation(event.currentTarget)}
+    />
+  );
 
   const cells = (
     <>
@@ -88,28 +118,33 @@ export function SubagentRow({ taskId, stage, node, waitingToolUseId }: SubagentR
     return (
       <li
         data-feed-item
+        data-subagent={action.toolUseId}
         tabIndex={-1}
         aria-label={name}
-        className={cn(ROW_GRID, "hover:bg-veil-hover")}
+        className="flex items-center gap-(--space-1)"
       >
-        {cells}
+        <div className={cn(ROW_GRID, "min-w-0 flex-1 hover:bg-veil-hover")}>{cells}</div>
+        {conversation}
       </li>
     );
   }
   return (
-    <li data-feed-entry className="flex flex-col">
-      <button
-        type="button"
-        data-feed-item
-        data-feed-toggle
-        tabIndex={-1}
-        aria-expanded={open}
-        aria-label={name}
-        onClick={() => setOpen(!open)}
-        className={cn(ROW_GRID, "hover:bg-veil-hover active:bg-veil-press")}
-      >
-        {cells}
-      </button>
+    <li data-feed-entry data-subagent={action.toolUseId} className="flex flex-col">
+      <div className="flex items-center gap-(--space-1)">
+        <button
+          type="button"
+          data-feed-item
+          data-feed-toggle
+          tabIndex={-1}
+          aria-expanded={open}
+          aria-label={name}
+          onClick={() => setOpen(!open)}
+          className={cn(ROW_GRID, "min-w-0 flex-1 hover:bg-veil-hover active:bg-veil-press")}
+        >
+          {cells}
+        </button>
+        {conversation}
+      </div>
       {open && (
         <div className="mb-(--space-1) ml-[calc(var(--space-2)+var(--icon-xs)+var(--space-2)+var(--icon-sm)/2)] flex flex-col pl-(--space-3) shadow-[inset_var(--border)_0_0_var(--line-2)]">
           {node.children.length > 0 && (

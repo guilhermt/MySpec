@@ -40,14 +40,19 @@ export interface GroupProps {
   group: GroupModel;
   /** waitingToolUseId is the action the pending permission holds, null without one. */
   waitingToolUseId: string | null;
+  /**
+   * landed is the group that holds the call of the subagent the reader comes back to: it starts
+   * open, with every action in its list.
+   */
+  landed?: boolean;
 }
 
 /**
  * Group is what the agent did between two things it said: one line, folded, that opens into its
  * commands. The line of a running group says what runs.
  */
-export function Group({ taskId, stage, group, waitingToolUseId }: GroupProps) {
-  const [open, setOpen] = useState(false);
+export function Group({ taskId, stage, group, waitingToolUseId, landed = false }: GroupProps) {
+  const [open, setOpen] = useState(landed);
   const id = useId();
   const live = group.running !== null;
   const now = useNow(1000, live);
@@ -143,6 +148,7 @@ export function Group({ taskId, stage, group, waitingToolUseId }: GroupProps) {
             stage={stage}
             nodes={group.nodes}
             waitingToolUseId={waitingToolUseId}
+            revealed={landed}
           />
         </div>
       )}

@@ -61,6 +61,8 @@ import {
   useSettingsUi,
   useSidebarCollapsed,
   useStartReview,
+  useSubagentConversation,
+  useSubagentReturn,
   useTask,
   useTasks,
   useTextDraft,
@@ -3337,6 +3339,99 @@ describe("earlier conversation", () => {
     useAppStore.getState().applyState(makeState({ repositories: [], boards: [], tasks: [] }));
 
     expect(useAppStore.getState().earlierConversation).toBeNull();
+  });
+});
+
+describe("conversation of a subagent", () => {
+  const TASK_PLACE: Location = { kind: "task", id: WEB_TASK.id };
+  const SUBAGENT = { itemId: WEB_TASK.id, stage: "prd", toolUseId: "toolu_agent", offset: 40 };
+
+  function reading() {
+    useAppStore.getState().applyState(withTasks({ tasks: [WEB_TASK, API_TASK] }));
+    useAppStore.getState().go(TASK_PLACE);
+    useAppStore.getState().openSubagentConversation(SUBAGENT);
+  }
+
+  it("is read in place of the conversation, and closing it keeps where to land", () => {
+    const open = renderHook(() => useSubagentConversation(WEB_TASK.id));
+    const landing = renderHook(() => useSubagentReturn(WEB_TASK.id));
+    act(() => reading());
+
+    expect(open.result.current).toEqual(SUBAGENT);
+    expect(landing.result.current).toBeNull();
+
+    act(() => useAppStore.getState().closeSubagentConversation());
+
+    expect(open.result.current).toBeNull();
+    expect(landing.result.current).toEqual(SUBAGENT);
+
+    act(() => useAppStore.getState().clearSubagentReturn());
+
+    expect(landing.result.current).toBeNull();
+  });
+
+  it("belongs to its item only", () => {
+    act(() => reading());
+    const { result } = renderHook(() => useSubagentConversation(API_TASK.id));
+
+    expect(result.current).toBeNull();
+  });
+
+  it("hides the situation of the place while it is on screen", () => {
+    const { result } = renderHook(() => useOnScreenSituationId());
+    act(() => {
+      useAppStore.getState().applyState(
+        withTasks({
+          tasks: [
+            makeTask({
+              ...WEB_TASK,
+              situations: [makeSituation({ taskId: WEB_TASK.id, place: stagePlace("prd") })],
+            }),
+          ],
+        }),
+      );
+      useAppStore.getState().go(TASK_PLACE);
+    });
+    expect(result.current).not.toBeNull();
+
+    act(() => useAppStore.getState().openSubagentConversation(SUBAGENT));
+
+    expect(result.current).toBeNull();
+  });
+
+  it("closes on the way to another place, with where it would land", () => {
+    reading();
+    useAppStore.getState().closeSubagentConversation();
+
+    useAppStore.getState().go({ kind: "history" });
+
+    expect(useAppStore.getState().subagentReturn).toBeNull();
+
+    useAppStore.getState().go(TASK_PLACE);
+    useAppStore.getState().openSubagentConversation(SUBAGENT);
+    useAppStore.getState().go({ kind: "history" });
+
+    expect(useAppStore.getState().subagentConversation).toBeNull();
+  });
+
+  it("stays open while its item is there, and closes when it leaves", () => {
+    reading();
+
+    useAppStore.getState().applyState(withTasks({ tasks: [WEB_TASK, API_TASK] }));
+
+    expect(useAppStore.getState().subagentConversation).not.toBeNull();
+
+    useAppStore.getState().applyState(withTasks({ tasks: [API_TASK] }));
+
+    expect(useAppStore.getState().subagentConversation).toBeNull();
+  });
+
+  it("closes once no repository nor board is registered", () => {
+    reading();
+
+    useAppStore.getState().applyState(makeState({ repositories: [], boards: [], tasks: [] }));
+
+    expect(useAppStore.getState().subagentConversation).toBeNull();
   });
 });
 

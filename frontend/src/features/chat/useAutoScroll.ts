@@ -34,7 +34,8 @@ export interface AutoScroll {
  * from someone reading further up: for them an arrival only counts in newCount, by the keys of the
  * rows seen when they left the end. With
  * follow false, as for a conversation read from its start, it never scrolls and
- * never offers the way back to the end.
+ * never offers the way back to the end. With startAtEnd false, the reader begins away from the end
+ * (a conversation that opens at a row), and the end is followed only once they reach it.
  */
 export function useAutoScroll(
   ref: RefObject<HTMLElement | null>,
@@ -42,11 +43,14 @@ export function useAutoScroll(
   deps: readonly unknown[],
   rowKeys: readonly string[],
   follow = true,
+  startAtEnd = true,
 ): AutoScroll {
   // seen is the rows on screen when the user left the end; null at the end.
-  const [seen, setSeen] = useState<ReadonlySet<string> | null>(null);
-  const [atBottom, setAtBottom] = useState(true);
-  const atBottomRef = useRef(true);
+  const [seen, setSeen] = useState<ReadonlySet<string> | null>(() =>
+    startAtEnd ? null : new Set(rowKeys),
+  );
+  const [atBottom, setAtBottom] = useState(startAtEnd);
+  const atBottomRef = useRef(startAtEnd);
   const rowKeysRef = useRef(rowKeys);
   rowKeysRef.current = rowKeys;
   const previous = useRef(deps);
