@@ -1124,6 +1124,7 @@ const MACHINE_ITEM_IDS: readonly MachineItemId[] = [
   "gh_found",
   "gh_login",
   "gh_scopes",
+  "gh_version",
 ];
 
 /** makeMachineItem is an item of the check that ended ok. */
@@ -1146,6 +1147,8 @@ export function makeMachine(overrides: Partial<Machine> = {}): Machine {
     claudeVersion: "2.1.291",
     minVersion: "2.1.291",
     ghAccount: "octocat",
+    ghVersion: "2.102.0",
+    ghMinVersion: "2.99.0",
     ghScopes: ["gist", "project", "read:org", "repo", "workflow"],
     missingScopes: [],
     ...overrides,

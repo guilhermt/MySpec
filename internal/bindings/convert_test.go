@@ -4156,6 +4156,9 @@ func TestFromMachineOfNothingCheckedHasEmptyLists(t *testing.T) {
 	if got.MinVersion != claude.MinVersion {
 		t.Errorf("MinVersion = %q, want %q", got.MinVersion, claude.MinVersion)
 	}
+	if got.GHVersion != "" || got.GHMinVersion != "2.99.0" {
+		t.Errorf("GHVersion, GHMinVersion = %q, %q, want \"\", 2.99.0", got.GHVersion, got.GHMinVersion)
+	}
 }
 
 func TestFromMachineCarriesTheItemsInOrderAndCopiesTheLists(t *testing.T) {
@@ -4174,6 +4177,7 @@ func TestFromMachineCarriesTheItemsInOrderAndCopiesTheLists(t *testing.T) {
 			ClaudePath:    "/bin/claude",
 			ClaudeVersion: "2.1.291",
 			GHAccount:     "octocat",
+			GHVersion:     "2.102.0",
 			GHScopes:      scopes,
 			MissingScopes: []string{"project"},
 		},
@@ -4193,6 +4197,8 @@ func TestFromMachineCarriesTheItemsInOrderAndCopiesTheLists(t *testing.T) {
 		ClaudeVersion: "2.1.291",
 		MinVersion:    claude.MinVersion,
 		GHAccount:     "octocat",
+		GHVersion:     "2.102.0",
+		GHMinVersion:  "2.99.0",
 		GHScopes:      []string{"gist", "repo"},
 		MissingScopes: []string{"project"},
 	}

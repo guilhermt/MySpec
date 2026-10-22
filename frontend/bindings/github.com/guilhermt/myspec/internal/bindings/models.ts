@@ -1655,7 +1655,7 @@ export interface LeftoverWorktree {
 }
 
 /**
- * Machine is where the check of the machine stands: the six items in order,
+ * Machine is where the check of the machine stands: the seven items in order,
  * with what the settings show of each tool. It is checked at every opening
  * and on Check again; nothing of it is persisted.
  */
@@ -1705,6 +1705,16 @@ export interface Machine {
     "ghAccount": string;
 
     /**
+     * as "2.102.0"; "" when it was not read
+     */
+    "ghVersion": string;
+
+    /**
+     * the oldest gh that publishes images
+     */
+    "ghMinVersion": string;
+
+    /**
      * GHScopes are the scopes of the login of gh and MissingScopes the ones
      * the app needs that it lacks, project then repo; never nil.
      */
@@ -1717,8 +1727,8 @@ export interface Machine {
  */
 export interface MachineItem {
     /**
-     * ID is claude_found, claude_login, claude_version, gh_found, gh_login or
-     * gh_scopes; Result is ok, missing or unchecked; Reason is "", depends,
+     * ID is claude_found, claude_login, claude_version, gh_found, gh_login,
+     * gh_scopes or gh_version; Result is ok, missing or unchecked; Reason is "", depends,
      * timeout, unreadable, no_scopes, failed or invalid_token. Strings for the
      * same reason as State.Theme.
      */

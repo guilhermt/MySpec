@@ -15,7 +15,7 @@ import (
 	"github.com/guilhermt/myspec/internal/machine"
 )
 
-// items builds the six items of a report: every one ok, then the changes.
+// items builds the seven items of a report: every one ok, then the changes.
 func items(changes ...machine.Item) []machine.Item {
 	out := make([]machine.Item, len(machine.Order))
 	for i, id := range machine.Order {
@@ -46,6 +46,7 @@ func TestCheckFindsEverythingInPlace(t *testing.T) {
 		Items:         items(),
 		ClaudePath:    "/usr/bin/claude",
 		ClaudeVersion: "2.1.291",
+		GHVersion:     "2.102.0",
 		GHAccount:     "octocat",
 		GHScopes:      []string{"gist", "project", "read:org", "repo"},
 	}
@@ -254,6 +255,8 @@ func TestCheckGitHubChain(t *testing.T) {
 		wantScopes    []string
 		wantMissing   []string
 		wantNoAccount bool
+		wantNoVersion bool
+		wantVersion   string // "2.102.0" when empty and wantNoVersion is not set
 	}{
 		{
 			name: "not installed",
@@ -264,9 +267,10 @@ func TestCheckGitHubChain(t *testing.T) {
 			},
 			want: items(
 				machine.Item{ID: machine.GHFound, Result: machine.Missing},
-				depends(machine.GHLogin), depends(machine.GHScopes),
+				depends(machine.GHLogin), depends(machine.GHScopes), depends(machine.GHVersion),
 			),
 			wantNoAccount: true,
+			wantNoVersion: true,
 		},
 		{
 			name: "not signed in",
@@ -373,6 +377,74 @@ func TestCheckGitHubChain(t *testing.T) {
 				ID: machine.GHScopes, Result: machine.Unchecked, Reason: machine.ReasonTimeout,
 			}),
 		},
+		{
+			name: "gh is the oldest that attaches",
+			github: func() *fakeGitHub {
+				g := goodGitHub()
+				g.version = gh.MinAttachVersion
+				return g
+			},
+			want:        items(),
+			wantAccount: "octocat",
+			wantScopes:  []string{"gist", "project", "read:org", "repo"},
+			wantVersion: "2.99.0",
+		},
+		{
+			name: "gh too old",
+			github: func() *fakeGitHub {
+				g := goodGitHub()
+				g.version = gh.Version{Major: 2, Minor: 95}
+				return g
+			},
+			want:        items(machine.Item{ID: machine.GHVersion, Result: machine.Missing}),
+			wantAccount: "octocat",
+			wantScopes:  []string{"gist", "project", "read:org", "repo"},
+			wantVersion: "2.95.0",
+		},
+		{
+			name: "version unreadable",
+			github: func() *fakeGitHub {
+				g := goodGitHub()
+				g.version = gh.Version{}
+				g.versionErr = fmt.Errorf("%w: %q", gh.ErrVersionUnreadable, "oops")
+				return g
+			},
+			want: items(machine.Item{
+				ID: machine.GHVersion, Result: machine.Unchecked, Reason: machine.ReasonUnreadable,
+				Detail: `gh: the version can't be read: "oops"`,
+			}),
+			wantAccount:   "octocat",
+			wantScopes:    []string{"gist", "project", "read:org", "repo"},
+			wantNoVersion: true,
+		},
+		{
+			name: "version fails",
+			github: func() *fakeGitHub {
+				g := goodGitHub()
+				g.versionErr = errBoom
+				return g
+			},
+			want: items(machine.Item{
+				ID: machine.GHVersion, Result: machine.Unchecked, Reason: machine.ReasonFailed, Detail: "boom",
+			}),
+			wantAccount:   "octocat",
+			wantScopes:    []string{"gist", "project", "read:org", "repo"},
+			wantNoVersion: true,
+		},
+		{
+			name: "version hangs",
+			github: func() *fakeGitHub {
+				g := goodGitHub()
+				g.versionBlock = make(chan struct{})
+				return g
+			},
+			want: items(machine.Item{
+				ID: machine.GHVersion, Result: machine.Unchecked, Reason: machine.ReasonTimeout,
+			}),
+			wantAccount:   "octocat",
+			wantScopes:    []string{"gist", "project", "read:org", "repo"},
+			wantNoVersion: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -395,10 +467,35 @@ func TestCheckGitHubChain(t *testing.T) {
 			if diff := cmp.Diff(tt.wantMissing, got.MissingScopes); diff != "" {
 				t.Errorf("MissingScopes mismatch (-want +got):\n%s", diff)
 			}
+			wantVersion := tt.wantVersion
+			if wantVersion == "" && !tt.wantNoVersion {
+				wantVersion = "2.102.0"
+			}
+			if got.GHVersion != wantVersion {
+				t.Errorf("GHVersion = %q, want %q", got.GHVersion, wantVersion)
+			}
 			if tt.wantNoAccount && g.accountCalls() != 0 {
 				t.Errorf("Account called %d times, want never", g.accountCalls())
 			}
 		})
+	}
+}
+
+func TestOrderEndsWithTheGHVersion(t *testing.T) {
+	t.Parallel()
+
+	want := []machine.ItemID{
+		machine.ClaudeFound, machine.ClaudeLogin, machine.ClaudeVersion,
+		machine.GHFound, machine.GHLogin, machine.GHScopes, machine.GHVersion,
+	}
+	if !slices.Equal(machine.Order, want) {
+		t.Errorf("Order = %v, want %v", machine.Order, want)
+	}
+	got := newService(t, goodClaude(), goodGitHub()).Check(context.Background())
+	for i, item := range got.Items {
+		if item.ID != want[i] {
+			t.Errorf("Items[%d] = %s, want %s", i, item.ID, want[i])
+		}
 	}
 }
 
@@ -537,6 +634,7 @@ func TestCheckLogs(t *testing.T) {
 	c.version = claude.MustParseVersion("2.0.14")
 	g := goodGitHub()
 	g.account.Scopes = []string{"repo"}
+	g.version = gh.Version{Major: 2, Minor: 95}
 	g.signedInErr = nil
 	c.preflightErr = errors.New("boom")
 	s := newService(t, c, g)
@@ -551,9 +649,11 @@ func TestCheckLogs(t *testing.T) {
 		"claude_path":        "/usr/bin/claude",
 		"claude_version":     "2.0.14",
 		"claude_min_version": claude.MinVersion,
+		"gh_version":         "2.95.0",
+		"gh_min_version":     "2.99.0",
 		"gh_account":         "octocat",
 		"gh_scopes":          "repo",
-		"missing":            "claude_version,gh_scopes",
+		"missing":            "claude_version,gh_scopes,gh_version",
 		"unchecked":          "claude_login:failed",
 	}
 	for key, value := range want {

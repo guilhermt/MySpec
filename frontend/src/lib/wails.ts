@@ -704,7 +704,8 @@ export type MachineItemId =
   | "claude_version"
   | "gh_found"
   | "gh_login"
-  | "gh_scopes";
+  | "gh_scopes"
+  | "gh_version";
 
 /** MachineResult is how an item of the check ended. */
 export type MachineResult = "ok" | "missing" | "unchecked";

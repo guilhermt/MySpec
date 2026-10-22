@@ -2578,6 +2578,8 @@ func FromMachine(status machine.Status) Machine {
 		ClaudeVersion:  report.ClaudeVersion,
 		MinVersion:     claude.MinVersion,
 		GHAccount:      report.GHAccount,
+		GHVersion:      report.GHVersion,
+		GHMinVersion:   gh.MinAttachVersion.String(),
 		GHScopes:       append([]string{}, report.GHScopes...),
 		MissingScopes:  append([]string{}, report.MissingScopes...),
 	}

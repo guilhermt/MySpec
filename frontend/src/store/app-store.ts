@@ -1537,6 +1537,8 @@ const NO_MACHINE: Machine = {
   claudeVersion: "",
   minVersion: "",
   ghAccount: "",
+  ghVersion: "",
+  ghMinVersion: "",
   ghScopes: [],
   missingScopes: [],
 };

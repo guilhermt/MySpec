@@ -1116,7 +1116,7 @@ type PromptListing struct {
 	EditedAt string `json:"editedAt"` // RFC 3339; "" without an edit
 }
 
-// Machine is where the check of the machine stands: the six items in order,
+// Machine is where the check of the machine stands: the seven items in order,
 // with what the settings show of each tool. It is checked at every opening
 // and on Check again; nothing of it is persisted.
 type Machine struct {
@@ -1134,6 +1134,8 @@ type Machine struct {
 	ClaudeVersion  string `json:"claudeVersion"` // as "2.1.291"; "" when it was not read
 	MinVersion     string `json:"minVersion"`    // the oldest Claude Code the app supports
 	GHAccount      string `json:"ghAccount"`     // "" when unknown
+	GHVersion      string `json:"ghVersion"`     // as "2.102.0"; "" when it was not read
+	GHMinVersion   string `json:"ghMinVersion"`  // the oldest gh that publishes images
 	// GHScopes are the scopes of the login of gh and MissingScopes the ones
 	// the app needs that it lacks, project then repo; never nil.
 	GHScopes      []string `json:"ghScopes"`
@@ -1142,8 +1144,8 @@ type Machine struct {
 
 // MachineItem is one item of the check of the machine.
 type MachineItem struct {
-	// ID is claude_found, claude_login, claude_version, gh_found, gh_login or
-	// gh_scopes; Result is ok, missing or unchecked; Reason is "", depends,
+	// ID is claude_found, claude_login, claude_version, gh_found, gh_login,
+	// gh_scopes or gh_version; Result is ok, missing or unchecked; Reason is "", depends,
 	// timeout, unreadable, no_scopes, failed or invalid_token. Strings for the
 	// same reason as State.Theme.
 	ID     string `json:"id"`

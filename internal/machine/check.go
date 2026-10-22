@@ -16,8 +16,9 @@ func (s *Service) check(ctx context.Context) Report {
 	var (
 		wg              sync.WaitGroup
 		claudeItems     [3]Item
-		ghItems         [3]Item
+		ghItems         [4]Item
 		path, version   string
+		ghVersion       string
 		account         string
 		scopes, missing []string
 	)
@@ -28,7 +29,7 @@ func (s *Service) check(ctx context.Context) Report {
 	}()
 	go func() {
 		defer wg.Done()
-		ghItems, account, scopes, missing = s.checkGitHub(ctx)
+		ghItems, ghVersion, account, scopes, missing = s.checkGitHub(ctx)
 	}()
 	wg.Wait()
 
@@ -39,6 +40,7 @@ func (s *Service) check(ctx context.Context) Report {
 		Items:         items,
 		ClaudePath:    path,
 		ClaudeVersion: version,
+		GHVersion:     ghVersion,
 		GHAccount:     account,
 		GHScopes:      scopes,
 		MissingScopes: missing,
@@ -105,32 +107,57 @@ func (s *Service) checkClaude(ctx context.Context) (items [3]Item, path, version
 	return items, path, version
 }
 
-// checkGitHub is the chain of gh: found and signed in, then the account and its scopes.
-func (s *Service) checkGitHub(ctx context.Context) (items [3]Item, account string, scopes, missing []string) {
-	items = [3]Item{{ID: GHFound}, {ID: GHLogin}, {ID: GHScopes}}
+// checkGitHub is the chain of gh: found and signed in, its version, then the
+// account and its scopes.
+func (s *Service) checkGitHub(ctx context.Context) (items [4]Item, version, account string, scopes, missing []string) {
+	items = [4]Item{{ID: GHFound}, {ID: GHLogin}, {ID: GHScopes}, {ID: GHVersion}}
 
 	timedOut, err := s.command(ctx, s.github.SignedIn)
 	if errors.Is(err, gh.ErrNotFound) {
 		items[0].Result = Missing
 		items[1] = dependent(GHLogin)
 		items[2] = dependent(GHScopes)
-		return items, "", nil, nil
+		items[3] = dependent(GHVersion)
+		return items, "", "", nil, nil
 	}
 	// The binary ran, whatever it answered.
 	items[0].Result = OK
 	items[2] = dependent(GHScopes)
+
+	var v gh.Version
+	versionTimedOut, versionErr := s.command(ctx, func(ctx context.Context) error {
+		var readErr error
+		v, readErr = s.github.Version(ctx)
+		return readErr
+	})
+	switch {
+	case versionErr == nil:
+		version = v.String()
+		if v.Less(gh.MinAttachVersion) {
+			items[3].Result = Missing
+		} else {
+			items[3].Result = OK
+		}
+	case errors.Is(versionErr, gh.ErrVersionUnreadable):
+		items[3] = unchecked(GHVersion, ReasonUnreadable, versionErr)
+	case versionTimedOut:
+		items[3] = unchecked(GHVersion, ReasonTimeout, nil)
+	default:
+		items[3] = unchecked(GHVersion, ReasonFailed, versionErr)
+	}
+
 	switch {
 	case err == nil:
 		items[1].Result = OK
 	case errors.Is(err, gh.ErrNotAuthenticated):
 		items[1].Result = Missing
-		return items, "", nil, nil
+		return items, version, "", nil, nil
 	case timedOut:
 		items[1] = unchecked(GHLogin, ReasonTimeout, nil)
-		return items, "", nil, nil
+		return items, version, "", nil, nil
 	default:
 		items[1] = unchecked(GHLogin, ReasonFailed, err)
-		return items, "", nil, nil
+		return items, version, "", nil, nil
 	}
 
 	var a gh.Account
@@ -162,7 +189,7 @@ func (s *Service) checkGitHub(ctx context.Context) (items [3]Item, account strin
 	default:
 		items[2] = unchecked(GHScopes, ReasonFailed, err)
 	}
-	return items, account, scopes, missing
+	return items, version, account, scopes, missing
 }
 
 // command runs f with the timeout of one command and tells a timeout apart
@@ -214,6 +241,8 @@ func (s *Service) logReport(r Report) {
 		"claude_path", r.ClaudePath,
 		"claude_version", r.ClaudeVersion,
 		"claude_min_version", claude.MinVersion,
+		"gh_version", r.GHVersion,
+		"gh_min_version", gh.MinAttachVersion.String(),
 		"gh_account", r.GHAccount,
 		"gh_scopes", strings.Join(r.GHScopes, ","),
 		"missing", strings.Join(missing, ","),
