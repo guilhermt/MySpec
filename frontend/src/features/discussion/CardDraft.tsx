@@ -166,9 +166,11 @@ export function CardDraft({
           <Markdown
             cutCode
             className="ui-headings"
-            {...(kind === "update" && card !== null
-              ? { images: { kind: "card" as const, issue: card.key } }
-              : {})}
+            images={{
+              kind: "draft",
+              discussionId: discussion.id,
+              issue: kind === "update" && card !== null ? card.key : null,
+            }}
           >
             {draft.body}
           </Markdown>

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   type Attachment,
   cardBodyImageUrl,
+  draftImageUrl,
   encodeImages,
   failureLine,
   guardFileDrops,
@@ -10,6 +11,8 @@ import {
   imagesCount,
   imagesPart,
   imageTitle,
+  isRemoteImage,
+  MAX_CARD_IMAGE_BYTES,
   MAX_IMAGE_BYTES,
   readAttachments,
   refusalText,
@@ -72,7 +75,27 @@ describe("readAttachments", () => {
   });
 });
 
+describe("readAttachments with another limit", () => {
+  it("refuses what is over the limit it is given", async () => {
+    const big = file("big.png", PNG);
+    Object.defineProperty(big, "size", { value: MAX_CARD_IMAGE_BYTES + 1 });
+    const fits = file("fits.png", PNG);
+    Object.defineProperty(fits, "size", { value: MAX_CARD_IMAGE_BYTES });
+
+    const { attachments, refusals } = await readAttachments([big, fits], MAX_CARD_IMAGE_BYTES);
+
+    expect(refusals).toEqual([{ name: "big.png", reason: "size" }]);
+    expect(attachments.map((one) => one.name)).toEqual(["fits.png"]);
+  });
+});
+
 describe("refusalText", () => {
+  it("names the limit it is given", () => {
+    expect(refusalText([{ name: "big.png", reason: "size" }], 10)).toBe(
+      "Not attached · big.png is over 10 MB",
+    );
+  });
+
   it("says each reason after a single lead", () => {
     expect(refusalText([{ name: "print.png", reason: "size" }])).toBe(
       "Not attached · print.png is over 20 MB",
@@ -125,6 +148,8 @@ describe("texts", () => {
     expect(imageTitle({ origin: "card", number: 474 })).toBe("From the card #474");
     expect(imageTitle({ origin: "epic", number: 470 })).toBe("From the epic #470");
     expect(imageTitle({ origin: "user", number: 0 })).toBe("From your text");
+    expect(imageCaption({ origin: "draft", number: 0 })).toBe("Your edit");
+    expect(imageTitle({ origin: "draft", number: 0 })).toBe("From your edit of a draft");
   });
 
   it("writes a failure of the body, of an image with alt and of one without", () => {
@@ -154,6 +179,38 @@ describe("texts", () => {
     expect(cardBodyImageUrl("o/r#4", "https://x/a b.png")).toBe(
       "/myspec/card-images/body?issue=o%2Fr%234&src=https%3A%2F%2Fx%2Fa%20b.png",
     );
+  });
+});
+
+describe("isRemoteImage", () => {
+  it("tells a link from a path", () => {
+    expect(isRemoteImage("https://x/a.png")).toBe(true);
+    expect(isRemoteImage("//host/a.png")).toBe(true);
+    expect(isRemoteImage("images/a.png")).toBe(false);
+    expect(isRemoteImage("foo.png")).toBe(false);
+    expect(isRemoteImage("C:\\x.png")).toBe(false);
+  });
+});
+
+describe("draftImageUrl", () => {
+  const FILE = "0b6c3c1e-2f8a-4c7e-9b1d-2a4f5e6d7c8b.png";
+
+  it("loads a reference of the discussion, with or without the leading dot", () => {
+    expect(draftImageUrl("d-1", null, `images/${FILE}`)).toBe(`/myspec/images/d-1/${FILE}`);
+    expect(draftImageUrl("d-1", "o/r#4", `./images/${FILE}`)).toBe(`/myspec/images/d-1/${FILE}`);
+  });
+
+  it("loads a link through the card of an update, and draws it as it is without one", () => {
+    expect(draftImageUrl("d-1", "o/r#4", "https://x/a.png")).toBe(
+      cardBodyImageUrl("o/r#4", "https://x/a.png"),
+    );
+    expect(draftImageUrl("d-1", null, "https://x/a.png")).toBe("https://x/a.png");
+  });
+
+  it("has nothing for any other path", () => {
+    expect(draftImageUrl("d-1", null, "images/x.png")).toBeNull();
+    expect(draftImageUrl("d-1", null, `../images/${FILE}`)).toBeNull();
+    expect(draftImageUrl("d-1", null, "")).toBeNull();
   });
 });
 

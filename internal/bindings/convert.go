@@ -2212,6 +2212,7 @@ func fromDraft(
 		Epic:         draftRefOf(d.Epic, drafts, reading),
 		Dependencies: fromDraftDependencies(d.Dependencies, drafts, reading),
 		Current:      fromDraftCurrent(d, reading),
+		Images:       fromDraftImages(state.Images),
 		Decision:     string(d.Decision),
 		Revision:     d.Revision,
 		Warnings:     warnings,
@@ -2232,6 +2233,15 @@ func fromDraft(
 	}
 	if d.Published.Done() {
 		converted.PublishedAt = d.Published.At.Format(time.RFC3339)
+	}
+	return converted
+}
+
+// fromDraftImages converts the images of the body of a draft, never nil.
+func fromDraftImages(imgs []discussion.BodyImage) []DraftImage {
+	converted := make([]DraftImage, len(imgs))
+	for i, img := range imgs {
+		converted[i] = DraftImage{Src: img.Src, Alt: img.Alt, Problem: string(img.Problem)}
 	}
 	return converted
 }

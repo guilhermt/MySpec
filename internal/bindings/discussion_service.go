@@ -11,6 +11,7 @@ import (
 	"github.com/guilhermt/myspec/internal/cardimages"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
+	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/repository"
 )
@@ -118,6 +119,27 @@ func (s *DiscussionService) SetDraftText(id, draftID, title, body string) error 
 		return s.fail("SetDraftText", err)
 	}
 	return nil
+}
+
+// AddDraftImage stores an image the user put in the body of a draft while
+// editing it, in base64, and answers the reference the body takes it by.
+func (s *DiscussionService) AddDraftImage(id, draftID, image string) (string, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return "", err
+	}
+	data, err := uploadsOf([]string{image})
+	if err != nil {
+		return "", s.fail("AddDraftImage", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	img, err := s.flow.AddDraftImage(ctx, id, draftID, data[0])
+	if err != nil {
+		return "", s.fail("AddDraftImage", err)
+	}
+	return images.Ref(img), nil
 }
 
 // SetDraftRepository records the registered repository a new card or an epic

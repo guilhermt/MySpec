@@ -1808,6 +1808,15 @@ type DraftHold struct {
 	Cards    int    `json:"cards"`    // epic_short: every card of the epic
 }
 
+// DraftImage is an image of the body of a draft, once per destination, in the
+// order of the body.
+type DraftImage struct {
+	Src string `json:"src"` // the destination as the body writes it
+	Alt string `json:"alt"`
+	// Problem is "", missing or too_large, a string for the same reason as State.Theme.
+	Problem string `json:"problem"`
+}
+
 // Draft is one card a discussion produced: as the user left it, and what
 // became of it on GitHub.
 type Draft struct {
@@ -1828,6 +1837,7 @@ type Draft struct {
 	Epic         *DraftRef         `json:"epic"`         // nil without an epic
 	Dependencies []DraftDependency `json:"dependencies"` // never nil
 	Current      *DraftCurrent     `json:"current"`      // update only; nil otherwise
+	Images       []DraftImage      `json:"images"`       // never nil
 	// Decision is "", approved or discarded, a string for the same reason as
 	// State.Theme.
 	Decision string   `json:"decision"`

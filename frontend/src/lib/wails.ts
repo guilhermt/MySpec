@@ -48,6 +48,7 @@ import type {
   DraftCurrent,
   DraftDependency,
   DraftHold,
+  DraftImage,
   DraftRef,
   Entry,
   ErrorEntry,
@@ -181,6 +182,7 @@ export type {
   DraftCurrent,
   DraftDependency,
   DraftHold,
+  DraftImage,
   DraftRef,
   Entry,
   ErrorEntry,
@@ -1747,6 +1749,8 @@ export const api = {
     DiscussionService.StartDiscussion(req),
   discussionContext: (req: DiscussionContextRequest): Promise<string> =>
     DiscussionService.DiscussionContext(req),
+  addDraftImage: (id: string, draftId: string, image: string): Promise<string> =>
+    DiscussionService.AddDraftImage(id, draftId, image),
   setDraftText: (id: string, draftId: string, title: string, body: string): Promise<void> =>
     DiscussionService.SetDraftText(id, draftId, title, body),
   setDraftRepository: (id: string, draftId: string, repositoryId: string): Promise<void> =>

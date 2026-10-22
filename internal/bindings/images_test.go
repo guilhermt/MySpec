@@ -349,3 +349,56 @@ func TestStartDiscussionStoresTheImages(t *testing.T) {
 		}
 	}
 }
+
+func TestAddDraftImageStoresTheFileAndAnswersTheReferenceOfTheBody(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+	f.registerBoard(t, true)
+	d := f.seedDiscussion(t, webDraft("export-invoices", "Export the invoices"))
+
+	ref, err := f.discussionSvc.AddDraftImage(d.ID, "export-invoices", encoded(pngBytes(1)))
+	if err != nil {
+		t.Fatalf("AddDraftImage() = %v, want nil", err)
+	}
+	img, ok := images.ParseRef(ref)
+	if !ok || !strings.HasSuffix(ref, ".png") {
+		t.Fatalf("AddDraftImage() = %q, want images/<uuid>.png", ref)
+	}
+	if _, err := os.Stat(filepath.Join(d.ArtifactsDir, images.DirName, img.ID+".png")); err != nil {
+		t.Errorf("the image file = %v, want it in the images folder of the discussion", err)
+	}
+}
+
+func TestAddDraftImageRefusalsGetTheirSentence(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		image string
+		want  string
+	}{
+		{"not base64", "***", "An image isn't PNG, JPEG, GIF or WebP."},
+		{"over 10 MB", encoded(append(pngBytes(1), make([]byte, images.MaxPublishSize)...)), "GitHub takes images up to 10 MB."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			f.register(t, t.TempDir())
+			f.registerBoard(t, true)
+			d := f.seedDiscussion(t, webDraft("export-invoices", "Export the invoices"))
+
+			_, err := f.discussionSvc.AddDraftImage(d.ID, "export-invoices", tt.image)
+
+			if err == nil || err.Error() != tt.want {
+				t.Errorf("AddDraftImage() = %v, want %q", err, tt.want)
+			}
+			if f.logged(t, "binding failed") {
+				t.Error("a refusal the user can read was logged as a failure")
+			}
+		})
+	}
+}

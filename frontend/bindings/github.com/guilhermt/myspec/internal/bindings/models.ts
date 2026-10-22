@@ -1230,6 +1230,11 @@ export interface Draft {
     "current": DraftCurrent | null;
 
     /**
+     * never nil
+     */
+    "images": DraftImage[] | null;
+
+    /**
      * Decision is "", approved or discarded, a string for the same reason as
      * State.Theme.
      */
@@ -1422,6 +1427,23 @@ export interface DraftHold {
      * epic_short: every card of the epic
      */
     "cards": number;
+}
+
+/**
+ * DraftImage is an image of the body of a draft, once per destination, in the
+ * order of the body.
+ */
+export interface DraftImage {
+    /**
+     * the destination as the body writes it
+     */
+    "src": string;
+    "alt": string;
+
+    /**
+     * Problem is "", missing or too_large, a string for the same reason as State.Theme.
+     */
+    "problem": string;
 }
 
 /**

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/guilhermt/myspec/internal/discussion"
+	"github.com/guilhermt/myspec/internal/images"
 )
 
 // Decide records what the user decided about one draft and asks for the
@@ -31,6 +32,18 @@ func (s *Service) Decide(ctx context.Context, id, draftID string, d discussion.D
 // is what a publication sends.
 func (s *Service) SetDraftText(ctx context.Context, id, draftID, title, body string) error {
 	return s.editDraft(id, draftID, func() error { return s.discussions.SetDraftText(ctx, id, draftID, title, body) })
+}
+
+// AddDraftImage stores an image the user put in the body of a draft, refusing
+// as every edit does during a publication or on a draft memory holds as started.
+func (s *Service) AddDraftImage(_ context.Context, id, draftID string, data []byte) (images.Image, error) {
+	var img images.Image
+	err := s.editDraft(id, draftID, func() error {
+		var saveErr error
+		img, saveErr = s.discussions.SaveDraftImage(id, draftID, data)
+		return saveErr
+	})
+	return img, err
 }
 
 // SetDraftRepository records the repository a new card or an epic is created
