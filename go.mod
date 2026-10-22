@@ -10,6 +10,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/vektah/gqlparser/v2 v2.5.62
 	github.com/wailsapp/wails/v3 v3.0.0-beta.23
+	github.com/yuin/goldmark v1.7.16
 	golang.org/x/net v0.59.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/sys v0.49.0
@@ -137,7 +138,6 @@ require (
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	github.com/yuin/goldmark v1.7.16 // indirect
 	github.com/yuin/goldmark-emoji v1.0.6 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	github.com/zalando/go-keyring v0.2.6 // indirect

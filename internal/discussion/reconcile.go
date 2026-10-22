@@ -26,8 +26,9 @@ const (
 // content, which is a draft of the new round. The content is what the user
 // sees: a draft the agent rewrote as the user had left it stays in its round.
 // reading is the DraftsRevision the discussion has if the reading revises its
-// round.
-func reconcile(discussionID string, stored []Draft, a Artifact, reading int) ([]Draft, Recorded) {
+// round. broken says whether a body has an image problem that keeps a draft
+// from being approved, nil when none has.
+func reconcile(discussionID string, stored []Draft, a Artifact, reading int, broken func(body string) bool) ([]Draft, Recorded) {
 	current := maxRound(stored)
 	round := max(current, 1)
 	if current >= 1 && roundSettled(stored, current) {
@@ -53,6 +54,7 @@ func reconcile(discussionID string, stored []Draft, a Artifact, reading int) ([]
 
 	normalize(drafts, stored)
 	unapproveMoved(stored, drafts)
+	unapproveBroken(drafts, broken)
 	for i := range drafts {
 		drafts[i].Position = i
 	}
@@ -409,6 +411,19 @@ func unapproveMoved(stored, drafts []Draft) {
 		}
 		if moved {
 			unapprove(draft)
+		}
+	}
+}
+
+// unapproveBroken takes back the approval of a draft whose body now has an image
+// problem.
+func unapproveBroken(drafts []Draft, broken func(body string) bool) {
+	if broken == nil {
+		return
+	}
+	for i := range drafts {
+		if broken(drafts[i].Body) {
+			unapprove(&drafts[i])
 		}
 	}
 }

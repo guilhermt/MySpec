@@ -182,7 +182,10 @@ type Publication struct {
 	StatusSet bool
 	ModuleSet bool
 	ParentSet bool
-	At        time.Time // zero until every step is done
+	// ImagesPending says GitHub has the issue and some image of its body is still a
+	// file of the discussion, to attach before the next step.
+	ImagesPending bool
+	At            time.Time // zero until every step is done
 }
 
 // Done reports whether every step of the publication finished.
@@ -384,4 +387,6 @@ var (
 	ErrEpicUntitled     = errors.New("discussion: an epic needs a title to group drafts")
 	ErrEpicTitleTooLong = errors.New("discussion: the title of the epic is too long")
 	ErrNotGroupable     = errors.New("discussion: the draft can't go into an epic")
+	ErrImageMissing     = errors.New("discussion: the draft references an image that isn't in the discussion")
+	ErrImageTooLarge    = errors.New("discussion: the draft has an image over 10 MB")
 )

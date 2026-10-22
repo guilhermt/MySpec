@@ -51,7 +51,7 @@ const (
 	roundsVersion        = 24
 	savedStatusesVersion = 25
 	prReviewFixesVersion = 26
-	latestVersion        = 27
+	latestVersion        = 28
 )
 
 // upgradeTime is the instant the repositories of the fake upgrades are stamped

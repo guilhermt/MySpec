@@ -276,7 +276,8 @@ func (s *Service) RecordDrafts(ctx context.Context, id string, a Artifact) (Reco
 	}
 
 	stored := s.Drafts(id)
-	drafts, rec := reconcile(id, stored, a, d.DraftsRevision+1)
+	drafts, rec := reconcile(id, stored, a, d.DraftsRevision+1,
+		func(body string) bool { return ImagesError(d.DraftImages(body)) != nil })
 	rec.Changed = !equalDrafts(stored, drafts)
 	if !rec.Changed && d.DraftsRead {
 		return Recorded{Round: rec.Round}, nil
@@ -314,11 +315,15 @@ func (s *Service) SetDraftText(ctx context.Context, id, draftID, title, body str
 	if title == "" {
 		return fmt.Errorf("set text of draft %s of discussion %s: %w", draftID, id, ErrEmptyText)
 	}
+	disc, _ := s.Lookup(id)
 	return s.editDraft(ctx, id, draftID, func(d *Draft) error {
 		if body == "" && (d.Kind != KindEpic || d.Source != SourceUser) {
 			return fmt.Errorf("set text of draft %s of discussion %s: %w", draftID, id, ErrEmptyText)
 		}
 		d.Title, d.Body = title, body
+		if ImagesError(disc.DraftImages(body)) != nil {
+			unapprove(d)
+		}
 		return nil
 	})
 }
@@ -474,15 +479,48 @@ func (s *Service) Decide(ctx context.Context, id, draftID string, decision Decis
 	if err != nil {
 		return err
 	}
+	disc, _ := s.Lookup(id)
 	return s.editDraft(ctx, id, draftID, func(d *Draft) error {
 		if decided == DecisionApproved && d.Title == "" {
 			return fmt.Errorf("approve draft %s of discussion %s: %w", draftID, id, ErrUntitled)
+		}
+		if decided == DecisionApproved {
+			if err := ImagesError(disc.DraftImages(d.Body)); err != nil {
+				return fmt.Errorf("approve draft %s of discussion %s: %w", draftID, id, err)
+			}
 		}
 		d.Decision = decided
 		d.PublishError = ""
 		d.ApprovalCleared = false
 		return nil
 	})
+}
+
+// SaveDraftImage stores an image the user put in the body of a draft while
+// editing it, in the images folder of the discussion, and answers its record.
+// Nothing is written to the database: the body of the draft that references it
+// is what keeps it, and the file goes with the folder of the discussion.
+func (s *Service) SaveDraftImage(id, draftID string, data []byte) (images.Image, error) {
+	d, err := s.editable(id)
+	if err != nil {
+		return images.Image{}, err
+	}
+	draft, ok := s.draft(id, draftID)
+	if !ok {
+		return images.Image{}, fmt.Errorf("save image of draft %s of discussion %s: %w", draftID, id, ErrDraftNotFound)
+	}
+	if draft.Published.Started() {
+		return images.Image{}, fmt.Errorf("save image of draft %s of discussion %s: %w", draftID, id, ErrPublished)
+	}
+	if len(data) > images.MaxPublishSize {
+		return images.Image{}, fmt.Errorf("save image of draft %s of discussion %s: %w", draftID, id, images.ErrTooLargeToPublish)
+	}
+	saved, err := images.Save(d.ArtifactsDir, []images.Upload{{Image: images.Image{Origin: images.OriginUser}, Data: data}})
+	if err != nil {
+		return images.Image{}, fmt.Errorf("save image of draft %s of discussion %s: %w", draftID, id, err)
+	}
+	s.log.Info("discussion draft image saved", "discussion", id, "draft", draftID, "image", saved[0].ID)
+	return saved[0], nil
 }
 
 // GroupIntoEpic creates an epic of the user over the given cards of the
