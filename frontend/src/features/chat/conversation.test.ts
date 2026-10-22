@@ -54,6 +54,7 @@ const MARKER: MarkerEntry = {
   url: "",
   commits: [],
   wakes: [],
+  background: [],
   count: 0,
   board: "",
   epics: [],

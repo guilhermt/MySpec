@@ -60,6 +60,10 @@ func (a *App) restartForUpdate() error {
 		return fmt.Errorf("restart into MySpec %s: %w", install.Version, err)
 	}
 	a.log.Info("restarting for update", "version", install.Version, "working", len(a.workingSessions()))
+	// The page of the update asked already.
+	a.quitMu.Lock()
+	a.quitConfirmed = true
+	a.quitMu.Unlock()
 	if wails, _ := a.handles(); wails != nil {
 		go wails.Quit()
 	}

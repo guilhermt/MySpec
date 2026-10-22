@@ -52,6 +52,7 @@ import type {
   PullRequestRow,
   PullReview,
   PullsFailure,
+  QuitRequest,
   Repository,
   RepositoryCandidate,
   Review,
@@ -62,6 +63,7 @@ import type {
   ReviewPass,
   ReviewSummary,
   ReviewVerdict,
+  RunningTask,
   SaveBoardRequest,
   Situation,
   SituationOpen,
@@ -93,6 +95,8 @@ export const api = {
   getStartup: vi.fn<() => Promise<Startup>>(() => Promise.resolve(makeStartup())),
   tryStartupAgain: vi.fn<() => Promise<void>>(() => Promise.resolve()),
   getState: vi.fn<() => Promise<State>>(() => Promise.resolve(makeState())),
+  quitAnyway: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  cancelQuit: vi.fn<() => Promise<void>>(() => Promise.resolve()),
   scanRepositories: vi.fn<() => Promise<RepositoryCandidate[]>>(() => Promise.resolve([])),
   addRepository: vi.fn<(path: string) => Promise<void>>(() => Promise.resolve()),
   browseRepository: vi.fn<() => Promise<boolean>>(() => Promise.resolve(false)),
@@ -169,6 +173,12 @@ export const api = {
     Promise.resolve(makeTranscript({ taskId, stage })),
   ),
   getActionOutput: vi.fn<(itemId: string, stage: string, entryId: string) => Promise<ActionOutput>>(
+    () => Promise.resolve({ text: "", lines: 0, truncated: false }),
+  ),
+  stopTasks: vi.fn<(itemId: string, stage: string, taskIds: string[]) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
+  getTaskOutput: vi.fn<(itemId: string, stage: string, taskId: string) => Promise<ActionOutput>>(
     () => Promise.resolve({ text: "", lines: 0, truncated: false }),
   ),
   sendMessage: vi.fn<
@@ -484,6 +494,32 @@ export function makeState(overrides: Partial<State> = {}): State {
     discussionHistory: [],
     historySummary: makeHistorySummary(),
     cloneFolder: "",
+    quit: null,
+    ...overrides,
+  };
+}
+
+export function makeRunningTask(overrides: Partial<RunningTask> = {}): RunningTask {
+  return {
+    taskId: "task_a1",
+    kind: "agent",
+    name: "Survey the repository",
+    toolUseId: "toolu_agent",
+    entryId: "",
+    startedAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+    background: true,
+    stopping: false,
+    stopError: "",
+    actions: 3,
+    actionLabel: "Reading",
+    actionTarget: "internal/session/service.go",
+    ...overrides,
+  };
+}
+
+export function makeQuitRequest(overrides: Partial<QuitRequest> = {}): QuitRequest {
+  return {
+    sessions: [{ itemId: "task-1", stage: "prd", tasks: [makeRunningTask()] }],
     ...overrides,
   };
 }
@@ -723,6 +759,7 @@ export function makeMigration(overrides: Partial<Migration> = {}): Migration {
 
 export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
   return {
+    running: [],
     id: "task-1",
     name: "add-login",
     repositoryId: "repo-1",
@@ -1305,6 +1342,7 @@ export function makePullsFailure(overrides: Partial<PullsFailure> = {}): PullsFa
 
 export function makeReviewSummary(overrides: Partial<ReviewSummary> = {}): ReviewSummary {
   return {
+    running: [],
     id: "review-1",
     repositoryId: "repo-1",
     repository: "dev/web",
@@ -1428,6 +1466,7 @@ export function makeArchivedReview(overrides: Partial<ArchivedReview> = {}): Arc
 
 export function makeDiscussion(overrides: Partial<DiscussionSummary> = {}): DiscussionSummary {
   return {
+    running: [],
     id: "discussion-1",
     boardId: "board-1",
     board: "Roadmap",
@@ -1616,6 +1655,7 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
           status: "pending",
           denyMessage: "",
           answeredAt: "",
+          parentToolUseId: "",
         },
       };
     case "question":
@@ -1681,6 +1721,7 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
           url: "",
           commits: [],
           wakes: [],
+          background: [],
           count: 0,
           board: "",
           epics: [],
@@ -1717,6 +1758,9 @@ export function makeAction(overrides: Partial<ActionEntry> = {}): ActionEntry {
     outputLines: 0,
     outputTail: "",
     outputTruncated: false,
+    background: false,
+    taskId: "",
+    prompt: "",
     ...overrides,
   };
 }
@@ -1784,6 +1828,9 @@ export function resetWailsMock(): void {
   api.deleteTask.mockImplementation(() => Promise.resolve({ leftover: null }));
   api.deleteReview.mockImplementation(() => Promise.resolve({ leftover: null }));
   api.readReviewArtifact.mockImplementation(() => Promise.resolve("## Findings\n"));
+  api.getTaskOutput.mockImplementation(() =>
+    Promise.resolve({ text: "", lines: 0, truncated: false }),
+  );
   api.getTranscript.mockImplementation((taskId, stage) =>
     Promise.resolve(makeTranscript({ taskId, stage })),
   );

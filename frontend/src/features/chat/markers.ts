@@ -657,6 +657,11 @@ function wokeLine(marker: MarkerEntry): MarkerView {
     : line("woke", first, parts(...others));
 }
 
+// backgroundNames is the work a background marker names: `"A" and "B"`.
+function backgroundNames(marker: MarkerEntry): string {
+  return andList((marker.background ?? []).map(({ name }) => `"${name}"`));
+}
+
 function planInvalidLine(marker: MarkerEntry): MarkerView {
   const problems = marker.problems ?? [];
   return problems.length === 0
@@ -730,6 +735,10 @@ export function markerOf(
       );
     case "paused":
       return line("pause", "Paused by you");
+    case "background_stopped":
+      return line("ban", "Stopped by you", backgroundNames(marker));
+    case "background_lost":
+      return line("ban", "Lost when the session stopped", backgroundNames(marker));
     case "retried":
       return retriedLine(marker);
     case "woke":

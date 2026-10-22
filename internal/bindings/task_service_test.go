@@ -738,6 +738,31 @@ func TestGetActionOutputRejectsWhatItDoesNotKnow(t *testing.T) {
 	}
 }
 
+func TestStopTasksIgnoresATaskThatIsNotRunning(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := createdTask(t)
+
+	if err := f.tasks.StopTasks(id, "prd", []string{"nope"}); err != nil {
+		t.Errorf("StopTasks() = %v, want nil", err)
+	}
+	if err := f.tasks.StopTasks(id, "tech_spec", []string{"nope"}); err == nil || err.Error() != "This conversation has ended." {
+		t.Errorf("StopTasks() of a stage with no session = %v, want the ended conversation notice", err)
+	}
+}
+
+func TestGetTaskOutputRejectsATaskThatIsNotRunning(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := createdTask(t)
+
+	_, err := f.tasks.GetTaskOutput(id, "prd", "nope")
+
+	if err == nil || err.Error() != "This conversation has ended." {
+		t.Errorf("GetTaskOutput() = %v, want the ended conversation notice", err)
+	}
+}
+
 func TestGetTranscriptReadsAClosedStage(t *testing.T) {
 	t.Parallel()
 

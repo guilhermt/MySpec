@@ -122,7 +122,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 		p.finish(stepData)
 		a.services.Bind(bindings.Services{State: bindings.NewStateService(func() bindings.State {
 			return bindings.RefusedState(refused, a.systemDark)
-		})})
+		}, bindings.QuitActions{})})
 		return nil
 	}
 	// Data a newer version changed is neither read nor written, and the interface
@@ -133,7 +133,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 		p.finish(stepData)
 		a.services.Bind(bindings.Services{State: bindings.NewStateService(func() bindings.State {
 			return bindings.NewerState(newer, a.systemDark)
-		})})
+		}, bindings.QuitActions{})})
 		return nil
 	}
 	if err != nil {
@@ -391,7 +391,7 @@ func (a *App) bound(
 	log *slog.Logger,
 ) bindings.Services {
 	return bindings.Services{
-		State:      bindings.NewStateService(a.state),
+		State:      bindings.NewStateService(a.state, bindings.QuitActions{Quit: a.quitAnyway, Cancel: a.cancelQuit}),
 		Repository: bindings.NewRepositoryService(repositories, a, log),
 		Settings: bindings.NewSettingsService(themeSvc, modelsSvc, reviewModesSvc, a.checkMachine,
 			bindings.UpdateActions{Check: a.checkForUpdates, Install: a.installUpdate, Restart: a.restartForUpdate}, dataDir, log),

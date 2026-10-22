@@ -36,6 +36,10 @@ import (
 // removal is far slower than the database work callTimeout was written for.
 const removeTimeout = time.Minute
 
+// stopCallTimeout bounds a StopTasks call: the wait of the session for the
+// answers of the CLI, and a second to spare.
+const stopCallTimeout = session.StopTimeout + time.Second
+
 // errPathOutside is a file the frontend asked for that is not in the worktree
 // of the task.
 var errPathOutside = errors.New("bindings: the path is outside the worktree")
@@ -974,6 +978,40 @@ func (s *TaskService) Resume(taskID, stage string) error {
 	return nil
 }
 
+// StopTasks stops tasks the agent left running in one conversation of an item,
+// and returns once the CLI answered them all. A stop the CLI refused comes back
+// as the reason in its own words.
+func (s *TaskService) StopTasks(itemID, stage string, taskIDs []string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), stopCallTimeout)
+	defer cancel()
+
+	if err := s.sessions.StopTasks(ctx, session.Key{TaskID: itemID, Stage: stage}, taskIDs); err != nil {
+		return s.fail("StopTasks", err)
+	}
+	return nil
+}
+
+// GetTaskOutput reads the end of the output of a command or monitor that runs
+// in one conversation of an item.
+func (s *TaskService) GetTaskOutput(itemID, stage, taskID string) (ActionOutput, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return ActionOutput{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	o, err := s.sessions.TaskOutput(ctx, session.Key{TaskID: itemID, Stage: stage}, taskID)
+	if err != nil {
+		return ActionOutput{}, s.fail("GetTaskOutput", err)
+	}
+	return ActionOutput{Text: o.Text, Lines: o.Lines, Truncated: o.Truncated}, nil
+}
+
 // Retry clears the last error of a task and starts its process again.
 func (s *TaskService) Retry(taskID, stage string) error {
 	s, err := s.late.resolve(s)
@@ -1115,6 +1153,7 @@ var userMessages = []struct {
 	{images.ErrFormat, "An image isn't PNG, JPEG, GIF or WebP."},
 	{images.ErrTooLarge, "An image is over 20 MB."},
 	{session.ErrNotFound, "This conversation has ended."},
+	{session.ErrNoAnswer, "Claude Code did not answer."},
 	{flow.ErrInvalidTarget, "This stage can't be reached from here."},
 	{flow.ErrNotRevisiting, "The task isn't revisiting a stage."},
 	{flow.ErrNotReady, "Wait for the agent to finish and the document to be written."},
@@ -1225,6 +1264,11 @@ func failure(log *slog.Logger, method string, err error) error {
 	var archive *discussionflow.ArchiveRefusal
 	if errors.As(err, &archive) {
 		return errors.New(archive.Hint)
+	}
+	// A stop the CLI refused says why in its own words.
+	var stopRefusal *session.StopRefusal
+	if errors.As(err, &stopRefusal) {
+		return errors.New(stopRefusal.Message())
 	}
 	var taken *task.CardTakenError
 	if errors.As(err, &taken) {

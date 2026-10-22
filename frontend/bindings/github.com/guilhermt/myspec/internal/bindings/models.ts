@@ -59,10 +59,27 @@ export interface ActionEntry {
     "outputTruncated": boolean;
 
     /**
-     * InterruptedBy is user or crash when the status is interrupted, ""
+     * InterruptedBy is user, crash or agent when the status is interrupted, ""
      * otherwise.
      */
     "interruptedBy": string;
+
+    /**
+     * Background says the call runs in the background and stays running until
+     * its task ends.
+     */
+    "background": boolean;
+
+    /**
+     * TaskID is the id the CLI gave the task of the call; "" when none.
+     */
+    "taskId": string;
+
+    /**
+     * Prompt is the task an Agent/Task call gave its subagent; "" for any other
+     * call.
+     */
+    "prompt": string;
 }
 
 /**
@@ -379,6 +396,17 @@ export interface AssistantEntry {
      * InterruptedBy is user or crash when the text was cut short, "" otherwise.
      */
     "interruptedBy": string;
+}
+
+/**
+ * BackgroundItem is a task in the background a marker names.
+ */
+export interface BackgroundItem {
+    /**
+     * agent, command or monitor
+     */
+    "kind": string;
+    "name": string;
 }
 
 /**
@@ -1030,6 +1058,11 @@ export interface DiscussionRepository {
  * interface shows it.
  */
 export interface DiscussionSummary {
+    /**
+     * Running are the open conversations of the item with something alive, in
+     * the order of its stages; never nil.
+     */
+    "running": SessionTasks[] | null;
     "id": string;
     "boardId": string;
 
@@ -1753,8 +1786,8 @@ export interface MarkerEntry {
      * step_review_written, review_started, discussion_started, stage_started,
      * step_started, compacted, interrupted, retried, woke, committed, pr_opened,
      * checks_read, draft_approved, changes_approved, paused, plan_invalid,
-     * discussion_document, drafts_written, drafts_revised, drafts_unreadable
-     * or drafts_published.
+     * background_stopped, background_lost, discussion_document,
+     * drafts_written, drafts_revised, drafts_unreadable or drafts_published.
      */
     "type": string;
     "preTokens": number;
@@ -1869,6 +1902,12 @@ export interface MarkerEntry {
      * never nil, empty when the agent resumed on its own.
      */
     "wakes": Wake[] | null;
+
+    /**
+     * Background belongs to background_stopped and background_lost: the work
+     * they name, in the order it started; never nil.
+     */
+    "background": BackgroundItem[] | null;
 }
 
 /**
@@ -2125,6 +2164,12 @@ export interface PermissionEntry {
      * "" while pending
      */
     "answeredAt": string;
+
+    /**
+     * ParentToolUseID is the Agent/Task action of the subagent that asks; ""
+     * for the main thread.
+     */
+    "parentToolUseId": string;
 }
 
 /**
@@ -2620,6 +2665,30 @@ export interface QuestionOption {
 }
 
 /**
+ * QuitRequest is a close of the window the app held back because a subagent
+ * runs: what runs, by item and conversation.
+ */
+export interface QuitRequest {
+    /**
+     * never nil
+     */
+    "sessions": QuitSession[] | null;
+}
+
+/**
+ * QuitSession is what runs in one conversation, for the quit warning.
+ */
+export interface QuitSession {
+    "itemId": string;
+    "stage": string;
+
+    /**
+     * never nil
+     */
+    "tasks": RunningTask[] | null;
+}
+
+/**
  * Repository is a registered repository, with what the app knows about its
  * clone and its tasks.
  */
@@ -2944,6 +3013,11 @@ export interface ReviewPass {
  * conversation.
  */
 export interface ReviewSummary {
+    /**
+     * Running are the open conversations of the item with something alive, in
+     * the order of its stages; never nil.
+     */
+    "running": SessionTasks[] | null;
     "id": string;
     "repositoryId": string;
 
@@ -3130,6 +3204,56 @@ export interface ReviewSummary {
 }
 
 /**
+ * RunningTask is a task the agent left running, or a subagent of the turn.
+ */
+export interface RunningTask {
+    "taskId": string;
+
+    /**
+     * agent | command | monitor; a string for the same reason as State.Theme
+     */
+    "kind": string;
+    "name": string;
+    "toolUseId": string;
+
+    /**
+     * "" when the conversation has no action for it
+     */
+    "entryId": string;
+
+    /**
+     * RFC 3339
+     */
+    "startedAt": string;
+
+    /**
+     * false for a subagent the turn waits for
+     */
+    "background": boolean;
+    "stopping": boolean;
+
+    /**
+     * "" when the last stop did not fail
+     */
+    "stopError": string;
+
+    /**
+     * a subagent's actions; 0 for the others
+     */
+    "actions": number;
+
+    /**
+     * what a subagent runs now; "" when none
+     */
+    "actionLabel": string;
+
+    /**
+     * its target
+     */
+    "actionTarget": string;
+}
+
+/**
  * SaveBoardRequest is what the user chose in the board dialog.
  */
 export interface SaveBoardRequest {
@@ -3141,6 +3265,18 @@ export interface SaveBoardRequest {
      * none.
      */
     "newCardStatus": string;
+}
+
+/**
+ * SessionTasks is what runs in one conversation of an item.
+ */
+export interface SessionTasks {
+    "stage": string;
+
+    /**
+     * never nil, never empty
+     */
+    "tasks": RunningTask[] | null;
 }
 
 /**
@@ -3479,6 +3615,11 @@ export interface State {
     "historySummary": HistorySummary;
 
     /**
+     * Quit is the close of the window the app held back; null without one.
+     */
+    "quit": QuitRequest | null;
+
+    /**
      * CloneFolder is where new clones go; "" until chosen.
      */
     "cloneFolder": string;
@@ -3711,6 +3852,11 @@ export interface TaskStageModel {
  * TaskSummary is an active task with the state of its session.
  */
 export interface TaskSummary {
+    /**
+     * Running are the open conversations of the item with something alive, in
+     * the order of its stages; never nil.
+     */
+    "running": SessionTasks[] | null;
     "id": string;
     "name": string;
     "repositoryId": string;

@@ -921,6 +921,9 @@ func fromAction(a *session.ActionEntry) *ActionEntry {
 		OutputTail:      a.OutputTail,
 		OutputTruncated: a.OutputTruncated,
 		InterruptedBy:   a.InterruptedBy,
+		Background:      a.Background,
+		TaskID:          a.TaskID,
+		Prompt:          a.Prompt,
 	}
 	// The times of an action keep their fractions: a command of 8.2s reads 8.2s, not 8s.
 	if a.StartedAt != nil {
@@ -1029,6 +1032,7 @@ func FromEntry(itemID string, e session.Entry) Entry {
 			Dropped:       e.Marker.Dropped,
 			Before:        fromDraftBefore(e.Marker.Before),
 			Wakes:         fromWakes(e.Marker.Wakes),
+			Background:    fromBackgroundItems(e.Marker.Background),
 		}
 		if e.Marker.Findings != nil {
 			converted.Marker.Findings = *e.Marker.Findings
@@ -1065,6 +1069,7 @@ func fromPermission(p *session.PermissionEntry) *PermissionEntry {
 		Status:              string(p.Status),
 		DenyMessage:         p.DenyMessage,
 		AnsweredAt:          answeredAt,
+		ParentToolUseID:     p.ParentToolUseID,
 	}
 }
 
@@ -2424,6 +2429,112 @@ func fromWakes(wakes []session.Wake) []Wake {
 		out = append(out, Wake{Kind: string(wake.Kind), Name: wake.Name, Status: string(wake.Status), ExitCode: exitCode})
 	}
 	return out
+}
+
+// fromBackgroundItems converts the work a background marker names; never nil.
+func fromBackgroundItems(items []session.BackgroundItem) []BackgroundItem {
+	out := make([]BackgroundItem, 0, len(items))
+	for _, item := range items {
+		out = append(out, BackgroundItem{Kind: string(item.Kind), Name: item.Name})
+	}
+	return out
+}
+
+// FromRunningTask converts a task the CLI runs.
+func FromRunningTask(t session.RunningTask) RunningTask {
+	return RunningTask{
+		TaskID:       t.TaskID,
+		Kind:         string(t.Kind),
+		Name:         t.Name,
+		ToolUseID:    t.ToolUseID,
+		EntryID:      t.EntryID,
+		StartedAt:    t.StartedAt.Format(time.RFC3339),
+		Background:   t.Background,
+		Stopping:     t.Stopping,
+		StopError:    t.StopError,
+		Actions:      t.Actions,
+		ActionLabel:  t.ActionLabel,
+		ActionTarget: t.ActionTarget,
+	}
+}
+
+// fromRunningTasks converts a list of tasks; never nil.
+func fromRunningTasks(tasks []session.RunningTask) []RunningTask {
+	out := make([]RunningTask, len(tasks))
+	for i, t := range tasks {
+		out[i] = FromRunningTask(t)
+	}
+	return out
+}
+
+// RunningOf gathers what runs in the open conversations of an item, in the
+// order of its stages: the known stages in workflow order, then the others
+// alphabetically. Never nil.
+func RunningOf(itemID string, sums map[session.Key]session.Summary) []SessionTasks {
+	out := []SessionTasks{}
+	for k, sum := range sums {
+		if k.TaskID == itemID && len(sum.Tasks) > 0 {
+			out = append(out, SessionTasks{Stage: k.Stage, Tasks: fromRunningTasks(sum.Tasks)})
+		}
+	}
+	slices.SortFunc(out, func(a, b SessionTasks) int { return compareStages(a.Stage, b.Stage) })
+	return out
+}
+
+// FromQuit converts what runs in every open session into the quit warning,
+// ordered by item and then by stage. Never nil.
+func FromQuit(running map[session.Key][]session.RunningTask) *QuitRequest {
+	sessions := make([]QuitSession, 0, len(running))
+	for k, tasks := range running {
+		sessions = append(sessions, QuitSession{ItemID: k.TaskID, Stage: k.Stage, Tasks: fromRunningTasks(tasks)})
+	}
+	slices.SortFunc(sessions, func(a, b QuitSession) int {
+		if c := cmp.Compare(a.ItemID, b.ItemID); c != 0 {
+			return c
+		}
+		return compareStages(a.Stage, b.Stage)
+	})
+	return &QuitRequest{Sessions: sessions}
+}
+
+// stageOrder are the stages of a task before its steps, in workflow order.
+var stageOrder = []string{"prd", "tech_spec", "plan", "one_shot"}
+
+// stageRank places a stage in the workflow: the stages before the steps, each
+// step followed by its reviewer, then the pull request and its review. -1 for a
+// stage it does not know.
+func stageRank(stage string) int {
+	if i := slices.Index(stageOrder, stage); i >= 0 {
+		return i
+	}
+	if n, ok := session.ParseStepStage(stage); ok {
+		return 100 + 2*n
+	}
+	if n, ok := session.ParseStepReviewStage(stage); ok {
+		return 101 + 2*n
+	}
+	switch stage {
+	case string(task.StagePR):
+		return 1 << 20
+	case session.PRReviewStage:
+		return 1<<20 + 1
+	}
+	return -1
+}
+
+// compareStages orders two stages by stageRank; the unknown ones come after
+// the known, alphabetically.
+func compareStages(a, b string) int {
+	ra, rb := stageRank(a), stageRank(b)
+	switch {
+	case ra >= 0 && rb >= 0:
+		return cmp.Compare(ra, rb)
+	case ra >= 0:
+		return -1
+	case rb >= 0:
+		return 1
+	}
+	return cmp.Compare(a, b)
 }
 
 // fromDraftBefore converts the drafts of a drafts_revised marker; never nil.

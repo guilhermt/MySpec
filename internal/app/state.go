@@ -47,7 +47,7 @@ func (a *App) snapshot() bindings.State {
 	repositories := a.repositoryStates()
 	archivedTasks, archivedReviews, archivedDiscussions := a.tasks.ListArchived(), a.prReviews.ListArchived(), a.discussions.ListArchived()
 	start := bindings.WindowStart(time.Now())
-	return bindings.State{
+	state := bindings.State{
 		Repositories:     repositories,
 		RepositoryFilter: a.repositories.Filter(),
 		Theme:            string(a.theme.Preference()),
@@ -104,6 +104,19 @@ func (a *App) snapshot() bindings.State {
 		HistorySummary: bindings.FromHistorySummary(archivedTasks, archivedReviews, archivedDiscussions, start),
 		CloneFolder:    a.repositories.CloneFolder(),
 	}
+	for i := range state.Tasks {
+		state.Tasks[i].Running = bindings.RunningOf(state.Tasks[i].ID, summaries)
+	}
+	for i := range state.Reviews {
+		state.Reviews[i].Running = bindings.RunningOf(state.Reviews[i].ID, summaries)
+	}
+	for i := range state.Discussions {
+		state.Discussions[i].Running = bindings.RunningOf(state.Discussions[i].ID, summaries)
+	}
+	if a.quitAskedNow() {
+		state.Quit = bindings.FromQuit(a.sessions.RunningTasks())
+	}
+	return state
 }
 
 // repositoryStates are the registered repositories as the interface sees them,

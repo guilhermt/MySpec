@@ -161,6 +161,14 @@ export function GetActionOutput(taskID: string, stage: string, entryID: string):
 }
 
 /**
+ * GetTaskOutput reads the end of the output of a command or monitor that runs
+ * in one conversation of an item.
+ */
+export function GetTaskOutput(itemID: string, stage: string, taskID: string): $CancellablePromise<$models.ActionOutput> {
+    return $Call.ByID(405741314, itemID, stage, taskID);
+}
+
+/**
  * GetTranscript returns the whole conversation of one session of an item,
  * named by its stage. It is how the frontend gets its first one; every later
  * change arrives with EventTranscriptChanged.
@@ -358,4 +366,13 @@ export function SetStepModel(taskID: string, step: number, model: string, effort
  */
 export function SetStepReviewMode(taskID: string, step: number, mode: string): $CancellablePromise<void> {
     return $Call.ByID(617698371, taskID, step, mode);
+}
+
+/**
+ * StopTasks stops tasks the agent left running in one conversation of an item,
+ * and returns once the CLI answered them all. A stop the CLI refused comes back
+ * as the reason in its own words.
+ */
+export function StopTasks(itemID: string, stage: string, taskIDs: string[] | null): $CancellablePromise<void> {
+    return $Call.ByID(2601606848, itemID, stage, taskIDs);
 }

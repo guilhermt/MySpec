@@ -14,6 +14,7 @@ import type {
   ArchivedStep,
   ArchivedTask,
   AssistantEntry,
+  BackgroundItem,
   Board,
   BoardCard,
   BoardFailure,
@@ -87,6 +88,8 @@ import type {
   Question,
   QuestionEntry,
   QuestionOption,
+  QuitRequest,
+  QuitSession,
   Repository,
   RepositoryCandidate,
   Review,
@@ -96,7 +99,9 @@ import type {
   ReviewFinding,
   ReviewPass,
   ReviewSummary,
+  RunningTask,
   SaveBoardRequest,
+  SessionTasks,
   Situation,
   SituationOpen,
   SituationStarted,
@@ -147,6 +152,7 @@ export type {
   ArchivedStep,
   ArchivedTask,
   AssistantEntry,
+  BackgroundItem,
   Board,
   BoardCard,
   BoardFailure,
@@ -220,6 +226,8 @@ export type {
   Question,
   QuestionEntry,
   QuestionOption,
+  QuitRequest,
+  QuitSession,
   Repository,
   RepositoryCandidate,
   Review,
@@ -229,7 +237,9 @@ export type {
   ReviewFinding,
   ReviewPass,
   ReviewSummary,
+  RunningTask,
   SaveBoardRequest,
+  SessionTasks,
   Situation,
   SituationOpen,
   SituationStarted,
@@ -417,7 +427,9 @@ export type MarkerType =
   | "draft_approved"
   | "changes_approved"
   | "paused"
-  | "plan_invalid";
+  | "plan_invalid"
+  | "background_stopped"
+  | "background_lost";
 /** AppKind is which message of the workflow the app sent; "" for any other message. */
 export type AppKind =
   | ""
@@ -431,12 +443,17 @@ export type AppKind =
   | "open"
   | "pr_pass"
   | "apply";
-/** InterruptedBy is who cut a text, an action or a turn short; "" when nobody did. */
-export type InterruptedBy = "" | "user" | "crash";
+/**
+ * InterruptedBy is who cut a text, an action or a turn short; "" when nobody did.
+ * "agent" is the agent stopping a task in the background itself.
+ */
+export type InterruptedBy = "" | "user" | "crash" | "agent";
 /** RetryReason is why an API call the CLI retries failed; "" without a retry. */
 export type RetryReason = "" | "overloaded" | "rate_limit" | "server" | "connection" | "other";
 /** WakeKind is the kind of task in the background whose return woke the agent. */
 export type WakeKind = "agent" | "command" | "monitor";
+/** RunningKind is the kind of a task the CLI runs: a subagent, a command or a monitor. */
+export type RunningKind = "agent" | "command" | "monitor";
 /** WakeStatus is how a task in the background ended. */
 export type WakeStatus = "completed" | "failed" | "stopped";
 export type ErrorKind =
@@ -1100,6 +1117,8 @@ export function asMarkerType(value: string): MarkerType {
     case "changes_approved":
     case "paused":
     case "plan_invalid":
+    case "background_stopped":
+    case "background_lost":
       return value;
     default:
       return "compacted";
@@ -1128,6 +1147,7 @@ export function asInterruptedBy(value: string): InterruptedBy {
   switch (value) {
     case "user":
     case "crash":
+    case "agent":
       return value;
     default:
       return "";
@@ -1144,6 +1164,17 @@ export function asRetryReason(value: string): RetryReason {
       return value;
     default:
       return "other";
+  }
+}
+
+export function asRunningKind(value: string): RunningKind | null {
+  switch (value) {
+    case "agent":
+    case "command":
+    case "monitor":
+      return value;
+    default:
+      return null;
   }
 }
 
@@ -1575,6 +1606,8 @@ export const api = {
   getStartup: (): Promise<Startup> => StartupService.GetStartup(),
   tryStartupAgain: (): Promise<void> => StartupService.TryAgain(),
   getState: (): Promise<State> => StateService.GetState(),
+  quitAnyway: (): Promise<void> => StateService.QuitAnyway(),
+  cancelQuit: (): Promise<void> => StateService.CancelQuit(),
   scanRepositories: async (): Promise<RepositoryCandidate[]> =>
     (await RepositoryService.ScanRepositories()) ?? [],
   addRepository: (path: string): Promise<void> => RepositoryService.AddRepository(path),
@@ -1632,6 +1665,10 @@ export const api = {
     TaskService.GetTranscript(taskId, stage),
   getActionOutput: (itemId: string, stage: string, entryId: string): Promise<ActionOutput> =>
     TaskService.GetActionOutput(itemId, stage, entryId),
+  stopTasks: (itemId: string, stage: string, taskIds: string[]): Promise<void> =>
+    TaskService.StopTasks(itemId, stage, taskIds),
+  getTaskOutput: (itemId: string, stage: string, taskId: string): Promise<ActionOutput> =>
+    TaskService.GetTaskOutput(itemId, stage, taskId),
   sendMessage: (taskId: string, stage: string, text: string, images: string[]): Promise<void> =>
     TaskService.SendMessage(taskId, stage, text, images),
   removePending: (taskId: string, stage: string, entryId: string): Promise<void> =>
