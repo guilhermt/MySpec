@@ -10,6 +10,7 @@ export interface YourMessageProps {
 /** YourMessage is what the user said, in the column, as written. */
 export function YourMessage({ user, createdAt }: YourMessageProps) {
   const time = clockTime(createdAt, Date.now());
+  const images = user.images ?? [];
 
   return (
     <article
@@ -27,8 +28,13 @@ export function YourMessage({ user, createdAt }: YourMessageProps) {
           {user.text}
         </p>
       )}
-      {(user.images ?? []).length > 0 && (
-        <StoredImages images={user.images ?? []} size="md" captions={false} />
+      {images.length > 0 && (
+        // Images of a draft's edit say so; those of a plain message need no word.
+        <StoredImages
+          images={images}
+          size="md"
+          captions={images.some((image) => image.origin === "draft")}
+        />
       )}
     </article>
   );

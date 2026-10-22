@@ -42,6 +42,20 @@ describe("YourMessage", () => {
     expect(screen.getByRole("dialog", { name: "Image 1 of 2" })).toBeInTheDocument();
   });
 
+  it("captions the images of a draft as Your edit", () => {
+    const entry = makeEntry("user");
+    const user = entry.user;
+    if (user === null) throw new Error("no user");
+    renderWithStore(
+      <YourMessage
+        user={{ ...user, text: "see this", images: [{ ...IMAGE, origin: "draft" }] }}
+        createdAt={entry.createdAt}
+      />,
+    );
+
+    expect(screen.getByText("Your edit")).toBeInTheDocument();
+  });
+
   it("draws no text for a message of only images", () => {
     const entry = makeEntry("user");
     const user = entry.user;

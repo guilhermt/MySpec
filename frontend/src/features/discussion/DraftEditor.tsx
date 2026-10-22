@@ -14,16 +14,29 @@ import { Input } from "@/components/system/Input";
 import { ICONS } from "@/components/system/icons";
 import { Select, type SelectOption } from "@/components/system/Select";
 import { Textarea } from "@/components/system/Textarea";
+import { DraftImageStrip } from "@/features/discussion/DraftImageStrip";
 import { dependencyLabel, refValue } from "@/features/discussion/discussion-status";
+import { altOf, imageReference, removeImage } from "@/features/discussion/draft-images";
 import { dependencyViews } from "@/features/discussion/drafts-card";
 import { type DraftField, useDraftText } from "@/features/discussion/useDraftText";
+import { DropHint } from "@/features/images/DropHint";
+import { pasteImages } from "@/features/images/pasteImages";
+import { useImageDrop } from "@/features/images/useImageDrop";
 import { draftTitle } from "@/lib/drafts";
 import { messageOf } from "@/lib/errors";
+import {
+  encodeImages,
+  MAX_CARD_IMAGE_BYTES,
+  readAttachments,
+  refusalText,
+  revokeAttachments,
+} from "@/lib/images";
 import { revealItem, scrollerOf } from "@/lib/reveal";
 import { cn } from "@/lib/utils";
 import { asDraftKind, type DiscussionSummary, type Draft } from "@/lib/wails";
 import {
   addDraftDependency,
+  addDraftImage,
   removeDraftDependency,
   saveDraftText,
   setDraftEpic,
@@ -141,6 +154,8 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
   const addDependency = useRef<HTMLButtonElement>(null);
   const [issue, setIssue] = useState<string | null>(null);
   const [issueRefusal, setIssueRefusal] = useState<string | null>(null);
+  const bodyField = useRef<HTMLTextAreaElement>(null);
+  const [refusal, setRefusal] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
 
   // The edit comes into the conversation as it opens, its fields below the title too.
@@ -183,6 +198,43 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
     (next) => saveText("body", next),
     bodyRequired,
   );
+
+  // addImages stores the images put in the body and writes their references where the cursor is;
+  // what it can't attach is said in a line below the field.
+  const addImages = async (files: File[]) => {
+    const read = await readAttachments(files, MAX_CARD_IMAGE_BYTES);
+    const refusals: string[] = [];
+    const refs: string[] = [];
+    for (const attachment of read.attachments) {
+      try {
+        const [data] = await encodeImages([attachment]);
+        const ref = await addDraftImage(discussion.id, draft.id, data ?? "");
+        refs.push(imageReference(altOf(attachment.name), ref));
+      } catch (failure) {
+        refusals.push(`${attachment.name}: ${messageOf(failure)}`);
+      }
+    }
+    revokeAttachments(read.attachments);
+    if (refs.length > 0) {
+      const inserted = refs.join("\n\n");
+      const field = bodyField.current;
+      const start = field?.selectionStart ?? body.value.length;
+      const end = field?.selectionEnd ?? start;
+      body.onChange(body.value.slice(0, start) + inserted + body.value.slice(end));
+      requestAnimationFrame(() => {
+        field?.setSelectionRange(start + inserted.length, start + inserted.length);
+      });
+    }
+    // refusalText carries the "Not attached" lead for the files refused by format or size.
+    const lines = [
+      ...(read.refusals.length > 0 ? [refusalText(read.refusals, 10)] : []),
+      ...(refusals.length > 0
+        ? [`${read.refusals.length > 0 ? "" : "Not attached · "}${refusals.join(" · ")}`]
+        : []),
+    ];
+    setRefusal(lines.length > 0 ? lines.join(" · ") : null);
+  };
+  const drop = useImageDrop((files) => void addImages(files), !locked);
 
   const repositories = discussion.repositories ?? [];
   const repositoryOptions: SelectOption[] = repositories.map((each) => ({
@@ -299,15 +351,40 @@ export function DraftEditor({ discussion, draft, onDone }: DraftEditorProps) {
         complement="Markdown"
         {...(bodyRequired && body.value.trim() === "" ? { error: "Write the body." } : {})}
       >
-        <Textarea
-          mono
-          rows={6}
-          value={body.value}
-          onChange={(event) => body.onChange(event.target.value)}
-          onBlur={body.onBlur}
-          // field-sizing-content ignores rows: the field holds six lines of the text at least.
-          className="min-h-[calc(var(--leading-body)*6+var(--space-2)*2+var(--border)*2)] max-h-(--size-composer-max) field-sizing-content"
-          {...lock}
+        <div className="relative" {...drop.handlers}>
+          {drop.dragging && <DropHint rounded="md" />}
+          <Textarea
+            ref={bodyField}
+            mono
+            rows={6}
+            value={body.value}
+            onChange={(event) => body.onChange(event.target.value)}
+            onBlur={body.onBlur}
+            onPaste={(event) => {
+              if (!locked) {
+                pasteImages(event, (files) => void addImages(files));
+              }
+            }}
+            // field-sizing-content ignores rows: the field holds six lines of the text at least.
+            className="min-h-[calc(var(--leading-body)*6+var(--space-2)*2+var(--border)*2)] max-h-(--size-composer-max) field-sizing-content"
+            {...lock}
+          />
+        </div>
+        {refusal !== null && (
+          <p
+            role="alert"
+            className="text-(length:--text-meta) leading-(--leading-meta) text-state-error"
+          >
+            {refusal}
+          </p>
+        )}
+        <DraftImageStrip
+          discussionId={discussion.id}
+          issue={isUpdate && draft.card !== null ? draft.card.key : null}
+          text={body.value}
+          {...(locked
+            ? {}
+            : { onRemove: (src: string) => body.onChange(removeImage(body.value, src)) })}
         />
       </Field>
       <div className="grid grid-cols-3 gap-(--space-2)">

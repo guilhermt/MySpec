@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DraftEditor } from "@/features/discussion/DraftEditor";
 import { api, type DiscussionSummary, type Draft } from "@/lib/wails";
@@ -358,5 +358,114 @@ describe("DraftEditor, Esc", () => {
     await user.click(screen.getByRole("button", { name: "Done" }));
 
     expect(onDone).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("DraftEditor, images", () => {
+  const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0];
+  const REF = "images/0b6c3c1e-2f8a-4c7e-9b1d-2a4f5e6d7c8b.png";
+  const png = (name = "shot.png", extra = 0) =>
+    new File([new Uint8Array([...PNG, ...new Array<number>(extra).fill(0)])], name, {
+      type: "image/png",
+    });
+  const body = () => screen.getByRole("textbox", { name: "Body Markdown" });
+  const paste = (files: File[]) =>
+    fireEvent.paste(body(), { clipboardData: { files, getData: () => "", types: [] } });
+
+  it("puts a pasted image in the body at the cursor and saves it", async () => {
+    const { user } = draw(makeDraft({ body: "" }));
+
+    paste([png()]);
+
+    await waitFor(() => expect(body()).toHaveValue(`![shot](${REF})`));
+    expect(api.addDraftImage).toHaveBeenCalledTimes(1);
+    await user.tab();
+    await user.click(body());
+    await user.tab();
+    expect(api.setDraftText).toHaveBeenLastCalledWith(
+      "discussion-1",
+      "draft-1",
+      expect.any(String),
+      `![shot](${REF})`,
+    );
+  });
+
+  it("writes Image as the alt of a paste without a name", async () => {
+    draw(makeDraft({ body: "" }));
+
+    paste([png("")]);
+
+    await waitFor(() => expect(body()).toHaveValue(`![Image](${REF})`));
+  });
+
+  it("puts a dropped image in the body", async () => {
+    draw(makeDraft({ body: "" }));
+
+    fireEvent.drop(body().parentElement as HTMLElement, {
+      dataTransfer: { types: ["Files"], files: [png()] },
+    });
+
+    await waitFor(() => expect(body()).toHaveValue(`![shot](${REF})`));
+  });
+
+  it("refuses an image over 10 MB without storing it", async () => {
+    draw(makeDraft({ body: "" }));
+
+    paste([png("big.png", 10 * 1024 * 1024)]);
+
+    expect(await screen.findByText("Not attached · big.png is over 10 MB")).toBeInTheDocument();
+    expect(api.addDraftImage).not.toHaveBeenCalled();
+    expect(body()).toHaveValue("");
+  });
+
+  it("refuses a file of the wrong format", async () => {
+    draw(makeDraft({ body: "" }));
+
+    paste([new File([new Uint8Array(Buffer.from("%PDF-1.7"))], "doc.png", { type: "image/png" })]);
+
+    expect(
+      await screen.findByText("Not attached · doc.png isn't PNG, JPEG, GIF or WebP"),
+    ).toBeInTheDocument();
+    expect(api.addDraftImage).not.toHaveBeenCalled();
+  });
+
+  it("says why the Go side refused an image and goes on", async () => {
+    vi.mocked(api.addDraftImage).mockRejectedValueOnce(new Error("the draft is gone"));
+    draw(makeDraft({ body: "" }));
+
+    paste([png("a.png"), png("b.png")]);
+
+    expect(await screen.findByText("Not attached · a.png: the draft is gone")).toBeInTheDocument();
+    expect(body()).toHaveValue(`![b](${REF})`);
+  });
+
+  it("shows the thumbnails of the body in order", () => {
+    draw(
+      makeDraft({
+        body: `![one](${REF})\n\n![two](images/1b6c3c1e-2f8a-4c7e-9b1d-2a4f5e6d7c8b.png)`,
+      }),
+    );
+
+    expect(screen.getByRole("list", { name: "Images of the body" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Image 1 of 2, one" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Image 2 of 2, two" })).toBeInTheDocument();
+  });
+
+  it("takes every reference to an image out of the body with the ×", async () => {
+    const { user } = draw(makeDraft({ body: `Look\n![one](${REF})\n![again](${REF})` }));
+
+    await user.click(screen.getByRole("button", { name: "Take image 1 out of the body, one" }));
+
+    expect(body()).toHaveValue("Look");
+    expect(screen.queryByRole("list", { name: "Images of the body" })).not.toBeInTheDocument();
+  });
+
+  it("has no × during a publication, and attaches nothing", () => {
+    draw(makeDraft({ body: `![one](${REF})` }), { publishing: true });
+
+    expect(screen.getByRole("button", { name: "Image 1 of 1, one" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Take image/ })).not.toBeInTheDocument();
+    paste([png()]);
+    expect(api.addDraftImage).not.toHaveBeenCalled();
   });
 });
