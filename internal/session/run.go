@@ -317,6 +317,9 @@ func (s *Service) ensureProcessLocked(ctx context.Context, r *run, n *notes) err
 	}
 
 	r.proc = p
+	if err := p.Initialize(); err != nil {
+		s.log.Warn("initialize claude failed", "task", r.task.ID, "stage", r.rec.Stage, "error", err)
+	}
 	r.procChoice = r.rec.Choice
 	r.procGen++
 	r.stopping = false

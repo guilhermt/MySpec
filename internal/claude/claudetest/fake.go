@@ -56,6 +56,8 @@ const (
 	// EnvPidFile is the file the spawn scenario writes the pid of the process it
 	// started to.
 	EnvPidFile = "MYSPEC_FAKE_PIDFILE"
+	// EnvStop set to "refuse" makes the fake refuse every stop_task.
+	EnvStop = "MYSPEC_FAKE_STOP"
 )
 
 // The effort levels every model of Catalog that takes one accepts.
@@ -113,6 +115,13 @@ const (
 	Narration       = "Two things don't match: the card says weekly, the spec says daily."
 	NarrationAnswer = "Which one is right?"
 )
+
+// BackgroundOutput is the whole output the fake keeps on disk for a command or
+// monitor that ends, which the task_notification names in output_file.
+const BackgroundOutput = "line 1\nline 2\n"
+
+// taskTail is what get_task_output answers for a task the fake knows.
+const taskTail = "tick 1\ntick 2\n"
 
 // fakeSignature is the signature the thinking blocks of the fake carry.
 const fakeSignature = "c2lnbmF0dXJl"
@@ -290,7 +299,18 @@ type fake struct {
 	responses  chan response
 	interrupts chan string
 	seq        int
+	seqMu      sync.Mutex
 	turns      int
+	liveMu     sync.Mutex
+	live       map[string]liveTask
+}
+
+// liveTask is a task in the background the fake launched and has not ended.
+type liveTask struct {
+	runID       string
+	toolUseID   string
+	description string
+	taskType    string
 }
 
 func newFake(id string) *fake {
@@ -302,6 +322,7 @@ func newFake(id string) *fake {
 		users:      make(chan string, queueSize),
 		responses:  make(chan response, queueSize),
 		interrupts: make(chan string, queueSize),
+		live:       map[string]liveTask{},
 	}
 }
 
@@ -321,6 +342,7 @@ type stdinLine struct {
 	} `json:"message"`
 	Request struct {
 		Subtype string `json:"subtype"`
+		TaskID  string `json:"task_id"`
 	} `json:"request"`
 	Response struct {
 		RequestID string          `json:"request_id"`
@@ -365,6 +387,12 @@ func (f *fake) read(input *os.File) {
 				f.interrupts <- line.RequestID
 			case "list_models":
 				f.answerListModels(line.RequestID)
+			case "initialize":
+				f.answer(line.RequestID, map[string]any{})
+			case "stop_task":
+				f.stopTask(line.RequestID, line.Request.TaskID)
+			case "get_task_output":
+				f.taskOutput(line.RequestID, line.Request.TaskID)
 			}
 		case "control_response":
 			f.responses <- response{requestID: line.Response.RequestID, body: line.Response.Response}
@@ -372,6 +400,81 @@ func (f *fake) read(input *os.File) {
 			fail("unexpected input line type %q", line.Type)
 		}
 	}
+}
+
+// answer emits a successful control response.
+func (f *fake) answer(requestID string, body map[string]any) {
+	f.emitRaw(map[string]any{
+		"type": "control_response",
+		"response": map[string]any{
+			"subtype":    "success",
+			"request_id": requestID,
+			"response":   body,
+		},
+	})
+}
+
+// answerError emits a failed control response.
+func (f *fake) answerError(requestID, message string) {
+	f.emitRaw(map[string]any{
+		"type": "control_response",
+		"response": map[string]any{
+			"subtype":    "error",
+			"request_id": requestID,
+			"error":      message,
+		},
+	})
+}
+
+// stopTask stops a task the way the CLI does: the task is killed and reported
+// stopped, the set of background tasks loses it, and only then comes the answer.
+// EnvStop "refuse" refuses instead.
+func (f *fake) stopTask(requestID, taskID string) {
+	if os.Getenv(EnvStop) == "refuse" {
+		f.answerError(requestID, "Task cannot be stopped")
+		return
+	}
+	f.liveMu.Lock()
+	task, ok := f.live[taskID]
+	f.liveMu.Unlock()
+	if !ok {
+		f.answerError(requestID, "No task found with ID: "+taskID)
+		return
+	}
+	f.emit(map[string]any{
+		"type":    "system",
+		"subtype": "task_updated",
+		"task_id": taskID,
+		"run_id":  task.runID,
+		"patch":   map[string]any{"status": "killed"},
+	})
+	f.taskNotification(taskID, task.runID, task.toolUseID, "stopped", task.description)
+	f.liveMu.Lock()
+	rest := make([]string, 0, len(f.live))
+	for id := range f.live {
+		rest = append(rest, id)
+	}
+	f.liveMu.Unlock()
+	slices.Sort(rest)
+	f.backgroundTasks(rest...)
+	f.answer(requestID, map[string]any{})
+}
+
+// taskOutput answers the end of the output of a task the fake launched.
+func (f *fake) taskOutput(requestID, taskID string) {
+	f.liveMu.Lock()
+	_, ok := f.live[taskID]
+	f.liveMu.Unlock()
+	if !ok {
+		f.answerError(requestID, "No task found with ID: "+taskID)
+		return
+	}
+	f.answer(requestID, map[string]any{"output": taskTail, "total_bytes": len(taskTail), "truncated": false})
+}
+
+// outputFile is where the fake keeps the whole output of a task.
+func (f *fake) outputFile(taskID string) string {
+	return filepath.Join(os.TempDir(), fmt.Sprintf("myspec-fake-%d-%s.output", os.Getpid(), taskID))
 }
 
 // answerListModels answers the catalog request the way EnvCatalog asks it to:
@@ -419,6 +522,10 @@ func (f *fake) answerListModels(requestID string) {
 //     with no task_notification.
 //   - bg_promoted: a command that starts in the foreground and is moved to the
 //     background; gate 1 ends it and the agent resumes for it.
+//   - bg_live_agent: a subagent and a command that never ends; gate 1 is the
+//     narration and a Read of the subagent, gate 2 its report and its end.
+//   - bg_permission_sub: a subagent that asks permission for a command, in the
+//     turn that launched it; no gates.
 func (f *fake) play(scenario string) int {
 	for text := range f.users {
 		f.turns++
@@ -461,6 +568,10 @@ func (f *fake) play(scenario string) int {
 			f.bgLevelTurn(text)
 		case "bg_promoted":
 			f.bgPromotedTurn(text)
+		case "bg_live_agent":
+			f.bgLiveAgentTurn(text)
+		case "bg_permission_sub":
+			f.bgPermissionSubTurn(text)
 		case "bash_fail":
 			f.bashFailTurn(text)
 		case "writer":
@@ -693,32 +804,42 @@ func (f *fake) permissionTurn() {
 // askBash asks the app to allow a Bash call, with the suggestions of a rule for
 // the command and of access to the folder.
 func (f *fake) askBash(toolUseID string, input map[string]any) {
+	f.askBashAs(toolUseID, input, "")
+}
+
+// askBashAs is askBash for a subagent, named by its task id; "" asks as the
+// main thread.
+func (f *fake) askBashAs(toolUseID string, input map[string]any, agentID string) {
 	requestID := f.nextID("req")
+	request := map[string]any{
+		"subtype":      "can_use_tool",
+		"tool_name":    "Bash",
+		"display_name": "Bash",
+		"input":        input,
+		"description":  "Create hello.txt with the word hi",
+		"permission_suggestions": []any{
+			map[string]any{
+				"type":        "addRules",
+				"rules":       []any{map[string]any{"toolName": "Bash", "ruleContent": BashCommand}},
+				"behavior":    "allow",
+				"destination": "localSettings",
+			},
+			map[string]any{
+				"type":        "addDirectories",
+				"directories": []any{"/tmp/fake"},
+				"destination": "session",
+			},
+		},
+		"blocked_path": ReadPath,
+		"tool_use_id":  toolUseID,
+	}
+	if agentID != "" {
+		request["agent_id"] = agentID
+	}
 	f.emitRaw(map[string]any{
 		"type":       "control_request",
 		"request_id": requestID,
-		"request": map[string]any{
-			"subtype":      "can_use_tool",
-			"tool_name":    "Bash",
-			"display_name": "Bash",
-			"input":        input,
-			"description":  "Create hello.txt with the word hi",
-			"permission_suggestions": []any{
-				map[string]any{
-					"type":        "addRules",
-					"rules":       []any{map[string]any{"toolName": "Bash", "ruleContent": BashCommand}},
-					"behavior":    "allow",
-					"destination": "localSettings",
-				},
-				map[string]any{
-					"type":        "addDirectories",
-					"directories": []any{"/tmp/fake"},
-					"destination": "session",
-				},
-			},
-			"blocked_path": ReadPath,
-			"tool_use_id":  toolUseID,
-		},
+		"request":    request,
 	})
 }
 
@@ -1061,8 +1182,9 @@ func (f *fake) bgLaunchAgent(index int, messageID, description, name string) (ta
 
 // bgLaunchCommand starts a command in the background, as bgLaunchAgent does a
 // subagent.
-func (f *fake) bgLaunchCommand(index int, messageID string) {
-	taskID, runID := fmt.Sprintf("task-%d-cmd", f.turns), fmt.Sprintf("run-%d-cmd", f.turns)
+func (f *fake) bgLaunchCommand(index int, messageID string) (taskID string) {
+	taskID = fmt.Sprintf("task-%d-cmd", f.turns)
+	runID := fmt.Sprintf("run-%d-cmd", f.turns)
 	toolUseID := f.nextID("toolu")
 	f.streamToolUse(index, messageID, toolUseID, "Bash", map[string]any{
 		"command":           "npm run dev",
@@ -1071,6 +1193,7 @@ func (f *fake) bgLaunchCommand(index int, messageID string) {
 	})
 	f.taskStarted(taskID, runID, toolUseID, BackgroundServer, "local_bash", true)
 	f.toolResult(toolUseID, "Command running in background with ID: "+taskID+".")
+	return taskID
 }
 
 // bgClose says the text of the turn and closes it.
@@ -1237,6 +1360,65 @@ func (f *fake) bgPermissionTurn(text string) {
 	}
 	f.bgReturn(a, aRun, aUse, BackgroundAgentAText)
 	f.bgEmptyTurn(aRun)
+}
+
+// bgLiveAgentTurn launches a subagent and a command and ends the turn. Gate 1:
+// the subagent narrates and reads a file. Gate 2: it reports and returns, and
+// the agent resumes for it. The command lives until a stop_task.
+func (f *fake) bgLiveAgentTurn(text string) {
+	n := f.turns
+	gate := func(k int) bool { return f.awaitGate(fmt.Sprintf("%d-%d", n, k)) }
+
+	f.emitInit()
+	f.status()
+	m1 := f.nextID("msg")
+	f.messageStart(m1)
+	a, aRun, aUse := f.bgLaunchAgent(0, m1, BackgroundAgentA, "a")
+	cmd := f.bgLaunchCommand(1, m1)
+	f.bgClose(m1, 2, text)
+
+	if !gate(1) {
+		return
+	}
+	subMessageID := f.nextID("msg")
+	readID := f.nextID("toolu")
+	f.assistantTextWithParent(subMessageID, SubagentNarration, aUse)
+	f.toolUseWithParent(subMessageID, readID, "Read", map[string]any{"file_path": ReadPath}, aUse)
+	f.toolResultWithParent(readID, "1\thi\n", aUse)
+
+	if !gate(2) {
+		return
+	}
+	f.assistantTextWithParent(f.nextID("msg"), SubagentReport, aUse)
+	f.backgroundTasks(cmd)
+	f.bgReturn(a, aRun, aUse, BackgroundAgentAText)
+}
+
+// bgPermissionSubTurn launches a subagent whose Bash call asks permission in the
+// turn that launched it, and ends the turn with the answer.
+func (f *fake) bgPermissionSubTurn(text string) {
+	f.emitInit()
+	f.status()
+	m1 := f.nextID("msg")
+	f.messageStart(m1)
+	a, _, aUse := f.bgLaunchAgent(0, m1, BackgroundAgentA, "a")
+
+	toolUseID := f.nextID("toolu")
+	input := map[string]any{"command": BashCommand, "description": "Create hello.txt with the word hi"}
+	f.toolUseWithParent(f.nextID("msg"), toolUseID, "Bash", input, aUse)
+	f.askBashAs(toolUseID, input, a)
+
+	answer, ok := f.awaitPermission()
+	if !ok {
+		return
+	}
+	reply := text
+	if answer.Behavior == "allow" {
+		f.toolResultWithParent(toolUseID, "(Bash completed with no output)", aUse)
+	} else {
+		reply = "denied: " + answer.Message
+	}
+	f.bgClose(m1, 1, reply)
 }
 
 // bgSilentTurn launches a subagent and ends the turn. Gate 1: the subagent
@@ -1701,6 +1883,11 @@ func (f *fake) status() {
 
 // taskStarted announces a task the agent launched.
 func (f *fake) taskStarted(taskID, runID, toolUseID, description, taskType string, backgrounded bool) {
+	if backgrounded {
+		f.liveMu.Lock()
+		f.live[taskID] = liveTask{runID: runID, toolUseID: toolUseID, description: description, taskType: taskType}
+		f.liveMu.Unlock()
+	}
 	f.emit(map[string]any{
 		"type":            "system",
 		"subtype":         "task_started",
@@ -1714,7 +1901,22 @@ func (f *fake) taskStarted(taskID, runID, toolUseID, description, taskType strin
 }
 
 // taskNotification announces the end of a task.
+// A command or monitor in the background leaves its whole output in a file.
 func (f *fake) taskNotification(taskID, runID, toolUseID, status, summary string) {
+	f.liveMu.Lock()
+	task, ok := f.live[taskID]
+	delete(f.live, taskID)
+	f.liveMu.Unlock()
+
+	outputFile := ""
+	if ok && task.taskType == "local_bash" {
+		outputFile = f.outputFile(taskID)
+		//nolint:gosec // G703: the path is the fake's own, under the temp dir
+		if err := os.WriteFile(outputFile, []byte(BackgroundOutput), 0o600); err != nil {
+			fail("write task output: %v", err)
+			outputFile = ""
+		}
+	}
 	f.emit(map[string]any{
 		"type":        "system",
 		"subtype":     "task_notification",
@@ -1723,7 +1925,7 @@ func (f *fake) taskNotification(taskID, runID, toolUseID, status, summary string
 		"tool_use_id": toolUseID,
 		"status":      status,
 		"summary":     summary,
-		"output_file": "",
+		"output_file": outputFile,
 	})
 }
 
@@ -1773,6 +1975,9 @@ func (f *fake) emitRaw(line map[string]any) {
 
 // nextID mints an id that is unique within this run and readable in a failure.
 func (f *fake) nextID(prefix string) string {
+	f.seqMu.Lock()
+	defer f.seqMu.Unlock()
+
 	f.seq++
 	return fmt.Sprintf("%s_fake_%d", prefix, f.seq)
 }

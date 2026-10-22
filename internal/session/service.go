@@ -37,6 +37,9 @@ type Process interface {
 	Events() <-chan claude.Event
 	Send(text string, imgs []claude.Image) error
 	Interrupt() (string, error)
+	Initialize() error
+	StopTask(taskID string) (string, error)
+	TaskOutput(taskID string) (string, error)
 	Respond(requestID string, resp claude.PermissionResponse) error
 	CloseInput() error
 	Terminate() error

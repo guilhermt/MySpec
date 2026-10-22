@@ -671,3 +671,142 @@ func TestStartReportsACancelledContext(t *testing.T) {
 		t.Errorf("Start() = %v, want context.Canceled", err)
 	}
 }
+
+// answerOf reads the control response with the given request id.
+func answerOf(t *testing.T, p *claude.Process, requestID string) *claude.ControlResponseEvent {
+	t.Helper()
+
+	return nextEvent(t, p, "the answer to "+requestID, func(e claude.Event) bool {
+		return e.ControlResponse != nil && e.ControlResponse.Response.RequestID == requestID
+	}).ControlResponse
+}
+
+// startedTask sends a message to a bg_command process and returns the id of the
+// command it leaves running.
+func startedTask(t *testing.T, p *claude.Process) string {
+	t.Helper()
+
+	send(t, p, "serve")
+	return nextEvent(t, p, "the task start", func(e claude.Event) bool {
+		return e.TaskStarted != nil
+	}).TaskStarted.TaskID
+}
+
+func TestInitializeIsAnswered(t *testing.T) {
+	t.Parallel()
+	p := start(t, fakeConfig(t, "echo"))
+
+	if err := p.Initialize(); err != nil {
+		t.Fatalf("Initialize() = %v, want nil", err)
+	}
+	send(t, p, "hi")
+	nextEvent(t, p, "the success answer", func(e claude.Event) bool {
+		return e.ControlResponse != nil && e.ControlResponse.Response.Subtype == "success"
+	})
+}
+
+func TestStopTaskEndsTheTaskBeforeItAnswers(t *testing.T) {
+	t.Parallel()
+	p := start(t, fakeConfig(t, "bg_command"))
+	taskID := startedTask(t, p)
+
+	requestID, err := p.StopTask(taskID)
+	if err != nil {
+		t.Fatalf("StopTask() = %v, want nil", err)
+	}
+	if requestID == "" {
+		t.Error("StopTask() returned an empty request id, want one to match the answer")
+	}
+	end := nextEvent(t, p, "the end of the task", func(e claude.Event) bool {
+		return e.TaskNotification != nil
+	}).TaskNotification
+	if end.TaskID != taskID || end.Status != "stopped" {
+		t.Errorf("task notification = %+v, want %s stopped", end, taskID)
+	}
+	if end.OutputFile == "" {
+		t.Error("OutputFile is empty, want the file of a command")
+	}
+	if answer := answerOf(t, p, requestID); answer.Response.Subtype != "success" {
+		t.Errorf("answer = %+v, want success", answer.Response)
+	}
+}
+
+func TestStopTaskOfAnUnknownTaskIsAnError(t *testing.T) {
+	t.Parallel()
+	p := start(t, fakeConfig(t, "echo"))
+
+	requestID, err := p.StopTask("nope")
+	if err != nil {
+		t.Fatalf("StopTask() = %v, want nil", err)
+	}
+	answer := answerOf(t, p, requestID).Response
+	if answer.Subtype != "error" || answer.Error != "No task found with ID: nope" {
+		t.Errorf("answer = %+v, want the error of an unknown task", answer)
+	}
+}
+
+func TestStopTaskRefusedByTheCLI(t *testing.T) {
+	t.Parallel()
+	cfg := fakeConfig(t, "bg_command")
+	cfg.Env = append(cfg.Env, claudetest.EnvStop+"=refuse")
+	p := start(t, cfg)
+	taskID := startedTask(t, p)
+
+	requestID, err := p.StopTask(taskID)
+	if err != nil {
+		t.Fatalf("StopTask() = %v, want nil", err)
+	}
+	answer := answerOf(t, p, requestID).Response
+	if answer.Subtype != "error" || answer.Error != "Task cannot be stopped" {
+		t.Errorf("answer = %+v, want the refusal", answer)
+	}
+}
+
+func TestTaskOutputReadsTheEndOfARunningCommand(t *testing.T) {
+	t.Parallel()
+	p := start(t, fakeConfig(t, "bg_command"))
+	taskID := startedTask(t, p)
+
+	requestID, err := p.TaskOutput(taskID)
+	if err != nil {
+		t.Fatalf("TaskOutput() = %v, want nil", err)
+	}
+	answer := answerOf(t, p, requestID).Response
+	if answer.Subtype != "success" {
+		t.Fatalf("answer = %+v, want success", answer)
+	}
+	got, err := claude.DecodeTaskOutput(answer.Response)
+	if err != nil {
+		t.Fatalf("DecodeTaskOutput() = %v, want nil", err)
+	}
+	want := claude.TaskOutput{Output: "tick 1\ntick 2\n", TotalBytes: 14}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("TaskOutput mismatch (-want +got):\n%s", diff)
+	}
+
+	requestID, err = p.TaskOutput("nope")
+	if err != nil {
+		t.Fatalf("TaskOutput() = %v, want nil", err)
+	}
+	if answer := answerOf(t, p, requestID).Response; answer.Subtype != "error" {
+		t.Errorf("answer = %+v, want an error for an unknown task", answer)
+	}
+}
+
+func TestTaskRequestsFailOnceTheInputIsClosed(t *testing.T) {
+	t.Parallel()
+	p := start(t, fakeConfig(t, "echo"))
+	if err := p.CloseInput(); err != nil {
+		t.Fatalf("CloseInput() = %v, want nil", err)
+	}
+
+	if err := p.Initialize(); !errors.Is(err, claude.ErrInputClosed) {
+		t.Errorf("Initialize() = %v, want ErrInputClosed", err)
+	}
+	if _, err := p.StopTask("x"); !errors.Is(err, claude.ErrInputClosed) {
+		t.Errorf("StopTask() = %v, want ErrInputClosed", err)
+	}
+	if _, err := p.TaskOutput("x"); !errors.Is(err, claude.ErrInputClosed) {
+		t.Errorf("TaskOutput() = %v, want ErrInputClosed", err)
+	}
+}

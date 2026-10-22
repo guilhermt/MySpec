@@ -165,6 +165,32 @@ func (p *Process) Interrupt() (string, error) {
 	return requestID, nil
 }
 
+// Initialize writes an initialize control request. The answer is not awaited.
+func (p *Process) Initialize() error {
+	if err := p.write(InitializeRequest(uuid.NewString())); err != nil {
+		return fmt.Errorf("send initialize request: %w", err)
+	}
+	return nil
+}
+
+// StopTask writes a stop_task control request and returns its request id.
+func (p *Process) StopTask(taskID string) (string, error) {
+	requestID := uuid.NewString()
+	if err := p.write(StopTaskRequest(requestID, taskID)); err != nil {
+		return "", fmt.Errorf("send stop_task request: %w", err)
+	}
+	return requestID, nil
+}
+
+// TaskOutput writes a get_task_output control request and returns its request id.
+func (p *Process) TaskOutput(taskID string) (string, error) {
+	requestID := uuid.NewString()
+	if err := p.write(TaskOutputRequest(requestID, taskID)); err != nil {
+		return "", fmt.Errorf("send get_task_output request: %w", err)
+	}
+	return requestID, nil
+}
+
 // Respond writes a control response to a can_use_tool request.
 func (p *Process) Respond(requestID string, resp PermissionResponse) error {
 	line, err := ControlResponse(requestID, resp)

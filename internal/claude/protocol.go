@@ -90,6 +90,8 @@ type TaskNotificationEvent struct {
 	ToolUseID string `json:"tool_use_id"`
 	Status    string `json:"status"`  // completed | failed | stopped
 	Summary   string `json:"summary"` // `Background command "X" failed with exit code 1`, ...
+	// OutputFile is the whole output on disk; "" when the CLI keeps none.
+	OutputFile string `json:"output_file"`
 }
 
 // TaskUpdatedEvent is a change of a task the CLI started; the app reads only
@@ -275,6 +277,7 @@ type ControlRequestEvent struct {
 		SuppressAlwaysAllowRule bool            `json:"suppress_always_allow_rule"`
 		DefaultToNo             bool            `json:"default_to_no"`
 		RequiresUserInteraction bool            `json:"requires_user_interaction"`
+		AgentID                 string          `json:"agent_id"` // the subagent that asks; "" for the main thread
 	} `json:"request"`
 }
 
@@ -432,7 +435,10 @@ func UserMessage(text string, images []Image) []byte {
 
 // controlRequestBody is the request field of a control request the app makes.
 type controlRequestBody struct {
-	Subtype string `json:"subtype"`
+	Subtype               string `json:"subtype"`
+	TaskID                string `json:"task_id,omitempty"`
+	PerTaskStopAffordance bool   `json:"perTaskStopAffordance,omitempty"`
+	ForwardSubagentText   bool   `json:"forwardSubagentText,omitempty"`
 }
 
 // controlRequestLine is a whole control request line written to the CLI.
@@ -458,6 +464,56 @@ func ListModelsRequest(requestID string) []byte {
 		RequestID: requestID,
 		Request:   controlRequestBody{Subtype: "list_models"},
 	})
+}
+
+// InitializeRequest sets the options of the session. perTaskStopAffordance
+// spares the work in the background from an interrupt and turns on stop_task;
+// forwardSubagentText sends the speech of the subagents.
+func InitializeRequest(requestID string) []byte {
+	return mustMarshal("initialize request", controlRequestLine{
+		Type:      "control_request",
+		RequestID: requestID,
+		Request: controlRequestBody{
+			Subtype:               "initialize",
+			PerTaskStopAffordance: true,
+			ForwardSubagentText:   true,
+		},
+	})
+}
+
+// StopTaskRequest asks the CLI to stop one task it runs.
+func StopTaskRequest(requestID, taskID string) []byte {
+	return mustMarshal("stop_task request", controlRequestLine{
+		Type:      "control_request",
+		RequestID: requestID,
+		Request:   controlRequestBody{Subtype: "stop_task", TaskID: taskID},
+	})
+}
+
+// TaskOutputRequest asks the CLI for the end of the output of a task it runs.
+func TaskOutputRequest(requestID, taskID string) []byte {
+	return mustMarshal("get_task_output request", controlRequestLine{
+		Type:      "control_request",
+		RequestID: requestID,
+		Request:   controlRequestBody{Subtype: "get_task_output", TaskID: taskID},
+	})
+}
+
+// TaskOutput is the end of the output of a command or monitor the CLI runs,
+// as get_task_output answers it.
+type TaskOutput struct {
+	Output     string `json:"output"` // at most the last 8 KiB, escapes included
+	TotalBytes int    `json:"total_bytes"`
+	Truncated  bool   `json:"truncated"`
+}
+
+// DecodeTaskOutput reads the success payload of a get_task_output answer.
+func DecodeTaskOutput(raw json.RawMessage) (TaskOutput, error) {
+	var out TaskOutput
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return TaskOutput{}, fmt.Errorf("decode get_task_output answer: %w", err)
+	}
+	return out, nil
 }
 
 // ModelEntry is one model of the catalog the CLI reports with list_models.
