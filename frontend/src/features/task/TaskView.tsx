@@ -1,5 +1,7 @@
 import { type KeyboardEvent, type ReactNode, useEffect, useRef } from "react";
 import { ArrivalFocus } from "@/components/ArrivalFocus";
+import { BackgroundWork } from "@/components/BackgroundWork";
+import { backgroundOf } from "@/components/background-work";
 import { PanelLayout } from "@/components/system/AuxPanel";
 import { useNow } from "@/features/attention/useNow";
 import { Conversation } from "@/features/chat/Conversation";
@@ -321,6 +323,11 @@ export function TaskView({ taskId }: TaskViewProps) {
               replyWaiting={screenSituationKindOf(task, stepTab) === "reply"}
             />
             <TaskRequest task={task} tab={stepTab} />
+            <BackgroundWork
+              itemId={task.id}
+              stage={task.stage}
+              tasks={backgroundOf(task.running, task.stage)}
+            />
             <TaskComposer task={task} tab={stepTab} stage={task.stage} session={task} />
           </>
         )}

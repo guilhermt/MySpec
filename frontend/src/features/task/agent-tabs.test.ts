@@ -4,6 +4,7 @@ import type { PullRequest, Situation, Step, TaskSummary } from "@/lib/wails";
 import {
   makePRImplementer,
   makePullRequest,
+  makeRunningTask,
   makeSituation,
   makeStep,
   makeStepReviewer,
@@ -217,6 +218,84 @@ describe("agentTabsOf", () => {
     ["a step done", { status: "done" }],
   ])("has no tabs on %s", (_, overrides) => {
     expect(agentTabsOf(task(), step(overrides), "implementer", NOW)).toBeNull();
+  });
+});
+
+describe("the background work of a tab", () => {
+  const background = (stage: string, count: number) => [
+    {
+      stage,
+      tasks: Array.from({ length: count }, (_, index) => makeRunningTask({ taskId: `t${index}` })),
+    },
+  ];
+
+  it("says background on the tab out of view, and counts it in the label", () => {
+    const tabs = agentTabsOf(
+      task([], { running: background("step_review:3", 2) }),
+      step({ reviewer: reviewer("waiting") }),
+      "implementer",
+      NOW,
+    );
+
+    expect(tabs?.[1]).toMatchObject({
+      word: "background",
+      label: "Reviewer: idle, 2 in the background",
+    });
+    expect(tabs?.[0]).toMatchObject({ word: "", label: "Implementer: idle" });
+  });
+
+  it("says nothing on the chosen tab, but keeps the count in its label", () => {
+    const tabs = agentTabsOf(
+      task([], { running: background("step:3", 1) }),
+      step({ reviewer: reviewer("waiting") }),
+      "implementer",
+      NOW,
+    );
+
+    expect(tabs?.[0]).toMatchObject({ word: "", label: "Implementer: idle, 1 in the background" });
+  });
+
+  it("leaves the word to a situation of the tab", () => {
+    const asking = makeSituation({
+      id: "p",
+      kind: "permission",
+      place: { kind: "step", stage: "", step: 3 },
+      startedAt: MINUTES_AGO(4),
+    });
+    const tabs = agentTabsOf(
+      task([asking], { running: background("step:3", 1) }),
+      step({ reviewer: reviewer("waiting") }),
+      "reviewer",
+      NOW,
+    );
+
+    expect(tabs?.[0]?.word).toBe("waits");
+  });
+
+  it("tells the pull request conversations apart by their stage", () => {
+    const pr = makePullRequest({
+      status: "awaiting_decision",
+      sessionStage: "pr_review",
+      sessionStatus: "waiting",
+      implementer: makePRImplementer(),
+    });
+    const tabs = prAgentTabsOf(
+      makeTask({
+        stage: "pr",
+        pr,
+        conversations: [{ stage: "pr_review", startedAt: MINUTES_AGO(60) }],
+        running: background("pr_fix", 3),
+      }),
+      pr,
+      "reviewer",
+      NOW,
+    );
+
+    expect(tabs?.[0]).toMatchObject({
+      word: "background",
+      label: expect.stringContaining("3 in the background"),
+    });
+    expect(tabs?.[1]?.label).not.toContain("background");
   });
 });
 

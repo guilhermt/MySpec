@@ -12,6 +12,7 @@ import {
   makePRImplementer,
   makePullRequest,
   makeReviewSummary,
+  makeRunningTask,
   makeStep,
   makeStepReviewer,
   makeTask,
@@ -130,6 +131,7 @@ describe("workingSession", () => {
     turnStartedAt,
     actionLabel: "",
     actionTarget: "",
+    background: 0,
   });
 
   it("is the working session whose turn started first", () => {
@@ -161,5 +163,28 @@ describe("workingSession", () => {
 
   it("is null when none works", () => {
     expect(workingSession([session("Implementer", false, "")], NOW)).toBeNull();
+  });
+});
+
+describe("the background count of a session", () => {
+  it("counts the background tasks of the stage of each conversation", () => {
+    const task = implementing({
+      steps: [
+        makeStep({
+          number: 1,
+          status: "agent_review",
+          reviewer: makeStepReviewer({ sessionStage: "step_review:1" }),
+        }),
+      ],
+      running: [
+        {
+          stage: "step:1",
+          tasks: [makeRunningTask(), makeRunningTask({ taskId: "b" })],
+        },
+        { stage: "step_review:1", tasks: [makeRunningTask({ background: false })] },
+      ],
+    });
+
+    expect(taskSessions(task).map((session) => session.background)).toEqual([2, 0]);
   });
 });

@@ -1,3 +1,5 @@
+import { BackgroundWork } from "@/components/BackgroundWork";
+import { backgroundOf } from "@/components/background-work";
 import { tabId } from "@/components/system/Tabs";
 import { Conversation } from "@/features/chat/Conversation";
 import { AGENT_CONVERSATION } from "@/features/task/AgentTabs";
@@ -47,6 +49,7 @@ function StepConversation({ task, step, view }: StepConversationProps) {
         replyWaiting={screenSituationKindOf(task, tab) === "reply"}
       />
       <TaskRequest task={task} tab={tab} />
+      <BackgroundWork itemId={task.id} stage={stage} tasks={backgroundOf(task.running, stage)} />
       {hasComposer(view) && (
         <TaskComposer
           key={`composer:${stage}`}

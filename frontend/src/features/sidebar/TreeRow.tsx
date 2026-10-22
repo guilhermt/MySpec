@@ -2,6 +2,7 @@ import { memo, useEffect, useRef } from "react";
 import { ContextMeter } from "@/components/system/ContextMeter";
 import { useFits } from "@/components/system/fits";
 import { Icon } from "@/components/system/Icon";
+import { ICONS } from "@/components/system/icons";
 import { ITEM_ICONS, TONE_GLYPHS } from "@/components/system/item-parts";
 import { Kbd } from "@/components/system/Kbd";
 import { Shimmer } from "@/components/system/Shimmer";
@@ -36,6 +37,24 @@ const LINE_PRESSED = "group-active/row:text-ink-2";
 // The invisible copy a cell measures its long content with. The row clips it, so a long copy never
 // widens the tree into a sideways scroll.
 const MEASURE = "invisible absolute whitespace-nowrap";
+
+// BackgroundCount is what runs in the background, on the right of line 3: the icon and the number.
+// The accessible name of the row already says it.
+function BackgroundCount({ count, selected }: { count: number; selected: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        MICRO,
+        "flex items-center gap-(--space-0-5) tabular-nums",
+        selected ? "text-ink-3" : FAINT,
+      )}
+    >
+      <Icon icon={ICONS.background} size="xs" />
+      {count}
+    </span>
+  );
+}
 
 /** TreeRowView is a task, a review or a discussion of the tree, in its three lines. */
 function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: TreeRowProps) {
@@ -230,12 +249,34 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
                 {work.long}
               </span>
             </span>
-            <span className="justify-self-end">
+            <span className="flex items-center gap-(--space-2) justify-self-end">
               <ContextMeter
                 percent={work.contextPercent}
                 compact={narrow}
                 detail={`Context window ${Math.round(work.contextPercent)}% used`}
               />
+              {row.background > 0 && <BackgroundCount count={row.background} selected={selected} />}
+            </span>
+          </>
+        )}
+        {/* What runs in the background while the agent does not work. */}
+        {work?.kind === "background" && (
+          <>
+            <span />
+            <span
+              ref={line3}
+              className={cn(
+                "relative min-w-0 truncate text-(length:--text-meta) leading-(--leading-meta) text-ink-3",
+                selected && LINE_PRESSED,
+              )}
+            >
+              {!narrow && line3Fits ? work.long : work.short}
+              <span ref={line3Measure} aria-hidden="true" className={MEASURE}>
+                {work.long}
+              </span>
+            </span>
+            <span className="flex items-center justify-self-end">
+              <BackgroundCount count={work.count} selected={selected} />
             </span>
           </>
         )}

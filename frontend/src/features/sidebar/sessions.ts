@@ -1,5 +1,12 @@
+import { countOf } from "@/components/background-work";
 import { currentStepOf, hasStepSession, stepStage } from "@/features/task/step-status";
-import type { DiscussionSummary, ReviewSummary, SessionStatus, TaskSummary } from "@/lib/wails";
+import type {
+  DiscussionSummary,
+  ReviewSummary,
+  SessionStatus,
+  SessionTasks,
+  TaskSummary,
+} from "@/lib/wails";
 import { asSessionStatus, asTaskStage } from "@/lib/wails";
 
 /** ItemSession is one conversation of an item: who it is, how it is and what it runs now. */
@@ -17,6 +24,8 @@ export interface ItemSession {
   turnStartedAt: string;
   actionLabel: string;
   actionTarget: string;
+  /** background is how many tasks run in the background in the conversation. */
+  background: number;
 }
 
 /** SessionBlock is the part of a DTO that tells the state of a session. */
@@ -31,7 +40,12 @@ interface SessionBlock {
   actionTarget: string;
 }
 
-function itemSession(role: string, stage: string, block: SessionBlock): ItemSession {
+function itemSession(
+  role: string,
+  stage: string,
+  block: SessionBlock,
+  running: readonly SessionTasks[] | null,
+): ItemSession {
   const status = asSessionStatus(block.sessionStatus);
   return {
     role,
@@ -45,6 +59,7 @@ function itemSession(role: string, stage: string, block: SessionBlock): ItemSess
     turnStartedAt: block.turnStartedAt,
     actionLabel: block.actionLabel,
     actionTarget: block.actionTarget,
+    background: countOf(running, stage),
   };
 }
 
@@ -52,21 +67,23 @@ function itemSession(role: string, stage: string, block: SessionBlock): ItemSess
 export function taskSessions(task: TaskSummary): ItemSession[] {
   switch (asTaskStage(task.stage)) {
     case "prd":
-      return [itemSession("PRD agent", task.stage, task)];
+      return [itemSession("PRD agent", task.stage, task, task.running)];
     case "tech_spec":
-      return [itemSession("Tech spec agent", task.stage, task)];
+      return [itemSession("Tech spec agent", task.stage, task, task.running)];
     case "plan":
-      return [itemSession("Plan agent", task.stage, task)];
+      return [itemSession("Plan agent", task.stage, task, task.running)];
     case "one_shot":
-      return [itemSession("Planning agent", task.stage, task)];
+      return [itemSession("Planning agent", task.stage, task, task.running)];
     case "implementation": {
       const step = currentStepOf(task);
       const sessions: ItemSession[] = [];
       if (step !== null && hasStepSession(step)) {
-        sessions.push(itemSession("Implementer", stepStage(step.number), task));
+        sessions.push(itemSession("Implementer", stepStage(step.number), task, task.running));
       }
       if (step?.reviewer) {
-        sessions.push(itemSession("Reviewer", step.reviewer.sessionStage, step.reviewer));
+        sessions.push(
+          itemSession("Reviewer", step.reviewer.sessionStage, step.reviewer, task.running),
+        );
       }
       return sessions;
     }
@@ -79,11 +96,12 @@ export function taskSessions(task: TaskSummary): ItemSession[] {
             pr.sessionStage === "pr_review" ? "Reviewer" : "PR agent",
             pr.sessionStage,
             pr,
+            task.running,
           ),
         );
       }
       if (pr?.implementer) {
-        sessions.push(itemSession("Implementer", "pr_fix", pr.implementer));
+        sessions.push(itemSession("Implementer", "pr_fix", pr.implementer, task.running));
       }
       return sessions;
     }
@@ -92,14 +110,16 @@ export function taskSessions(task: TaskSummary): ItemSession[] {
 
 /** reviewSessions is the conversation of a review, once it opened. */
 export function reviewSessions(review: ReviewSummary): ItemSession[] {
-  return review.sessionStage === "" ? [] : [itemSession("Reviewer", review.sessionStage, review)];
+  return review.sessionStage === ""
+    ? []
+    : [itemSession("Reviewer", review.sessionStage, review, review.running)];
 }
 
 /** discussionSessions is the conversation of a discussion, once it opened. */
 export function discussionSessions(discussion: DiscussionSummary): ItemSession[] {
   return discussion.sessionStage === ""
     ? []
-    : [itemSession("Discussion agent", discussion.sessionStage, discussion)];
+    : [itemSession("Discussion agent", discussion.sessionStage, discussion, discussion.running)];
 }
 
 /**

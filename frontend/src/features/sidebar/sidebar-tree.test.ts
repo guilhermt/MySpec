@@ -32,6 +32,7 @@ import {
   makeReviewFinding,
   makeReviewPass,
   makeReviewSummary,
+  makeRunningTask,
   makeSituation,
   makeState,
   makeStep,
@@ -1059,6 +1060,70 @@ describe("line 3", () => {
 
   it("is null while the agent does not work", () => {
     expect(taskRow(makeState(), taskWith({ stage: "prd" }), NOW).line3).toBeNull();
+  });
+});
+
+describe("line 3 with work in the background", () => {
+  const ofStage = (stage: string, tasks = [makeRunningTask({ kind: "monitor" })]) => [
+    { stage, tasks },
+  ];
+  const idle = { sessionStatus: "waiting", turnRunning: false, processRunning: true };
+
+  it("says what runs when the agent does not work, with the count", () => {
+    const row = taskRow(
+      makeState(),
+      taskWith({ ...idle, stage: "prd", running: ofStage("prd") }),
+      NOW,
+    );
+
+    expect(row.line3).toEqual({
+      kind: "background",
+      long: "1 monitor running",
+      short: "1 monitor running",
+      count: 1,
+    });
+    expect(row.background).toBe(1);
+    expect(row.label).toContain("1 running in the background.");
+  });
+
+  it("keeps the action of the agent that works and adds the count", () => {
+    const row = taskRow(
+      makeState(),
+      taskWith({
+        stage: "prd",
+        sessionStatus: "working",
+        turnRunning: true,
+        processRunning: true,
+        turnStartedAt: THREE_MINUTES_AGO,
+        actionLabel: "Editing",
+        actionTarget: "a/b.go",
+        running: ofStage("prd", [
+          makeRunningTask(),
+          makeRunningTask({ taskId: "x", kind: "command" }),
+        ]),
+      }),
+      NOW,
+    );
+
+    expect(row.line3).toMatchObject({ kind: "work", verb: "Editing" });
+    expect(row.background).toBe(2);
+  });
+
+  it("is absent without background tasks, or for tasks the turn waits for", () => {
+    const none = taskRow(makeState(), taskWith({ ...idle, stage: "prd" }), NOW);
+    const foreground = taskRow(
+      makeState(),
+      taskWith({
+        ...idle,
+        stage: "prd",
+        running: ofStage("prd", [makeRunningTask({ background: false })]),
+      }),
+      NOW,
+    );
+
+    expect(none.line3).toBeNull();
+    expect(none.background).toBe(0);
+    expect(foreground.line3).toBeNull();
   });
 });
 

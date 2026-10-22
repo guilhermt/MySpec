@@ -317,13 +317,13 @@ Um gatilho com o chevron que gira e o conteúdo que abre no lugar, sem estilo pr
 
 | | |
 |---|---|
-| Anatomia | Grade de três colunas: glifo (16 px), texto, borda direita. Linha 1: tipo e nome; meta ou `Ctrl J` à direita. Linha 2: glifo de estado, o que pede ou onde está (sempre com a posição), `+N`, e o relógio. Linha 3, só com o agente rodando: a ação em mono, verbo primeiro, e o medidor |
+| Anatomia | Grade de três colunas: glifo (16 px), texto, borda direita. Linha 1: tipo e nome; meta ou `Ctrl J` à direita. Linha 2: glifo de estado, o que pede ou onde está (sempre com a posição), `+N`, e o relógio. Linha 3, com o agente rodando: a ação em mono, verbo primeiro, e o medidor; sem ele e com trabalho em segundo plano, o que roda (`1 monitor running`). À direita da linha 3, com trabalho em segundo plano, o ícone `background` e o número |
 | Variantes | Os estados do glifo; task, One-Shot, review e discussão pelo glifo de tipo; o aviso de clone `◇`; itens de épico recuados em `--epic-indent`, ao longo da guia |
 | Estados | Hover: `--veil-hover` e o meta aparece se couber. Foco: anel por fora. Pressionado: `--veil-press`. Aberta: `--brand-veil` com anel `--brand-ring` colado e o glifo de tipo em `--brand-ink`. Carregando: `checking GitHub` com brilho. Erro: trilho `--error-rail` na borda esquerda. Situação nova: pisca `--state-wait-veil` duas vezes |
 | Largura | O nome ocupa as colunas 2 e 3. O meta aparece no hover, no foco e na linha aberta só quando cabe ao lado do nome inteiro; quando não cabe, vai para o tooltip do nome (`Rotate API keys without downtime · api#441`) e continua no nome acessível. `Ctrl J` fica sempre visível. Abaixo de 330 px de lateral, rótulos curtos e o medidor só com a porcentagem. A linha 3 passa à forma curta sempre que a longa não cabe |
 | Tokens | `--surface-sidebar`, `--ink-1..4`, `--weight-name`, `--weight-name-waiting`, `--brand-veil`, `--brand-ring`, `--veil-hover`, `--veil-press`, `--row-pad-y`, `--row-gap`, `--line-gap`, `--tree-pad`, `--epic-indent`, `--sidebar-guide` |
 | Teclado | A árvore é uma parada de Tab. ↑↓, `Home`, `End`, ← recolhe ou sobe, → expande, `Enter` abre |
-| Acessibilidade | `treeitem` com `aria-level`, `aria-current="page"` na aberta; o nome acessível é a frase inteira (tipo, nome, cada situação com lugar e tempo, posição, quem trabalha, a ação e o contexto, o meta, e `Ctrl+J opens this next.` na linha da marca). A árvore é `Active items`, dentro da lateral `aside` `Work`. O texto e a gravidade de cada estado estão em [structure.md](./structure.md) §2 |
+| Acessibilidade | `treeitem` com `aria-level`, `aria-current="page"` na aberta; o nome acessível é a frase inteira (tipo, nome, cada situação com lugar e tempo, posição, quem trabalha, a ação e o contexto, o meta, `N running in the background` depois da ação, e `Ctrl+J opens this next.` na linha da marca). A árvore é `Active items`, dentro da lateral `aside` `Work`. O texto e a gravidade de cada estado estão em [structure.md](./structure.md) §2 |
 | Faça | Deixe o nome inteiro sempre que houver espaço, também em hover e em foco |
 | Não faça | Não reordene a árvore sozinha. Não esconda a posição para caber. Não pinte `--ink-4` sobre a linha aberta: o meta sobe para `--ink-3` |
 
@@ -478,9 +478,9 @@ A seção de um painel tem a legenda em caixa alta de `--text-caps`, que a nomei
 |---|---|
 | Anatomia | Duas abas de texto, `Implementer` e `Reviewer`, alinhadas à esquerda na coluna da conversa (`--measure-conversation`), sobre um fio `--line-1`, sem fundo, altura `--size-tab`. Cada uma: o glifo da sessão (`--glyph-sm`) e o nome |
 | Quando existem | Num step `Agent`, da primeira passada do revisor até o commit, e na etapa de PR, da primeira passada do review da pull request em diante, também depois do review, com as duas conversas somente leitura. A mesma forma serve às abas de uma task arquivada (**PRD**, **Tech spec**, **Steps · 6**, **Pull request**; **One-Shot document** numa One-Shot), sem glifo |
-| Estados | Escolhida: `--ink-1`, peso 600, sublinhada por `--border-2` em `--brand`. A outra: `--ink-3`; hover em `--ink-1`. A de fora diz a palavra só quando espera ou falhou: `Implementer · waits` em `--state-wait`, `Reviewer · error` em `--state-error`, com o que pede no tooltip. Foco: anel por dentro. Desabilitada com a razão (`Reviewer · starts with pass 1` num step; na PR, `Implementer · starts with round 1`, `Implementer · starts with Apply approved` ou `Implementer · never started`). Carregando (`starting`, spinner) |
+| Estados | Escolhida: `--ink-1`, peso 600, sublinhada por `--border-2` em `--brand`. A outra: `--ink-3`; hover em `--ink-1`. A de fora diz a palavra só quando espera, falhou ou tem trabalho em segundo plano e nada mais a pedir: `Implementer · waits` em `--state-wait`, `Reviewer · error` em `--state-error`, `Reviewer · background` em `--ink-3`, sem tom, com o que pede no tooltip. Foco: anel por dentro. Desabilitada com a razão (`Reviewer · starts with pass 1` num step; na PR, `Implementer · starts with round 1`, `Implementer · starts with Apply approved` ou `Implementer · never started`). Carregando (`starting`, spinner) |
 | Teclado | `tablist` com uma parada de Tab, a escolhida; ←→ trocam de aba e abrem a conversa; o produto nunca troca de aba sozinho |
-| Acessibilidade | `role="tab"`, `aria-selected`, `aria-controls` para a conversa; o nome acessível e o tooltip `<Nome>: <estado>` (`Implementer: waits for you: permission, for 4 minutes`, `Reviewer: working`) |
+| Acessibilidade | `role="tab"`, `aria-selected`, `aria-controls` para a conversa; o nome acessível e o tooltip `<Nome>: <estado>` (`Implementer: waits for you: permission, for 4 minutes`, `Reviewer: working`), com `, N in the background` quando a conversa tem trabalho em segundo plano (`Reviewer: working, 2 in the background`) |
 | Faça | Mantenha o glifo da outra conversa visível: é ele que aponta onde mais se espera |
 | Não faça | Não ponha chip de tempo na aba |
 
@@ -498,6 +498,19 @@ A seção de um painel tem a legenda em caixa alta de `--text-caps`, que a nomei
 | Acessibilidade | `role="region"` com o nome `Request`; o texto de estado em `role="status"` |
 | Faça | Deixe a ação que resolve aqui e em nenhum outro lugar, fora as exceções de [structure.md](./structure.md) §3 |
 | Não faça | Não repita o comando nem a pergunta: a barra é a chamada, o cartão é o conteúdo |
+
+### Trabalho em segundo plano · `components/BackgroundWork`
+
+| | |
+|---|---|
+| Anatomia | Uma linha entre a barra do pedido e o compositor, na coluna da conversa (`--measure-conversation`), de `--size-control-sm`, sem fundo, com o véu de hover: o chevron (dobrado ou aberto), o ícone `background` em `--ink-4`, `Background` em `--ink-2` 500 e o resumo em `--ink-3` (`· 2 agents · 1 command · 1 monitor`, só os tipos presentes, no singular ou no plural). Abre no lugar, abaixo da linha, uma lista em `--surface-0` com `--radius-md`: um item por tarefa e, no pé, **Stop all**. Cada item tem, à esquerda, o ícone do tipo (`subagent` num agente, `terminal` num comando, `woke` num monitor) e a palavra do tipo em `--ink-3`; o nome em `--ink-1`; num agente, o progresso (`14 actions · Reading …/service.go`, ou `Thinking…` sem ação); à direita a duração correndo e **Stop** `xs` secundário |
+| Quando existe | Só com tarefa em segundo plano na conversa que está na tela. Sem nenhuma, a linha não existe (só a região dos anúncios fica montada). Cada conversa tem a sua: a aba de fora mostra o que roda nela pela palavra `background` |
+| Estados | Dobrada e aberta. **Parando**: **Stopping…** desabilitado no item, vindo do estado (e de imediato, ao clicar), e em **Stop all** enquanto alguma está parando. **Parada recusada**: `Couldn't stop it · <motivo>` em `--state-error`, sob o item. O clique num agente abre a conversa dele; num comando ou monitor, abre ou dobra a saída ao vivo sob o item. Quando o último item sai, a lista fecha |
+| Teclado | A linha é uma parada de Tab entre a barra do pedido e o compositor; `Enter` e `Space` abrem e fecham. Aberta, o Tab passa por cada item (um botão), pelo **Stop** dele e, no fim, por **Stop all**. Quando o último item sai com o foco na linha ou na lista, o foco vai ao compositor |
+| Acessibilidade | A linha é um `button` com `aria-expanded` e o nome `Background work: 2 agents, 1 command. Show the list` (ou `Hide the list`); a lista é uma `list` chamada `Background work`; **Stop** se chama `Stop agent "<nome>"`; a duração é `aria-hidden`. Uma região `status` sempre montada diz o que entrou e o que saiu (`Agent "Survey the repository" started in the background.`, `Command "Run the dev server" ended.`), nunca a duração |
+| Tokens | `--size-control-sm`, `--surface-0`, `--radius-md`, `--ink-1..4`, `--state-error`, `--veil-hover` |
+| Faça | Deixe a lista dobrada por padrão: o resumo já diz o que roda |
+| Não faça | Não ponha a linha na conversa nem mostre nela uma tarefa que o turno espera |
 
 ### Miniatura de imagem · `ImageThumb`, `ImageStrip`
 

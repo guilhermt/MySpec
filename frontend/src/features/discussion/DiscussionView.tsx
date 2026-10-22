@@ -1,5 +1,7 @@
 import { type KeyboardEvent, useEffect, useMemo, useRef } from "react";
 import { ArrivalFocus } from "@/components/ArrivalFocus";
+import { BackgroundWork } from "@/components/BackgroundWork";
+import { backgroundOf } from "@/components/background-work";
 import { PanelLayout } from "@/components/system/AuxPanel";
 import { Conversation } from "@/features/chat/Conversation";
 import { voiceOf } from "@/features/chat/markers";
@@ -160,6 +162,11 @@ export function DiscussionView({ discussionId }: DiscussionViewProps) {
           <>
             <DiscussionConversation discussion={discussion} />
             <DiscussionRequest discussion={discussion} />
+            <BackgroundWork
+              itemId={discussion.id}
+              stage={DISCUSSION_STAGE}
+              tasks={backgroundOf(discussion.running, DISCUSSION_STAGE)}
+            />
             <DiscussionComposer discussion={discussion} />
           </>
         )}

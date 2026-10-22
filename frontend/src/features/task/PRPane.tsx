@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { BackgroundWork } from "@/components/BackgroundWork";
+import { backgroundOf } from "@/components/background-work";
 import { tabId } from "@/components/system/Tabs";
 import { Conversation } from "@/features/chat/Conversation";
 import { MarkerLine } from "@/features/chat/entries/MarkerLine";
@@ -123,6 +125,11 @@ export function PRPane({ task, pr, tab }: PRPaneProps) {
               replyWaiting={screenSituationKindOf(task, tab) === "reply"}
             />
             {request}
+            <BackgroundWork
+              itemId={task.id}
+              stage={stage}
+              tasks={backgroundOf(task.running, stage)}
+            />
             {hasComposer(view) && !closed && (
               <TaskComposer
                 key={`composer:${stage}`}

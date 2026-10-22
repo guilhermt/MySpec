@@ -1,5 +1,7 @@
 import { type KeyboardEvent, type ReactNode, useEffect, useRef } from "react";
 import { ArrivalFocus } from "@/components/ArrivalFocus";
+import { BackgroundWork } from "@/components/BackgroundWork";
+import { backgroundOf } from "@/components/background-work";
 import { PanelLayout } from "@/components/system/AuxPanel";
 import { Conversation } from "@/features/chat/Conversation";
 import { voiceOf } from "@/features/chat/markers";
@@ -183,6 +185,11 @@ export function ReviewView({ reviewId }: ReviewViewProps) {
             <CheckStrip review={review} />
             <ReviewConversation review={review} />
             <ReviewRequest review={review} />
+            <BackgroundWork
+              itemId={review.id}
+              stage={REVIEW_STAGE}
+              tasks={backgroundOf(review.running, REVIEW_STAGE)}
+            />
             {hasReviewComposer(review) && <ReviewComposer review={review} />}
           </>
         )}
