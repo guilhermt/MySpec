@@ -15,6 +15,7 @@ import (
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/session"
 )
@@ -45,13 +46,15 @@ var errSession = errors.New("session: the model is not there")
 // memSessions is an in-memory discussionflow.Sessions recording what it was
 // asked to do.
 type memSessions struct {
-	mu        sync.Mutex
-	summaries map[session.Key]session.Summary
-	infos     map[session.Key]session.TaskInfo
-	stored    map[session.Key]bool // the sessions ever created, open or not
-	calls     []string
-	startErr  error // returned by Start alone
-	markers   []session.MarkerEntry
+	mu            sync.Mutex
+	summaries     map[session.Key]session.Summary
+	infos         map[session.Key]session.TaskInfo
+	stored        map[session.Key]bool // the sessions ever created, open or not
+	calls         []string
+	startErr      error // returned by Start alone
+	transcripts   map[session.Key]session.Transcript
+	transcriptErr error // returned by Transcript
+	markers       []session.MarkerEntry
 }
 
 func newSessions() *memSessions {
@@ -154,6 +157,31 @@ func (m *memSessions) Exists(_ context.Context, k session.Key) (bool, error) {
 	defer m.mu.Unlock()
 
 	return m.stored[k], nil
+}
+
+func (m *memSessions) Transcript(_ context.Context, k session.Key) (session.Transcript, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.transcriptErr != nil {
+		return session.Transcript{}, m.transcriptErr
+	}
+	return m.transcripts[k], nil
+}
+
+// say puts a message of the user, with its images, in the conversation of a
+// discussion.
+func (m *memSessions) say(id string, imgs ...images.Image) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	k := session.Key{TaskID: id, Stage: session.DiscussionStage}
+	if m.transcripts == nil {
+		m.transcripts = map[session.Key]session.Transcript{}
+	}
+	t := m.transcripts[k]
+	t.Entries = append(t.Entries, session.Entry{Kind: session.KindUser, User: &session.UserEntry{Images: imgs}})
+	m.transcripts[k] = t
 }
 
 // idle leaves the conversation of a discussion resting, which is what an

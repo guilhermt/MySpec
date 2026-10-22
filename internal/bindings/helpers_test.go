@@ -27,6 +27,7 @@ import (
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/git/gittest"
+	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreport"
@@ -394,7 +395,8 @@ type fixture struct {
 	faults         *faults
 
 	mu          sync.Mutex
-	identities  map[string]repository.Identity // by clone path
+	draftImages func(ctx context.Context, id string) []images.Image // what the flow says is unseen
+	identities  map[string]repository.Identity                      // by clone path
 	fakeEnv     []string
 	events      []bindings.TranscriptEvent
 	corrections map[string]int // the most the session of a task ever counted
@@ -569,7 +571,7 @@ func newFixture(t *testing.T) *fixture {
 	})
 	f.tasks = bindings.NewTaskService(
 		f.taskSvc, f.sessions, f.flow, f.models, f.reviewModes, f.repositories, f.boards, f.cardImages, f.editor.open,
-		f.discussions.DocumentOfCard, f.hasConversation, log,
+		f.discussions.DocumentOfCard, f.unseenDraftImages, f.hasConversation, log,
 	)
 	f.boardService = bindings.NewBoardService(f.boards, f.discussions.DocumentOfCard, f.cardImages, log)
 	f.reviewSvc = bindings.NewReviewService(
@@ -579,6 +581,19 @@ func newFixture(t *testing.T) *fixture {
 		f.discussionFlow, f.discussions, f.repositories, f.cardImages, log,
 	)
 	return f
+}
+
+// unseenDraftImages is the draft images of the discussions the test chose: what
+// the flow answers for them.
+func (f *fixture) unseenDraftImages(ctx context.Context, id string) []images.Image {
+	f.mu.Lock()
+	read := f.draftImages
+	f.mu.Unlock()
+
+	if read == nil {
+		return nil
+	}
+	return read(ctx, id)
 }
 
 // hasConversation says whether an id names a review of a pull request or a

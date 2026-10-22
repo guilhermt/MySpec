@@ -57,6 +57,7 @@ type TaskService struct {
 	cardImages      *cardimages.Service
 	editor          Editor
 	documents       func(owner, name string, number int) (string, bool)
+	draftImages     func(ctx context.Context, discussionID string) []images.Image
 	hasConversation func(id string) bool
 	log             *slog.Logger
 }
@@ -66,7 +67,9 @@ type TaskService struct {
 // conversation the frontend asks this service for, a review of a pull request
 // or a discussion; without it, only tasks have one. documents is the
 // understanding of the discussion that wrote a card, which the task created
-// from it starts with; without it, no card has one.
+// from it starts with; without it, no card has one. draftImages are the images
+// the user put in the drafts of a discussion that the agent hasn't seen, which
+// go with the next message of the discussion; without it, none go.
 func NewTaskService(
 	tasks *task.Service,
 	sessions *session.Service,
@@ -78,6 +81,7 @@ func NewTaskService(
 	cardImages *cardimages.Service,
 	editor Editor,
 	documents func(owner, name string, number int) (string, bool),
+	draftImages func(ctx context.Context, discussionID string) []images.Image,
 	hasConversation func(id string) bool,
 	log *slog.Logger,
 ) *TaskService {
@@ -98,6 +102,7 @@ func NewTaskService(
 		cardImages:      cardImages,
 		editor:          editor,
 		documents:       documents,
+		draftImages:     draftImages,
 		hasConversation: hasConversation,
 		log:             log,
 	}
@@ -895,20 +900,26 @@ func (s *TaskService) RefreshPR(taskID string) error {
 }
 
 // SendMessage queues a message for the agent, delivered right away when the
-// session is free. images are the ones attached to it, in base64.
-func (s *TaskService) SendMessage(taskID, stage, text string, images []string) error {
+// session is free. attached are the images of it, in base64. A message of a
+// discussion also takes the images the user put in the drafts that the agent
+// hasn't seen.
+func (s *TaskService) SendMessage(taskID, stage, text string, attached []string) error {
 	s, err := s.late.resolve(s)
 	if err != nil {
 		return err
 	}
-	uploads, err := uploadsOf(images)
+	uploads, err := uploadsOf(attached)
 	if err != nil {
 		return s.fail("SendMessage", err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 
-	if err := s.sessions.Send(ctx, session.Key{TaskID: taskID, Stage: stage}, text, uploads); err != nil {
+	var stored []images.Image
+	if stage == string(prompts.StageDiscussion) && s.draftImages != nil {
+		stored = s.draftImages(ctx, taskID)
+	}
+	if err := s.sessions.Send(ctx, session.Key{TaskID: taskID, Stage: stage}, text, uploads, stored); err != nil {
 		return s.fail("SendMessage", err)
 	}
 	return nil

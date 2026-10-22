@@ -492,8 +492,10 @@ func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 
 // Send queues a message and delivers it right away when the session is free.
 // The uploads are the images attached to it; they are checked and stored with
-// the session before anything is queued.
-func (s *Service) Send(ctx context.Context, k Key, text string, uploads [][]byte) error {
+// the session before anything is queued. The stored images are already in the
+// folder of artifacts of the item, the ones of the drafts of a discussion: they
+// go after the uploads and don't make a message on their own.
+func (s *Service) Send(ctx context.Context, k Key, text string, uploads [][]byte, stored []images.Image) error {
 	text = strings.TrimSpace(text)
 	if text == "" && len(uploads) == 0 {
 		return ErrEmptyMessage
@@ -520,13 +522,21 @@ func (s *Service) Send(ctx context.Context, k Key, text string, uploads [][]byte
 			return err
 		}
 	}
-	if err := s.enqueueLocked(ctx, r, &UserEntry{Text: text, Images: saved}, n); err != nil {
+	if err := s.enqueueLocked(ctx, r, &UserEntry{Text: text, Images: slices.Concat(saved, stored)}, n); err != nil {
 		images.Remove(r.task.ArtifactsDir, saved)
 		return err
 	}
 	r.stopTimer(&r.idleTimer)
 	s.flushPendingLocked(ctx, r, n)
 	return nil
+}
+
+// ownImages are the images whose files belong to the message: the ones of a
+// draft stay, because the drafts still reference them.
+func ownImages(imgs []images.Image) []images.Image {
+	return slices.DeleteFunc(slices.Clone(imgs), func(img images.Image) bool {
+		return img.Origin == images.OriginDraft
+	})
 }
 
 // userUploads is an upload for each image the user attached.
@@ -640,7 +650,7 @@ func (s *Service) RemovePending(ctx context.Context, k Key, entryID string) erro
 		return err
 	}
 	if removed.User != nil {
-		images.Remove(r.task.ArtifactsDir, removed.User.Images)
+		images.Remove(r.task.ArtifactsDir, ownImages(removed.User.Images))
 	}
 	n.remove(k, entryID)
 	n.state(k)

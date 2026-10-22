@@ -1244,6 +1244,24 @@ func TestRenderAppendsTheSectionsOfADiscussionInOrder(t *testing.T) {
 	if !strings.Contains(got, keepsItsID) {
 		t.Errorf("Render() of an edited prompt = %q, want the drafts format to carry %q", got, keepsItsID)
 	}
+	for _, rule := range imageRules {
+		if !strings.Contains(got, rule) {
+			t.Errorf("Render() of a discussion = %q, want the drafts format to carry the rule %q", got, rule)
+		}
+	}
+	if i, j := strings.Index(got, imageRules[0]), strings.Index(got, "Any deviation makes the file unreadable"); i < 0 || j < i {
+		t.Errorf("Render() of a discussion: the image rules are at %d and the closing paragraph at %d, want the rules first", i, j)
+	}
+}
+
+// imageRules are the parts of the drafts format about images: the reference,
+// when to put one in a draft, the links of the card an update changes and the
+// request of the user.
+var imageRules = []string{
+	"Every image you saw in this discussion, given at its start, in a message or put in a draft by the user, came with a label that ends with its reference, `images/<id>.<ext>`: use exactly that reference.",
+	"Put an image in a draft only when it explains the demand of the card",
+	"keep the ones that still belong as those same links, never as their reference",
+	"When the user asks for an image to be taken out of a draft or put in one, rewrite the draft as with any other change.",
 }
 
 func TestRenderAppendsTheDraftsFormatOfADiscussionWithoutABoard(t *testing.T) {
