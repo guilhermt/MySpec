@@ -148,7 +148,7 @@ function task(of: BoardCard): TaskSummary {
     pausedAt: "",
     actionLabel: "",
     actionTarget: "",
-    contextPercent: 0,
+    contextPercent: null,
     pendingCount: 0,
     corrections: 0,
     hasPrd: false,

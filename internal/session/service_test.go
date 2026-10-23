@@ -30,8 +30,8 @@ func TestStartEchoesTheRenderedPrompt(t *testing.T) {
 	f.start(t, info)
 
 	sum := f.waitIdle(t, prd("t1"))
-	if sum.ContextPercent <= 0 {
-		t.Errorf("ContextPercent = %d, want > 0 after the first result", sum.ContextPercent)
+	if sum.ContextPercent == nil || *sum.ContextPercent <= 0 {
+		t.Errorf("ContextPercent = %v, want > 0 after the first result", sum.ContextPercent)
 	}
 	if sum.TurnRunning || sum.PendingCount != 0 || sum.LastError != "" {
 		t.Errorf("summary = %+v, want an idle session", sum)
@@ -350,8 +350,6 @@ func TestCompactionAddsAMarker(t *testing.T) {
 	f := newFixture(t, "compact")
 	f.start(t, taskInfo(t, "t1"))
 	f.waitIdle(t, prd("t1"))
-	// The first compaction comes before any result gives the window; the
-	// second knows it.
 	f.send(t, prd("t1"), "again")
 	f.waitEntries(t, prd("t1"), session.KindMarker, 3)
 	f.waitIdle(t, prd("t1"))
@@ -359,7 +357,7 @@ func TestCompactionAddsAMarker(t *testing.T) {
 	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
 	want := []*session.MarkerEntry{
 		{Type: session.MarkerStageStarted, Stage: string(prompts.StagePRD)},
-		{Type: session.MarkerCompacted, PreTokens: 120000},
+		{Type: session.MarkerCompacted, PreTokens: 120000, Percent: 120000 * 100 / claudetest.ContextWindow},
 		{Type: session.MarkerCompacted, PreTokens: 120000, Percent: 120000 * 100 / claudetest.ContextWindow},
 	}
 	got := make([]*session.MarkerEntry, 0, len(markers))

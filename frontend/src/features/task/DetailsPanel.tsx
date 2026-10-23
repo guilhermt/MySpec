@@ -1,13 +1,14 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ExternalLink } from "@/components/ExternalLink";
 import { FACTS, Fact } from "@/components/Facts";
-import { AUX_PANEL_COLUMN_MIN, AuxPanel } from "@/components/system/AuxPanel";
+import { AuxPanel } from "@/components/system/AuxPanel";
 import { ChecksList } from "@/components/system/ChecksList";
 import { Chip } from "@/components/system/Chip";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import { PanelRow } from "@/components/system/PanelRow";
 import { PanelSection } from "@/components/system/PanelSection";
+import { getAdjustedPanelWidth, panelGeometry } from "@/components/system/panel-width";
 import { Spinner } from "@/components/system/Spinner";
 import { StateGlyph } from "@/components/system/StateGlyph";
 import { Tooltip } from "@/components/system/Tooltip";
@@ -355,7 +356,7 @@ function ConversationRow({ task, conversation, now, nested }: ConversationRowPro
     }
     // The panel covers the conversation below the width from which it stands beside it.
     const width = document.querySelector<HTMLElement>(".main-area")?.clientWidth ?? 0;
-    setAsked({ covering: width < AUX_PANEL_COLUMN_MIN });
+    setAsked({ covering: !panelGeometry("item", width, getAdjustedPanelWidth()).beside });
     void readEarlierConversation(task.id, stage);
   };
 

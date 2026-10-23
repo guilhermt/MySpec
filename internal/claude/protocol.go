@@ -245,18 +245,6 @@ type ResultEvent struct {
 	NumTurns       int           `json:"num_turns"`
 	TotalCostUSD   float64       `json:"total_cost_usd"`
 	Usage          Usage         `json:"usage"`
-	ModelUsage     map[string]struct {
-		ContextWindow int `json:"contextWindow"`
-	} `json:"modelUsage"`
-}
-
-// ContextWindow is the largest window among the models used, 0 when unknown.
-func (r ResultEvent) ContextWindow() int {
-	largest := 0
-	for _, usage := range r.ModelUsage {
-		largest = max(largest, usage.ContextWindow)
-	}
-	return largest
 }
 
 // ControlRequestEvent is what the CLI asks the app to decide, on the stdout
@@ -440,6 +428,7 @@ type controlRequestBody struct {
 	TaskID                string `json:"task_id,omitempty"`
 	PerTaskStopAffordance bool   `json:"perTaskStopAffordance,omitempty"`
 	ForwardSubagentText   bool   `json:"forwardSubagentText,omitempty"`
+	Detail                string `json:"detail,omitempty"`
 }
 
 // controlRequestLine is a whole control request line written to the CLI.
@@ -515,6 +504,33 @@ func DecodeTaskOutput(raw json.RawMessage) (TaskOutput, error) {
 		return TaskOutput{}, fmt.Errorf("decode get_task_output answer: %w", err)
 	}
 	return out, nil
+}
+
+// ContextUsageRequest asks the CLI for the use of the context window, which it
+// answers without calling the API.
+func ContextUsageRequest(requestID string) []byte {
+	return mustMarshal("get_context_usage request", controlRequestLine{
+		Type:      "control_request",
+		RequestID: requestID,
+		Request:   controlRequestBody{Subtype: "get_context_usage", Detail: "summary"},
+	})
+}
+
+// ContextUsage is what get_context_usage answers that the app reads: the
+// tokens in the context, the CLI's estimate before the first response, and
+// the whole window of the model.
+type ContextUsage struct {
+	TotalTokens  int `json:"totalTokens"`
+	RawMaxTokens int `json:"rawMaxTokens"`
+}
+
+// DecodeContextUsage reads the success payload of a get_context_usage answer.
+func DecodeContextUsage(raw json.RawMessage) (ContextUsage, error) {
+	var usage ContextUsage
+	if err := json.Unmarshal(raw, &usage); err != nil {
+		return ContextUsage{}, fmt.Errorf("decode get_context_usage answer: %w", err)
+	}
+	return usage, nil
 }
 
 // ModelEntry is one model of the catalog the CLI reports with list_models.

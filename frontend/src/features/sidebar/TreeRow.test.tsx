@@ -141,7 +141,7 @@ describe("TreeRow", () => {
         }),
       ),
       "agent",
-      "task add-login. agent working, Step 3/7. Implementer working for 3 minutes: Reading go.mod. context 0% used. web#42.",
+      "task add-login. agent working, Step 3/7. Implementer working for 3 minutes: Reading go.mod. web#42.",
     ],
     [
       "the app preparing a step",
@@ -377,6 +377,24 @@ describe("TreeRow", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "40");
+  });
+
+  it("draws … for the context before the first reading", () => {
+    renderRow(
+      rowOf(
+        task({
+          steps: stepAt("implementing"),
+          sessionStatus: "working",
+          turnRunning: true,
+          turnStartedAt: THREE_MINUTES_AGO,
+          contextPercent: null,
+          actionLabel: "Reading",
+          actionTarget: "go.mod",
+        }),
+      ),
+    );
+
+    expect(screen.getByRole("meter")).toHaveTextContent("…");
   });
 
   it("draws a publication on line 2 and the situation that stands on line 3, with its chip", () => {

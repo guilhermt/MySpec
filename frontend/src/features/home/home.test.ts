@@ -97,13 +97,13 @@ describe("continueItem", () => {
       "a review",
       { kind: "review", id: "review-1" } as const,
       "Reviews",
-      "Continue: pull request review Add login. agent working, Pass 1. Reviewer working for less than a minute: thinking. context 0% used. web#31. Reviews",
+      "Continue: pull request review Add login. agent working, Pass 1. Reviewer working for less than a minute: thinking. web#31. Reviews",
     ],
     [
       "a discussion",
       { kind: "discussion", id: "disc-1" } as const,
       "Platform Roadmap",
-      "Continue: discussion Pricing. agent working, Discussing. Discussion agent working for less than a minute: thinking. context 0% used. #12. Platform Roadmap",
+      "Continue: discussion Pricing. agent working, Discussing. Discussion agent working for less than a minute: thinking. #12. Platform Roadmap",
     ],
   ])("says where %s lives", (_, location, crumbs, label) => {
     const state: State = {

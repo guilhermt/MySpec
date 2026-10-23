@@ -367,9 +367,6 @@ func TestStartStreamsAWholeTurn(t *testing.T) {
 	if closing[0].Subtype != "success" || closing[0].IsError {
 		t.Errorf("result = %q, is_error = %v, want success and false", closing[0].Subtype, closing[0].IsError)
 	}
-	if got := closing[0].ContextWindow(); got != claudetest.ContextWindow {
-		t.Errorf("ContextWindow() = %d, want %d", got, claudetest.ContextWindow)
-	}
 	if got := closing[0].Usage.ContextTokens(); got == 0 {
 		t.Error("ContextTokens() = 0, want the tokens of the turn")
 	}
@@ -827,6 +824,28 @@ func TestTaskOutputReadsTheEndOfARunningCommand(t *testing.T) {
 	}
 	if answer := answerOf(t, p, requestID).Response; answer.Subtype != "error" {
 		t.Errorf("answer = %+v, want an error for an unknown task", answer)
+	}
+}
+
+func TestContextUsageReadsTheWindowOfTheModel(t *testing.T) {
+	t.Parallel()
+	p := start(t, fakeConfig(t, "echo"))
+
+	requestID, err := p.ContextUsage()
+	if err != nil {
+		t.Fatalf("ContextUsage() = %v, want nil", err)
+	}
+	answer := answerOf(t, p, requestID).Response
+	if answer.Subtype != "success" {
+		t.Fatalf("answer = %+v, want success", answer)
+	}
+	got, err := claude.DecodeContextUsage(answer.Response)
+	if err != nil {
+		t.Fatalf("DecodeContextUsage() = %v, want nil", err)
+	}
+	want := claude.ContextUsage{TotalTokens: claudetest.ContextEstimate, RawMaxTokens: claudetest.ContextWindow}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("ContextUsage mismatch (-want +got):\n%s", diff)
 	}
 }
 

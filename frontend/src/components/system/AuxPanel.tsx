@@ -1,17 +1,33 @@
-import type { ReactNode } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
 import { ICONS, type IconGlyph } from "./icons";
+import { PanelResizer } from "./PanelResizer";
 import { Presence } from "./Presence";
+import {
+  type PanelFamily,
+  type PanelGeometry,
+  panelGeometry,
+  useAdjustedPanelWidth,
+} from "./panel-width";
 import { ScrollArea } from "./ScrollArea";
 import { Tooltip } from "./Tooltip";
 
-/**
- * AUX_PANEL_COLUMN_MIN is the width of main area, in px, from which a panel stands beside the reading
- * column instead of covering it: the mirror of the container query of .aux-panel in globals.css.
- */
-export const AUX_PANEL_COLUMN_MIN = 1120;
+/** PanelAreaContext is the width of the PanelLayout a panel is in, which its geometry is worked out from. */
+const PanelAreaContext = createContext(0);
+
+/** usePanelGeometry is the geometry of a panel of a family in the PanelLayout it is in. */
+export function usePanelGeometry(family: PanelFamily): PanelGeometry {
+  return panelGeometry(family, useContext(PanelAreaContext), useAdjustedPanelWidth());
+}
 
 /** panelTriggerId is the id of the button that opens the panel id, where the focus returns when it closes. */
 export function panelTriggerId(id: string): string {
@@ -56,14 +72,30 @@ export interface PanelLayoutProps {
 }
 
 /**
- * PanelLayout puts a panel beside the reading column from 1120px of main area, and over it below.
+ * PanelLayout puts a panel beside the reading column while the column keeps the room of the panel's
+ * family, and over it otherwise. It measures its width, which the panel works out its own from.
  * A panel that closes stays for its exit.
  */
 export function PanelLayout({ children, panel }: PanelLayoutProps) {
+  const root = useRef<HTMLDivElement>(null);
+  const [area, setArea] = useState(0);
+  useLayoutEffect(() => {
+    const element = root.current;
+    if (element === null) {
+      return;
+    }
+    setArea(element.clientWidth);
+    const observer = new ResizeObserver(() => setArea(element.clientWidth));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <div className="relative flex min-h-0 flex-1">
+    <div ref={root} className="relative flex min-h-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col overflow-clip">{children}</div>
-      <Presence>{panel}</Presence>
+      <PanelAreaContext value={area}>
+        <Presence>{panel}</Presence>
+      </PanelAreaContext>
     </div>
   );
 }
@@ -79,8 +111,15 @@ export interface AuxPanelProps {
 export function AuxPanel({ id, title, onClose, children }: AuxPanelProps) {
   // Not modal: the focus moves freely between the panel and the column, and
   // Esc is the global shortcut's, in the order of the layers of the app.
+  const geometry = usePanelGeometry("item");
   return (
-    <aside aria-label={title} className="aux-panel flex flex-col">
+    <aside
+      aria-label={title}
+      style={{ width: geometry.width }}
+      data-beside={geometry.beside ? "" : undefined}
+      className="aux-panel flex shrink-0 flex-col"
+    >
+      <PanelResizer geometry={geometry} />
       {/* The line under the head is drawn inside it, as in the place header, to keep it on whole pixels. */}
       <div className="flex h-(--size-head) shrink-0 items-center justify-between gap-(--space-2) pr-(--space-2) pl-(--space-4) shadow-[inset_0_calc(var(--border)*-1)_0_var(--line-1)]">
         <h2 className="truncate text-(length:--text-ui) leading-(--leading-ui) font-semibold text-ink-1">

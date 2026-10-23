@@ -287,7 +287,7 @@ type AgentSession struct {
 	// runs.
 	ActionLabel    string `json:"actionLabel"`
 	ActionTarget   string `json:"actionTarget"`
-	ContextPercent int    `json:"contextPercent"`
+	ContextPercent *int   `json:"contextPercent"` // nil before the first reading
 	PendingCount   int    `json:"pendingCount"`
 	LastError      string `json:"lastError"`
 }
@@ -438,7 +438,7 @@ type PullRequest struct {
 	// runs.
 	ActionLabel    string `json:"actionLabel"`
 	ActionTarget   string `json:"actionTarget"`
-	ContextPercent int    `json:"contextPercent"`
+	ContextPercent *int   `json:"contextPercent"` // nil before the first reading
 	PendingCount   int    `json:"pendingCount"`
 	LastError      string `json:"lastError"`
 }
@@ -576,7 +576,7 @@ type TaskSummary struct {
 	// runs.
 	ActionLabel    string           `json:"actionLabel"`
 	ActionTarget   string           `json:"actionTarget"`
-	ContextPercent int              `json:"contextPercent"`
+	ContextPercent *int             `json:"contextPercent"` // nil before the first reading
 	PendingCount   int              `json:"pendingCount"`
 	Corrections    int              `json:"corrections"`
 	HasPRD         bool             `json:"hasPrd"`
@@ -1814,7 +1814,7 @@ type ReviewSummary struct {
 	// runs.
 	ActionLabel    string      `json:"actionLabel"`
 	ActionTarget   string      `json:"actionTarget"`
-	ContextPercent int         `json:"contextPercent"`
+	ContextPercent *int        `json:"contextPercent"` // nil before the first reading
 	PendingCount   int         `json:"pendingCount"`
 	LastError      string      `json:"lastError"`
 	Situations     []Situation `json:"situations"` // what the review waits on the user for; never nil
@@ -2044,7 +2044,7 @@ type DiscussionSummary struct {
 	// runs.
 	ActionLabel    string      `json:"actionLabel"`
 	ActionTarget   string      `json:"actionTarget"`
-	ContextPercent int         `json:"contextPercent"`
+	ContextPercent *int        `json:"contextPercent"` // nil before the first reading
 	PendingCount   int         `json:"pendingCount"`
 	LastError      string      `json:"lastError"`
 	Situations     []Situation `json:"situations"` // what the discussion waits on the user for; never nil

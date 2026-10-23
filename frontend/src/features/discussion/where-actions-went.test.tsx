@@ -543,15 +543,6 @@ const ROWS: Row[] = [
   },
   {
     origin: "DiscussionHeader",
-    control: "the context gauge",
-    state: "with a session",
-    draw: view(),
-    where: "header",
-    role: "meter",
-    name: /^Context$/,
-  },
-  {
-    origin: "DiscussionHeader",
     control: "Pause",
     state: "the agent working",
     draw: view({ sessionStatus: "working", turnRunning: true }),

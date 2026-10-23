@@ -1,5 +1,6 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setAdjustedPanelWidth } from "@/components/system/panel-width";
 import { DetailsPanel } from "@/features/task/DetailsPanel";
 import { choiceLabel } from "@/lib/models";
 import { api, type Repository, type TaskSummary } from "@/lib/wails";
@@ -121,6 +122,7 @@ function facts(region: HTMLElement): Record<string, string> {
 
 afterEach(() => {
   vi.useRealTimers();
+  setAdjustedPanelWidth(null);
 });
 
 describe("DetailsPanel, Steps", () => {
@@ -708,6 +710,17 @@ describe("DetailsPanel, conversations", () => {
       taskId: "task-1",
       stage: "prd",
       from: null,
+    });
+  });
+
+  it("closes when a width the user gave the panel leaves the conversation too little room", async () => {
+    setAdjustedPanelWidth(600);
+    const { user } = inMainArea(TALKED, 1300);
+
+    await user.click(screen.getByRole("button", { name: `PRD · ${time}` }));
+
+    await waitFor(() => {
+      expect(useAppStore.getState().panel).toBeNull();
     });
   });
 

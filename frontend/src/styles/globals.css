@@ -388,10 +388,9 @@
     container: list / inline-size;
   }
 
-  /* An auxiliary panel: beside the reading column while the column keeps
-     760px (from 1120px of main area with --panel-width), over it below. */
+  /* An auxiliary panel: beside the reading column while the column keeps 760px, over it below,
+     as panel-width.ts decides. */
   .aux-panel {
-    width: round(down, var(--panel-width), 1px);
     position: absolute;
     inset-block: 0;
     right: 0;
@@ -404,18 +403,15 @@
   [data-leaving] > .aux-panel {
     animation: aux-panel-exit var(--duration-fast) var(--ease-exit) forwards;
   }
-  @container main (min-width: 1120px) {
-    .aux-panel {
-      position: relative;
-      background: var(--surface-0);
-      box-shadow: none;
-      border-left: var(--border) solid var(--line-1);
-    }
+  .aux-panel[data-beside] {
+    position: relative;
+    background: var(--surface-0);
+    box-shadow: none;
+    border-left: var(--border) solid var(--line-1);
   }
 
-  /* The panel of a list: beside the list from 800px of main area, where the list keeps 440px; over it below. */
+  /* The panel of a list: beside the list while the list keeps 440px, over it below. */
   .list-panel {
-    width: round(down, var(--panel-card-width), 1px);
     position: absolute;
     inset-block: 0;
     right: 0;
@@ -427,13 +423,18 @@
   [data-leaving] > .list-panel {
     animation: aux-panel-exit var(--duration-fast) var(--ease-exit) forwards;
   }
-  @container main (min-width: 800px) {
-    .list-panel {
-      position: relative;
-      background: var(--surface-0);
-      box-shadow: none;
-      border-left: var(--border) solid var(--line-1);
-    }
+  .list-panel[data-beside] {
+    position: relative;
+    background: var(--surface-0);
+    box-shadow: none;
+    border-left: var(--border) solid var(--line-1);
+  }
+
+  /* While a panel's edge is dragged, the whole window keeps its cursor and selects no text. */
+  :root[data-panel-resizing],
+  :root[data-panel-resizing] * {
+    cursor: col-resize;
+    user-select: none;
   }
 
   /* The description of a card in its panel: read at the reading size. */

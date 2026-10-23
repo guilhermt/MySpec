@@ -128,7 +128,7 @@ func TestFromTasksCarriesTheAgentReviewOfAStep(t *testing.T) {
 				TurnRunning:    true,
 				ProcessRunning: true,
 				RetryAttempt:   1,
-				ContextPercent: 40,
+				ContextPercent: percent(40),
 				PendingCount:   1,
 				LastError:      "overloaded",
 			},
@@ -156,7 +156,7 @@ func TestFromTasksCarriesTheAgentReviewOfAStep(t *testing.T) {
 				TurnRunning:    true,
 				ProcessRunning: true,
 				RetryAttempt:   1,
-				ContextPercent: 40,
+				ContextPercent: percent(40),
 				PendingCount:   1,
 				LastError:      "overloaded",
 			},
@@ -1483,7 +1483,7 @@ func TestFromTasksPicksTheSessionOfTheStageTheTaskIsIn(t *testing.T) {
 	summaries := map[session.Key]session.Summary{
 		{TaskID: "task-1", Stage: "prd"}:    {Status: session.StatusWorking, PendingCount: 2},
 		{TaskID: "task-2", Stage: "plan"}:   {Status: session.StatusPaused},
-		{TaskID: "task-2", Stage: "step:2"}: {Status: session.StatusNeedsPermission, ContextPercent: 40},
+		{TaskID: "task-2", Stage: "step:2"}: {Status: session.StatusNeedsPermission, ContextPercent: percent(40)},
 	}
 	states := []flow.StepState{
 		{Step: task.Step{Number: 1}, Status: flow.StepDone},
@@ -1517,7 +1517,7 @@ func TestFromTasksPicksTheSessionOfTheStageTheTaskIsIn(t *testing.T) {
 	}
 	// The implementing task is shown through the session of the step that
 	// runs, never through the one the planning stage left behind.
-	if got[1].SessionStatus != "needs_permission" || got[1].ContextPercent != 40 {
+	if got[1].SessionStatus != "needs_permission" || got[1].ContextPercent == nil || *got[1].ContextPercent != 40 {
 		t.Errorf("task-2 = %+v, want the session of step 2", got[1])
 	}
 }
@@ -1564,7 +1564,7 @@ func TestFromTasksCarriesThePullRequestOfThePRStage(t *testing.T) {
 		SessionStage: session.PRReviewStage,
 		Session: session.Summary{
 			Status:         session.StatusWaiting,
-			ContextPercent: 30,
+			ContextPercent: percent(30),
 			Choice:         models.Choice{Model: models.Opus55, Effort: models.Medium},
 		},
 	}
@@ -1608,7 +1608,7 @@ func TestFromTasksCarriesThePullRequestOfThePRStage(t *testing.T) {
 		SessionStatus:  "waiting",
 		SessionModel:   "claude-opus-5-5[1m]",
 		SessionEffort:  "medium",
-		ContextPercent: 30,
+		ContextPercent: percent(30),
 	}
 	if diff := cmp.Diff(want, got[0].PR); diff != "" {
 		t.Errorf("pull request mismatch (-want +got):\n%s", diff)
@@ -1618,7 +1618,7 @@ func TestFromTasksCarriesThePullRequestOfThePRStage(t *testing.T) {
 	}
 	// The PR stage has no conversation of its own: both of them belong to the
 	// pull request, and the fields of the task stay empty.
-	if got[0].SessionStatus != "waiting" || got[0].ContextPercent != 0 {
+	if got[0].SessionStatus != "waiting" || got[0].ContextPercent != nil {
 		t.Errorf("task = %+v, want no session of its own", got[0])
 	}
 }
@@ -1637,7 +1637,7 @@ func TestFromTasksCarriesTheImplementerAndTheModeOfThePullRequestReview(t *testi
 		Fixer: session.Summary{
 			Status:         session.StatusNeedsAnswer,
 			Choice:         models.Choice{Model: models.Opus55, Effort: models.High},
-			ContextPercent: 20,
+			ContextPercent: percent(20),
 		},
 	}
 	task1 := task.Task{
@@ -1659,7 +1659,7 @@ func TestFromTasksCarriesTheImplementerAndTheModeOfThePullRequestReview(t *testi
 		SessionStatus:  "needs_answer",
 		SessionModel:   "claude-opus-5-5[1m]",
 		SessionEffort:  "high",
-		ContextPercent: 20,
+		ContextPercent: percent(20),
 	}
 	if diff := cmp.Diff(wantImplementer, got.PR.Implementer); diff != "" {
 		t.Errorf("implementer mismatch (-want +got):\n%s", diff)
@@ -4422,3 +4422,6 @@ func TestFromEntryCarriesTheDivergenceOfAMarker(t *testing.T) {
 		t.Errorf("marker divergence = %+v, want nil for another marker", other.Marker.Divergence)
 	}
 }
+
+// percent is a context percentage that was read.
+func percent(p int) *int { return &p }

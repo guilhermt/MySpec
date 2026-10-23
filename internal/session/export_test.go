@@ -30,3 +30,6 @@ var TurnOf = turnOf
 func StateOf(t TaskInfo, turn contract.Turn) contract.State {
 	return stateOf(&run{task: t}, turn)
 }
+
+// ContextPercent exposes contextPercent.
+var ContextPercent = contextPercent

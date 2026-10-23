@@ -43,6 +43,7 @@ type Process interface {
 	Initialize() error
 	StopTask(taskID string) (string, error)
 	TaskOutput(taskID string) (string, error)
+	ContextUsage() (string, error)
 	Respond(requestID string, resp claude.PermissionResponse) error
 	CloseInput() error
 	Terminate() error
@@ -1964,11 +1965,13 @@ func cloneEntries(entries []*Entry) []Entry {
 	return out
 }
 
-// contextPercent is how full the context window is, 0 until the first result
-// of the session says how large the window is.
-func contextPercent(tokens, window int) int {
-	if window <= 0 {
-		return 0
+// contextPercent is the fraction of the whole window the context occupies,
+// rounded and clamped like the status line of Claude Code; nil before the
+// first reading.
+func contextPercent(tokens, window int) *int {
+	if window <= 0 || tokens <= 0 {
+		return nil
 	}
-	return int(math.Round(100 * float64(tokens) / float64(window)))
+	p := min(max(int(math.Round(100*float64(tokens)/float64(window))), 0), 100)
+	return &p
 }

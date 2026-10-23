@@ -1,7 +1,9 @@
-import { screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderWithStore } from "@/test/render";
-import { LIST_PANEL_COLUMN_MIN, ListPanel } from "./ListPanel";
+import { PanelLayout } from "./AuxPanel";
+import { ListPanel } from "./ListPanel";
+import { setAdjustedPanelWidth } from "./panel-width";
 
 function panel(scrollKey = "acme/api#474") {
   const onClose = vi.fn();
@@ -22,6 +24,11 @@ function panel(scrollKey = "acme/api#474") {
   const rendered = renderWithStore(element(scrollKey));
   return { ...rendered, onClose, onOpenExternal, element };
 }
+
+afterEach(() => {
+  setAdjustedPanelWidth(null);
+  vi.restoreAllMocks();
+});
 
 describe("ListPanel", () => {
   it("is a complementary region named by the card, with its reference in the head", () => {
@@ -74,7 +81,38 @@ describe("ListPanel", () => {
     expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
   });
 
-  it("stands beside the list from 800px of main area", () => {
-    expect(LIST_PANEL_COLUMN_MIN).toBe(800);
+  /** inLayout renders the panel in a PanelLayout of a width, which the jsdom does not measure. */
+  function inLayout(area: number) {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(area);
+    render(
+      <PanelLayout
+        panel={
+          <ListPanel
+            label="Card #474"
+            number="#474"
+            repository="acme/api"
+            url="https://github.com/acme/api/issues/474"
+            onOpenExternal={vi.fn()}
+            onClose={vi.fn()}
+            scrollKey="474"
+          >
+            <p>The body</p>
+          </ListPanel>
+        }
+      >
+        <p>The list</p>
+      </PanelLayout>,
+    );
+    return screen.getByRole("complementary", { name: "Card #474" });
+  }
+
+  it("opens at the width an item panel was given, when that is above its own default", () => {
+    setAdjustedPanelWidth(900);
+    expect(inLayout(1600)).toHaveStyle({ width: "900px" });
+  });
+
+  it("never opens below its default", () => {
+    setAdjustedPanelWidth(400);
+    expect(inLayout(1600)).toHaveStyle({ width: "640px" });
   });
 });

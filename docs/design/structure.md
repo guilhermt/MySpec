@@ -213,14 +213,13 @@ Todo o resto fica fechado, nos painéis ou no menu `⋯`. Um painel aberto fica 
 
 `←`, `→` (só com destino), o breadcrumb, o título do item, o progresso, e à direita:
 
-- o medidor de contexto, só com uma sessão na tela;
 - **Pause** ou **Resume**, só aqui;
 - o grupo dos painéis do item;
 - `⋯`.
 
 **O progresso.** Na task, o **stepper**: as etapas nomeadas, a feita com o visto, a atual como pílula com a posição (`Implementation 3/7 · pass 2`) e o glifo do estado, a futura com o círculo, sem trilha inteira nem tempos. No review e na discussão, a **pílula** sozinha: `Pass 1`, `Discussing`, `Round N`. O progresso não tem ação.
 
-**Largura.** O topo cede pela largura da área principal, em limites fixos: primeiro o que fica em volta do progresso (o breadcrumb dobra, os painéis ficam só com o ícone, **Pause** só com o ícone, o medidor só com a porcentagem), depois as etapas feitas, depois o laço e a palavra da pílula, por último os nomes das futuras; o nome da etapa atual nunca sai. O título cede depois de tudo. Os limites estão em [components.md](./components.md), Cabeçalho do lugar. Na metade do monitor, o stepper ainda nomeia a atual e as futuras.
+**Largura.** O topo cede pela largura da área principal, em limites fixos: primeiro o que fica em volta do progresso (o breadcrumb dobra, os painéis ficam só com o ícone, **Pause** só com o ícone), depois as etapas feitas, depois o laço e a palavra da pílula, por último os nomes das futuras; o nome da etapa atual nunca sai. O título cede depois de tudo. Os limites estão em [components.md](./components.md), Cabeçalho do lugar. Na metade do monitor, o stepper ainda nomeia a atual e as futuras.
 
 **O `⋯`** tem as ferramentas do item e as ações raras e destrutivas, agrupadas por assunto, com o destrutivo por último, em vermelho: na task, as do step (**Review myself**, **Open in VS Code**, **Discard step N…**), as da PR (**Open PR**, **Refresh PR**, **Review again**, que na task pede a passada sem diálogo, e **Review myself**, que só existe quando o agente revisa a PR), as do planejamento e da task (**Review mode ›**, com os modos dos steps e da PR ao lado, **Models ›**, **Back to <etapa>…**, **Discard and restart the <etapa>…**, **Delete task…**); no review, **Open PR**, **Refresh PR**, **Open in VS Code**, **Review again…** e **Delete review…**; na discussão, **Open <board>**, **Group drafts into an epic…**, **Archive…** e **Delete discussion…**. Cada destrutiva diz antes o que será perdido. Um item desabilitado diz por quê ao lado.
 
@@ -305,6 +304,7 @@ Embaixo da conversa, na mesma medida. Existe sempre que a conversa na tela tem u
 - **A caixa de texto.** O placeholder diz a quem se responde e como (`Answer with 1–3, or reply to the reviewer…`, `Queue a message for the implementer…`, `Sending resumes the task…`).
 - **As pastilhas**, quando há: a resposta rápida a uma pergunta em texto com opções, e os começos de mensagem (**Ask for changes**, **Ask to fix the drafts**).
 - **O seletor de modelo e esforço da sessão** (`Opus · high ▾`), que vale a partir da próxima mensagem. A resposta em andamento termina com a escolha anterior. Um modelo sem esforço mostra só o nome. Uma escolha que o catálogo não tem mais aparece marcada como indisponível.
+- **O medidor de contexto**, ao lado do seletor de modelo: a fração da janela do modelo já ocupada. Abaixo de 1300 px de área principal, só a porcentagem.
 - **Send**, ou, com o agente trabalhando, o relógio do turno e **Stop**, que interrompe a resposta e mantém a sessão. Uma mensagem enviada com o agente ocupado entra na fila, que aparece na conversa, no fim, com **Remove**.
 - **Estados.** Com a sessão pausada, o compositor diz que enviar retoma, e enviar retoma a sessão. Com uma pergunta estruturada aberta, o que se escreve responde a pergunta. Numa conversa em que o produto não age mais (o revisor depois de **Review myself**), ele continua aceitando mensagens.
 
@@ -335,7 +335,7 @@ O que cada um mostra:
 área principal − painel ≥ 760 px
 ```
 
-O painel usa `clamp(360px, 28% da área principal, 480px)`, arredondado para baixo ao pixel. Quando a regra não vale, o painel cobre a conversa, com sombra, e `Esc` fecha. Isso muda por volta de 1450 px de janela.
+O painel tem por padrão `clamp(360px, 28% da área principal, 480px)`, arredondado para baixo ao pixel, e o usuário o alarga arrastando a borda esquerda, até a área principal menos 64 px. A regra vale sobre a largura real do painel. Quando ela não vale, o painel cobre a conversa, com sombra, e `Esc` fecha. Com a largura padrão, isso muda por volta de 1450 px de janela.
 
 ### Faixas de aviso
 
@@ -361,6 +361,7 @@ Sob o cabeçalho, na medida da conversa, quando algo bloqueia sem ser a situaç�
 | `Enter` | Home | Abre **Continue** |
 | ↑↓ `Home` `End` | Lista (board, Reviews, History) | Percorrem as linhas e os cabeçalhos visíveis |
 | ←→ | Lista do board e de Reviews | Recolhem e expandem a seção |
+| ←→ | Borda de um painel | Alarga e estreita o painel |
 | `Enter` | Lista do board e de Reviews | Abre ou fecha o painel; num cabeçalho, recolhe ou expande |
 | `/` | Board, History | Foca a busca; `↓` volta à lista |
 | `S` | Linha do card | **Start task** ou **Clone and continue**; onde não age, diz por quê |
@@ -386,7 +387,7 @@ Sob o cabeçalho, na medida da conversa, quando algo bloqueia sem ser a situaç�
 
 `Cmd` vale no lugar de `Ctrl`. Os atalhos globais ficam inertes com os diálogos de criação abertos. As teclas de uma letra valem só fora de um campo de texto.
 
-**Ordem de Tab:** topo da lateral, filtro, árvore (uma parada), rodapé, cabeçalho (navegação, breadcrumb, progresso, ferramentas), abas, faixa de aviso, conversa (uma parada: a entrada atual e os controles dela), barra do pedido, linha do trabalho em segundo plano (e a lista, aberta), compositor, painel. Nas listas: cabeçalho, barra de filtros, a lista (uma parada), o painel.
+**Ordem de Tab:** topo da lateral, filtro, árvore (uma parada), rodapé, cabeçalho (navegação, breadcrumb, progresso, ferramentas), abas, faixa de aviso, conversa (uma parada: a entrada atual e os controles dela), barra do pedido, linha do trabalho em segundo plano (e a lista, aberta), compositor, painel (a borda primeiro). Nas listas: cabeçalho, barra de filtros, a lista (uma parada), o painel (a borda primeiro).
 
 ## 6. Larguras
 
@@ -398,8 +399,8 @@ O design funciona de 1100 a 2600 px, sem pontos fixos de janela. Cada regra depe
 | Linha da árvore | Lateral abaixo de 330 px: o meta sai, os rótulos passam à forma curta e o medidor fica só com a porcentagem. A posição nunca sai. A ação passa à forma curta sempre que a longa não cabe: o verbo primeiro; de um caminho, `…/` e o último segmento; de um comando, o executável, o subcomando e o último segmento do primeiro caminho, sem as flags (`Running go test …/ratelimit`) |
 | Cabeçalho do item | Cede em ordem, pelos limites de [components.md](./components.md), Cabeçalho do lugar (1660, 1440, 1360, 1300, 1200, 1040 e 900 px de área principal) |
 | Conversa | `--measure-conversation` (960 px), centrada em pixel inteiro; numa área mais estreita, a área menos `--space-6` de cada lado |
-| Painéis do item | A regra da seção 3 |
-| Lista do board e de Reviews | 70rem centrada. Abaixo de 1040 px de lista, o que não é número, título e teclas desce para uma segunda linha; o título tem sempre um terço da linha. O painel da lista (`clamp(360px, 42%, 640px)`) fica ao lado enquanto a lista mantém 440 px, o que vale exatamente a partir de 800 px de área principal (a janela de 1100 px dá 812) |
+| Painéis do item | A regra da seção 3; o usuário os alarga pela borda |
+| Lista do board e de Reviews | 70rem centrada. Abaixo de 1040 px de lista, o que não é número, título e teclas desce para uma segunda linha; o título tem sempre um terço da linha. O painel da lista (`clamp(360px, 42%, 640px)`) fica ao lado enquanto a lista mantém 440 px, o que, na largura padrão, vale exatamente a partir de 800 px de área principal (a janela de 1100 px dá 812); o usuário o alarga pela borda |
 | Lista do History | As colunas até 860 px de lista; abaixo, onde e o resultado descem para a segunda linha |
 | Settings | A navegação à esquerda e a página de `--measure`; abaixo de 820 px de área principal, a navegação é uma linha acima da página; abaixo de 720 px, as ações de uma linha de Settings descem para baixo do texto |
 | Diálogos | O mínimo em 480 px (`--size-dialog`), o largo em 576 px (`--size-dialog-wide`), os dois a `8vh` do topo, crescendo para baixo, centrados na janela inteira; a tela cheia, a janela menos `--space-8` de cada lado |

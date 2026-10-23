@@ -2,7 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { AUX_PANEL_COLUMN_MIN } from "@/components/system/AuxPanel";
 import { AlertDialog, AlertDialogContent, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { renderWithStore } from "@/test/render";
@@ -49,10 +48,7 @@ const PLACEMENT = /^-?(inset|top|right|bottom|left|start|end|translate|m[xytrbls
 const EM_TOKENS = ["--link-offset", "--tracking-caps"];
 
 /** The prefixes of the layout widths, which may depend on the window. */
-const LAYOUT_WIDTHS = /^--(sidebar-|panel-|measure|list-|size-|col-|snav-)/;
-
-/** Layout widths rounded where they are used, not in the token. */
-const UNROUNDED_WIDTHS = ["--panel-width", "--panel-card-width"];
+const LAYOUT_WIDTHS = /^--(sidebar-|measure|list-|size-|col-|snav-)/;
 
 function placementClasses(element: Element): string[] {
   return [...element.classList]
@@ -160,10 +156,7 @@ describe("globals.css", () => {
   it("rounds every layout width that depends on the window", () => {
     const unrounded = [...tokens].filter(
       ([name, value]) =>
-        LAYOUT_WIDTHS.test(name) &&
-        !UNROUNDED_WIDTHS.includes(name) &&
-        /%|vw/.test(value) &&
-        !value.includes("round("),
+        LAYOUT_WIDTHS.test(name) && /%|vw/.test(value) && !value.includes("round("),
     );
 
     expect(unrounded).toEqual([]);
@@ -182,19 +175,12 @@ describe("globals.css", () => {
     expect(GLOBALS).toContain(ICON_RULE);
   });
 
-  it("rounds the width of the auxiliary panel to the pixel", () => {
-    expect(GLOBALS).toMatch(/\.aux-panel \{[^}]*width: round\(down, var\(--panel-width\), 1px\);/);
-  });
-
-  it("puts the panel beside the column from 1120px of main area", () => {
+  it("keeps the main area a container, which the panels no longer query", () => {
     expect(GLOBALS).toContain(".main-area {\n    container: main / inline-size;\n  }");
-    expect(GLOBALS).toMatch(
-      /@container main \(min-width: 1120px\) \{\s*\.aux-panel \{\s*position: relative;/,
-    );
   });
 
-  it("measures the panel beside the column from the width the stylesheet puts it there", () => {
-    expect(GLOBALS).toContain(`@container main (min-width: ${AUX_PANEL_COLUMN_MIN}px) {`);
+  it("puts the auxiliary panel beside the column when it says so", () => {
+    expect(GLOBALS).toMatch(/\.aux-panel\[data-beside\] \{\s*position: relative;/);
   });
 
   it("centers the pair of Settings at a whole pixel, with the page at --measure", () => {
@@ -206,16 +192,15 @@ describe("globals.css", () => {
     );
   });
 
-  it("rounds the width of the list panel and puts it beside the list from 800px of main area", () => {
-    expect(GLOBALS).toMatch(
-      /\.list-panel \{[^}]*width: round\(down, var\(--panel-card-width\), 1px\);/,
-    );
-    expect(GLOBALS).toMatch(
-      /@container main \(min-width: 800px\) \{\s*\.list-panel \{\s*position: relative;/,
-    );
+  it("puts the list panel beside the list when it says so", () => {
+    expect(GLOBALS).toMatch(/\.list-panel\[data-beside\] \{\s*position: relative;/);
     expect(GLOBALS).toContain(
       "[data-leaving] > .list-panel {\n    animation: aux-panel-exit var(--duration-fast) var(--ease-exit) forwards;",
     );
+  });
+
+  it("keeps the cursor and the selection of the window while a panel's edge is dragged", () => {
+    expect(GLOBALS).toMatch(/:root\[data-panel-resizing\][^{]*\{[^}]*cursor: col-resize;/);
   });
 
   it("blinks a new situation twice for --duration-slow, and never with reduced motion", () => {

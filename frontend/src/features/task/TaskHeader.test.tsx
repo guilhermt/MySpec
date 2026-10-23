@@ -45,7 +45,6 @@ function inPass(reviewer: Parameters<typeof makeStepReviewer>[0], task: Partial<
 }
 
 const stepper = () => screen.getByRole("list", { name: /^Progress/ });
-const meter = () => screen.getByRole("meter", { name: "Context" });
 
 // clock writes a time the way the header does for today: 14:52.
 function clock(date: Date): string {
@@ -135,58 +134,10 @@ describe("TaskHeader", () => {
     });
   });
 
-  describe("the context meter", () => {
-    it("measures the conversation on screen, with who it is in the tooltip", async () => {
-      const { user } = header({ contextPercent: 44 });
+  it("has no context meter, which lives in the box of the conversation", () => {
+    header({ contextPercent: 44 });
 
-      expect(meter()).toHaveTextContent("44%");
-      await user.hover(meter());
-      expect(await screen.findByRole("tooltip")).toHaveTextContent(
-        "Context used by the PRD agent: 44%",
-      );
-    });
-
-    it("measures the tab chosen in a step with two conversations", () => {
-      const task = inPass({ contextPercent: 72 }, { contextPercent: 10 });
-
-      header(task, "reviewer");
-      expect(meter()).toHaveTextContent("72%");
-    });
-
-    it("measures the implementer while its tab is chosen", () => {
-      header(inPass({ contextPercent: 72 }, { contextPercent: 10 }), "implementer");
-
-      expect(meter()).toHaveTextContent("10%");
-    });
-
-    it("says it has no reading yet with …", () => {
-      header({ contextPercent: 0 });
-
-      expect(meter()).toHaveTextContent("…");
-      expect(meter()).toHaveAttribute("aria-valuetext", "not read yet");
-    });
-
-    it("shows — while the session on screen is paused", () => {
-      header({ sessionStatus: "paused", contextPercent: 44 });
-
-      expect(meter()).toHaveTextContent("—");
-    });
-
-    it("is not there without a session on screen", () => {
-      header({
-        stage: "implementation",
-        steps: [makeStep({ status: "preparing" })],
-        currentStep: 1,
-      });
-
-      expect(screen.queryByRole("meter")).not.toBeInTheDocument();
-    });
-
-    it("is not there while the pull request is done", () => {
-      header({ stage: "pr", pr: makePullRequest({ status: "done", prNumber: 12 }) });
-
-      expect(screen.queryByRole("meter")).not.toBeInTheDocument();
-    });
+    expect(screen.queryByRole("meter")).not.toBeInTheDocument();
   });
 
   describe("Pause", () => {

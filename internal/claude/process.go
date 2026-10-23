@@ -194,6 +194,15 @@ func (p *Process) TaskOutput(taskID string) (string, error) {
 	return requestID, nil
 }
 
+// ContextUsage writes a get_context_usage control request and returns its request id.
+func (p *Process) ContextUsage() (string, error) {
+	requestID := uuid.NewString()
+	if err := p.write(ContextUsageRequest(requestID)); err != nil {
+		return "", fmt.Errorf("send get_context_usage request: %w", err)
+	}
+	return requestID, nil
+}
+
 // Respond writes a control response to a can_use_tool request.
 func (p *Process) Respond(requestID string, resp PermissionResponse) error {
 	line, err := ControlResponse(requestID, resp)

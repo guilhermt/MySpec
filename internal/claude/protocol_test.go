@@ -659,9 +659,6 @@ func TestDecodeResultClosesTheTurn(t *testing.T) {
 	if first.Usage.OutputTokens == 0 || first.Usage.ContextTokens() == 0 {
 		t.Errorf("Usage = %+v, want the token counts", first.Usage)
 	}
-	if got := first.ContextWindow(); got != 200000 {
-		t.Errorf("ContextWindow() = %d, want 200000", got)
-	}
 }
 
 // Fact 8: a tool the classifier escalates arrives as a can_use_tool request.
@@ -965,24 +962,6 @@ func TestUsageContextTokens(t *testing.T) {
 
 	if got := usage.ContextTokens(); got != 321 {
 		t.Errorf("ContextTokens() = %d, want 321", got)
-	}
-}
-
-func TestResultContextWindowTakesTheLargest(t *testing.T) {
-	t.Parallel()
-	var result claude.ResultEvent
-	if err := json.Unmarshal([]byte(`{"modelUsage":{
-		"small":{"contextWindow":200000},
-		"big":{"contextWindow":1000000}
-	}}`), &result); err != nil {
-		t.Fatalf("unmarshal result = %v, want nil", err)
-	}
-
-	if got := result.ContextWindow(); got != 1000000 {
-		t.Errorf("ContextWindow() = %d, want 1000000", got)
-	}
-	if got := (claude.ResultEvent{}).ContextWindow(); got != 0 {
-		t.Errorf("ContextWindow() of an empty result = %d, want 0", got)
 	}
 }
 
@@ -1353,5 +1332,38 @@ func TestDecodeRecordedAPIRetry(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("APIRetry mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestContextUsageRequestIsWhatTheCLIExpects(t *testing.T) {
+	t.Parallel()
+
+	line := claude.ContextUsageRequest("x")
+	want := `{"type":"control_request","request_id":"x","request":{"subtype":"get_context_usage","detail":"summary"}}`
+	if string(line) != want {
+		t.Errorf("ContextUsageRequest() = %s, want %s", line, want)
+	}
+}
+
+func TestDecodeContextUsage(t *testing.T) {
+	t.Parallel()
+
+	got, err := claude.DecodeContextUsage([]byte(`{"categories":[{"name":"System prompt","tokens":3000,"color":"promptBorder"}],
+		"totalTokens":17000,"maxTokens":167000,"rawMaxTokens":200000,"percentage":10,"gridRows":[[]],
+		"model":"claude-fake-1","autoCompactThreshold":167000}`))
+	if err != nil {
+		t.Fatalf("DecodeContextUsage() = %v, want nil", err)
+	}
+	want := claude.ContextUsage{TotalTokens: 17000, RawMaxTokens: 200000}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("ContextUsage mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestDecodeContextUsageRejectsAnInvalidPayload(t *testing.T) {
+	t.Parallel()
+
+	if _, err := claude.DecodeContextUsage([]byte(`{"totalTokens":"many"}`)); err == nil {
+		t.Error("DecodeContextUsage() = nil, want an error")
 	}
 }
