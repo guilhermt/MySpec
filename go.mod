@@ -9,9 +9,9 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/vektah/gqlparser/v2 v2.5.62
-	github.com/wailsapp/wails/v3 v3.0.0-beta.23
-	github.com/yuin/goldmark v1.7.16
-	golang.org/x/net v0.59.0
+	github.com/wailsapp/wails/v3 v3.0.0-beta.34
+	github.com/yuin/goldmark v1.7.17
+	golang.org/x/net v0.60.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/sys v0.49.0
 	golang.org/x/text v0.43.0
@@ -36,7 +36,7 @@ require (
 	github.com/agnivade/levenshtein v1.2.1 // indirect
 	github.com/alecthomas/chroma/v2 v2.23.1 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
-	github.com/atterpac/refresh v1.0.0 // indirect
+	github.com/atterpac/refresh v1.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/blakesmith/ar v0.0.0-20190502131153-809d4375e1fb // indirect
