@@ -335,7 +335,7 @@ O que cada um mostra:
 área principal − painel ≥ 760 px
 ```
 
-O painel usa `clamp(360px, 28% da área principal, 480px)`, arredondado para baixo ao pixel. Quando a regra não vale, o painel cobre a conversa, com sombra, e `Esc` fecha. Isso muda por volta de 1450 px de janela.
+O painel tem por padrão `clamp(360px, 28% da área principal, 480px)`, arredondado para baixo ao pixel, e o usuário o alarga arrastando a borda esquerda, até a área principal menos 64 px. A regra vale sobre a largura real do painel. Quando ela não vale, o painel cobre a conversa, com sombra, e `Esc` fecha. Com a largura padrão, isso muda por volta de 1450 px de janela.
 
 ### Faixas de aviso
 
@@ -361,6 +361,7 @@ Sob o cabeçalho, na medida da conversa, quando algo bloqueia sem ser a situaç�
 | `Enter` | Home | Abre **Continue** |
 | ↑↓ `Home` `End` | Lista (board, Reviews, History) | Percorrem as linhas e os cabeçalhos visíveis |
 | ←→ | Lista do board e de Reviews | Recolhem e expandem a seção |
+| ←→ | Borda de um painel | Alarga e estreita o painel |
 | `Enter` | Lista do board e de Reviews | Abre ou fecha o painel; num cabeçalho, recolhe ou expande |
 | `/` | Board, History | Foca a busca; `↓` volta à lista |
 | `S` | Linha do card | **Start task** ou **Clone and continue**; onde não age, diz por quê |
@@ -386,7 +387,7 @@ Sob o cabeçalho, na medida da conversa, quando algo bloqueia sem ser a situaç�
 
 `Cmd` vale no lugar de `Ctrl`. Os atalhos globais ficam inertes com os diálogos de criação abertos. As teclas de uma letra valem só fora de um campo de texto.
 
-**Ordem de Tab:** topo da lateral, filtro, árvore (uma parada), rodapé, cabeçalho (navegação, breadcrumb, progresso, ferramentas), abas, faixa de aviso, conversa (uma parada: a entrada atual e os controles dela), barra do pedido, linha do trabalho em segundo plano (e a lista, aberta), compositor, painel. Nas listas: cabeçalho, barra de filtros, a lista (uma parada), o painel.
+**Ordem de Tab:** topo da lateral, filtro, árvore (uma parada), rodapé, cabeçalho (navegação, breadcrumb, progresso, ferramentas), abas, faixa de aviso, conversa (uma parada: a entrada atual e os controles dela), barra do pedido, linha do trabalho em segundo plano (e a lista, aberta), compositor, painel (a borda primeiro). Nas listas: cabeçalho, barra de filtros, a lista (uma parada), o painel (a borda primeiro).
 
 ## 6. Larguras
 
@@ -398,8 +399,8 @@ O design funciona de 1100 a 2600 px, sem pontos fixos de janela. Cada regra depe
 | Linha da árvore | Lateral abaixo de 330 px: o meta sai, os rótulos passam à forma curta e o medidor fica só com a porcentagem. A posição nunca sai. A ação passa à forma curta sempre que a longa não cabe: o verbo primeiro; de um caminho, `…/` e o último segmento; de um comando, o executável, o subcomando e o último segmento do primeiro caminho, sem as flags (`Running go test …/ratelimit`) |
 | Cabeçalho do item | Cede em ordem, pelos limites de [components.md](./components.md), Cabeçalho do lugar (1660, 1440, 1360, 1300, 1200, 1040 e 900 px de área principal) |
 | Conversa | `--measure-conversation` (960 px), centrada em pixel inteiro; numa área mais estreita, a área menos `--space-6` de cada lado |
-| Painéis do item | A regra da seção 3 |
-| Lista do board e de Reviews | 70rem centrada. Abaixo de 1040 px de lista, o que não é número, título e teclas desce para uma segunda linha; o título tem sempre um terço da linha. O painel da lista (`clamp(360px, 42%, 640px)`) fica ao lado enquanto a lista mantém 440 px, o que vale exatamente a partir de 800 px de área principal (a janela de 1100 px dá 812) |
+| Painéis do item | A regra da seção 3; o usuário os alarga pela borda |
+| Lista do board e de Reviews | 70rem centrada. Abaixo de 1040 px de lista, o que não é número, título e teclas desce para uma segunda linha; o título tem sempre um terço da linha. O painel da lista (`clamp(360px, 42%, 640px)`) fica ao lado enquanto a lista mantém 440 px, o que, na largura padrão, vale exatamente a partir de 800 px de área principal (a janela de 1100 px dá 812); o usuário o alarga pela borda |
 | Lista do History | As colunas até 860 px de lista; abaixo, onde e o resultado descem para a segunda linha |
 | Settings | A navegação à esquerda e a página de `--measure`; abaixo de 820 px de área principal, a navegação é uma linha acima da página; abaixo de 720 px, as ações de uma linha de Settings descem para baixo do texto |
 | Diálogos | O mínimo em 480 px (`--size-dialog`), o largo em 576 px (`--size-dialog-wide`), os dois a `8vh` do topo, crescendo para baixo, centrados na janela inteira; a tela cheia, a janela menos `--space-8` de cada lado |

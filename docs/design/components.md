@@ -375,14 +375,15 @@ Um gatilho com o chevron que gira e o conteúdo que abre no lugar, sem estilo pr
 
 | | |
 |---|---|
-| Anatomia | Coluna à direita da área principal, afundada (`--surface-0`), largura `round(down, var(--panel-width), 1px)`. Cabeçalho de `--size-head` com o título em `--text-ui` 600, e o `×` (`Close · Esc`); corpo que rola, em `--text-meta` |
-| Variantes | **Do item**: `Details`, `Artifacts` e `Card` (task), `Details` e `Reports` (review), `Details` e `Documents` (discussão). **Da lista**: o card no board e a PR em Reviews, largura `round(down, var(--panel-card-width), 1px)`, com a faixa de `--size-head` no lugar do título (`#474 · acme/api` em `--text-meta` `--ink-3`, **Open on GitHub** fantasma de ícone com a seta externa, e `×`), o título em `--text-title`, as ações, os avisos, o bloco do item, os fatos em chave e valor, o corpo em Markdown no registro de leitura e as relações |
-| Coluna ou cobertura | O painel do item fica ao lado enquanto a conversa cabe inteira (área principal − painel ≥ 760 px); o painel da lista, enquanto a lista mantém 440 px. Fora disso, cobre com `--surface-3` e `--shadow-overlay` |
+| Anatomia | Coluna à direita da área principal, afundada (`--surface-0`), largura o padrão da família (do item `clamp(360px, 28% da área, 480px)`, da lista `clamp(360px, 42%, 640px)`, arredondado para baixo) ou a que o usuário deu, a maior das duas, até a área menos 64 px. A borda esquerda é a alça de redimensionar. Cabeçalho de `--size-head` com o título em `--text-ui` 600, e o `×` (`Close · Esc`); corpo que rola, em `--text-meta` |
+| Variantes | **Do item**: `Details`, `Artifacts` e `Card` (task), `Details` e `Reports` (review), `Details` e `Documents` (discussão). **Da lista**: o card no board e a PR em Reviews, com a faixa de `--size-head` no lugar do título (`#474 · acme/api` em `--text-meta` `--ink-3`, **Open on GitHub** fantasma de ícone com a seta externa, e `×`), o título em `--text-title`, as ações, os avisos, o bloco do item, os fatos em chave e valor, o corpo em Markdown no registro de leitura e as relações |
+| Coluna ou cobertura | O painel do item fica ao lado enquanto a conversa cabe inteira (área principal − painel ≥ 760 px); o painel da lista, enquanto a lista mantém 440 px. Fora disso, cobre com `--surface-3` e `--shadow-overlay`. A conta usa a largura real do painel |
+| Borda | Uma faixa invisível de 8 px (`--space-2`) centrada na borda esquerda, em toda a altura, com o cursor `col-resize`. Com o ponteiro em cima, durante o arraste e com o foco do teclado, uma linha de 2 px (`--border-2`) em `--focus` aparece sobre a borda. `←` alarga e `→` estreita 32 px. A largura é uma só para todos os painéis, vale enquanto o app está aberto, nunca fica abaixo do padrão e não tem gesto que a restaure: o usuário arrasta de volta |
 | Grupo de painéis | No cabeçalho, os botões dos painéis do lugar como um grupo que alterna: o aberto pressionado (`--brand-tint-plane`, `aria-pressed`); abaixo de 1440 px de área principal, só o ícone, com o nome no tooltip e no nome acessível. `Artifacts`, `Reports` e `Documents` usam o ícone de documento (`file`) |
-| Regra em pixel | A largura do painel e a condição da coluna ficam em pixel inteiro: com `--panel-width`, a regra `área principal − painel ≥ 760 px` vale exatamente a partir de 1120 px de área principal, e é uma container query nesse limite. Com `--panel-card-width`, a regra `área principal − painel ≥ 440 px` vale exatamente a partir de 800 px de área principal (abaixo de 857 px o painel tem o mínimo de 360 px, e 800 − 360 = 440; acima, a lista fica com 58% da área, sempre mais de 440), e é a container query do painel da lista |
+| Regra em pixel | A geometria fica em `components/system/panel-width.ts`, em pixel inteiro, e a coluna é o atributo `data-beside` do `aside`. Com a largura padrão, a regra `área principal − painel ≥ 760 px` (item) vale exatamente a partir de 1120 px de área principal, e `área principal − painel ≥ 440 px` (lista) a partir de 800 px (abaixo de 857 px o painel da lista tem o mínimo de 360 px, e 800 − 360 = 440; acima, a lista fica com 58% da área, sempre mais de 440) |
 | Estados | Entra em `--duration-base` com `--ease-enter`, por opacidade e um deslocamento de `--space-4` da direita; sai em `--duration-fast` com `--ease-exit`. Não é modal: o foco fica no botão que o abriu, e `Esc` fecha e devolve o foco a ele; vazio com o que falta (`No artifacts yet`, `Steps come from the plan`); carregando; o item da lista que saiu da leitura: a faixa de aviso no alto e as ações tracejadas |
-| Teclado | Um de cada vez; `Esc` fecha; o teclado continua na lista enquanto o painel da lista está aberto. O painel da lista não tem botão que o abriu: `Esc` e o `×` devolvem o foco à linha do card, quando ele estava no painel |
-| Acessibilidade | `aside` com o nome (`Card #474`) |
+| Teclado | Um de cada vez; `Esc` fecha; `←` e `→` na borda alargam e estreitam o painel; o teclado continua na lista enquanto o painel da lista está aberto. O painel da lista não tem botão que o abriu: `Esc` e o `×` devolvem o foco à linha do card, quando ele estava no painel |
+| Acessibilidade | `aside` com o nome (`Card #474`). A borda é um `separator` vertical, `Resize the panel`, com `aria-valuenow` (a largura), `aria-valuemin` (o padrão) e `aria-valuemax` (o máximo); é a primeira parada de Tab do painel |
 | Faça | Deixe fechado por padrão e abra só por uma ação do usuário |
 | Não faça | Não abra um painel sozinho. Não troque de documento sozinho |
 
@@ -983,7 +984,7 @@ O board, o History e a conversa montam só as linhas que aparecem, as fixadas (a
 
 ## Tamanhos de layout
 
-Os tokens de medida e de layout da conversa, das listas, do painel da lista, do diálogo largo e de Settings, e onde cada um é usado:
+Os tokens de medida e de layout da conversa, das listas, do diálogo largo e de Settings, e onde cada um é usado:
 
 | Token | Valor | Onde |
 |---|---|---|
@@ -991,7 +992,6 @@ Os tokens de medida e de layout da conversa, das listas, do painel da lista, do 
 | `--measure` | `50rem` | A página de Settings e a página centrada de um aviso; a base de `--list-measure` |
 | `--measure-read` | `42rem` | Um bloco curto de texto: a Home, a página do item que saiu, o início |
 | `--list-measure` | `calc(var(--measure) + var(--space-16) * 5)` | A coluna da lista do board e de Reviews |
-| `--panel-card-width` | `clamp(22.5rem, 42%, 40rem)` | O painel da lista |
 | `--size-dialog-wide` | `calc(var(--size-dialog) + var(--space-16) + var(--space-8))` | O diálogo largo, 576 px: um nome de 64 caracteres em Fira Code de 13 px (512 px) cabe no campo, com o corpo do diálogo (`--space-5` de cada lado) e o campo (10 px de folga e a borda de cada lado) |
 | `--col-num` | `var(--space-12)` | Linha do card |
 | `--col-epic` | `calc(var(--space-16) * 2.25)` | Linha do card |
