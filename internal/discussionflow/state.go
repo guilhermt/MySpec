@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/guilhermt/myspec/internal/discussion"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/session"
 )
 
@@ -13,11 +14,11 @@ type Status string
 
 // The states a discussion is shown in.
 const (
-	StatusNone            Status = ""                // Waiting only: nothing waits for the user
-	StatusDiscussing      Status = "discussing"      // the conversation goes on; no drafts to act on
-	StatusAwaitingDrafts  Status = "awaiting_drafts" // the agent rested with a drafts artifact the app can't read
-	StatusDeciding        Status = "deciding"        // a draft is still to decide
-	StatusPublishing      Status = "publishing"      // a run writes on GitHub, or is about to
+	StatusNone            Status = ""           // Waiting only: nothing waits for the user
+	StatusDiscussing      Status = "discussing" // the conversation goes on; no drafts to act on
+	StatusDiverged        Status = "diverged"   // the drafts artifact is still unreadable after the one correction
+	StatusDeciding        Status = "deciding"   // a draft is still to decide
+	StatusPublishing      Status = "publishing" // a run writes on GitHub, or is about to
 	StatusPublishFailed   Status = "publish_failed"
 	StatusEpicDiscarded   Status = "epic_discarded"    // a discarded epic has an approved card that won't publish
 	StatusEpicCantPublish Status = "epic_cant_publish" // an approved epic has every card decided and fewer than two approved
@@ -82,6 +83,9 @@ type State struct {
 	// UnreadableDrafts is why the drafts artifact could not be read; "" when
 	// that is not the case.
 	UnreadableDrafts string
+	// Divergence is what the app expected of the discussion and did not find;
+	// nil for none.
+	Divergence *divergence.Divergence
 	// HasDocument says the agent has written the document of the discussion,
 	// and DocumentRevision changes every time it does.
 	HasDocument      bool
@@ -117,6 +121,9 @@ func (s *Service) State(id string) (State, bool) {
 	}
 	running := maps.Clone(l.running)
 	s.mu.Unlock()
+	if d, has := s.divergences.Get(id); has {
+		state.Divergence = &d
+	}
 
 	drafts := s.effectiveDrafts(id, s.discussions.Drafts(id))
 	settle(&state, drafts, running)
@@ -190,7 +197,7 @@ func (s *Service) effectiveDrafts(id string, drafts []discussion.Draft) []discus
 }
 
 // standing is where a discussion stands: the first that holds of the
-// conversation at work, a run, a failure, an unreadable artifact, no drafts
+// conversation at work, a run, a failure, a divergence, no drafts
 // yet, a discarded epic with approved cards, a draft to decide, an epic that
 // can't publish, a run about to start, and every draft settled. run says
 // whether a run counts: Waiting leaves it out, so that a situation stands
@@ -205,8 +212,8 @@ func standing(in State, c chain, run bool) Status {
 		return StatusPublishing
 	case slices.ContainsFunc(in.Drafts, func(d DraftState) bool { return d.Draft.PublishError != "" }):
 		return StatusPublishFailed
-	case in.UnreadableDrafts != "":
-		return StatusAwaitingDrafts
+	case in.Divergence != nil:
+		return StatusDiverged
 	case !in.Discussion.DraftsRead || len(in.Drafts) == 0:
 		return StatusDiscussing
 	case discarded:

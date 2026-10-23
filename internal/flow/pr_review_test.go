@@ -104,7 +104,7 @@ func TestApprovePRStartsTheImplementerWhenItHasNoConversation(t *testing.T) {
 	}
 
 	info, ok := f.sessions.info(fixKeyOf)
-	if !ok || info.Request.Kind != session.AppCommit || strings.Contains(info.Request.Text, prompts.PushInstruction) {
+	if !ok || info.Request.Kind != session.AppCommit || strings.Contains(info.Request.Text, "push") {
 		t.Errorf("first request = %+v, want the commit without the push", info.Request)
 	}
 	approvals := []keyedMarker{{Key: fixKeyOf, Marker: session.MarkerEntry{Type: session.MarkerChangesApproved, Files: 3}}}

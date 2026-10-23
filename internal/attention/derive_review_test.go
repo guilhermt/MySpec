@@ -60,8 +60,7 @@ func TestDeriveTheSituationOfAReview(t *testing.T) {
 	partly.State.Watch = &review.Snapshot{Staged: 1, Total: 4}
 	unstaged := reviewInput(reviewflow.StatusInReview)
 	unstaged.State.Watch = &review.Snapshot{Total: 4}
-	noCommit := reviewInput(reviewflow.StatusReadyToApprove)
-	noCommit.State.CommitFailed = true
+	toApprove := reviewInput(reviewflow.StatusReadyToApprove)
 
 	// deciding is a pass with three findings, one of them decided.
 	deciding := reviewInput(reviewflow.StatusAwaitingDecision, waiting)
@@ -188,10 +187,10 @@ func TestDeriveTheSituationOfAReview(t *testing.T) {
 				"The changes from the review are ready for your review."), 25),
 		},
 		{
-			"the changes are ready to approve after a commit that did not happen",
-			noCommit,
+			"the changes are ready to approve",
+			toApprove,
 			reviewSituation(attention.KindChangesReview, attention.FormApprove,
-				"The last approval of the pull request didn't produce a commit."),
+				"The changes from the review are ready for your review."),
 		},
 		{
 			"a published review whose pull request is in trouble",

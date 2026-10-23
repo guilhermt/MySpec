@@ -120,6 +120,7 @@ func TestTheDocumentIsMarkedByItsStamp(t *testing.T) {
 	// stamp, which the session knows.
 	restarted := discussionflow.New(discussionflow.Deps{
 		Discussions:  f.discussions,
+		Divergences:  f.divergences,
 		Sessions:     f.sessions,
 		Boards:       f.boards,
 		Repositories: f.repositories,

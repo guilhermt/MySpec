@@ -662,6 +662,27 @@ func (s *Service) ClearPublishErrors(ctx context.Context, id string, draftIDs []
 	return nil
 }
 
+// SetDraftsCorrected records whether the app already asked the agent to fix an
+// unreadable drafts artifact, so that reopening the app does not ask again.
+func (s *Service) SetDraftsCorrected(ctx context.Context, id string, corrected bool) error {
+	d, err := s.editable(id)
+	if err != nil {
+		return err
+	}
+	if d.DraftsCorrected == corrected {
+		return nil
+	}
+
+	d.DraftsCorrected = corrected
+	d.UpdatedAt = s.now().UTC()
+	if err = s.store.Update(ctx, d); err != nil {
+		return err
+	}
+	s.save(d)
+	s.changed()
+	return nil
+}
+
 // Archive takes a discussion out of the active list and into the history.
 // There is no way back.
 func (s *Service) Archive(ctx context.Context, id string) (Discussion, error) {

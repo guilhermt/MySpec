@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/guilhermt/myspec/internal/discussion"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/session"
 )
 
@@ -79,8 +80,8 @@ func documentStamp(path string) (string, bool) {
 
 // readDrafts records the drafts of the artifact the agent wrote, reconciled
 // with the edits and the decisions the user already made. An artifact the app
-// cannot read leaves the discussion saying so, because no draft of it can be
-// acted on.
+// cannot read is corrected once by the agent and then a divergence, because no
+// draft of it can be acted on.
 func (s *Service) readDrafts(ctx context.Context, stored discussion.Discussion) {
 	artifact, ok, err := discussion.ReadArtifact(stored.DraftsPath())
 	if err != nil {
@@ -104,6 +105,12 @@ func (s *Service) readDrafts(ctx context.Context, stored discussion.Discussion) 
 	// A rewrite that brought the artifact back to what was recorded changes no
 	// draft, but it does settle the warning that the app could not read it.
 	settled := s.setUnreadable(stored.ID, "")
+	if stored.DraftsCorrected {
+		if err = s.discussions.SetDraftsCorrected(ctx, stored.ID, false); err != nil {
+			s.log.Error("record discussion drafts correction failed", "discussion", stored.ID, "error", err)
+		}
+	}
+	s.clearDivergence(ctx, stored.ID, divergence.KindDraftsUnreadable)
 	if rec.Changed || settled {
 		s.notify(stored.ID)
 	}
@@ -111,6 +118,8 @@ func (s *Service) readDrafts(ctx context.Context, stored discussion.Discussion) 
 
 // draftsUnreadable keeps why the drafts artifact could not be read, so that
 // the discussion says it instead of waiting for drafts that will never come.
+// The agent is asked once to fix it; an artifact still unreadable after that is
+// a divergence.
 func (s *Service) draftsUnreadable(ctx context.Context, id string, err error) {
 	if !errors.Is(err, discussion.ErrUnreadable) {
 		s.log.Error("read discussion drafts failed", "discussion", id, "error", err)
@@ -124,6 +133,26 @@ func (s *Service) draftsUnreadable(ctx context.Context, id string, err error) {
 			Type: session.MarkerDraftsUnreadable, Reason: reason, Round: maxRound(s.discussions.Drafts(id)),
 		})
 	}
+
+	stored, ok := s.discussions.Get(id)
+	if !ok {
+		return
+	}
+	if !stored.DraftsCorrected {
+		message := session.AppMessage{
+			Kind: session.AppDraftsCorrection, Text: draftsCorrectionMessage(stored.DraftsPath(), reason),
+		}
+		if err = s.sessions.SendFromApp(ctx, sessionKey(id), message); err == nil {
+			if err = s.discussions.SetDraftsCorrected(ctx, id, true); err != nil {
+				s.log.Error("record discussion drafts correction failed", "discussion", id, "error", err)
+			}
+			return
+		}
+		// A send that fails, a paused session among them, goes straight to the
+		// divergence.
+		s.log.Warn("ask for the correction of the discussion drafts failed", "discussion", id, "error", err)
+	}
+	s.diverge(ctx, id, divergence.KindDraftsUnreadable, divergence.Facts{Path: discussion.DraftsFile, Reason: reason})
 }
 
 // markReading records in the conversation what a reading of the drafts did:

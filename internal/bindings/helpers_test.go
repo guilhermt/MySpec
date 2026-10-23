@@ -543,6 +543,7 @@ func newFixture(t *testing.T) *fixture {
 	})
 	f.reviewFlow = reviewflow.New(reviewflow.Deps{
 		Reviews:      f.prReviews,
+		Divergences:  divergence.New(divergence.Deps{Store: st, Log: log}),
 		Pulls:        f.pullRequests,
 		Sessions:     f.sessions,
 		Worktrees:    f.worktrees,
@@ -560,6 +561,7 @@ func newFixture(t *testing.T) *fixture {
 	f.discussions = discussion.New(discussion.Deps{Store: faultyDiscussions{DiscussionsRepo: st.Discussions, faults: f.faults}, DataDir: f.dataDir, Log: log})
 	f.discussionFlow = discussionflow.New(discussionflow.Deps{
 		Discussions:  f.discussions,
+		Divergences:  divergence.New(divergence.Deps{Store: st, Log: log}),
 		Sessions:     f.sessions,
 		Boards:       f.boards,
 		Repositories: f.repositories,

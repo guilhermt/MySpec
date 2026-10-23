@@ -1078,7 +1078,7 @@ export interface DiscussionSummary {
     "text": string;
 
     /**
-     * Status is discussing, awaiting_drafts, deciding, publishing, publish_failed,
+     * Status is discussing, diverged, deciding, publishing, publish_failed,
      * epic_discarded, epic_cant_publish or ready_to_archive, a string for the
      * same reason as State.Theme.
      */
@@ -3155,7 +3155,7 @@ export interface ReviewSummary {
      * Status is reviewing, waiting_checks, pass_blocked, awaiting_reply,
      * awaiting_decision, ready_to_publish, publish_failed, published,
      * new_commits, ready_to_apply, applying, in_review, ready_to_approve,
-     * committing, ready_to_merge or trouble.
+     * committing, pushing, diverged, ready_to_merge or trouble.
      */
     "status": string;
 
@@ -3225,7 +3225,7 @@ export interface ReviewSummary {
     "unreadableReport": string;
 
     /**
-     * CommitFailed says the last approval of apply mode ended without a commit.
+     * CommitFailed is always false: a commit that did not happen is the divergence of the review.
      */
     "commitFailed": boolean;
 

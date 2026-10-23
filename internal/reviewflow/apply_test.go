@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
@@ -186,7 +187,8 @@ func TestTheChangesOfTheAgentAreReviewedFileByFile(t *testing.T) {
 	f.sessions.goIdle(id)
 	f.watch.setSnapshot(review.Snapshot{Head: headHash, Staged: 1, Total: 2})
 	f.settled(t, id)
-	if got := f.watch.recorded(); got[len(got)-1] != "track:"+id+":pr_42:true" {
+	got := f.watch.recorded()
+	if quiet := slices.Index(got, "track:"+id+":pr_42:false"); slices.Index(got[quiet:], "track:"+id+":pr_42:true") < 0 {
 		t.Errorf("watch calls = %v, want the worktree watched for the user once the agent rests", got)
 	}
 	if got := f.state(t, id).Status; got != reviewflow.StatusInReview {
@@ -200,18 +202,18 @@ func TestTheChangesOfTheAgentAreReviewedFileByFile(t *testing.T) {
 	}
 }
 
-func TestApprovingAsksTheAgentToCommitAndPushToTheBranchOfThePullRequest(t *testing.T) {
+func TestApprovingAsksTheAgentToCommitWithoutPushing(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	id := committing(t, f)
 
 	stored, _ := f.reviews.Get(id)
-	want := "Commit the work of dev/web#42 in " + stored.ArtifactsDir + ", push=true to cache-boards"
+	want := "Commit the work of dev/web#42 in " + stored.ArtifactsDir + ""
 	if got := lastMessage(t, f); got != want {
 		t.Errorf("message = %q, want %q", got, want)
 	}
-	wantLastApp(t, f, session.AppMessage{Kind: session.AppCommitPush})
+	wantLastApp(t, f, session.AppMessage{Kind: session.AppCommit})
 	if stored.Phase != prreview.PhaseCommitting {
 		t.Errorf("phase = %q, want committing", stored.Phase)
 	}
@@ -242,12 +244,19 @@ func TestACommitTurnThatLeavesNoCommitGivesTheChangesBack(t *testing.T) {
 	f.sessions.goIdle(id)
 
 	f.evaluated(t, id, func(s reviewflow.State) bool {
-		return s.CommitFailed
+		return s.Divergence != nil
 	}, "the commit to be found missing")
 
 	state := f.state(t, id)
-	if state.Review.Phase != prreview.PhaseApplying || state.Status != reviewflow.StatusReadyToApprove {
-		t.Errorf("phase, status = %q, %q, want applying, ready_to_approve", state.Review.Phase, state.Status)
+	if state.Review.Phase != prreview.PhaseApplying || state.Status != reviewflow.StatusDiverged {
+		t.Errorf("phase, status = %q, %q, want applying, diverged", state.Review.Phase, state.Status)
+	}
+	if d := state.Divergence; d.Kind != divergence.KindCommitMissing || d.Stage != session.ReviewStage ||
+		d.Facts.Branch != "cache-boards" || d.Facts.Files != 2 {
+		t.Errorf("divergence = %+v, want commit_missing in review on cache-boards with 2 files", d)
+	}
+	if got := f.sessions.markersOf(session.MarkerDivergence); len(got) != 1 {
+		t.Errorf("divergence markers = %+v, want one", got)
 	}
 	if !slices.Contains(f.watch.recorded(), "refresh:"+id) {
 		t.Errorf("watch calls = %v, want a fresh reading of the worktree", f.watch.recorded())
@@ -279,7 +288,7 @@ func TestACommitTurnThatLeavesNoCommitIsToldWhenThePassRecordedNoCommit(t *testi
 	f.sessions.goIdle(id)
 
 	f.evaluated(t, id, func(s reviewflow.State) bool {
-		return s.CommitFailed
+		return s.Divergence != nil
 	}, "the commit to be found missing against the head read at the approval")
 
 	state := f.state(t, id)
@@ -325,8 +334,11 @@ func TestACommitThatWentUpAsksForTheNextPass(t *testing.T) {
 	}, "the second pass to start once the checks passed")
 
 	state := f.state(t, id)
-	if state.Review.Phase != prreview.PhaseNone || state.CommitFailed {
-		t.Errorf("review = %+v, commit failed = %v, want the cycle over", state.Review, state.CommitFailed)
+	if state.Review.Phase != prreview.PhaseNone || state.Divergence != nil {
+		t.Errorf("review = %+v, divergence = %v, want the cycle over", state.Review, state.Divergence)
+	}
+	if got := f.worktrees.pushed(); !slices.Equal(got, []string{"cache-boards"}) {
+		t.Errorf("pushes = %v, want the branch of the pull request once", got)
 	}
 	if passes := f.reviews.Passes(id); !passes[0].Applied || passes[1].Applied {
 		t.Errorf("passes = %+v, want the first one applied and the second one not", passes)
@@ -674,7 +686,7 @@ func TestACommitThatWentUpIsMarkedWithItsSubjectAndThePullRequest(t *testing.T) 
 			f.committedMarked(t, 1)
 
 			want := []session.MarkerEntry{{
-				Type: session.MarkerCommitted, SHA: task.ShortSHA(commitHash), Subject: c.subject, Pushed: true, Number: 42,
+				Type: session.MarkerCommitted, SHA: task.ShortSHA(commitHash), Subject: c.subject, Pushed: false, Number: 42,
 			}}
 			if diff := cmp.Diff(want, f.sessions.markersOf(session.MarkerCommitted)); diff != "" {
 				t.Errorf("committed markers (-want +got):\n%s", diff)

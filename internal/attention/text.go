@@ -211,10 +211,7 @@ func changesReviewBody(form Form, commitFailed bool, fallback task.ReviewFallbac
 }
 
 // reviewChangesBody is changesReviewBody for the review of a pull request.
-func reviewChangesBody(form Form, commitFailed bool) string {
-	if form == FormApprove && commitFailed {
-		return "The last approval of the pull request didn't produce a commit."
-	}
+func reviewChangesBody() string {
 	return "The changes from the review are ready for your review."
 }
 
@@ -269,12 +266,6 @@ func draftsBody(undecided int) string {
 		return "There is 1 draft to decide in the discussion."
 	}
 	return fmt.Sprintf("There are %d drafts to decide in the discussion.", undecided)
-}
-
-// unreadableDraftsBody is the notification of a discussion whose drafts
-// artifact the app cannot read.
-func unreadableDraftsBody() string {
-	return "The agent wrote drafts the app can't read in the discussion."
 }
 
 // draftsPublishFailedBody is the notification of drafts of a discussion GitHub

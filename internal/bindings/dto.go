@@ -1744,7 +1744,7 @@ type ReviewSummary struct {
 	// Status is reviewing, waiting_checks, pass_blocked, awaiting_reply,
 	// awaiting_decision, ready_to_publish, publish_failed, published,
 	// new_commits, ready_to_apply, applying, in_review, ready_to_approve,
-	// committing, ready_to_merge or trouble.
+	// committing, pushing, diverged, ready_to_merge or trouble.
 	Status       string       `json:"status"`
 	Card         *PullCard    `json:"card"` // nil when the pull request has no card
 	WorktreePath string       `json:"worktreePath"`
@@ -1777,7 +1777,7 @@ type ReviewSummary struct {
 	// UnreadableReport is why the report of the pass the app asked for could
 	// not be read; "" otherwise.
 	UnreadableReport string `json:"unreadableReport"`
-	// CommitFailed says the last approval of apply mode ended without a commit.
+	// CommitFailed is always false: a commit that did not happen is the divergence of the review.
 	CommitFailed bool `json:"commitFailed"`
 	// Review is the last reading of the worktree; apply mode only.
 	Review *Review `json:"review"`
@@ -1988,7 +1988,7 @@ type DiscussionSummary struct {
 	Board   string         `json:"board"` // the title of the board
 	Title   string         `json:"title"`
 	Text    string         `json:"text"` // what the user wrote when creating it; "" for none
-	// Status is discussing, awaiting_drafts, deciding, publishing, publish_failed,
+	// Status is discussing, diverged, deciding, publishing, publish_failed,
 	// epic_discarded, epic_cant_publish or ready_to_archive, a string for the
 	// same reason as State.Theme.
 	Status string           `json:"status"`

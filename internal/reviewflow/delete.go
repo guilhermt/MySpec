@@ -52,6 +52,8 @@ func (s *Service) Delete(ctx context.Context, id string) (Leftover, error) {
 	if err := s.reviews.Delete(ctx, id); err != nil {
 		return Leftover{}, err
 	}
+	// The row went with the review by cascade.
+	s.divergences.Forget(id)
 
 	s.mu.Lock()
 	delete(s.locks, id)

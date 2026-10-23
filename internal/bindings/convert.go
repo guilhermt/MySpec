@@ -1783,7 +1783,6 @@ func FromReviews(
 			PublishError:     stored.PublishError,
 			PassBlocked:      state.PassBlocked,
 			UnreadableReport: state.UnreadableReport,
-			CommitFailed:     state.CommitFailed,
 			Review:           fromReview(state.Watch),
 			Verdicts:         verdictsOf(stored),
 			CanPublish:       canPublish(state),

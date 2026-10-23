@@ -2256,13 +2256,9 @@ func (m *memGH) ghCalls() []string {
 
 // commitPrompt is what the fake renderer answers with for the commit stage,
 // with the name of the task so that a test can see the placeholders went
-// through, and the push instruction when the commit belongs to a pull request.
-func commitPrompt(name string, push bool) string {
-	message := "Commit the work of " + name
-	if push {
-		message += ". " + prompts.PushInstruction
-	}
-	return message
+// through.
+func commitPrompt(name string) string {
+	return "Commit the work of " + name
 }
 
 // commitAllPrompt is what the fake renderer answers with for the commit stage
@@ -2330,7 +2326,7 @@ func newFixture(t *testing.T) *fixture {
 				if vars.CommitAll {
 					return commitAllPrompt(vars.TaskName), nil
 				}
-				return commitPrompt(vars.TaskName, vars.Push), nil
+				return commitPrompt(vars.TaskName), nil
 			case prompts.StagePRReview:
 				status := githubStatus(vars.Checks, vars.MergeBase)
 				switch {

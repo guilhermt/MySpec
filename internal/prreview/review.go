@@ -26,8 +26,8 @@ const (
 )
 
 // Phase is where a review is in the cycle of a pass: waiting for the checks
-// of the head before one, and, in apply mode, applying the findings or
-// committing the fixes.
+// of the head before one, and, in apply mode, applying the findings,
+// committing the fixes or pushing the commit.
 type Phase string
 
 // The phases of a review.
@@ -36,6 +36,7 @@ const (
 	PhaseWaitingChecks Phase = "waiting_checks" // both modes: a pass was asked for and waits for GitHub
 	PhaseApplying      Phase = "applying"       // apply only
 	PhaseCommitting    Phase = "committing"     // apply only
+	PhasePushing       Phase = "pushing"        // apply only: the app pushes the commit of the fixes
 )
 
 // PRState is what became of the pull request under review.

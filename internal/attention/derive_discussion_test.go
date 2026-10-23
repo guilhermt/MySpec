@@ -155,11 +155,6 @@ func TestDeriveTheSituationOfADiscussion(t *testing.T) {
 			discussionSituation(attention.KindReply, "The agent is waiting for your reply in the discussion."),
 		},
 		{
-			"the drafts the agent wrote can't be read",
-			discussionInput(discussionflow.StatusAwaitingDrafts, waiting),
-			discussionSituation(attention.KindReply, "The agent wrote drafts the app can't read in the discussion."),
-		},
-		{
 			"there are drafts to decide",
 			withDrafts(draftsRead(discussionInput(discussionflow.StatusDeciding, waiting)), toDecide(5)...),
 			discussionSituation(attention.KindDrafts, "There are 5 drafts to decide in the discussion."),

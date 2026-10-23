@@ -40,6 +40,20 @@ export function ArchiveDiscussion(id: string): $CancellablePromise<void> {
 }
 
 /**
+ * AskAgain asks the agent to fix the drafts of a discussion once more.
+ */
+export function AskAgain(id: string): $CancellablePromise<void> {
+    return $Call.ByID(2031788764, id);
+}
+
+/**
+ * CheckAgain reads the drafts of a discussion again after the user fixed them by hand.
+ */
+export function CheckAgain(id: string): $CancellablePromise<void> {
+    return $Call.ByID(1847105891, id);
+}
+
+/**
  * DecideDraft records what the user decided about one draft: "", approved or
  * discarded.
  */

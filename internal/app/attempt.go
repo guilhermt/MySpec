@@ -317,6 +317,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	})
 	reviewFlow := reviewflow.New(reviewflow.Deps{
 		Reviews:      prReviews,
+		Divergences:  divergences,
 		Pulls:        pullRequests,
 		Sessions:     sessions,
 		Worktrees:    worktrees,
@@ -336,6 +337,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	})
 	discussionFlow := discussionflow.New(discussionflow.Deps{
 		Discussions:  discussions,
+		Divergences:  divergences,
 		Sessions:     sessions,
 		Boards:       boards,
 		Repositories: repositories,

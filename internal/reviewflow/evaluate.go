@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/session"
@@ -50,20 +51,36 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 }
 
 // recordAsked records the report of the pass the app asked for, once the
-// agent has written one. A pass that rested without a report leaves the
-// review waiting for the user.
+// agent has rested. A pass that rested without a report the app can read is a
+// divergence, which says what is wrong with the file.
 func (s *Service) recordAsked(
 	ctx context.Context, stored prreview.Review, wt worktree.Worktree, key session.Key,
 ) {
 	pass := stored.AskedPass
-	report, ok, err := prreport.ReadReport(stored.ReportPath(pass), pass)
+	name := prreview.ReportFile(pass)
+	found, err := prreport.Resolve(stored.ArtifactsDir, name, pass)
 	if err != nil {
-		s.reportUnreadable(stored.ID, pass, err)
+		s.log.Error("read review report failed", "review", stored.ID, "pass", pass, "error", err)
 		return
 	}
-	if !ok {
+	facts := divergence.Facts{Pass: pass, Path: name}
+	switch found.Resolution {
+	case prreport.ResolutionMissing:
+		s.diverge(ctx, stored, divergence.KindReportMissing, facts)
 		return
+	case prreport.ResolutionUnreadable:
+		s.log.Warn("review report is unreadable", "review", stored.ID, "pass", pass, "reason", found.Reason)
+		facts.Reason = found.Reason
+		s.diverge(ctx, stored, divergence.KindReportUnreadable, facts)
+		return
+	case prreport.ResolutionAmbiguous:
+		facts.Candidates = found.Candidates
+		s.diverge(ctx, stored, divergence.KindReportsAmbiguous, facts)
+		return
+	case prreport.ResolutionFound:
 	}
+	report := found.Report
+	s.clearDivergence(ctx, stored.ID, reportKinds...)
 
 	if _, _, err = s.reviews.RecordReport(ctx, stored.ID, report, s.headOf(ctx, wt)); err != nil {
 		s.log.Error("record review report failed", "review", stored.ID, "pass", pass, "error", err)

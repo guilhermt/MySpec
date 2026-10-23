@@ -40,8 +40,6 @@ func DeriveDiscussion(in DiscussionInput) []Found {
 	}
 
 	switch state.Waiting {
-	case discussionflow.StatusAwaitingDrafts:
-		found.Kind, found.Body = KindReply, unreadableDraftsBody()
 	case discussionflow.StatusDiscussing:
 		// The agent asks in the conversation and rests, as in a planning stage.
 		if !state.SessionOpen || !state.Session.Idle || state.Discussion.DraftsRead {

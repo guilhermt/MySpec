@@ -64,10 +64,10 @@ func DeriveReview(in ReviewInput) []Found {
 			form, percent = FormStaged, state.Watch.Percent()
 		}
 		found.Kind, found.Form, found.Percent = KindChangesReview, form, percent
-		found.Body = reviewChangesBody(form, state.CommitFailed)
+		found.Body = reviewChangesBody()
 	case reviewflow.StatusReadyToApprove:
 		found.Kind, found.Form = KindChangesReview, FormApprove
-		found.Body = reviewChangesBody(FormApprove, state.CommitFailed)
+		found.Body = reviewChangesBody()
 	case reviewflow.StatusReadyToMerge:
 		found.Kind, found.Form = KindMerge, FormMerge
 		found.Body = reviewMergeBody()

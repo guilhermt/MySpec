@@ -14,7 +14,6 @@ import (
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
-	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
@@ -200,8 +199,8 @@ func TestApprovePRCommitsThroughTheImplementer(t *testing.T) {
 		t.Errorf("status = %q, want committing", run.Status)
 	}
 	sent := f.sessions.sent()
-	if len(sent) != 1 || strings.Contains(sent[0], prompts.PushInstruction) {
-		t.Errorf("sent = %q, want the commit prompt without the push instruction", sent)
+	if len(sent) != 1 || sent[0] != commitPrompt("task-1") {
+		t.Errorf("sent = %q, want the commit prompt", sent)
 	}
 	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppCommit}}, f.sessions.sentApps()); diff != "" {
 		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
