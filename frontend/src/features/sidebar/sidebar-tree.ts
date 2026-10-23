@@ -57,7 +57,7 @@ export interface RowText {
 
 /** RowLine3 is the third line of a row: what the agent does, or the situation under a publication. */
 export type RowLine3 =
-  | (RowText & { kind: "work"; verb: string; contextPercent: number })
+  | (RowText & { kind: "work"; verb: string; contextPercent: number | null })
   | (RowText & { kind: "background"; count: number })
   | (RowText & { kind: "situation"; chip: Extract<RowClock, { kind: "chip" }> });
 
@@ -808,10 +808,10 @@ function buildRow(owner: Owner, parts: RowParts, now: number): ItemRow {
       session.actionLabel === ""
         ? activity(session).spoken
         : `${session.actionLabel} ${session.actionTarget}`;
-    sentences.push(
-      `${session.role} working for ${forWait(session.turnStartedAt, now)}: ${does}.`,
-      `context ${session.contextPercent}% used.`,
-    );
+    sentences.push(`${session.role} working for ${forWait(session.turnStartedAt, now)}: ${does}.`);
+    if (session.contextPercent !== null) {
+      sentences.push(`context ${session.contextPercent}% used.`);
+    }
   }
   if (background > 0) {
     sentences.push(`${background} running in the background.`);

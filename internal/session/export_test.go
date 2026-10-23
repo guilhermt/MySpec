@@ -17,3 +17,6 @@ var WakeOf = wakeOf
 
 // FileOutput exposes fileOutput.
 var FileOutput = fileOutput
+
+// ContextPercent exposes contextPercent.
+var ContextPercent = contextPercent

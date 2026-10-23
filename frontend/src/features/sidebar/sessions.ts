@@ -20,7 +20,7 @@ export interface ItemSession {
   turnRunning: boolean;
   processRunning: boolean;
   retryAttempt: number;
-  contextPercent: number;
+  contextPercent: number | null;
   turnStartedAt: string;
   actionLabel: string;
   actionTarget: string;
@@ -34,7 +34,7 @@ interface SessionBlock {
   turnRunning: boolean;
   processRunning: boolean;
   retryAttempt: number;
-  contextPercent: number;
+  contextPercent: number | null;
   turnStartedAt: string;
   actionLabel: string;
   actionTarget: string;

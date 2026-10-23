@@ -646,6 +646,39 @@ describe("Composer", () => {
     expect(screen.queryByRole("button", { name: /Conversation model:/ })).not.toBeInTheDocument();
   });
 
+  it("measures the context of the session right after the model", async () => {
+    const { user } = renderWithStore(composer(makeTask({ contextPercent: 44 })), {
+      state: makeState(),
+    });
+    const meter = screen.getByRole("meter", { name: "Context" });
+
+    expect(meter).toHaveTextContent("44%");
+    expect(
+      screen.getByRole("button", { name: /Conversation model:/ }).compareDocumentPosition(meter) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    await user.hover(meter);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Context window 44% used");
+  });
+
+  it("shows … for the context before the first reading", () => {
+    renderWithStore(composer(makeTask({ contextPercent: null })));
+
+    expect(screen.getByRole("meter", { name: "Context" })).toHaveTextContent("…");
+  });
+
+  it("shows — for the context while the session is paused", () => {
+    renderWithStore(composer(makeTask({ sessionStatus: "paused", contextPercent: 44 })));
+
+    expect(screen.getByRole("meter", { name: "Context" })).toHaveTextContent("—");
+  });
+
+  it("has no context meter without a session", () => {
+    renderWithStore(composer(makeTask({ sessionModel: "", sessionEffort: "" })));
+
+    expect(screen.queryByRole("meter")).not.toBeInTheDocument();
+  });
+
   it("never gives way to the conversation above it", () => {
     renderWithStore(composer(makeTask({ sessionStatus: "paused" })));
 

@@ -796,15 +796,6 @@ const ROWS: Row[] = [
   },
   {
     origin: "ReviewHeader",
-    control: "the meter",
-    state: "with a session",
-    draw: review({ contextPercent: 44 }),
-    where: "header",
-    role: "meter",
-    name: /^Context$/,
-  },
-  {
-    origin: "ReviewHeader",
     control: "Pause",
     state: "the reviewer working",
     draw: review({ sessionStatus: "working", turnRunning: true }),

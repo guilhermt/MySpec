@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { DiscussionHeader } from "@/features/discussion/DiscussionHeader";
 import { api, type DiscussionSummary } from "@/lib/wails";
@@ -15,7 +15,6 @@ function header(overrides: Partial<DiscussionSummary> = {}) {
 }
 
 const stepper = () => screen.getByRole("list", { name: /^Progress/ });
-const meter = () => screen.getByRole("meter", { name: "Context" });
 
 describe("DiscussionHeader", () => {
   it("names the place after the discussion, under the crumb of its board", () => {
@@ -68,39 +67,10 @@ describe("DiscussionHeader", () => {
     expect(stepper()).toHaveAccessibleName("Progress · Round 1 · waiting for you: decide drafts");
   });
 
-  describe("the context meter", () => {
-    it("measures the session of the discussion", async () => {
-      const { user } = header({ contextPercent: 44 });
+  it("has no context meter, which lives in the box of the conversation", () => {
+    header({ contextPercent: 44 });
 
-      expect(meter()).toHaveTextContent("44%");
-      await user.hover(meter());
-      expect(await screen.findByRole("tooltip")).toHaveTextContent(
-        "Context used by the discussion: 44%",
-      );
-    });
-
-    it("steps aside while the conversation of a subagent is read", () => {
-      header({ contextPercent: 44 });
-      expect(meter()).toBeInTheDocument();
-
-      act(() =>
-        useAppStore.getState().openSubagentConversation({
-          itemId: makeDiscussion().id,
-          stage: "discussion",
-          toolUseId: "toolu_a",
-          offset: null,
-        }),
-      );
-
-      expect(screen.queryByRole("meter")).not.toBeInTheDocument();
-    });
-
-    it("is not there, nor Pause, before the discussion has a session", () => {
-      header({ sessionStage: "" });
-
-      expect(screen.queryByRole("meter")).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Pause" })).not.toBeInTheDocument();
-    });
+    expect(screen.queryByRole("meter")).not.toBeInTheDocument();
   });
 
   describe("Pause", () => {

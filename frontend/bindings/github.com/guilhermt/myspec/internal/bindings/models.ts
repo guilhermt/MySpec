@@ -146,7 +146,11 @@ export interface AgentSession {
      */
     "actionLabel": string;
     "actionTarget": string;
-    "contextPercent": number;
+
+    /**
+     * nil before the first reading
+     */
+    "contextPercent": number | null;
     "pendingCount": number;
     "lastError": string;
 }
@@ -1199,7 +1203,11 @@ export interface DiscussionSummary {
      */
     "actionLabel": string;
     "actionTarget": string;
-    "contextPercent": number;
+
+    /**
+     * nil before the first reading
+     */
+    "contextPercent": number | null;
     "pendingCount": number;
     "lastError": string;
 
@@ -2500,7 +2508,11 @@ export interface PullRequest {
      */
     "actionLabel": string;
     "actionTarget": string;
-    "contextPercent": number;
+
+    /**
+     * nil before the first reading
+     */
+    "contextPercent": number | null;
     "pendingCount": number;
     "lastError": string;
 }
@@ -3224,7 +3236,11 @@ export interface ReviewSummary {
      */
     "actionLabel": string;
     "actionTarget": string;
-    "contextPercent": number;
+
+    /**
+     * nil before the first reading
+     */
+    "contextPercent": number | null;
     "pendingCount": number;
     "lastError": string;
 
@@ -3997,7 +4013,11 @@ export interface TaskSummary {
      */
     "actionLabel": string;
     "actionTarget": string;
-    "contextPercent": number;
+
+    /**
+     * nil before the first reading
+     */
+    "contextPercent": number | null;
     "pendingCount": number;
     "corrections": number;
     "hasPrd": boolean;

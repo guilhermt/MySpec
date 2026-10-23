@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ReviewHeader } from "@/features/reviews/ReviewHeader";
 import { api, type ReviewSummary } from "@/lib/wails";
@@ -15,7 +15,6 @@ function header(overrides: Partial<ReviewSummary> = {}) {
 }
 
 const stepper = () => screen.getByRole("list", { name: /^Progress/ });
-const meter = () => screen.getByRole("meter", { name: "Context" });
 
 // clock writes a time the way the header does for today: 14:52.
 function clock(date: Date): string {
@@ -92,52 +91,10 @@ describe("ReviewHeader", () => {
     expect(stepper()).toHaveAccessibleName("Progress · Pass 1 · waiting for you: decide findings");
   });
 
-  describe("the context meter", () => {
-    it("measures the session of the reviewer, who it is in the tooltip", async () => {
-      const { user } = header({ contextPercent: 44 });
+  it("has no context meter, which lives in the box of the conversation", () => {
+    header({ contextPercent: 44 });
 
-      expect(meter()).toHaveTextContent("44%");
-      await user.hover(meter());
-      expect(await screen.findByRole("tooltip")).toHaveTextContent(
-        "Context used by the reviewer: 44%",
-      );
-    });
-
-    it("says it has no reading yet with …", () => {
-      header({ contextPercent: 0 });
-
-      expect(meter()).toHaveTextContent("…");
-      expect(meter()).toHaveAttribute("aria-valuetext", "not read yet");
-    });
-
-    it("shows — while the session is paused", () => {
-      header({ sessionStatus: "paused", contextPercent: 44 });
-
-      expect(meter()).toHaveTextContent("—");
-    });
-
-    it("steps aside while the conversation of a subagent is read", () => {
-      header({ contextPercent: 44 });
-      expect(meter()).toBeInTheDocument();
-
-      act(() =>
-        useAppStore.getState().openSubagentConversation({
-          itemId: makeReviewSummary().id,
-          stage: "review",
-          toolUseId: "toolu_a",
-          offset: null,
-        }),
-      );
-
-      expect(screen.queryByRole("meter")).not.toBeInTheDocument();
-    });
-
-    it("is not there, nor Pause, before the review has a session", () => {
-      header({ sessionStage: "" });
-
-      expect(screen.queryByRole("meter")).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Pause" })).not.toBeInTheDocument();
-    });
+    expect(screen.queryByRole("meter")).not.toBeInTheDocument();
   });
 
   describe("Pause", () => {

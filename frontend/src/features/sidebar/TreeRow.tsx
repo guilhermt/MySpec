@@ -9,6 +9,7 @@ import { Shimmer } from "@/components/system/Shimmer";
 import { StateGlyph } from "@/components/system/StateGlyph";
 import { TimeChip } from "@/components/system/TimeChip";
 import { Tooltip } from "@/components/system/Tooltip";
+import { contextDetail } from "@/features/chat/session";
 import type { ItemRow, RowFlash } from "@/features/sidebar/sidebar-tree";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
@@ -253,7 +254,7 @@ function TreeRowView({ row, level, selected, isNext, flash, narrow, tabIndex }: 
               <ContextMeter
                 percent={work.contextPercent}
                 compact={narrow}
-                detail={`Context window ${Math.round(work.contextPercent)}% used`}
+                detail={contextDetail(work.contextPercent)}
               />
               {row.background > 0 && <BackgroundCount count={row.background} selected={selected} />}
             </span>

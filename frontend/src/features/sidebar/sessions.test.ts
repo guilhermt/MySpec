@@ -127,7 +127,7 @@ describe("workingSession", () => {
     turnRunning: working,
     processRunning: true,
     retryAttempt: 0,
-    contextPercent: 0,
+    contextPercent: null,
     turnStartedAt,
     actionLabel: "",
     actionTarget: "",

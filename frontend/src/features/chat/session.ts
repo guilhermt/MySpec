@@ -23,6 +23,8 @@ export interface SessionState {
   turnFailed: boolean;
   /** pausedAt is when the session was paused, RFC 3339; "" when it is not, or the time is unknown. */
   pausedAt: string;
+  /** contextPercent is how much of the model's whole window the context uses, rounded; null before the first reading. */
+  contextPercent: number | null;
 }
 
 /**
@@ -43,4 +45,12 @@ export const IDLE_SESSION: SessionState = {
   lastError: "",
   turnFailed: false,
   pausedAt: "",
+  contextPercent: null,
 };
+
+/** contextDetail is the tooltip of the context meter: "Context window 44% used", or "Context window not read yet" before the first reading. */
+export function contextDetail(percent: number | null): string {
+  return percent === null
+    ? "Context window not read yet"
+    : `Context window ${Math.round(percent)}% used`;
+}

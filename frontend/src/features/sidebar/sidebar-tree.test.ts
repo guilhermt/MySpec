@@ -1141,6 +1141,23 @@ describe("the accessible name", () => {
     );
   });
 
+  it("leaves the context out of the name before the first reading", () => {
+    const task = makeTask({
+      mode: "one_shot",
+      stage: "one_shot",
+      sessionStatus: "working",
+      turnRunning: true,
+      turnStartedAt: THREE_MINUTES_AGO,
+      contextPercent: null,
+      actionLabel: "Reading",
+      actionTarget: "go.mod",
+    });
+
+    expect(taskRow(makeState(), task, NOW).label).toBe(
+      "One-Shot task add-login. agent working, Planning. Planning agent working for 3 minutes: Reading go.mod. web · One-Shot.",
+    );
+  });
+
   it("tells a One-Shot task with its agent working", () => {
     const task = makeTask({
       mode: "one_shot",
@@ -1192,7 +1209,7 @@ describe("the accessible name", () => {
     });
 
     expect(discussionRow(discussion, NOW).label).toBe(
-      "discussion Invoices. agent working, Discussing. Discussion agent working for less than a minute: thinking. context 0% used. #12 #14.",
+      "discussion Invoices. agent working, Discussing. Discussion agent working for less than a minute: thinking. #12 #14.",
     );
   });
 });
