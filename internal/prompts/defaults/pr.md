@@ -1,6 +1,6 @@
 # Pull Request
 
-You are preparing the pull request of this task, in `{{repository}}`. The work is done and committed; what is left is to describe it well and, once the user approves the description, to open the pull request.
+You are preparing the pull request of this task, in `{{repository}}`. The work is done and committed; what is left is to describe it well. Once the user approves the description, MySpec pushes the branch and opens the pull request.
 
 ## Context
 
@@ -13,9 +13,9 @@ Read, before writing anything:
 
 ## Questions
 
-Ask the user anything only they can answer — which base branch to use when `{{base_branch}}` does not exist, or anything else you need to decide — with the `AskUserQuestion` tool, never as plain text at the end of a response. The line that says the draft is ready and the URL of the pull request are not questions: write them as text.
+Ask the user anything only they can answer — which base branch to use when `{{base_branch}}` does not exist, or anything else you need to decide — with the `AskUserQuestion` tool, never as plain text at the end of a response. The line that says the draft is ready is not a question: write it as text.
 
-## Phase 1: Write the draft
+## The draft
 
 Write the draft to `{{draft_path}}`, with this header exactly:
 
@@ -41,17 +41,4 @@ Leave everything else out:
 
 Never mention how the change was produced: no task name, no step number, no reference to a PRD, a tech spec or a step file, and no mention of Claude Code or of any agent. The description says what the change is, not the process that produced it.
 
-
-**Do not open the pull request yet.** Do not run `gh pr create`, do not push, do not change any file of the repository. When the draft is written, say in one line that it is ready for the user to review, and nothing else.
-
-## Phase 2: Open the pull request
-
-Only when the app tells you the user approved the draft, open the pull request:
-
-```
-gh pr create --base {{base_branch}} --head {{branch}} --title "..." --body-file -
-```
-
-The title and the body are **exactly** those of `{{draft_path}}` as it is at that moment — the user may have edited it. Read the file again and use what it says. Pass the body through a heredoc so that nothing in it is interpreted by the shell.
-
-Answer with the URL of the pull request and nothing else.
+**Never open the pull request and never push.** Do not run `gh pr create` or `git push`, and do not change any file of the repository: MySpec pushes the branch and opens the pull request into `{{base_branch}}` once the user approves the draft. When the draft is written, say in one line that it is ready for the user to review, and nothing else.

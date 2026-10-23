@@ -32,6 +32,7 @@ import {
   asModelStage,
   asPermissionStatus,
   asPlaceKind,
+  asPRBlockReason,
   asPRState,
   asPRStatus,
   asPromptStage,
@@ -301,6 +302,8 @@ describe("narrowing", () => {
     expect(asBlockReason("path_exists")).toBe("path_exists");
     expect(asBlockReason("branch_exists")).toBe("branch_exists");
     expect(asBlockReason("clone_missing")).toBe("clone_missing");
+    expect(asPRBlockReason("push_failed")).toBe("push_failed");
+    expect(asPRBlockReason("open_failed")).toBe("open_failed");
     expect(asErrorKind("not_logged_in")).toBe("not_logged_in");
     expect(asTranscriptEventKind("text")).toBe("text");
     expect(asSituationKind("session_error")).toBe("session_error");

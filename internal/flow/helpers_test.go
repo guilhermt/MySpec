@@ -1555,7 +1555,11 @@ type memWorktrees struct {
 	statusErr error
 	commitErr error
 	cleanErr  error
+	pushErr   error
 	removeErr error
+	merging   bool          // whether a merge is in progress in every worktree
+	notPushed bool          // whether the head is said to be missing from the remote
+	pushes    []string      // the branches pushed, in order
 	block     chan struct{} // when set, Ensure waits on it or on the context
 	linger    chan struct{} // when set, a cancelled Ensure waits on it before it returns
 	hold      chan struct{} // when set, Close waits on it after it recorded the call
@@ -1714,6 +1718,51 @@ func (m *memWorktrees) Clean(_ context.Context, wt worktree.Worktree) error {
 	}
 	m.status = git.Status{}
 	return nil
+}
+
+func (m *memWorktrees) Push(_ context.Context, wt worktree.Worktree, branch string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "push:"+wt.TaskID+":"+branch)
+	if m.pushErr != nil {
+		return m.pushErr
+	}
+	m.pushes = append(m.pushes, branch)
+	m.notPushed = false
+	return nil
+}
+
+func (m *memWorktrees) Pushed(_ context.Context, wt worktree.Worktree, branch string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "pushed:"+wt.TaskID+":"+branch)
+	return !m.notPushed, nil
+}
+
+func (m *memWorktrees) Merging(_ context.Context, wt worktree.Worktree) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "merging:"+wt.TaskID)
+	return m.merging, nil
+}
+
+// failPush makes every push fail with err.
+func (m *memWorktrees) failPush(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.pushErr = err
+}
+
+// pushed are the branches the app pushed, in order.
+func (m *memWorktrees) pushed() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.pushes)
 }
 
 func (m *memWorktrees) Merged(_ context.Context, wt worktree.Worktree, base string) (bool, error) {
@@ -1977,15 +2026,25 @@ func (m *memDivergenceStore) DeleteDivergence(_ context.Context, itemID string) 
 // memGH is an in-memory flow.GH: it answers with the login and the pull
 // requests a test seeds, and records what it was asked.
 type memGH struct {
-	mu      sync.Mutex
-	calls   []string
-	authErr error
-	prs     map[string]gh.PR // by branch
-	viewErr error            // returned by every reading that finds no seeded PR
+	mu        sync.Mutex
+	calls     []string
+	authErr   error
+	prs       map[string]gh.PR  // by branch
+	viewErr   error             // returned by every reading that finds no seeded PR
+	listErr   error             // returned by OpenPRs
+	createErr error             // returned by CreatePR
+	created   []createCall      // the pull requests CreatePR opened, in order
+	nextPR    int               // the number the next CreatePR answers with
+	oids      map[string]string // the commit every seeded branch is said to be on
+}
+
+// createCall is one pull request the app opened.
+type createCall struct {
+	base, head, title, body string
 }
 
 func newGH() *memGH {
-	return &memGH{prs: map[string]gh.PR{}, viewErr: gh.ErrNoPR}
+	return &memGH{prs: map[string]gh.PR{}, viewErr: gh.ErrNoPR, nextPR: 7, oids: map[string]string{}}
 }
 
 func (m *memGH) Auth(context.Context) error {
@@ -1996,15 +2055,94 @@ func (m *memGH) Auth(context.Context) error {
 	return m.authErr
 }
 
-func (m *memGH) ViewPR(_ context.Context, dir, branch string) (gh.PR, error) {
+// ViewPR answers with the pull request of a branch, or of a number as text.
+func (m *memGH) ViewPR(_ context.Context, dir, ref string) (gh.PR, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "view:"+filepath.Base(filepath.Dir(dir))+":"+branch)
-	if pr, ok := m.prs[branch]; ok {
+	m.calls = append(m.calls, "view:"+filepath.Base(filepath.Dir(dir))+":"+ref)
+	if pr, ok := m.prs[ref]; ok {
 		return pr, nil
 	}
+	for _, pr := range m.prs {
+		if strconv.Itoa(pr.Number) == ref {
+			return pr, nil
+		}
+	}
 	return gh.PR{}, m.viewErr
+}
+
+// OpenPRs lists the open pull requests the test seeded, by number.
+func (m *memGH) OpenPRs(context.Context, string) ([]gh.PRHead, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "list")
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
+	var heads []gh.PRHead
+	for branch, pr := range m.prs {
+		if pr.State == "closed" || pr.State == "merged" {
+			continue
+		}
+		heads = append(heads, gh.PRHead{
+			Number: pr.Number, URL: pr.URL, Base: pr.Base, Head: cmp.Or(pr.Head, branch), HeadOID: m.oids[branch],
+		})
+	}
+	slices.SortFunc(heads, func(a, b gh.PRHead) int { return cmp.Compare(a.Number, b.Number) })
+	return heads, nil
+}
+
+// CreatePR opens a pull request of the head branch and seeds it, so that the
+// readings that follow find it.
+func (m *memGH) CreatePR(_ context.Context, _, base, head, title, body string) (int, string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "create:"+head)
+	if m.createErr != nil {
+		return 0, "", m.createErr
+	}
+	number := m.nextPR
+	url := "https://github.com/acme/api/pull/" + strconv.Itoa(number)
+	m.prs[head] = gh.PR{
+		Number: number, URL: url, State: "open", Base: base, Head: head, Checks: passedChecks(),
+	}
+	m.created = append(m.created, createCall{base: base, head: head, title: title, body: body})
+	return number, url, nil
+}
+
+// setHeadOID is the commit the seeded pull request of a branch is on.
+func (m *memGH) setHeadOID(branch, oid string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.oids[branch] = oid
+}
+
+// failList makes every listing of the open pull requests fail with err.
+func (m *memGH) failList(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.listErr = err
+}
+
+// failCreate makes every opening of a pull request fail with err.
+func (m *memGH) failCreate(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.createErr = err
+}
+
+// createdPRs are the pull requests the app opened, in order.
+func (m *memGH) createdPRs() []createCall {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.created)
 }
 
 // setPR is the pull request every reading of a branch answers with. A pull
@@ -2028,14 +2166,19 @@ func (m *memGH) forgetPR(branch string) {
 	delete(m.prs, branch)
 }
 
-// viewCount is how many times the pull request of a branch was read.
+// viewCount is how many times the pull request of a branch was read, by the
+// branch or by the number it has.
 func (m *memGH) viewCount(branch string) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	refs := []string{":" + branch}
+	if pr, ok := m.prs[branch]; ok {
+		refs = append(refs, ":"+strconv.Itoa(pr.Number))
+	}
 	n := 0
 	for _, call := range m.calls {
-		if strings.HasPrefix(call, "view:") && strings.HasSuffix(call, ":"+branch) {
+		if strings.HasPrefix(call, "view:") && slices.ContainsFunc(refs, func(ref string) bool { return strings.HasSuffix(call, ref) }) {
 			n++
 		}
 	}

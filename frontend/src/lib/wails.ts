@@ -362,7 +362,9 @@ export type PRBlockReason =
   | "gh_unauthenticated"
   | "gh_failed"
   | "git_failed"
-  | "no_worktree";
+  | "no_worktree"
+  | "push_failed"
+  | "open_failed";
 
 /** PRState is what GitHub last said about a pull request; "" before it is read. */
 export type PRState = "open" | "merged" | "closed" | "";
@@ -970,6 +972,8 @@ export function asPRBlockReason(value: string): PRBlockReason {
     case "gh_failed":
     case "git_failed":
     case "no_worktree":
+    case "push_failed":
+    case "open_failed":
       return value;
     default:
       return "gh_failed";

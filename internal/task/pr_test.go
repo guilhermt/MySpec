@@ -36,7 +36,7 @@ func TestParsePRBlockReason(t *testing.T) {
 
 	reasons := []task.PRBlockReason{
 		task.PRBlockGHMissing, task.PRBlockGHAuth, task.PRBlockGHFailed,
-		task.PRBlockGitFailed, task.PRBlockNoWorktree,
+		task.PRBlockGitFailed, task.PRBlockNoWorktree, task.PRBlockPushFailed, task.PRBlockOpenFailed,
 	}
 	for _, reason := range reasons {
 		got, err := task.ParsePRBlockReason(string(reason))

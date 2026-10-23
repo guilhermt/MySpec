@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
@@ -33,7 +34,7 @@ const (
 	PRBlocked          PRStatus = "blocked"
 	PRDrafting         PRStatus = "drafting"       // the agent is writing the draft
 	PRDraftReady       PRStatus = "draft_ready"    // the draft awaits the OK
-	PRAwaitingReply    PRStatus = "awaiting_reply" // the agent stopped short of what the app waits for: a draft, the pull request it was asked to open, or the report of a review pass
+	PRAwaitingReply    PRStatus = "awaiting_reply" // the agent stopped short of what the app waits for: a draft or the report of a review pass
 	PROpening          PRStatus = "opening"
 	PRReviewing        PRStatus = "reviewing"         // the agent is reviewing
 	PRAddressingReview PRStatus = "addressing_review" // the implementer works on findings: the approved ones, or a report of the agent review
@@ -48,6 +49,7 @@ const (
 	PRClosedUnmerged   PRStatus = "pr_closed" // the pull request was closed without a merge
 	PRClosing          PRStatus = "closing"
 	PRClosed           PRStatus = "closed"
+	PRDiverged         PRStatus = "diverged" // the app found the pull request otherwise than it expected, and the divergence says how
 )
 
 // PullRequest is the PR stage of a task, with everything the app knows about it.
@@ -86,6 +88,10 @@ type PullRequest struct {
 	// CommitFailed says the last approval of the review ended without a commit,
 	// the way a step says it.
 	CommitFailed bool
+
+	// Divergence is what the app expected of the pull request and did not
+	// find; nil for none.
+	Divergence *divergence.Divergence
 
 	SessionStage string // session.PRStage or session.PRReviewStage; "" when none is open
 	Session      session.Summary
@@ -167,6 +173,9 @@ func (s *Service) prState(t task.Task, run task.PRRun, art task.PRArtifacts) Pul
 	snap, read := s.review.Snapshot(t.ID)
 	pr.Review = reading(snap, read)
 	pr.CommitFailed = s.prNoCommit(t.ID)
+	if d, ok := s.divergences.Get(t.ID); ok && isPRStage(d.Stage) {
+		pr.Divergence = &d
+	}
 	pr.Mode = PRReviewModeOf(t, &pr)
 	if t.ReviewModes.PRMode() == reviewmode.Agent {
 		pr.Round = prRounds(passes)
@@ -179,18 +188,25 @@ func (s *Service) prState(t task.Task, run task.PRRun, art task.PRArtifacts) Pul
 		return c.Stage == session.PRFixStage
 	})
 	facts := prFacts{
-		idle:       pr.Session.Idle && pr.SessionStage != "",
-		paused:     pausedAtRest(pr.Session) && pr.SessionStage != "",
-		openFailed: s.openFailed(t.ID),
-		passAsked:  s.passAsked(t.ID) != "",
-		pass:       pr.Pass,
-		agent:      prAgentReviewed(t, run),
-		fixerBusy:  fixerWorking(fixer, fixerOpen),
-		headMoved:  read && snap.Head != "" && snap.Head != run.ReviewedCommit,
+		idle:      pr.Session.Idle && pr.SessionStage != "",
+		paused:    pausedAtRest(pr.Session) && pr.SessionStage != "",
+		passAsked: s.passAsked(t.ID) != "",
+		pass:      pr.Pass,
+		agent:     prAgentReviewed(t, run),
+		fixerBusy: fixerWorking(fixer, fixerOpen),
+		headMoved: read && snap.Head != "" && snap.Head != run.ReviewedCommit,
 	}
+	// A divergence shows once the session of the stage rests: one that works
+	// still has the floor.
+	facts.diverged = pr.Divergence != nil && (facts.idle || facts.paused || pr.SessionStage == "")
 	pr.Status = prStatus(run, art, facts, snap, read)
 	pr.CanClose = canClose(pr.Status, pr.CheckError) && !pr.CloneMissing
 	return pr
+}
+
+// isPRStage says whether a conversation belongs to the PR stage.
+func isPRStage(stage string) bool {
+	return stage == session.PRStage || stage == session.PRReviewStage || stage == session.PRFixStage
 }
 
 // canClose says when the closing of a task is the user's to ask for: the merge
@@ -226,20 +242,23 @@ func prSessionStage(status task.PRStatus) string {
 // prFacts is what the app knows about the PR stage of a task beyond its record
 // and its artifacts.
 type prFacts struct {
-	idle       bool         // the session of the stage is open and at rest
-	paused     bool         // the session of the stage is open, paused, with nothing queued
-	openFailed bool         // the last opening of the pull request ended without one
-	passAsked  bool         // a review pass was asked for and its report is not in yet
-	pass       *task.PRPass // the current structured pass; nil for a pass in text or none
-	agent      bool         // the agent reviews the pull request
-	fixerBusy  bool         // the implementer is open and not at rest
-	headMoved  bool         // the branch is on a commit no report covered
+	idle      bool         // the session of the stage is open and at rest
+	paused    bool         // the session of the stage is open, paused, with nothing queued
+	diverged  bool         // the pull request has a divergence and the session of the stage does not work
+	passAsked bool         // a review pass was asked for and its report is not in yet
+	pass      *task.PRPass // the current structured pass; nil for a pass in text or none
+	agent     bool         // the agent reviews the pull request
+	fixerBusy bool         // the implementer is open and not at rest
+	headMoved bool         // the branch is on a commit no report covered
 }
 
 // prStatus turns what the app recorded, the artifacts on disk, what else it
 // knows about the stage and the last reading of the worktree into the state the
 // pull request is shown in.
 func prStatus(run task.PRRun, art task.PRArtifacts, facts prFacts, snap review.Snapshot, read bool) PRStatus {
+	if facts.diverged {
+		return PRDiverged
+	}
 	switch run.Status {
 	case task.PRPreparing:
 		return PRPreparing
@@ -249,7 +268,7 @@ func prStatus(run task.PRRun, art task.PRArtifacts, facts prFacts, snap review.S
 		switch {
 		case !facts.idle:
 			return PRDrafting
-		case !art.Draft.Present || facts.openFailed:
+		case !art.Draft.Present:
 			return PRAwaitingReply
 		default:
 			return PRDraftReady
@@ -490,22 +509,28 @@ func (s *Service) preparePR(ctx context.Context, id string) {
 		s.blockPRUnlessCancelled(ctx, id, ghReason(err), err)
 		return
 	}
-	pr, err := s.viewPR(ctx, wt)
+	run, _ := s.tasks.PRRun(id)
+	pr, d, err := s.lookupPR(ctx, t, wt, base, run)
 	switch {
-	case err == nil:
+	case err == nil && d != nil:
+		// The conversation that drafts is there for the user to talk to about it.
+		s.startDraft(ctx, t, wt, base)
+		s.diverge(ctx, t, session.PRStage, d.Kind, d.Facts)
+	case err == nil && pr.Number > 0:
 		s.recordPR(id, pr, false)
-	case errors.Is(err, gh.ErrNoPR):
+	case err == nil, errors.Is(err, gh.ErrNoPR):
 		s.startDraft(ctx, t, wt, base)
 	default:
 		s.blockPRUnlessCancelled(ctx, id, ghReason(err), err)
 	}
 }
 
-// checkPR reads the pull request of a task again, which is what says that the
-// agent opened it and, later, that the user merged it. It runs on the goroutine
-// of the stage.
+// checkPR reads the pull request of a task again, which is what says that
+// someone opened it while the draft waited and, later, that the user merged it.
+// It runs on the goroutine of the stage.
 func (s *Service) checkPR(ctx context.Context, id string) {
-	if _, ok := s.prTask(ctx, id); !ok {
+	t, ok := s.prTask(ctx, id)
+	if !ok {
 		return
 	}
 	wt, ok := s.worktrees.Get(id)
@@ -513,12 +538,19 @@ func (s *Service) checkPR(ctx context.Context, id string) {
 		return
 	}
 	run, hasRun := s.tasks.PRRun(id)
+	if !hasRun {
+		return
+	}
+	if run.PR.Number == 0 {
+		s.checkDraftedPR(ctx, t, wt, run)
+		return
+	}
 	// A task whose review is over, closed clean or with every finding of its
 	// pass discarded, is waiting for the merge: the reading tells what became
 	// of the pull request, not what the app does next.
-	awaiting := hasRun && awaitingMerge(run, currentPassPtr(s.tasks.PRPasses(id)))
+	awaiting := awaitingMerge(run, currentPassPtr(s.tasks.PRPasses(id)))
 
-	pr, err := s.viewPR(ctx, wt)
+	pr, err := s.viewPR(ctx, wt, run)
 	if err == nil {
 		s.setCheckError(id, "")
 		s.recordPR(id, pr, awaiting)
@@ -535,13 +567,9 @@ func (s *Service) checkPR(ctx context.Context, id string) {
 		s.notify(id)
 		return
 	}
-	if !errors.Is(err, gh.ErrNoPR) {
-		// A reading that fails says nothing about the pull request: the state
-		// stays where it is and the next evaluation asks again.
-		s.log.Warn("read pull request failed", "task", id, "error", err)
-		return
-	}
-	s.reopenDraft(id)
+	// A reading that fails says nothing about the pull request: the state stays
+	// where it is and the next evaluation asks again.
+	s.log.Warn("read pull request failed", "task", id, "error", err)
 }
 
 // notify says that something the app only keeps in memory about a task
@@ -573,11 +601,16 @@ func (s *Service) ghAuth(ctx context.Context) error {
 	return s.gh.Auth(ctx)
 }
 
-// viewPR asks gh for the pull request of the branch of a worktree.
-func (s *Service) viewPR(ctx context.Context, wt worktree.Worktree) (gh.PR, error) {
+// viewPR asks gh for the pull request a task recorded, by its number: the
+// branch of the task is not always the one it comes from. A run with no number
+// reads the branch of the worktree.
+func (s *Service) viewPR(ctx context.Context, wt worktree.Worktree, run task.PRRun) (gh.PR, error) {
 	ctx, cancel := context.WithTimeout(ctx, prCheckTimeout)
 	defer cancel()
 
+	if run.PR.Number > 0 {
+		return s.gh.ViewPR(ctx, wt.Path, strconv.Itoa(run.PR.Number))
+	}
 	return s.gh.ViewPR(ctx, wt.Path, wt.Branch)
 }
 
@@ -596,6 +629,7 @@ func (s *Service) recordPR(id string, pr gh.PR, detailsOnly bool) {
 		s.log.Error("record pull request failed", "task", id, "error", err)
 		return
 	}
+	s.clearDivergence(ctx, id, recordedKinds...)
 	if detailsOnly {
 		if details.State == task.PRStateOpen {
 			s.recordTrouble(ctx, id, run, pr.Checks)
@@ -618,6 +652,19 @@ func (s *Service) recordPR(id string, pr gh.PR, detailsOnly bool) {
 	s.Check(id)
 }
 
+// recordedKinds are the divergences a recorded pull request ends: the ones that
+// are about finding it, opening it or drafting it.
+var recordedKinds = slices.Concat(
+	prFoundKinds, prDraftKinds, []divergence.Kind{divergence.KindPRNotOpened},
+)
+
+// clearDivergence ends the divergences of a kind a task has.
+func (s *Service) clearDivergence(ctx context.Context, id string, kinds ...divergence.Kind) {
+	if err := s.divergences.Clear(ctx, id, kinds...); err != nil {
+		s.log.Error("clear divergence failed", "task", id, "error", err)
+	}
+}
+
 // inReview reports whether the review of a pull request already began and is
 // not over.
 func inReview(status task.PRStatus) bool {
@@ -631,6 +678,7 @@ func prDetails(pr gh.PR) task.PRDetails {
 		URL:       pr.URL,
 		State:     task.PRState(pr.State),
 		Base:      pr.Base,
+		Head:      pr.Head,
 		CheckedAt: time.Now().UTC(),
 		Checks:    pr.Checks.Checks,
 		Mergeable: pr.Checks.Mergeable,
@@ -662,25 +710,6 @@ func (s *Service) startDraft(ctx context.Context, t task.Task, wt worktree.Workt
 		s.log.Error("start pr session failed", "task", t.ID, "error", err)
 	}
 	s.log.Info("draft started", "task", t.ID, "worktree", wt.Path)
-}
-
-// reopenDraft brings a task whose pull request did not appear back to its
-// draft, with the button enabled again. The conversation says what failed.
-func (s *Service) reopenDraft(id string) {
-	ctx, cancel := context.WithTimeout(context.Background(), evaluateTimeout)
-	defer cancel()
-
-	run, ok := s.tasks.PRRun(id)
-	if !ok || run.Status != task.PROpening {
-		return
-	}
-	if _, err := s.tasks.SetPRRun(ctx, id, task.PRDrafting, nil); err != nil {
-		s.log.Error("record drafting pull request failed", "task", id, "error", err)
-		return
-	}
-	s.setOpenFailed(id, true)
-	s.log.Warn("pull request was not opened", "task", id)
-	s.Check(id)
 }
 
 // blockPR records why the PR stage of a task cannot go on, in the words of the
@@ -736,24 +765,17 @@ func (s *Service) evaluatePR(ctx context.Context, t task.Task) {
 	switch run.Status {
 	case task.PRDrafting:
 		sum, open := s.sessions.Summary(session.Key{TaskID: t.ID, Stage: session.PRStage})
-		if open && sum.TurnRunning {
-			// The conversation moved on after an opening that failed: what the
-			// agent does in this turn decides what the stage waits for.
-			s.setOpenFailed(t.ID, false)
-		}
-		// An agent that opened the pull request on its own, or an app that was
-		// closed in the middle of it, is found by asking GitHub.
+		// A pull request opened by hand while the draft waits is found by asking
+		// GitHub, and the draft the agent left, or did not, is read from disk.
 		if open && sum.Idle {
+			if !sum.TurnFailed {
+				s.checkDraft(ctx, t)
+			}
 			s.spawnPRWork(t.ID, s.checkPR)
 		}
 	case task.PROpening:
-		// GitHub is asked once the turn that opens the pull request is over: a
-		// reading in the middle of it finds nothing yet, and would give the
-		// draft back while the agent is still opening it.
-		sum, open := s.sessions.Summary(session.Key{TaskID: t.ID, Stage: session.PRStage})
-		if !open || !sum.TurnRunning {
-			s.spawnPRWork(t.ID, s.checkPR)
-		}
+		// Nothing to evaluate: openWork, started by the approval of the draft and
+		// by the resume of the stage, is what acts.
 	case task.PRCommitting:
 		if back, done := s.evaluatePRCommit(ctx, t, run); done {
 			// The commit landed the task back in its review, and the pass it asks
@@ -892,7 +914,7 @@ func (s *Service) reopenReviewer(ctx context.Context, t task.Task, wt worktree.W
 		s.log.Error("open pr session failed", "task", t.ID, "error", err)
 		return
 	}
-	base := s.baseOf(ctx, wt)
+	base := s.reviewBase(ctx, wt, run)
 	info := prReviewInfo(t, wt, base, repo, run.PR, run.ReportedPass+1, nil, s.tasks.PRPasses(t.ID))
 	if err := s.sessions.Open(ctx, info); err != nil {
 		s.log.Error("open pr session failed", "task", t.ID, "error", err)
@@ -1053,7 +1075,7 @@ func (s *Service) startReview(
 		s.log.Error("start pr review session failed", "task", t.ID, "error", err)
 		return
 	}
-	base := s.baseOf(ctx, wt)
+	base := s.reviewBase(ctx, wt, run)
 	pass := run.ReportedPass + 1
 	// The pass that opens the conversation is a pass asked for: a report the
 	// task already has decides nothing until this one writes its own.
@@ -1126,7 +1148,7 @@ func (s *Service) askPass(
 		return
 	}
 	pass := run.ReportedPass + 1
-	base := s.baseOf(ctx, wt)
+	base := s.reviewBase(ctx, wt, run)
 	info := prReviewInfo(t, wt, base, repo, run.PR, pass, checks, s.tasks.PRPasses(t.ID))
 	message, err := s.renderPrompt(prompts.StagePRReview, prReviewVars(info))
 	if err != nil {
@@ -1280,28 +1302,6 @@ func (s *Service) prNoCommit(id string) bool {
 	return l.prNoCommit
 }
 
-// setOpenFailed records whether the last opening of the pull request ended
-// without one.
-func (s *Service) setOpenFailed(id string, v bool) {
-	l := s.lockOf(id)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	l.openFailed = v
-}
-
-// openFailed reports whether the last opening of the pull request ended without
-// one.
-func (s *Service) openFailed(id string) bool {
-	l := s.lockOf(id)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return l.openFailed
-}
-
 // resumePR picks up a task in the PR stage where the app left it. A preparation
 // under way holds the lock, and then there is nothing to resume.
 func (s *Service) resumePR(ctx context.Context, t task.Task) {
@@ -1318,8 +1318,13 @@ func (s *Service) resumePR(ctx context.Context, t task.Task) {
 	switch run.Status {
 	case task.PRPreparing:
 		s.spawnPRWork(t.ID, s.preparePR)
-	case task.PRDrafting, task.PROpening:
+	case task.PRDrafting:
 		s.reopenPRSession(ctx, t, run, false)
+	case task.PROpening:
+		// The app was closed with the opening halfway: it is read again from
+		// what GitHub has.
+		s.reopenPRSession(ctx, t, run, false)
+		s.spawnPRWork(t.ID, s.openResumed)
 	case task.PRReviewing, task.PRCommitting:
 		s.reopenPRSession(ctx, t, run, true)
 		s.reopenFixer(ctx, t, run)
@@ -1365,11 +1370,23 @@ func (s *Service) reopenPRSession(ctx context.Context, t task.Task, run task.PRR
 	if isReview {
 		// Reopening renders no prompt: what the app read from GitHub belongs to
 		// the pass that starts.
+		base = s.reviewBase(ctx, wt, run)
 		info = prReviewInfo(t, wt, base, repo, run.PR, run.ReportedPass+1, nil, s.tasks.PRPasses(t.ID))
 	}
 	if err := s.sessions.Open(ctx, info); err != nil {
 		s.log.Error("open pr session failed", "task", t.ID, "error", err)
 	}
+}
+
+// reviewBase is the ref the review of a pull request compares against: the base
+// the pull request goes into, which is not the one the branch came from when the
+// user adopted a pull request of another base, and the one the branch came from
+// until the pull request is read.
+func (s *Service) reviewBase(ctx context.Context, wt worktree.Worktree, run task.PRRun) string {
+	if run.PR.Base != "" {
+		return "origin/" + run.PR.Base
+	}
+	return s.baseOf(ctx, wt)
 }
 
 // baseOf is the ref the branch of a worktree was created from, "" when git
@@ -1394,7 +1411,6 @@ func (s *Service) tearDownPR(ctx context.Context, t task.Task) error {
 	s.review.Forget(t.ID)
 
 	// A PR stage started again later begins from nothing this one left.
-	s.setOpenFailed(t.ID, false)
 	s.setPassAsked(t.ID, "")
 	s.setUnreadable(t.ID, "")
 	s.forgetChecks(t.ID)
@@ -1403,6 +1419,9 @@ func (s *Service) tearDownPR(ctx context.Context, t task.Task) error {
 		return err
 	}
 	if err := s.tasks.ClearPRRun(ctx, t.ID); err != nil {
+		return err
+	}
+	if err := s.divergences.Clear(ctx, t.ID); err != nil {
 		return err
 	}
 	if err := s.tasks.RemoveArtifacts(ctx, t.ID, task.StagePR); err != nil {
@@ -1496,9 +1515,9 @@ func (s *Service) prOf(id string) (task.Task, task.PRRun, error) {
 	return t, run, nil
 }
 
-// OpenPR writes the draft the user approved and asks the agent to open the
-// pull request from it. A paused session is resumed first: the user should not
-// have to think about processes to open what they wrote.
+// OpenPR writes the draft the user approved and has the app push the branch and
+// open the pull request from it. The agent is not asked for anything: it only
+// must not change the draft while the app reads it.
 func (s *Service) OpenPR(ctx context.Context, id, title, body string) error {
 	l := s.lockOf(id)
 	l.mu.Lock()
@@ -1528,40 +1547,24 @@ func (s *Service) OpenPR(ctx context.Context, id, title, body string) error {
 	}
 
 	key := session.Key{TaskID: id, Stage: session.PRStage}
-	sum, err := s.readySession(ctx, key)
-	if err != nil {
-		return fmt.Errorf("open the pull request of task %s: %w", id, err)
-	}
-	if !sum.Idle {
+	if sum, open := s.sessions.Summary(key); open && sum.TurnRunning {
 		return fmt.Errorf("open the pull request of task %s: %w", id, ErrStepBusy)
 	}
 
 	base := s.baseOf(ctx, wt)
-	path := t.DraftPath()
-	if err := task.WriteDraft(path, repo.FullName(), base, title, body); err != nil {
+	if err := task.WriteDraft(t.DraftPath(), repo.FullName(), base, title, body); err != nil {
 		return err
 	}
 	if _, err := s.tasks.SetPRRun(ctx, id, task.PROpening, nil); err != nil {
 		return err
 	}
-	s.setOpenFailed(id, false)
 	s.sessions.MarkDraftApproved(ctx, key, title)
-	if err := s.sessions.SendFromApp(ctx, key, session.AppMessage{Text: openMessage(path, base), Kind: session.AppOpen}); err != nil {
-		// The button stays where the user left it: the draft is theirs again.
-		if _, setErr := s.tasks.SetPRRun(ctx, id, task.PRDrafting, nil); setErr != nil {
-			s.log.Error("record drafting pull request failed", "task", id, "error", setErr)
-		}
-		return err
+	if err := s.divergences.Clear(ctx, id, openedKinds...); err != nil {
+		s.log.Error("clear divergence failed", "task", id, "error", err)
 	}
 	s.log.Info("pull request opening", "task", id)
+	s.spawnPRWork(id, s.openWork)
 	return nil
-}
-
-// openMessage is what the app says to the session that wrote a draft once the
-// user approves it.
-func openMessage(draftPath, base string) string {
-	return "The user approved the draft at `" + draftPath + "`. Open the pull request now, with the title and " +
-		"the body of that file exactly as they are, against `" + base + "`. Do not change the text."
 }
 
 // ApprovePR approves the review of the changes a pass of the pull request
@@ -1766,7 +1769,9 @@ func (s *Service) DiscardDraft(ctx context.Context, id string) error {
 	if _, err := s.tasks.SetPRRun(ctx, id, task.PRPreparing, nil); err != nil {
 		return err
 	}
-	s.setOpenFailed(id, false)
+	if err := s.divergences.Clear(ctx, id); err != nil {
+		return err
+	}
 	s.log.Info("draft discarded", "task", id)
 	s.spawnPRWork(id, s.preparePR)
 	return nil
@@ -1785,6 +1790,17 @@ func (s *Service) RetryPR(ctx context.Context, id string) error {
 	}
 	if run.Status != task.PRBlocked {
 		return fmt.Errorf("retry the pull request of task %s: %w", id, ErrPRNotBlocked)
+	}
+	// What failed is what is repeated: the opening, with the draft the user
+	// approved, or the whole preparation of the stage.
+	if reopens := run.Block != nil && run.PR.Number == 0 &&
+		(run.Block.Reason == task.PRBlockOpenFailed || run.Block.Reason == task.PRBlockPushFailed); reopens {
+		if _, err := s.tasks.SetPRRun(ctx, id, task.PROpening, nil); err != nil {
+			return err
+		}
+		s.log.Info("pull request retried", "task", id)
+		s.spawnPRWork(id, s.openWork)
+		return nil
 	}
 	if _, err := s.tasks.SetPRRun(ctx, id, task.PRPreparing, nil); err != nil {
 		return err

@@ -21,7 +21,7 @@ import (
 )
 
 // samePR is the pull request gh answers with about a branch that has one.
-var samePR = gh.PR{Number: 7, URL: "https://github.com/acme/api/pull/7", State: gh.StateOpen}
+var samePR = gh.PR{Number: 7, URL: "https://github.com/acme/api/pull/7", State: gh.StateOpen, Base: "dev"}
 
 // inPR puts a task straight in the PR stage, with its worktree and the record
 // of its pull request, which is where most PR tests start.
@@ -177,10 +177,10 @@ func TestWhatBlocksThePRStageOfATask(t *testing.T) {
 			detail:  "gh auth status: connection refused",
 		},
 		{
-			name:    "the pull request could not be read",
-			arrange: func(f *fixture) { f.gh.failView(errors.New("gh pr view: bad credentials")) },
+			name:    "the open pull requests could not be listed",
+			arrange: func(f *fixture) { f.gh.failList(errors.New("gh pr list: bad credentials")) },
 			reason:  task.PRBlockGHFailed,
-			detail:  "gh pr view: bad credentials",
+			detail:  "gh pr list: bad credentials",
 		},
 		{
 			name:    "git could not say where the branch came from",
@@ -325,6 +325,7 @@ func TestRefreshingThePullRequestWhileAPassCommitsKeepsTheStatus(t *testing.T) {
 	f := newFixture(t)
 	f.gh.setPR("task-1", withChecks(failing(gh.MergeableClean, "lint")))
 	inPR(f, "task-1", plan(), task.PRCommitting)
+	f.tasks.setPRRun("task-1", task.PRRun{Status: task.PRCommitting, PR: openPR()})
 
 	before := f.tasks.inspectCount()
 	if err := f.service.RefreshPR(t.Context(), "task-1"); err != nil {
@@ -408,7 +409,7 @@ func TestAPullRequestThatAlreadyExistsSkipsTheDraft(t *testing.T) {
 	}
 }
 
-func TestAPullRequestOpenedByTheAgentIsNoticed(t *testing.T) {
+func TestAPullRequestOpenedByHandWhileTheDraftWaitsIsNoticed(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -423,72 +424,6 @@ func TestAPullRequestOpenedByTheAgentIsNoticed(t *testing.T) {
 		run, ok := f.tasks.prRun("task-1")
 		return ok && run.Status == task.PRReviewing
 	})
-}
-
-func TestAPullRequestThatDidNotOpenGivesTheDraftBack(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	inPR(f, "task-1", plan(), task.PROpening)
-	f.tasks.setArtifacts("task-1", prArtifacts(task.PRArtifacts{
-		Draft: task.Draft{Present: true, Title: "t", Body: "b"},
-	}))
-	f.sessions.setSummary("task-1", session.Summary{
-		Stage: session.PRStage, Status: session.StatusWaiting, Idle: true,
-	})
-
-	f.service.Check("task-1")
-	waitFor(t, "the draft to come back", func() bool {
-		run, ok := f.tasks.prRun("task-1")
-		return ok && run.Status == task.PRDrafting
-	})
-	// The agent ended the turn without the pull request it was asked for: the
-	// draft is back, and so is the conversation, which is where it says why.
-	f.waitPR(t, "task-1", flow.PRAwaitingReply)
-
-	// Once the conversation moves on, what the agent does in that turn decides.
-	f.sessions.setSummary("task-1", session.Summary{
-		Stage: session.PRStage, Status: session.StatusWorking, TurnRunning: true,
-	})
-	f.service.Check("task-1")
-	f.sessions.goIdle("task-1")
-	f.service.Check("task-1")
-	f.waitPR(t, "task-1", flow.PRDraftReady)
-}
-
-func TestAPullRequestIsLookedForOnceTheTurnThatOpensItIsOver(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	inPR(f, "task-1", plan(), task.PROpening)
-	f.tasks.setArtifacts("task-1", prArtifacts(task.PRArtifacts{
-		Draft: task.Draft{Present: true, Title: "t", Body: "b"},
-	}))
-	f.sessions.setSummary("task-1", session.Summary{
-		Stage: session.PRStage, Status: session.StatusWorking, TurnRunning: true,
-	})
-
-	// While the agent opens the pull request, GitHub has nothing to say yet, and
-	// the draft is not given back in the middle of the turn. The second
-	// evaluation starts only once the first one is over.
-	before := f.tasks.inspectCount()
-	f.service.Check("task-1")
-	f.waitEvaluations(t, before+1)
-	f.service.Check("task-1")
-	f.waitEvaluations(t, before+2)
-	if calls := f.gh.ghCalls(); len(calls) != 0 {
-		t.Errorf("gh calls = %q, want none while the turn runs", calls)
-	}
-	if got := f.prState(t, "task-1").Status; got != flow.PROpening {
-		t.Errorf("status = %q, want opening while the turn runs", got)
-	}
-
-	// The turn ended without the pull request, and the agent waits for a reply.
-	f.sessions.setSummary("task-1", session.Summary{
-		Stage: session.PRStage, Status: session.StatusWaiting, Idle: true,
-	})
-	f.service.Check("task-1")
-	f.waitPR(t, "task-1", flow.PRAwaitingReply)
 }
 
 func TestResumingThePRStageOpensTheSessionItWasLeftIn(t *testing.T) {

@@ -296,8 +296,9 @@ type AgentSession struct {
 
 // PRBlock is why the pull request stage of a task cannot go on.
 type PRBlock struct {
-	// Reason is gh_missing, gh_unauthenticated, gh_failed, git_failed or
-	// no_worktree, a string for the same reason as State.Theme.
+	// Reason is gh_missing, gh_unauthenticated, gh_failed, git_failed,
+	// no_worktree, push_failed or open_failed, a string for the same reason as
+	// State.Theme.
 	Reason string `json:"reason"`
 	Detail string `json:"detail"` // what gh or git said, verbatim
 }
@@ -358,8 +359,8 @@ type PullRequest struct {
 	// Status is preparing, blocked, drafting, draft_ready, awaiting_reply,
 	// opening, reviewing, addressing_review, waiting_checks, awaiting_decision,
 	// in_review,
-	// ready_to_approve, committing, done, trouble, merged, pr_closed, closing or
-	// closed, a string for the same reason as State.Theme.
+	// ready_to_approve, committing, done, trouble, merged, pr_closed, closing,
+	// closed or diverged, a string for the same reason as State.Theme.
 	Status       string   `json:"status"`
 	Block        *PRBlock `json:"block"` // blocked only
 	WorktreePath string   `json:"worktreePath"`

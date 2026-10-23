@@ -90,7 +90,7 @@ func TestReadGivesTheDefaultOfEveryPrompt(t *testing.T) {
 		}},
 		{prompts.StageStepReview, []string{"# Step Review", "{{step_path}}", "{{review_path}}", "git diff HEAD", "status: clean", "AskUserQuestion", "## How to write the report", "Portuguese"}},
 		{prompts.StageCommit, []string{"# Commit", "{{what_to_commit}}", "Co-Authored-By", "{{push}}"}},
-		{prompts.StagePR, []string{"# Pull Request", "{{draft_path}}", "{{base_branch}}", "gh pr create", "AskUserQuestion"}},
+		{prompts.StagePR, []string{"# Pull Request", "{{draft_path}}", "{{base_branch}}", "Never open the pull request and never push", "AskUserQuestion"}},
 		{prompts.StagePRReview, []string{"# Pull Request Review", "{{review_path}}", "{{pr_url}}", "status: clean", "AskUserQuestion", "## How to write the report", "Portuguese", "The summary is optional"}},
 		{prompts.StagePRFix, []string{"# Pull Request Review Fixes", "{{pr_url}}", "{{prd_path}}", "AskUserQuestion", "never by rebasing", "Never write or rewrite a review report"}},
 		{prompts.StageDiscussion, []string{"# Discussion", "{{document_path}}", "{{drafts_path}}", "AskUserQuestion", "never repeats the shared context of the epic", "never shorter at the cost of the context"}},
@@ -1887,4 +1887,25 @@ func TestRenderGivesThePRFixesTheOneShotNote(t *testing.T) {
 		t.Errorf("Render() does not contain %q", want)
 	}
 	assertInOrder(t, got, "## One-Shot task", "## The first request")
+}
+
+func TestThePRPromptOnlyWritesTheDraft(t *testing.T) {
+	t.Parallel()
+
+	text, err := prompts.Render(t.TempDir(), prompts.StagePR, prompts.Vars{
+		Repository: "acme/api", Branch: "add-login", BaseBranch: "origin/dev", DraftPath: "/data/pr/draft.md",
+	})
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+	for _, gone := range []string{"Phase 1", "Phase 2", "--body-file", "URL of the pull request"} {
+		if strings.Contains(text, gone) {
+			t.Errorf("the PR prompt = %q, want no %q: the app opens the pull request", text, gone)
+		}
+	}
+	for _, want := range []string{"MySpec pushes the branch and opens the pull request", "## The draft"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the PR prompt = %q, want it to contain %q", text, want)
+		}
+	}
 }

@@ -158,6 +158,8 @@ func TestBlockPhrasesInTheirNotifications(t *testing.T) {
 		task.PRBlockGHFailed:   "the GitHub CLI failed",
 		task.PRBlockNoWorktree: "the worktree is gone",
 		task.PRBlockGitFailed:  "git failed",
+		task.PRBlockPushFailed: "the push failed",
+		task.PRBlockOpenFailed: "opening the pull request failed",
 	}
 	for reason, phrase := range prs {
 		if got, want := prBlockedBody(reason), "The pull request is blocked: "+phrase+"."; got != want {

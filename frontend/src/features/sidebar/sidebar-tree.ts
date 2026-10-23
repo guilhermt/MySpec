@@ -227,6 +227,8 @@ const PR_BLOCK_REASONS: Record<string, string> = {
   gh_failed: "gh failed",
   git_failed: "git failed",
   no_worktree: "no worktree",
+  push_failed: "push failed",
+  open_failed: "opening failed",
 };
 
 const withReason = (text: string, reason: string | undefined): RowText => ({

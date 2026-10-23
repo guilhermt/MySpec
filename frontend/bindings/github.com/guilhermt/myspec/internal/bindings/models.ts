@@ -2098,8 +2098,9 @@ export interface NewerData {
  */
 export interface PRBlock {
     /**
-     * Reason is gh_missing, gh_unauthenticated, gh_failed, git_failed or
-     * no_worktree, a string for the same reason as State.Theme.
+     * Reason is gh_missing, gh_unauthenticated, gh_failed, git_failed,
+     * no_worktree, push_failed or open_failed, a string for the same reason as
+     * State.Theme.
      */
     "reason": string;
 
@@ -2394,8 +2395,8 @@ export interface PullRequest {
      * Status is preparing, blocked, drafting, draft_ready, awaiting_reply,
      * opening, reviewing, addressing_review, waiting_checks, awaiting_decision,
      * in_review,
-     * ready_to_approve, committing, done, trouble, merged, pr_closed, closing or
-     * closed, a string for the same reason as State.Theme.
+     * ready_to_approve, committing, done, trouble, merged, pr_closed, closing,
+     * closed or diverged, a string for the same reason as State.Theme.
      */
     "status": string;
 

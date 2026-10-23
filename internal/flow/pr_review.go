@@ -192,7 +192,7 @@ func (s *Service) fixInfoOf(ctx context.Context, t task.Task, run task.PRRun) (s
 	if err != nil {
 		return session.TaskInfo{}, err
 	}
-	return prFixInfo(t, wt, s.baseOf(ctx, wt), repo, run.PR), nil
+	return prFixInfo(t, wt, s.reviewBase(ctx, wt, run), repo, run.PR), nil
 }
 
 // reopenFixer opens again the conversation of the implementer a task had when
@@ -335,7 +335,7 @@ func (s *Service) askLocalPass(
 		return
 	}
 	s.setUnreadable(t.ID, "")
-	section := prompts.PRChecksSection(lastReading(run), "origin/"+s.baseOf(ctx, wt))
+	section := prompts.PRChecksSection(lastReading(run), "origin/"+s.reviewBase(ctx, wt, run))
 	app := session.AppMessage{
 		Text: prLocalPassMessage(reply, t.ReviewPath(next), section), Kind: session.AppPRPass, Pass: next,
 	}

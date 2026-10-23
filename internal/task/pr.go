@@ -19,7 +19,7 @@ const (
 	PRPreparing     PRStatus = "preparing"      // gh and commit checks under way
 	PRBlocked       PRStatus = "blocked"        // the stage could not start; Block says why
 	PRDrafting      PRStatus = "drafting"       // the PR session is open, writing or waiting for the OK
-	PROpening       PRStatus = "opening"        // the user approved the draft; the agent is opening the PR
+	PROpening       PRStatus = "opening"        // the user approved the draft; the app pushes the branch and opens the PR
 	PRReviewing     PRStatus = "reviewing"      // the PR exists and the review session is running
 	PRWaitingChecks PRStatus = "waiting_checks" // the review waits for the checks of the head and the merge state before a pass
 	PRCommitting    PRStatus = "committing"     // the commit prompt was sent, waiting for the commit
@@ -44,11 +44,14 @@ const (
 	PRBlockGHFailed   PRBlockReason = "gh_failed"
 	PRBlockGitFailed  PRBlockReason = "git_failed"
 	PRBlockNoWorktree PRBlockReason = "no_worktree"
+	PRBlockPushFailed PRBlockReason = "push_failed" // git refused the push of the branch for a reason other than the remote being ahead
+	PRBlockOpenFailed PRBlockReason = "open_failed" // gh refused to open the pull request
 )
 
 // prBlockReasons lists every reason the PR stage may be blocked for.
 var prBlockReasons = []PRBlockReason{
 	PRBlockGHMissing, PRBlockGHAuth, PRBlockGHFailed, PRBlockGitFailed, PRBlockNoWorktree,
+	PRBlockPushFailed, PRBlockOpenFailed,
 }
 
 // PRState is where GitHub says the pull request is.

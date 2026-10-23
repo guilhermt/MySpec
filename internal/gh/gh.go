@@ -1,5 +1,5 @@
-// Package gh runs the gh binary. It reads from GitHub and clones repositories;
-// the pull requests are opened by the agent, inside its own session.
+// Package gh runs the gh binary. It reads from GitHub, clones repositories and
+// opens the pull request of a task; the agent never opens one.
 package gh
 
 import (

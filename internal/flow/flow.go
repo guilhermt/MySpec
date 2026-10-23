@@ -123,10 +123,12 @@ type Reviews interface {
 }
 
 // GH is what the flow needs from internal/gh: the readings that say whether a
-// pull request can be opened and whether it already exists.
+// pull request can be opened and whether it already exists, and the opening.
 type GH interface {
 	Auth(ctx context.Context) error
-	ViewPR(ctx context.Context, dir, branch string) (gh.PR, error)
+	ViewPR(ctx context.Context, dir, ref string) (gh.PR, error)
+	OpenPRs(ctx context.Context, dir string) ([]gh.PRHead, error)
+	CreatePR(ctx context.Context, dir, base, head, title, body string) (int, string, error)
 }
 
 // Worktrees is what the flow needs from internal/worktree.
@@ -141,6 +143,9 @@ type Worktrees interface {
 	Status(ctx context.Context, wt worktree.Worktree) (git.Status, error)
 	Commit(ctx context.Context, wt worktree.Worktree, rev string) (git.Commit, error)
 	Clean(ctx context.Context, wt worktree.Worktree) error
+	Push(ctx context.Context, wt worktree.Worktree, branch string) error
+	Pushed(ctx context.Context, wt worktree.Worktree, branch string) (bool, error)
+	Merging(ctx context.Context, wt worktree.Worktree) (bool, error)
 	Close(ctx context.Context, wt worktree.Worktree, base string, policy worktree.BranchPolicy) task.CloseResult
 	Purge(ctx context.Context, taskID string) (worktree.Leftover, bool)
 	Remove(ctx context.Context, taskID string) error
@@ -227,9 +232,6 @@ type taskLock struct {
 	// checkError is what the last reading of a pull request awaiting its merge
 	// said when it failed; "" when it succeeded.
 	checkError string
-	// openFailed says the agent was asked to open the pull request and ended its
-	// turn without one. It holds until the conversation moves on.
-	openFailed bool
 	// checks is the reading of GitHub that settled the last wait for checks,
 	// held until the pass it belongs to is asked for; nil otherwise.
 	checks *gh.PRChecks

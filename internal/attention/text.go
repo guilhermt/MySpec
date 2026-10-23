@@ -489,6 +489,10 @@ func prBlockPhrase(reason task.PRBlockReason) string {
 		return "the GitHub CLI failed"
 	case task.PRBlockNoWorktree:
 		return "the worktree is gone"
+	case task.PRBlockPushFailed:
+		return "the push failed"
+	case task.PRBlockOpenFailed:
+		return "opening the pull request failed"
 	case task.PRBlockGitFailed:
 		return "git failed"
 	default:

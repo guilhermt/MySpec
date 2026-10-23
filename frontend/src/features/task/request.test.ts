@@ -1426,6 +1426,8 @@ describe("blockRequestOf", () => {
     ["gh_failed", "gh failed"],
     ["git_failed", "git failed"],
     ["no_worktree", "no worktree"],
+    ["push_failed", "push failed"],
+    ["open_failed", "opening failed"],
   ])("draws a pull request blocked by %s", (reason, place) => {
     const task = prTask({ status: "blocked", block: { reason, detail: "" } });
 

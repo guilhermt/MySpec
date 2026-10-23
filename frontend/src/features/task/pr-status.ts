@@ -260,5 +260,9 @@ export function prBlockHint(reason: PRBlockReason): string {
       return "Fix what git reports, then try again.";
     case "no_worktree":
       return "The app no longer knows the worktree of this task. Discard the plan to start the implementation over.";
+    case "push_failed":
+      return "Fix what git reports, then try again.";
+    case "open_failed":
+      return "Fix what gh reports, then try again.";
   }
 }

@@ -802,6 +802,8 @@ const PR_BLOCK_WORDS: Record<PRBlockReason, string> = {
   gh_failed: "gh failed",
   git_failed: "git failed",
   no_worktree: "no worktree",
+  push_failed: "push failed",
+  open_failed: "opening failed",
 };
 
 /** SESSION_WORDS are the short words of what a conversation asks, on the bar of the other one. */

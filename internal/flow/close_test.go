@@ -295,14 +295,14 @@ func TestPollingOnlyAsksAboutThePullRequestsWaitingForAMerge(t *testing.T) {
 	f.service.PollPRs()
 	f.waitPR(t, "task-1", flow.PRMerged)
 
-	if got := f.gh.ghCalls(); !slices.Equal(got, []string{"view:web:task-1"}) {
-		t.Errorf("gh calls = %q, want only the pull request waiting for a merge", got)
+	if got := f.gh.ghCalls(); !slices.Equal(got, []string{"view:web:7"}) {
+		t.Errorf("gh calls = %q, want only the pull request waiting for a merge, read by its number", got)
 	}
 
 	// A merged pull request has nothing more to say.
 	f.service.PollPRs()
 	f.waitEvaluations(t, 1)
-	if got := f.gh.ghCalls(); !slices.Equal(got, []string{"view:web:task-1"}) {
+	if got := f.gh.ghCalls(); !slices.Equal(got, []string{"view:web:7"}) {
 		t.Errorf("gh calls = %q, want no reading of a pull request already merged", got)
 	}
 }
@@ -541,7 +541,10 @@ func TestResumingPicksUpAClosingAndAsksAboutAPullRequestWaitingForAMerge(t *test
 	f.gh.setPR("task-1", gh.PR{Number: 7, URL: samePR.URL, State: gh.StateOpen, Base: "dev"})
 	awaitingClosing(f, "task-1", plan(), task.PRRun{Status: task.PRClosing, PR: mergedPR()})
 	// A second task is waiting for its merge, and the app asks GitHub about it.
-	awaitingClosing(f, "task-2", plan(), task.PRRun{Status: task.PRDone, PR: openPR()})
+	second := openPR()
+	second.Number = 8
+	f.gh.setPR("task-2", gh.PR{Number: 8, URL: samePR.URL, State: gh.StateOpen, Base: "dev"})
+	awaitingClosing(f, "task-2", plan(), task.PRRun{Status: task.PRDone, PR: second})
 
 	f.service.Sync(t.Context())
 
@@ -550,9 +553,9 @@ func TestResumingPicksUpAClosingAndAsksAboutAPullRequestWaitingForAMerge(t *test
 	// The merge may have happened while the app was closed, so the pull request
 	// still waiting for one is read again.
 	waitFor(t, "the reading of the pull request of task-2", func() bool {
-		return slices.Contains(f.gh.ghCalls(), "view:web:task-2")
+		return slices.Contains(f.gh.ghCalls(), "view:web:8")
 	})
-	if got := f.gh.ghCalls(); slices.Contains(got, "view:web:task-1") {
+	if got := f.gh.ghCalls(); slices.Contains(got, "view:web:7") {
 		t.Errorf("gh calls = %q, want nothing asked about the task being closed", got)
 	}
 }
