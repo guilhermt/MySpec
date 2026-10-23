@@ -1,6 +1,7 @@
 package attention
 
 import (
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/reviewflow"
 )
@@ -8,6 +9,8 @@ import (
 // ReviewInput is what the situations of one review are derived from.
 type ReviewInput struct {
 	State reviewflow.State
+	// Divergence is the one the review has open; nil for none.
+	Divergence *divergence.Divergence
 	// Title is the title of the notification: owner/name#number · the title of
 	// the pull request.
 	Title string
@@ -30,6 +33,11 @@ func DeriveReview(in ReviewInput) []Found {
 			found.Kind, found.Body = kind, sessionBody(kind, placeName(place, false))
 			return []Found{found}
 		}
+	}
+
+	if in.Divergence != nil {
+		found.Kind, found.Body = KindDivergence, divergenceBody(*in.Divergence, 0)
+		return []Found{found}
 	}
 
 	switch state.Status {

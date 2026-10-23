@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/guilhermt/myspec/internal/discussion"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/task"
@@ -495,4 +496,65 @@ func prBlockPhrase(reason task.PRBlockReason) string {
 	default:
 		return "git failed"
 	}
+}
+
+// divergenceBody is the notification of an item the app found otherwise than
+// it expected after its one instruction, with the names the divergence holds.
+// step is the step a commit_missing divergence is about; 0 outside a step.
+func divergenceBody(d divergence.Divergence, step int) string {
+	f := d.Facts
+	review := "Review " + strconv.Itoa(f.Pass)
+	switch d.Kind {
+	case divergence.KindCommitMissing:
+		if step > 0 {
+			return fmt.Sprintf("Step %d: the commit MySpec asked for didn't happen.", step)
+		}
+		return "The commit of the review fixes didn't happen."
+	case divergence.KindReportMissing:
+		return review + " has no report."
+	case divergence.KindReportUnreadable:
+		return review + " can't be read" + reasonPart(f.Reason)
+	case divergence.KindReportsAmbiguous:
+		return fmt.Sprintf("%s has %d possible reports.", review, len(f.Candidates))
+	case divergence.KindDraftMissing:
+		return "The draft of the pull request isn't there."
+	case divergence.KindDraftUnreadable:
+		return "The draft of the pull request can't be read."
+	case divergence.KindNoChanges:
+		findings := "approved findings"
+		if f.Approved == 1 {
+			findings = "approved finding"
+		}
+		return fmt.Sprintf("The implementer changed no file for the %d %s of review %d.", f.Approved, findings, f.Pass)
+	case divergence.KindPRWrongBase:
+		return fmt.Sprintf("%s goes into %s, not %s.", firstPR(f), firstPRField(f, func(p divergence.PR) string { return p.Base }), f.Base)
+	case divergence.KindPROtherBranch:
+		return fmt.Sprintf("%s comes from %s, not from the branch of the task.", firstPR(f), firstPRField(f, func(p divergence.PR) string { return p.Head }))
+	case divergence.KindPRsAmbiguous:
+		return fmt.Sprintf("%d pull requests could be the one of this task.", len(f.PRs))
+	case divergence.KindPRNotOpened:
+		return "The draft was approved and GitHub has no pull request yet."
+	case divergence.KindPushRejected:
+		return "MySpec couldn't push " + f.Branch + ": origin has commits it doesn't."
+	case divergence.KindDraftsUnreadable:
+		return "drafts.md still can't be read" + reasonPart(f.Reason)
+	default:
+		return "The work isn't as MySpec expected."
+	}
+}
+
+// firstPR names the pull request a divergence is about: PR #1284.
+func firstPR(f divergence.Facts) string {
+	if len(f.PRs) == 0 {
+		return "The pull request"
+	}
+	return "PR #" + strconv.Itoa(f.PRs[0].Number)
+}
+
+// firstPRField reads one field of the pull request a divergence is about.
+func firstPRField(f divergence.Facts, field func(divergence.PR) string) string {
+	if len(f.PRs) == 0 {
+		return ""
+	}
+	return field(f.PRs[0])
 }

@@ -1207,7 +1207,67 @@ export interface DiscussionSummary {
      * what the discussion waits on the user for; never nil
      */
     "situations": Situation[] | null;
+
+    /**
+     * what the app expected and found otherwise; nil without one
+     */
+    "divergence": Divergence | null;
     "createdAt": string;
+}
+
+/**
+ * Divergence is what the app expected of an item after its one instruction,
+ * and found otherwise.
+ */
+export interface Divergence {
+    /**
+     * Stage is the conversation it belongs to: step:3, step_review:3, pr,
+     * pr_review, pr_fix, review or discussion.
+     */
+    "stage": string;
+
+    /**
+     * Kind is commit_missing, report_missing, report_unreadable,
+     * reports_ambiguous, draft_missing, draft_unreadable, no_changes,
+     * pr_wrong_base, pr_other_branch, prs_ambiguous, pr_not_opened,
+     * push_rejected or drafts_unreadable, a string for the same reason as
+     * State.Theme.
+     */
+    "kind": string;
+    "branch": string;
+    "base": string;
+    "commit": string;
+    "files": number;
+    "all": boolean;
+    "pass": number;
+    "approved": number;
+    "path": string;
+    "reason": string;
+
+    /**
+     * never nil
+     */
+    "candidates": string[] | null;
+
+    /**
+     * never nil
+     */
+    "prs": DivergentPR[] | null;
+
+    /**
+     * RFC 3339
+     */
+    "startedAt": string;
+}
+
+/**
+ * DivergentPR is a pull request a divergence names.
+ */
+export interface DivergentPR {
+    "number": number;
+    "url": string;
+    "base": string;
+    "head": string;
 }
 
 /**
@@ -1819,7 +1879,8 @@ export interface MarkerEntry {
      * step_started, compacted, interrupted, retried, woke, committed, pr_opened,
      * checks_read, draft_approved, changes_approved, paused, plan_invalid,
      * background_stopped, background_lost, discussion_document,
-     * drafts_written, drafts_revised, drafts_unreadable or drafts_published.
+     * drafts_written, drafts_revised, drafts_unreadable, drafts_published or
+     * divergence.
      */
     "type": string;
     "preTokens": number;
@@ -1940,6 +2001,12 @@ export interface MarkerEntry {
      * they name, in the order it started; never nil.
      */
     "background": BackgroundItem[] | null;
+
+    /**
+     * Divergence belongs to divergence: what the app expected and found
+     * otherwise; Stage and StartedAt are empty in a marker.
+     */
+    "divergence": Divergence | null;
 }
 
 /**
@@ -3238,6 +3305,11 @@ export interface ReviewSummary {
      * what the review waits on the user for; never nil
      */
     "situations": Situation[] | null;
+
+    /**
+     * what the app expected and found otherwise; nil without one
+     */
+    "divergence": Divergence | null;
     "createdAt": string;
 }
 
@@ -3328,8 +3400,8 @@ export interface Situation {
      * Kind is session_error, step_blocked, worktree_unreadable, pr_blocked,
      * plan_invalid, pr_closed, permission, question, reply, ready_to_continue,
      * step_review, step_empty, draft, findings, changes_review, merge,
-     * review_report, new_commits, publish_failed, pass_blocked or drafts, a
-     * string for the same reason as State.Theme.
+     * review_report, new_commits, publish_failed, pass_blocked, divergence or
+     * drafts, a string for the same reason as State.Theme.
      */
     "kind": string;
 
@@ -4036,6 +4108,11 @@ export interface TaskSummary {
     "situations": Situation[] | null;
 
     /**
+     * what the app expected and found otherwise; nil without one
+     */
+    "divergence": Divergence | null;
+
+    /**
      * every stage, in workflow order; never nil
      */
     "models": TaskStageModel[] | null;
@@ -4291,7 +4368,8 @@ export interface UserEntry {
 
     /**
      * AppKind is which message of the workflow the app sent: report, pass,
-     * commit, commit_all, commit_all_push, commit_push, correction, open, pr_pass or apply; ""
+     * commit, commit_all, commit_all_push, commit_push, correction,
+     * drafts_correction, again, open, pr_pass or apply; ""
      * for every other entry. AppPass belongs to report, pass and pr_pass;
      * AppRound and AppRounds to report (the round of MaxReviewRounds) and
      * correction (the attempt of MaxCorrections); AppCount to report (the

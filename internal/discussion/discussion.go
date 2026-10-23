@@ -318,9 +318,12 @@ type Discussion struct {
 	Cards          []InputCard
 	DraftsRead     bool // a readable drafts artifact was recorded
 	DraftsRevision int  // bumped by every reading that opens or revises a round
-	ArchivedAt     time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// DraftsCorrected says the app already asked the agent to fix an unreadable
+	// drafts artifact; the next readable reading clears it.
+	DraftsCorrected bool
+	ArchivedAt      time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 // Archived reports whether the discussion left the list for the history.

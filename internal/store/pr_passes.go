@@ -11,7 +11,7 @@ import (
 // prPassColumns is the column list every pr pass query selects, in scan order.
 //
 //nolint:gosec // G101: "pass" is the review pass, not a credential
-const prPassColumns = `task_id, pass, asked_at, recorded, clean, summary_original, revision, recorded_at, sent_at`
+const prPassColumns = `task_id, pass, asked_at, recorded, clean, summary_original, revision, recorded_at, sent_at, changed`
 
 // prFindingColumns is the column list every pr finding query selects, in scan order.
 const prFindingColumns = `task_id, pass, number, title, path, line, original, text, decision`
@@ -77,7 +77,7 @@ func (r *TasksRepo) prFindings(ctx context.Context, taskID string) (map[int][]pr
 // WritePRPass stores a structured pass with its findings, rewriting what was
 // there, in one transaction.
 func (r *TasksRepo) WritePRPass(ctx context.Context, pass task.PRPass) error {
-	const upsert = `INSERT INTO pr_passes (` + prPassColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	const upsert = `INSERT INTO pr_passes (` + prPassColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (task_id, pass) DO UPDATE SET
 			asked_at = excluded.asked_at,
 			recorded = excluded.recorded,
@@ -85,7 +85,8 @@ func (r *TasksRepo) WritePRPass(ctx context.Context, pass task.PRPass) error {
 			summary_original = excluded.summary_original,
 			revision = excluded.revision,
 			recorded_at = excluded.recorded_at,
-			sent_at = excluded.sent_at`
+			sent_at = excluded.sent_at,
+			changed = excluded.changed`
 	const clearFindings = `DELETE FROM pr_findings WHERE task_id = ? AND pass = ?`
 	const insertFinding = `INSERT INTO pr_findings (` + prFindingColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
@@ -97,7 +98,7 @@ func (r *TasksRepo) WritePRPass(ctx context.Context, pass task.PRPass) error {
 
 	_, err = tx.ExecContext(ctx, upsert, pass.TaskID, pass.Pass, formatTime(pass.AskedAt), pass.Recorded,
 		pass.Clean, pass.SummaryOriginal, pass.Revision, formatTimeOrEmpty(pass.RecordedAt),
-		formatTimeOrEmpty(pass.SentAt))
+		formatTimeOrEmpty(pass.SentAt), pass.Changed)
 	if err != nil {
 		return fmt.Errorf("upsert pr pass %d of task %s: %w", pass.Pass, pass.TaskID, err)
 	}
@@ -147,7 +148,7 @@ func scanPRPass(row scanner) (task.PRPass, error) {
 		askedAt, recordedAt, sentAt string
 	)
 	err := row.Scan(&pass.TaskID, &pass.Pass, &askedAt, &pass.Recorded, &pass.Clean, &pass.SummaryOriginal,
-		&pass.Revision, &recordedAt, &sentAt)
+		&pass.Revision, &recordedAt, &sentAt, &pass.Changed)
 	if err != nil {
 		return task.PRPass{}, fmt.Errorf("scan pr pass: %w", err)
 	}

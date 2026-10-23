@@ -66,6 +66,8 @@ export type {
     DiscussionContextRequest,
     DiscussionRepository,
     DiscussionSummary,
+    Divergence,
+    DivergentPR,
     Draft,
     DraftBefore,
     DraftCurrent,

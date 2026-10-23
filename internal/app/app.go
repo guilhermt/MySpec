@@ -20,6 +20,7 @@ import (
 	"github.com/guilhermt/myspec/internal/cardimages"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/machine"
 	"github.com/guilhermt/myspec/internal/models"
@@ -91,6 +92,7 @@ type App struct {
 	reviewFlow       *reviewflow.Service
 	discussions      *discussion.Service
 	discussionFlow   *discussionflow.Service
+	divergences      *divergence.Service
 	attention        *attention.Service
 	cardImages       *cardimages.Service
 	images           atomic.Pointer[imageFiles] // what the image middleware reads from; set once the services are up

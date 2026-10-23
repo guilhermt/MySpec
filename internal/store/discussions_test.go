@@ -190,6 +190,7 @@ func TestUpdateRewritesTheMutableColumnsOfADiscussionAndLeavesItArchived(t *test
 	want.Title = "The board of the week, renamed"
 	want.DraftsRead = true
 	want.DraftsRevision = 2
+	want.DraftsCorrected = true
 	want.UpdatedAt = read
 	if err := s.Discussions.Update(t.Context(), want); err != nil {
 		t.Fatalf("Update() = %v, want nil", err)

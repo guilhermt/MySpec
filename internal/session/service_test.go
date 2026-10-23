@@ -15,6 +15,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/claude/claudetest"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
@@ -1537,6 +1538,34 @@ func TestTheMilestonesOfTheWorkflowAreMarked(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestADivergenceIsMarkedInTheConversation(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+	before := len(f.entriesOf(t, prd("t1"), session.KindMarker))
+
+	d := divergence.Divergence{
+		ItemID: "t1", Stage: "prd", Kind: divergence.KindPushRejected,
+		Facts: divergence.Facts{Branch: "153-x", Commit: "a1b2c3d", Reason: "fetch first"},
+	}
+	f.service.MarkDivergence(t.Context(), prd("t1"), d)
+	f.service.MarkDivergence(t.Context(), prd("missing"), d)
+
+	markers := f.entriesOf(t, prd("t1"), session.KindMarker)[before:]
+	if len(markers) != 1 {
+		t.Fatalf("markers = %d, want 1", len(markers))
+	}
+	want := &session.MarkerEntry{
+		Type:       session.MarkerDivergence,
+		Divergence: &divergence.Mark{Kind: divergence.KindPushRejected, Facts: d.Facts},
+	}
+	if diff := cmp.Diff(want, markers[0].Marker); diff != "" {
+		t.Errorf("marker mismatch (-want +got):\n%s", diff)
 	}
 }
 

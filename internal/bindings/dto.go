@@ -486,8 +486,8 @@ type Situation struct {
 	// Kind is session_error, step_blocked, worktree_unreadable, pr_blocked,
 	// plan_invalid, pr_closed, permission, question, reply, ready_to_continue,
 	// step_review, step_empty, draft, findings, changes_review, merge,
-	// review_report, new_commits, publish_failed, pass_blocked or drafts, a
-	// string for the same reason as State.Theme.
+	// review_report, new_commits, publish_failed, pass_blocked, divergence or
+	// drafts, a string for the same reason as State.Theme.
 	Kind string `json:"kind"`
 	// Group is error, waiting or closing, from the most urgent, a string for
 	// the same reason as State.Theme.
@@ -591,6 +591,7 @@ type TaskSummary struct {
 	PR             *PullRequest     `json:"pr"`           // nil outside the pull request stage
 	PlanProblems   []PlanProblem    `json:"planProblems"` // never nil
 	Situations     []Situation      `json:"situations"`   // what the task waits on the user for, the most urgent first; never nil
+	Divergence     *Divergence      `json:"divergence"`   // what the app expected and found otherwise; nil without one
 	Models         []TaskStageModel `json:"models"`       // every stage, in workflow order; never nil
 	// Conversations is every session the task has, open or closed, by start;
 	// never nil.
@@ -748,7 +749,8 @@ type UserEntry struct {
 	// every other entry.
 	Sent string `json:"sent"`
 	// AppKind is which message of the workflow the app sent: report, pass,
-	// commit, commit_all, commit_all_push, commit_push, correction, open, pr_pass or apply; ""
+	// commit, commit_all, commit_all_push, commit_push, correction,
+	// drafts_correction, again, open, pr_pass or apply; ""
 	// for every other entry. AppPass belongs to report, pass and pr_pass;
 	// AppRound and AppRounds to report (the round of MaxReviewRounds) and
 	// correction (the attempt of MaxCorrections); AppCount to report (the
@@ -924,7 +926,8 @@ type MarkerEntry struct {
 	// step_started, compacted, interrupted, retried, woke, committed, pr_opened,
 	// checks_read, draft_approved, changes_approved, paused, plan_invalid,
 	// background_stopped, background_lost, discussion_document,
-	// drafts_written, drafts_revised, drafts_unreadable or drafts_published.
+	// drafts_written, drafts_revised, drafts_unreadable, drafts_published or
+	// divergence.
 	Type      string `json:"type"`
 	PreTokens int    `json:"preTokens"`
 	// Stage belongs to stage_started alone, Step to the markers of a step
@@ -998,6 +1001,43 @@ type MarkerEntry struct {
 	// Background belongs to background_stopped and background_lost: the work
 	// they name, in the order it started; never nil.
 	Background []BackgroundItem `json:"background"`
+	// Divergence belongs to divergence: what the app expected and found
+	// otherwise; Stage and StartedAt are empty in a marker.
+	Divergence *Divergence `json:"divergence"`
+}
+
+// Divergence is what the app expected of an item after its one instruction,
+// and found otherwise.
+type Divergence struct {
+	// Stage is the conversation it belongs to: step:3, step_review:3, pr,
+	// pr_review, pr_fix, review or discussion.
+	Stage string `json:"stage"`
+	// Kind is commit_missing, report_missing, report_unreadable,
+	// reports_ambiguous, draft_missing, draft_unreadable, no_changes,
+	// pr_wrong_base, pr_other_branch, prs_ambiguous, pr_not_opened,
+	// push_rejected or drafts_unreadable, a string for the same reason as
+	// State.Theme.
+	Kind       string        `json:"kind"`
+	Branch     string        `json:"branch"`
+	Base       string        `json:"base"`
+	Commit     string        `json:"commit"`
+	Files      int           `json:"files"`
+	All        bool          `json:"all"`
+	Pass       int           `json:"pass"`
+	Approved   int           `json:"approved"`
+	Path       string        `json:"path"`
+	Reason     string        `json:"reason"`
+	Candidates []string      `json:"candidates"` // never nil
+	PRs        []DivergentPR `json:"prs"`        // never nil
+	StartedAt  string        `json:"startedAt"`  // RFC 3339
+}
+
+// DivergentPR is a pull request a divergence names.
+type DivergentPR struct {
+	Number int    `json:"number"`
+	URL    string `json:"url"`
+	Base   string `json:"base"`
+	Head   string `json:"head"`
 }
 
 // BackgroundItem is a task in the background a marker names.
@@ -1781,6 +1821,7 @@ type ReviewSummary struct {
 	PendingCount   int         `json:"pendingCount"`
 	LastError      string      `json:"lastError"`
 	Situations     []Situation `json:"situations"` // what the review waits on the user for; never nil
+	Divergence     *Divergence `json:"divergence"` // what the app expected and found otherwise; nil without one
 	CreatedAt      string      `json:"createdAt"`
 }
 
@@ -2010,6 +2051,7 @@ type DiscussionSummary struct {
 	PendingCount   int         `json:"pendingCount"`
 	LastError      string      `json:"lastError"`
 	Situations     []Situation `json:"situations"` // what the discussion waits on the user for; never nil
+	Divergence     *Divergence `json:"divergence"` // what the app expected and found otherwise; nil without one
 	CreatedAt      string      `json:"createdAt"`
 }
 

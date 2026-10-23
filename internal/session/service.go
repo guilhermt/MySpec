@@ -17,6 +17,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/contract"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/models"
@@ -1253,6 +1254,13 @@ func (s *Service) MarkDraftApproved(ctx context.Context, k Key, title string) {
 // MarkChangesApproved records that the user approved the changed files.
 func (s *Service) MarkChangesApproved(ctx context.Context, k Key, files int) {
 	s.mark(ctx, k, &MarkerEntry{Type: MarkerChangesApproved, Files: files})
+}
+
+// MarkDivergence records that the app found an item otherwise than it expected
+// after its one instruction. The caller only asks for it when the divergence is
+// new.
+func (s *Service) MarkDivergence(ctx context.Context, k Key, d divergence.Divergence) {
+	s.mark(ctx, k, &MarkerEntry{Type: MarkerDivergence, Divergence: &divergence.Mark{Kind: d.Kind, Facts: d.Facts}})
 }
 
 // MarkPlanInvalid records the problems of a plan that is not valid, unless

@@ -8,6 +8,7 @@ import (
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prreview"
@@ -36,6 +37,7 @@ func (a *App) snapshot() bindings.State {
 		}
 		found = append(found, attention.Derive(attention.Input{
 			Task: t, Artifacts: artifacts[t.ID], Steps: steps[t.ID], PR: pr, Sessions: summaries,
+			Divergence: a.divergenceOf(t.ID),
 		})...)
 	}
 	reviews, reviewFound := a.reviewStates()
@@ -106,12 +108,15 @@ func (a *App) snapshot() bindings.State {
 	}
 	for i := range state.Tasks {
 		state.Tasks[i].Running = bindings.RunningOf(state.Tasks[i].ID, summaries)
+		state.Tasks[i].Divergence = bindings.FromDivergence(a.divergences.Get(state.Tasks[i].ID))
 	}
 	for i := range state.Reviews {
 		state.Reviews[i].Running = bindings.RunningOf(state.Reviews[i].ID, summaries)
+		state.Reviews[i].Divergence = bindings.FromDivergence(a.divergences.Get(state.Reviews[i].ID))
 	}
 	for i := range state.Discussions {
 		state.Discussions[i].Running = bindings.RunningOf(state.Discussions[i].ID, summaries)
+		state.Discussions[i].Divergence = bindings.FromDivergence(a.divergences.Get(state.Discussions[i].ID))
 	}
 	if a.quitAskedNow() {
 		state.Quit = bindings.FromQuit(a.sessions.RunningTasks())
@@ -182,7 +187,7 @@ func reviewTitle(fullName string, stored prreview.Review) string {
 // reviewStates is what the app knows about every active review, with the
 // situations each one waits on the user for.
 func (a *App) reviewStates() ([]reviewflow.State, []attention.Found) {
-	return reviewStatesOf(a.prReviews.List(), a.reviewFlow.State, a.repositories.Get)
+	return reviewStatesOf(a.prReviews.List(), a.reviewFlow.State, a.repositories.Get, a.divergenceOf)
 }
 
 // reviewStatesOf are the states of the reviews of list the flow knows, with
@@ -191,6 +196,7 @@ func reviewStatesOf(
 	list []prreview.Review,
 	stateOf func(id string) (reviewflow.State, bool),
 	repositoryOf func(id string) (repository.Repository, bool),
+	divergenceOf func(id string) *divergence.Divergence,
 ) ([]reviewflow.State, []attention.Found) {
 	states := make([]reviewflow.State, 0, len(list))
 	found := make([]attention.Found, 0, len(list)) // a review waits on one thing at a time
@@ -205,7 +211,7 @@ func reviewStatesOf(
 			fullName = repo.FullName()
 		}
 		found = append(found, attention.DeriveReview(attention.ReviewInput{
-			State: state, Title: reviewTitle(fullName, stored),
+			State: state, Title: reviewTitle(fullName, stored), Divergence: divergenceOf(stored.ID),
 		})...)
 	}
 	return states, found
@@ -224,10 +230,19 @@ func (a *App) discussionStates() ([]discussionflow.State, []attention.Found) {
 		}
 		states = append(states, state)
 		found = append(found, attention.DeriveDiscussion(attention.DiscussionInput{
-			State: state, Title: stored.Title,
+			State: state, Title: stored.Title, Divergence: a.divergenceOf(stored.ID),
 		})...)
 	}
 	return states, found
+}
+
+// divergenceOf is the divergence an item has open; nil for none.
+func (a *App) divergenceOf(id string) *divergence.Divergence {
+	d, ok := a.divergences.Get(id)
+	if !ok {
+		return nil
+	}
+	return &d
 }
 
 // state is the snapshot the frontend asks for. It takes the lock a publish

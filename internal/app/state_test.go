@@ -13,6 +13,7 @@ import (
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/discussion"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/platform/xdg"
 	"github.com/guilhermt/myspec/internal/prreview"
@@ -208,5 +209,53 @@ func TestTheStateCarriesTheTaskAndTheDiscussionThatWroteACardOfABoard(t *testing
 	}
 	if cards[1].ActiveTaskID != "" || cards[2].ActiveTaskID != "" || cards[2].WrittenBy != nil {
 		t.Errorf("cards 8 and 9 = %+v and %+v, want neither a task nor a writer beyond card 8's", cards[1], cards[2])
+	}
+}
+
+func TestTheStateCarriesTheDivergenceOfEachItem(t *testing.T) {
+	t.Parallel()
+	dataDir := t.TempDir()
+	started := time.Date(2026, time.October, 5, 9, 0, 0, 0, time.UTC)
+	seed(t, dataDir, func(st *store.Store) {
+		repo := repository.Repository{ID: "repo-1", Owner: "acme", Name: "web", Path: "/nowhere/web", CreatedAt: started}
+		if err := st.Repositories.Insert(t.Context(), repo); err != nil {
+			t.Fatalf("insert the repository: %v", err)
+		}
+		for _, id := range []string{"task-a", "task-b"} {
+			active := task.Task{
+				ID: id, RepositoryID: repo.ID, Name: id, Stage: task.StagePRD, Mode: task.ModeStructured,
+				CreatedAt: started, UpdatedAt: started,
+			}
+			if err := st.Tasks.Insert(t.Context(), active); err != nil {
+				t.Fatalf("insert %s: %v", id, err)
+			}
+		}
+		row := divergence.Row{
+			ItemID: "task-a", Stage: "step:2", Kind: string(divergence.KindCommitMissing),
+			Facts: `{"branch":"153-x","files":3}`, StartedAt: started,
+		}
+		if err := st.PutDivergence(t.Context(), row); err != nil {
+			t.Fatalf("put the divergence: %v", err)
+		}
+	})
+	a, published := newApp(t, app.AppOptions{DataDir: dataDir})
+
+	a.Start()
+	waitFor(t, published, phaseIs("ready"))
+	state := a.State()
+
+	byID := map[string]*bindings.Divergence{}
+	for _, summary := range state.Tasks {
+		byID[summary.ID] = summary.Divergence
+	}
+	want := &bindings.Divergence{
+		Stage: "step:2", Kind: "commit_missing", Branch: "153-x", Files: 3,
+		Candidates: []string{}, PRs: []bindings.DivergentPR{}, StartedAt: started.Format(time.RFC3339),
+	}
+	if diff := cmp.Diff(want, byID["task-a"]); diff != "" {
+		t.Errorf("Divergence of task-a mismatch (-want +got):\n%s", diff)
+	}
+	if byID["task-b"] != nil {
+		t.Errorf("Divergence of task-b = %+v, want nil", byID["task-b"])
 	}
 }

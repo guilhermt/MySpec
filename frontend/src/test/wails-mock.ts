@@ -801,6 +801,7 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
     pr: null,
     planProblems: [],
     situations: [],
+    divergence: null,
     models: makeTaskModels(),
     conversations: [],
     branch: "",
@@ -1402,6 +1403,7 @@ export function makeReviewSummary(overrides: Partial<ReviewSummary> = {}): Revie
     pendingCount: 0,
     lastError: "",
     situations: [],
+    divergence: null,
     createdAt: "2026-09-16T12:00:00Z",
     ...overrides,
   };
@@ -1512,6 +1514,7 @@ export function makeDiscussion(overrides: Partial<DiscussionSummary> = {}): Disc
     pendingCount: 0,
     lastError: "",
     situations: [],
+    divergence: null,
     createdAt: "2026-09-16T12:00:00Z",
     ...overrides,
   };
@@ -1730,6 +1733,7 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
           commits: [],
           wakes: [],
           background: [],
+          divergence: null,
           count: 0,
           board: "",
           epics: [],

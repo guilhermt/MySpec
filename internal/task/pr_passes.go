@@ -25,6 +25,7 @@ type PRPass struct {
 	Revision        int    // bumped every time the report is read again and differs
 	RecordedAt      time.Time
 	SentAt          time.Time // when the approved findings went to the agent; zero before
+	Changed         bool      // the worktree had changes after the approved findings went, or the user adopted the pass as applied
 	Findings        []prreport.Finding
 }
 

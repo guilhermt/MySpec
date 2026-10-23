@@ -3,11 +3,14 @@ package attention
 import (
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
+	"github.com/guilhermt/myspec/internal/divergence"
 )
 
 // DiscussionInput is what the situations of one discussion are derived from.
 type DiscussionInput struct {
 	State discussionflow.State
+	// Divergence is the one the discussion has open; nil for none.
+	Divergence *divergence.Divergence
 	// Title is the title of the notification: the title of the discussion.
 	Title string
 }
@@ -29,6 +32,11 @@ func DeriveDiscussion(in DiscussionInput) []Found {
 			found.Kind, found.Body = kind, sessionBody(kind, placeName(place, false))
 			return []Found{found}
 		}
+	}
+
+	if in.Divergence != nil {
+		found.Kind, found.Body = KindDivergence, divergenceBody(*in.Divergence, 0)
+		return []Found{found}
 	}
 
 	switch state.Waiting {

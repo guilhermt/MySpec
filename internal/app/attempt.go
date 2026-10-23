@@ -16,6 +16,7 @@ import (
 	"github.com/guilhermt/myspec/internal/contract"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/editor"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
@@ -269,6 +270,14 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	worktrees := worktree.New(worktree.Deps{
 		Git: gitRunner, Store: st.Worktrees, DataDir: a.dirs.Data, Log: log,
 	})
+	// The divergences are read with the rest of the data and reach the flows
+	// that open and clear them once those hold the service.
+	divergences := divergence.New(divergence.Deps{
+		Store: st, Log: log, OnChange: func(string) { a.publish() },
+	})
+	if err = withTimeout(ctx, divergences.Load); err != nil {
+		return fmt.Errorf("read divergences: %w", err)
+	}
 	reviews, err := review.New(review.Deps{
 		Worktrees: worktrees,
 		Log:       log,
@@ -339,6 +348,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	a.reviewModes, a.boards = reviewModesSvc, boards
 	a.pulls, a.prReviews, a.reviewFlow = pullRequests, prReviews, reviewFlow
 	a.discussions, a.discussionFlow = discussions, discussionFlow
+	a.divergences = divergences
 	a.cardImages = cardImages
 
 	if err = a.read(ctx); err != nil {

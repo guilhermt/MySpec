@@ -16,6 +16,7 @@ import (
 	"github.com/guilhermt/myspec/internal/claude/claudetest"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
@@ -4355,5 +4356,57 @@ func TestFromEntryCarriesTheBackgroundFieldsOfActionsPermissionsAndMarkers(t *te
 	}
 	if none := bindings.FromEntry("t1", session.Entry{Kind: session.KindMarker, Marker: &session.MarkerEntry{}}); none.Marker.Background == nil {
 		t.Error("a marker without background work has nil Background, want an empty list")
+	}
+}
+
+func TestFromDivergenceKeepsTheFactsAndNeverLeavesASliceNil(t *testing.T) {
+	t.Parallel()
+
+	started := time.Date(2026, time.October, 5, 9, 0, 0, 0, time.UTC)
+	d := divergence.Divergence{
+		ItemID: "t1", Stage: "pr", Kind: divergence.KindPRsAmbiguous, StartedAt: started,
+		Facts: divergence.Facts{
+			Branch: "153-x", Base: "dev", Pass: 2,
+			PRs: []divergence.PR{{Number: 7, URL: "https://github.com/acme/web/pull/7", Base: "dev", Head: "fix"}},
+		},
+	}
+
+	want := &bindings.Divergence{
+		Stage: "pr", Kind: "prs_ambiguous", Branch: "153-x", Base: "dev", Pass: 2,
+		Candidates: []string{},
+		PRs:        []bindings.DivergentPR{{Number: 7, URL: "https://github.com/acme/web/pull/7", Base: "dev", Head: "fix"}},
+		StartedAt:  started.Format(time.RFC3339),
+	}
+	if diff := cmp.Diff(want, bindings.FromDivergence(d, true)); diff != "" {
+		t.Errorf("FromDivergence() mismatch (-want +got):\n%s", diff)
+	}
+	if got := bindings.FromDivergence(d, false); got != nil {
+		t.Errorf("FromDivergence(none) = %+v, want nil", got)
+	}
+}
+
+func TestFromEntryCarriesTheDivergenceOfAMarker(t *testing.T) {
+	t.Parallel()
+
+	marker := bindings.FromEntry("t1", session.Entry{Kind: session.KindMarker, Marker: &session.MarkerEntry{
+		Type: session.MarkerDivergence,
+		Divergence: &divergence.Mark{
+			Kind: divergence.KindReportsAmbiguous, Facts: divergence.Facts{Pass: 2, Candidates: []string{"a.md", "b.md"}},
+		},
+	}})
+
+	want := &bindings.Divergence{
+		Kind: "reports_ambiguous", Pass: 2, Candidates: []string{"a.md", "b.md"}, PRs: []bindings.DivergentPR{},
+	}
+	if diff := cmp.Diff(want, marker.Marker.Divergence); diff != "" {
+		t.Errorf("marker divergence mismatch (-want +got):\n%s", diff)
+	}
+	if marker.Marker.Type != "divergence" {
+		t.Errorf("marker type = %q, want divergence", marker.Marker.Type)
+	}
+
+	other := bindings.FromEntry("t1", session.Entry{Kind: session.KindMarker, Marker: &session.MarkerEntry{Type: session.MarkerPaused}})
+	if other.Marker.Divergence != nil {
+		t.Errorf("marker divergence = %+v, want nil for another marker", other.Marker.Divergence)
 	}
 }

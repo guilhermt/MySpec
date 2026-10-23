@@ -159,6 +159,7 @@ function task(of: BoardCard): TaskSummary {
     pr: null,
     planProblems: [],
     situations: [],
+    divergence: null,
     models: [],
     conversations: [],
     branch: "",

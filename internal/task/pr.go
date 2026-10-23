@@ -84,6 +84,7 @@ type PRDetails struct {
 	URL       string
 	State     PRState // "" until a reading says otherwise
 	Base      string  // the branch the pull request merges into; "" until gh says
+	Head      string  // the branch the pull request comes from, as GitHub names it; "" until read
 	CheckedAt time.Time
 	Checks    []gh.Check   // the checks of the reading; nil before the first
 	Mergeable gh.Mergeable // "" before the first reading

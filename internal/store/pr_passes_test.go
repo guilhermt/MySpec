@@ -23,6 +23,7 @@ func newPRPass(taskID string, number int) task.PRPass {
 		Revision:        2,
 		RecordedAt:      fixedTime.Add(time.Minute),
 		SentAt:          fixedTime.Add(2 * time.Minute),
+		Changed:         true,
 		Findings: []prreport.Finding{
 			{
 				Number: 1, Title: "Missing check", Path: "api/limits.go", Line: 12,

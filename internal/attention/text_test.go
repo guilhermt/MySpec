@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/guilhermt/myspec/internal/discussion"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/task"
 )
@@ -219,5 +220,46 @@ func TestReadyToContinueKeepsItsOwnArticle(t *testing.T) {
 	}
 	if got, want := readyToContinueBody(task.StagePRD), "The PRD is revised and ready to continue."; got != want {
 		t.Errorf("readyToContinueBody() = %q, want %q", got, want)
+	}
+}
+
+func TestDivergenceBody(t *testing.T) {
+	t.Parallel()
+
+	pr := func(base, head string) []divergence.PR {
+		return []divergence.PR{{Number: 1284, Base: base, Head: head}}
+	}
+	tests := []struct {
+		name string
+		d    divergence.Divergence
+		step int
+		want string
+	}{
+		{"commit in a step", divergence.Divergence{Kind: divergence.KindCommitMissing}, 3, "Step 3: the commit MySpec asked for didn't happen."},
+		{"commit of the review fixes", divergence.Divergence{Kind: divergence.KindCommitMissing}, 0, "The commit of the review fixes didn't happen."},
+		{"report missing", divergence.Divergence{Kind: divergence.KindReportMissing, Facts: divergence.Facts{Pass: 2}}, 0, "Review 2 has no report."},
+		{"report unreadable", divergence.Divergence{Kind: divergence.KindReportUnreadable, Facts: divergence.Facts{Pass: 2, Reason: "The header has no pass."}}, 0, "Review 2 can't be read: the header has no pass."},
+		{"report unreadable without a reason", divergence.Divergence{Kind: divergence.KindReportUnreadable, Facts: divergence.Facts{Pass: 2}}, 0, "Review 2 can't be read."},
+		{"reports ambiguous", divergence.Divergence{Kind: divergence.KindReportsAmbiguous, Facts: divergence.Facts{Pass: 2, Candidates: []string{"a.md", "b.md"}}}, 0, "Review 2 has 2 possible reports."},
+		{"draft missing", divergence.Divergence{Kind: divergence.KindDraftMissing}, 0, "The draft of the pull request isn't there."},
+		{"draft unreadable", divergence.Divergence{Kind: divergence.KindDraftUnreadable}, 0, "The draft of the pull request can't be read."},
+		{"no changes", divergence.Divergence{Kind: divergence.KindNoChanges, Facts: divergence.Facts{Pass: 1, Approved: 3}}, 0, "The implementer changed no file for the 3 approved findings of review 1."},
+		{"no changes for one finding", divergence.Divergence{Kind: divergence.KindNoChanges, Facts: divergence.Facts{Pass: 1, Approved: 1}}, 0, "The implementer changed no file for the 1 approved finding of review 1."},
+		{"wrong base", divergence.Divergence{Kind: divergence.KindPRWrongBase, Facts: divergence.Facts{Base: "dev", PRs: pr("main", "153-x")}}, 0, "PR #1284 goes into main, not dev."},
+		{"other branch", divergence.Divergence{Kind: divergence.KindPROtherBranch, Facts: divergence.Facts{PRs: pr("dev", "fix-login")}}, 0, "PR #1284 comes from fix-login, not from the branch of the task."},
+		{"pull requests ambiguous", divergence.Divergence{Kind: divergence.KindPRsAmbiguous, Facts: divergence.Facts{PRs: append(pr("dev", "a"), pr("dev", "b")...)}}, 0, "2 pull requests could be the one of this task."},
+		{"pull request not opened", divergence.Divergence{Kind: divergence.KindPRNotOpened}, 0, "The draft was approved and GitHub has no pull request yet."},
+		{"push rejected", divergence.Divergence{Kind: divergence.KindPushRejected, Facts: divergence.Facts{Branch: "153-robustez"}}, 0, "MySpec couldn't push 153-robustez: origin has commits it doesn't."},
+		{"drafts unreadable", divergence.Divergence{Kind: divergence.KindDraftsUnreadable, Facts: divergence.Facts{Reason: "no drafts found"}}, 0, "drafts.md still can't be read: no drafts found."},
+		{"a pull request the facts don't hold", divergence.Divergence{Kind: divergence.KindPRWrongBase, Facts: divergence.Facts{Base: "dev"}}, 0, "The pull request goes into , not dev."},
+		{"a kind it doesn't know", divergence.Divergence{Kind: "from_the_future"}, 0, "The work isn't as MySpec expected."},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := divergenceBody(tc.d, tc.step); got != tc.want {
+				t.Errorf("divergenceBody() = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
