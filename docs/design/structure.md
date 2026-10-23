@@ -213,14 +213,13 @@ Todo o resto fica fechado, nos painéis ou no menu `⋯`. Um painel aberto fica 
 
 `←`, `→` (só com destino), o breadcrumb, o título do item, o progresso, e à direita:
 
-- o medidor de contexto, só com uma sessão na tela;
 - **Pause** ou **Resume**, só aqui;
 - o grupo dos painéis do item;
 - `⋯`.
 
 **O progresso.** Na task, o **stepper**: as etapas nomeadas, a feita com o visto, a atual como pílula com a posição (`Implementation 3/7 · pass 2`) e o glifo do estado, a futura com o círculo, sem trilha inteira nem tempos. No review e na discussão, a **pílula** sozinha: `Pass 1`, `Discussing`, `Round N`. O progresso não tem ação.
 
-**Largura.** O topo cede pela largura da área principal, em limites fixos: primeiro o que fica em volta do progresso (o breadcrumb dobra, os painéis ficam só com o ícone, **Pause** só com o ícone, o medidor só com a porcentagem), depois as etapas feitas, depois o laço e a palavra da pílula, por último os nomes das futuras; o nome da etapa atual nunca sai. O título cede depois de tudo. Os limites estão em [components.md](./components.md), Cabeçalho do lugar. Na metade do monitor, o stepper ainda nomeia a atual e as futuras.
+**Largura.** O topo cede pela largura da área principal, em limites fixos: primeiro o que fica em volta do progresso (o breadcrumb dobra, os painéis ficam só com o ícone, **Pause** só com o ícone), depois as etapas feitas, depois o laço e a palavra da pílula, por último os nomes das futuras; o nome da etapa atual nunca sai. O título cede depois de tudo. Os limites estão em [components.md](./components.md), Cabeçalho do lugar. Na metade do monitor, o stepper ainda nomeia a atual e as futuras.
 
 **O `⋯`** tem as ferramentas do item e as ações raras e destrutivas, agrupadas por assunto, com o destrutivo por último, em vermelho: na task, as do step (**Review myself**, **Open in VS Code**, **Discard step N…**), as da PR (**Open PR**, **Refresh PR**, **Review again**, que na task pede a passada sem diálogo, e **Review myself**, que só existe quando o agente revisa a PR), as do planejamento e da task (**Review mode ›**, com os modos dos steps e da PR ao lado, **Models ›**, **Back to <etapa>…**, **Discard and restart the <etapa>…**, **Delete task…**); no review, **Open PR**, **Refresh PR**, **Open in VS Code**, **Review again…** e **Delete review…**; na discussão, **Open <board>**, **Group drafts into an epic…**, **Archive…** e **Delete discussion…**. Cada destrutiva diz antes o que será perdido. Um item desabilitado diz por quê ao lado.
 
@@ -305,6 +304,7 @@ Embaixo da conversa, na mesma medida. Existe sempre que a conversa na tela tem u
 - **A caixa de texto.** O placeholder diz a quem se responde e como (`Answer with 1–3, or reply to the reviewer…`, `Queue a message for the implementer…`, `Sending resumes the task…`).
 - **As pastilhas**, quando há: a resposta rápida a uma pergunta em texto com opções, e os começos de mensagem (**Ask for changes**, **Ask to fix the drafts**).
 - **O seletor de modelo e esforço da sessão** (`Opus · high ▾`), que vale a partir da próxima mensagem. A resposta em andamento termina com a escolha anterior. Um modelo sem esforço mostra só o nome. Uma escolha que o catálogo não tem mais aparece marcada como indisponível.
+- **O medidor de contexto**, ao lado do seletor de modelo: a fração da janela do modelo já ocupada. Abaixo de 1300 px de área principal, só a porcentagem.
 - **Send**, ou, com o agente trabalhando, o relógio do turno e **Stop**, que interrompe a resposta e mantém a sessão. Uma mensagem enviada com o agente ocupado entra na fila, que aparece na conversa, no fim, com **Remove**.
 - **Estados.** Com a sessão pausada, o compositor diz que enviar retoma, e enviar retoma a sessão. Com uma pergunta estruturada aberta, o que se escreve responde a pergunta. Numa conversa em que o produto não age mais (o revisor depois de **Review myself**), ele continua aceitando mensagens.
 

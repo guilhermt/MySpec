@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/system/Button";
 import { Chip } from "@/components/system/Chip";
+import { ContextMeter } from "@/components/system/ContextMeter";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import { Spinner } from "@/components/system/Spinner";
@@ -22,7 +23,7 @@ import {
   sendIsPrimary,
 } from "@/features/chat/composer";
 import { voiceInSentence, voiceOf } from "@/features/chat/markers";
-import type { SessionState } from "@/features/chat/session";
+import { contextDetail, type SessionState } from "@/features/chat/session";
 import { AttachedImages } from "@/features/images/AttachedImages";
 import { DropHint } from "@/features/images/DropHint";
 import { pasteImages } from "@/features/images/pasteImages";
@@ -415,14 +416,23 @@ export function Composer({
         <div className="flex items-center justify-between gap-(--space-2) px-(--space-2) pb-(--space-2)">
           <div className="flex min-w-0 items-center gap-(--space-2)">
             {session.sessionModel !== "" && (
-              <ModelChip
-                value={{ model: session.sessionModel, effort: session.sessionEffort }}
-                onChange={(choice) => void changeModel(choice)}
-                label="Conversation"
-                own
-                followNote="Model of this conversation · from your next message"
-                saving={saving}
-              />
+              <>
+                <ModelChip
+                  value={{ model: session.sessionModel, effort: session.sessionEffort }}
+                  onChange={(choice) => void changeModel(choice)}
+                  label="Conversation"
+                  own
+                  followNote="Model of this conversation · from your next message"
+                  saving={saving}
+                />
+                <ContextMeter
+                  percent={session.contextPercent}
+                  paused={paused}
+                  compact="narrow"
+                  reading={session.lastError === ""}
+                  detail={contextDetail(session.contextPercent)}
+                />
+              </>
             )}
             {footLine !== "" && (
               <p

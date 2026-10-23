@@ -138,7 +138,6 @@ export interface StepDisplay {
 export interface LoopSession extends SessionState {
   /** stage names the session: step:<n> or step_review:<n>. */
   stage: string;
-  contextPercent: number;
 }
 
 /** loopSession is the conversation the current step of a task waits on. */

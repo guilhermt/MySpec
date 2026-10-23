@@ -100,7 +100,7 @@ func TestCreateTaskAddsTheTaskToTheState(t *testing.T) {
 	}
 	// The context percentage depends on the tokens the fake reports, and the
 	// process may still be idling; neither belongs in this comparison.
-	got.ContextPercent = 0
+	got.ContextPercent = nil
 	got.ProcessRunning = false
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("task mismatch (-want +got):\n%s", diff)

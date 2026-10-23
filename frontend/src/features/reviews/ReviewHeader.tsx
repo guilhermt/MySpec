@@ -1,19 +1,13 @@
 import { ItemPause } from "@/components/ItemPause";
 import { PanelGroup } from "@/components/system/AuxPanel";
-import { ContextMeter } from "@/components/system/ContextMeter";
 import { ICONS } from "@/components/system/icons";
 import { Stepper } from "@/components/system/Stepper";
 import { useNow } from "@/features/attention/useNow";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { ReviewMenu } from "@/features/reviews/ReviewMenu";
-import {
-  isPausedReview,
-  reviewContextDetail,
-  reviewPauseRefusal,
-  reviewStepper,
-} from "@/features/reviews/review-header";
+import { reviewPauseRefusal, reviewStepper } from "@/features/reviews/review-header";
 import type { ReviewSummary } from "@/lib/wails";
-import { useAppStore, usePanel, useSubagentConversation } from "@/store/app-store";
+import { useAppStore, usePanel } from "@/store/app-store";
 
 /** PANELS are the panels of a review, in their order, each with what it shows. */
 const PANELS = [
@@ -35,9 +29,8 @@ export interface ReviewHeaderProps {
 
 /**
  * ReviewHeader is the header of the place of a pull request under review: the title, the pill of its
- * pass, and on the right the context meter, Pause or Resume, the panels and the ⋯. The meter and Pause
- * are there only while the review has a session.
- * A subagent's conversation on screen is not the one the meter measures, so the meter steps aside.
+ * pass, and on the right Pause or Resume, the panels and the ⋯. Pause is there only while the review
+ * has a session.
  */
 export function ReviewHeader({ review }: ReviewHeaderProps) {
   const now = useNow(MINUTE, true);
@@ -45,7 +38,6 @@ export function ReviewHeader({ review }: ReviewHeaderProps) {
   const openPanel = useAppStore((state) => state.openPanel);
   const stepper = reviewStepper(review, now);
   const hasSession = review.sessionStage !== "";
-  const subagent = useSubagentConversation(review.id);
 
   return (
     <LocationHeader
@@ -59,15 +51,6 @@ export function ReviewHeader({ review }: ReviewHeaderProps) {
         />
       }
     >
-      {hasSession && subagent === null && (
-        <ContextMeter
-          percent={review.contextPercent === 0 ? null : review.contextPercent}
-          paused={isPausedReview(review)}
-          compact="narrow"
-          reading={review.lastError === ""}
-          detail={reviewContextDetail(review)}
-        />
-      )}
       <ItemPause
         id={review.id}
         item="the review"

@@ -14,13 +14,9 @@ export interface TaskSession extends SessionState {
   stage: string;
   /** role is who talks: Implementer, Reviewer (also in the PR review), PRD agent, Tech spec agent, Plan agent, Planning agent, PR agent. */
   role: string;
-  contextPercent: number;
 }
 
-/** SessionBlock is the part of a DTO that tells the state of a session. */
-type SessionBlock = SessionState & { contextPercent: number };
-
-function sessionOf(task: TaskSummary, stage: string, block: SessionBlock): TaskSession {
+function sessionOf(task: TaskSummary, stage: string, block: SessionState): TaskSession {
   // The name of each conversation is the one the sidebar gives it, so the app has one.
   const role = taskSessions(task).find((session) => session.stage === stage)?.role ?? "";
   return {
@@ -150,10 +146,4 @@ export function pauseRefusal(task: TaskSummary, session: TaskSession): string | 
         ? "."
         : `, or discard and restart ${stage === "one_shot" ? "planning" : `the ${stageNoun(stage)}`}.`;
   return `Nothing is running to pause: the ${speaker(session)}'s session stopped with an error. Retry it${way}`;
-}
-
-/** contextDetail is the tooltip of the meter: "Context used by the implementer: 44%", "…" before the first reading. */
-export function contextDetail(session: TaskSession): string {
-  const used = session.contextPercent === 0 ? "…" : `${Math.round(session.contextPercent)}%`;
-  return `Context used by the ${speaker(session)}: ${used}`;
 }

@@ -85,8 +85,11 @@ const (
 // Model is the model name every fake turn reports.
 const Model = "claude-fake-1"
 
-// ContextWindow is the window the fake reports in the result of a turn.
+// ContextWindow is the window the fake answers to get_context_usage.
 const ContextWindow = 200000
+
+// ContextEstimate is the estimate of tokens the fake answers to get_context_usage.
+const ContextEstimate = 17000
 
 // ReadPath is the file the tool scenario pretends to read.
 const ReadPath = "/tmp/fake/hello.txt"
@@ -393,6 +396,8 @@ func (f *fake) read(input *os.File) {
 				f.stopTask(line.RequestID, line.Request.TaskID)
 			case "get_task_output":
 				f.taskOutput(line.RequestID, line.Request.TaskID)
+			case "get_context_usage":
+				f.answer(line.RequestID, map[string]any{"totalTokens": ContextEstimate, "rawMaxTokens": ContextWindow})
 			}
 		case "control_response":
 			f.responses <- response{requestID: line.Response.RequestID, body: line.Response.Response}
@@ -1926,7 +1931,6 @@ func (f *fake) resultLine(subtype string, isError bool, text, terminalReason str
 		"num_turns":          numTurns,
 		"total_cost_usd":     0.01,
 		"usage":              usage(64),
-		"modelUsage":         map[string]any{Model: map[string]any{"contextWindow": ContextWindow}},
 		"permission_denials": []any{},
 	}
 }

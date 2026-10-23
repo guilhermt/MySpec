@@ -180,7 +180,7 @@ type Summary struct {
 	// action entry of the turn that is still running. "" when none runs.
 	ActionLabel    string
 	ActionTarget   string
-	ContextPercent int // 0 until the first result of the session
+	ContextPercent *int // nil without a reading
 	PendingCount   int
 	Corrections    int
 	LastError      string

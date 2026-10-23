@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  contextDetail,
   isPaused,
   pauseRefusal,
   screenSession,
@@ -141,7 +140,7 @@ describe("screenSession", () => {
   it.each([
     ["the implementer tab", both, "implementer", "step:3", 60],
     ["the reviewer tab", both, "reviewer", "step_review:3", 30],
-    ["a step without a reviewer", inStep({ status: "implementing" }), "reviewer", "step:3", 0],
+    ["a step without a reviewer", inStep({ status: "implementing" }), "reviewer", "step:3", null],
     ["the PRD", makeTask({ stage: "prd", contextPercent: 12 }), "implementer", "prd", 12],
   ] as const)("is the conversation of %s", (_, task, tab, stage, contextPercent) => {
     expect(screenSession(task, tab)).toMatchObject({ stage, contextPercent });
@@ -317,18 +316,4 @@ describe("pauseRefusal", () => {
       expect(pauseRefusal(task, sessionOf(task))).toBeNull();
     },
   );
-});
-
-describe("contextDetail", () => {
-  it("says who used how much of the context", () => {
-    expect(contextDetail(sessionOf(inStep({ status: "agent_review", reviewer })))).toBe(
-      "Context used by the reviewer: 30%",
-    );
-  });
-
-  it("says … before the first reading", () => {
-    expect(contextDetail(sessionOf(makeTask({ contextPercent: 0 })))).toBe(
-      "Context used by the PRD agent: …",
-    );
-  });
 });

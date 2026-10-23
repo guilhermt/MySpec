@@ -28,6 +28,7 @@ type run struct {
 	stopping   bool          // we asked the process to stop; its exit is expected
 	eventSeen  bool          // the current process has said something
 	startTimer *time.Timer   // fires when a message got no event back in time
+	readings   int           // exact readings of the tokens (message_start of the main thread) so far, so that an estimate asked before them does not overwrite them
 	procChoice models.Choice // the model and effort the current process was started with
 
 	turn         *turn
@@ -102,11 +103,13 @@ type subagent struct {
 }
 
 // controlRequest is a control request of the app whose answer someone awaits:
-// a stop_task of a batch, or a get_task_output.
+// a stop_task of a batch, a get_task_output, or a get_context_usage.
 type controlRequest struct {
-	taskID string
-	batch  *stopBatch                       // stop_task only
-	answer chan claude.ControlResponseEvent // get_task_output only, buffered 1
+	taskID   string
+	batch    *stopBatch                       // stop_task only
+	answer   chan claude.ControlResponseEvent // get_task_output only, buffered 1
+	context  bool                             // get_context_usage
+	readings int                              // get_context_usage only: r.readings when it was sent
 }
 
 // stopBatch is the stops one gesture asked for: their marker is written once,
@@ -399,6 +402,20 @@ func (r *run) stopTimers() {
 	}
 }
 
+// askContextLocked asks the CLI for the window of its model and its estimate
+// of the context. The answer is applied by applyContextLocked.
+func (s *Service) askContextLocked(r *run) {
+	if r.proc == nil {
+		return
+	}
+	id, err := r.proc.ContextUsage()
+	if err != nil {
+		s.log.Warn("ask context usage failed", "task", r.task.ID, "stage", r.rec.Stage, "error", err)
+		return
+	}
+	r.requests[id] = &controlRequest{context: true, readings: r.readings}
+}
+
 // ensureProcessLocked starts the CLI when it is not running. A failure is
 // recorded in the conversation and returned. The caller holds the mutex.
 func (s *Service) ensureProcessLocked(ctx context.Context, r *run, n *notes) error {
@@ -455,6 +472,7 @@ func (s *Service) ensureProcessLocked(ctx context.Context, r *run, n *notes) err
 	clear(r.dirty)
 	r.forgetTasks()
 	r.lastTurnAt = time.Time{}
+	s.askContextLocked(r)
 	if r.rec.LastError != "" {
 		r.rec.LastError = ""
 		_ = s.persistRecord(ctx, r)

@@ -148,6 +148,7 @@ func (s *Service) handleSystem(ctx context.Context, r *run, ev claude.Event, n *
 			PreTokens: pre,
 			Percent:   percent,
 		}}, n)
+		s.askContextLocked(r)
 	case "task_started":
 		s.handleTaskStarted(ctx, r, ev.TaskStarted, n)
 	case "task_updated":
@@ -571,6 +572,7 @@ func (s *Service) handleStream(ctx context.Context, r *run, ev *claude.StreamEve
 		t.finalized = map[int]bool{}
 		t.thinking = map[int]string{}
 		r.rec.ContextTokens = event.Message.Usage.ContextTokens()
+		r.readings++
 		n.state(r.key())
 	case "content_block_start":
 		if event.ContentBlock == nil {
@@ -963,7 +965,8 @@ func requesterOf(r *run, toolUseID, agentID string) string {
 }
 
 // handleControlResponse delivers the answer to a control request of the app:
-// the output a caller awaits, or the end of one stop of a batch. Any other
+// the output a caller awaits, the use of the context, or the end of one stop
+// of a batch. Any other
 // answer, the interrupt's receipt among them, needs nothing.
 func (s *Service) handleControlResponse(ctx context.Context, r *run, ev *claude.ControlResponseEvent, n *notes) {
 	id := ev.Response.RequestID
@@ -972,6 +975,10 @@ func (s *Service) handleControlResponse(ctx context.Context, r *run, ev *claude.
 		return
 	}
 	delete(r.requests, id)
+	if req.context {
+		s.applyContextLocked(ctx, r, req, ev, n)
+		return
+	}
 	if req.answer != nil {
 		req.answer <- *ev
 		return
@@ -993,6 +1000,29 @@ func (s *Service) handleControlResponse(ctx context.Context, r *run, ev *claude.
 	if req.batch.pending == 0 {
 		s.settleStopLocked(ctx, r, req.batch, n)
 	}
+	n.state(r.key())
+}
+
+// applyContextLocked takes the window of the model from a get_context_usage
+// answer, and its estimate of the tokens unless an exact reading arrived since
+// it was asked.
+func (s *Service) applyContextLocked(ctx context.Context, r *run, req *controlRequest, ev *claude.ControlResponseEvent, n *notes) {
+	if ev.Response.Subtype == "error" {
+		s.log.Debug("context usage refused", "task", r.task.ID, "stage", r.rec.Stage, "error", ev.Response.Error)
+		return
+	}
+	usage, err := claude.DecodeContextUsage(ev.Response.Response)
+	if err != nil {
+		s.log.Debug("context usage unreadable", "task", r.task.ID, "stage", r.rec.Stage, "error", err)
+		return
+	}
+	if usage.RawMaxTokens > 0 {
+		r.rec.ContextWindow = usage.RawMaxTokens
+	}
+	if usage.TotalTokens > 0 && req.readings == r.readings {
+		r.rec.ContextTokens = usage.TotalTokens
+	}
+	_ = s.persistRecord(ctx, r)
 	n.state(r.key())
 }
 
@@ -1097,9 +1127,6 @@ func (s *Service) handleResult(ctx context.Context, r *run, ev *claude.ResultEve
 		s.closeTurnLocked(ctx, r, aborted, interruptedByUser, n)
 	}
 
-	if w := ev.ContextWindow(); w > 0 {
-		r.rec.ContextWindow = w
-	}
 	_ = s.persistRecord(ctx, r)
 
 	if ev.IsError && !aborted {

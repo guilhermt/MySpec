@@ -1,6 +1,5 @@
 import { ItemPause } from "@/components/ItemPause";
 import { PanelGroup } from "@/components/system/AuxPanel";
-import { ContextMeter } from "@/components/system/ContextMeter";
 import { ICONS } from "@/components/system/icons";
 import type { PillView } from "@/components/system/Pill";
 import { Stepper } from "@/components/system/Stepper";
@@ -8,20 +7,9 @@ import { useNow } from "@/features/attention/useNow";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
 import { loadingSteps, stepperOf } from "@/features/task/stepper";
 import { TaskMenu } from "@/features/task/TaskMenu";
-import {
-  contextDetail,
-  pauseRefusal,
-  screenSession,
-  waitingSession,
-} from "@/features/task/task-session";
-import { asSessionStatus, asTaskMode, type TaskCard, type TaskSummary } from "@/lib/wails";
-import {
-  useAppStore,
-  useEarlierConversation,
-  useOpenStepTab,
-  usePanel,
-  useSubagentConversation,
-} from "@/store/app-store";
+import { pauseRefusal, waitingSession } from "@/features/task/task-session";
+import { asTaskMode, type TaskCard, type TaskSummary } from "@/lib/wails";
+import { useAppStore, usePanel } from "@/store/app-store";
 
 export interface TaskHeaderProps {
   /** task is null in the instant before the first snapshot that brings a new task. */
@@ -129,27 +117,12 @@ export function TaskHeader({ task }: TaskHeaderProps) {
 
 /** TaskTools is the right of the header of a task, in its order. */
 function TaskTools({ task, now }: { task: TaskSummary; now: number }) {
-  const tab = useOpenStepTab(task.id);
   const panel = usePanel();
   const openPanel = useAppStore((state) => state.openPanel);
-  const earlier = useEarlierConversation(task.id);
-  const subagent = useSubagentConversation(task.id);
   const panels = asTaskMode(task.mode) === "one_shot" ? ONE_SHOT_PANELS : STRUCTURED_PANELS;
-  // An earlier conversation or a subagent's on screen is not the one the meter measures, so it
-  // steps aside.
-  const onScreen = earlier === null && subagent === null ? screenSession(task, tab) : null;
 
   return (
     <>
-      {onScreen !== null && (
-        <ContextMeter
-          percent={onScreen.contextPercent === 0 ? null : onScreen.contextPercent}
-          paused={asSessionStatus(onScreen.sessionStatus) === "paused"}
-          compact="narrow"
-          reading={onScreen.lastError === ""}
-          detail={contextDetail(onScreen)}
-        />
-      )}
       <ItemPause
         id={task.id}
         item="the task"

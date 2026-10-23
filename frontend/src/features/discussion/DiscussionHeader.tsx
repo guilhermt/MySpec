@@ -1,14 +1,13 @@
 import { ItemPause } from "@/components/ItemPause";
 import { PanelGroup } from "@/components/system/AuxPanel";
-import { ContextMeter } from "@/components/system/ContextMeter";
 import { ICONS } from "@/components/system/icons";
 import { Stepper } from "@/components/system/Stepper";
 import { useNow } from "@/features/attention/useNow";
 import { DiscussionMenu } from "@/features/discussion/DiscussionMenu";
 import { discussionPauseRefusal, discussionStepper } from "@/features/discussion/discussion-header";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
-import { asSessionStatus, DISCUSSION_STAGE, type DiscussionSummary, sessionKey } from "@/lib/wails";
-import { useAppStore, usePanel, useSubagentConversation } from "@/store/app-store";
+import { DISCUSSION_STAGE, type DiscussionSummary, sessionKey } from "@/lib/wails";
+import { useAppStore, usePanel } from "@/store/app-store";
 
 /** PANELS are the panels of a discussion, in their order, each with what it shows. */
 const PANELS = [
@@ -35,9 +34,8 @@ export interface DiscussionHeaderProps {
 
 /**
  * DiscussionHeader is the header of the place of a discussion: the title, the pill of its round, and
- * on the right the context meter, Pause or Resume, the panels and the ⋯. The meter and Pause are
- * there only while the discussion has a session.
- * A subagent's conversation on screen is not the one the meter measures, so the meter steps aside.
+ * on the right Pause or Resume, the panels and the ⋯. Pause is there only while the discussion has a
+ * session.
  */
 export function DiscussionHeader({ discussion }: DiscussionHeaderProps) {
   const now = useNow(MINUTE, true);
@@ -50,7 +48,6 @@ export function DiscussionHeader({ discussion }: DiscussionHeaderProps) {
   });
   const stepper = discussionStepper(discussion, now);
   const hasSession = discussion.sessionStage !== "";
-  const subagent = useSubagentConversation(discussion.id);
 
   return (
     <LocationHeader
@@ -65,15 +62,6 @@ export function DiscussionHeader({ discussion }: DiscussionHeaderProps) {
         />
       }
     >
-      {hasSession && subagent === null && (
-        <ContextMeter
-          percent={discussion.contextPercent === 0 ? null : discussion.contextPercent}
-          paused={asSessionStatus(discussion.sessionStatus) === "paused"}
-          compact="narrow"
-          reading={discussion.lastError === ""}
-          detail={`Context used by the discussion: ${discussion.contextPercent === 0 ? "…" : `${Math.round(discussion.contextPercent)}%`}`}
-        />
-      )}
       <ItemPause
         id={discussion.id}
         item="the discussion"
