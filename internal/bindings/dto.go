@@ -214,8 +214,8 @@ type Step struct {
 	Title  string `json:"title"`
 	// Status is not_started, preparing, blocked, implementing, agent_review,
 	// addressing_review, awaiting_review, in_review, ready_to_approve,
-	// nothing_to_commit, review_failed, committing or done, a string for the
-	// same reason as State.Theme.
+	// nothing_to_commit, review_failed, committing, diverged or done, a string
+	// for the same reason as State.Theme.
 	Status string `json:"status"`
 	// Phase is fetching, creating or checking while preparing; "" otherwise.
 	Phase        string     `json:"phase"`
@@ -226,7 +226,6 @@ type Step struct {
 	CommitSHA     string  `json:"commitSha"`     // done only
 	CommitSubject string  `json:"commitSubject"` // done only
 	CommittedAt   string  `json:"committedAt"`   // done only: the committer date, RFC 3339; "" when unknown
-	CommitFailed  bool    `json:"commitFailed"`  // the last approval ended without a commit
 
 	Model         string `json:"model"` // what the step runs with, or will run with
 	Effort        string `json:"effort"`
@@ -243,11 +242,10 @@ type Step struct {
 	// step that started under the agent review is reviewed by the user; ""
 	// while its mode holds.
 	ReviewFallback string        `json:"reviewFallback"`
-	ReviewPass     int           `json:"reviewPass"`    // agent_review only: the pass under way
-	ReviewRound    int           `json:"reviewRound"`   // addressing_review only: the report the implementer addresses
-	ReportMissing  bool          `json:"reportMissing"` // agent_review only: the reviewer rests without the report of the pass
-	Reports        []StepReport  `json:"reports"`       // the reports of the agent review, by pass; never nil
-	Reviewer       *AgentSession `json:"reviewer"`      // nil while the step has no reviewer conversation open
+	ReviewPass     int           `json:"reviewPass"`  // agent_review only: the pass under way
+	ReviewRound    int           `json:"reviewRound"` // addressing_review only: the report the implementer addresses
+	Reports        []StepReport  `json:"reports"`     // the reports of the agent review, by pass; never nil
+	Reviewer       *AgentSession `json:"reviewer"`    // nil while the step has no reviewer conversation open
 }
 
 // StepReport is one pass of the agent review of a step.
@@ -296,8 +294,9 @@ type AgentSession struct {
 
 // PRBlock is why the pull request stage of a task cannot go on.
 type PRBlock struct {
-	// Reason is gh_missing, gh_unauthenticated, gh_failed, git_failed or
-	// no_worktree, a string for the same reason as State.Theme.
+	// Reason is gh_missing, gh_unauthenticated, gh_failed, git_failed,
+	// no_worktree, push_failed or open_failed, a string for the same reason as
+	// State.Theme.
 	Reason string `json:"reason"`
 	Detail string `json:"detail"` // what gh or git said, verbatim
 }
@@ -357,9 +356,8 @@ type CloseResult struct {
 type PullRequest struct {
 	// Status is preparing, blocked, drafting, draft_ready, awaiting_reply,
 	// opening, reviewing, addressing_review, waiting_checks, awaiting_decision,
-	// in_review,
-	// ready_to_approve, committing, done, trouble, merged, pr_closed, closing or
-	// closed, a string for the same reason as State.Theme.
+	// in_review, ready_to_approve, committing, pushing, done, trouble, merged,
+	// pr_closed, closing, closed or diverged, a string for the same reason as State.Theme.
 	Status       string   `json:"status"`
 	Block        *PRBlock `json:"block"` // blocked only
 	WorktreePath string   `json:"worktreePath"`
@@ -375,8 +373,6 @@ type PullRequest struct {
 	// can't be read; "" otherwise.
 	UnreadableReport string  `json:"unreadableReport"`
 	Review           *Review `json:"review"` // the review states and committing only
-	// CommitFailed says the last approval of the review ended without a commit.
-	CommitFailed bool `json:"commitFailed"`
 	// ReviewRound is the reports with findings the agent review handed to the
 	// implementer; 0 in manual mode.
 	ReviewRound int `json:"reviewRound"`
@@ -486,8 +482,8 @@ type Situation struct {
 	// Kind is session_error, step_blocked, worktree_unreadable, pr_blocked,
 	// plan_invalid, pr_closed, permission, question, reply, ready_to_continue,
 	// step_review, step_empty, draft, findings, changes_review, merge,
-	// review_report, new_commits, publish_failed, pass_blocked or drafts, a
-	// string for the same reason as State.Theme.
+	// review_report, new_commits, publish_failed, pass_blocked, divergence or
+	// drafts, a string for the same reason as State.Theme.
 	Kind string `json:"kind"`
 	// Group is error, waiting or closing, from the most urgent, a string for
 	// the same reason as State.Theme.
@@ -591,6 +587,7 @@ type TaskSummary struct {
 	PR             *PullRequest     `json:"pr"`           // nil outside the pull request stage
 	PlanProblems   []PlanProblem    `json:"planProblems"` // never nil
 	Situations     []Situation      `json:"situations"`   // what the task waits on the user for, the most urgent first; never nil
+	Divergence     *Divergence      `json:"divergence"`   // what the app expected and found otherwise; nil without one
 	Models         []TaskStageModel `json:"models"`       // every stage, in workflow order; never nil
 	// Conversations is every session the task has, open or closed, by start;
 	// never nil.
@@ -748,7 +745,8 @@ type UserEntry struct {
 	// every other entry.
 	Sent string `json:"sent"`
 	// AppKind is which message of the workflow the app sent: report, pass,
-	// commit, commit_all, commit_all_push, commit_push, correction, open, pr_pass or apply; ""
+	// commit, commit_all, commit_all_push, commit_push, correction,
+	// drafts_correction, again, open, pr_pass or apply; ""
 	// for every other entry. AppPass belongs to report, pass and pr_pass;
 	// AppRound and AppRounds to report (the round of MaxReviewRounds) and
 	// correction (the attempt of MaxCorrections); AppCount to report (the
@@ -884,6 +882,9 @@ type PermissionEntry struct {
 	// ParentToolUseID is the Agent/Task action of the subagent that asks; ""
 	// for the main thread.
 	ParentToolUseID string `json:"parentToolUseId"`
+	// Deviation says the action is outside what the stage of the session does:
+	// a hook of the contract asked, and DecisionReason says what is expected.
+	Deviation bool `json:"deviation"`
 }
 
 // QuestionOption is one answer offered for a question.
@@ -921,7 +922,8 @@ type MarkerEntry struct {
 	// step_started, compacted, interrupted, retried, woke, committed, pr_opened,
 	// checks_read, draft_approved, changes_approved, paused, plan_invalid,
 	// background_stopped, background_lost, discussion_document,
-	// drafts_written, drafts_revised, drafts_unreadable or drafts_published.
+	// drafts_written, drafts_revised, drafts_unreadable, drafts_published or
+	// divergence.
 	Type      string `json:"type"`
 	PreTokens int    `json:"preTokens"`
 	// Stage belongs to stage_started alone, Step to the markers of a step
@@ -995,6 +997,43 @@ type MarkerEntry struct {
 	// Background belongs to background_stopped and background_lost: the work
 	// they name, in the order it started; never nil.
 	Background []BackgroundItem `json:"background"`
+	// Divergence belongs to divergence: what the app expected and found
+	// otherwise; Stage and StartedAt are empty in a marker.
+	Divergence *Divergence `json:"divergence"`
+}
+
+// Divergence is what the app expected of an item after its one instruction,
+// and found otherwise.
+type Divergence struct {
+	// Stage is the conversation it belongs to: step:3, step_review:3, pr,
+	// pr_review, pr_fix, review or discussion.
+	Stage string `json:"stage"`
+	// Kind is commit_missing, report_missing, report_unreadable,
+	// reports_ambiguous, draft_missing, draft_unreadable, no_changes,
+	// pr_wrong_base, pr_other_branch, prs_ambiguous, pr_not_opened,
+	// push_rejected or drafts_unreadable, a string for the same reason as
+	// State.Theme.
+	Kind       string        `json:"kind"`
+	Branch     string        `json:"branch"`
+	Base       string        `json:"base"`
+	Commit     string        `json:"commit"`
+	Files      int           `json:"files"`
+	All        bool          `json:"all"`
+	Pass       int           `json:"pass"`
+	Approved   int           `json:"approved"`
+	Path       string        `json:"path"`
+	Reason     string        `json:"reason"`
+	Candidates []string      `json:"candidates"` // never nil
+	PRs        []DivergentPR `json:"prs"`        // never nil
+	StartedAt  string        `json:"startedAt"`  // RFC 3339
+}
+
+// DivergentPR is a pull request a divergence names.
+type DivergentPR struct {
+	Number int    `json:"number"`
+	URL    string `json:"url"`
+	Base   string `json:"base"`
+	Head   string `json:"head"`
 }
 
 // BackgroundItem is a task in the background a marker names.
@@ -1701,7 +1740,7 @@ type ReviewSummary struct {
 	// Status is reviewing, waiting_checks, pass_blocked, awaiting_reply,
 	// awaiting_decision, ready_to_publish, publish_failed, published,
 	// new_commits, ready_to_apply, applying, in_review, ready_to_approve,
-	// committing, ready_to_merge or trouble.
+	// committing, pushing, diverged, ready_to_merge or trouble.
 	Status       string       `json:"status"`
 	Card         *PullCard    `json:"card"` // nil when the pull request has no card
 	WorktreePath string       `json:"worktreePath"`
@@ -1731,11 +1770,12 @@ type ReviewSummary struct {
 	// PublishError is why the last publication failed; "" otherwise.
 	PublishError string `json:"publishError"`
 	PassBlocked  string `json:"passBlocked"` // why the pass the app asked for could not start; "" otherwise
+	// PushBlocked is true when what is blocked is the push of the commits, which
+	// the user asks for again; pass_blocked only.
+	PushBlocked bool `json:"pushBlocked"`
 	// UnreadableReport is why the report of the pass the app asked for could
 	// not be read; "" otherwise.
 	UnreadableReport string `json:"unreadableReport"`
-	// CommitFailed says the last approval of apply mode ended without a commit.
-	CommitFailed bool `json:"commitFailed"`
 	// Review is the last reading of the worktree; apply mode only.
 	Review *Review `json:"review"`
 	// Verdicts are the verdicts this review can be published with, in the order
@@ -1778,6 +1818,7 @@ type ReviewSummary struct {
 	PendingCount   int         `json:"pendingCount"`
 	LastError      string      `json:"lastError"`
 	Situations     []Situation `json:"situations"` // what the review waits on the user for; never nil
+	Divergence     *Divergence `json:"divergence"` // what the app expected and found otherwise; nil without one
 	CreatedAt      string      `json:"createdAt"`
 }
 
@@ -1944,7 +1985,7 @@ type DiscussionSummary struct {
 	Board   string         `json:"board"` // the title of the board
 	Title   string         `json:"title"`
 	Text    string         `json:"text"` // what the user wrote when creating it; "" for none
-	// Status is discussing, awaiting_drafts, deciding, publishing, publish_failed,
+	// Status is discussing, diverged, deciding, publishing, publish_failed,
 	// epic_discarded, epic_cant_publish or ready_to_archive, a string for the
 	// same reason as State.Theme.
 	Status string           `json:"status"`
@@ -2007,6 +2048,7 @@ type DiscussionSummary struct {
 	PendingCount   int         `json:"pendingCount"`
 	LastError      string      `json:"lastError"`
 	Situations     []Situation `json:"situations"` // what the discussion waits on the user for; never nil
+	Divergence     *Divergence `json:"divergence"` // what the app expected and found otherwise; nil without one
 	CreatedAt      string      `json:"createdAt"`
 }
 

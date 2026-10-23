@@ -6,6 +6,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/attention"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/reviewflow"
@@ -49,6 +50,7 @@ func TestTheSituationOfAReviewIsTitledByItsPullRequest(t *testing.T) {
 		[]prreview.Review{migrate, unknown},
 		func(id string) (reviewflow.State, bool) { state, ok := states[id]; return state, ok },
 		func(id string) (repository.Repository, bool) { repo, ok := repositories[id]; return repo, ok },
+		func(string) *divergence.Divergence { return nil },
 	)
 
 	if len(gotStates) != 1 || gotStates[0].Review.ID != migrate.ID {

@@ -670,6 +670,55 @@ func (s *TaskService) ApproveStep(taskID string) error {
 	return nil
 }
 
+// CheckAgain reads the real state of a task again after the user sorted out
+// what the app found otherwise than it expected.
+func (s *TaskService) CheckAgain(taskID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.CheckAgain(ctx, taskID); err != nil {
+		return s.fail("CheckAgain", err)
+	}
+	return nil
+}
+
+// AskAgain sends the agent the instruction the divergence of a task is about
+// once more.
+func (s *TaskService) AskAgain(taskID string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.AskAgain(ctx, taskID); err != nil {
+		return s.fail("AskAgain", err)
+	}
+	return nil
+}
+
+// Adopt accepts what the app found in place of what it expected: choice is the
+// path of a candidate or the number of a pull request, "" when the divergence
+// has one way out.
+func (s *TaskService) Adopt(taskID, choice string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.Adopt(ctx, taskID, choice); err != nil {
+		return s.fail("Adopt", err)
+	}
+	return nil
+}
+
 // OpenFileInEditor opens one file of the worktree of a task in the editor, in
 // the window of that worktree.
 func (s *TaskService) OpenFileInEditor(taskID, path string) error {
@@ -1177,6 +1226,10 @@ var userMessages = []struct {
 	{flow.ErrNoWorktree, "The worktree doesn't exist yet."},
 	{flow.ErrStepNotReady, "Stage every changed file before approving."},
 	{flow.ErrStepBusy, "Wait for the agent to finish."},
+	{flow.ErrNoDivergence, "There is nothing out of place in this task any more."},
+	{flow.ErrNotAskable, "The agent can't be asked again about this."},
+	{flow.ErrNotAdoptable, "There is nothing to adopt here."},
+	{flow.ErrNoCandidate, "That isn't one of the options."},
 	{flow.ErrNotInPR, "The task isn't in the pull request stage."},
 	{flow.ErrDraftMissing, "The draft isn't ready yet."},
 	{flow.ErrEmptyDraft, "Write a title and a description before opening the PR."},
@@ -1219,6 +1272,11 @@ var userMessages = []struct {
 	{reviewflow.ErrOwnVerdict, "A pull request of your own can only be commented on."},
 	{reviewflow.ErrEmptyReview, "Write a summary before publishing."},
 	{reviewflow.ErrNoWorktree, "The worktree of the review is gone."},
+	{reviewflow.ErrNoDivergence, "There is nothing out of place in this review any more."},
+	{reviewflow.ErrNotAskable, "The agent can't be asked again about this."},
+	{reviewflow.ErrNotAdoptable, "There is nothing to adopt here."},
+	{reviewflow.ErrNoCandidate, "That isn't one of the options."},
+	{reviewflow.ErrNotPushing, "The review isn't pushing a commit."},
 	{discussion.ErrNotFound, "This discussion no longer exists."},
 	{discussion.ErrEmptyTitle, "Write a title."},
 	{discussion.ErrTitleTooLong, "Use at most 120 characters in the title."},
@@ -1242,6 +1300,8 @@ var userMessages = []struct {
 	{discussion.ErrNotGroupable, "One of the drafts can't go into an epic anymore."},
 	{discussionflow.ErrPublishing, "A publication is running."},
 	{discussionflow.ErrNoReading, "The board hasn't been read yet."},
+	{discussionflow.ErrNoDivergence, "There is nothing out of place in this discussion any more."},
+	{discussionflow.ErrNotAskable, "The agent can't be asked again about this."},
 	{discussionflow.ErrCannotArchive, "This discussion can't be archived yet."},
 	{editor.ErrNotFound, "VS Code was not found: `code` isn't on the PATH."},
 	{gh.ErrNotFound, "GitHub CLI was not found: `gh` isn't on the PATH."},

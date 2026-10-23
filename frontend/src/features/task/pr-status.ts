@@ -1,7 +1,14 @@
 import type { StatusTone } from "@/features/task/status";
 import { prBaseName, troubleText } from "@/lib/pull-requests";
 import { cloneMissingText } from "@/lib/repositories";
-import type { PRBlockReason, PRStatus, PullRequest, Repository, TaskSummary } from "@/lib/wails";
+import type {
+  Divergence,
+  PRBlockReason,
+  PRStatus,
+  PullRequest,
+  Repository,
+  TaskSummary,
+} from "@/lib/wails";
 import { asPRState, asPRStatus, asReviewMode, asSessionStatus } from "@/lib/wails";
 
 /** prStatusLabel is where the pull request of a task stands, in the words of the product. */
@@ -33,6 +40,10 @@ export function prStatusLabel(pr: PullRequest): string {
       return "Ready to approve";
     case "committing":
       return "Committing";
+    case "pushing":
+      return "Pushing the commit";
+    case "diverged":
+      return "Not as expected";
     case "done":
       return "Waiting for the merge";
     case "trouble":
@@ -62,6 +73,7 @@ export function prStatusTone(pr: PullRequest): StatusTone {
     case "addressing_review":
     case "waiting_checks":
     case "committing":
+    case "pushing":
     case "closing":
       return "working";
     case "closed":
@@ -72,6 +84,7 @@ export function prStatusTone(pr: PullRequest): StatusTone {
     case "awaiting_decision":
     case "in_review":
     case "ready_to_approve":
+    case "diverged":
     case "done":
     case "trouble":
     case "merged":
@@ -82,16 +95,18 @@ export function prStatusTone(pr: PullRequest): StatusTone {
 
 /**
  * draftAtHand reports whether the draft is the user's to send: a ready draft,
- * or the one an opening that failed left while the agent waits for a reply, so
- * that trying again needs no message to the agent first. Once the pull request
+ * the one an opening that failed left while the agent waits for a reply, so
+ * that trying again needs no message to the agent first, or the one approved
+ * before a pull request that GitHub doesn't have (the divergence pr_not_opened). Once the pull request
  * exists the draft is only a record, even when the agent waits for a reply
  * during the review.
  */
-export function draftAtHand(pr: PullRequest): boolean {
+export function draftAtHand(pr: PullRequest, divergence?: Divergence | null): boolean {
   const status = asPRStatus(pr.status);
   return (
     status === "draft_ready" ||
-    (status === "awaiting_reply" && pr.draft !== null && pr.prNumber === 0)
+    (status === "awaiting_reply" && pr.draft !== null && pr.prNumber === 0) ||
+    (status === "diverged" && divergence?.kind === "pr_not_opened")
   );
 }
 
@@ -191,6 +206,10 @@ export function reviewAgainRefusal(task: TaskSummary): string | null {
       return "a pass waits for the checks";
     case "committing":
       return "the changes are being committed";
+    case "pushing":
+      return "the commit is being pushed";
+    case "diverged":
+      return "the pull request isn't as expected";
     case "pr_closed":
       return "the pull request was closed";
     case "blocked":
@@ -260,5 +279,9 @@ export function prBlockHint(reason: PRBlockReason): string {
       return "Fix what git reports, then try again.";
     case "no_worktree":
       return "The app no longer knows the worktree of this task. Discard the plan to start the implementation over.";
+    case "push_failed":
+      return "Fix what git reports, then try again.";
+    case "open_failed":
+      return "Fix what gh reports, then try again.";
   }
 }

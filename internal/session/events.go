@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/guilhermt/myspec/internal/claude"
+	"github.com/guilhermt/myspec/internal/contract"
 )
 
 // askUserQuestionTool is the tool whose permission request is a structured
@@ -922,6 +923,7 @@ func (s *Service) handleControlRequest(ctx context.Context, r *run, ev *claude.C
 		return
 	}
 
+	reason := stripANSI(req.DecisionReason)
 	var e Entry
 	if req.ToolName == askUserQuestionTool {
 		e = Entry{Kind: KindQuestion, Question: &QuestionEntry{
@@ -940,11 +942,12 @@ func (s *Service) handleControlRequest(ctx context.Context, r *run, ev *claude.C
 			Input:               rawOrNull(req.Input),
 			Suggestions:         rawOrNull(req.PermissionSuggestions),
 			BlockedPath:         req.BlockedPath,
-			DecisionReason:      stripANSI(req.DecisionReason),
+			DecisionReason:      reason,
 			SuppressAlwaysAllow: req.SuppressAlwaysAllowRule,
 			DefaultToNo:         req.DefaultToNo,
 			Status:              PermissionPending,
 			ParentToolUseID:     requesterOf(r, req.ToolUseID, req.AgentID),
+			Deviation:           req.DecisionReasonType == "hook" && strings.HasPrefix(reason, contract.ReasonPrefix),
 		}}
 	}
 	r.permission = s.appendLocked(ctx, r, e, n)
@@ -1241,6 +1244,7 @@ func (s *Service) closeTurnLocked(ctx context.Context, r *run, aborted bool, by 
 
 // resetTurnLocked forgets the turn and wakes whoever waits for its end.
 func (s *Service) resetTurnLocked(r *run, n *notes) {
+	s.writeContractLocked(r, contract.TurnNone)
 	if r.turnDone != nil {
 		close(r.turnDone)
 		r.turnDone = nil

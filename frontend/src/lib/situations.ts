@@ -131,6 +131,8 @@ export function situationLabel(situation: Situation): string {
       return "Publish failed";
     case "pass_blocked":
       return "Pass blocked";
+    case "divergence":
+      return "Not as expected";
     case "pr_trouble":
       if (form === "checks_conflict") {
         return "Checks failed · conflict";

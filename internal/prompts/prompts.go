@@ -139,15 +139,6 @@ const contextPathPlaceholder = "{{context_path}}"
 // placeholder of a prompt.
 const mergeBasePlaceholder = "{{merge_base}}"
 
-// PushInstruction is what the app puts in the commit prompt when the commit
-// belongs to a pull request that already exists.
-const PushInstruction = "After committing, push this branch to `origin`, so the commit reaches the pull request. Push only this branch, and never force-push."
-
-// DetachedPushInstruction is what the app puts in the commit prompt when the
-// commit belongs to a pull request whose worktree is on a detached HEAD; %s is
-// the branch of the pull request.
-const DetachedPushInstruction = "After committing, push the commit to the pull request with `git push origin HEAD:refs/heads/%s`: this worktree is on a detached HEAD, so there is no local branch to push. Never force-push."
-
 // StagedInstruction is what {{what_to_commit}} becomes when the user reviewed
 // the change by staging it.
 const StagedInstruction = "Commit **exactly what is staged**. Never run `git add`, `git commit -a`, `git add -p` or anything else that stages files: what the user wants in this commit is already in the index, and whatever is out of it was left out on purpose."
@@ -159,10 +150,6 @@ const AllChangesInstruction = "Commit **every change of the worktree**, new file
 // contextHeading opens the section Render appends when a prompt has no
 // placeholder for the initial context.
 const contextHeading = "\n\n## Initial context\n\n"
-
-// pushHeading opens the section Render appends when a prompt has no
-// placeholder for the push instruction.
-const pushHeading = "\n\n## Pushing\n\n"
 
 // whatToCommitHeading opens the section Render appends when a commit prompt
 // has no placeholder for what to commit.
@@ -539,7 +526,6 @@ type Vars struct {
 	ReviewPath string
 	PRNumber   string
 	PRURL      string
-	Push       bool // the commit of this session goes up to the pull request
 
 	CommitAll        bool   // the commit takes every change of the worktree, not what is staged
 	ImplementerReply string // StageStepReview only: what the implementer said last, appended to the prompt
@@ -579,25 +565,6 @@ type Vars struct {
 	DocumentPath string
 	DraftsPath   string
 	Board        string // the section that describes the board, appended to the prompt
-
-	// PushRef is the branch a commit of a worktree on a detached HEAD is pushed
-	// to; commit only, with Push.
-	PushRef string
-}
-
-// pushInstruction is what {{push}} becomes: the instruction when the commit
-// belongs to a pull request, the one for a worktree on a detached HEAD when
-// the commit goes up without a local branch, nothing when the commit belongs
-// to no pull request.
-func pushInstruction(push bool, ref string) string {
-	switch {
-	case push && ref != "":
-		return fmt.Sprintf(DetachedPushInstruction, ref)
-	case push:
-		return PushInstruction
-	default:
-		return ""
-	}
 }
 
 // commitInstruction is what {{what_to_commit}} becomes: every change of the
@@ -611,10 +578,11 @@ func commitInstruction(all bool) string {
 
 // Render takes the prompt of stage, the edit of the user when there is one and
 // the default otherwise, and replaces its placeholders. A prompt the user
-// edited may have lost a placeholder, which is not an error. Three things are
-// never dropped with one: the initial context the user wrote, what to commit
-// and the push instruction are appended to a prompt that has no placeholder
-// for them. The prompt of a step reviewer always ends with what the
+// edited may have lost a placeholder, which is not an error. Two things are
+// never dropped with one: the initial context the user wrote and what to commit
+// are appended to a prompt that has no placeholder for them. {{push}} is a
+// placeholder of old prompts and renders empty: the app pushes the commits
+// itself. The prompt of a step reviewer always ends with what the
 // implementer said last. In a One-Shot task, the placeholders of the PRD, the
 // tech spec and the step file render the document, and the prompts that read
 // them always end with what the document stands for. The prompt of a pull
@@ -664,7 +632,7 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 		prNumberPlaceholder, vars.PRNumber,
 		prURLPlaceholder, vars.PRURL,
 		whatToCommitPlaceholder, commitInstruction(vars.CommitAll),
-		pushPlaceholder, pushInstruction(vars.Push, vars.PushRef),
+		pushPlaceholder, "",
 		documentPathPlaceholder, vars.DocumentPath,
 		draftsPathPlaceholder, vars.DraftsPath,
 	).Replace(text)
@@ -677,9 +645,6 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 	}
 	if stage == StageCommit && !strings.Contains(text, whatToCommitPlaceholder) {
 		rendered += whatToCommitHeading + commitInstruction(vars.CommitAll)
-	}
-	if !strings.Contains(text, pushPlaceholder) && vars.Push {
-		rendered += pushHeading + pushInstruction(vars.Push, vars.PushRef)
 	}
 	if note := oneShotNote(stage); note != "" && vars.OneShotPath != "" {
 		rendered += oneShotHeading + strings.ReplaceAll(note, oneShotPathPlaceholder, vars.OneShotPath)

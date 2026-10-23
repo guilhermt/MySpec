@@ -110,6 +110,13 @@ describe("reviewStepper", () => {
       "Progress · Pass 1 · committing the changes",
     ],
     [
+      "pushing the commit",
+      { status: "pushing", mode: "apply", passes: [recorded(1)] },
+      "work",
+      "pushing",
+      "Progress · Pass 1 · pushing the commit",
+    ],
+    [
       "published, at rest",
       {
         status: "published",
@@ -213,6 +220,8 @@ describe("reviewAgainRefusal", () => {
     ],
     ["the agent applying", { status: "applying" }, "the agent is applying the findings"],
     ["a commit", { status: "committing" }, "the changes are being committed"],
+    ["a push", { status: "pushing" }, "the commit is being pushed"],
+    ["a divergence", { status: "diverged" }, "the review isn't as expected"],
   ])("says %s", (_, overrides, reason) => {
     expect(reviewAgainRefusal(review(overrides))).toBe(reason);
   });

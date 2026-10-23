@@ -41,6 +41,10 @@ function prPhrase(pr: PullRequest): string {
       return "ready to approve";
     case "committing":
       return "committing";
+    case "pushing":
+      return "pushing the commit";
+    case "diverged":
+      return "not as expected";
     case "done":
       return pr.canClose ? "merge unconfirmed" : "waiting for the merge";
     case "trouble":

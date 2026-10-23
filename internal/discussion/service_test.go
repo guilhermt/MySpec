@@ -1319,3 +1319,38 @@ func TestSavingAnImageOfADraftIsRefusedWhenItDoesNotFit(t *testing.T) {
 		t.Errorf("archived: error = %v, want ErrArchived", err)
 	}
 }
+
+func TestTheCorrectionOfTheDraftsIsRemembered(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	d := f.create()
+
+	if err := f.service.SetDraftsCorrected(t.Context(), d.ID, true); err != nil {
+		t.Fatalf("set drafts corrected: %v", err)
+	}
+	if got, _ := f.service.Get(d.ID); !got.DraftsCorrected {
+		t.Error("drafts corrected = false, want true")
+	}
+	if stored := f.store.discussions[0]; !stored.DraftsCorrected {
+		t.Error("the correction was not written to the store")
+	}
+
+	if err := f.service.SetDraftsCorrected(t.Context(), d.ID, false); err != nil {
+		t.Fatalf("set drafts corrected: %v", err)
+	}
+	if got, _ := f.service.Get(d.ID); got.DraftsCorrected {
+		t.Error("drafts corrected = true, want it cleared")
+	}
+}
+
+func TestTheCorrectionOfTheDraftsRefusesAnUnknownDiscussion(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+
+	err := f.service.SetDraftsCorrected(t.Context(), "nope", true)
+	if !errors.Is(err, discussion.ErrNotFound) {
+		t.Errorf("error = %v, want ErrNotFound", err)
+	}
+}

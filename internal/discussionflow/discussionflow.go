@@ -15,6 +15,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/discussion"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/session"
@@ -31,6 +32,16 @@ type Sessions interface {
 	Summary(k session.Key) (session.Summary, bool)
 	Exists(ctx context.Context, k session.Key) (bool, error)
 	Transcript(ctx context.Context, k session.Key) (session.Transcript, error)
+	SendFromApp(ctx context.Context, k session.Key, m session.AppMessage) error
+	MarkDivergence(ctx context.Context, k session.Key, d divergence.Divergence)
+}
+
+// Divergences is what the discussions need from internal/divergence.
+type Divergences interface {
+	Get(itemID string) (divergence.Divergence, bool)
+	Open(ctx context.Context, d divergence.Divergence) (bool, error)
+	Clear(ctx context.Context, itemID string, kinds ...divergence.Kind) error
+	Forget(itemID string)
 }
 
 // Boards is what the discussions need from internal/board: the board a
@@ -63,6 +74,7 @@ type GH interface {
 // Deps are what Service needs from the outside.
 type Deps struct {
 	Discussions  *discussion.Service
+	Divergences  Divergences
 	Sessions     Sessions
 	Boards       Boards
 	Repositories *repository.Service
@@ -95,6 +107,7 @@ func (e *UndoneError) Unwrap() error { return e.Err }
 // Service is the state machine of every discussion of the product.
 type Service struct {
 	discussions  *discussion.Service
+	divergences  Divergences
 	sessions     Sessions
 	boards       Boards
 	repositories *repository.Service
@@ -146,6 +159,7 @@ type unrecorded struct {
 func New(deps Deps) *Service {
 	s := &Service{
 		discussions:  deps.Discussions,
+		divergences:  deps.Divergences,
 		sessions:     deps.Sessions,
 		boards:       deps.Boards,
 		repositories: deps.Repositories,

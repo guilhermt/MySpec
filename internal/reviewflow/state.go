@@ -4,6 +4,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/pulls"
@@ -33,6 +34,8 @@ const (
 	StatusTrouble          Status = "trouble"          // published or ready to merge, and a check failed or a conflict with the base came up since
 	StatusWaitingChecks    Status = "waiting_checks"   // a pass was asked for and waits for the checks of the head
 	StatusPassBlocked      Status = "pass_blocked"     // the pass could not start: GitHub could not be read, or the worktree updated
+	StatusPushing          Status = "pushing"          // apply: the app is pushing the commit of the fixes
+	StatusDiverged         Status = "diverged"         // what the app expected of the agent is not there
 )
 
 // State is everything the app knows about a review: what it recorded, what
@@ -69,9 +72,9 @@ type State struct {
 	// UnreadableReport is why the report of the pass the app asked for could
 	// not be read; "" when that is not the case.
 	UnreadableReport string
-	// CommitFailed says the last approval of apply mode ended without a
-	// commit.
-	CommitFailed bool
+	// Divergence is what the app expected of the review and did not find; nil
+	// for none.
+	Divergence *divergence.Divergence
 	// PassBlocked is why the pass the app asked for could not start; "" when
 	// nothing blocks it.
 	PassBlocked string
@@ -101,11 +104,13 @@ func (s *Service) State(id string) (State, bool) {
 		CheckErrorAt:     l.checkErrorAt,
 		Checks:           l.checks,
 		UnreadableReport: l.unreadable,
-		CommitFailed:     l.commitFailed,
 		PassBlocked:      l.passBlocked,
 	}
 	s.mu.Unlock()
 
+	if d, has := s.divergences.Get(id); has {
+		state.Divergence = &d
+	}
 	if wt, found := s.worktrees.Get(id); found {
 		state.WorktreePath = wt.Path
 	}
@@ -120,7 +125,7 @@ func (s *Service) State(id string) (State, bool) {
 	state.Status = status(statusInput{
 		Review: stored, Last: last,
 		Session: sum, SessionOpen: open, Watch: snap, Watched: watched,
-		PassBlocked: state.PassBlocked,
+		PassBlocked: state.PassBlocked, Diverged: state.Divergence != nil,
 	})
 	state.StalePass = stale(stored, last)
 	if state.Status == StatusNewCommits {
@@ -141,6 +146,7 @@ type statusInput struct {
 	Watch       review.Snapshot
 	Watched     bool   // the watcher has a reading of the worktree
 	PassBlocked string // why the pass the app asked for could not start
+	Diverged    bool   // the review has a divergence open
 }
 
 // status is the state a review is shown in. The conversation comes first:
@@ -156,12 +162,24 @@ func status(in statusInput) Status {
 			return StatusReviewing
 		}
 	}
-	if in.Review.Phase == prreview.PhaseWaitingChecks {
+	if in.Diverged {
+		return StatusDiverged
+	}
+	switch in.Review.Phase {
+	case prreview.PhaseWaitingChecks:
 		// The pass was asked for and has not reached the agent yet.
 		if in.PassBlocked != "" {
 			return StatusPassBlocked
 		}
 		return StatusWaitingChecks
+	case prreview.PhasePushing:
+		// The push that failed for another reason than a rejection waits for the
+		// user, who asks for it again.
+		if in.PassBlocked != "" {
+			return StatusPassBlocked
+		}
+		return StatusPushing
+	case prreview.PhaseNone, prreview.PhaseApplying, prreview.PhaseCommitting:
 	}
 	if in.Review.AskedPass > in.Review.ReportedPass {
 		// The agent rested without the report of the pass it was asked for.
@@ -214,7 +232,9 @@ func applyStatus(in statusInput) Status {
 		return StatusReadyToApprove
 	default:
 		switch {
-		case in.Last.Clean:
+		case in.Last.Clean, in.Last.Applied:
+			// An applied pass is one whose fixes went up, or that the user adopted
+			// as applied: either way nothing is left to fix in it.
 			return readyToMerge(in.Review)
 		case !in.Last.Decided():
 			return StatusAwaitingDecision

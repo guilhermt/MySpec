@@ -6,6 +6,7 @@ import (
 	"errors"
 	"maps"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
@@ -669,6 +671,13 @@ func (m *memTasks) ApproveRestOfPRFindings(_ context.Context, id string, pass in
 func (m *memTasks) MarkPRPassSent(_ context.Context, id string, pass int) error {
 	return m.mutatePass(id, pass, "markPRPassSent", func(p *task.PRPass) error {
 		p.SentAt = time.Now().UTC()
+		return nil
+	})
+}
+
+func (m *memTasks) SetPRPassChanged(_ context.Context, id string, pass int) error {
+	return m.mutatePass(id, pass, "setPRPassChanged", func(p *task.PRPass) error {
+		p.Changed = true
 		return nil
 	})
 }
@@ -1353,6 +1362,12 @@ func (m *memSessions) MarkChangesApproved(_ context.Context, k session.Key, file
 	m.mark(k, session.MarkerEntry{Type: session.MarkerChangesApproved, Files: files})
 }
 
+func (m *memSessions) MarkDivergence(_ context.Context, k session.Key, d divergence.Divergence) {
+	m.mark(k, session.MarkerEntry{
+		Type: session.MarkerDivergence, Divergence: &divergence.Mark{Kind: d.Kind, Facts: d.Facts},
+	})
+}
+
 func (m *memSessions) MarkPlanInvalid(_ context.Context, k session.Key, problems []session.PlanProblem) {
 	m.mark(k, session.MarkerEntry{Type: session.MarkerPlanInvalid, Problems: problems})
 }
@@ -1547,7 +1562,12 @@ type memWorktrees struct {
 	statusErr error
 	commitErr error
 	cleanErr  error
+	pushErr   error
 	removeErr error
+	merging   bool          // whether a merge is in progress in every worktree
+	notPushed bool          // whether the head is said to be missing from the remote
+	pushedErr error         // what reading whether the head is on the remote fails with
+	pushes    []string      // the branches pushed, in order
 	block     chan struct{} // when set, Ensure waits on it or on the context
 	linger    chan struct{} // when set, a cancelled Ensure waits on it before it returns
 	hold      chan struct{} // when set, Close waits on it after it recorded the call
@@ -1706,6 +1726,78 @@ func (m *memWorktrees) Clean(_ context.Context, wt worktree.Worktree) error {
 	}
 	m.status = git.Status{}
 	return nil
+}
+
+func (m *memWorktrees) Push(_ context.Context, wt worktree.Worktree, branch string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "push:"+wt.TaskID+":"+branch)
+	if m.pushErr != nil {
+		return m.pushErr
+	}
+	m.pushes = append(m.pushes, branch)
+	m.notPushed = false
+	return nil
+}
+
+func (m *memWorktrees) Pushed(_ context.Context, wt worktree.Worktree, branch string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "pushed:"+wt.TaskID+":"+branch)
+	if m.pushedErr != nil {
+		return false, m.pushedErr
+	}
+	return !m.notPushed, nil
+}
+
+func (m *memWorktrees) Merging(_ context.Context, wt worktree.Worktree) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "merging:"+wt.TaskID)
+	return m.merging, nil
+}
+
+// setMerging makes the worktree a merge is under way in.
+func (m *memWorktrees) setMerging(v bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.merging = v
+}
+
+// failPush makes every push fail with err.
+func (m *memWorktrees) failPush(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.pushErr = err
+}
+
+// setNotPushed says whether the head is missing from the remote.
+func (m *memWorktrees) setNotPushed(v bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.notPushed = v
+}
+
+// failPushed makes reading whether the head is on the remote fail with err.
+func (m *memWorktrees) failPushed(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.pushedErr = err
+}
+
+// pushed are the branches the app pushed, in order.
+func (m *memWorktrees) pushed() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.pushes)
 }
 
 func (m *memWorktrees) Merged(_ context.Context, wt worktree.Worktree, base string) (bool, error) {
@@ -1936,18 +2028,58 @@ func (m *memReviews) reviewCalls() []string {
 	return slices.Clone(m.calls)
 }
 
+// memDivergenceStore is an in-memory divergence.Store, under the real
+// divergence service the flow runs against.
+type memDivergenceStore struct {
+	mu   sync.Mutex
+	rows map[string]divergence.Row
+}
+
+func (m *memDivergenceStore) Divergences(context.Context) ([]divergence.Row, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Collect(maps.Values(m.rows)), nil
+}
+
+func (m *memDivergenceStore) PutDivergence(_ context.Context, row divergence.Row) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.rows[row.ItemID] = row
+	return nil
+}
+
+func (m *memDivergenceStore) DeleteDivergence(_ context.Context, itemID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	delete(m.rows, itemID)
+	return nil
+}
+
 // memGH is an in-memory flow.GH: it answers with the login and the pull
 // requests a test seeds, and records what it was asked.
 type memGH struct {
-	mu      sync.Mutex
-	calls   []string
-	authErr error
-	prs     map[string]gh.PR // by branch
-	viewErr error            // returned by every reading that finds no seeded PR
+	mu        sync.Mutex
+	calls     []string
+	authErr   error
+	prs       map[string]gh.PR  // by branch
+	viewErr   error             // returned by every reading that finds no seeded PR
+	listErr   error             // returned by OpenPRs
+	createErr error             // returned by CreatePR
+	created   []createCall      // the pull requests CreatePR opened, in order
+	nextPR    int               // the number the next CreatePR answers with
+	oids      map[string]string // the commit every seeded branch is said to be on
+}
+
+// createCall is one pull request the app opened.
+type createCall struct {
+	base, head, title, body string
 }
 
 func newGH() *memGH {
-	return &memGH{prs: map[string]gh.PR{}, viewErr: gh.ErrNoPR}
+	return &memGH{prs: map[string]gh.PR{}, viewErr: gh.ErrNoPR, nextPR: 7, oids: map[string]string{}}
 }
 
 func (m *memGH) Auth(context.Context) error {
@@ -1958,15 +2090,94 @@ func (m *memGH) Auth(context.Context) error {
 	return m.authErr
 }
 
-func (m *memGH) ViewPR(_ context.Context, dir, branch string) (gh.PR, error) {
+// ViewPR answers with the pull request of a branch, or of a number as text.
+func (m *memGH) ViewPR(_ context.Context, dir, ref string) (gh.PR, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, "view:"+filepath.Base(filepath.Dir(dir))+":"+branch)
-	if pr, ok := m.prs[branch]; ok {
+	m.calls = append(m.calls, "view:"+filepath.Base(filepath.Dir(dir))+":"+ref)
+	if pr, ok := m.prs[ref]; ok {
 		return pr, nil
 	}
+	for _, pr := range m.prs {
+		if strconv.Itoa(pr.Number) == ref {
+			return pr, nil
+		}
+	}
 	return gh.PR{}, m.viewErr
+}
+
+// OpenPRs lists the open pull requests the test seeded, by number.
+func (m *memGH) OpenPRs(context.Context, string) ([]gh.PRHead, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "list")
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
+	var heads []gh.PRHead
+	for branch, pr := range m.prs {
+		if pr.State == "closed" || pr.State == "merged" {
+			continue
+		}
+		heads = append(heads, gh.PRHead{
+			Number: pr.Number, URL: pr.URL, Base: pr.Base, Head: cmp.Or(pr.Head, branch), HeadOID: m.oids[branch],
+		})
+	}
+	slices.SortFunc(heads, func(a, b gh.PRHead) int { return cmp.Compare(a.Number, b.Number) })
+	return heads, nil
+}
+
+// CreatePR opens a pull request of the head branch and seeds it, so that the
+// readings that follow find it.
+func (m *memGH) CreatePR(_ context.Context, _, base, head, title, body string) (int, string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, "create:"+head)
+	if m.createErr != nil {
+		return 0, "", m.createErr
+	}
+	number := m.nextPR
+	url := "https://github.com/acme/api/pull/" + strconv.Itoa(number)
+	m.prs[head] = gh.PR{
+		Number: number, URL: url, State: "open", Base: base, Head: head, Checks: passedChecks(),
+	}
+	m.created = append(m.created, createCall{base: base, head: head, title: title, body: body})
+	return number, url, nil
+}
+
+// setHeadOID is the commit the seeded pull request of a branch is on.
+func (m *memGH) setHeadOID(branch, oid string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.oids[branch] = oid
+}
+
+// failList makes every listing of the open pull requests fail with err.
+func (m *memGH) failList(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.listErr = err
+}
+
+// failCreate makes every opening of a pull request fail with err.
+func (m *memGH) failCreate(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.createErr = err
+}
+
+// createdPRs are the pull requests the app opened, in order.
+func (m *memGH) createdPRs() []createCall {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.created)
 }
 
 // setPR is the pull request every reading of a branch answers with. A pull
@@ -1990,14 +2201,19 @@ func (m *memGH) forgetPR(branch string) {
 	delete(m.prs, branch)
 }
 
-// viewCount is how many times the pull request of a branch was read.
+// viewCount is how many times the pull request of a branch was read, by the
+// branch or by the number it has.
 func (m *memGH) viewCount(branch string) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	refs := []string{":" + branch}
+	if pr, ok := m.prs[branch]; ok {
+		refs = append(refs, ":"+strconv.Itoa(pr.Number))
+	}
 	n := 0
 	for _, call := range m.calls {
-		if strings.HasPrefix(call, "view:") && strings.HasSuffix(call, ":"+branch) {
+		if strings.HasPrefix(call, "view:") && slices.ContainsFunc(refs, func(ref string) bool { return strings.HasSuffix(call, ref) }) {
 			n++
 		}
 	}
@@ -2040,13 +2256,9 @@ func (m *memGH) ghCalls() []string {
 
 // commitPrompt is what the fake renderer answers with for the commit stage,
 // with the name of the task so that a test can see the placeholders went
-// through, and the push instruction when the commit belongs to a pull request.
-func commitPrompt(name string, push bool) string {
-	message := "Commit the work of " + name
-	if push {
-		message += ". " + prompts.PushInstruction
-	}
-	return message
+// through.
+func commitPrompt(name string) string {
+	return "Commit the work of " + name
 }
 
 // commitAllPrompt is what the fake renderer answers with for the commit stage
@@ -2085,6 +2297,7 @@ type fixture struct {
 	repositories *memRepositories
 	reviews      *memReviews
 	gh           *memGH
+	divergences  *divergence.Service
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -2097,6 +2310,7 @@ func newFixture(t *testing.T) *fixture {
 		repositories: newRepositories(),
 		reviews:      newReviews(),
 		gh:           newGH(),
+		divergences:  divergence.New(divergence.Deps{Store: &memDivergenceStore{rows: map[string]divergence.Row{}}}),
 	}
 	f.service = flow.New(flow.Deps{
 		Tasks:        f.tasks,
@@ -2105,13 +2319,14 @@ func newFixture(t *testing.T) *fixture {
 		Repositories: f.repositories,
 		Review:       f.reviews,
 		GH:           f.gh,
+		Divergences:  f.divergences,
 		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
 			switch stage {
 			case prompts.StageCommit:
 				if vars.CommitAll {
 					return commitAllPrompt(vars.TaskName), nil
 				}
-				return commitPrompt(vars.TaskName, vars.Push), nil
+				return commitPrompt(vars.TaskName), nil
 			case prompts.StagePRReview:
 				status := githubStatus(vars.Checks, vars.MergeBase)
 				switch {
@@ -2328,4 +2543,40 @@ func (m *memWorktrees) failRemove(err error) {
 	defer m.mu.Unlock()
 
 	m.removeErr = err
+}
+
+// diverge opens a divergence of a task the way a flow does, which is how a test
+// says what the app found before.
+func (f *fixture) diverge(t *testing.T, tk task.Task, stage string, kind divergence.Kind, facts divergence.Facts) {
+	t.Helper()
+
+	d := divergence.Divergence{ItemID: tk.ID, Stage: stage, Kind: kind, Facts: facts}
+	if _, err := f.divergences.Open(t.Context(), d); err != nil {
+		t.Fatalf("Open() = %v, want nil", err)
+	}
+}
+
+// wantDivergence fails the test unless task-1 has this divergence open.
+func (f *fixture) wantDivergence(t *testing.T, stage string, kind divergence.Kind, facts divergence.Facts) {
+	t.Helper()
+
+	d, ok := f.divergences.Get("task-1")
+	if !ok {
+		t.Fatalf("divergence = none, want %s in %s", kind, stage)
+	}
+	if d.Stage != stage || d.Kind != kind {
+		t.Errorf("divergence = %s in %s, want %s in %s", d.Kind, d.Stage, kind, stage)
+	}
+	if !reflect.DeepEqual(facts, d.Facts) {
+		t.Errorf("facts = %+v, want %+v", d.Facts, facts)
+	}
+}
+
+// wantNoDivergence fails the test when task-1 has a divergence open.
+func (f *fixture) wantNoDivergence(t *testing.T) {
+	t.Helper()
+
+	if d, ok := f.divergences.Get("task-1"); ok {
+		t.Errorf("divergence = %s in %s, want none", d.Kind, d.Stage)
+	}
 }

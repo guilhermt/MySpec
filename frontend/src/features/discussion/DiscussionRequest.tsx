@@ -10,7 +10,7 @@ import { RequestButtons } from "@/features/task/request-buttons";
 import { useBornStatus } from "@/features/task/useBornStatus";
 import { activeDraftId, currentDraftId, focusDraft, focusRequest } from "@/lib/focus";
 import { DISCUSSION_STAGE, type DiscussionSummary } from "@/lib/wails";
-import { retry } from "@/store/actions";
+import { askAgainDiscussion, checkAgainDiscussion, retry } from "@/store/actions";
 import { useAppStore, useFlashing } from "@/store/app-store";
 
 export interface DiscussionRequestProps {
@@ -63,9 +63,17 @@ export function DiscussionRequest({ discussion }: DiscussionRequestProps) {
         openDiscussionDialog(discussion.id, "archive");
         return;
       case "retrySession":
+      case "checkAgain":
+      case "askAgain":
         setRunning(action);
         try {
-          await retry(discussion.id, stage ?? DISCUSSION_STAGE);
+          if (action === "retrySession") {
+            await retry(discussion.id, stage ?? DISCUSSION_STAGE);
+          } else if (action === "checkAgain") {
+            await checkAgainDiscussion(discussion.id);
+          } else {
+            await askAgainDiscussion(discussion.id);
+          }
         } finally {
           setRunning(null);
         }

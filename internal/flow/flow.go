@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
@@ -59,6 +60,7 @@ type Tasks interface {
 	SetPRFindingText(ctx context.Context, id string, pass, number int, text string) error
 	ApproveRestOfPRFindings(ctx context.Context, id string, pass int) error
 	MarkPRPassSent(ctx context.Context, id string, pass int) error
+	SetPRPassChanged(ctx context.Context, id string, pass int) error
 	UnmarkPRPassSent(ctx context.Context, id string, pass int) error
 	StepRuns(id string) []task.StepRun
 	SetStepRun(ctx context.Context, id string, number int, status task.StepStatus, block *task.StepBlock) (task.StepRun, error)
@@ -103,6 +105,7 @@ type Sessions interface {
 	MarkDraftApproved(ctx context.Context, k session.Key, title string)
 	MarkChangesApproved(ctx context.Context, k session.Key, files int)
 	MarkPlanInvalid(ctx context.Context, k session.Key, problems []session.PlanProblem)
+	MarkDivergence(ctx context.Context, k session.Key, d divergence.Divergence)
 }
 
 // Repositories is what the flow needs from internal/repository.
@@ -121,10 +124,12 @@ type Reviews interface {
 }
 
 // GH is what the flow needs from internal/gh: the readings that say whether a
-// pull request can be opened and whether it already exists.
+// pull request can be opened and whether it already exists, and the opening.
 type GH interface {
 	Auth(ctx context.Context) error
-	ViewPR(ctx context.Context, dir, branch string) (gh.PR, error)
+	ViewPR(ctx context.Context, dir, ref string) (gh.PR, error)
+	OpenPRs(ctx context.Context, dir string) ([]gh.PRHead, error)
+	CreatePR(ctx context.Context, dir, base, head, title, body string) (int, string, error)
 }
 
 // Worktrees is what the flow needs from internal/worktree.
@@ -139,6 +144,9 @@ type Worktrees interface {
 	Status(ctx context.Context, wt worktree.Worktree) (git.Status, error)
 	Commit(ctx context.Context, wt worktree.Worktree, rev string) (git.Commit, error)
 	Clean(ctx context.Context, wt worktree.Worktree) error
+	Push(ctx context.Context, wt worktree.Worktree, branch string) error
+	Pushed(ctx context.Context, wt worktree.Worktree, branch string) (bool, error)
+	Merging(ctx context.Context, wt worktree.Worktree) (bool, error)
 	Close(ctx context.Context, wt worktree.Worktree, base string, policy worktree.BranchPolicy) task.CloseResult
 	Purge(ctx context.Context, taskID string) (worktree.Leftover, bool)
 	Remove(ctx context.Context, taskID string) error
@@ -152,6 +160,7 @@ type Deps struct {
 	Repositories Repositories
 	Review       Reviews
 	GH           GH
+	Divergences  Divergences
 	Log          *slog.Logger
 	// RenderPrompt turns a prompt of the data directory into the message the
 	// app sends; the flow uses it for the commit prompt.
@@ -187,6 +196,7 @@ type Service struct {
 	repositories Repositories
 	review       Reviews
 	gh           GH
+	divergences  Divergences
 	log          *slog.Logger
 	onChange     func(taskID string)
 
@@ -207,10 +217,6 @@ type taskLock struct {
 	preparing bool               // a prepare goroutine exists for the task
 	cancel    context.CancelFunc // cancels it; nil when there is none
 	phase     Phase              // what that goroutine is doing
-	// noCommit says the last approval of the step ended without a commit. It
-	// is transient on purpose: reopening the app leaves the step ready to
-	// approve, which is what git says.
-	noCommit bool
 
 	// pr is the asynchronous work of the PR stage, while one is under way; the
 	// lock of the task is not held while it runs.
@@ -221,15 +227,15 @@ type taskLock struct {
 	// unreadable is why the report of the current structured pass, or its
 	// rewrite, can't be read; "" once one is read.
 	unreadable string
-	// prNoCommit says the last approval of the review of the pull request ended
-	// without a commit. Like noCommit, it is transient on purpose.
-	prNoCommit bool
+	// retryPush lets the next evaluation push a commit the remote refused: the
+	// user asked for it to be checked again.
+	retryPush bool
+	// openBlocked says that the block of the PR stage came from the opening of
+	// the pull request, which trying again repeats.
+	openBlocked bool
 	// checkError is what the last reading of a pull request awaiting its merge
 	// said when it failed; "" when it succeeded.
 	checkError string
-	// openFailed says the agent was asked to open the pull request and ended its
-	// turn without one. It holds until the conversation moves on.
-	openFailed bool
 	// checks is the reading of GitHub that settled the last wait for checks,
 	// held until the pass it belongs to is asked for; nil otherwise.
 	checks *gh.PRChecks

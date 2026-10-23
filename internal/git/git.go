@@ -82,9 +82,16 @@ func (e *Error) Unwrap() error { return e.Err }
 // Run runs git in dir and returns its trimmed stdout. A non-zero exit is an
 // *Error; a cancelled context is an *Error whose Err is the context error.
 func (r *Runner) Run(ctx context.Context, dir string, args ...string) (string, error) {
+	out, _, err := r.run(ctx, dir, args...)
+	return out, err
+}
+
+// run is Run that also hands back the stdout of a command that failed, for the
+// one caller that reads an answer in it.
+func (r *Runner) run(ctx context.Context, dir string, args ...string) (string, string, error) {
 	binary, err := r.resolve()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -117,7 +124,7 @@ func (r *Runner) Run(ctx context.Context, dir string, args ...string) (string, e
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			runErr = ctxErr
 		}
-		return "", &Error{
+		return "", stdout.String(), &Error{
 			Args:     args,
 			Dir:      dir,
 			Output:   output(stdout.String(), stderr.String()),
@@ -125,7 +132,7 @@ func (r *Runner) Run(ctx context.Context, dir string, args ...string) (string, e
 			Err:      runErr,
 		}
 	}
-	return strings.TrimSpace(stdout.String()), nil
+	return strings.TrimSpace(stdout.String()), "", nil
 }
 
 // resolve finds the git binary once and remembers it.

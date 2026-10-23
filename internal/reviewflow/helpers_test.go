@@ -3,6 +3,7 @@ package reviewflow_test
 import (
 	"context"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
@@ -253,6 +255,12 @@ func (m *memSessions) MarkCommitted(
 	})
 }
 
+func (m *memSessions) MarkDivergence(_ context.Context, _ session.Key, d divergence.Divergence) {
+	m.record(session.MarkerEntry{
+		Type: session.MarkerDivergence, Divergence: &divergence.Mark{Kind: d.Kind, Facts: d.Facts},
+	})
+}
+
 func (m *memSessions) record(marker session.MarkerEntry) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -411,7 +419,9 @@ type memWorktrees struct {
 	// unlisted says git no longer lists a worktree whose removal failed.
 	unlisted bool
 	// locked says the worktree git still lists is locked.
-	locked bool
+	locked  bool
+	pushErr error
+	pushes  []string // the branches pushed, in order
 }
 
 func newWorktrees(dataDir string) *memWorktrees {
@@ -480,6 +490,30 @@ func (m *memWorktrees) Commit(_ context.Context, _ worktree.Worktree, rev string
 		return git.Commit{}, m.commitErr
 	}
 	return git.Commit{SHA: rev, Subject: "Fix the time zone rule"}, nil
+}
+
+func (m *memWorktrees) Push(_ context.Context, _ worktree.Worktree, branch string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.pushes = append(m.pushes, branch)
+	return m.pushErr
+}
+
+// failPush makes every push fail with err.
+func (m *memWorktrees) failPush(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.pushErr = err
+}
+
+// pushed returns the branches the fake was asked to push, in order.
+func (m *memWorktrees) pushed() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.pushes)
 }
 
 func (m *memWorktrees) Clean(_ context.Context, wt worktree.Worktree) error {
@@ -693,6 +727,36 @@ func (m *memPulls) failWith(err error) {
 	defer m.mu.Unlock()
 
 	m.err = err
+}
+
+// memDivergenceStore is an in-memory divergence.Store, under the real
+// divergence service the flow runs against.
+type memDivergenceStore struct {
+	mu   sync.Mutex
+	rows map[string]divergence.Row
+}
+
+func (m *memDivergenceStore) Divergences(context.Context) ([]divergence.Row, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Collect(maps.Values(m.rows)), nil
+}
+
+func (m *memDivergenceStore) PutDivergence(_ context.Context, row divergence.Row) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.rows[row.ItemID] = row
+	return nil
+}
+
+func (m *memDivergenceStore) DeleteDivergence(_ context.Context, itemID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	delete(m.rows, itemID)
+	return nil
 }
 
 // memBoards is an in-memory reviewflow.Boards: the card a test linked to a
@@ -1135,6 +1199,7 @@ func registered(t *testing.T, repo repository.Repository) *repository.Service {
 // the reviews and of the repositories behind it.
 type fixture struct {
 	service      *reviewflow.Service
+	divergences  *divergence.Service
 	reviews      *prreview.Service
 	store        *memReviewStore
 	repositories *repository.Service
@@ -1167,6 +1232,7 @@ func newFixture(t *testing.T) *fixture {
 		dataDir:  t.TempDir(),
 		clock:    base,
 	}
+	f.divergences = divergence.New(divergence.Deps{Store: &memDivergenceStore{rows: map[string]divergence.Row{}}})
 	f.worktrees = newWorktrees(f.dataDir)
 	f.repo = clonedRepository(t)
 	f.repositories = registered(t, f.repo)
@@ -1189,6 +1255,7 @@ func (f *fixture) newService(t *testing.T) *reviewflow.Service {
 
 	service := reviewflow.New(reviewflow.Deps{
 		Reviews:      f.reviews,
+		Divergences:  f.divergences,
 		Pulls:        f.pulls,
 		Sessions:     f.sessions,
 		Worktrees:    f.worktrees,
@@ -1201,8 +1268,7 @@ func (f *fixture) newService(t *testing.T) *reviewflow.Service {
 			if stage != prompts.StageCommit {
 				return "", errors.New("unexpected prompt stage " + string(stage))
 			}
-			return "Commit the work of " + vars.TaskName + " in " + vars.ArtifactsDir +
-				", push=" + strconv.FormatBool(vars.Push) + " to " + vars.PushRef, nil
+			return "Commit the work of " + vars.TaskName + " in " + vars.ArtifactsDir, nil
 		},
 		OnChange: f.onChange,
 	})

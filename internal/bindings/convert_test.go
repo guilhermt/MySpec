@@ -16,6 +16,7 @@ import (
 	"github.com/guilhermt/myspec/internal/claude/claudetest"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
@@ -112,11 +113,10 @@ func TestFromTasksCarriesTheAgentReviewOfAStep(t *testing.T) {
 
 	states := []flow.StepState{
 		{
-			Step:          task.Step{Number: 1, File: "1-first.md", Title: "First"},
-			Status:        flow.StepAgentReview,
-			ReviewMode:    reviewmode.Agent,
-			ReviewPass:    2,
-			ReportMissing: true,
+			Step:       task.Step{Number: 1, File: "1-first.md", Title: "First"},
+			Status:     flow.StepAgentReview,
+			ReviewMode: reviewmode.Agent,
+			ReviewPass: 2,
 			Reports: []task.ReviewReport{
 				{Pass: 1, File: "1-review-1.md"},
 				{Pass: 2, File: "1-review-2.md", Clean: true},
@@ -142,9 +142,8 @@ func TestFromTasksCarriesTheAgentReviewOfAStep(t *testing.T) {
 	want := []bindings.Step{
 		{
 			Number: 1, File: "1-first.md", Title: "First", Status: "agent_review",
-			ReviewMode:    "agent",
-			ReviewPass:    2,
-			ReportMissing: true,
+			ReviewMode: "agent",
+			ReviewPass: 2,
 			Reports: []bindings.StepReport{
 				{Pass: 1, File: "1-review-1.md"},
 				{Pass: 2, File: "1-review-2.md", Clean: true},
@@ -419,10 +418,9 @@ func TestFromTasksCarriesTheCommitOfAStepThatIsOver(t *testing.T) {
 			CommittedAt:   time.Date(2026, 9, 20, 14, 30, 0, 0, time.UTC),
 		},
 		{
-			Step:         task.Step{Number: 2, File: "2-second.md", Title: "Second"},
-			Status:       flow.StepReadyToApprove,
-			Review:       &review.Snapshot{Staged: 2, Total: 2},
-			CommitFailed: true,
+			Step:   task.Step{Number: 2, File: "2-second.md", Title: "Second"},
+			Status: flow.StepReadyToApprove,
+			Review: &review.Snapshot{Staged: 2, Total: 2},
 		},
 	}
 
@@ -438,9 +436,6 @@ func TestFromTasksCarriesTheCommitOfAStepThatIsOver(t *testing.T) {
 	}
 	if got[0].Review != nil {
 		t.Errorf("review = %+v, want nil on a step that is over", got[0].Review)
-	}
-	if !got[1].CommitFailed {
-		t.Error("commitFailed = false, want the warning of the step the user is on")
 	}
 }
 
@@ -2875,6 +2870,24 @@ func TestFromReviewsOffersABlockedPassAgainWithItsReason(t *testing.T) {
 	}
 }
 
+func TestFromReviewsMarksABlockedPushApartFromABlockedPass(t *testing.T) {
+	t.Parallel()
+
+	pushing := reviewState(reviewflow.StatusPassBlocked, recordedPass(1, prreview.DecisionNone))
+	pushing.Review.Phase = prreview.PhasePushing
+	pushing.PassBlocked = "gh is not logged in"
+	if got := bindings.FromReviews([]reviewflow.State{pushing}, nil, reviewRepos)[0]; !got.PushBlocked {
+		t.Error("pushBlocked = false, want true on a push that failed")
+	}
+
+	waiting := reviewState(reviewflow.StatusPassBlocked, recordedPass(1, prreview.DecisionNone))
+	waiting.Review.Phase = prreview.PhaseWaitingChecks
+	waiting.PassBlocked = "gh is not logged in"
+	if got := bindings.FromReviews([]reviewflow.State{waiting}, nil, reviewRepos)[0]; got.PushBlocked {
+		t.Error("pushBlocked = true, want false on a pass that could not start")
+	}
+}
+
 func TestFromReviewsCarriesThePassesTheVerdictsAndTheSituationsOfAReview(t *testing.T) {
 	t.Parallel()
 
@@ -4336,10 +4349,13 @@ func TestFromEntryCarriesTheBackgroundFieldsOfActionsPermissionsAndMarkers(t *te
 	}
 
 	permission := bindings.FromEntry("t1", session.Entry{Kind: session.KindPermission, Permission: &session.PermissionEntry{
-		ParentToolUseID: "toolu_1",
+		ParentToolUseID: "toolu_1", Deviation: true,
 	}})
 	if got := permission.Permission.ParentToolUseID; got != "toolu_1" {
 		t.Errorf("permission parent = %q, want toolu_1", got)
+	}
+	if !permission.Permission.Deviation {
+		t.Error("permission deviation = false, want true")
 	}
 
 	marker := bindings.FromEntry("t1", session.Entry{Kind: session.KindMarker, Marker: &session.MarkerEntry{
@@ -4352,6 +4368,58 @@ func TestFromEntryCarriesTheBackgroundFieldsOfActionsPermissionsAndMarkers(t *te
 	}
 	if none := bindings.FromEntry("t1", session.Entry{Kind: session.KindMarker, Marker: &session.MarkerEntry{}}); none.Marker.Background == nil {
 		t.Error("a marker without background work has nil Background, want an empty list")
+	}
+}
+
+func TestFromDivergenceKeepsTheFactsAndNeverLeavesASliceNil(t *testing.T) {
+	t.Parallel()
+
+	started := time.Date(2026, time.October, 5, 9, 0, 0, 0, time.UTC)
+	d := divergence.Divergence{
+		ItemID: "t1", Stage: "pr", Kind: divergence.KindPRsAmbiguous, StartedAt: started,
+		Facts: divergence.Facts{
+			Branch: "153-x", Base: "dev", Pass: 2,
+			PRs: []divergence.PR{{Number: 7, URL: "https://github.com/acme/web/pull/7", Base: "dev", Head: "fix"}},
+		},
+	}
+
+	want := &bindings.Divergence{
+		Stage: "pr", Kind: "prs_ambiguous", Branch: "153-x", Base: "dev", Pass: 2,
+		Candidates: []string{},
+		PRs:        []bindings.DivergentPR{{Number: 7, URL: "https://github.com/acme/web/pull/7", Base: "dev", Head: "fix"}},
+		StartedAt:  started.Format(time.RFC3339),
+	}
+	if diff := cmp.Diff(want, bindings.FromDivergence(d, true)); diff != "" {
+		t.Errorf("FromDivergence() mismatch (-want +got):\n%s", diff)
+	}
+	if got := bindings.FromDivergence(d, false); got != nil {
+		t.Errorf("FromDivergence(none) = %+v, want nil", got)
+	}
+}
+
+func TestFromEntryCarriesTheDivergenceOfAMarker(t *testing.T) {
+	t.Parallel()
+
+	marker := bindings.FromEntry("t1", session.Entry{Kind: session.KindMarker, Marker: &session.MarkerEntry{
+		Type: session.MarkerDivergence,
+		Divergence: &divergence.Mark{
+			Kind: divergence.KindReportsAmbiguous, Facts: divergence.Facts{Pass: 2, Candidates: []string{"a.md", "b.md"}},
+		},
+	}})
+
+	want := &bindings.Divergence{
+		Kind: "reports_ambiguous", Pass: 2, Candidates: []string{"a.md", "b.md"}, PRs: []bindings.DivergentPR{},
+	}
+	if diff := cmp.Diff(want, marker.Marker.Divergence); diff != "" {
+		t.Errorf("marker divergence mismatch (-want +got):\n%s", diff)
+	}
+	if marker.Marker.Type != "divergence" {
+		t.Errorf("marker type = %q, want divergence", marker.Marker.Type)
+	}
+
+	other := bindings.FromEntry("t1", session.Entry{Kind: session.KindMarker, Marker: &session.MarkerEntry{Type: session.MarkerPaused}})
+	if other.Marker.Divergence != nil {
+		t.Errorf("marker divergence = %+v, want nil for another marker", other.Marker.Divergence)
 	}
 }
 

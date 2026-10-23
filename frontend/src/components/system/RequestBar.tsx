@@ -26,6 +26,8 @@ export interface RequestButton<A extends string> {
   tooltip?: string;
   /** stage is the session Retry restarts (step:4, step_review:4, pr, pr_review, prd…); retrySession only. */
   stage?: string;
+  /** choice is what the action adopts, for a way out of a divergence with more than one; the button doesn't draw it. */
+  choice?: string;
 }
 
 /** RequestModel is a request bar: the form, what it says and the buttons, and where the focus goes. */

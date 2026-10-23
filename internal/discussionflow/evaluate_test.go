@@ -1,6 +1,7 @@
 package discussionflow_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
+	"github.com/guilhermt/myspec/internal/divergence"
+	"github.com/guilhermt/myspec/internal/session"
 )
 
 // draftsArtifact is what the agent writes at the end of a turn: an epic, a new
@@ -96,7 +99,7 @@ func TestTheDraftsAreNotReadWhileTheConversationWorksInTheBackground(t *testing.
 	f.waitFor(id, func(s discussionflow.State) bool { return s.Discussion.DraftsRead })
 }
 
-func TestAnArtifactTheAppCannotReadLeavesTheDiscussionAwaitingDrafts(t *testing.T) {
+func TestAnArtifactTheAppCannotReadIsCorrectedOnceByTheAgent(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -106,15 +109,140 @@ func TestAnArtifactTheAppCannotReadLeavesTheDiscussionAwaitingDrafts(t *testing.
 	f.sessions.idle(id)
 	f.flow.Check(id)
 
-	state := f.waitFor(id, func(s discussionflow.State) bool { return s.UnreadableDrafts != "" })
-	if state.Status != discussionflow.StatusAwaitingDrafts {
-		t.Errorf("the discussion is %s, want %s", state.Status, discussionflow.StatusAwaitingDrafts)
+	state := f.waitFor(id, func(s discussionflow.State) bool { return s.Discussion.DraftsCorrected })
+	if state.Status != discussionflow.StatusDiscussing || state.Divergence != nil {
+		t.Errorf("status, divergence = %s, %+v, want discussing while the agent corrects", state.Status, state.Divergence)
 	}
 	if !strings.Contains(state.UnreadableDrafts, "Payroll") {
 		t.Errorf("the reason says nothing about the module: %s", state.UnreadableDrafts)
 	}
 	if len(state.Drafts) != 0 {
 		t.Errorf("the drafts of an unreadable artifact were recorded: %d", len(state.Drafts))
+	}
+	apps := f.sessions.sentApps()
+	if len(apps) != 1 || apps[0].Kind != session.AppDraftsCorrection ||
+		!strings.HasPrefix(apps[0].Text, "The app can't read `"+draftsPathOf(f, id)+"`: ") ||
+		!strings.HasSuffix(apps[0].Text, ". Rewrite it in the format the instructions of this session give, keeping the ids of the drafts, and stop.") {
+		t.Errorf("messages = %+v, want one correction of the drafts", apps)
+	}
+}
+
+func TestAnArtifactStillUnreadableAfterTheCorrectionIsADivergence(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.unreadable(id)
+
+	state := f.state(id)
+	if state.Status != discussionflow.StatusDiverged || state.Divergence.Kind != divergence.KindDraftsUnreadable ||
+		state.Divergence.Stage != session.DiscussionStage || state.Divergence.Facts.Path != discussion.DraftsFile ||
+		!strings.Contains(state.Divergence.Facts.Reason, "Payroll") {
+		t.Errorf("status, divergence = %s, %+v, want diverged by drafts_unreadable", state.Status, state.Divergence)
+	}
+	if got := len(f.sessions.markersOf(session.MarkerDivergence)); got != 1 {
+		t.Errorf("divergence markers = %d, want one", got)
+	}
+	if got := len(f.sessions.sentApps()); got != 1 {
+		t.Errorf("messages = %d, want only the one correction", got)
+	}
+}
+
+func TestAPausedConversationGoesStraightToTheDivergence(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.sessions.failSend(errSession)
+
+	f.write(id, discussion.DraftsFile, "## Draft: broken\n")
+	f.sessions.idle(id)
+	f.flow.Check(id)
+
+	state := f.waitFor(id, func(s discussionflow.State) bool { return s.Divergence != nil })
+	if state.Discussion.DraftsCorrected {
+		t.Error("the correction counted as made though it was not sent")
+	}
+}
+
+func TestAReadableArtifactEndsTheDivergenceAndTheCorrection(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.unreadable(id)
+
+	f.record(id, draftsArtifact)
+	f.flow.Check(id)
+
+	state := f.waitFor(id, func(s discussionflow.State) bool { return s.Divergence == nil && !s.Discussion.DraftsCorrected })
+	if state.UnreadableDrafts != "" {
+		t.Errorf("the drafts still read as unreadable: %s", state.UnreadableDrafts)
+	}
+}
+
+func TestAskingAgainSendsTheCorrectionOnceMoreWithoutCountingIt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.unreadable(id)
+
+	if err := f.flow.AskAgain(t.Context(), id); err != nil {
+		t.Fatalf("ask again: %v", err)
+	}
+
+	apps := f.sessions.sentApps()
+	if len(apps) != 2 || apps[1].Kind != session.AppDraftsCorrection || apps[1].Text != apps[0].Text {
+		t.Errorf("messages = %+v, want the same correction twice", apps)
+	}
+	if state := f.state(id); state.Divergence != nil || !state.Discussion.DraftsCorrected {
+		t.Errorf("divergence, corrected = %+v, %v, want it ended and still corrected", state.Divergence, state.Discussion.DraftsCorrected)
+	}
+}
+
+func TestAskingAgainBringsTheDivergenceBackWhenTheSendFails(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.unreadable(id)
+	f.sessions.failSend(errSession)
+
+	if err := f.flow.AskAgain(t.Context(), id); !errors.Is(err, errSession) {
+		t.Fatalf("ask again error = %v, want the session's", err)
+	}
+	if f.state(id).Divergence == nil {
+		t.Error("the divergence ended though nothing was sent")
+	}
+}
+
+func TestCheckAgainReadsTheDraftsAgain(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+	f.unreadable(id)
+	f.write(id, discussion.DraftsFile, draftsArtifact)
+
+	if err := f.flow.CheckAgain(t.Context(), id); err != nil {
+		t.Fatalf("check again: %v", err)
+	}
+
+	f.waitFor(id, func(s discussionflow.State) bool { return s.Divergence == nil && s.Discussion.DraftsRead })
+}
+
+func TestTheWaysOutRefuseADiscussionWithoutDivergence(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start(cardKey)
+
+	if err := f.flow.CheckAgain(t.Context(), id); !errors.Is(err, discussionflow.ErrNoDivergence) {
+		t.Errorf("check again error = %v, want ErrNoDivergence", err)
+	}
+	if err := f.flow.AskAgain(t.Context(), id); !errors.Is(err, discussionflow.ErrNoDivergence) {
+		t.Errorf("ask again error = %v, want ErrNoDivergence", err)
 	}
 }
 

@@ -117,6 +117,8 @@ function momentOf(review: ReviewSummary): Moment {
       return busy("applying", "applying the findings");
     case "committing":
       return busy("committing", "committing the changes");
+    case "pushing":
+      return busy("pushing", "pushing the commit");
     default:
       break;
   }
@@ -220,6 +222,10 @@ export function reviewAgainRefusal(review: ReviewSummary): string | null {
       return "the agent is applying the findings";
     case "committing":
       return "the changes are being committed";
+    case "pushing":
+      return "the commit is being pushed";
+    case "diverged":
+      return "the review isn't as expected";
     case "reviewing":
       if ((review.passes ?? []).at(-1)?.recorded === false) {
         return "a pass is running";

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -12,8 +13,10 @@ import (
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/cardimages"
+	"github.com/guilhermt/myspec/internal/contract"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/editor"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
@@ -192,10 +195,21 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	}); err != nil {
 		return fmt.Errorf("read review mode default: %w", err)
 	}
+	// A failure to find the executable leaves the contract off: the sessions
+	// run without the hook that applies it.
+	hooksDir, hookCommand := filepath.Join(a.dirs.Data, "hooks"), ""
+	if exe, exeErr := os.Executable(); exeErr != nil {
+		log.Error("hook command failed", "error", exeErr)
+		hooksDir = ""
+	} else {
+		hookCommand = contract.HookCommand(exe, hooksDir)
+	}
 	sessions := session.New(session.Deps{
-		Sessions: st.Sessions,
-		Entries:  st.Entries,
-		Launcher: claudeLauncher{log: log, effort: modelsSvc.ProcessEffort},
+		HooksDir:    hooksDir,
+		HookCommand: hookCommand,
+		Sessions:    st.Sessions,
+		Entries:     st.Entries,
+		Launcher:    claudeLauncher{log: log, effort: modelsSvc.ProcessEffort},
 		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
 			return prompts.Render(a.dirs.Data, stage, vars)
 		},
@@ -256,6 +270,14 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	worktrees := worktree.New(worktree.Deps{
 		Git: gitRunner, Store: st.Worktrees, DataDir: a.dirs.Data, Log: log,
 	})
+	// The divergences are read with the rest of the data and reach the flows
+	// that open and clear them once those hold the service.
+	divergences := divergence.New(divergence.Deps{
+		Store: st, Log: log, OnChange: func(string) { a.publish() },
+	})
+	if err = withTimeout(ctx, divergences.Load); err != nil {
+		return fmt.Errorf("read divergences: %w", err)
+	}
 	reviews, err := review.New(review.Deps{
 		Worktrees: worktrees,
 		Log:       log,
@@ -278,6 +300,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 		Repositories: repositories,
 		Review:       reviews,
 		GH:           ghRunner,
+		Divergences:  divergences,
 		Log:          log,
 		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
 			return prompts.Render(a.dirs.Data, stage, vars)
@@ -294,6 +317,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	})
 	reviewFlow := reviewflow.New(reviewflow.Deps{
 		Reviews:      prReviews,
+		Divergences:  divergences,
 		Pulls:        pullRequests,
 		Sessions:     sessions,
 		Worktrees:    worktrees,
@@ -313,6 +337,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	})
 	discussionFlow := discussionflow.New(discussionflow.Deps{
 		Discussions:  discussions,
+		Divergences:  divergences,
 		Sessions:     sessions,
 		Boards:       boards,
 		Repositories: repositories,
@@ -326,6 +351,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	a.reviewModes, a.boards = reviewModesSvc, boards
 	a.pulls, a.prReviews, a.reviewFlow = pullRequests, prReviews, reviewFlow
 	a.discussions, a.discussionFlow = discussions, discussionFlow
+	a.divergences = divergences
 	a.cardImages = cardImages
 
 	if err = a.read(ctx); err != nil {

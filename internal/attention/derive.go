@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
@@ -18,6 +19,8 @@ type Input struct {
 	Steps     []flow.StepState
 	PR        *flow.PullRequest // nil outside the PR stage
 	Sessions  map[session.Key]session.Summary
+	// Divergence is the one the task has open; nil for none.
+	Divergence *divergence.Divergence
 }
 
 // Derive lists the situations of one task: one per place at most, the most
@@ -32,7 +35,7 @@ func Derive(in Input) []Found {
 		return stepSituations(in)
 	case task.StagePR:
 		if in.PR != nil {
-			return prSituations(in.Task, *in.PR)
+			return prSituations(in.Task, *in.PR, in.Divergence)
 		}
 	}
 	return nil
@@ -111,10 +114,10 @@ func stepSituations(in Input) []Found {
 	}
 	step := in.Steps[index]
 	var situations []Found
-	if found, ok := stepSituation(in.Task, step, in.Sessions); ok {
+	if found, ok := stepSituation(in.Task, step, in.Sessions, in.Divergence); ok {
 		situations = append(situations, found)
 	}
-	if found, ok := reviewerSituation(in.Task, step); ok {
+	if found, ok := reviewerSituation(in.Task, step, in.Divergence); ok {
 		situations = append(situations, found)
 	}
 	return situations
@@ -122,7 +125,9 @@ func stepSituations(in Input) []Found {
 
 // stepSituation is the situation of the current step of a task in
 // implementation, in the conversation that implements it.
-func stepSituation(t task.Task, step flow.StepState, sessions map[session.Key]session.Summary) (Found, bool) {
+func stepSituation(
+	t task.Task, step flow.StepState, sessions map[session.Key]session.Summary, d *divergence.Divergence,
+) (Found, bool) {
 	n := step.Step.Number
 	place := Place{Kind: PlaceStep, Step: n}
 
@@ -140,6 +145,10 @@ func stepSituation(t task.Task, step flow.StepState, sessions map[session.Key]se
 			}
 			return newFound(t, place, kind, sessionBody(kind, placeName(place, false))), true
 		}
+	}
+
+	if d != nil && d.Stage == session.StepStage(n) {
+		return newFound(t, place, KindDivergence, divergenceBody(*d, n)), true
 	}
 
 	var form Form
@@ -161,7 +170,7 @@ func stepSituation(t task.Task, step flow.StepState, sessions map[session.Key]se
 	if step.Review != nil && step.Review.Err == "" {
 		files = step.Review.Total
 	}
-	found := newFound(t, place, KindStepReview, stepReviewBody(n, form, step.CommitFailed, step.Fallback, files))
+	found := newFound(t, place, KindStepReview, stepReviewBody(n, step.Fallback, files))
 	found.Form = form
 	if form == FormStaged && step.Review != nil {
 		found.Percent = step.Review.Percent()
@@ -171,7 +180,7 @@ func stepSituation(t task.Task, step flow.StepState, sessions map[session.Key]se
 
 // reviewerSituation is the situation of the conversation that reviews a step:
 // what its session holds, or the report a pass still owes.
-func reviewerSituation(t task.Task, step flow.StepState) (Found, bool) {
+func reviewerSituation(t task.Task, step flow.StepState, d *divergence.Divergence) (Found, bool) {
 	if step.ReviewerStage == "" {
 		return Found{}, false
 	}
@@ -183,8 +192,8 @@ func reviewerSituation(t task.Task, step flow.StepState) (Found, bool) {
 		}
 		return newFound(t, place, kind, reviewerBody(kind, n)), true
 	}
-	if step.ReportMissing {
-		return newFound(t, place, KindReply, reviewerBody(KindReply, n)), true
+	if d != nil && d.Stage == session.StepReviewStage(n) {
+		return newFound(t, place, KindDivergence, divergenceBody(*d, 0)), true
 	}
 	return Found{}, false
 }
@@ -193,22 +202,30 @@ func reviewerSituation(t task.Task, step flow.StepState) (Found, bool) {
 // stage: the one of the pull request itself, and the one the conversation of
 // the implementer of its review holds, so that both can wait on the user at
 // once.
-func prSituations(t task.Task, pr flow.PullRequest) []Found {
+func prSituations(t task.Task, pr flow.PullRequest, d *divergence.Divergence) []Found {
 	var found []Found
-	if f, ok := prSituation(t, pr); ok {
+	if f, ok := prSituation(t, pr, d); ok {
 		found = append(found, f)
 	}
+	place := Place{Kind: PlacePRFix}
+	var (
+		kind    Kind
+		decided bool
+	)
 	if pr.FixerStage != "" {
-		if kind, decided := sessionKind(pr.Fixer); decided && kind != "" {
-			place := Place{Kind: PlacePRFix}
-			found = append(found, newFound(t, place, kind, sessionBody(kind, placeName(place, false))))
-		}
+		kind, decided = sessionKind(pr.Fixer)
+	}
+	switch {
+	case decided && kind != "":
+		found = append(found, newFound(t, place, kind, sessionBody(kind, placeName(place, false))))
+	case !decided && d != nil && d.Stage == session.PRFixStage:
+		found = append(found, newFound(t, place, KindDivergence, divergenceBody(*d, 0)))
 	}
 	return found
 }
 
 // prSituation is the situation of the pull request of a task in the PR stage.
-func prSituation(t task.Task, pr flow.PullRequest) (Found, bool) {
+func prSituation(t task.Task, pr flow.PullRequest, d *divergence.Divergence) (Found, bool) {
 	place := Place{Kind: PlacePR}
 	name := placeName(place, pr.SessionStage == session.PRReviewStage)
 	if pr.SessionStage != "" {
@@ -218,6 +235,10 @@ func prSituation(t task.Task, pr flow.PullRequest) (Found, bool) {
 			}
 			return newFound(t, place, kind, sessionBody(kind, name)), true
 		}
+	}
+
+	if d != nil && (d.Stage == session.PRStage || d.Stage == session.PRReviewStage) {
+		return newFound(t, place, KindDivergence, divergenceBody(*d, 0)), true
 	}
 
 	switch pr.Status {
@@ -249,11 +270,11 @@ func prSituation(t task.Task, pr flow.PullRequest) (Found, bool) {
 		if pr.Review != nil && pr.Review.Staged > 0 {
 			form, percent = FormStaged, pr.Review.Percent()
 		}
-		found := newFound(t, place, KindChangesReview, changesReviewBody(form, pr.CommitFailed, pr.Fallback))
+		found := newFound(t, place, KindChangesReview, changesReviewBody(pr.Fallback))
 		found.Form, found.Percent = form, percent
 		return found, true
 	case flow.PRReadyToApprove:
-		found := newFound(t, place, KindChangesReview, changesReviewBody(FormApprove, pr.CommitFailed, pr.Fallback))
+		found := newFound(t, place, KindChangesReview, changesReviewBody(pr.Fallback))
 		found.Form = FormApprove
 		return found, true
 	case flow.PRTrouble:

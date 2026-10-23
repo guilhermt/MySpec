@@ -2,7 +2,6 @@ package prompts_test
 
 import (
 	"errors"
-	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -89,8 +88,8 @@ func TestReadGivesTheDefaultOfEveryPrompt(t *testing.T) {
 			"# One-Shot Planner", "{{one_shot_path}}", "{{repository}}", "{{initial_context}}", "AskUserQuestion",
 		}},
 		{prompts.StageStepReview, []string{"# Step Review", "{{step_path}}", "{{review_path}}", "git diff HEAD", "status: clean", "AskUserQuestion", "## How to write the report", "Portuguese"}},
-		{prompts.StageCommit, []string{"# Commit", "{{what_to_commit}}", "Co-Authored-By", "{{push}}"}},
-		{prompts.StagePR, []string{"# Pull Request", "{{draft_path}}", "{{base_branch}}", "gh pr create", "AskUserQuestion"}},
+		{prompts.StageCommit, []string{"# Commit", "{{what_to_commit}}", "Co-Authored-By"}},
+		{prompts.StagePR, []string{"# Pull Request", "{{draft_path}}", "{{base_branch}}", "Never open the pull request and never push", "AskUserQuestion"}},
 		{prompts.StagePRReview, []string{"# Pull Request Review", "{{review_path}}", "{{pr_url}}", "status: clean", "AskUserQuestion", "## How to write the report", "Portuguese", "The summary is optional"}},
 		{prompts.StagePRFix, []string{"# Pull Request Review Fixes", "{{pr_url}}", "{{prd_path}}", "AskUserQuestion", "never by rebasing", "Never write or rewrite a review report"}},
 		{prompts.StageDiscussion, []string{"# Discussion", "{{document_path}}", "{{drafts_path}}", "AskUserQuestion", "never repeats the shared context of the epic", "never shorter at the cost of the context"}},
@@ -280,7 +279,7 @@ func TestPlaceholdersAreTheOnesTheDefaultUses(t *testing.T) {
 		{prompts.StageStepReview, []string{
 			"{{prd_path}}", "{{tech_spec_path}}", "{{step_path}}", "{{repository}}", "{{branch}}", "{{review_path}}",
 		}},
-		{prompts.StageCommit, []string{"{{what_to_commit}}", "{{push}}"}},
+		{prompts.StageCommit, []string{"{{what_to_commit}}"}},
 		{prompts.StagePRReview, []string{
 			"{{prd_path}}", "{{tech_spec_path}}", "{{repository}}", "{{branch}}",
 			"{{base_branch}}", "{{review_path}}", "{{pr_number}}", "{{pr_url}}",
@@ -668,102 +667,42 @@ func TestRenderOfAStepFailsWhenTheFileIsMissing(t *testing.T) {
 	}
 }
 
-func TestRenderReplacesThePushPlaceholder(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		push bool
-		want string
-	}{
-		{"pushing", true, "commit " + prompts.StagedInstruction + ". " + prompts.PushInstruction + " done"},
-		{"not pushing", false, "commit " + prompts.StagedInstruction + ".  done"},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			dataDir := t.TempDir()
-			write(t, dataDir, prompts.StageCommit, "commit {{what_to_commit}}. {{push}} done")
-
-			got, err := prompts.Render(dataDir, prompts.StageCommit, prompts.Vars{Push: test.push})
-			if err != nil {
-				t.Fatalf("Render() = %v, want nil", err)
-			}
-			if got != test.want {
-				t.Errorf("Render() = %q, want %q", got, test.want)
-			}
-		})
-	}
-}
-
-func TestRenderAppendsThePushInstructionWhenThePlaceholderIsGone(t *testing.T) {
+func TestRenderTheCommitPromptNeverMentionsPushing(t *testing.T) {
 	t.Parallel()
 
 	dataDir := t.TempDir()
-	write(t, dataDir, prompts.StageCommit, "commit {{what_to_commit}}")
-
-	got, err := prompts.Render(dataDir, prompts.StageCommit, prompts.Vars{Push: true})
-	if err != nil {
-		t.Fatalf("Render() = %v, want nil", err)
-	}
-
-	want := "commit " + prompts.StagedInstruction + "\n\n## Pushing\n\n" + prompts.PushInstruction
-	if got != want {
-		t.Errorf("Render() = %q, want %q", got, want)
-	}
-}
-
-func TestRenderAppendsNoPushSectionWhenTheCommitDoesNotPush(t *testing.T) {
-	t.Parallel()
-
-	dataDir := t.TempDir()
-	write(t, dataDir, prompts.StageCommit, "commit {{what_to_commit}}")
+	write(t, dataDir, prompts.StageCommit, "commit {{what_to_commit}}. {{push}}done")
 
 	got, err := prompts.Render(dataDir, prompts.StageCommit, prompts.Vars{})
 	if err != nil {
 		t.Fatalf("Render() = %v, want nil", err)
 	}
 
-	if want := "commit " + prompts.StagedInstruction; got != want {
-		t.Errorf("Render() = %q, want %q", got, want)
+	if want := "commit " + prompts.StagedInstruction + ". done"; got != want {
+		t.Errorf("Render() = %q, want {{push}} to render empty: %q", got, want)
 	}
 }
 
-func TestRenderTheDefaultCommitPromptCarriesThePushInstruction(t *testing.T) {
+func TestNoDefaultPromptAsksToPushOrToOpenAPullRequest(t *testing.T) {
 	t.Parallel()
 
-	dataDir := t.TempDir()
+	// The PR prompt forbids both, in the one sentence that names them.
+	forbidding := "Do not run `gh pr create` or `git push`"
+	for _, stage := range []prompts.Stage{prompts.StageCommit, prompts.StagePR, prompts.StagePRFix} {
+		t.Run(string(stage), func(t *testing.T) {
+			t.Parallel()
 
-	vars := everyVar()
-	vars.Push = true
-	got, err := prompts.Render(dataDir, prompts.StageCommit, vars)
-	if err != nil {
-		t.Fatalf("Render(commit) = %v, want nil", err)
-	}
-
-	if !strings.Contains(got, prompts.PushInstruction) {
-		t.Error("the rendered commit prompt does not carry the push instruction")
-	}
-	// The instruction is in place of the placeholder, not appended after it.
-	if strings.Contains(got, "## Pushing\n\n"+prompts.PushInstruction+"\n\n## Pushing") {
-		t.Error("the rendered commit prompt carries the push instruction twice")
-	}
-}
-
-func TestRenderTheDefaultCommitPromptWithoutPushSaysNothingAboutPushing(t *testing.T) {
-	t.Parallel()
-
-	dataDir := t.TempDir()
-
-	got, err := prompts.Render(dataDir, prompts.StageCommit, everyVar())
-	if err != nil {
-		t.Fatalf("Render(commit) = %v, want nil", err)
-	}
-
-	if strings.Contains(got, prompts.PushInstruction) {
-		t.Error("the rendered commit prompt carries the push instruction, want nothing about pushing")
+			text, err := prompts.Render(t.TempDir(), stage, everyVar())
+			if err != nil {
+				t.Fatalf("Render(%s) = %v, want nil", stage, err)
+			}
+			text = strings.ReplaceAll(text, forbidding, "")
+			for _, asked := range []string{"git push", "gh pr create", "## Pushing"} {
+				if strings.Contains(text, asked) {
+					t.Errorf("the %s prompt contains %q, want the app to push and open the pull request", stage, asked)
+				}
+			}
+		})
 	}
 }
 
@@ -1633,44 +1572,6 @@ func TestRenderPointsThePathsOfTheDocumentsToTheContextOfAReview(t *testing.T) {
 	}
 }
 
-func TestRenderPushesFromADetachedHeadToTheBranchOfThePullRequest(t *testing.T) {
-	t.Parallel()
-
-	dataDir := t.TempDir()
-	write(t, dataDir, prompts.StageCommit, "commit {{what_to_commit}}. {{push}}")
-
-	got, err := prompts.Render(dataDir, prompts.StageCommit, prompts.Vars{Push: true, PushRef: "fix-the-cache"})
-	if err != nil {
-		t.Fatalf("Render() = %v, want nil", err)
-	}
-
-	want := "commit " + prompts.StagedInstruction + ". " + fmt.Sprintf(prompts.DetachedPushInstruction, "fix-the-cache")
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("Render() mismatch (-want +got):\n%s", diff)
-	}
-	if strings.Contains(got, prompts.PushInstruction) {
-		t.Error("the rendered commit prompt carries the instruction of a branch, want the detached one")
-	}
-}
-
-func TestRenderAppendsTheDetachedPushInstructionWhenThePlaceholderIsGone(t *testing.T) {
-	t.Parallel()
-
-	dataDir := t.TempDir()
-	write(t, dataDir, prompts.StageCommit, "commit {{what_to_commit}}")
-
-	got, err := prompts.Render(dataDir, prompts.StageCommit, prompts.Vars{Push: true, PushRef: "fix-the-cache"})
-	if err != nil {
-		t.Fatalf("Render() = %v, want nil", err)
-	}
-
-	want := "commit " + prompts.StagedInstruction +
-		"\n\n## Pushing\n\n" + fmt.Sprintf(prompts.DetachedPushInstruction, "fix-the-cache")
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("Render() mismatch (-want +got):\n%s", diff)
-	}
-}
-
 func TestLineCountsLinesWithoutTheFinalBreak(t *testing.T) {
 	t.Parallel()
 
@@ -1887,4 +1788,25 @@ func TestRenderGivesThePRFixesTheOneShotNote(t *testing.T) {
 		t.Errorf("Render() does not contain %q", want)
 	}
 	assertInOrder(t, got, "## One-Shot task", "## The first request")
+}
+
+func TestThePRPromptOnlyWritesTheDraft(t *testing.T) {
+	t.Parallel()
+
+	text, err := prompts.Render(t.TempDir(), prompts.StagePR, prompts.Vars{
+		Repository: "acme/api", Branch: "add-login", BaseBranch: "origin/dev", DraftPath: "/data/pr/draft.md",
+	})
+	if err != nil {
+		t.Fatalf("Render() = %v, want nil", err)
+	}
+	for _, gone := range []string{"Phase 1", "Phase 2", "--body-file", "URL of the pull request"} {
+		if strings.Contains(text, gone) {
+			t.Errorf("the PR prompt = %q, want no %q: the app opens the pull request", text, gone)
+		}
+	}
+	for _, want := range []string{"MySpec pushes the branch and opens the pull request", "## The draft"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the PR prompt = %q, want it to contain %q", text, want)
+		}
+	}
 }

@@ -6,6 +6,7 @@ import type { TranscriptState } from "@/store/transcript";
 import { renderWithStore } from "@/test/render";
 import { SCENE_FINDINGS } from "@/test/task-scenes";
 import {
+  makeDivergence,
   makeEntry,
   makePRReport,
   makePullRequest,
@@ -324,6 +325,45 @@ const ROWS: Row[] = [
     task: inStep({ status: "nothing_to_commit" }, { situations: [stepSituation("step_empty")] }),
     where: "bar",
     name: /^Discard step 1…$/,
+  },
+  {
+    origin: "StepBar",
+    button: "Ask the agent again",
+    state: "the commit that did not happen",
+    task: inStep(
+      { status: "diverged" },
+      {
+        divergence: makeDivergence({ stage: "step:1", kind: "commit_missing", files: 2 }),
+        situations: [stepSituation("divergence")],
+      },
+    ),
+    where: "bar",
+    name: /^Ask the agent again$/,
+  },
+  {
+    origin: "StepBar",
+    button: "Check again",
+    state: "the commit that did not happen",
+    task: inStep(
+      { status: "diverged" },
+      {
+        divergence: makeDivergence({ stage: "step:1", kind: "commit_missing", files: 2 }),
+        situations: [stepSituation("divergence")],
+      },
+    ),
+    where: "bar",
+    name: /^Check again$/,
+  },
+  {
+    origin: "PRBar",
+    button: "Open PR",
+    state: "a draft approved and no pull request on GitHub",
+    task: {
+      ...inPR({ status: "diverged", draft: DRAFT, sessionStage: "pr" }, "divergence"),
+      divergence: makeDivergence({ stage: "pr", kind: "pr_not_opened" }),
+    },
+    where: "bar",
+    name: /^Open the pull request$/,
   },
   {
     origin: "StepBar",

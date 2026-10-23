@@ -10,6 +10,7 @@ import { cardEntries, isDecided, nextToDecide } from "@/features/discussion/draf
 import {
   type Bar,
   clean,
+  divergenceBar,
   drawn,
   type PendingRequest,
   sessionRequestOf,
@@ -35,7 +36,13 @@ import {
 } from "@/lib/wails";
 
 /** DiscussionRequestAction is what a button of the request bar of a discussion does. */
-export type DiscussionRequestAction = "show" | "retrySession" | "nextToDecide" | "archive";
+export type DiscussionRequestAction =
+  | "show"
+  | "retrySession"
+  | "nextToDecide"
+  | "archive"
+  | "checkAgain"
+  | "askAgain";
 
 /** DiscussionRequestModel is the request bar of the discussion screen. */
 export type DiscussionRequestModel = RequestModel<DiscussionRequestAction, RequestFocus> & {
@@ -52,7 +59,12 @@ type DiscussionBar = Omit<Bar<DiscussionRequestAction>, "focus"> & {
 /** DiscussionKind is each situation of the drafts and of the state of the discussion. */
 type DiscussionKind = Extract<
   SituationKind,
-  "drafts" | "epic_cant_publish" | "epic_discarded" | "publish_failed" | "ready_to_archive"
+  | "drafts"
+  | "epic_cant_publish"
+  | "epic_discarded"
+  | "publish_failed"
+  | "ready_to_archive"
+  | "divergence"
 >;
 
 const DISCUSSION_KINDS: readonly SituationKind[] = [
@@ -61,6 +73,7 @@ const DISCUSSION_KINDS: readonly SituationKind[] = [
   "epic_discarded",
   "publish_failed",
   "ready_to_archive",
+  "divergence",
 ];
 
 /** NEXT_TO_DECIDE goes to the next draft to decide, as Alt+↓ does. */
@@ -120,11 +133,12 @@ function targetOf(
       return failed === undefined ? null : { draft: failed.id, retry: true, approve: false };
     }
     case "ready_to_archive":
+    case "divergence":
       return null;
   }
 }
 
-function barOf(discussion: DiscussionSummary, kind: DiscussionKind): DiscussionBar {
+function barOf(discussion: DiscussionSummary, kind: DiscussionKind): DiscussionBar | null {
   const place = placeOf(discussion);
   const target = targetOf(discussion, kind);
   const round = cardEntries(discussion).map((entry) => entry.draft);
@@ -193,6 +207,16 @@ function barOf(discussion: DiscussionSummary, kind: DiscussionKind): DiscussionB
         target,
       };
     }
+    case "divergence": {
+      if (discussion.divergence === null) {
+        return null;
+      }
+      return {
+        ...divergenceBar<DiscussionRequestAction>(discussion.divergence, place),
+        focus: "primary",
+        target,
+      };
+    }
   }
 }
 
@@ -215,8 +239,9 @@ function pausedWant(discussion: DiscussionSummary): DiscussionKind | null {
       return "publish_failed";
     case "ready_to_archive":
       return "ready_to_archive";
+    case "diverged":
+      return "divergence";
     case "discussing":
-    case "awaiting_drafts":
     case "publishing":
       return null;
   }
@@ -232,15 +257,13 @@ function sessionBar(
     stage: discussion.sessionStage === "" ? DISCUSSION_STAGE : discussion.sessionStage,
     lastError: discussion.lastError,
   };
-  const unreadable = discussion.unreadableDrafts !== "";
   const model = sessionRequestOf<DiscussionRequestAction>(
     situation,
     session,
     placeOf(discussion),
     pending,
     {
-      label: unreadable ? "Waiting for the drafts" : "Waiting for reply",
-      ...(unreadable ? { progress: "ask the agent to fix drafts.md below" } : {}),
+      label: "Waiting for reply",
       actions: [],
     },
   );
@@ -268,7 +291,11 @@ export function discussionRequestOf(
     if (kind === null) {
       return null;
     }
-    const { focus, target, ...rest } = barOf(discussion, kind);
+    const bar = barOf(discussion, kind);
+    if (bar === null) {
+      return null;
+    }
+    const { focus, target, ...rest } = bar;
     return { ...clean(rest), form: "quiet", glyph: "paused", situationId: null, focus, target };
   }
   const situation = discussionSituation(discussion);
@@ -276,9 +303,12 @@ export function discussionRequestOf(
     return null;
   }
   const kind = asSituationKind(situation.kind);
-  const model = DISCUSSION_KINDS.includes(kind)
-    ? drawnBar(situation, barOf(discussion, kind as DiscussionKind))
-    : sessionBar(discussion, situation, pending);
+  const bar = DISCUSSION_KINDS.includes(kind) ? barOf(discussion, kind as DiscussionKind) : null;
+  if (DISCUSSION_KINDS.includes(kind) && bar === null) {
+    return null;
+  }
+  const model =
+    bar === null ? sessionBar(discussion, situation, pending) : drawnBar(situation, bar);
   return {
     ...model,
     time: {

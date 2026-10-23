@@ -13,16 +13,23 @@ import (
 const Fence = "---"
 
 // Split cuts the metadata header off content. Content without one is all
-// body. Lines without a colon are ignored, and a value may be wrapped in
-// quotes or backticks.
+// body. A UTF-8 byte order mark and blank lines before the opening fence, and
+// spaces after a fence, are accepted. Lines without a colon are ignored, keys
+// come out in lowercase, and a value may be wrapped in quotes or backticks.
 func Split(content string) (fields map[string]string, body string) {
 	text := strings.ReplaceAll(content, "\r", "")
-	if !strings.HasPrefix(text, Fence+"\n") {
+	text = strings.TrimPrefix(text, "\ufeff")
+	text = strings.TrimLeft(text, "\n")
+
+	first, rest, found := strings.Cut(text, "\n")
+	if !found || strings.TrimRight(first, " \t") != Fence {
 		return nil, content
 	}
 
-	lines := strings.Split(text[len(Fence)+1:], "\n")
-	end := slices.Index(lines, Fence)
+	lines := strings.Split(rest, "\n")
+	end := slices.IndexFunc(lines, func(line string) bool {
+		return strings.TrimRight(line, " \t") == Fence
+	})
 	if end < 0 {
 		return nil, content
 	}
@@ -33,7 +40,7 @@ func Split(content string) (fields map[string]string, body string) {
 		if !found {
 			continue
 		}
-		fields[strings.TrimSpace(key)] = unwrap(strings.TrimSpace(value))
+		fields[strings.ToLower(strings.TrimSpace(key))] = unwrap(strings.TrimSpace(value))
 	}
 	return fields, strings.Join(lines[end+1:], "\n")
 }

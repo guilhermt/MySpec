@@ -76,8 +76,13 @@ function Detail({ tool, input }: { tool: string; input: string }) {
   );
 }
 
-function answerText(status: Exclude<PermissionStatus, "pending">, message: string): string {
-  return status === "denied" && message !== ""
+// The denial of a deviation carries the reason the card already showed, so it says nothing more.
+function answerText(
+  status: Exclude<PermissionStatus, "pending">,
+  message: string,
+  deviation: boolean,
+): string {
+  return status === "denied" && message !== "" && !deviation
     ? `${ANSWER_TEXT.denied} · ${message}`
     : ANSWER_TEXT[status];
 }
@@ -174,7 +179,8 @@ export function PermissionCard({
     );
   }
   const cancelled = status === "cancelled";
-  const answer = status === "pending" ? "" : answerText(status, permission.denyMessage);
+  const answer =
+    status === "pending" ? "" : answerText(status, permission.denyMessage, permission.deviation);
   const tip =
     permission.answeredAt === ""
       ? answer
@@ -257,6 +263,7 @@ function PendingPermission({
   const [sending, setSending] = useState<PermissionDecision | null>(null);
   const [failure, setFailure] = useState("");
   const forSession = permissionKeys(permission) === 3;
+  const { deviation } = permission;
 
   const answer = async (decision: PermissionDecision, text: string) => {
     if (sending !== null) {
@@ -278,7 +285,12 @@ function PendingPermission({
     }
   };
 
+  // A deviation is denied on the spot: the reason the agent reads is the one on the card.
   const deny = () => {
+    if (deviation) {
+      void answer("deny", "");
+      return;
+    }
     setDenying(true);
     requestAnimationFrame(() => denyRef.current?.focus());
   };
@@ -338,6 +350,7 @@ function PendingPermission({
       <fieldset aria-labelledby={titleId} className={REQUEST_CARD}>
         <div id={titleId} className="flex items-baseline gap-(--space-2) text-ink-1 select-text">
           <Tag>{toolName(permission)}</Tag>
+          {deviation && <Tag>Outside this stage</Tag>}
           {permission.description !== "" && <span>{permission.description}</span>}
         </div>
         {requester !== null && (
@@ -381,7 +394,7 @@ function PendingPermission({
             <Button
               variant="primary"
               shortcut="1"
-              {...(permission.defaultToNo ? {} : { "data-default-focus": true })}
+              {...(permission.defaultToNo && !deviation ? {} : { "data-default-focus": true })}
               {...busy("allow")}
               {...(others("allow") ? { disabled: true } : {})}
               onClick={() => void answer("allow", "")}
@@ -402,11 +415,12 @@ function PendingPermission({
               ref={denyButtonRef}
               variant="ghost"
               shortcut={forSession ? "3" : "2"}
-              {...(permission.defaultToNo ? { "data-default-focus": true } : {})}
-              {...(sending !== null ? { disabled: true } : {})}
+              {...(permission.defaultToNo && !deviation ? { "data-default-focus": true } : {})}
+              {...(deviation ? busy("deny") : {})}
+              {...((deviation ? others("deny") : sending !== null) ? { disabled: true } : {})}
               onClick={deny}
             >
-              Deny…
+              {deviation ? "Deny" : "Deny…"}
             </Button>
           </div>
         )}

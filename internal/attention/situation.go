@@ -36,6 +36,7 @@ const (
 	KindReviewReport    Kind = "review_report"
 	KindNewCommits      Kind = "new_commits"
 	KindPRTrouble       Kind = "pr_trouble"
+	KindDivergence      Kind = "divergence"
 	KindDrafts          Kind = "drafts"
 	KindEpicCantPublish Kind = "epic_cant_publish"
 	KindEpicDiscarded   Kind = "epic_discarded"

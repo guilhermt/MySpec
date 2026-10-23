@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/guilhermt/myspec/internal/app"
+	"github.com/guilhermt/myspec/internal/contract"
 )
 
 //go:embed all:frontend/dist
@@ -23,6 +24,10 @@ var notificationIcon []byte
 var version = "dev"
 
 func main() {
+	if dir, ok := contract.HookFlag(os.Args[1:]); ok {
+		os.Exit(contract.Hook(os.Stdin, os.Stdout, dir))
+	}
+
 	os.Exit(app.Run(app.Config{
 		Assets:           assets,
 		Icon:             icon,

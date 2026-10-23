@@ -21,7 +21,7 @@ type DiscussionsRepo struct{ db *sql.DB }
 // discussionColumns is the column list every discussion query selects, in scan
 // order.
 const discussionColumns = `id, board_id, board_title, title, text, initial_context, initial_images, artifacts_dir,
-	drafts_read, drafts_revision, archived_at, created_at, updated_at`
+	drafts_read, drafts_revision, drafts_corrected, archived_at, created_at, updated_at`
 
 // discussionCardColumns is the column list every card query selects, in scan
 // order.
@@ -118,7 +118,7 @@ func (r *DiscussionsRepo) cards(ctx context.Context, discussionID string) ([]dis
 // Insert stores a new discussion with the cards it started from.
 func (r *DiscussionsRepo) Insert(ctx context.Context, d discussion.Discussion) error {
 	const stmt = `INSERT INTO discussions (` + discussionColumns + `)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	encodedImages, err := encodeImages(d.InitialImages)
 	if err != nil {
@@ -132,7 +132,7 @@ func (r *DiscussionsRepo) Insert(ctx context.Context, d discussion.Discussion) e
 
 	_, err = tx.ExecContext(ctx, stmt, d.ID, d.BoardID, d.BoardTitle, d.Title, d.Text,
 		d.InitialContext, encodedImages, d.ArtifactsDir, d.DraftsRead, d.DraftsRevision,
-		nullTime(d.ArchivedAt), formatTime(d.CreatedAt), formatTime(d.UpdatedAt))
+		d.DraftsCorrected, nullTime(d.ArchivedAt), formatTime(d.CreatedAt), formatTime(d.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("insert discussion %s: %w", d.ID, err)
 	}
@@ -170,10 +170,10 @@ func (r *DiscussionsRepo) Update(ctx context.Context, d discussion.Discussion) e
 // updateDiscussion runs Update on the database or inside a transaction.
 func updateDiscussion(ctx context.Context, db execer, d discussion.Discussion) error {
 	const stmt = `UPDATE discussions SET title = ?, drafts_read = ?, drafts_revision = ?,
-		updated_at = ? WHERE id = ?`
+		drafts_corrected = ?, updated_at = ? WHERE id = ?`
 
 	_, err := db.ExecContext(ctx, stmt, d.Title, d.DraftsRead, d.DraftsRevision,
-		formatTime(d.UpdatedAt), d.ID)
+		d.DraftsCorrected, formatTime(d.UpdatedAt), d.ID)
 	if err != nil {
 		return fmt.Errorf("update discussion %s: %w", d.ID, err)
 	}
@@ -403,7 +403,7 @@ func scanDiscussion(row scanner) (discussion.Discussion, error) {
 		encodedImages        string
 	)
 	err := row.Scan(&d.ID, &d.BoardID, &d.BoardTitle, &d.Title, &d.Text, &d.InitialContext, &encodedImages,
-		&d.ArtifactsDir, &d.DraftsRead, &d.DraftsRevision, &archivedAt, &createdAt, &updatedAt)
+		&d.ArtifactsDir, &d.DraftsRead, &d.DraftsRevision, &d.DraftsCorrected, &archivedAt, &createdAt, &updatedAt)
 	if err != nil {
 		return discussion.Discussion{}, fmt.Errorf("scan discussion: %w", err)
 	}

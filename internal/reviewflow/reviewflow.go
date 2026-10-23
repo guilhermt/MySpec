@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/prompts"
@@ -41,6 +42,15 @@ type Sessions interface {
 	MarkNewCommits(ctx context.Context, k session.Key, commits []session.MarkerCommit, count int)
 	MarkChangesApproved(ctx context.Context, k session.Key, files int)
 	MarkCommitted(ctx context.Context, k session.Key, sha, subject string, pushed bool, number int)
+	MarkDivergence(ctx context.Context, k session.Key, d divergence.Divergence)
+}
+
+// Divergences is what the reviews need from internal/divergence.
+type Divergences interface {
+	Get(itemID string) (divergence.Divergence, bool)
+	Open(ctx context.Context, d divergence.Divergence) (bool, error)
+	Clear(ctx context.Context, itemID string, kinds ...divergence.Kind) error
+	Forget(itemID string)
 }
 
 // Worktrees is what the reviews need from internal/worktree: a worktree on a
@@ -56,6 +66,7 @@ type Worktrees interface {
 	Remove(ctx context.Context, itemID string) error
 	Registration(ctx context.Context, repoPath, path string) worktree.Registration
 	Commit(ctx context.Context, wt worktree.Worktree, rev string) (git.Commit, error)
+	Push(ctx context.Context, wt worktree.Worktree, branch string) error
 }
 
 // Pulls is what the reviews need from internal/pulls: the pull request as
@@ -100,6 +111,7 @@ type TaskPR struct {
 // Deps are what Service needs from the outside.
 type Deps struct {
 	Reviews      *prreview.Service
+	Divergences  Divergences
 	Pulls        Pulls
 	Sessions     Sessions
 	Worktrees    Worktrees
@@ -147,6 +159,7 @@ const (
 // Service is the state machine of every review of a pull request.
 type Service struct {
 	reviews      *prreview.Service
+	divergences  Divergences
 	pulls        Pulls
 	sessions     Sessions
 	worktrees    Worktrees
@@ -166,6 +179,11 @@ type Service struct {
 	polling bool // a reading of the pull requests of the reviews is under way
 	// pollDone is closed when the reading under way ends; nil when none is.
 	pollDone chan struct{}
+	// ctx is the context of the pushes, which Close cancels; spawned counts
+	// them.
+	ctx     context.Context
+	stop    context.CancelFunc
+	spawned sync.WaitGroup
 }
 
 // reviewLock serializes the work on one review and coalesces its pending
@@ -193,9 +211,8 @@ type reviewLock struct {
 	// readAt is the last reading, good or not; RefreshPR waits for one after
 	// its call.
 	readAt time.Time
-	// commitFailed says the last approval of apply mode ended without a
-	// commit. Like the flow of a task, it is transient on purpose.
-	commitFailed bool
+	// pushing says a push of the commit of the fixes is under way.
+	pushing bool
 	// commitBase is the commit the worktree was on when the last approval
 	// asked for a commit, read then because the pass it fixes recorded none.
 	// A head that moved from it is the commit the agent made.
@@ -214,6 +231,7 @@ type reviewLock struct {
 func New(deps Deps) *Service {
 	s := &Service{
 		reviews:      deps.Reviews,
+		divergences:  deps.Divergences,
 		pulls:        deps.Pulls,
 		sessions:     deps.Sessions,
 		worktrees:    deps.Worktrees,
@@ -228,6 +246,7 @@ func New(deps Deps) *Service {
 		renderPrompt: deps.RenderPrompt,
 		locks:        map[string]*reviewLock{},
 	}
+	s.ctx, s.stop = context.WithCancel(context.Background())
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
 	}
@@ -271,13 +290,16 @@ func (s *Service) run(id string, l *reviewLock) {
 	s.evaluate(ctx, id)
 }
 
-// Close stops the flow from evaluating anything else. The evaluations under
-// way end on their own.
+// Close stops the flow from evaluating anything else and cancels the pushes
+// under way, which it waits for: the phase of a review that was pushing stays,
+// and Sync resumes it. The evaluations under way end on their own.
 func (s *Service) Close() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	s.closed = true
+	s.mu.Unlock()
+
+	s.stop()
+	s.spawned.Wait()
 }
 
 // isClosed reports whether the flow was closed.

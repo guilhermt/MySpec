@@ -1,7 +1,9 @@
 package task
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -10,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/guilhermt/myspec/internal/frontmatter"
+	"github.com/guilhermt/myspec/internal/prreport"
 )
 
 // PRDirName is the folder of the PR artifacts inside the task folder.
@@ -112,21 +115,79 @@ func ReadPRArtifacts(dir string) PRArtifacts {
 	return found
 }
 
-// readDraft reads one draft file. A file without a title, or with nothing
-// under the header, is half written and is no draft.
-func readDraft(path string) (Draft, bool) {
+// ErrDraftUnreadable is a draft the app cannot act on.
+var ErrDraftUnreadable = errors.New("task: the draft can't be read")
+
+// ReadDraft reads the draft of the pull request: ok is false when the file
+// is not there; a file that is there and has no front matter, no title or no
+// description fails with ErrDraftUnreadable, the rule it breaks after a colon.
+func ReadDraft(path string) (Draft, bool, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return Draft{}, false
+		if errors.Is(err, fs.ErrNotExist) {
+			return Draft{}, false, nil
+		}
+		return Draft{}, false, fmt.Errorf("read draft %s: %w", path, err)
 	}
 
 	fields, body := frontmatter.Split(string(content))
-	title := strings.TrimSpace(fields["title"])
-	body = strings.TrimSpace(body)
-	if title == "" || body == "" {
-		return Draft{}, false
+	if fields == nil {
+		return Draft{}, false, fmt.Errorf("%w: it has no front matter", ErrDraftUnreadable)
 	}
-	return Draft{Present: true, Title: title, Body: body}, true
+	title := cleanTitle(fields["title"])
+	if title == "" {
+		return Draft{}, false, fmt.Errorf("%w: it has no title", ErrDraftUnreadable)
+	}
+	body = strings.TrimSpace(body)
+	if first, rest, _ := strings.Cut(body, "\n"); strings.HasPrefix(first, "# ") && cleanTitle(first[2:]) == title {
+		body = strings.TrimSpace(rest)
+	}
+	if body == "" {
+		return Draft{}, false, fmt.Errorf("%w: it has no description", ErrDraftUnreadable)
+	}
+	return Draft{Present: true, Title: title, Body: body}, true, nil
+}
+
+// cleanTitle drops the pairs of quotes and of ** that wrap a title.
+func cleanTitle(raw string) string {
+	title := strings.TrimSpace(raw)
+	for {
+		unwrapped := title
+		for _, mark := range []string{"**", `"`, "'", "`"} {
+			if len(unwrapped) > 2*len(mark) && strings.HasPrefix(unwrapped, mark) && strings.HasSuffix(unwrapped, mark) {
+				unwrapped = strings.TrimSpace(unwrapped[len(mark) : len(unwrapped)-len(mark)])
+			}
+		}
+		if unwrapped == title {
+			return title
+		}
+		title = unwrapped
+	}
+}
+
+// DraftReason is why a draft can't be read, as the user reads it, in the
+// shape of prreport.Reason: "The draft can't be read: it has no title."
+func DraftReason(err error) string {
+	const generic = "The draft can't be read."
+	_, rule, found := strings.Cut(err.Error(), ErrDraftUnreadable.Error()+": ")
+	if !errors.Is(err, ErrDraftUnreadable) || !found || strings.TrimSpace(rule) == "" {
+		return generic
+	}
+	return "The draft can't be read: " + strings.TrimSpace(rule) + "."
+}
+
+// readDraft reads one draft file. A file without a title, or with nothing
+// under the header, is half written and is no draft.
+func readDraft(path string) (Draft, bool) {
+	draft, ok, err := ReadDraft(path)
+	return draft, ok && err == nil
+}
+
+// ResolvePRReport finds the report of one pass of the PR review: the file at
+// pr/review-<pass>.md and, when it is not there, the one other report of the
+// artifacts folder that declares the pass.
+func ResolvePRReport(t Task, pass int) (prreport.Result, error) {
+	return prreport.Resolve(t.ArtifactsDir, PRDirName+"/"+ReviewFile(pass), pass)
 }
 
 // readReport reads one review report. A report without a verdict, or whose

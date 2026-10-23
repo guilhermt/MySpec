@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/images"
 )
 
@@ -72,23 +73,25 @@ type AppKind string
 
 // The messages of the workflow.
 const (
-	AppReport        AppKind = "report"          // a step review report to the implementer
-	AppPass          AppKind = "pass"            // the next pass to the step reviewer
-	AppCommit        AppKind = "commit"          // commit the staged files
-	AppCommitAll     AppKind = "commit_all"      // commit every change of the step, after a clean report
-	AppCommitPush    AppKind = "commit_push"     // commit the staged files and push
-	AppCommitAllPush AppKind = "commit_all_push" // commit every change of the worktree and push, after a clean report of the agent review of a pull request
-	AppCorrection    AppKind = "correction"      // the plan isn't valid yet
-	AppOpen          AppKind = "open"            // open the pull request
-	AppPRPass        AppKind = "pr_pass"         // the next pass of the pull request review
-	AppApply         AppKind = "apply"           // apply the approved findings
+	AppReport           AppKind = "report"            // a step review report to the implementer
+	AppPass             AppKind = "pass"              // the next pass to the step reviewer
+	AppCommit           AppKind = "commit"            // commit the staged files
+	AppCommitAll        AppKind = "commit_all"        // commit every change of the step, after a clean report
+	AppCommitPush       AppKind = "commit_push"       // commit the staged files and push
+	AppCommitAllPush    AppKind = "commit_all_push"   // commit every change of the worktree and push, after a clean report of the agent review of a pull request
+	AppCorrection       AppKind = "correction"        // the plan isn't valid yet
+	AppDraftsCorrection AppKind = "drafts_correction" // the drafts artifact of a discussion can't be read
+	AppAgain            AppKind = "again"             // the report or the draft that wasn't there, asked once more
+	AppOpen             AppKind = "open"              // open the pull request
+	AppPRPass           AppKind = "pr_pass"           // the next pass of the pull request review
+	AppApply            AppKind = "apply"             // apply the approved findings
 )
 
 // AppMessage is a message the app sends the agent on the user's behalf.
 type AppMessage struct {
 	Text   string
 	Kind   AppKind
-	Pass   int // report, pass, pr_pass
+	Pass   int // report, pass, pr_pass, again
 	Round  int // report: the round; correction: the attempt
 	Rounds int // report: MaxReviewRounds; correction: MaxCorrections
 	Count  int // report: findings (-1 unknown); correction: problems; apply: approved findings
@@ -198,6 +201,9 @@ type PermissionEntry struct {
 	// ParentToolUseID is the Agent/Task action of the subagent that asks; "" for
 	// the main thread and in old transcripts.
 	ParentToolUseID string `json:"parentToolUseId,omitempty"`
+	// Deviation says a hook of the contract asked: the action is outside what
+	// the stage of the session does, and DecisionReason says what is expected.
+	Deviation bool `json:"deviation,omitempty"`
 }
 
 // QuestionOption is one answer offered for a question.
@@ -266,6 +272,7 @@ const (
 	MarkerChangesApproved    MarkerType = "changes_approved"
 	MarkerPaused             MarkerType = "paused"
 	MarkerPlanInvalid        MarkerType = "plan_invalid"
+	MarkerDivergence         MarkerType = "divergence"
 
 	MarkerBackgroundStopped MarkerType = "background_stopped" // the user stopped work in the background
 	MarkerBackgroundLost    MarkerType = "background_lost"    // work in the background died with the process
@@ -352,6 +359,8 @@ type MarkerEntry struct {
 	Title    string        `json:"title"`    // draft_approved
 	Files    int           `json:"files"`    // changes_approved
 	Problems []PlanProblem `json:"problems"` // plan_invalid
+
+	Divergence *divergence.Mark `json:"divergence,omitempty"` // divergence: what the app expected and found otherwise
 
 	Model     string         `json:"model"`     // review_started: the model of the session
 	Effort    string         `json:"effort"`    // review_started: its effort

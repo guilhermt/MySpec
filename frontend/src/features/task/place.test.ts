@@ -12,6 +12,7 @@ import {
 } from "@/features/task/place";
 import type { PullRequest, Step, TaskSummary } from "@/lib/wails";
 import {
+  makeDivergence,
   makePRCheck,
   makePRReport,
   makePullRequest,
@@ -194,6 +195,18 @@ describe("prPlaceOf", () => {
       { kind: "conversation" },
     ],
     ["the PR opening", pr({ status: "opening", prNumber: 0 }), false, { kind: "conversation" }],
+    [
+      "the push of a commit before the first pass",
+      pr({ status: "pushing", prNumber: 12 }),
+      false,
+      { kind: "activity", text: "Pushing the commit…" },
+    ],
+    [
+      "the push of a commit of a round of the review",
+      pr({ status: "pushing", prNumber: 12 }),
+      true,
+      { kind: "conversation" },
+    ],
     [
       "the checks before the first pass",
       pr({ status: "waiting_checks", checks, checkedAt: "2026-09-28T17:30:00Z" }),
@@ -383,6 +396,7 @@ describe("prFixedCardOf", () => {
       null,
     ],
     ["the opening", { status: "opening", draft: DRAFT }, null],
+    ["the push of a commit", { status: "pushing", prNumber: 12 }, null],
     ["a pass of the review", { status: "reviewing", prNumber: 12 }, null],
     ["the findings to decide", { status: "awaiting_decision", prNumber: 12 }, null],
     ["the changes to review", { status: "in_review", prNumber: 12 }, "files"],
@@ -391,5 +405,20 @@ describe("prFixedCardOf", () => {
     ["a later pass waiting for the checks", { status: "waiting_checks", prNumber: 12 }, "checks"],
   ])("gives %s its card", (_, fields, expected) => {
     expect(prFixedCardOf(makePullRequest(fields))).toBe(expected);
+  });
+});
+
+describe("prFixedCardOf, the pull request GitHub doesn't have", () => {
+  const diverged = makePullRequest({
+    status: "diverged",
+    draft: { title: "Add login", body: "The login page.", file: "draft.md" },
+  });
+
+  it("gives the approved draft its card again, to open the pull request", () => {
+    expect(prFixedCardOf(diverged, makeDivergence({ kind: "pr_not_opened" }))).toBe("draft");
+  });
+
+  it.each(["pr_wrong_base", "prs_ambiguous", "push_rejected"])("gives %s no card", (kind) => {
+    expect(prFixedCardOf(diverged, makeDivergence({ kind }))).toBeNull();
   });
 });

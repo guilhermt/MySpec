@@ -15,6 +15,15 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as $models from "./models.js";
 
 /**
+ * Adopt accepts what the app found in place of what it expected: choice is the
+ * path of a candidate or the number of a pull request, "" when the divergence
+ * has one way out.
+ */
+export function Adopt(taskID: string, choice: string): $CancellablePromise<void> {
+    return $Call.ByID(830764200, taskID, choice);
+}
+
+/**
  * AnswerPermission answers the pending permission request of a task. The
  * decision is allow, allow_session or deny; message is the reason a denial
  * gives the agent.
@@ -63,11 +72,27 @@ export function ApproveStep(taskID: string): $CancellablePromise<void> {
 }
 
 /**
+ * AskAgain sends the agent the instruction the divergence of a task is about
+ * once more.
+ */
+export function AskAgain(taskID: string): $CancellablePromise<void> {
+    return $Call.ByID(247314225, taskID);
+}
+
+/**
  * BackToStage reopens a finished stage of a task, throwing away what came
  * after it. The stage is prd, tech_spec or one_shot.
  */
 export function BackToStage(taskID: string, stage: string): $CancellablePromise<void> {
     return $Call.ByID(398771202, taskID, stage);
+}
+
+/**
+ * CheckAgain reads the real state of a task again after the user sorted out
+ * what the app found otherwise than it expected.
+ */
+export function CheckAgain(taskID: string): $CancellablePromise<void> {
+    return $Call.ByID(1369392222, taskID);
 }
 
 /**

@@ -347,3 +347,33 @@ func (s *DiscussionService) boardRepository(id, repositoryID, of string) (reposi
 }
 
 func (s *DiscussionService) fail(method string, err error) error { return failure(s.log, method, err) }
+
+// CheckAgain reads the drafts of a discussion again after the user fixed them by hand.
+func (s *DiscussionService) CheckAgain(id string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.CheckAgain(ctx, id); err != nil {
+		return s.fail("CheckAgain", err)
+	}
+	return nil
+}
+
+// AskAgain asks the agent to fix the drafts of a discussion once more.
+func (s *DiscussionService) AskAgain(id string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.AskAgain(ctx, id); err != nil {
+		return s.fail("AskAgain", err)
+	}
+	return nil
+}

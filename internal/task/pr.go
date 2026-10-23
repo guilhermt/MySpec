@@ -19,10 +19,11 @@ const (
 	PRPreparing     PRStatus = "preparing"      // gh and commit checks under way
 	PRBlocked       PRStatus = "blocked"        // the stage could not start; Block says why
 	PRDrafting      PRStatus = "drafting"       // the PR session is open, writing or waiting for the OK
-	PROpening       PRStatus = "opening"        // the user approved the draft; the agent is opening the PR
+	PROpening       PRStatus = "opening"        // the user approved the draft; the app pushes the branch and opens the PR
 	PRReviewing     PRStatus = "reviewing"      // the PR exists and the review session is running
 	PRWaitingChecks PRStatus = "waiting_checks" // the review waits for the checks of the head and the merge state before a pass
 	PRCommitting    PRStatus = "committing"     // the commit prompt was sent, waiting for the commit
+	PRPushing       PRStatus = "pushing"        // the app pushes the commit of the task to the pull request
 	PRDone          PRStatus = "done"           // a pass closed clean; the task awaits closing
 	PRClosing       PRStatus = "closing"        // the user asked for the closing; git is at work
 	PRClosed        PRStatus = "closed"         // the worktree is gone; Close says what else happened
@@ -30,7 +31,7 @@ const (
 
 // prStatuses lists every status a PR run may carry.
 var prStatuses = []PRStatus{
-	PRPreparing, PRBlocked, PRDrafting, PROpening, PRReviewing, PRWaitingChecks, PRCommitting,
+	PRPreparing, PRBlocked, PRDrafting, PROpening, PRReviewing, PRWaitingChecks, PRCommitting, PRPushing,
 	PRDone, PRClosing, PRClosed,
 }
 
@@ -44,11 +45,14 @@ const (
 	PRBlockGHFailed   PRBlockReason = "gh_failed"
 	PRBlockGitFailed  PRBlockReason = "git_failed"
 	PRBlockNoWorktree PRBlockReason = "no_worktree"
+	PRBlockPushFailed PRBlockReason = "push_failed" // git refused the push of the branch for a reason other than the remote being ahead
+	PRBlockOpenFailed PRBlockReason = "open_failed" // gh refused to open the pull request
 )
 
 // prBlockReasons lists every reason the PR stage may be blocked for.
 var prBlockReasons = []PRBlockReason{
 	PRBlockGHMissing, PRBlockGHAuth, PRBlockGHFailed, PRBlockGitFailed, PRBlockNoWorktree,
+	PRBlockPushFailed, PRBlockOpenFailed,
 }
 
 // PRState is where GitHub says the pull request is.
@@ -84,6 +88,7 @@ type PRDetails struct {
 	URL       string
 	State     PRState // "" until a reading says otherwise
 	Base      string  // the branch the pull request merges into; "" until gh says
+	Head      string  // the branch the pull request comes from, as GitHub names it; "" until read
 	CheckedAt time.Time
 	Checks    []gh.Check   // the checks of the reading; nil before the first
 	Mergeable gh.Mergeable // "" before the first reading

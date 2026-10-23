@@ -10,10 +10,10 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
-	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/session"
@@ -199,10 +199,10 @@ func TestApprovePRCommitsThroughTheImplementer(t *testing.T) {
 		t.Errorf("status = %q, want committing", run.Status)
 	}
 	sent := f.sessions.sent()
-	if len(sent) != 1 || !strings.Contains(sent[0], prompts.PushInstruction) {
-		t.Errorf("sent = %q, want the commit prompt with the push instruction", sent)
+	if len(sent) != 1 || sent[0] != commitPrompt("task-1") {
+		t.Errorf("sent = %q, want the commit prompt", sent)
 	}
-	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppCommitPush}}, f.sessions.sentApps()); diff != "" {
+	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppCommit}}, f.sessions.sentApps()); diff != "" {
 		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
 	}
 	approved := []keyedMarker{{Key: fixKeyOf, Marker: session.MarkerEntry{Type: session.MarkerChangesApproved, Files: 3}}}
@@ -247,11 +247,8 @@ func TestACommitOfAReviewStartsTheNextPass(t *testing.T) {
 	if diff := cmp.Diff(session.AppMessage{Kind: session.AppPRPass, Pass: 2}, apps[len(apps)-1]); diff != "" {
 		t.Errorf("app message mismatch (-want +got):\n%s", diff)
 	}
-	if state := f.prState(t, "task-1"); state.CommitFailed {
-		t.Error("the approval is reported as having produced no commit")
-	}
 	committed := []keyedMarker{{Key: fixKeyOf, Marker: session.MarkerEntry{
-		Type: session.MarkerCommitted, SHA: commitSHA[:7], Subject: "Do the work of the step", Pushed: true, Number: 7,
+		Type: session.MarkerCommitted, SHA: commitSHA[:7], Subject: "Do the work of the step", Pushed: false, Number: 7,
 	}}}
 	if diff := cmp.Diff(committed, f.sessions.marked(session.MarkerCommitted)); diff != "" {
 		t.Errorf("committed markers mismatch (-want +got):\n%s", diff)
@@ -294,9 +291,13 @@ func TestACommitTurnOfAReviewThatCommitsNothingGivesTheTaskBack(t *testing.T) {
 		run, ok := f.tasks.prRun("task-1")
 		return ok && run.Status == task.PRReviewing
 	})
-	waitFor(t, "the warning of the missing commit", func() bool {
-		return f.prState(t, "task-1").CommitFailed
-	})
+	d := f.waitDivergence(t, divergence.KindCommitMissing)
+	if d.Stage != session.PRReviewStage && d.Stage != session.PRFixStage {
+		t.Errorf("divergence stage = %q, want the conversation of the commit", d.Stage)
+	}
+	if got := f.prState(t, "task-1"); got.Status != flow.PRDiverged || got.Divergence == nil {
+		t.Errorf("status = %q with divergence %v, want diverged", got.Status, got.Divergence)
+	}
 }
 
 func TestACleanReportClosesThePullRequest(t *testing.T) {
@@ -343,7 +344,7 @@ func TestAPassThatFindsNothingAfterAPassWithFindingsClosesThePullRequest(t *test
 	f.waitPR(t, "task-1", flow.PRDone)
 }
 
-func TestOpeningThePullRequestWritesTheDraftTheUserApproved(t *testing.T) {
+func TestOpeningThePullRequestWritesTheDraftPushesAndOpensIt(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -353,6 +354,7 @@ func TestOpeningThePullRequestWritesTheDraftTheUserApproved(t *testing.T) {
 	f.tasks.setArtifacts("task-1", prArtifacts(task.PRArtifacts{
 		Draft: task.Draft{Present: true, Title: "Add the login screen", Body: "It adds the screen."},
 	}))
+	f.worktrees.setStatus(git.Status{Head: startCommit})
 	f.sessions.setSummary("task-1", session.Summary{
 		Stage: session.PRStage, Status: session.StatusWaiting, Idle: true,
 	})
@@ -362,10 +364,9 @@ func TestOpeningThePullRequestWritesTheDraftTheUserApproved(t *testing.T) {
 		t.Fatalf("OpenPR() = %v, want nil", err)
 	}
 
-	run, _ := f.tasks.prRun("task-1")
-	if run.Status != task.PROpening {
-		t.Errorf("status = %q, want opening", run.Status)
-	}
+	f.waitPRRun(t, "the pull request to be recorded", func(run task.PRRun) bool {
+		return run.Status == task.PRReviewing && run.PR.Number == 7
+	})
 	path := filepath.Join(dir, "pr", "draft.md")
 	written, readErr := os.ReadFile(path)
 	if readErr != nil {
@@ -376,12 +377,20 @@ func TestOpeningThePullRequestWritesTheDraftTheUserApproved(t *testing.T) {
 			t.Errorf("draft = %q, want it to contain %q", written, want)
 		}
 	}
-	sent := f.sessions.sent()
-	if len(sent) != 1 || !strings.Contains(sent[0], path) || !strings.Contains(sent[0], "origin/dev") {
-		t.Errorf("sent = %q, want the message that opens the pull request", sent)
+	// The app opens it: the agent is asked for nothing.
+	if sent := f.sessions.sent(); len(sent) != 0 {
+		t.Errorf("sent = %q, want nothing sent to the agent", sent)
 	}
-	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppOpen}}, f.sessions.sentApps()); diff != "" {
-		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
+	if diff := cmp.Diff([]string{"task-1"}, f.worktrees.pushed()); diff != "" {
+		t.Errorf("pushes mismatch (-want +got):\n%s", diff)
+	}
+	created := []createCall{{base: "dev", head: "task-1", title: "Add the login screen", body: "It adds the screen."}}
+	if diff := cmp.Diff(created, f.gh.createdPRs(), cmp.AllowUnexported(createCall{})); diff != "" {
+		t.Errorf("created pull requests mismatch (-want +got):\n%s", diff)
+	}
+	run, _ := f.tasks.prRun("task-1")
+	if run.PR.Head != "task-1" || run.PR.Base != "dev" {
+		t.Errorf("pull request = %+v, want the head and the base GitHub reported", run.PR)
 	}
 	approved := []keyedMarker{{
 		Key:    session.Key{TaskID: "task-1", Stage: session.PRStage},
@@ -390,15 +399,21 @@ func TestOpeningThePullRequestWritesTheDraftTheUserApproved(t *testing.T) {
 	if diff := cmp.Diff(approved, f.sessions.marked(session.MarkerDraftApproved)); diff != "" {
 		t.Errorf("draft_approved markers mismatch (-want +got):\n%s", diff)
 	}
+	opened := []keyedMarker{{
+		Key:    session.Key{TaskID: "task-1", Stage: session.PRStage},
+		Marker: session.MarkerEntry{Type: session.MarkerPROpened, Number: 7, Base: "dev"},
+	}}
+	if diff := cmp.Diff(opened, f.sessions.marked(session.MarkerPROpened)); diff != "" {
+		t.Errorf("pr_opened markers mismatch (-want +got):\n%s", diff)
+	}
 }
 
-func TestOpeningThePullRequestResumesAPausedSession(t *testing.T) {
+func TestOpeningThePullRequestLeavesAPausedSessionPaused(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	dir := t.TempDir()
 	inPR(f, "task-1", plan(), task.PRDrafting)
-	f.tasks.useDir("task-1", dir)
+	f.tasks.useDir("task-1", t.TempDir())
 	f.sessions.setSummary("task-1", session.Summary{Stage: session.PRStage, Status: session.StatusPaused})
 
 	err := f.service.OpenPR(t.Context(), "task-1", "Add the login screen", "It adds the screen.")
@@ -406,12 +421,30 @@ func TestOpeningThePullRequestResumesAPausedSession(t *testing.T) {
 		t.Fatalf("OpenPR() = %v, want nil", err)
 	}
 
-	// The user should not have to think about processes to open what they
-	// wrote: the session comes back and takes the message.
+	f.waitPRRun(t, "the pull request to be recorded", func(run task.PRRun) bool { return run.PR.Number == 7 })
+	// The agent has no part in it: the session neither comes back nor takes a message.
 	calls := f.sessions.recorded()
-	resume, send := slices.Index(calls, "resume:task-1:pr"), slices.Index(calls, "send:task-1:pr")
-	if resume < 0 || send < resume {
-		t.Errorf("session calls = %q, want the session resumed before the message", calls)
+	if slices.Contains(calls, "resume:task-1:pr") || slices.Contains(calls, "send:task-1:pr") {
+		t.Errorf("session calls = %q, want the session left alone", calls)
+	}
+}
+
+func TestOpeningThePullRequestIsRefusedWhileTheAgentWorks(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	inPR(f, "task-1", plan(), task.PRDrafting)
+	f.tasks.useDir("task-1", t.TempDir())
+	f.sessions.setSummary("task-1", session.Summary{
+		Stage: session.PRStage, Status: session.StatusWorking, TurnRunning: true,
+	})
+
+	err := f.service.OpenPR(t.Context(), "task-1", "Add the login screen", "It adds the screen.")
+	if !errors.Is(err, flow.ErrStepBusy) {
+		t.Errorf("OpenPR() = %v, want ErrStepBusy", err)
+	}
+	if run, _ := f.tasks.prRun("task-1"); run.Status != task.PRDrafting {
+		t.Errorf("status = %q, want the draft where it was", run.Status)
 	}
 }
 
@@ -471,7 +504,8 @@ func TestReviewingAgainStartsAPassOverTheSamePullRequest(t *testing.T) {
 	}
 
 	// The clean report of the first pass does not close the review asked for
-	// again: the agent rested without the report of the new pass.
+	// again: the agent rested without the report of the new pass, which is a
+	// divergence.
 	f.sessions.goIdle("task-1")
 	before := f.tasks.inspectCount()
 	f.service.Check("task-1")
@@ -479,9 +513,11 @@ func TestReviewingAgainStartsAPassOverTheSamePullRequest(t *testing.T) {
 	if run, _ := f.tasks.prRun("task-1"); run.Status != task.PRReviewing {
 		t.Errorf("status = %q, want reviewing until the report of the new pass is in", run.Status)
 	}
-	if got := f.prState(t, "task-1").Status; got != flow.PRAwaitingReply {
-		t.Errorf("status = %q, want awaiting_reply", got)
+	if got := f.prState(t, "task-1").Status; got != flow.PRDiverged {
+		t.Errorf("status = %q, want diverged", got)
 	}
+	f.wantDivergence(t, session.PRReviewStage, divergence.KindReportMissing,
+		divergence.Facts{Pass: 2, Path: "pr/review-2.md"})
 
 	// The clean report of that pass is what closes it.
 	reportsWritten(t, f, reports(2, true))

@@ -91,6 +91,7 @@ func TestTheConversationOfAReviewReviewsTheWorktreeAgainstTheContextDocument(t *
 		ContextPath:      stored.ContextPath(),
 		Repository:       "dev/web",
 		Branch:           "cache-boards",
+		HeadBranch:       "cache-boards",
 		BaseBranch:       "origin/main",
 		ReviewPath:       stored.ReportPath(1),
 		PRNumber:         "42",

@@ -17,6 +17,14 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as $models from "./models.js";
 
 /**
+ * Adopt accepts what the app found in place of what it expected: choice is the
+ * path of a candidate report, "" when the divergence has one way out.
+ */
+export function Adopt(id: string, choice: string): $CancellablePromise<void> {
+    return $Call.ByID(2390817327, id, choice);
+}
+
+/**
  * ApplyReview asks the agent to fix the findings the user approved, in the
  * worktree of the review.
  */
@@ -32,11 +40,27 @@ export function ApproveRestOfFindings(id: string, pass: number): $CancellablePro
 }
 
 /**
- * ApproveReview approves the changes the agent made and asks it to commit them
- * and push them to the pull request.
+ * ApproveReview approves the changes the agent made and asks it to commit them;
+ * the app pushes the commit to the pull request.
  */
 export function ApproveReview(id: string): $CancellablePromise<void> {
     return $Call.ByID(821139084, id);
+}
+
+/**
+ * AskAgain sends the agent the instruction the divergence of a review is about once
+ * more.
+ */
+export function AskAgain(id: string): $CancellablePromise<void> {
+    return $Call.ByID(418484208, id);
+}
+
+/**
+ * CheckAgain reads the real state of a review again after the user sorted out what the app
+ * found otherwise than it expected.
+ */
+export function CheckAgain(id: string): $CancellablePromise<void> {
+    return $Call.ByID(1451765391, id);
 }
 
 /**
@@ -103,6 +127,14 @@ export function RefreshPR(id: string): $CancellablePromise<void> {
  */
 export function RefreshPullRequests(): $CancellablePromise<void> {
     return $Call.ByID(607206883);
+}
+
+/**
+ * RetryPush pushes the commit of the fixes of a review again after a push that
+ * failed.
+ */
+export function RetryPush(id: string): $CancellablePromise<void> {
+    return $Call.ByID(3176898751, id);
 }
 
 /**

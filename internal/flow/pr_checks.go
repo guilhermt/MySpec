@@ -65,12 +65,13 @@ func (s *Service) readChecks(ctx context.Context, id string) {
 	if !ok {
 		return
 	}
-	if run, ok := s.tasks.PRRun(id); !ok || run.Status != task.PRWaitingChecks {
+	run, ok := s.tasks.PRRun(id)
+	if !ok || run.Status != task.PRWaitingChecks {
 		// The wait ended while the reading waited for its turn.
 		return
 	}
 
-	pr, err := s.viewPR(ctx, wt)
+	pr, err := s.viewPR(ctx, wt, run)
 	if err != nil {
 		// The pull request exists: a gh that does not find it failed too.
 		s.log.Warn("read pull request checks failed", "task", id, "error", err)

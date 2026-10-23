@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
@@ -192,7 +193,7 @@ func (s *Service) fixInfoOf(ctx context.Context, t task.Task, run task.PRRun) (s
 	if err != nil {
 		return session.TaskInfo{}, err
 	}
-	return prFixInfo(t, wt, s.baseOf(ctx, wt), repo, run.PR), nil
+	return prFixInfo(t, wt, s.reviewBase(ctx, wt, run), repo, run.PR), nil
 }
 
 // reopenFixer opens again the conversation of the implementer a task had when
@@ -240,9 +241,9 @@ func lastReading(run task.PRRun) *gh.PRChecks {
 // evaluateAgentPR drives the agent review of a pull request once both of its
 // sessions rest: it hands a report with findings to the implementer, asks the
 // reviewer for the pass that follows the implementer's work, has the changes
-// of a clean report committed and pushed, asks for the pass after a push, or
-// ends the review. A session that works, asks, is paused or failed is where
-// the review waits.
+// of a clean report committed, asks for the pass after a commit, or ends the
+// review. A session that works, asks, is paused or failed, and a divergence,
+// are where the review waits.
 func (s *Service) evaluateAgentPR(
 	ctx context.Context, t task.Task, wt worktree.Worktree, run task.PRRun, pass task.PRPass, reviewer session.Summary,
 ) {
@@ -264,6 +265,16 @@ func (s *Service) evaluateAgentPR(
 	if err != nil {
 		s.log.Warn("read worktree failed", "task", t.ID, "path", wt.Path, "error", err)
 		return
+	}
+	if _, diverged := s.divergences.Get(t.ID); diverged {
+		// A commit that moved the branch is the one a missing commit waits for;
+		// any other divergence holds the loop until the user sorts it out.
+		if status.Head != run.ReviewedCommit {
+			s.clearDivergence(ctx, t.ID, divergence.KindCommitMissing)
+		}
+		if _, still := s.divergences.Get(t.ID); still {
+			return
+		}
 	}
 
 	passes := s.tasks.PRPasses(t.ID)
@@ -335,7 +346,7 @@ func (s *Service) askLocalPass(
 		return
 	}
 	s.setUnreadable(t.ID, "")
-	section := prompts.PRChecksSection(lastReading(run), "origin/"+s.baseOf(ctx, wt))
+	section := prompts.PRChecksSection(lastReading(run), "origin/"+s.reviewBase(ctx, wt, run))
 	app := session.AppMessage{
 		Text: prLocalPassMessage(reply, t.ReviewPath(next), section), Kind: session.AppPRPass, Pass: next,
 	}
@@ -349,11 +360,11 @@ func (s *Service) askLocalPass(
 }
 
 // commitAgentPR asks the implementer of a pull request whose report came clean
-// to commit every change of the worktree and push it: nobody staged anything.
+// to commit every change of the worktree: nobody staged anything. The app
+// pushes the commit.
 func (s *Service) commitAgentPR(ctx context.Context, t task.Task, run task.PRRun) {
 	vars := commitVars(t)
 	vars.CommitAll = true
-	vars.Push = true
 	message, err := s.renderPrompt(prompts.StageCommit, vars)
 	if err != nil {
 		s.log.Error("render commit prompt failed", "task", t.ID, "error", err)
@@ -363,8 +374,7 @@ func (s *Service) commitAgentPR(ctx context.Context, t task.Task, run task.PRRun
 		s.log.Error("record committing pull request failed", "task", t.ID, "error", err)
 		return
 	}
-	s.setPRNoCommit(t.ID, false)
-	app := session.AppMessage{Text: message, Kind: session.AppCommitAllPush}
+	app := session.AppMessage{Text: message, Kind: session.AppCommitAll}
 	if err := s.sendToFixer(ctx, t, run, app, nil); err != nil {
 		if _, setErr := s.tasks.SetPRRun(ctx, t.ID, task.PRReviewing, nil); setErr != nil {
 			s.log.Error("record reviewing pull request failed", "task", t.ID, "error", setErr)

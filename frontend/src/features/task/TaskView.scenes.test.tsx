@@ -59,6 +59,17 @@ describe("TaskView, the nine scenes", () => {
       "Progress · PR review pass 1 · round 1/5 · waiting for you: question in Implementer",
       "wait",
     ],
+    [
+      "diverged-commit",
+      "Progress · Implementation 3/7 · Manual · error: not as expected in Step 3",
+      "error",
+    ],
+    ["diverged-pr-base", "Progress · PR · error: not as expected in PR", "error"],
+    [
+      "diverged-no-changes",
+      "Progress · PR review · Manual · error: not as expected in Implementer",
+      "error",
+    ],
   ])("draws the stepper of the %s scene, with the glyph of its pill", (name, label, glyph) => {
     scene(name);
 
@@ -124,6 +135,45 @@ describe("TaskView, the nine scenes", () => {
       "aria-disabled",
       "true",
     );
+  });
+
+  it("says what the app expected and found in the bar of the diverged-commit scene", () => {
+    scene("diverged-commit");
+
+    const bar = screen.getByRole("region", { name: "Request" });
+    expect(bar).toHaveTextContent("Not as expected");
+    expect(bar).toHaveTextContent(
+      "Expected a commit on rate-limit-per-api-key after c19f02e · found no commit, and 4 files changed in the worktree",
+    );
+    expect(within(bar).getByRole("button", { name: "Ask the agent again" })).toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: "Check again" })).toBeInTheDocument();
+    expect(within(bar).queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+  });
+
+  it("offers to adopt the pull request in the bar of the diverged-pr-base scene", () => {
+    scene("diverged-pr-base");
+
+    const bar = screen.getByRole("region", { name: "Request" });
+    expect(bar).toHaveTextContent("Not as expected");
+    expect(bar).toHaveTextContent("Expected a pull request into dev · found #1284 into main");
+    expect(within(bar).getByRole("button", { name: "Adopt #1284" })).toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: "Check again" })).toBeInTheDocument();
+  });
+
+  it("offers to go on in the bar of the diverged-no-changes scene, with no Review changes", () => {
+    scene("diverged-no-changes");
+
+    const bar = screen.getByRole("region", { name: "Request" });
+    expect(bar).toHaveTextContent("Not as expected");
+    expect(bar).toHaveTextContent("found no file changed");
+    expect(
+      within(bar).getByRole("button", { name: "Continue without changes" }),
+    ).toBeInTheDocument();
+    expect(
+      within(bar).getByRole("button", { name: "Ask the implementer again" }),
+    ).toBeInTheDocument();
+    expect(bar).not.toHaveTextContent("Review changes");
+    expect(within(bar).queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
   });
 
   it("offers the closing in the bar of the close scene", () => {

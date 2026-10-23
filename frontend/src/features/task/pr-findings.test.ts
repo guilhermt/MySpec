@@ -9,7 +9,6 @@ import {
   findingsBar,
   findingsFormOf,
   findingsNotes,
-  noFileChanged,
   passPlace,
   prComposerContext,
   reviewAgainTooltip,
@@ -309,33 +308,6 @@ describe("findingsBar", () => {
       actions: [],
       focus: "composer",
     });
-  });
-});
-
-describe("noFileChanged", () => {
-  const sent = report(["approved"], { sentAt: SENT_AT });
-
-  it.each<[string, PullRequest, boolean]>([
-    [
-      "a sent pass and a worktree without changes",
-      pr("in_review", [sent], { review: makeReview({ total: 0 }) }),
-      true,
-    ],
-    ["a sent pass and no review read", pr("in_review", [sent], { review: null }), true],
-    [
-      "a worktree with changes",
-      pr("in_review", [sent], { review: makeReview({ total: 2 }) }),
-      false,
-    ],
-    [
-      "a worktree that can't be read",
-      pr("in_review", [sent], { review: makeReview({ total: 0, error: "x" }) }),
-      false,
-    ],
-    ["a pass not sent", pr("in_review", [report(["approved"])], { review: null }), false],
-    ["another status", pr("awaiting_decision", [sent], { review: null }), false],
-  ])("says %s", (_name, request, expected) => {
-    expect(noFileChanged(request)).toBe(expected);
   });
 });
 

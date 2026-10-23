@@ -1,10 +1,13 @@
 package attention
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/guilhermt/myspec/internal/discussion"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -38,7 +41,6 @@ func TestNotificationBodies(t *testing.T) {
 		// The reviewer of a step.
 		{"reviewer question", reviewerBody(KindQuestion, 3), "The reviewer of step 3 has a question."},
 		{"reviewer permission", reviewerBody(KindPermission, 3), "The reviewer of step 3 asks for a permission."},
-		{"reviewer without report", reviewerBody(KindReply, 3), "The reviewer of step 3 stopped without writing its report."},
 		{"reviewer error", reviewerBody(KindSessionError, 3), "The review of step 3 stopped with an error."},
 
 		// The stages.
@@ -49,12 +51,11 @@ func TestNotificationBodies(t *testing.T) {
 		// The steps.
 		{"step blocked", stepBlockedBody(5, task.BlockDirty), "Step 5 can't start: the worktree has uncommitted changes."},
 		{"worktree unreadable", worktreeUnreadableBody(3), "Step 3: the worktree can't be read."},
-		{"step to review", stepReviewBody(4, FormReview, false, "", 7), "Step 4 is ready for your review. 7 files changed."},
-		{"step to review, one file", stepReviewBody(4, FormReview, false, "", 1), "Step 4 is ready for your review. 1 file changed."},
-		{"step to review, no reading", stepReviewBody(4, FormReview, false, "", -1), "Step 4 is ready for your review."},
-		{"no commit after approval", stepReviewBody(4, FormApprove, true, "", 7), "Step 4: the last approval didn't produce a commit."},
-		{"no commit fallback", stepReviewBody(4, FormReview, true, task.FallbackNoCommit, 7), "Step 4: the last approval didn't produce a commit."},
-		{"agent review gave up", stepReviewBody(3, FormReview, false, task.FallbackRoundsExhausted, 2), "Step 3: the agent review didn't come clean after 3 rounds. It's yours now."},
+		{"step to review", stepReviewBody(4, "", 7), "Step 4 is ready for your review. 7 files changed."},
+		{"step to review, one file", stepReviewBody(4, "", 1), "Step 4 is ready for your review. 1 file changed."},
+		{"step to review, no reading", stepReviewBody(4, "", -1), "Step 4 is ready for your review."},
+		{"no commit fallback", stepReviewBody(4, task.FallbackNoCommit, 7), "Step 4: the last approval didn't produce a commit."},
+		{"agent review gave up", stepReviewBody(3, task.FallbackRoundsExhausted, 2), "Step 3: the agent review didn't come clean after 3 rounds. It's yours now."},
 		{"step empty", stepEmptyBody(6), "Step 6 finished without changes."},
 
 		// The pull request of a task.
@@ -64,12 +65,10 @@ func TestNotificationBodies(t *testing.T) {
 		{"one finding", findingsBody(FormDecide, 1, ""), "The review of the pull request found 1 change for you to decide."},
 		{"findings in text", findingsBody(FormNone, -1, ""), "The review of the pull request found changes for you to decide."},
 		{"findings to apply", findingsBody(FormApply, 2, ""), "The approved findings of the pull request review are ready to apply."},
-		{"changes to review", changesReviewBody(FormReview, false, ""), "The changes from the review of the pull request are ready for your review."},
-		{"no commit after approval, pr", changesReviewBody(FormApprove, true, ""), "The last approval of the pull request didn't produce a commit."},
+		{"changes to review", changesReviewBody(""), "The changes from the review of the pull request are ready for your review."},
 		{"findings after the agent review gave up", findingsBody(FormDecide, 2, task.FallbackRoundsExhausted), "The agent review of the pull request didn't come clean after 5 rounds. The review of the pull request found 2 changes for you to decide."},
 		{"findings after the agent review was taken over", findingsBody(FormDecide, 1, task.FallbackTakenOver), "The review of the pull request found 1 change for you to decide."},
-		{"changes after the commit did not happen", changesReviewBody(FormApprove, false, task.FallbackNoCommit), "Review the changes of the review: the commit after the agent review didn't happen."},
-		{"no commit after approval, pr, fallback", changesReviewBody(FormApprove, true, task.FallbackNoCommit), "The last approval of the pull request didn't produce a commit."},
+		{"changes after the commit did not happen", changesReviewBody(task.FallbackNoCommit), "Review the changes of the review: the commit after the agent review didn't happen."},
 		{"check failed", troubleBody(gh.Trouble{FailedChecks: []string{"e2e (chromium)"}}, "dev"), "A check failed after the review: e2e (chromium)."},
 		{"checks failed", troubleBody(gh.Trouble{FailedChecks: []string{"e2e (chromium)", "lint"}}, "dev"), "Checks failed after the review: e2e (chromium), lint."},
 		{"conflict", troubleBody(gh.Trouble{Conflict: true}, "dev"), "The pull request has a conflict with dev."},
@@ -89,8 +88,7 @@ func TestNotificationBodies(t *testing.T) {
 		{"review one finding", reviewReportBody(FormDecide, 1), "The review has 1 finding for you to decide."},
 		{"ready to publish", reviewReportBody(FormPublish, 0), "The review is ready to publish."},
 		{"ready to apply", reviewReportBody(FormApply, 0), "The approved findings are ready to apply."},
-		{"review changes", reviewChangesBody(FormReview, false), "The changes from the review are ready for your review."},
-		{"review no commit", reviewChangesBody(FormApprove, true), "The last approval of the pull request didn't produce a commit."},
+		{"review changes", reviewChangesBody(), "The changes from the review are ready for your review."},
 		{"review ready to merge", reviewMergeBody(), "The pull request is ready to merge."},
 		{"publish failed", publishFailedBody("GitHub's rate limit was reached. It resets at 15:04."), "The review couldn't be published: GitHub's rate limit was reached."},
 		{"publish failed, gone", publishFailedBody("This pull request is no longer on GitHub."), "The review couldn't be published: this pull request is no longer on GitHub."},
@@ -108,7 +106,6 @@ func TestNotificationBodies(t *testing.T) {
 		{"permission in the discussion", sessionBody(KindPermission, placeName(Place{Kind: PlaceDiscussion}, false)), "Permission requested in the discussion."},
 		{"reply in the discussion", sessionBody(KindReply, placeName(Place{Kind: PlaceDiscussion}, false)), "The agent is waiting for your reply in the discussion."},
 		{"session error in the discussion", sessionBody(KindSessionError, placeName(Place{Kind: PlaceDiscussion}, false)), "The session stopped with an error in the discussion."},
-		{"unreadable drafts", unreadableDraftsBody(), "The agent wrote drafts the app can't read in the discussion."},
 		{"drafts to decide", draftsBody(5), "There are 5 drafts to decide in the discussion."},
 		{"one draft to decide", draftsBody(1), "There is 1 draft to decide in the discussion."},
 		{"epic, one approved", epicCantPublishBody(1, 3), "The epic can't publish: approve one more of its cards, or discard it."},
@@ -159,6 +156,8 @@ func TestBlockPhrasesInTheirNotifications(t *testing.T) {
 		task.PRBlockGHFailed:   "the GitHub CLI failed",
 		task.PRBlockNoWorktree: "the worktree is gone",
 		task.PRBlockGitFailed:  "git failed",
+		task.PRBlockPushFailed: "the push failed",
+		task.PRBlockOpenFailed: "opening the pull request failed",
 	}
 	for reason, phrase := range prs {
 		if got, want := prBlockedBody(reason), "The pull request is blocked: "+phrase+"."; got != want {
@@ -219,5 +218,48 @@ func TestReadyToContinueKeepsItsOwnArticle(t *testing.T) {
 	}
 	if got, want := readyToContinueBody(task.StagePRD), "The PRD is revised and ready to continue."; got != want {
 		t.Errorf("readyToContinueBody() = %q, want %q", got, want)
+	}
+}
+
+func TestDivergenceBody(t *testing.T) {
+	t.Parallel()
+
+	pr := func(base, head string) []divergence.PR {
+		return []divergence.PR{{Number: 1284, Base: base, Head: head}}
+	}
+	tests := []struct {
+		name string
+		d    divergence.Divergence
+		step int
+		want string
+	}{
+		{"commit in a step", divergence.Divergence{Kind: divergence.KindCommitMissing}, 3, "Step 3: the commit MySpec asked for didn't happen."},
+		{"commit of the review fixes", divergence.Divergence{Kind: divergence.KindCommitMissing}, 0, "The commit of the review fixes didn't happen."},
+		{"report missing", divergence.Divergence{Kind: divergence.KindReportMissing, Facts: divergence.Facts{Pass: 2}}, 0, "Review 2 has no report."},
+		{"report unreadable", divergence.Divergence{Kind: divergence.KindReportUnreadable, Facts: divergence.Facts{Pass: 2, Reason: "The header has no pass."}}, 0, "Review 2 can't be read: the header has no pass."},
+		{"report unreadable with the reason prreport gives", divergence.Divergence{Kind: divergence.KindReportUnreadable, Facts: divergence.Facts{Pass: 2, Reason: prreport.Reason(fmt.Errorf("%w: the header has no pass", prreport.ErrUnreadable))}}, 0, "Review 2 can't be read: the header has no pass."},
+		{"report unreadable with the generic reason prreport gives", divergence.Divergence{Kind: divergence.KindReportUnreadable, Facts: divergence.Facts{Pass: 2, Reason: prreport.Reason(prreport.ErrUnreadable)}}, 0, "Review 2 can't be read."},
+		{"report unreadable without a reason", divergence.Divergence{Kind: divergence.KindReportUnreadable, Facts: divergence.Facts{Pass: 2}}, 0, "Review 2 can't be read."},
+		{"reports ambiguous", divergence.Divergence{Kind: divergence.KindReportsAmbiguous, Facts: divergence.Facts{Pass: 2, Candidates: []string{"a.md", "b.md"}}}, 0, "Review 2 has 2 possible reports."},
+		{"draft missing", divergence.Divergence{Kind: divergence.KindDraftMissing}, 0, "The draft of the pull request isn't there."},
+		{"draft unreadable", divergence.Divergence{Kind: divergence.KindDraftUnreadable}, 0, "The draft of the pull request can't be read."},
+		{"no changes", divergence.Divergence{Kind: divergence.KindNoChanges, Facts: divergence.Facts{Pass: 1, Approved: 3}}, 0, "The implementer changed no file for the 3 approved findings of review 1."},
+		{"no changes for one finding", divergence.Divergence{Kind: divergence.KindNoChanges, Facts: divergence.Facts{Pass: 1, Approved: 1}}, 0, "The implementer changed no file for the 1 approved finding of review 1."},
+		{"wrong base", divergence.Divergence{Kind: divergence.KindPRWrongBase, Facts: divergence.Facts{Base: "dev", PRs: pr("main", "153-x")}}, 0, "PR #1284 goes into main, not dev."},
+		{"other branch", divergence.Divergence{Kind: divergence.KindPROtherBranch, Facts: divergence.Facts{PRs: pr("dev", "fix-login")}}, 0, "PR #1284 comes from fix-login, not from the branch of the task."},
+		{"pull requests ambiguous", divergence.Divergence{Kind: divergence.KindPRsAmbiguous, Facts: divergence.Facts{PRs: append(pr("dev", "a"), pr("dev", "b")...)}}, 0, "2 pull requests could be the one of this task."},
+		{"pull request not opened", divergence.Divergence{Kind: divergence.KindPRNotOpened}, 0, "The draft was approved and GitHub has no pull request yet."},
+		{"push rejected", divergence.Divergence{Kind: divergence.KindPushRejected, Facts: divergence.Facts{Branch: "153-robustez"}}, 0, "MySpec couldn't push 153-robustez: origin has commits it doesn't."},
+		{"drafts unreadable", divergence.Divergence{Kind: divergence.KindDraftsUnreadable, Facts: divergence.Facts{Reason: "no drafts found"}}, 0, "drafts.md still can't be read: no drafts found."},
+		{"a pull request the facts don't hold", divergence.Divergence{Kind: divergence.KindPRWrongBase, Facts: divergence.Facts{Base: "dev"}}, 0, "The pull request goes into , not dev."},
+		{"a kind it doesn't know", divergence.Divergence{Kind: "from_the_future"}, 0, "The work isn't as MySpec expected."},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := divergenceBody(tc.d, tc.step); got != tc.want {
+				t.Errorf("divergenceBody() = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

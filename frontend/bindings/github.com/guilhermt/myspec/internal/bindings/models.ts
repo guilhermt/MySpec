@@ -1082,7 +1082,7 @@ export interface DiscussionSummary {
     "text": string;
 
     /**
-     * Status is discussing, awaiting_drafts, deciding, publishing, publish_failed,
+     * Status is discussing, diverged, deciding, publishing, publish_failed,
      * epic_discarded, epic_cant_publish or ready_to_archive, a string for the
      * same reason as State.Theme.
      */
@@ -1215,7 +1215,67 @@ export interface DiscussionSummary {
      * what the discussion waits on the user for; never nil
      */
     "situations": Situation[] | null;
+
+    /**
+     * what the app expected and found otherwise; nil without one
+     */
+    "divergence": Divergence | null;
     "createdAt": string;
+}
+
+/**
+ * Divergence is what the app expected of an item after its one instruction,
+ * and found otherwise.
+ */
+export interface Divergence {
+    /**
+     * Stage is the conversation it belongs to: step:3, step_review:3, pr,
+     * pr_review, pr_fix, review or discussion.
+     */
+    "stage": string;
+
+    /**
+     * Kind is commit_missing, report_missing, report_unreadable,
+     * reports_ambiguous, draft_missing, draft_unreadable, no_changes,
+     * pr_wrong_base, pr_other_branch, prs_ambiguous, pr_not_opened,
+     * push_rejected or drafts_unreadable, a string for the same reason as
+     * State.Theme.
+     */
+    "kind": string;
+    "branch": string;
+    "base": string;
+    "commit": string;
+    "files": number;
+    "all": boolean;
+    "pass": number;
+    "approved": number;
+    "path": string;
+    "reason": string;
+
+    /**
+     * never nil
+     */
+    "candidates": string[] | null;
+
+    /**
+     * never nil
+     */
+    "prs": DivergentPR[] | null;
+
+    /**
+     * RFC 3339
+     */
+    "startedAt": string;
+}
+
+/**
+ * DivergentPR is a pull request a divergence names.
+ */
+export interface DivergentPR {
+    "number": number;
+    "url": string;
+    "base": string;
+    "head": string;
 }
 
 /**
@@ -1827,7 +1887,8 @@ export interface MarkerEntry {
      * step_started, compacted, interrupted, retried, woke, committed, pr_opened,
      * checks_read, draft_approved, changes_approved, paused, plan_invalid,
      * background_stopped, background_lost, discussion_document,
-     * drafts_written, drafts_revised, drafts_unreadable or drafts_published.
+     * drafts_written, drafts_revised, drafts_unreadable, drafts_published or
+     * divergence.
      */
     "type": string;
     "preTokens": number;
@@ -1948,6 +2009,12 @@ export interface MarkerEntry {
      * they name, in the order it started; never nil.
      */
     "background": BackgroundItem[] | null;
+
+    /**
+     * Divergence belongs to divergence: what the app expected and found
+     * otherwise; Stage and StartedAt are empty in a marker.
+     */
+    "divergence": Divergence | null;
 }
 
 /**
@@ -2039,8 +2106,9 @@ export interface NewerData {
  */
 export interface PRBlock {
     /**
-     * Reason is gh_missing, gh_unauthenticated, gh_failed, git_failed or
-     * no_worktree, a string for the same reason as State.Theme.
+     * Reason is gh_missing, gh_unauthenticated, gh_failed, git_failed,
+     * no_worktree, push_failed or open_failed, a string for the same reason as
+     * State.Theme.
      */
     "reason": string;
 
@@ -2210,6 +2278,12 @@ export interface PermissionEntry {
      * for the main thread.
      */
     "parentToolUseId": string;
+
+    /**
+     * Deviation says the action is outside what the stage of the session does:
+     * a hook of the contract asked, and DecisionReason says what is expected.
+     */
+    "deviation": boolean;
 }
 
 /**
@@ -2328,9 +2402,8 @@ export interface PullRequest {
     /**
      * Status is preparing, blocked, drafting, draft_ready, awaiting_reply,
      * opening, reviewing, addressing_review, waiting_checks, awaiting_decision,
-     * in_review,
-     * ready_to_approve, committing, done, trouble, merged, pr_closed, closing or
-     * closed, a string for the same reason as State.Theme.
+     * in_review, ready_to_approve, committing, pushing, done, trouble, merged,
+     * pr_closed, closing, closed or diverged, a string for the same reason as State.Theme.
      */
     "status": string;
 
@@ -2368,11 +2441,6 @@ export interface PullRequest {
      * the review states and committing only
      */
     "review": Review | null;
-
-    /**
-     * CommitFailed says the last approval of the review ended without a commit.
-     */
-    "commitFailed": boolean;
 
     /**
      * ReviewRound is the reports with findings the agent review handed to the
@@ -3094,7 +3162,7 @@ export interface ReviewSummary {
      * Status is reviewing, waiting_checks, pass_blocked, awaiting_reply,
      * awaiting_decision, ready_to_publish, publish_failed, published,
      * new_commits, ready_to_apply, applying, in_review, ready_to_approve,
-     * committing, ready_to_merge or trouble.
+     * committing, pushing, diverged, ready_to_merge or trouble.
      */
     "status": string;
 
@@ -3158,15 +3226,16 @@ export interface ReviewSummary {
     "passBlocked": string;
 
     /**
+     * PushBlocked is true when what is blocked is the push of the commits, which
+     * the user asks for again; pass_blocked only.
+     */
+    "pushBlocked": boolean;
+
+    /**
      * UnreadableReport is why the report of the pass the app asked for could
      * not be read; "" otherwise.
      */
     "unreadableReport": string;
-
-    /**
-     * CommitFailed says the last approval of apply mode ended without a commit.
-     */
-    "commitFailed": boolean;
 
     /**
      * Review is the last reading of the worktree; apply mode only.
@@ -3248,6 +3317,11 @@ export interface ReviewSummary {
      * what the review waits on the user for; never nil
      */
     "situations": Situation[] | null;
+
+    /**
+     * what the app expected and found otherwise; nil without one
+     */
+    "divergence": Divergence | null;
     "createdAt": string;
 }
 
@@ -3338,8 +3412,8 @@ export interface Situation {
      * Kind is session_error, step_blocked, worktree_unreadable, pr_blocked,
      * plan_invalid, pr_closed, permission, question, reply, ready_to_continue,
      * step_review, step_empty, draft, findings, changes_review, merge,
-     * review_report, new_commits, publish_failed, pass_blocked or drafts, a
-     * string for the same reason as State.Theme.
+     * review_report, new_commits, publish_failed, pass_blocked, divergence or
+     * drafts, a string for the same reason as State.Theme.
      */
     "kind": string;
 
@@ -3688,8 +3762,8 @@ export interface Step {
     /**
      * Status is not_started, preparing, blocked, implementing, agent_review,
      * addressing_review, awaiting_review, in_review, ready_to_approve,
-     * nothing_to_commit, review_failed, committing or done, a string for the
-     * same reason as State.Theme.
+     * nothing_to_commit, review_failed, committing, diverged or done, a string
+     * for the same reason as State.Theme.
      */
     "status": string;
 
@@ -3727,11 +3801,6 @@ export interface Step {
      * done only: the committer date, RFC 3339; "" when unknown
      */
     "committedAt": string;
-
-    /**
-     * the last approval ended without a commit
-     */
-    "commitFailed": boolean;
 
     /**
      * what the step runs with, or will run with
@@ -3782,11 +3851,6 @@ export interface Step {
      * addressing_review only: the report the implementer addresses
      */
     "reviewRound": number;
-
-    /**
-     * agent_review only: the reviewer rests without the report of the pass
-     */
-    "reportMissing": boolean;
 
     /**
      * the reports of the agent review, by pass; never nil
@@ -4050,6 +4114,11 @@ export interface TaskSummary {
     "situations": Situation[] | null;
 
     /**
+     * what the app expected and found otherwise; nil without one
+     */
+    "divergence": Divergence | null;
+
+    /**
      * every stage, in workflow order; never nil
      */
     "models": TaskStageModel[] | null;
@@ -4305,7 +4374,8 @@ export interface UserEntry {
 
     /**
      * AppKind is which message of the workflow the app sent: report, pass,
-     * commit, commit_all, commit_all_push, commit_push, correction, open, pr_pass or apply; ""
+     * commit, commit_all, commit_all_push, commit_push, correction,
+     * drafts_correction, again, open, pr_pass or apply; ""
      * for every other entry. AppPass belongs to report, pass and pr_pass;
      * AppRound and AppRounds to report (the round of MaxReviewRounds) and
      * correction (the attempt of MaxCorrections); AppCount to report (the

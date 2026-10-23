@@ -9,6 +9,7 @@ import {
 } from "@/features/reviews/review-request";
 import type { ReviewSummary, Situation } from "@/lib/wails";
 import {
+  makeDivergence,
   makePRCheck,
   makeReview,
   makeReviewFinding,
@@ -242,41 +243,6 @@ describe("reviewRequestOf, the situations of the review", () => {
       },
     ],
     [
-      "changes to review, the last approval without a commit",
-      waiting(situation("changes_review", "waiting", "staged"), {
-        mode: "apply",
-        review: makeReview({ staged: 3, total: 5, percent: 60 }),
-        commitFailed: true,
-      }),
-      {
-        form: "tinted",
-        glyph: "wait",
-        label: "Review changes",
-        place: "pass 1",
-        time: WAIT,
-        progress: "3 of 5 files staged · the last approval didn't produce a commit",
-        status: "Review changes · pass 1",
-        actions: [
-          {
-            action: "openInEditor",
-            label: "Open in VS Code",
-            variant: "secondary",
-            shortcut: "Ctrl E",
-            loadingLabel: "",
-          },
-          {
-            action: "approve",
-            label: "Approve",
-            variant: "primary",
-            loadingLabel: "Approving…",
-            disabledReason: "Stage 2 more files",
-          },
-        ],
-        situationId: "s-changes_review",
-        focus: "primary",
-      },
-    ],
-    [
       "changes to approve",
       waiting(situation("changes_review", "waiting", "approve"), {
         mode: "apply",
@@ -403,8 +369,105 @@ describe("reviewRequestOf, the situations of the review", () => {
         focus: "primary",
       },
     ],
+    [
+      "a push that failed",
+      waiting(situation("pass_blocked", "error"), {
+        status: "pass_blocked",
+        passes: [makeReviewPass()],
+        passBlocked: "The push failed.",
+        pushBlocked: true,
+      }),
+      {
+        form: "error",
+        glyph: "error",
+        label: "Pass blocked",
+        place: "pass 1",
+        time: ERROR,
+        progress: "The push failed.",
+        status: "Pass blocked · pass 1",
+        actions: [
+          { action: "retryPush", label: "Try again", variant: "primary", loadingLabel: "Pushing…" },
+        ],
+        situationId: "s-pass_blocked",
+        focus: "primary",
+      },
+    ],
+    [
+      "a report that is missing",
+      waiting(situation("divergence", "error"), {
+        status: "diverged",
+        divergence: makeDivergence({
+          stage: "review",
+          kind: "report_missing",
+          pass: 1,
+          path: "review-pass-1.md",
+        }),
+      }),
+      {
+        form: "error",
+        glyph: "error",
+        label: "Not as expected",
+        place: "pass 1",
+        time: ERROR,
+        progress: "Expected the report of pass 1 at review-pass-1.md · found no report",
+        progressTooltip:
+          "MySpec expected the report of pass 1 at review-pass-1.md. It found no report.",
+        status: "Not as expected · pass 1",
+        actions: [
+          {
+            action: "askAgain",
+            label: "Ask the reviewer again",
+            variant: "primary",
+            loadingLabel: "Asking…",
+          },
+          {
+            action: "checkAgain",
+            label: "Check again",
+            variant: "secondary",
+            loadingLabel: "Checking…",
+          },
+        ],
+        situationId: "s-divergence",
+        focus: "primary",
+      },
+    ],
   ])("draws %s", (_, found, bar) => {
     expect(reviewRequestOf(found, NOW, null)).toEqual(bar);
+  });
+});
+
+describe("reviewRequestOf, a divergence", () => {
+  it("offers one adoption for each file that could be the report", () => {
+    const found = waiting(situation("divergence", "error"), {
+      status: "diverged",
+      divergence: makeDivergence({
+        stage: "review",
+        kind: "reports_ambiguous",
+        pass: 1,
+        path: "review-pass-1.md",
+        candidates: ["a/one.md", "b/two.md"],
+      }),
+    });
+
+    expect(reviewRequestOf(found, NOW, null)?.actions).toMatchObject([
+      { action: "adopt", label: "Adopt one.md", variant: "primary", choice: "a/one.md" },
+      { action: "adopt", label: "Adopt two.md", variant: "secondary", choice: "b/two.md" },
+      { action: "checkAgain", label: "Check again", variant: "secondary" },
+    ]);
+  });
+
+  it("is quiet while the reviewer is paused", () => {
+    const found = waiting(situation("divergence", "error"), {
+      status: "diverged",
+      sessionStatus: "paused",
+      divergence: makeDivergence({ stage: "review", kind: "report_missing" }),
+    });
+
+    expect(reviewRequestOf(found, NOW, null)).toMatchObject({
+      form: "quiet",
+      glyph: "paused",
+      label: "Not as expected",
+    });
   });
 });
 
@@ -464,19 +527,14 @@ describe("reviewRequestOf, the situations of the conversation", () => {
 
   it.each<[string, ReviewSummary, ReviewRequestModel]>([
     [
-      "the report it waits for, with why it can't be read",
-      waiting(situation("reply"), {
-        ...asked,
-        unreadableReport: "The report can't be read: finding 2 does not open with its location.",
-      }),
+      "the report it waits for",
+      waiting(situation("reply"), asked),
       {
         form: "tinted",
         glyph: "wait",
         label: "Waiting for the report",
         place: "pass 1",
         time: WAIT,
-        progress: "The report can't be read: finding 2 does not open with its location.",
-        progressTooltip: "The report can't be read: finding 2 does not open with its location.",
         status: "Waiting for the report · pass 1",
         actions: [],
         situationId: "s-reply",

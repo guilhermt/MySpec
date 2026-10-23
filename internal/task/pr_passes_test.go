@@ -425,6 +425,26 @@ func TestMarkAndUnmarkPRPassSent(t *testing.T) {
 	wantErrIs(t, f.service.MarkPRPassSent(t.Context(), created.ID, 7), task.ErrNotFound)
 }
 
+func TestSetPRPassChanged(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login")
+	recordedPRPass(t, f, created.ID, 1)
+
+	if err := f.service.SetPRPassChanged(t.Context(), created.ID, 1); err != nil {
+		t.Fatalf("SetPRPassChanged() = %v, want nil", err)
+	}
+	if !f.repo.storedPRPasses(created.ID)[0].Changed || !f.service.PRPasses(created.ID)[0].Changed {
+		t.Error("the pass is not changed, want it stored and cached as changed")
+	}
+	if err := f.service.SetPRPassChanged(t.Context(), created.ID, 1); err != nil {
+		t.Errorf("SetPRPassChanged() again = %v, want nil", err)
+	}
+
+	wantErrIs(t, f.service.SetPRPassChanged(t.Context(), created.ID, 7), task.ErrNotFound)
+}
+
 func TestPRPassesAreCopies(t *testing.T) {
 	t.Parallel()
 

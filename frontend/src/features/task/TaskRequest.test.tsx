@@ -1,10 +1,18 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { TaskRequest } from "@/features/task/TaskRequest";
-import { api, type PullRequest, type Situation, type Step, type TaskSummary } from "@/lib/wails";
+import {
+  api,
+  type Divergence,
+  type PullRequest,
+  type Situation,
+  type Step,
+  type TaskSummary,
+} from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import {
+  makeDivergence,
   makePullRequest,
   makeReview,
   makeRunningTask,
@@ -13,6 +21,7 @@ import {
   makeStep,
   makeStepReviewer,
   makeTask,
+  makeTaskConversation,
 } from "@/test/wails-mock";
 
 function request(overrides: Partial<TaskSummary>, prDrafts: object = {}) {
@@ -368,6 +377,76 @@ describe("TaskRequest", () => {
     await user.click(screen.getByRole("button", { name: "Approve draft" }));
 
     expect(api.openPR).toHaveBeenCalledWith("task-1", DRAFT.title, DRAFT.body);
+  });
+
+  describe("a divergence", () => {
+    const prs = [
+      { number: 12, url: "", base: "main", head: "add-login" },
+      { number: 14, url: "", base: "main", head: "add-login" },
+    ];
+    const divergent = (divergence: Divergence) => ({
+      stage: "pr",
+      pr: makePullRequest({ status: "diverged", sessionStage: "pr", draft: DRAFT, prNumber: 0 }),
+      divergence,
+      situations: [onPR("divergence")],
+    });
+
+    it("checks again and asks the agent again", async () => {
+      const { user } = request(
+        divergent(makeDivergence({ stage: "pr", kind: "draft_missing", path: "draft.md" })),
+      );
+
+      await user.click(screen.getByRole("button", { name: "Check again" }));
+      await user.click(screen.getByRole("button", { name: "Ask the agent again" }));
+
+      expect(api.checkAgainTask).toHaveBeenCalledWith("task-1");
+      expect(api.askAgainTask).toHaveBeenCalledWith("task-1");
+    });
+
+    it("adopts the pull request the button names", async () => {
+      const { user } = request(
+        divergent(makeDivergence({ stage: "pr", kind: "prs_ambiguous", prs })),
+      );
+
+      await user.click(screen.getByRole("button", { name: "Adopt #14" }));
+
+      expect(api.adoptTask).toHaveBeenCalledWith("task-1", "14");
+    });
+
+    it("continues without changes with an empty choice", async () => {
+      const { user } = request({
+        ...divergent(makeDivergence({ stage: "pr_fix", kind: "no_changes", approved: 1, pass: 1 })),
+        situations: [
+          makeSituation({ kind: "divergence", place: { kind: "pr_fix", stage: "", step: 0 } }),
+        ],
+        conversations: [makeTaskConversation({ stage: "pr_review" })],
+      });
+
+      await user.click(screen.getByRole("button", { name: "Continue without changes" }));
+
+      expect(api.adoptTask).toHaveBeenCalledWith("task-1", "");
+    });
+
+    it("opens the pull request of the draft GitHub doesn't have", async () => {
+      const { user } = request(divergent(makeDivergence({ stage: "pr", kind: "pr_not_opened" })));
+
+      await user.click(screen.getByRole("button", { name: "Open the pull request" }));
+
+      expect(api.openPR).toHaveBeenCalledWith("task-1", DRAFT.title, DRAFT.body);
+    });
+
+    it("says it failed in the notice when the action fails", async () => {
+      vi.mocked(api.checkAgainTask).mockRejectedValueOnce(new Error("busy"));
+      const { user } = request(
+        divergent(makeDivergence({ stage: "pr", kind: "draft_missing", path: "draft.md" })),
+      );
+
+      await user.click(screen.getByRole("button", { name: "Check again" }));
+
+      await waitFor(() =>
+        expect(useAppStore.getState().error?.label).toMatch(/^Couldn't check .* again$/),
+      );
+    });
   });
 
   it("shows the question card with Show, the focus on its first question without a choice", async () => {

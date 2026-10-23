@@ -5,6 +5,7 @@ import { api, type ReviewSummary, type Situation } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import {
+  makeDivergence,
   makeReview,
   makeReviewFinding,
   makeReviewPass,
@@ -220,6 +221,52 @@ describe("ReviewRequest", () => {
     expect(await screen.findByRole("dialog", { name: "Review web#31 again" })).toBeInTheDocument();
   });
 
+  it("pushes the commit again after a push that failed", async () => {
+    const { user } = bar({
+      status: "pass_blocked",
+      passBlocked: "The push failed.",
+      pushBlocked: true,
+      situations: [situation("pass_blocked", "", "error")],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(api.retryPushReview).toHaveBeenCalledWith("review-1");
+    expect(screen.queryByRole("button", { name: /^Review again/ })).not.toBeInTheDocument();
+  });
+
+  it("checks again, asks the reviewer again and adopts the file the button names", async () => {
+    const { user } = bar({
+      status: "diverged",
+      divergence: makeDivergence({
+        stage: "review",
+        kind: "reports_ambiguous",
+        pass: 1,
+        path: "review-pass-1.md",
+        candidates: ["a/one.md", "b/two.md"],
+      }),
+      situations: [situation("divergence", "", "error")],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Adopt two.md" }));
+    await user.click(screen.getByRole("button", { name: "Check again" }));
+
+    expect(api.adoptReview).toHaveBeenCalledWith("review-1", "b/two.md");
+    expect(api.checkAgainReview).toHaveBeenCalledWith("review-1");
+  });
+
+  it("asks the reviewer again for the report that is not there", async () => {
+    const { user } = bar({
+      status: "diverged",
+      divergence: makeDivergence({ stage: "review", kind: "report_missing", pass: 1 }),
+      situations: [situation("divergence", "", "error")],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Ask the reviewer again" }));
+
+    expect(api.askAgainReview).toHaveBeenCalledWith("review-1");
+  });
+
   it("restarts the reviewer after its session stopped", async () => {
     const { user } = bar({
       lastError: "It crashed.",
@@ -232,14 +279,10 @@ describe("ReviewRequest", () => {
     expect(api.retry).toHaveBeenCalledWith("review-1", "review");
   });
 
-  it("says the wait for the report, with why it could not be read", () => {
-    bar({
-      unreadableReport: "The report has no findings section.",
-      situations: [situation("reply")],
-    });
+  it("says the wait for the report", () => {
+    bar({ situations: [situation("reply")] });
 
     expect(request()).toHaveTextContent("Waiting for the report");
-    expect(request()).toHaveTextContent("The report has no findings section.");
   });
 
   it("is quiet while the review is paused", () => {

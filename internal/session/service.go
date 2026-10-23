@@ -1,6 +1,7 @@
 package session
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/guilhermt/myspec/internal/claude"
+	"github.com/guilhermt/myspec/internal/contract"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/models"
@@ -101,8 +104,11 @@ type TaskInfo struct {
 	CardReference string
 
 	// The review of a pull request that comes from no task.
-	ContextPath  string // the single document the prompts read in place of the PRD and the tech spec
-	External     bool   // the pull request comes from no task of the product
+	ContextPath string // the single document the prompts read in place of the PRD and the tech spec
+	External    bool   // the pull request comes from no task of the product
+	// HeadBranch is the branch of the pull request of a review, which stands
+	// for Branch when the item has none.
+	HeadBranch   string
 	Publish      bool   // external only: the findings are published on GitHub, not applied
 	Instructions string // the fixed review instructions of the repository
 	// PassInstructions is what the user wrote for the pass that opens the
@@ -164,6 +170,11 @@ type Deps struct {
 	ReturnTimeout time.Duration            // defaults to DefaultReturnTimeout
 	OnState       func(k Key)              // a Summary changed; may be nil
 	OnTranscript  func(ev TranscriptEvent) // the conversation changed; may be nil
+	// HooksDir is the folder of the state files the hook of the contract reads;
+	// "" turns the contract off. HookCommand is the line of that hook, from
+	// contract.HookCommand.
+	HooksDir    string
+	HookCommand string
 }
 
 // The errors the service reports to its callers.
@@ -175,6 +186,9 @@ var (
 	ErrPaused         = errors.New("session: paused")
 	ErrNoRequest      = errors.New("session: no pending request with that id")
 	ErrNotPending     = errors.New("session: entry is not pending")
+	// ErrDeviationSession means a deviation, an action outside the contract of
+	// the session, was allowed for the rest of the session.
+	ErrDeviationSession = errors.New("session: a deviation is allowed one action at a time")
 
 	// ErrProductMessage marks a message of the product, the prompt that opens a session or one
 	// the workflow sends, which is never the user's to remove.
@@ -232,6 +246,8 @@ type Service struct {
 	returnTimeout time.Duration
 	onState       func(k Key)
 	onTranscript  func(ev TranscriptEvent)
+	hooksDir      string
+	hookCommand   string
 
 	mu            sync.Mutex
 	runs          map[Key]*run
@@ -255,6 +271,8 @@ func New(deps Deps) *Service {
 		returnTimeout: deps.ReturnTimeout,
 		onState:       deps.OnState,
 		onTranscript:  deps.OnTranscript,
+		hooksDir:      deps.HooksDir,
+		hookCommand:   deps.HookCommand,
 		runs:          map[Key]*run{},
 		conversations: map[string][]Conversation{},
 	}
@@ -278,6 +296,12 @@ func New(deps Deps) *Service {
 	}
 	if s.returnTimeout <= 0 {
 		s.returnTimeout = DefaultReturnTimeout
+	}
+	if s.hooksDir != "" {
+		// A state left by a previous run belongs to a process that is gone.
+		if err := contract.ResetStates(s.hooksDir); err != nil {
+			s.log.Warn("contract states reset failed", "error", err)
+		}
 	}
 	return s
 }
@@ -846,6 +870,15 @@ const (
 // word.
 const defaultDenyMessage = "The user denied this action."
 
+// deviationReason is what the agent reads when a deviation is denied without a
+// word: why the action is outside what its stage does.
+func deviationReason(p *PermissionEntry) string {
+	if p.Deviation {
+		return p.DecisionReason
+	}
+	return ""
+}
+
 // AnswerPermission answers the pending permission request of a task.
 func (s *Service) AnswerPermission(ctx context.Context, k Key, requestID string, d Decision, message string) error {
 	n := &notes{}
@@ -858,6 +891,9 @@ func (s *Service) AnswerPermission(ctx context.Context, k Key, requestID string,
 		return err
 	}
 	p := e.Permission
+	if p.Deviation && d == DecisionAllowSession {
+		return fmt.Errorf("answer permission %s: %w", requestID, ErrDeviationSession)
+	}
 
 	var resp claude.PermissionResponse
 	status := PermissionAllowed
@@ -874,7 +910,7 @@ func (s *Service) AnswerPermission(ctx context.Context, k Key, requestID string,
 	case DecisionDeny:
 		status = PermissionDenied
 		if message == "" {
-			message = defaultDenyMessage
+			message = cmp.Or(deviationReason(p), defaultDenyMessage)
 		}
 		resp = claude.PermissionResponse{Behavior: "deny", Message: message}
 	default:
@@ -1219,6 +1255,45 @@ func (s *Service) MarkDraftApproved(ctx context.Context, k Key, title string) {
 // MarkChangesApproved records that the user approved the changed files.
 func (s *Service) MarkChangesApproved(ctx context.Context, k Key, files int) {
 	s.mark(ctx, k, &MarkerEntry{Type: MarkerChangesApproved, Files: files})
+}
+
+// MarkDivergence records that the app found an item otherwise than it expected
+// after its one instruction. The caller only asks for it when the divergence is
+// new.
+func (s *Service) MarkDivergence(ctx context.Context, k Key, d divergence.Divergence) {
+	marker := &MarkerEntry{Type: MarkerDivergence, Divergence: &divergence.Mark{Kind: d.Kind, Facts: d.Facts}}
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if r, ok := s.runs[k]; ok {
+		s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
+		return
+	}
+	s.markClosedLocked(ctx, k, marker)
+}
+
+// markClosedLocked writes a marker at the end of the stored conversation of a
+// session that is not open, without opening it; a session that was never
+// started has no conversation and gets nothing. The caller holds the mutex.
+func (s *Service) markClosedLocked(ctx context.Context, k Key, marker *MarkerEntry) {
+	rec, err := s.sessions.Get(ctx, k.TaskID, k.Stage)
+	if err != nil {
+		if !errors.Is(err, ErrNotFound) {
+			s.log.Error("read session failed", "task", k.TaskID, "stage", k.Stage, "error", err)
+		}
+		return
+	}
+	maxSeq, err := s.entries.MaxSeq(ctx, rec.ID)
+	if err != nil {
+		s.log.Error("read entries failed", "task", k.TaskID, "stage", k.Stage, "error", err)
+		return
+	}
+	e := Entry{ID: s.newID(), Seq: maxSeq + 1, Kind: KindMarker, Marker: marker, CreatedAt: s.now().UTC()}
+	if err = s.entries.Insert(ctx, rec.ID, e); err != nil {
+		s.log.Error("insert entry failed", "task", k.TaskID, "entry", e.ID, "error", err)
+	}
 }
 
 // MarkPlanInvalid records the problems of a plan that is not valid, unless
@@ -1616,6 +1691,7 @@ func (s *Service) Close(_ context.Context, k Key) error {
 	defer s.mu.Unlock()
 	r.stopTimers()
 	delete(s.runs, k)
+	s.removeContract(r)
 	return nil
 }
 

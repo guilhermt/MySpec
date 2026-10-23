@@ -415,6 +415,7 @@ type fixture struct {
 	sessions *memSessions
 	entries  *memEntries
 	launcher *fakeLauncher
+	hooksDir string // the folder of the contract states; "" leaves the contract off
 
 	mu      sync.Mutex
 	now     time.Time
@@ -466,12 +467,29 @@ func newFixtureLimits(t *testing.T, launcher *fakeLauncher, idle time.Duration, 
 	return f
 }
 
+// newContractFixture builds a Service that writes the contract states of its
+// sessions in a folder of the test.
+func newContractFixture(t *testing.T, scenario string) *fixture {
+	t.Helper()
+
+	entries := &memEntries{}
+	f := &fixture{
+		sessions: newMemSessions(entries),
+		entries:  entries,
+		launcher: &fakeLauncher{scenario: scenario},
+		hooksDir: t.TempDir(),
+		now:      base,
+	}
+	f.build(t, 0, limits{})
+	return f
+}
+
 // restart builds a new Service over the records of this one, as a new run of
 // the app finds them.
 func (f *fixture) restart(t *testing.T) *fixture {
 	t.Helper()
 
-	next := &fixture{sessions: f.sessions, entries: f.entries, launcher: f.launcher, now: f.clock()}
+	next := &fixture{sessions: f.sessions, entries: f.entries, launcher: f.launcher, hooksDir: f.hooksDir, now: f.clock()}
 	next.build(t, 0, limits{})
 	return next
 }
@@ -482,7 +500,13 @@ func (f *fixture) build(t *testing.T, idle time.Duration, l limits) {
 
 	var ids int
 	var idMu sync.Mutex
+	var hookCommand string
+	if f.hooksDir != "" {
+		hookCommand = "'/opt/myspec' --claude-hook '" + f.hooksDir + "'"
+	}
 	f.service = session.New(session.Deps{
+		HooksDir:     f.hooksDir,
+		HookCommand:  hookCommand,
 		Sessions:     f.sessions,
 		Entries:      f.entries,
 		Launcher:     f.launcher,

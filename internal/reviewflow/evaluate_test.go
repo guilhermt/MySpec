@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
 	"github.com/guilhermt/myspec/internal/reviewflow"
@@ -106,7 +107,7 @@ func TestAReportGitCannotSayTheCommitOfIsRecordedAllTheSame(t *testing.T) {
 	}
 }
 
-func TestAReportTheAppCannotReadLeavesTheReviewWaitingWithTheReason(t *testing.T) {
+func TestAReportTheAppCannotReadIsADivergenceWithTheReason(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -114,21 +115,26 @@ func TestAReportTheAppCannotReadLeavesTheReviewWaitingWithTheReason(t *testing.T
 	f.writeReport(t, id, 1, reportFile("perfect", "Nothing to change."))
 
 	f.evaluated(t, id, func(s reviewflow.State) bool {
-		return s.UnreadableReport != ""
-	}, "the reason the report could not be read")
+		return s.Divergence != nil
+	}, "the divergence of the unreadable report")
 
 	state := f.state(t, id)
-	if state.Status != reviewflow.StatusAwaitingReply {
-		t.Errorf("status = %q, want %q", state.Status, reviewflow.StatusAwaitingReply)
+	want := divergence.Facts{
+		Pass: 1, Path: "review-1.md",
+		Reason: "The report can't be read: status \"perfect\" is neither clean nor changes.",
 	}
-	if want := "The report can't be read: status \"perfect\" is neither clean nor changes."; state.UnreadableReport != want {
-		t.Errorf("unreadable report = %q, want %q", state.UnreadableReport, want)
+	if state.Status != reviewflow.StatusDiverged || state.Divergence.Kind != divergence.KindReportUnreadable ||
+		state.Divergence.Stage != session.ReviewStage {
+		t.Errorf("status, divergence = %q, %+v, want diverged by report_unreadable in review", state.Status, state.Divergence)
+	}
+	if diff := cmp.Diff(want, state.Divergence.Facts); diff != "" {
+		t.Errorf("facts (-want +got):\n%s", diff)
 	}
 	if f.pass(t, id, 1).Recorded {
 		t.Error("a report the app cannot read was recorded")
 	}
-	if diff := cmp.Diff([]string{id, id, id}, f.changed()); diff != "" {
-		t.Errorf("announced changes (-want +got):\n%s", diff)
+	if got := f.sessions.markersOf(session.MarkerDivergence); len(got) != 1 {
+		t.Errorf("divergence markers = %+v, want one", got)
 	}
 }
 
@@ -140,13 +146,16 @@ func TestAReportTheAppCanReadSettlesAReportItCouldNot(t *testing.T) {
 	f.writeReport(t, id, 1, reportFile("changes", "Something is wrong, and I forgot the findings."))
 
 	f.evaluated(t, id, func(s reviewflow.State) bool {
-		return s.UnreadableReport != ""
+		return s.Divergence != nil
 	}, "the reason the report could not be read")
 
 	f.writeReport(t, id, 1, reportFile("changes", twoFindings))
 	f.evaluated(t, id, func(s reviewflow.State) bool {
 		return s.Status == reviewflow.StatusAwaitingDecision
 	}, "the report of the first pass to be recorded")
+	if d := f.state(t, id).Divergence; d != nil {
+		t.Errorf("divergence = %+v, want it ended by the readable report", d)
+	}
 
 	if got := f.state(t, id).UnreadableReport; got != "" {
 		t.Errorf("unreadable report = %q, want none", got)
@@ -263,8 +272,9 @@ func TestNothingIsRecordedWhileThereIsNoReportToRead(t *testing.T) {
 	if f.pass(t, id, 1).Recorded {
 		t.Error("a pass without a report was recorded")
 	}
-	if got := f.state(t, id); got.Status != reviewflow.StatusAwaitingReply || got.UnreadableReport != "" {
-		t.Errorf("state = %+v, want the review waiting for a report", got)
+	got := f.state(t, id)
+	if got.Status != reviewflow.StatusDiverged || got.Divergence.Kind != divergence.KindReportMissing {
+		t.Errorf("status, divergence = %q, %+v, want diverged by report_missing", got.Status, got.Divergence)
 	}
 }
 

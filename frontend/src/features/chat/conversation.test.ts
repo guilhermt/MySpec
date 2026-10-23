@@ -55,6 +55,7 @@ const MARKER: MarkerEntry = {
   commits: [],
   wakes: [],
   background: [],
+  divergence: null,
   count: 0,
   board: "",
   epics: [],

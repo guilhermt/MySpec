@@ -239,6 +239,70 @@ func (s *ReviewService) RefreshPR(id string) error {
 	return nil
 }
 
+// CheckAgain reads the real state of a review again after the user sorted out what the app
+// found otherwise than it expected.
+func (s *ReviewService) CheckAgain(id string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.CheckAgain(ctx, id); err != nil {
+		return s.fail("CheckAgain", err)
+	}
+	return nil
+}
+
+// AskAgain sends the agent the instruction the divergence of a review is about once
+// more.
+func (s *ReviewService) AskAgain(id string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.AskAgain(ctx, id); err != nil {
+		return s.fail("AskAgain", err)
+	}
+	return nil
+}
+
+// Adopt accepts what the app found in place of what it expected: choice is the
+// path of a candidate report, "" when the divergence has one way out.
+func (s *ReviewService) Adopt(id string, choice string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.Adopt(ctx, id, choice); err != nil {
+		return s.fail("Adopt", err)
+	}
+	return nil
+}
+
+// RetryPush pushes the commit of the fixes of a review again after a push that
+// failed.
+func (s *ReviewService) RetryPush(id string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.flow.RetryPush(ctx, id); err != nil {
+		return s.fail("RetryPush", err)
+	}
+	return nil
+}
+
 // ApplyReview asks the agent to fix the findings the user approved, in the
 // worktree of the review.
 func (s *ReviewService) ApplyReview(id string) error {
@@ -255,8 +319,8 @@ func (s *ReviewService) ApplyReview(id string) error {
 	return nil
 }
 
-// ApproveReview approves the changes the agent made and asks it to commit them
-// and push them to the pull request.
+// ApproveReview approves the changes the agent made and asks it to commit them;
+// the app pushes the commit to the pull request.
 func (s *ReviewService) ApproveReview(id string) error {
 	s, err := s.late.resolve(s)
 	if err != nil {

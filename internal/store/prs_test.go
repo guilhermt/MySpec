@@ -52,7 +52,7 @@ func TestPRRunUpsertCreatesAndUpdates(t *testing.T) {
 	run.Status = task.PRReviewing
 	run.PR = task.PRDetails{
 		Number: 12, URL: "https://github.com/acme/api/pull/12",
-		State: task.PRStateOpen, CheckedAt: fixedTime.Add(time.Minute),
+		Head: "fix-login", State: task.PRStateOpen, CheckedAt: fixedTime.Add(time.Minute),
 	}
 	run.ReviewedCommit = "abc1234"
 	run.ReportedPass = 2

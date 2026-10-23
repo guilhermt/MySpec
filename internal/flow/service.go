@@ -18,6 +18,7 @@ func New(deps Deps) *Service {
 		repositories: deps.Repositories,
 		review:       deps.Review,
 		gh:           deps.GH,
+		divergences:  deps.Divergences,
 		log:          deps.Log,
 		onChange:     deps.OnChange,
 

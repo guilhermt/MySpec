@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/repository"
@@ -58,6 +60,8 @@ type memSessions struct {
 	transcripts   map[session.Key]session.Transcript
 	transcriptErr error // returned by Transcript
 	markers       []session.MarkerEntry
+	apps          []session.AppMessage // what the app sent to the conversations, in order
+	sendErr       error                // returned by SendFromApp
 }
 
 func newSessions() *memSessions {
@@ -113,6 +117,46 @@ func (m *memSessions) MarkDiscussion(_ context.Context, _ session.Key, marker *s
 	defer m.mu.Unlock()
 
 	m.markers = append(m.markers, *marker)
+}
+
+// SendFromApp records the message and leaves the conversation working on it,
+// as a turn the app opens does.
+func (m *memSessions) SendFromApp(_ context.Context, k session.Key, msg session.AppMessage) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.sendErr != nil {
+		return m.sendErr
+	}
+	m.apps = append(m.apps, msg)
+	m.summaries[k] = session.Summary{TaskID: k.TaskID, Stage: k.Stage, Status: session.StatusWorking, TurnRunning: true}
+	return nil
+}
+
+// MarkDivergence records the marker of a divergence.
+func (m *memSessions) MarkDivergence(_ context.Context, _ session.Key, d divergence.Divergence) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.markers = append(m.markers, session.MarkerEntry{
+		Type: session.MarkerDivergence, Divergence: &divergence.Mark{Kind: d.Kind, Facts: d.Facts},
+	})
+}
+
+// sentApps is what the app sent to the conversations, in order.
+func (m *memSessions) sentApps() []session.AppMessage {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Clone(m.apps)
+}
+
+// failSend makes every message of the app fail with err.
+func (m *memSessions) failSend(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.sendErr = err
 }
 
 // markersOf is the markers of a type the flow recorded, in order.
@@ -653,11 +697,42 @@ func (m *memGH) IssueBody(_ context.Context, issueID string) (string, error) {
 	return body, nil
 }
 
+// memDivergenceStore is an in-memory divergence.Store, under the real
+// divergence service the flow runs against.
+type memDivergenceStore struct {
+	mu   sync.Mutex
+	rows map[string]divergence.Row
+}
+
+func (m *memDivergenceStore) Divergences(context.Context) ([]divergence.Row, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Collect(maps.Values(m.rows)), nil
+}
+
+func (m *memDivergenceStore) PutDivergence(_ context.Context, row divergence.Row) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.rows[row.ItemID] = row
+	return nil
+}
+
+func (m *memDivergenceStore) DeleteDivergence(_ context.Context, itemID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	delete(m.rows, itemID)
+	return nil
+}
+
 // fixture is a flow over in-memory dependencies, with the discussions of a
 // real service on a store in memory.
 type fixture struct {
 	t            *testing.T
 	flow         *discussionflow.Service
+	divergences  *divergence.Service
 	discussions  *discussion.Service
 	store        *memStore
 	sessions     *memSessions
@@ -686,8 +761,10 @@ func newFixture(t *testing.T) *fixture {
 		Store: f.store, DataDir: f.dataDir, Now: f.now, NewID: f.newID,
 	})
 	f.repositories = repositoryService(t, f.dataDir)
+	f.divergences = divergence.New(divergence.Deps{Store: &memDivergenceStore{rows: map[string]divergence.Row{}}})
 	f.flow = discussionflow.New(discussionflow.Deps{
 		Discussions:  f.discussions,
+		Divergences:  f.divergences,
 		Sessions:     f.sessions,
 		Boards:       f.boards,
 		Repositories: f.repositories,
@@ -1120,4 +1197,19 @@ func (m *memStore) UpdateDraft(_ context.Context, draft discussion.Draft) error 
 // indexOf is the position of a discussion, -1 when it is not there.
 func (m *memStore) indexOf(id string) int {
 	return slices.IndexFunc(m.discussions, func(d discussion.Discussion) bool { return d.ID == id })
+}
+
+// unreadable leaves the drafts artifact unreadable through the correction the
+// agent was asked for, so that the discussion ends up in a divergence.
+func (f *fixture) unreadable(id string) {
+	f.t.Helper()
+
+	f.write(id, discussion.DraftsFile, strings.Replace(draftsArtifact, "- Module: Billing", "- Module: Payroll", 1))
+	f.sessions.idle(id)
+	f.flow.Check(id)
+	f.waitFor(id, func(s discussionflow.State) bool { return s.Discussion.DraftsCorrected })
+
+	f.sessions.idle(id)
+	f.flow.Check(id)
+	f.waitFor(id, func(s discussionflow.State) bool { return s.Divergence != nil })
 }

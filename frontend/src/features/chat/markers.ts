@@ -15,6 +15,7 @@ import { publishedGoes } from "@/features/reviews/publish";
 import { findingViews } from "@/features/reviews/review-conversation";
 import { verdictLabel } from "@/features/reviews/review-status";
 import { disabledNote } from "@/features/task/pr-findings";
+import { divergenceText } from "@/lib/divergences";
 import { decidedCounts, findingViewsOf } from "@/lib/findings";
 import { modelLabel } from "@/lib/models";
 import { baseName, type ChecksReading, checksSummary, prBaseName } from "@/lib/pull-requests";
@@ -354,6 +355,10 @@ function appComplement(user: UserEntry): string {
       return "Commit and push · every change, after a clean review";
     case "commit_push":
       return "Commit and push · the staged files";
+    case "drafts_correction":
+      return "drafts.md can't be read · rewrite it in the format MySpec reads";
+    case "again":
+      return "the report or the draft that wasn't there, asked once more";
     case "correction":
       return `The plan isn't valid yet · ${counted(user.appCount, "problem")} · correction ${user.appRound} of ${user.appRounds}`;
     case "open":
@@ -692,6 +697,22 @@ function backgroundLine(
   });
 }
 
+// divergenceLine is what the app expected after its one instruction and did not find.
+function divergenceLine(marker: MarkerEntry): MarkerView {
+  const label = "Not as expected";
+  if (marker.divergence === null) {
+    return { ...line("problem", label), tone: "error" };
+  }
+  const { expected, found } = divergenceText(marker.divergence);
+  return {
+    ...line("problem", label, found, {
+      kind: "list",
+      items: [`Expected ${expected}.`, `Found ${found}.`],
+    }),
+    tone: "error",
+  };
+}
+
 function planInvalidLine(marker: MarkerEntry): MarkerView {
   const problems = marker.problems ?? [];
   return problems.length === 0
@@ -786,6 +807,8 @@ export function markerOf(
       return line("check", "You approved the changes", `${counted(marker.files, "file")} staged`);
     case "plan_invalid":
       return planInvalidLine(marker);
+    case "divergence":
+      return divergenceLine(marker);
     case "interrupted":
       return line(
         "ban",

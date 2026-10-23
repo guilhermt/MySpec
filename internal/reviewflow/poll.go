@@ -248,6 +248,7 @@ func (s *Service) end(ctx context.Context, stored prreview.Review, detail pulls.
 	if err := s.worktrees.Remove(ctx, stored.ID); err != nil {
 		s.log.Warn("remove review worktree failed", "review", stored.ID, "error", err)
 	}
+	s.clearDivergence(ctx, stored.ID)
 	if _, err := s.reviews.Archive(ctx, stored.ID, prreview.End{
 		State: state, MergedBy: detail.MergedBy, MergedAt: detail.MergedAt, ClosedAt: detail.ClosedAt,
 	}); err != nil {
@@ -301,6 +302,10 @@ func (s *Service) Sync(ctx context.Context) {
 		}
 	}
 	for _, stored := range active {
+		if stored.Phase == prreview.PhasePushing {
+			// The app closed with a commit still to push.
+			s.spawnPush(stored.ID)
+		}
 		s.Check(stored.ID)
 	}
 	s.Poll()

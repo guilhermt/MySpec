@@ -1,7 +1,9 @@
 package task
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -10,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/guilhermt/myspec/internal/frontmatter"
+	"github.com/guilhermt/myspec/internal/prreport"
 )
 
 // StepReviewsDirName is the folder of the reports of the agent review of the
@@ -99,18 +102,91 @@ func readStepReport(path string, number, pass int) (ReviewReport, bool) {
 	if err != nil {
 		return ReviewReport{}, false
 	}
+	report, rule := parseStepReport(string(content), path, number, pass)
+	return report, rule == ""
+}
 
-	fields, body := frontmatter.Split(string(content))
-	status := strings.TrimSpace(fields["status"])
+// parseStepReport reads a report of a step from its text. rule is empty when
+// the report can be read, and else the rule it breaks, in the shape of
+// prreport.Reason.
+func parseStepReport(content, path string, number, pass int) (report ReviewReport, rule string) {
+	fields, body := frontmatter.Split(content)
+	status := normalizeStatus(fields["status"])
 	if status != cleanStatus && status != changesStatus {
-		return ReviewReport{}, false
+		return ReviewReport{}, fmt.Sprintf("status %q is neither %s nor %s", fields["status"], cleanStatus, changesStatus)
 	}
-	if !headerAgrees(fields["pass"], pass) || !headerAgrees(fields["step"], number) {
-		return ReviewReport{}, false
+	if !headerAgrees(fields["pass"], pass) {
+		return ReviewReport{}, fmt.Sprintf("it declares pass %q, and it is pass %d", fields["pass"], pass)
+	}
+	if !headerAgrees(fields["step"], number) {
+		return ReviewReport{}, fmt.Sprintf("it declares step %q, and it is step %d", fields["step"], number)
 	}
 	return ReviewReport{
 		Pass: pass, File: filepath.Base(path), Clean: status == cleanStatus, Findings: countFindings(body),
-	}, true
+	}, ""
+}
+
+// normalizeStatus reads a verdict written in any case, bold or not.
+func normalizeStatus(value string) string {
+	return strings.ToLower(strings.TrimSpace(strings.Trim(value, "*")))
+}
+
+// StepResolution is how the report of a pass of the agent review of a step was
+// found: the Resolution of prreport, with the report when it was found, the
+// reason when it can't be read and the candidates when more than one file may
+// be it, relative to the artifacts folder of the task.
+type StepResolution struct {
+	Resolution prreport.Resolution
+	Report     ReviewReport
+	Reason     string
+	Candidates []string
+}
+
+// ResolveStepReport finds the report of one pass of the agent review of a
+// step: the file at its agreed path and, when it is not there, the one other
+// Markdown file of the artifacts folder that declares the step and the pass
+// and has a verdict, which it copies to the agreed path first.
+func ResolveStepReport(t Task, number, pass int) (StepResolution, error) {
+	path := t.StepReportPath(number, pass)
+	content, err := os.ReadFile(path)
+	switch {
+	case err == nil:
+		report, rule := parseStepReport(string(content), path, number, pass)
+		if rule != "" {
+			return StepResolution{Resolution: prreport.ResolutionUnreadable, Reason: "The report can't be read: " + rule + "."}, nil
+		}
+		return StepResolution{Resolution: prreport.ResolutionFound, Report: report}, nil
+	case !errors.Is(err, fs.ErrNotExist):
+		return StepResolution{}, fmt.Errorf("read report %s: %w", path, err)
+	}
+
+	candidates, err := prreport.FindStepCandidates(t.ArtifactsDir, func(fields map[string]string, _ string) bool {
+		if !prreport.Declares(fields["step"], number) || !prreport.Declares(fields["pass"], pass) {
+			return false
+		}
+		status := normalizeStatus(fields["status"])
+		return status == cleanStatus || status == changesStatus
+	})
+	if err != nil {
+		return StepResolution{}, err
+	}
+
+	switch len(candidates) {
+	case 0:
+		return StepResolution{Resolution: prreport.ResolutionMissing}, nil
+	case 1:
+		name := StepReviewsDirName + "/" + StepReportFile(number, pass)
+		if err = prreport.AdoptReport(t.ArtifactsDir, candidates[0], name); err != nil {
+			return StepResolution{}, fmt.Errorf("adopt step report: %w", err)
+		}
+		report, ok := readStepReport(path, number, pass)
+		if !ok {
+			return StepResolution{}, fmt.Errorf("read report %s: it can't be read after it was adopted", path)
+		}
+		return StepResolution{Resolution: prreport.ResolutionFound, Report: report}, nil
+	default:
+		return StepResolution{Resolution: prreport.ResolutionAmbiguous, Candidates: candidates}, nil
+	}
 }
 
 // sectionNames are the sections of a report in the format the step_review

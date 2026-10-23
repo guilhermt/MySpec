@@ -1554,7 +1554,7 @@ function momentOf(name: ScreenScene, flags: DiscussionFlags, now: string): Momen
       };
     case "unreadable":
       return {
-        status: "awaiting_drafts",
+        status: "discussing",
         drafts: [],
         situation: { kind: "reply", group: "waiting", since: "14:27" },
         draftsRevision: 0,

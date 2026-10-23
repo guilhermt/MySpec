@@ -20,6 +20,7 @@ import { spoken } from "@/test/live";
 import { type RenderWithStoreResult, renderWithStore, type StoreOptions } from "@/test/render";
 import {
   makeBoard,
+  makeDivergence,
   makeEntry,
   makePullRequestRow,
   makePullsFailure,
@@ -187,6 +188,17 @@ const TROUBLE = {
   status: "trouble",
   trouble: { failedChecks: ["build"], conflict: false },
   situations: [situation("pr_trouble", "checks", "error")],
+};
+
+const DIVERGED_REPORT = {
+  status: "diverged",
+  divergence: makeDivergence({
+    stage: "review",
+    kind: "report_missing",
+    pass: 1,
+    path: "review-pass-1.md",
+  }),
+  situations: [situation("divergence", "", "error")],
 };
 
 const BLOCKED = {
@@ -955,27 +967,6 @@ const ROWS: Row[] = [
   },
   {
     origin: "ReviewBar",
-    control: "unreadableReport",
-    state: "a report that can't be read",
-    draw: review({
-      status: "awaiting_reply",
-      passes: [makeReviewPass({ recorded: false, findings: [] })],
-      unreadableReport: "The report has no findings section.",
-      situations: [situation("reply")],
-    }),
-    where: "bar",
-    text: /Waiting for the report.*The report has no findings section\./,
-  },
-  {
-    origin: "ReviewBar",
-    control: "commitFailed",
-    state: "an approval without a commit",
-    draw: review({ ...APPROVE, commitFailed: true }),
-    where: "bar",
-    text: /Approve changes.*the last approval didn't produce a commit/,
-  },
-  {
-    origin: "ReviewBar",
     control: "Publish review",
     state: "findings to decide",
     draw: review(DECIDING),
@@ -1258,6 +1249,55 @@ const ROWS: Row[] = [
     where: "reports",
     text: /Published · Request changes/,
     name: /^Open on GitHub$/,
+  },
+
+  // The divergences and the push of the app.
+  {
+    origin: "ReviewBar",
+    control: "Try again",
+    state: "a push that failed",
+    draw: review({
+      status: "pass_blocked",
+      passBlocked: "The push failed.",
+      pushBlocked: true,
+      situations: [situation("pass_blocked", "", "error")],
+    }),
+    where: "bar",
+    name: /^Try again$/,
+  },
+  {
+    origin: "ReviewBar",
+    control: "Ask the reviewer again",
+    state: "a report that is not there",
+    draw: review(DIVERGED_REPORT),
+    where: "bar",
+    name: /^Ask the reviewer again$/,
+  },
+  {
+    origin: "ReviewBar",
+    control: "Check again",
+    state: "a report that is not there",
+    draw: review(DIVERGED_REPORT),
+    where: "bar",
+    name: /^Check again$/,
+  },
+  {
+    origin: "ReviewBar",
+    control: "Adopt",
+    state: "files that could be the report",
+    draw: review({
+      status: "diverged",
+      divergence: makeDivergence({
+        stage: "review",
+        kind: "reports_ambiguous",
+        pass: 1,
+        path: "review-pass-1.md",
+        candidates: ["a/one.md", "b/two.md"],
+      }),
+      situations: [situation("divergence", "", "error")],
+    }),
+    where: "bar",
+    name: /^Adopt two\.md$/,
   },
 
   // The strip of the apply mode.

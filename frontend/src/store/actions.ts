@@ -776,7 +776,7 @@ export async function reviewPRMyself(taskId: string): Promise<void> {
   );
 }
 
-/** openPR sends the draft the user approved to the agent, which opens the PR. */
+/** openPR sends the draft the user approved to the app, which pushes the branch and opens the PR. */
 export async function openPR(taskId: string, title: string, body: string): Promise<void> {
   await run(fail(`Couldn't open the pull request of ${theItem(taskId)}`, GH), async () => {
     await api.openPR(taskId, title, body);
@@ -795,6 +795,59 @@ export async function approvePR(taskId: string): Promise<void> {
 export async function reviewAgain(taskId: string): Promise<void> {
   await run(fail(`Couldn't review the pull request of ${theItem(taskId)} again`, TRY), () =>
     api.reviewAgain(taskId),
+  );
+}
+
+/** checkAgainTask reads again what the task expected after its instruction and found otherwise. */
+export async function checkAgainTask(taskId: string): Promise<void> {
+  await run(fail(`Couldn't check ${theItem(taskId)} again`, TRY), () => api.checkAgainTask(taskId));
+}
+
+/** askAgainTask sends the agent of a diverged task its instruction once more. */
+export async function askAgainTask(taskId: string): Promise<void> {
+  await run(fail(`Couldn't ask the agent again in ${theItem(taskId)}`, TRY), () =>
+    api.askAgainTask(taskId),
+  );
+}
+
+/** adoptTask takes what the app found, the pull request or the report the choice names, as the expected one. */
+export async function adoptTask(taskId: string, choice: string): Promise<void> {
+  await run(fail(`Couldn't adopt it in ${theItem(taskId)}`, TRY), () =>
+    api.adoptTask(taskId, choice),
+  );
+}
+
+/** checkAgainReview reads again what the review expected and found otherwise. */
+export async function checkAgainReview(id: string): Promise<void> {
+  await run(fail(`Couldn't check ${theItem(id)} again`, TRY), () => api.checkAgainReview(id));
+}
+
+/** askAgainReview sends the agent of a diverged review its instruction once more. */
+export async function askAgainReview(id: string): Promise<void> {
+  await run(fail(`Couldn't ask the agent again in ${theItem(id)}`, TRY), () =>
+    api.askAgainReview(id),
+  );
+}
+
+/** adoptReview takes the report or the change the choice names as the expected one. */
+export async function adoptReview(id: string, choice: string): Promise<void> {
+  await run(fail(`Couldn't adopt it in ${theItem(id)}`, TRY), () => api.adoptReview(id, choice));
+}
+
+/** retryPushReview pushes again the commit of a review whose push failed. */
+export async function retryPushReview(id: string): Promise<void> {
+  await run(fail(`Couldn't push the commit of ${theItem(id)}`, TRY), () => api.retryPushReview(id));
+}
+
+/** checkAgainDiscussion reads again what the discussion expected and found otherwise. */
+export async function checkAgainDiscussion(id: string): Promise<void> {
+  await run(fail(`Couldn't check ${theItem(id)} again`, TRY), () => api.checkAgainDiscussion(id));
+}
+
+/** askAgainDiscussion sends the agent of a diverged discussion its instruction once more. */
+export async function askAgainDiscussion(id: string): Promise<void> {
+  await run(fail(`Couldn't ask the agent again in ${theItem(id)}`, TRY), () =>
+    api.askAgainDiscussion(id),
   );
 }
 

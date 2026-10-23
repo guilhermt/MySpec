@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,7 @@ type PR struct {
 	URL    string
 	State  State
 	Base   string // the branch the pull request merges into, as GitHub names it
+	Head   string // the branch the pull request merges from, as GitHub names it
 	Checks PRChecks
 	// MergedBy is the login of who merged the pull request and MergedAt when;
 	// "" and zero before the merge.
@@ -34,7 +36,7 @@ type PR struct {
 }
 
 // prFields are the fields of a pull request the app asks gh for.
-const prFields = "number,url,state,baseRefName,mergeable,statusCheckRollup,mergedBy,mergedAt"
+const prFields = "number,url,state,baseRefName,headRefName,mergeable,statusCheckRollup,mergedBy,mergedAt"
 
 // noPR is what gh says, in lower case, about a branch with no pull request.
 const noPR = "no pull requests found"
@@ -144,10 +146,11 @@ func splitScopes(s string) []string {
 	return scopes
 }
 
-// ViewPR reads the pull request of a branch, ErrNoPR when it has none. dir is
-// the worktree, which is what tells gh the repository to ask about.
-func (r *Runner) ViewPR(ctx context.Context, dir, branch string) (PR, error) {
-	out, err := r.Run(ctx, dir, "pr", "view", branch, "--json", prFields)
+// ViewPR reads a pull request by ref, a branch or its number as text, ErrNoPR
+// when there is none. dir is the worktree, which is what tells gh the
+// repository to ask about.
+func (r *Runner) ViewPR(ctx context.Context, dir, ref string) (PR, error) {
+	out, err := r.Run(ctx, dir, "pr", "view", ref, "--json", prFields)
 	if err != nil {
 		var ghErr *Error
 		// A branch with no pull request is an answer, not a failure: the app
@@ -163,6 +166,7 @@ func (r *Runner) ViewPR(ctx context.Context, dir, branch string) (PR, error) {
 		URL               string      `json:"url"`
 		State             string      `json:"state"`
 		BaseRefName       string      `json:"baseRefName"`
+		HeadRefName       string      `json:"headRefName"`
 		Mergeable         string      `json:"mergeable"`
 		StatusCheckRollup []CheckNode `json:"statusCheckRollup"`
 		MergedBy          struct {
@@ -171,17 +175,87 @@ func (r *Runner) ViewPR(ctx context.Context, dir, branch string) (PR, error) {
 		MergedAt time.Time `json:"mergedAt"`
 	}
 	if err := json.Unmarshal([]byte(out), &body); err != nil {
-		return PR{}, fmt.Errorf("gh pr view %s: %w", branch, err)
+		return PR{}, fmt.Errorf("gh pr view %s: %w", ref, err)
 	}
 	return PR{
 		Number:   body.Number,
 		URL:      body.URL,
 		State:    stateOf(body.State),
 		Base:     body.BaseRefName,
+		Head:     body.HeadRefName,
 		Checks:   ParseChecks(body.StatusCheckRollup, body.Mergeable),
 		MergedBy: body.MergedBy.Login,
 		MergedAt: body.MergedAt,
 	}, nil
+}
+
+// PRHead is a pull request as the search for the one of a task reads it.
+type PRHead struct {
+	Number  int
+	URL     string
+	Base    string // baseRefName
+	Head    string // headRefName
+	HeadOID string // headRefOid
+}
+
+// OpenPRs lists the open pull requests of the repository of dir, the 100 most recent.
+func (r *Runner) OpenPRs(ctx context.Context, dir string) ([]PRHead, error) {
+	out, err := r.Run(
+		ctx, dir, "pr", "list", "--state", "open", "--limit", "100",
+		"--json", "number,url,baseRefName,headRefName,headRefOid",
+	)
+	if err != nil {
+		return nil, authOr(err)
+	}
+
+	var body []struct {
+		Number      int    `json:"number"`
+		URL         string `json:"url"`
+		BaseRefName string `json:"baseRefName"`
+		HeadRefName string `json:"headRefName"`
+		HeadRefOid  string `json:"headRefOid"`
+	}
+	if err := json.Unmarshal([]byte(out), &body); err != nil {
+		return nil, fmt.Errorf("gh pr list: %w", err)
+	}
+	prs := make([]PRHead, 0, len(body))
+	for _, pr := range body {
+		prs = append(prs, PRHead{
+			Number:  pr.Number,
+			URL:     pr.URL,
+			Base:    pr.BaseRefName,
+			Head:    pr.HeadRefName,
+			HeadOID: pr.HeadRefOid,
+		})
+	}
+	return prs, nil
+}
+
+// pullNumber finds the number of a pull request in its URL.
+var pullNumber = regexp.MustCompile(`/pull/(\d+)`)
+
+// CreatePR opens a pull request from head into base with the title and the
+// body, the body on the stdin, and answers with its number and URL.
+func (r *Runner) CreatePR(ctx context.Context, dir, base, head, title, body string) (int, string, error) {
+	out, err := r.RunInput(
+		ctx, dir, body, "pr", "create",
+		"--base", base, "--head", head, "--title", title, "--body-file", "-",
+	)
+	if err != nil {
+		return 0, "", authOr(err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	url := strings.TrimSpace(lines[len(lines)-1])
+	match := pullNumber.FindStringSubmatch(url)
+	if match == nil {
+		return 0, "", fmt.Errorf("gh pr create: no pull request number in %q", url)
+	}
+	number, err := strconv.Atoi(match[1])
+	if err != nil {
+		return 0, "", fmt.Errorf("gh pr create: %w", err)
+	}
+	return number, url, nil
 }
 
 // stateOf normalizes the state gh writes in upper case. A value the app does

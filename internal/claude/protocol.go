@@ -262,6 +262,7 @@ type ControlRequestEvent struct {
 		BlockedPath             string          `json:"blocked_path"`
 		ToolUseID               string          `json:"tool_use_id"`
 		DecisionReason          string          `json:"decision_reason"`
+		DecisionReasonType      string          `json:"decision_reason_type"` // "hook" when a PreToolUse hook asked
 		SuppressAlwaysAllowRule bool            `json:"suppress_always_allow_rule"`
 		DefaultToNo             bool            `json:"default_to_no"`
 		RequiresUserInteraction bool            `json:"requires_user_interaction"`

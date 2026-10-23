@@ -31,6 +31,9 @@ type Config struct {
 	// ExtraDirs are directories outside Dir the session may read, each passed
 	// to the CLI with --add-dir.
 	ExtraDirs []string
+	// Settings is the JSON the CLI loads on top of the settings of the
+	// machine, with --settings; "" passes none.
+	Settings string
 }
 
 // Args are the fixed CLI flags every session gets.
@@ -91,7 +94,7 @@ func Start(ctx context.Context, cfg Config, log *slog.Logger) (*Process, error) 
 	}
 
 	//nolint:gosec // G204: the binary path comes from Locate or an explicit override
-	cmd := exec.Command(cfg.Binary, slices.Concat(Args, sessionArgs(cfg), choiceArgs(cfg), dirArgs(cfg))...)
+	cmd := exec.Command(cfg.Binary, slices.Concat(Args, sessionArgs(cfg), choiceArgs(cfg), dirArgs(cfg), settingsArgs(cfg))...)
 	cmd.Dir = cfg.Dir
 	cmd.Env = cfg.Env
 	// Its own group, so Terminate and Kill also reach the shells the CLI
@@ -380,6 +383,15 @@ func dirArgs(cfg Config) []string {
 		args = append(args, "--add-dir", dir)
 	}
 	return args
+}
+
+// settingsArgs pass the settings of the session, which carry the hook that
+// applies its git and GitHub contract.
+func settingsArgs(cfg Config) []string {
+	if cfg.Settings == "" {
+		return nil
+	}
+	return []string{"--settings", cfg.Settings}
 }
 
 // tailBuffer keeps the last limit bytes written to it, which is all the app

@@ -15,6 +15,7 @@ import (
 	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/machine"
@@ -361,7 +362,6 @@ func fromPullRequest(pr *flow.PullRequest) *PullRequest {
 		CurrentPass:      currentPassNumber(pr.Pass),
 		UnreadableReport: pr.Unreadable,
 		Review:           fromReview(pr.Review),
-		CommitFailed:     pr.CommitFailed,
 
 		PRNumber:     pr.PR.Number,
 		PRURL:        pr.PR.URL,
@@ -723,7 +723,6 @@ func fromSteps(states []flow.StepState) []Step {
 			CommitSHA:     state.CommitSHA,
 			CommitSubject: state.CommitSubject,
 			CommittedAt:   timeOrEmpty(state.CommittedAt),
-			CommitFailed:  state.CommitFailed,
 
 			Model:         string(state.Choice.Model),
 			Effort:        string(state.Choice.Effort),
@@ -736,7 +735,6 @@ func fromSteps(states []flow.StepState) []Step {
 			ReviewFallback:     string(state.Fallback),
 			ReviewPass:         state.ReviewPass,
 			ReviewRound:        state.ReviewRound,
-			ReportMissing:      state.ReportMissing,
 			Reports:            fromStepReports(state.Reports),
 			Reviewer:           fromAgentSession(state.ReviewerStage, state.Reviewer),
 		}
@@ -1033,6 +1031,7 @@ func FromEntry(itemID string, e session.Entry) Entry {
 			Before:        fromDraftBefore(e.Marker.Before),
 			Wakes:         fromWakes(e.Marker.Wakes),
 			Background:    fromBackgroundItems(e.Marker.Background),
+			Divergence:    fromMark(e.Marker.Divergence),
 		}
 		if e.Marker.Findings != nil {
 			converted.Marker.Findings = *e.Marker.Findings
@@ -1070,6 +1069,7 @@ func fromPermission(p *session.PermissionEntry) *PermissionEntry {
 		DenyMessage:         p.DenyMessage,
 		AnsweredAt:          answeredAt,
 		ParentToolUseID:     p.ParentToolUseID,
+		Deviation:           p.Deviation,
 	}
 }
 
@@ -1701,6 +1701,37 @@ func sortNames(list []string) {
 	})
 }
 
+// FromDivergence converts the divergence of an item; nil for an item without
+// one. The slices are always allocated so the frontend never sees null.
+func FromDivergence(d divergence.Divergence, ok bool) *Divergence {
+	if !ok {
+		return nil
+	}
+	startedAt := ""
+	if !d.StartedAt.IsZero() {
+		startedAt = d.StartedAt.Format(time.RFC3339)
+	}
+	f := d.Facts
+	prs := make([]DivergentPR, len(f.PRs))
+	for i, pr := range f.PRs {
+		prs[i] = DivergentPR{Number: pr.Number, URL: pr.URL, Base: pr.Base, Head: pr.Head}
+	}
+	return &Divergence{
+		Stage: d.Stage, Kind: string(d.Kind), Branch: f.Branch, Base: f.Base, Commit: f.Commit,
+		Files: f.Files, All: f.All, Pass: f.Pass, Approved: f.Approved, Path: f.Path, Reason: f.Reason,
+		Candidates: names(f.Candidates), PRs: prs, StartedAt: startedAt,
+	}
+}
+
+// fromMark converts the divergence a marker keeps; nil for a marker of another
+// kind.
+func fromMark(m *divergence.Mark) *Divergence {
+	if m == nil {
+		return nil
+	}
+	return FromDivergence(divergence.Divergence{Kind: m.Kind, Facts: m.Facts}, true)
+}
+
 // FromReviews converts the active reviews with the situations each one waits on
 // the user for, by review id, and the converted repositories. A nil map of
 // situations counts as none for every review. The slices are always allocated
@@ -1750,8 +1781,8 @@ func FromReviews(
 			Trouble:          fromTrouble(stored.Trouble),
 			PublishError:     stored.PublishError,
 			PassBlocked:      state.PassBlocked,
+			PushBlocked:      state.Status == reviewflow.StatusPassBlocked && stored.Phase == prreview.PhasePushing,
 			UnreadableReport: state.UnreadableReport,
-			CommitFailed:     state.CommitFailed,
 			Review:           fromReview(state.Watch),
 			Verdicts:         verdictsOf(stored),
 			CanPublish:       canPublish(state),
@@ -1816,7 +1847,7 @@ func canPublish(state reviewflow.State) bool {
 // the user's review do not hold a pass back, as on the pull request of a task.
 func canReviewAgain(state reviewflow.State) bool {
 	if state.Status == reviewflow.StatusPassBlocked {
-		return true
+		return state.Review.Phase != prreview.PhasePushing
 	}
 	if state.Review.AskedPass != state.Review.ReportedPass {
 		return false

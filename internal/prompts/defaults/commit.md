@@ -8,7 +8,7 @@ The work of this session was reviewed and approved. Commit it.
 
 Make **one commit**. Do not amend, rebase, tag or create branches.
 
-If the worktree has a merge in progress (`git rev-parse -q --verify MERGE_HEAD` succeeds), the commit concludes that merge: run `git commit --no-edit`, which keeps the message git prepared for it, and write no message of your own. Everything else here still holds: what to commit, one commit, and the push.
+If the worktree has a merge in progress (`git rev-parse -q --verify MERGE_HEAD` succeeds), the commit concludes that merge: run `git commit --no-edit`, which keeps the message git prepared for it, and write no message of your own. Everything else here still holds: what to commit and one commit.
 
 ## The message
 
@@ -23,10 +23,6 @@ Unless the repository says otherwise:
 Never mention the planning behind the change: no task name, no step number, no reference to a PRD, a tech spec or a step file. The message describes the change, not the process that produced it.
 
 Never add authorship trailers. No `Co-Authored-By`, no mention of Claude Code or of any agent.
-
-## Pushing
-
-{{push}}
 
 ## When you are done
 

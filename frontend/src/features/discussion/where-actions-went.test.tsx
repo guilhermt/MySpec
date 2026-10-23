@@ -235,7 +235,7 @@ const PUBLISHING = {
 
 // UNREADABLE is the drafts file the agent wrote and MySpec can't read, before any good reading.
 const UNREADABLE = {
-  status: "awaiting_drafts",
+  status: "discussing",
   round: 0,
   unreadableDrafts: "Draft invoice-overage: it has no ### Title.",
   situations: [situation("reply")],
@@ -653,7 +653,7 @@ const ROWS: Row[] = [
     state: "waiting for the drafts",
     draw: view(UNREADABLE),
     where: "bar",
-    text: /Waiting for the drafts.*Discussing.*ask the agent to fix drafts\.md below/,
+    text: /Waiting for reply.*Discussing/,
   },
   {
     origin: "DiscussionBar",

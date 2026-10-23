@@ -1003,6 +1003,7 @@ const ASK_IMPLEMENTER: Entry[] = [
       denyMessage: "",
       answeredAt: "",
       parentToolUseId: "",
+      deviation: false,
     },
   }),
 ];

@@ -11,6 +11,7 @@ import {
 } from "@/features/sidebar/sessions";
 import { currentReport } from "@/features/task/pr-findings";
 import { boardOfRepository } from "@/lib/boards";
+import { divergenceText } from "@/lib/divergences";
 import { checkCounts, prChecks } from "@/lib/pull-requests";
 import { ALL_REPOSITORIES, findRepository, shortName, tasksInFilter } from "@/lib/repositories";
 import { compactWait, compareSituations, spokenWait } from "@/lib/situations";
@@ -227,6 +228,8 @@ const PR_BLOCK_REASONS: Record<string, string> = {
   gh_failed: "gh failed",
   git_failed: "git failed",
   no_worktree: "no worktree",
+  push_failed: "push failed",
+  open_failed: "opening failed",
 };
 
 const withReason = (text: string, reason: string | undefined): RowText => ({
@@ -486,6 +489,18 @@ function situationText(owner: Owner, situation: Situation): RowText {
       return same(`New commits · ${passText(owner)}`);
     case "pass_blocked":
       return same(`Pass blocked · ${passText(owner)}`);
+    case "divergence": {
+      const divergence =
+        owner.kind === "task"
+          ? owner.task.divergence
+          : owner.kind === "review"
+            ? owner.review.divergence
+            : owner.discussion.divergence;
+      return withReason(
+        "Not as expected",
+        divergence === null ? undefined : divergenceText(divergence).found,
+      );
+    }
     case "publish_failed":
       return owner.kind === "discussion"
         ? roundText("Publish failed", owner)
@@ -599,6 +614,8 @@ function taskStanding(task: TaskSummary): Standing {
         return appWork(same("PR · opening"));
       case "committing":
         return appWork(same("PR review · committing"));
+      case "pushing":
+        return appWork(same("PR review · pushing"));
       case "closing":
         return appWork(same("Closing"));
       case "waiting_checks": {
@@ -665,6 +682,8 @@ function reviewStanding(review: ReviewSummary): Standing {
     }
     case "committing":
       return appWork(same(`${pass} · committing`));
+    case "pushing":
+      return appWork(same(`${pass} · pushing`));
     case "published": {
       const verdict = (review.passes ?? []).at(-1)?.verdict ?? "";
       return {

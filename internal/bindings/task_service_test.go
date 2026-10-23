@@ -872,6 +872,23 @@ func TestSendMessageReportsWhatTheUserGotWrong(t *testing.T) {
 	}
 }
 
+func TestTheWaysOutOfADivergenceReportWhatTheUserGotWrong(t *testing.T) {
+	t.Parallel()
+
+	f, _, id := createdTask(t)
+
+	const nothing = "There is nothing out of place in this task any more."
+	if err := f.tasks.CheckAgain(id); err == nil || err.Error() != nothing {
+		t.Errorf("CheckAgain() error = %v, want %q", err, nothing)
+	}
+	if err := f.tasks.AskAgain(id); err == nil || err.Error() != nothing {
+		t.Errorf("AskAgain() error = %v, want %q", err, nothing)
+	}
+	if err := f.tasks.Adopt(id, ""); err == nil || err.Error() != nothing {
+		t.Errorf("Adopt() error = %v, want %q", err, nothing)
+	}
+}
+
 func TestRemovePendingRejectsAnEntryThatIsNotQueued(t *testing.T) {
 	t.Parallel()
 
@@ -1272,10 +1289,8 @@ func TestApprovingAStepSendsTheCommitPromptToTheAgent(t *testing.T) {
 		t.Fatalf("ApproveStep(%s) = %v, want nil", id, err)
 	}
 	// The fake agent answers without committing, so the branch stays where it
-	// was and the app hands the step back with the warning.
-	after := f.waitStepWhere(t, id, 1, "the step back with the commit warning", func(step bindings.Step) bool {
-		return step.Status == "ready_to_approve" && step.CommitFailed
-	})
+	// was and the app hands the step back as diverged.
+	after := f.waitStep(t, id, 1, "diverged")
 	if after.Review == nil || after.Review.Percent != 100 {
 		t.Errorf("review = %+v, want the reading that was there before", after.Review)
 	}

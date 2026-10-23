@@ -271,6 +271,73 @@ func TestStatusReadsTheHeadOfTheWorktreeBranch(t *testing.T) {
 	}
 }
 
+func TestPushPutsTheBranchOnTheRemoteAndPushedSeesIt(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+	wt := f.ensure(t)
+	gittest.Commit(t, wt.Path, "a.txt", "a\n", "Add a")
+
+	pushed, err := f.svc.Pushed(t.Context(), wt, wt.Branch)
+	if err != nil || pushed {
+		t.Fatalf("Pushed() before the push = %v, %v, want false and nil", pushed, err)
+	}
+
+	if pushErr := f.svc.Push(t.Context(), wt, wt.Branch); pushErr != nil {
+		t.Fatalf("Push() = %v, want nil", pushErr)
+	}
+	pushed, err = f.svc.Pushed(t.Context(), wt, wt.Branch)
+	if err != nil || !pushed {
+		t.Errorf("Pushed() after the push = %v, %v, want true and nil", pushed, err)
+	}
+
+	gittest.Commit(t, wt.Path, "b.txt", "b\n", "Add b")
+	pushed, err = f.svc.Pushed(t.Context(), wt, wt.Branch)
+	if err != nil || pushed {
+		t.Errorf("Pushed() with a local commit the remote lacks = %v, %v, want false and nil", pushed, err)
+	}
+}
+
+func TestPushRefusesABranchTheRemoteIsAheadOf(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+	wt := f.ensure(t)
+	gittest.Commit(t, wt.Path, "a.txt", "a\n", "Add a")
+	if err := f.svc.Push(t.Context(), wt, wt.Branch); err != nil {
+		t.Fatalf("Push() = %v, want nil", err)
+	}
+	gittest.Run(t, wt.Path, "reset", "--hard", "HEAD~1")
+	gittest.Commit(t, wt.Path, "c.txt", "c\n", "Add c")
+
+	if err := f.svc.Push(t.Context(), wt, wt.Branch); !errors.Is(err, git.ErrPushRejected) {
+		t.Errorf("Push() = %v, want ErrPushRejected", err)
+	}
+}
+
+func TestMergingSeesAMergeUnderWay(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, true)
+	wt := f.ensure(t)
+
+	got, err := f.svc.Merging(t.Context(), wt)
+	if err != nil || got {
+		t.Fatalf("Merging() = %v, %v, want false and nil", got, err)
+	}
+
+	gittest.Run(t, wt.Path, "checkout", "-q", "-b", "side")
+	gittest.Commit(t, wt.Path, "f.txt", "side\n", "Side")
+	gittest.Run(t, wt.Path, "checkout", "-q", wt.Branch)
+	gittest.Commit(t, wt.Path, "f.txt", "own\n", "Own")
+	runner := git.New(git.Deps{Env: gittest.Env(t)})
+	if _, mergeErr := runner.Run(t.Context(), wt.Path, "merge", "side"); mergeErr == nil {
+		t.Fatal("merge side = nil, want a conflict")
+	}
+
+	got, err = f.svc.Merging(t.Context(), wt)
+	if err != nil || !got {
+		t.Errorf("Merging() = %v, %v, want true and nil", got, err)
+	}
+}
+
 func TestGitDirPointsInsideTheRepositoryOfTheWorktree(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, true)

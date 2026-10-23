@@ -25,6 +25,7 @@ import { fromTranscript, type TranscriptState } from "@/store/transcript";
 import {
   makeBoard,
   makeBoardCard,
+  makeDivergence,
   makeEntry,
   makePRCheck,
   makePRImplementer,
@@ -66,6 +67,9 @@ export const SCENES = [
   "pr-agent-addressing",
   "pr-fallback-rounds",
   "pr-implementer-question",
+  "diverged-commit",
+  "diverged-pr-base",
+  "diverged-no-changes",
 ] as const;
 
 /** SceneName is one moment of the reference task. */
@@ -809,6 +813,87 @@ function taskOf(name: SceneName, longName: boolean): TaskSummary {
         { situations: [situation("reply", "waiting", prPlace, 3)] },
         longName,
       );
+    case "diverged-commit":
+      // The commit turn of step 3 ended with no commit and four files changed in the worktree.
+      return inStep(
+        3,
+        { status: "diverged", reviewMode: "manual" },
+        {
+          contextPercent: 31,
+          divergence: makeDivergence({
+            stage: "step:3",
+            kind: "commit_missing",
+            branch: BRANCH,
+            commit: "c19f02e",
+            files: 4,
+            startedAt: at(5),
+          }),
+          situations: [situation("divergence", "error", stepPlace(3), 5)],
+        },
+        longName,
+      );
+    case "diverged-pr-base":
+      // GitHub has a pull request of the branch, into main instead of dev.
+      return inPR(
+        {
+          status: "diverged",
+          sessionStage: "pr",
+          prNumber: 0,
+          prUrl: "",
+          prState: "",
+          checkedAt: "",
+        },
+        {
+          divergence: makeDivergence({
+            stage: "pr",
+            kind: "pr_wrong_base",
+            branch: BRANCH,
+            base: "dev",
+            startedAt: at(5),
+            prs: [
+              {
+                number: 1284,
+                url: "https://github.com/acme/api/pull/1284",
+                base: "main",
+                head: BRANCH,
+              },
+            ],
+          }),
+          situations: [situation("divergence", "error", prPlace, 5)],
+        },
+        longName,
+      );
+    case "diverged-no-changes":
+      // The implementer applied the approved findings and no file changed.
+      return inPR(
+        {
+          status: "diverged",
+          sessionStage: "pr_review",
+          contextPercent: 33,
+          currentPass: 1,
+          reports: [
+            structuredReport(1, {
+              findings: findingsOf(4, DECIDED),
+              recordedAt: at(14),
+              sentAt: at(8),
+            }),
+          ],
+          implementer: makePRImplementer(),
+          implementerStarted: true,
+          review: { files: [], staged: 0, total: 0, percent: 0, error: "" },
+        },
+        {
+          divergence: makeDivergence({
+            stage: "pr_fix",
+            kind: "no_changes",
+            approved: 3,
+            pass: 1,
+            startedAt: at(5),
+          }),
+          situations: [situation("divergence", "error", prFixPlace, 5)],
+        },
+        longName,
+      );
     case "close":
       // Merged 2 hours ago, the chip of the mock, after the review: the conversation of the review
       // of the pull request started an hour before, and its clean second pass was written last.
@@ -1048,6 +1133,15 @@ function conversationsOf(name: SceneName): Record<string, Entry[]> {
         pr_review: reviewTalk(written(1, 4, 10), decidedOf(1, 9)),
         pr_fix: fixTalk(applied(9), makeEntry("question")),
       };
+    case "diverged-commit":
+      return { "step:3": talk("Commit the staged files.", "The commit is done.") };
+    case "diverged-pr-base":
+      return { pr: talk("Write the draft of the pull request.", "The draft is in pr.md.") };
+    case "diverged-no-changes":
+      return {
+        pr_review: reviewTalk(written(1, 4, 14), decidedOf(1, 8)),
+        pr_fix: fixTalk(applied(8)),
+      };
     case "close":
       return {
         pr_review: reviewTalk(written(1, 4, 172), decidedOf(1, 164), written(2, 0, 125)),
@@ -1087,6 +1181,7 @@ const PR_TABS: Partial<Record<SceneName, "implementer" | "reviewer">> = {
   "pr-agent-addressing": "implementer",
   "pr-fallback-rounds": "reviewer",
   "pr-implementer-question": "reviewer",
+  "diverged-no-changes": "implementer",
 };
 
 /**

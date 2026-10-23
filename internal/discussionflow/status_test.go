@@ -51,17 +51,14 @@ func TestTheStatusOfADiscussionIsWhatItsDraftsAndItsConversationSay(t *testing.T
 			want: discussionflow.StatusPublishFailed,
 		},
 		{
-			name: "an artifact the app can't read awaits the drafts",
+			name: "an artifact the app can't read after the correction is a divergence",
 			setup: func(t *testing.T, f *fixture) string {
 				t.Helper()
 				id := f.start(cardKey)
-				f.write(id, discussion.DraftsFile, "## Draft: broken\n")
-				f.sessions.idle(id)
-				f.flow.Check(id)
-				f.waitFor(id, func(s discussionflow.State) bool { return s.UnreadableDrafts != "" })
+				f.unreadable(id)
 				return id
 			},
-			want: discussionflow.StatusAwaitingDrafts,
+			want: discussionflow.StatusDiverged,
 		},
 		{
 			name: "a conversation at rest before any drafts is discussing",

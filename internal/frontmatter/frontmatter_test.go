@@ -31,7 +31,8 @@ func TestSplitTakesContentWithNoHeaderAsAllBody(t *testing.T) {
 	}{
 		{"no fence at all", "# A report\n\nNothing else.\n"},
 		{"a fence that never closes", "---\ntitle: Add the login screen\n\nThe body.\n"},
-		{"a fence that does not open the file", "\n---\ntitle: Add the login screen\n---\n"},
+		{"a fence that follows text", "A note.\n---\ntitle: Add the login screen\n---\n"},
+		{"a fence with text after it", "--- x\ntitle: Add the login screen\n---\n"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -88,5 +89,35 @@ func TestSplitKeepsAnEmptyHeader(t *testing.T) {
 	}
 	if body != "body" {
 		t.Errorf("body = %q, want %q", body, "body")
+	}
+}
+
+func TestSplitAcceptsTheVariationsOfAHeader(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		content string
+		want    map[string]string
+		body    string
+	}{
+		{"a byte order mark", "\ufeff---\ntitle: A\n---\nbody", map[string]string{"title": "A"}, "body"},
+		{"blank lines before the fence", "\n\n---\ntitle: A\n---\nbody", map[string]string{"title": "A"}, "body"},
+		{"spaces after the fences", "--- \ntitle: A\n---\t\nbody", map[string]string{"title": "A"}, "body"},
+		{"keys in any case", "---\nTitle: A\nSTATUS: Clean\n---\n", map[string]string{"title": "A", "status": "Clean"}, ""},
+		{"all of them", "\ufeff\n---  \nPass: 2\n---  \nbody", map[string]string{"pass": "2"}, "body"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			fields, body := frontmatter.Split(test.content)
+			if !maps.Equal(fields, test.want) {
+				t.Errorf("fields = %v, want %v", fields, test.want)
+			}
+			if body != test.body {
+				t.Errorf("body = %q, want %q", body, test.body)
+			}
+		})
 	}
 }

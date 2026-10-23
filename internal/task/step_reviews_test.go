@@ -3,11 +3,13 @@ package task_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -432,4 +434,140 @@ func TestClearStepReviewForgetsTheReviewOfOneStep(t *testing.T) {
 	}
 
 	wantErrIs(t, f.service.ClearStepReview(t.Context(), "nope", 1), task.ErrNotFound)
+}
+
+func TestReadStepReportsAcceptsAStatusInAnyCaseAndInBold(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login")
+	writeStepReport(t, created, "1-review-1.md", stepReportFile(1, 1, "'**Clean**'", "## Findings\n\nNone.\n"))
+	writeStepReport(t, created, "1-review-2.md", stepReportFile(1, 2, "CHANGES", "## Findings\n\n- One\n"))
+
+	got := task.ReadStepReports(created.StepReviewsDir())[1]
+
+	if len(got) != 2 || !got[0].Clean || got[1].Clean {
+		t.Errorf("ReadStepReports() = %+v, want a clean pass and a pass with changes", got)
+	}
+}
+
+func TestResolveStepReportReadsTheReportAtTheAgreedPath(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login")
+	writeStepReport(t, created, "2-review-1.md", stepReportFile(2, 1, "clean", "## Findings\n\nNone.\n"))
+
+	got, err := task.ResolveStepReport(created, 2, 1)
+	if err != nil {
+		t.Fatalf("ResolveStepReport() error = %v", err)
+	}
+	if got.Resolution != prreport.ResolutionFound || !got.Report.Clean || got.Report.Pass != 1 {
+		t.Errorf("ResolveStepReport() = %+v, want the clean pass found", got)
+	}
+}
+
+func TestResolveStepReportSaysWhyTheReportCannotBeRead(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		content string
+		reason  string
+	}{
+		{"a status that is no verdict", stepReportFile(2, 1, "done", "x"), `The report can't be read: status "done" is neither clean nor changes.`},
+		{"another pass", stepReportFile(2, 3, "clean", "x"), `The report can't be read: it declares pass "3", and it is pass 1.`},
+		{"another step", stepReportFile(5, 1, "clean", "x"), `The report can't be read: it declares step "5", and it is step 2.`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			created := f.create(t, "add-login")
+			writeStepReport(t, created, "2-review-1.md", test.content)
+
+			got, err := task.ResolveStepReport(created, 2, 1)
+			if err != nil {
+				t.Fatalf("ResolveStepReport() error = %v", err)
+			}
+			if got.Resolution != prreport.ResolutionUnreadable || got.Reason != test.reason {
+				t.Errorf("ResolveStepReport() = %+v, want unreadable with %q", got, test.reason)
+			}
+		})
+	}
+}
+
+func TestResolveStepReportCopiesTheOneReportOfTheStepAndThePass(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login")
+	content := stepReportFile(2, 1, "changes", "## Findings\n\n- One\n")
+	writeFile(t, filepath.Join(created.ArtifactsDir, "review.md"), content)
+	// Reports of other steps and passes are no candidates.
+	writeFile(t, filepath.Join(created.ArtifactsDir, "other.md"), stepReportFile(3, 1, "clean", "x"))
+	writeFile(t, filepath.Join(created.ArtifactsDir, "again.md"), stepReportFile(2, 2, "clean", "x"))
+
+	got, err := task.ResolveStepReport(created, 2, 1)
+	if err != nil {
+		t.Fatalf("ResolveStepReport() error = %v", err)
+	}
+	if got.Resolution != prreport.ResolutionFound || got.Report.Clean || got.Report.Findings != 1 {
+		t.Fatalf("ResolveStepReport() = %+v, want the pass with one finding found", got)
+	}
+	copied, readErr := os.ReadFile(created.StepReportPath(2, 1))
+	if readErr != nil || string(copied) != content {
+		t.Errorf("agreed path = %q (%v), want the report", copied, readErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(created.ArtifactsDir, "review.md")); statErr != nil {
+		t.Errorf("the original: %v, want it kept", statErr)
+	}
+}
+
+func TestResolveStepReportCopiesAReportOfTheStepReviewsFolder(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login")
+	content := stepReportFile(3, 2, "clean", "## Findings\n\nNone.\n")
+	if err := os.MkdirAll(filepath.Join(created.ArtifactsDir, task.StepReviewsDirName), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(created.ArtifactsDir, task.StepReviewsDirName, "step-3-pass-2.md"), content)
+	// A report already at its agreed name is no candidate for another pass.
+	writeFile(t, created.StepReportPath(3, 1), stepReportFile(3, 2, "clean", "x"))
+
+	got, err := task.ResolveStepReport(created, 3, 2)
+	if err != nil {
+		t.Fatalf("ResolveStepReport() error = %v", err)
+	}
+	if got.Resolution != prreport.ResolutionFound || !got.Report.Clean {
+		t.Fatalf("ResolveStepReport() = %+v, want the clean pass found", got)
+	}
+	if copied, readErr := os.ReadFile(created.StepReportPath(3, 2)); readErr != nil || string(copied) != content {
+		t.Errorf("agreed path = %q (%v), want the report", copied, readErr)
+	}
+}
+
+func TestResolveStepReportSortsOutMissingAndAmbiguous(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login")
+
+	got, err := task.ResolveStepReport(created, 2, 1)
+	if err != nil || got.Resolution != prreport.ResolutionMissing {
+		t.Fatalf("ResolveStepReport() = %+v, %v, want missing", got, err)
+	}
+
+	writeFile(t, filepath.Join(created.ArtifactsDir, "b.md"), stepReportFile(2, 1, "clean", "x"))
+	writeFile(t, filepath.Join(created.ArtifactsDir, "a.md"), stepReportFile(2, 1, "clean", "x"))
+	got, err = task.ResolveStepReport(created, 2, 1)
+	if err != nil {
+		t.Fatalf("ResolveStepReport() error = %v", err)
+	}
+	if got.Resolution != prreport.ResolutionAmbiguous || !slices.Equal(got.Candidates, []string{"a.md", "b.md"}) {
+		t.Errorf("ResolveStepReport() = %+v, want ambiguous between a.md and b.md", got)
+	}
 }

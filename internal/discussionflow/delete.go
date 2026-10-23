@@ -38,6 +38,9 @@ func (s *Service) Archive(ctx context.Context, id string) error {
 	if err := s.sessions.Close(ctx, sessionKey(id)); err != nil {
 		return fmt.Errorf("archive discussion %s: %w", id, err)
 	}
+	if err := s.divergences.Clear(ctx, id); err != nil {
+		return fmt.Errorf("archive discussion %s: %w", id, err)
+	}
 	if _, err := s.discussions.Archive(ctx, id); err != nil {
 		return err
 	}
@@ -73,6 +76,8 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	if err := s.discussions.Delete(ctx, id); err != nil {
 		return err
 	}
+	// The row went with the discussion by cascade.
+	s.divergences.Forget(id)
 	s.forget(id)
 
 	s.log.Info("discussion deleted", "discussion", id, "board", stored.BoardID)

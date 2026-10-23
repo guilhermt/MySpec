@@ -129,6 +129,10 @@ func (s *Service) archive(ctx context.Context, t task.Task) {
 		s.log.Error("discard sessions failed", "task", t.ID, "error", err)
 		return
 	}
+	if err := s.divergences.Clear(ctx, t.ID); err != nil {
+		s.log.Error("clear divergence failed", "task", t.ID, "error", err)
+		return
+	}
 	if _, err := s.tasks.Archive(ctx, t.ID); err != nil {
 		s.log.Error("archive task failed", "task", t.ID, "error", err)
 		return

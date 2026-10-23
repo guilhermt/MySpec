@@ -15,6 +15,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/claude/claudetest"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
@@ -1535,6 +1536,64 @@ func TestTheMilestonesOfTheWorkflowAreMarked(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("markers mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestADivergenceIsMarkedInTheConversation(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+	before := len(f.entriesOf(t, prd("t1"), session.KindMarker))
+
+	d := divergence.Divergence{
+		ItemID: "t1", Stage: "prd", Kind: divergence.KindPushRejected,
+		Facts: divergence.Facts{Branch: "153-x", Commit: "a1b2c3d", Reason: "fetch first"},
+	}
+	f.service.MarkDivergence(t.Context(), prd("t1"), d)
+	f.service.MarkDivergence(t.Context(), prd("missing"), d)
+
+	markers := f.entriesOf(t, prd("t1"), session.KindMarker)[before:]
+	if len(markers) != 1 {
+		t.Fatalf("markers = %d, want 1", len(markers))
+	}
+	want := &session.MarkerEntry{
+		Type:       session.MarkerDivergence,
+		Divergence: &divergence.Mark{Kind: divergence.KindPushRejected, Facts: d.Facts},
+	}
+	if diff := cmp.Diff(want, markers[0].Marker); diff != "" {
+		t.Errorf("marker mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestADivergenceIsMarkedInAClosedConversation(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+	if err := f.service.Close(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	before := f.entriesOf(t, prd("t1"), session.KindMarker)
+
+	d := divergence.Divergence{
+		ItemID: "t1", Stage: "prd", Kind: divergence.KindPushRejected,
+		Facts: divergence.Facts{Branch: "153-x", Commit: "a1b2c3d", Reason: "fetch first"},
+	}
+	f.service.MarkDivergence(t.Context(), prd("t1"), d)
+
+	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
+	if len(markers) != len(before)+1 {
+		t.Fatalf("markers = %d, want %d", len(markers), len(before)+1)
+	}
+	last := markers[len(markers)-1]
+	if last.Marker.Type != session.MarkerDivergence || last.Marker.Divergence.Kind != divergence.KindPushRejected {
+		t.Errorf("last marker = %+v, want the divergence", last.Marker)
+	}
+	if len(before) > 0 && last.Seq <= before[len(before)-1].Seq {
+		t.Errorf("seq = %d, want after %d", last.Seq, before[len(before)-1].Seq)
 	}
 }
 

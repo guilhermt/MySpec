@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/guilhermt/myspec/internal/claude"
+	"github.com/guilhermt/myspec/internal/contract"
 	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
@@ -446,7 +447,8 @@ func (s *Service) ensureProcessLocked(ctx context.Context, r *run, n *notes) err
 
 	startCtx, cancel := context.WithTimeout(context.Background(), StartTimeout)
 	defer cancel()
-	p, err := s.launcher.Start(startCtx, claude.Config{
+	s.writeContractLocked(r, contract.TurnNone)
+	cfg := claude.Config{
 		Binary:    binary,
 		Dir:       r.task.Dir,
 		SessionID: r.rec.ID,
@@ -454,7 +456,11 @@ func (s *Service) ensureProcessLocked(ctx context.Context, r *run, n *notes) err
 		Model:     string(r.rec.Choice.Model),
 		Effort:    string(r.rec.Choice.Effort),
 		ExtraDirs: r.task.ExtraDirs,
-	})
+	}
+	if s.hookCommand != "" {
+		cfg.Settings = contract.Settings(s.hookCommand)
+	}
+	p, err := s.launcher.Start(startCtx, cfg)
 	if err != nil {
 		return s.failStart(ctx, r, n, ErrorStartFailed, "Could not start Claude Code: "+err.Error(), err)
 	}
@@ -637,6 +643,7 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 	}
 
 	sent := s.imagesOf(r, e.User)
+	s.writeContractLocked(r, turnOf(e, r.task))
 	if err := r.proc.Send(text, sent); err != nil {
 		// The process is gone or going; its exit reports the failure.
 		s.log.Warn("send to claude failed", "task", r.task.ID, "error", err)
@@ -672,6 +679,7 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 // marker that says what woke the agent as its first entry. The caller holds
 // the mutex and r.turn is nil.
 func (s *Service) openAgentTurnLocked(ctx context.Context, r *run, n *notes) {
+	s.writeContractLocked(r, contract.TurnNone)
 	r.turn = newTurn(s.newID(), s.now().UTC())
 	r.lastTurnAt = r.turn.startedAt
 	r.answerReturn()

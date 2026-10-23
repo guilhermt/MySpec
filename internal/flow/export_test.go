@@ -31,3 +31,9 @@ func PRLocalPassMessage(reply, path, status string) string {
 func DiscardedFindings(passes []task.PRPass, pass int) string {
 	return discardedFindings(passes, pass)
 }
+
+// PRResolved exposes prResolved to the external tests of the package.
+func PRResolved(pass task.PRPass) bool { return prResolved(pass) }
+
+// ChecksGreen exposes checksGreen to the external tests of the package.
+func ChecksGreen(c gh.PRChecks) bool { return checksGreen(c) }

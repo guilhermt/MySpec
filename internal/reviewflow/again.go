@@ -89,7 +89,6 @@ func (s *Service) leaveFixes(
 		s.watch.Track(stored.ID, wt, true)
 		return err
 	}
-	s.setCommitFailed(stored.ID, false)
 	return nil
 }
 
@@ -102,7 +101,8 @@ func againable(stored prreview.Review, passBlocked string) error {
 	switch {
 	case stored.AskedPass > stored.ReportedPass:
 		return ErrPassRunning
-	case stored.Mode == prreview.ModeApply && stored.Phase == prreview.PhaseCommitting:
+	case stored.Mode == prreview.ModeApply &&
+		(stored.Phase == prreview.PhaseCommitting || stored.Phase == prreview.PhasePushing):
 		// The changes the user approved are going up; the pass follows them.
 		return ErrPassRunning
 	case stored.PRState != prreview.PROpen:

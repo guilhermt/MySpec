@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreport"
@@ -64,8 +65,8 @@ func (s *Service) Apply(ctx context.Context, id string) error {
 	return nil
 }
 
-// Approve approves the changes the agent made and asks it to commit them and
-// push them to the head of the pull request.
+// Approve approves the changes the agent made and asks it to commit them; the
+// app pushes the commit to the head of the pull request itself.
 func (s *Service) Approve(ctx context.Context, id string) error {
 	l := s.lockOf(id)
 	l.mu.Lock()
@@ -88,14 +89,16 @@ func (s *Service) Approve(ctx context.Context, id string) error {
 		return fmt.Errorf("approve review %s: %w", ref, ErrBusy)
 	}
 
-	// The worktree is on a detached HEAD: the commit goes up to the branch of
-	// the pull request by name.
-	message, err := s.renderPrompt(prompts.StageCommit, prompts.Vars{
-		TaskName:     ref,
-		ArtifactsDir: stored.ArtifactsDir,
-		Push:         true,
-		PushRef:      stored.HeadBranch,
-	})
+	return s.askCommit(ctx, stored, wt, ref, state.Watch.Total)
+}
+
+// askCommit asks the agent to commit the changes of the worktree and records
+// the commit turn. The caller holds the lock of the review.
+func (s *Service) askCommit(
+	ctx context.Context, stored prreview.Review, wt worktree.Worktree, ref string, files int,
+) error {
+	id := stored.ID
+	message, err := s.renderPrompt(prompts.StageCommit, prompts.Vars{TaskName: ref, ArtifactsDir: stored.ArtifactsDir})
 	if err != nil {
 		return err
 	}
@@ -107,8 +110,7 @@ func (s *Service) Approve(ctx context.Context, id string) error {
 	if err = s.setPhase(ctx, id, prreview.PhaseCommitting); err != nil {
 		return err
 	}
-	s.setCommitFailed(id, false)
-	app := session.AppMessage{Text: message, Kind: session.AppCommitPush}
+	app := session.AppMessage{Text: message, Kind: session.AppCommit}
 	if err = s.sessions.SendFromApp(ctx, sessionKey(id), app); err != nil {
 		if backErr := s.setPhase(ctx, id, prreview.PhaseApplying); backErr != nil {
 			s.log.Error("record review phase failed", "review", id, "error", backErr)
@@ -116,8 +118,8 @@ func (s *Service) Approve(ctx context.Context, id string) error {
 		return err
 	}
 
-	s.sessions.MarkChangesApproved(ctx, sessionKey(id), state.Watch.Total)
-	s.log.Info("review changes approved", "review", id, "files", state.Watch.Total)
+	s.sessions.MarkChangesApproved(ctx, sessionKey(id), files)
+	s.log.Info("review changes approved", "review", id, "files", files)
 	s.notify(id)
 	return nil
 }
@@ -133,19 +135,57 @@ func (s *Service) evaluateApply(ctx context.Context, id string, wt worktree.Work
 	switch stored.Phase {
 	case prreview.PhaseApplying:
 		s.watch.Track(id, wt, idle)
+		if idle {
+			s.evaluateApplied(ctx, stored, wt)
+		}
 	case prreview.PhaseCommitting:
 		if idle {
 			s.evaluateCommit(ctx, stored, wt)
 		}
-	case prreview.PhaseNone, prreview.PhaseWaitingChecks:
-		// The findings are the user's to decide on, the pass is running, or
-		// it waits for the checks, which the poll moves on.
+	case prreview.PhasePushing, prreview.PhaseNone, prreview.PhaseWaitingChecks:
+		// The push is started by the end of the commit, by Sync and by the ways
+		// out of a divergence, never by an evaluation. Otherwise the findings
+		// are the user's to decide on, the pass is running, or it waits for the
+		// checks, which the poll moves on.
 	}
 }
 
+// evaluateApplied looks at the worktree once the agent rests after the fixes
+// were sent: with no file changed and no commit, the approved findings changed
+// nothing, which is a divergence; any change ends it. A commit made with
+// nothing left to change, as by hand after a missing commit, goes up as the
+// commit of the pass.
+func (s *Service) evaluateApplied(ctx context.Context, stored prreview.Review, wt worktree.Worktree) {
+	snap, read := s.watch.Refresh(stored.ID)
+	if !read || snap.Err != "" {
+		return
+	}
+	if sum, open := s.sessions.Summary(sessionKey(stored.ID)); !open || sum.TurnFailed {
+		return
+	}
+	if snap.Total > 0 {
+		s.clearDivergence(ctx, stored.ID, divergence.KindNoChanges)
+		return
+	}
+	if snap.Head == "" {
+		return
+	}
+	if base := s.commitBaseOf(stored); base != "" && snap.Head != base {
+		s.commitMade(ctx, stored, wt, snap.Head)
+		return
+	}
+	last, ok := s.passOf(stored.ID, stored.ReportedPass)
+	if !ok {
+		return
+	}
+	s.diverge(ctx, stored, divergence.KindNoChanges, divergence.Facts{
+		Pass: last.Number, Approved: len(last.Approved()),
+	})
+}
+
 // evaluateCommit decides what became of the commit the app asked for, once
-// the turn that makes it is over: no commit gives the changes back to the
-// user, and a commit asks for the next pass over the pull request it reached.
+// the turn that makes it is over: no commit is a divergence, and a commit goes
+// up to the pull request, which the app pushes itself.
 func (s *Service) evaluateCommit(ctx context.Context, stored prreview.Review, wt worktree.Worktree) {
 	// Decide on a reading newer than the turn, not on one the debounce owes.
 	snap, read := s.watch.Refresh(stored.ID)
@@ -157,49 +197,41 @@ func (s *Service) evaluateCommit(ctx context.Context, stored prreview.Review, wt
 			s.log.Error("record review phase failed", "review", stored.ID, "error", err)
 			return
 		}
-		s.setCommitFailed(stored.ID, true)
 		s.watch.Track(stored.ID, wt, true)
+		s.diverge(ctx, stored, divergence.KindCommitMissing, divergence.Facts{
+			Branch: stored.HeadBranch, Commit: task.ShortSHA(s.commitBaseOf(stored)), Files: snap.Total,
+		})
 		s.log.Warn("review commit did not happen", "review", stored.ID)
 		s.notify(stored.ID)
 		return
 	}
+	s.commitMade(ctx, stored, wt, snap.Head)
+}
 
+// commitMade takes the commit of a pass up to the pull request.
+func (s *Service) commitMade(ctx context.Context, stored prreview.Review, wt worktree.Worktree, head string) {
 	id := stored.ID
-	// The fixes of the pass went up whatever becomes of the next one, and the
-	// next one lists them as applied. The review stays committing until that
-	// pass is asked for, so that the next evaluation tries both again instead
-	// of offering to apply findings that already went up. The conversation
-	// marks the commit only once the review waits for the checks of the next
-	// pass, so that a failed write that is tried again marks it once.
+	// The fixes of the pass are in a commit whatever becomes of the push, and
+	// the next pass lists them as applied. The conversation marks the commit
+	// only once, here, so that a failed write that is tried again marks it once.
 	if err := s.reviews.MarkApplied(ctx, id, stored.ReportedPass); err != nil {
 		s.log.Error("mark review pass applied failed", "review", id, "pass", stored.ReportedPass, "error", err)
 		return
 	}
-	// The next pass waits for the checks of the commit that went up. An
-	// evaluation reads nothing from GitHub: the poll brings the reading, and
-	// the pass starts from it.
-	if _, err := s.reviews.AskPass(ctx, id, stored.ReportedPass+1, ""); err != nil {
-		s.log.Error("ask review pass failed", "review", id, "error", err)
-		return
-	}
-	l := s.lockOf(id)
-	s.mu.Lock()
-	l.wait = checksWait{afterPush: true}
-	l.passBlocked = ""
-	s.mu.Unlock()
-	if err := s.setPhase(ctx, id, prreview.PhaseWaitingChecks); err != nil {
+	if err := s.setPhase(ctx, id, prreview.PhasePushing); err != nil {
 		s.log.Error("record review phase failed", "review", id, "error", err)
 		return
 	}
-	s.markCommit(ctx, id, wt, snap.Head, stored.Number)
+	s.clearDivergence(ctx, id)
+	s.markCommit(ctx, id, wt, head, stored.Number)
 	s.watch.Forget(id)
-	s.log.Info("review commit pushed", "review", id, "commit", snap.Head)
+	s.log.Info("review commit made", "review", id, "commit", head)
 	s.notify(id)
-	s.Poll()
+	s.spawnPush(id)
 }
 
-// markCommit records in the conversation the commit that went up to the pull
-// request; a commit that cannot be read is recorded without its subject.
+// markCommit records in the conversation the commit of the pass, before it is
+// pushed; a commit that cannot be read is recorded without its subject.
 func (s *Service) markCommit(ctx context.Context, id string, wt worktree.Worktree, head string, number int) {
 	commit := git.Commit{SHA: head}
 	read, err := s.worktrees.Commit(ctx, wt, head)
@@ -209,23 +241,13 @@ func (s *Service) markCommit(ctx context.Context, id string, wt worktree.Worktre
 	} else {
 		commit = read
 	}
-	s.sessions.MarkCommitted(ctx, sessionKey(id), task.ShortSHA(commit.SHA), commit.Subject, true, number)
+	s.sessions.MarkCommitted(ctx, sessionKey(id), task.ShortSHA(commit.SHA), commit.Subject, false, number)
 }
 
 // setPhase records where a review is in the cycle of a pass.
 func (s *Service) setPhase(ctx context.Context, id string, phase prreview.Phase) error {
 	_, err := s.reviews.Update(ctx, id, func(r *prreview.Review) { r.Phase = phase })
 	return err
-}
-
-// setCommitFailed records whether the last approval ended without a commit.
-func (s *Service) setCommitFailed(id string, failed bool) {
-	l := s.lockOf(id)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	l.commitFailed = failed
 }
 
 // setCommitBase records the commit the worktree was on when the commit of an
