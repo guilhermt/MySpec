@@ -197,13 +197,9 @@ func findingsText(form Form, count int) string {
 }
 
 // changesReviewBody is the notification of the changes a pull request review
-// applied. One that starts ready to approve, because the last approval left no
-// commit, says so, and so does one the commit after the agent review did not
-// happen.
-func changesReviewBody(form Form, commitFailed bool, fallback task.ReviewFallback) string {
-	if form == FormApprove && commitFailed {
-		return "The last approval of the pull request didn't produce a commit."
-	}
+// applied. One the commit after the agent review did not happen, which a task
+// recorded before divergences may have, says so.
+func changesReviewBody(fallback task.ReviewFallback) string {
 	if fallback == task.FallbackNoCommit {
 		return "Review the changes of the review: the commit after the agent review didn't happen."
 	}

@@ -44,6 +44,8 @@ import type {
   DiscussionContextRequest,
   DiscussionRepository,
   DiscussionSummary,
+  Divergence,
+  DivergentPR,
   Draft,
   DraftBefore,
   DraftCurrent,
@@ -183,6 +185,8 @@ export type {
   DiscussionContextRequest,
   DiscussionRepository,
   DiscussionSummary,
+  Divergence,
+  DivergentPR,
   Draft,
   DraftBefore,
   DraftCurrent,
@@ -320,6 +324,7 @@ export type StepStatus =
   | "nothing_to_commit"
   | "review_failed"
   | "committing"
+  | "diverged"
   | "done";
 /** PRStatus is where the pull request of a task stands in the PR stage. */
 export type PRStatus =
@@ -336,12 +341,30 @@ export type PRStatus =
   | "in_review"
   | "ready_to_approve"
   | "committing"
+  | "pushing"
+  | "diverged"
   | "done"
   | "trouble"
   | "merged"
   | "pr_closed"
   | "closing"
   | "closed";
+
+/** DivergenceKind is what the app expected of an item and did not find. */
+export type DivergenceKind =
+  | "commit_missing"
+  | "report_missing"
+  | "report_unreadable"
+  | "reports_ambiguous"
+  | "draft_missing"
+  | "draft_unreadable"
+  | "no_changes"
+  | "pr_wrong_base"
+  | "pr_other_branch"
+  | "prs_ambiguous"
+  | "pr_not_opened"
+  | "push_rejected"
+  | "drafts_unreadable";
 
 /** CloseOutcome is what became of one part of the closing of a task. */
 export type CloseOutcome = "done" | "skipped" | "failed";
@@ -433,7 +456,8 @@ export type MarkerType =
   | "paused"
   | "plan_invalid"
   | "background_stopped"
-  | "background_lost";
+  | "background_lost"
+  | "divergence";
 /** AppKind is which message of the workflow the app sent; "" for any other message. */
 export type AppKind =
   | ""
@@ -444,6 +468,8 @@ export type AppKind =
   | "commit_all_push"
   | "commit_push"
   | "correction"
+  | "drafts_correction"
+  | "again"
   | "open"
   | "pr_pass"
   | "apply";
@@ -495,7 +521,8 @@ export type SituationKind =
   | "epic_discarded"
   | "ready_to_archive"
   | "publish_failed"
-  | "pass_blocked";
+  | "pass_blocked"
+  | "divergence";
 
 /** SituationGroup is how urgent a situation is, from the most urgent. */
 export type SituationGroup = "error" | "waiting" | "closing";
@@ -581,6 +608,8 @@ export type PullReviewStatus =
   | "in_review"
   | "ready_to_approve"
   | "committing"
+  | "pushing"
+  | "diverged"
   | "ready_to_merge"
   | "trouble";
 
@@ -614,7 +643,7 @@ export type PullRequestOutcome = "merged" | "closed";
 /** DiscussionStatus is where a discussion of a demand of a board stands. */
 export type DiscussionStatus =
   | "discussing"
-  | "awaiting_drafts"
+  | "diverged"
   | "deciding"
   | "publishing"
   | "publish_failed"
@@ -905,6 +934,7 @@ export function asStepStatus(value: string): StepStatus {
     case "nothing_to_commit":
     case "review_failed":
     case "committing":
+    case "diverged":
     case "done":
       return value;
     default:
@@ -927,6 +957,8 @@ export function asPRStatus(value: string): PRStatus {
     case "in_review":
     case "ready_to_approve":
     case "committing":
+    case "pushing":
+    case "diverged":
     case "done":
     case "trouble":
     case "merged":
@@ -936,6 +968,27 @@ export function asPRStatus(value: string): PRStatus {
       return value;
     default:
       return "preparing";
+  }
+}
+
+export function asDivergenceKind(value: string): DivergenceKind {
+  switch (value) {
+    case "commit_missing":
+    case "report_missing":
+    case "report_unreadable":
+    case "reports_ambiguous":
+    case "draft_missing":
+    case "draft_unreadable":
+    case "no_changes":
+    case "pr_wrong_base":
+    case "pr_other_branch":
+    case "prs_ambiguous":
+    case "pr_not_opened":
+    case "push_rejected":
+    case "drafts_unreadable":
+      return value;
+    default:
+      return "commit_missing";
   }
 }
 
@@ -1126,6 +1179,7 @@ export function asMarkerType(value: string): MarkerType {
     case "plan_invalid":
     case "background_stopped":
     case "background_lost":
+    case "divergence":
       return value;
     default:
       return "compacted";
@@ -1141,6 +1195,8 @@ export function asAppKind(value: string): AppKind {
     case "commit_all_push":
     case "commit_push":
     case "correction":
+    case "drafts_correction":
+    case "again":
     case "open":
     case "pr_pass":
     case "apply":
@@ -1259,6 +1315,7 @@ export function asSituationKind(value: string): SituationKind {
     case "ready_to_archive":
     case "publish_failed":
     case "pass_blocked":
+    case "divergence":
       return value;
     default:
       return "reply";
@@ -1432,6 +1489,8 @@ export function asPullReviewStatus(value: string): PullReviewStatus {
     case "in_review":
     case "ready_to_approve":
     case "committing":
+    case "pushing":
+    case "diverged":
     case "ready_to_merge":
     case "trouble":
       return value;
@@ -1529,7 +1588,7 @@ export function asPullRequestOutcome(value: string): PullRequestOutcome {
 export function asDiscussionStatus(value: string): DiscussionStatus {
   switch (value) {
     case "discussing":
-    case "awaiting_drafts":
+    case "diverged":
     case "deciding":
     case "publishing":
     case "publish_failed":
@@ -1747,6 +1806,9 @@ export const api = {
     TaskService.OpenPRFindingInEditor(taskId, pass, number),
   reviewAgain: (taskId: string): Promise<void> => TaskService.ReviewAgain(taskId),
   discardDraft: (taskId: string): Promise<void> => TaskService.DiscardDraft(taskId),
+  checkAgainTask: (taskId: string): Promise<void> => TaskService.CheckAgain(taskId),
+  askAgainTask: (taskId: string): Promise<void> => TaskService.AskAgain(taskId),
+  adoptTask: (taskId: string, choice: string): Promise<void> => TaskService.Adopt(taskId, choice),
   retryPR: (taskId: string): Promise<void> => TaskService.RetryPR(taskId),
   refreshPR: (taskId: string): Promise<void> => TaskService.RefreshPR(taskId),
   closeTask: (taskId: string): Promise<void> => TaskService.CloseTask(taskId),
@@ -1774,6 +1836,10 @@ export const api = {
     ReviewService.SetReviewSummary(id, pass, text),
   publishReview: (id: string, verdict: ReviewVerdict, withSummary: boolean): Promise<void> =>
     ReviewService.PublishReview(id, verdict, withSummary),
+  checkAgainReview: (id: string): Promise<void> => ReviewService.CheckAgain(id),
+  askAgainReview: (id: string): Promise<void> => ReviewService.AskAgain(id),
+  adoptReview: (id: string, choice: string): Promise<void> => ReviewService.Adopt(id, choice),
+  retryPushReview: (id: string): Promise<void> => ReviewService.RetryPush(id),
   refreshReviewPR: (id: string): Promise<void> => ReviewService.RefreshPR(id),
   applyReview: (id: string): Promise<void> => ReviewService.ApplyReview(id),
   approveReview: (id: string): Promise<void> => ReviewService.ApproveReview(id),
@@ -1788,6 +1854,8 @@ export const api = {
 
   startDiscussion: (req: StartDiscussionRequest): Promise<string> =>
     DiscussionService.StartDiscussion(req),
+  checkAgainDiscussion: (id: string): Promise<void> => DiscussionService.CheckAgain(id),
+  askAgainDiscussion: (id: string): Promise<void> => DiscussionService.AskAgain(id),
   discussionContext: (req: DiscussionContextRequest): Promise<string> =>
     DiscussionService.DiscussionContext(req),
   addDraftImage: (id: string, draftId: string, image: string): Promise<string> =>

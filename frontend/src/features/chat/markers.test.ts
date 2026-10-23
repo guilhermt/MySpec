@@ -40,6 +40,7 @@ import type {
 import { clockTime } from "@/lib/when";
 import {
   makeDiscussionCard,
+  makeDivergence,
   makeDraft,
   makeDraftRef,
   makeEntry,
@@ -469,6 +470,16 @@ describe("productMessageOf", () => {
       product("The plan isn't valid yet · 3 problems · correction 1 of 3"),
     ],
     [
+      "the question asked once more",
+      app({ appKind: "again" }),
+      product("the report or the draft that wasn't there, asked once more"),
+    ],
+    [
+      "the correction of the drafts",
+      app({ appKind: "drafts_correction" }),
+      product("drafts.md can't be read · rewrite it in the format MySpec reads"),
+    ],
+    [
       "the opening of the pull request",
       app({ appKind: "open" }),
       product("Open the pull request · the approved draft"),
@@ -839,6 +850,36 @@ describe("markerOf", () => {
         complement: "2 problems",
         body: { kind: "problems", problems },
       }),
+    ],
+    [
+      "a divergence",
+      {
+        type: "divergence",
+        divergence: makeDivergence({
+          kind: "report_missing",
+          stage: "step_review:3",
+          pass: 2,
+          path: "step-reviews/step-3-pass-2.md",
+        }),
+      },
+      ctx("step_review:3"),
+      view("problem", "Not as expected", {
+        complement: "no report",
+        body: {
+          kind: "list",
+          items: [
+            "Expected the report of pass 2 at step-reviews/step-3-pass-2.md.",
+            "Found no report.",
+          ],
+        },
+        tone: "error",
+      }),
+    ],
+    [
+      "a divergence an old transcript lost",
+      { type: "divergence" },
+      ctx("step:3"),
+      view("problem", "Not as expected", { tone: "error" }),
     ],
     [
       "a turn you interrupted",

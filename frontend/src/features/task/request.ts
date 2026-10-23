@@ -2,11 +2,9 @@ import type { RequestButton, RequestModel } from "@/components/system/RequestBar
 import { pendingOf } from "@/features/chat/composer";
 import { voiceInSentence, voiceOf } from "@/features/chat/markers";
 import {
-  currentReport,
   discardedPass,
   findingsBar,
   findingsFormOf,
-  noFileChanged,
   REWRITE_UNREADABLE,
 } from "@/features/task/pr-findings";
 import { canCloseTask, closeHint, draftAtHand } from "@/features/task/pr-status";
@@ -17,6 +15,7 @@ import {
   stepStage,
 } from "@/features/task/step-status";
 import { isPaused } from "@/features/task/task-session";
+import { type DivergenceAction, divergenceActions, divergenceText } from "@/lib/divergences";
 import type { RequestFocus } from "@/lib/focus";
 import { hasReviewConversation, prBaseName, troubleLabel } from "@/lib/pull-requests";
 import { fallbackReason, prFallbackReason } from "@/lib/review-modes";
@@ -36,6 +35,7 @@ import {
 import { asLifecycleStage, stageLabel } from "@/lib/stages";
 import type {
   BlockReason,
+  Divergence,
   Entry,
   PRBlockReason,
   PullRequest,
@@ -85,7 +85,10 @@ export type TaskRequestAction =
   | "showProblems"
   | "nextToDecide"
   | "approveRest"
-  | "applyFindings";
+  | "applyFindings"
+  | "checkAgain"
+  | "askAgain"
+  | "adopt";
 
 /** TaskRequestButton is one button of the request bar of a task. */
 export type TaskRequestButton = RequestButton<TaskRequestAction>;
@@ -128,6 +131,7 @@ export type RequestKind = Extract<
   | "pr_trouble"
   | "pr_closed"
   | "findings"
+  | "divergence"
 >;
 
 /** Want is what the bar asks for: the kind of the request and its form, from a situation or from the state. */
@@ -153,6 +157,68 @@ type Drawn<A extends string> = Omit<
   RequestModel<A, RequestFocus>,
   "glyph" | "time" | "situationId"
 >;
+
+const DIVERGENCE_LOADING: Record<DivergenceAction["kind"], string> = {
+  checkAgain: "Checking…",
+  askAgain: "Asking…",
+  adopt: "Adopting…",
+  openPR: "Opening…",
+};
+
+/**
+ * divergenceBar is the bar of a divergence, in the three screens: what the app expected, what it
+ * found and the ways out, the first of them primary. openPR is the button of the screen whose
+ * action opens the pull request; without one, the divergence has no such way out.
+ */
+export function divergenceBar<A extends string>(
+  d: Divergence,
+  place: string,
+  openPR?: RequestButton<A>,
+): Bar<A> {
+  const { expected, found } = divergenceText(d);
+  const label = "Not as expected";
+  const actions = divergenceActions(d).flatMap((action, index): RequestButton<A>[] => {
+    const variant = index === 0 ? "primary" : "secondary";
+    if (action.kind === "openPR") {
+      return openPR === undefined
+        ? []
+        : [{ ...openPR, label: action.label, variant, loadingLabel: DIVERGENCE_LOADING.openPR }];
+    }
+    return [
+      {
+        action: action.kind as A,
+        label: action.label,
+        variant,
+        loadingLabel: DIVERGENCE_LOADING[action.kind],
+        ...(action.kind === "adopt" ? { choice: action.choice } : {}),
+      },
+    ];
+  });
+  return {
+    form: "error",
+    label,
+    place,
+    progress: `Expected ${expected} · found ${found}`,
+    progressTooltip: `MySpec expected ${expected}. It found ${found}.`,
+    status: statusOf(label, place),
+    actions,
+    focus: "primary",
+  };
+}
+
+/** divergencePlace is where in a task the conversation of a divergence is: Implementer, Reviewer, PR or PR review. */
+export function divergencePlace(stage: string): string {
+  switch (stage.split(":")[0]) {
+    case "step_review":
+      return "Reviewer";
+    case "pr":
+      return "PR";
+    case "pr_review":
+      return "PR review";
+    default:
+      return "Implementer";
+  }
+}
 
 const STEP_KINDS: readonly SituationKind[] = ["step_review", "step_empty"];
 const PR_KINDS: readonly SituationKind[] = [
@@ -240,9 +306,6 @@ function stepBar(task: TaskSummary, step: Step, want: Want): Bar {
     };
   }
   const notes = [...staged(step.review)];
-  if (step.commitFailed) {
-    notes.push("the last approval didn't produce a commit");
-  }
   const fallback = asReviewFallback(step.reviewFallback);
   if (fallback === "rounds_exhausted" || fallback === "commit_failed") {
     notes.push(lowerFirst(fallbackReason(fallback)));
@@ -435,27 +498,18 @@ function prBar(
       };
     case "changes_review": {
       const notes = [...staged(pr.review)];
-      if (pr.commitFailed) {
-        notes.push("the last approval didn't produce a commit");
-      }
       if (fallback === "commit_failed") {
         notes.push(lowerFirst(prFallbackReason(fallback)));
       }
       const label = want.form === "approve" ? "Approve changes" : "Review changes";
       const place = "PR review";
-      const empty = noFileChanged(pr);
       return {
         form: "tinted",
         label,
         place,
-        progress: empty ? "No file changed" : joined(notes),
+        progress: joined(notes),
         status: statusOf(label, place),
-        actions: [
-          openInEditor(),
-          empty
-            ? { ...approveButton("approvePR", null), disabledReason: "No change to approve" }
-            : approveButton("approvePR", pr.review),
-        ],
+        actions: [openInEditor(), approveButton("approvePR", pr.review)],
       };
     }
     case "findings":
@@ -497,6 +551,17 @@ function barOf(
     }
     case "ready_to_continue":
       return continueBar(task);
+    case "divergence": {
+      const { divergence, pr } = task;
+      if (divergence === null) {
+        return null;
+      }
+      return divergenceBar(
+        divergence,
+        divergencePlace(divergence.stage),
+        pr === null ? undefined : approveDraftButton(pr, editedDraft),
+      );
+    }
     default:
       return task.pr === null
         ? null
@@ -564,6 +629,7 @@ const TASK_KINDS: readonly SituationKind[] = [
   "pr_blocked",
   "plan_invalid",
   "findings",
+  "divergence",
 ];
 
 // prScreenSituation is the situation of the pull request on screen: of the tab chosen with the two
@@ -611,6 +677,8 @@ function pausedWant(task: TaskSummary): Want | null {
         return { kind: "step_review", form: "approve" };
       case "nothing_to_commit":
         return { kind: "step_empty", form: "" };
+      case "diverged":
+        return { kind: "divergence", form: "" };
       default:
         return null;
     }
@@ -636,6 +704,8 @@ function pausedWant(task: TaskSummary): Want | null {
       return { kind: "pr_closed", form: "" };
     case "awaiting_decision":
       return { kind: "findings", form: findingsFormOf(pr) };
+    case "diverged":
+      return { kind: "divergence", form: "" };
     default:
       return null;
   }
@@ -669,19 +739,13 @@ function situationRequestOf(
       const { pr } = task;
       const session = situationSession(situation, task);
       const actions =
-        asPlaceKind(situation.place.kind) === "pr" && pr !== null && draftAtHand(pr)
-          ? [approveDraftButton(pr, editedDraft)]
-          : [];
-      const unreadable =
         asPlaceKind(situation.place.kind) === "pr" &&
         pr !== null &&
-        pr.unreadableReport !== "" &&
-        currentReport(pr)?.recorded !== true
-          ? pr.unreadableReport
-          : "";
+        draftAtHand(pr, task.divergence)
+          ? [approveDraftButton(pr, editedDraft)]
+          : [];
       return sessionRequestOf(situation, session, conversationName(session.stage), pending, {
         label: "Waiting for reply",
-        ...(unreadable === "" ? {} : { progress: unreadable }),
         actions,
       });
     }

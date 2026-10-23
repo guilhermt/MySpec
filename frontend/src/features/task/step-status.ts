@@ -28,6 +28,7 @@ export function hasStepSession(step: Step | null): boolean {
     case "nothing_to_commit":
     case "review_failed":
     case "committing":
+    case "diverged":
       return true;
     case "not_started":
     case "preparing":
@@ -64,6 +65,8 @@ export function stepStatusLabel(step: Step): string {
       return "Can't read the worktree";
     case "committing":
       return "Committing";
+    case "diverged":
+      return "Not as expected";
     case "done":
       return "Done";
   }
@@ -91,6 +94,7 @@ export function stepStatusTone(step: Step): StatusTone {
     case "ready_to_approve":
     case "nothing_to_commit":
     case "review_failed":
+    case "diverged":
       return "idle";
   }
 }

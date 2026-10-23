@@ -270,11 +270,11 @@ func prSituation(t task.Task, pr flow.PullRequest, d *divergence.Divergence) (Fo
 		if pr.Review != nil && pr.Review.Staged > 0 {
 			form, percent = FormStaged, pr.Review.Percent()
 		}
-		found := newFound(t, place, KindChangesReview, changesReviewBody(form, pr.CommitFailed, pr.Fallback))
+		found := newFound(t, place, KindChangesReview, changesReviewBody(pr.Fallback))
 		found.Form, found.Percent = form, percent
 		return found, true
 	case flow.PRReadyToApprove:
-		found := newFound(t, place, KindChangesReview, changesReviewBody(FormApprove, pr.CommitFailed, pr.Fallback))
+		found := newFound(t, place, KindChangesReview, changesReviewBody(pr.Fallback))
 		found.Form = FormApprove
 		return found, true
 	case flow.PRTrouble:

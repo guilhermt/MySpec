@@ -86,10 +86,6 @@ type PullRequest struct {
 	// waits for it.
 	CloneMissing bool
 
-	// CommitFailed is always false: a commit that did not happen is the
-	// divergence of the pull request.
-	CommitFailed bool
-
 	// Divergence is what the app expected of the pull request and did not
 	// find; nil for none.
 	Divergence *divergence.Divergence

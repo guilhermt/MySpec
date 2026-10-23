@@ -11,6 +11,7 @@ import {
   asCloseSkipReason,
   asDependencyDrop,
   asDiscussionStatus,
+  asDivergenceKind,
   asDraftDecision,
   asDraftKind,
   asDraftOutcome,
@@ -208,6 +209,33 @@ describe("narrowing", () => {
     expect(asActionStatus("interrupted")).toBe("interrupted");
     expect(asPermissionStatus("allowed_session")).toBe("allowed_session");
     expect(asMarkerType("prd_updated")).toBe("prd_updated");
+    expect(asMarkerType("divergence")).toBe("divergence");
+    expect(asSituationKind("divergence")).toBe("divergence");
+    expect(asStepStatus("diverged")).toBe("diverged");
+    expect(asPRStatus("diverged")).toBe("diverged");
+    expect(asPRStatus("pushing")).toBe("pushing");
+    expect(asPullReviewStatus("diverged")).toBe("diverged");
+    expect(asPullReviewStatus("pushing")).toBe("pushing");
+    expect(asDiscussionStatus("diverged")).toBe("diverged");
+    expect(asAppKind("again")).toBe("again");
+    expect(asAppKind("drafts_correction")).toBe("drafts_correction");
+    for (const kind of [
+      "commit_missing",
+      "report_missing",
+      "report_unreadable",
+      "reports_ambiguous",
+      "draft_missing",
+      "draft_unreadable",
+      "no_changes",
+      "pr_wrong_base",
+      "pr_other_branch",
+      "prs_ambiguous",
+      "pr_not_opened",
+      "push_rejected",
+      "drafts_unreadable",
+    ]) {
+      expect(asDivergenceKind(kind)).toBe(kind);
+    }
     expect(asMarkerType("tech_spec_written")).toBe("tech_spec_written");
     expect(asMarkerType("tech_spec_updated")).toBe("tech_spec_updated");
     expect(asMarkerType("plan_written")).toBe("plan_written");
@@ -438,7 +466,7 @@ describe("narrowing", () => {
     expect(asPlaceKind("discussion")).toBe("discussion");
     for (const status of [
       "discussing",
-      "awaiting_drafts",
+      "diverged",
       "deciding",
       "publishing",
       "publish_failed",
@@ -521,6 +549,8 @@ describe("narrowing", () => {
     expect(asFindingDecision("deferred")).toBe("");
     expect(asFindingPlacement("thread")).toBe("");
     expect(asDiscussionStatus("archived")).toBe("discussing");
+    expect(asDiscussionStatus("awaiting_drafts")).toBe("discussing");
+    expect(asDivergenceKind("lost")).toBe("commit_missing");
     expect(asDraftKind("close")).toBe("new");
     expect(asDraftSource("board")).toBe("agent");
     expect(asDraftDecision("deferred")).toBe("");
@@ -621,6 +651,9 @@ describe("api", () => {
     await wails.api.reviewAgain("task-1");
     await wails.api.discardDraft("task-1");
     await wails.api.retryPR("task-1");
+    await wails.api.checkAgainTask("task-1");
+    await wails.api.askAgainTask("task-1");
+    await wails.api.adoptTask("task-1", "12");
     await wails.api.refreshPR("task-1");
     await wails.api.closeTask("task-1");
     await wails.api.previewDelete("task-1");
@@ -696,13 +729,19 @@ describe("api", () => {
     await wails.api.decideDraft("discussion-1", "draft-1", "approved");
     await wails.api.groupIntoEpic("discussion-1", ["draft-1", "draft-2"], "Epic", "repo-1");
     await wails.api.retryPublish("discussion-1", "draft-1");
+    await wails.api.checkAgainDiscussion("discussion-1");
+    await wails.api.askAgainDiscussion("discussion-1");
+    await wails.api.checkAgainReview("review-1");
+    await wails.api.askAgainReview("review-1");
+    await wails.api.adoptReview("review-1", "a/one.md");
+    await wails.api.retryPushReview("review-1");
     await wails.api.archiveDiscussion("discussion-1");
     await wails.api.deleteDiscussion("discussion-1");
     await wails.api.readDiscussionArtifact("discussion-1", "discussion.md");
 
-    expect(Call.ByID).toHaveBeenCalledTimes(95);
+    expect(Call.ByID).toHaveBeenCalledTimes(104);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);
-    expect(new Set(ids).size).toBe(95);
+    expect(new Set(ids).size).toBe(104);
   });
 
   it("opens a link in the browser of the desktop, never in the webview", async () => {

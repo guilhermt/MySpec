@@ -11,17 +11,26 @@ import { useFocusAfterApproveRest } from "@/features/task/useFocusAfterApproveRe
 import { focusFindingToDecide, focusRequest } from "@/lib/focus";
 import { REVIEW_STAGE, type ReviewSummary } from "@/lib/wails";
 import {
+  adoptReview,
   applyReview,
   approveRestOfFindings,
   approveReview,
+  askAgainReview,
+  checkAgainReview,
   openExternal,
   openReviewInEditor,
   retry,
+  retryPushReview,
 } from "@/store/actions";
 import { useAppStore, useFlashing } from "@/store/app-store";
 
 // run starts what a button of the bar does; the ones that open a dialog are pressed apart.
-function run(action: ReviewRequestAction, review: ReviewSummary, stage: string): Promise<void> {
+function run(
+  action: ReviewRequestAction,
+  review: ReviewSummary,
+  stage: string,
+  choice: string,
+): Promise<void> {
   switch (action) {
     case "retrySession":
       return retry(review.id, stage);
@@ -33,6 +42,14 @@ function run(action: ReviewRequestAction, review: ReviewSummary, stage: string):
       return approveReview(review.id);
     case "openPR":
       return openExternal(review.url);
+    case "checkAgain":
+      return checkAgainReview(review.id);
+    case "askAgain":
+      return askAgainReview(review.id);
+    case "adopt":
+      return adoptReview(review.id, choice);
+    case "retryPush":
+      return retryPushReview(review.id);
     default:
       return Promise.resolve();
   }
@@ -48,6 +65,7 @@ export interface ReviewRequestProps {
  */
 export function ReviewRequest({ review }: ReviewRequestProps) {
   const [running, setRunning] = useState<ReviewRequestAction | null>(null);
+  const [runningChoice, setRunningChoice] = useState("");
   const flashing = useFlashing();
   const announce = useAppStore((state) => state.announce);
   const dialog = useAppStore((state) => state.reviewDialog);
@@ -92,7 +110,7 @@ export function ReviewRequest({ review }: ReviewRequestProps) {
     return dialogs;
   }
 
-  const press = async (action: ReviewRequestAction, stage: string | undefined) => {
+  const press = async (action: ReviewRequestAction, stage: string | undefined, choice: string) => {
     switch (action) {
       case "show":
         focusRequest(request.focus);
@@ -108,12 +126,13 @@ export function ReviewRequest({ review }: ReviewRequestProps) {
         return;
     }
     setRunning(action);
+    setRunningChoice(choice);
     try {
       const pass = currentCardPass(review)?.pass;
       if (action === "approveRest" && pass !== undefined) {
         await approveRest(() => approveRestOfFindings(review.id, pass));
       } else {
-        await run(action, review, stage ?? REVIEW_STAGE);
+        await run(action, review, stage ?? REVIEW_STAGE, choice);
       }
     } finally {
       setRunning(null);
@@ -145,7 +164,8 @@ export function ReviewRequest({ review }: ReviewRequestProps) {
           actions={RequestButtons({
             buttons: request.actions,
             running,
-            onPress: (button) => void press(button.action, button.stage),
+            runningChoice,
+            onPress: (button) => void press(button.action, button.stage, button.choice ?? ""),
           })}
         />
       </div>

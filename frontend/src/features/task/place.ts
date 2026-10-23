@@ -4,7 +4,7 @@ import { draftAtHand, prBlockHint } from "@/features/task/pr-status";
 import { blockHint, currentStepOf, stepPhaseLabel } from "@/features/task/step-status";
 import { hasReviewConversation } from "@/lib/pull-requests";
 import { counted } from "@/lib/situations";
-import type { PRStatus, PullRequest, Step, TaskSummary } from "@/lib/wails";
+import type { Divergence, PRStatus, PullRequest, Step, TaskSummary } from "@/lib/wails";
 import {
   asCheckState,
   asPRBlockReason,
@@ -190,6 +190,10 @@ export function prPlaceOf(
             checks: true,
             endLine: null,
           };
+    case "pushing":
+      return hasReviewConversation
+        ? { kind: "conversation" }
+        : { kind: "activity", text: "Pushing the commit…" };
     case "closing":
       return { kind: "activity", text: "Closing the task…" };
     case "done":
@@ -244,12 +248,12 @@ export function stepFixedCardOf(step: Step): FixedCard | null {
  * round, the draft while it is the user's to send, the live checks while a later pass waits for
  * them; none otherwise.
  */
-export function prFixedCardOf(pr: PullRequest): FixedCard | null {
+export function prFixedCardOf(pr: PullRequest, divergence?: Divergence | null): FixedCard | null {
   const status = asPRStatus(pr.status);
   if (FILES_PR.includes(status)) {
     return "files";
   }
-  if (draftAtHand(pr)) {
+  if (draftAtHand(pr, divergence)) {
     return "draft";
   }
   return status === "waiting_checks" ? "checks" : null;

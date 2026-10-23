@@ -160,16 +160,6 @@ export function findingsNotes(pr: PullRequest): { notes: string[]; tooltip: stri
   return { notes, tooltip: tooltips.join(" ") };
 }
 
-/** noFileChanged says the implementer applied the findings and changed nothing. */
-export function noFileChanged(pr: PullRequest): boolean {
-  const sent = currentReport(pr)?.sentAt ?? "";
-  return (
-    asPRStatus(pr.status) === "in_review" &&
-    sent !== "" &&
-    (pr.review === null || (pr.review.error === "" && pr.review.total === 0))
-  );
-}
-
 /** findingsBar is the bar of the findings of the pull request in a form. */
 export function findingsBar(
   pr: PullRequest,

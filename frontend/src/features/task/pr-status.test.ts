@@ -13,7 +13,13 @@ import {
   reviewAgainRefusal,
 } from "@/features/task/pr-status";
 import type { PullRequest, TaskSummary } from "@/lib/wails";
-import { makePRImplementer, makePullRequest, makeRepository, makeTask } from "@/test/wails-mock";
+import {
+  makeDivergence,
+  makePRImplementer,
+  makePullRequest,
+  makeRepository,
+  makeTask,
+} from "@/test/wails-mock";
 
 const taskOf = (pr: Partial<PullRequest>, task: Partial<TaskSummary> = {}) =>
   makeTask({ pr: makePullRequest(pr), ...task });
@@ -35,6 +41,8 @@ describe("prStatusLabel and prStatusTone", () => {
     ["in_review", "In review", "idle"],
     ["ready_to_approve", "Ready to approve", "idle"],
     ["committing", "Committing", "working"],
+    ["pushing", "Pushing the commit", "working"],
+    ["diverged", "Not as expected", "idle"],
     ["done", "Waiting for the merge", "idle"],
     ["merged", "Merged · ready to close", "idle"],
     ["pr_closed", "Closed without merge", "idle"],
@@ -90,6 +98,16 @@ describe("what the pull request allows", () => {
     expect(draftAtHand(makePullRequest({ status: "reviewing", draft: DRAFT, prNumber: 12 }))).toBe(
       false,
     );
+  });
+
+  it("has the draft at hand when GitHub has no pull request for the approved one", () => {
+    const diverged = makePullRequest({ status: "diverged", draft: DRAFT });
+    const notOpened = makeDivergence({ kind: "pr_not_opened" });
+
+    expect(draftAtHand(diverged, notOpened)).toBe(true);
+    expect(draftAtHand(diverged, makeDivergence({ kind: "pr_wrong_base" }))).toBe(false);
+    expect(draftAtHand(diverged, null)).toBe(false);
+    expect(draftAtHand(diverged)).toBe(false);
   });
 
   it("keeps the draft a record while the agent waits for a reply over an open pull request", () => {
@@ -203,6 +221,8 @@ describe("reviewAgainRefusal", () => {
   it.each([
     ["waiting_checks", 12, "a pass waits for the checks"],
     ["committing", 12, "the changes are being committed"],
+    ["pushing", 12, "the commit is being pushed"],
+    ["diverged", 12, "the pull request isn't as expected"],
     ["pr_closed", 12, "the pull request was closed"],
     ["blocked", 12, "the pull request stage is blocked"],
     ["closing", 12, "the task is closing"],

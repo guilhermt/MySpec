@@ -25,10 +25,23 @@ import { prChecks } from "@/lib/pull-requests";
 import { asPRState, asPRStatus, type PullRequest, type TaskSummary } from "@/lib/wails";
 import { type StepTab, useSubagentReturn } from "@/store/app-store";
 
+// activityOf is what the app does at the end of the conversation while it opens the pull request or
+// pushes the commit of a round.
+function activityOf(pr: PullRequest): { activity: string } | Record<string, never> {
+  switch (asPRStatus(pr.status)) {
+    case "opening":
+      return { activity: "Opening the pull request…" };
+    case "pushing":
+      return { activity: `Pushing the commit to #${pr.prNumber}…` };
+    default:
+      return {};
+  }
+}
+
 // fixedOf is the fixed card at the end of the conversation of the pull request, if any. The changed
 // files are the pull request's, on both tabs; the live checks are the reviewer's.
 function fixedOf(task: TaskSummary, pr: PullRequest, onImplementer: boolean): ReactNode {
-  const card = prFixedCardOf(pr);
+  const card = prFixedCardOf(pr, task.divergence);
   if (onImplementer && card !== "files") {
     return undefined;
   }
@@ -119,9 +132,7 @@ export function PRPane({ task, pr, tab }: PRPaneProps) {
               anchor={subagentReturn}
               {...(onImplementer ? {} : { after: anchors })}
               {...(closed ? { readOnly: true } : {})}
-              {...(asPRStatus(pr.status) === "opening"
-                ? { activity: "Opening the pull request…" }
-                : {})}
+              {...activityOf(pr)}
               replyWaiting={screenSituationKindOf(task, tab) === "reply"}
             />
             {request}

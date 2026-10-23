@@ -226,7 +226,6 @@ type Step struct {
 	CommitSHA     string  `json:"commitSha"`     // done only
 	CommitSubject string  `json:"commitSubject"` // done only
 	CommittedAt   string  `json:"committedAt"`   // done only: the committer date, RFC 3339; "" when unknown
-	CommitFailed  bool    `json:"commitFailed"`  // always false: a commit that did not happen is the divergence of the task
 
 	Model         string `json:"model"` // what the step runs with, or will run with
 	Effort        string `json:"effort"`
@@ -375,8 +374,6 @@ type PullRequest struct {
 	// can't be read; "" otherwise.
 	UnreadableReport string  `json:"unreadableReport"`
 	Review           *Review `json:"review"` // the review states and committing only
-	// CommitFailed says the last approval of the review ended without a commit.
-	CommitFailed bool `json:"commitFailed"`
 	// ReviewRound is the reports with findings the agent review handed to the
 	// implementer; 0 in manual mode.
 	ReviewRound int `json:"reviewRound"`
@@ -1777,8 +1774,6 @@ type ReviewSummary struct {
 	// UnreadableReport is why the report of the pass the app asked for could
 	// not be read; "" otherwise.
 	UnreadableReport string `json:"unreadableReport"`
-	// CommitFailed is always false: a commit that did not happen is the divergence of the review.
-	CommitFailed bool `json:"commitFailed"`
 	// Review is the last reading of the worktree; apply mode only.
 	Review *Review `json:"review"`
 	// Verdicts are the verdicts this review can be published with, in the order

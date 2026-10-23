@@ -17,9 +17,18 @@ import {
   taskRequestOf,
 } from "@/features/task/request";
 import { cloneMissingText } from "@/lib/repositories";
-import type { AgentSession, Entry, PullRequest, Situation, Step, TaskSummary } from "@/lib/wails";
+import type {
+  AgentSession,
+  Divergence,
+  Entry,
+  PullRequest,
+  Situation,
+  Step,
+  TaskSummary,
+} from "@/lib/wails";
 import type { PrDraft, StepTab } from "@/store/app-store";
 import {
+  makeDivergence,
   makeEntry,
   makePRImplementer,
   makePRReport,
@@ -202,9 +211,9 @@ describe("taskRequestOf and pausedRequestOf", () => {
       },
     ],
     [
-      "step_review, after a failed commit and three rounds",
+      "step_review, after three rounds",
       inStep(
-        { review: staged(5, 7), commitFailed: true, reviewFallback: "rounds_exhausted" },
+        { review: staged(5, 7), reviewFallback: "rounds_exhausted" },
         situation("step_review", "waiting", "review", STEP_PLACE),
       ),
       {
@@ -213,7 +222,7 @@ describe("taskRequestOf and pausedRequestOf", () => {
         label: "Review step 4",
         time: WAIT,
         progress:
-          "5 of 7 files staged · 71% · the last approval didn't produce a commit · the agent review didn't come clean after three rounds",
+          "5 of 7 files staged · 71% · the agent review didn't come clean after three rounds",
         status: "Review step 4",
         actions: [OPEN_IN_EDITOR, approve("approveStep", "Stage 2 more files")],
         situationId: "s-step_review",
@@ -334,52 +343,6 @@ describe("taskRequestOf and pausedRequestOf", () => {
         progress: "3 of 5 files staged · 60%",
         status: "Review changes · PR review",
         actions: [OPEN_IN_EDITOR, approve("approvePR", "Stage 2 more files")],
-        situationId: "s-changes_review",
-        focus: "primary",
-      },
-    ],
-    [
-      "changes_review, to approve after a failed commit",
-      inPR(
-        { status: "ready_to_approve", review: staged(5, 5), commitFailed: true },
-        situation("changes_review", "waiting", "approve"),
-      ),
-      {
-        form: "tinted",
-        glyph: "wait",
-        label: "Approve changes",
-        place: "PR review",
-        time: WAIT,
-        progress: "5 of 5 files staged · 100% · the last approval didn't produce a commit",
-        status: "Approve changes · PR review",
-        actions: [OPEN_IN_EDITOR, approve("approvePR")],
-        situationId: "s-changes_review",
-        focus: "primary",
-      },
-    ],
-    [
-      "changes_review, with no file changed by the findings",
-      inPR(
-        {
-          status: "in_review",
-          currentPass: 1,
-          reports: [makePRReport({ sentAt: "2026-09-27T17:36:00Z" })],
-          review: makeReview({ staged: 0, total: 0, percent: 0 }),
-        },
-        situation("changes_review", "waiting", "review"),
-      ),
-      {
-        form: "tinted",
-        glyph: "wait",
-        label: "Review changes",
-        place: "PR review",
-        time: WAIT,
-        progress: "No file changed",
-        status: "Review changes · PR review",
-        actions: [
-          OPEN_IN_EDITOR,
-          { ...approve("approvePR"), disabledReason: "No change to approve" },
-        ],
         situationId: "s-changes_review",
         focus: "primary",
       },
@@ -823,7 +786,7 @@ describe("taskRequestOf and pausedRequestOf", () => {
     });
   });
 
-  it("says on the reply of the PR review why the report can't be read", () => {
+  it("leaves the reason a report can't be read to the divergence on the reply of the PR review", () => {
     const task = makeTask({
       stage: "pr",
       pr: makePullRequest({
@@ -835,12 +798,9 @@ describe("taskRequestOf and pausedRequestOf", () => {
       situations: [situation("reply", "waiting", "")],
     });
 
-    expect(taskRequestOf(task, "implementer", NOW)).toMatchObject({
-      label: "Waiting for reply",
-      place: "Reviewer",
-      progress: "no heading for the finding 3",
-      progressTooltip: "no heading for the finding 3",
-    });
+    const request = taskRequestOf(task, "implementer", NOW);
+    expect(request).toMatchObject({ label: "Waiting for reply", place: "Reviewer" });
+    expect(request?.progress).toBeUndefined();
   });
 
   it("draws the findings of the PR review, the plan still invalid and the PR blocked", () => {
@@ -1894,6 +1854,174 @@ describe("the request of the review of the pull request with two conversations",
       expect(taskRequestOf({ ...task, situations: [found] }, "reviewer", NOW)?.progress).toBe(
         "2 of 3 files staged · 67%",
       );
+    });
+  });
+});
+
+describe("the bar of a divergence", () => {
+  const DIVERGED = "Not as expected";
+
+  const inStepDiverged = (divergence: Divergence, sessionStatus = "waiting") =>
+    makeTask({
+      stage: "implementation",
+      currentStep: 4,
+      sessionStatus,
+      steps: [makeStep({ number: 4, reviewMode: "manual", status: "diverged" })],
+      divergence,
+      situations:
+        sessionStatus === "paused"
+          ? []
+          : [situation("divergence", "error", "", { kind: "step", stage: "", step: 4 })],
+    });
+
+  const inPRDiverged = (divergence: Divergence, pr: Partial<PullRequest> = {}) =>
+    makeTask({
+      stage: "pr",
+      pr: makePullRequest({ prNumber: 0, status: "diverged", sessionStage: "pr", ...pr }),
+      divergence,
+      situations: [situation("divergence", "error", "")],
+    });
+
+  it("draws what the app expected and found, with its two ways out of a missing commit", () => {
+    const divergence = makeDivergence({
+      stage: "step:4",
+      kind: "commit_missing",
+      branch: "feature/login",
+      commit: "abc1234",
+      files: 4,
+    });
+
+    expect(taskRequestOf(inStepDiverged(divergence), "implementer", NOW)).toEqual({
+      form: "error",
+      glyph: "error",
+      label: DIVERGED,
+      place: "Implementer",
+      time: ERROR,
+      progress:
+        "Expected a commit on feature/login after abc1234 · found no commit, and 4 files changed in the worktree",
+      progressTooltip:
+        "MySpec expected a commit on feature/login after abc1234. It found no commit, and 4 files changed in the worktree.",
+      status: "Not as expected · Implementer",
+      actions: [
+        {
+          action: "askAgain",
+          label: "Ask the agent again",
+          variant: "primary",
+          loadingLabel: "Asking…",
+        },
+        {
+          action: "checkAgain",
+          label: "Check again",
+          variant: "secondary",
+          loadingLabel: "Checking…",
+        },
+      ],
+      situationId: "s-divergence",
+      focus: "primary",
+    });
+  });
+
+  it("is quiet, without a chip, while the task is paused", () => {
+    const divergence = makeDivergence({ stage: "step:4", kind: "commit_missing", files: 0 });
+    const paused = inStepDiverged(divergence, "paused");
+
+    expect(taskRequestOf(paused, "implementer", NOW)).toMatchObject({
+      form: "quiet",
+      glyph: "paused",
+      label: DIVERGED,
+      situationId: null,
+    });
+    expect(pausedRequestOf(paused)?.time).toBeUndefined();
+  });
+
+  it("names the conversation of the reviewer", () => {
+    const divergence = makeDivergence({
+      stage: "step_review:4",
+      kind: "report_missing",
+      pass: 1,
+      path: "step-reviews/step-4-pass-1.md",
+    });
+    const task = inStepDiverged(divergence);
+    task.situations = [
+      situation("divergence", "error", "", { kind: "step_review", stage: "", step: 4 }),
+    ];
+    task.steps = [
+      makeStep({
+        number: 4,
+        status: "diverged",
+        reviewer: makeStepReviewer({ sessionStage: "step_review:4" }),
+      }),
+    ];
+
+    expect(taskRequestOf(task, "reviewer", NOW)).toMatchObject({
+      place: "Reviewer",
+      actions: [{ label: "Ask the reviewer again" }, { label: "Check again" }],
+    });
+  });
+
+  it("offers one adoption for each pull request the app found", () => {
+    const divergence = makeDivergence({
+      stage: "pr",
+      kind: "prs_ambiguous",
+      branch: "feature/login",
+      prs: [
+        { number: 12, url: "", base: "main", head: "feature/login" },
+        { number: 14, url: "", base: "main", head: "feature/login" },
+      ],
+    });
+
+    expect(taskRequestOf(inPRDiverged(divergence), "reviewer", NOW)).toMatchObject({
+      place: "PR",
+      progress: "Expected one pull request from feature/login · found #12 and #14",
+      actions: [
+        { action: "adopt", label: "Adopt #12", variant: "primary", choice: "12" },
+        { action: "adopt", label: "Adopt #14", variant: "secondary", choice: "14" },
+        { action: "checkAgain", label: "Check again", variant: "secondary" },
+      ],
+    });
+  });
+
+  it("opens the pull request with the approval of the draft", () => {
+    const divergence = makeDivergence({ stage: "pr", kind: "pr_not_opened", base: "main" });
+    const task = inPRDiverged(divergence, { draft: DRAFT });
+
+    expect(taskRequestOf(task, "reviewer", NOW)?.actions).toEqual([
+      {
+        action: "approveDraft",
+        label: "Open the pull request",
+        variant: "primary",
+        loadingLabel: "Opening…",
+      },
+      {
+        action: "checkAgain",
+        label: "Check again",
+        variant: "secondary",
+        loadingLabel: "Checking…",
+      },
+    ]);
+  });
+
+  it("puts the implementer of the review of the pull request in its place", () => {
+    const divergence = makeDivergence({
+      stage: "pr_fix",
+      kind: "no_changes",
+      approved: 2,
+      pass: 1,
+    });
+    const task = inPRDiverged(divergence, { prNumber: 1284, sessionStage: "pr_review" });
+    task.situations = [
+      situation("divergence", "error", "", { kind: "pr_fix", stage: "", step: 0 }),
+    ];
+    task.conversations = [makeTaskConversation({ stage: "pr_review" })];
+
+    expect(taskRequestOf(task, "implementer", NOW)).toMatchObject({
+      place: "Implementer",
+      progress: "Expected changes for the 2 approved findings of pass 1 · found no file changed",
+      actions: [
+        { action: "adopt", label: "Continue without changes", variant: "primary", choice: "" },
+        { action: "askAgain", label: "Ask the implementer again" },
+        { action: "checkAgain", label: "Check again" },
+      ],
     });
   });
 });

@@ -7,6 +7,7 @@ import {
   approveRestButton,
   type Bar,
   clean,
+  divergenceBar,
   drawn,
   type PendingRequest,
   REVIEW_AGAIN_TOOLTIP,
@@ -49,7 +50,11 @@ export type ReviewRequestAction =
   | "openInEditor"
   | "approve"
   | "openPR"
-  | "reviewAgain";
+  | "reviewAgain"
+  | "retryPush"
+  | "checkAgain"
+  | "askAgain"
+  | "adopt";
 
 /** ReviewRequestModel is the request bar of the review screen. */
 export type ReviewRequestModel = RequestModel<ReviewRequestAction, RequestFocus>;
@@ -67,6 +72,7 @@ type ReviewKind = Extract<
   | "new_commits"
   | "pr_trouble"
   | "pass_blocked"
+  | "divergence"
 >;
 
 /** Want is what the bar asks for: the kind and its form, from the situation or, paused, from the state. */
@@ -195,9 +201,6 @@ function reportBar(review: ReviewSummary, form: Want["form"], place: string): Re
 function changesBar(review: ReviewSummary, form: Want["form"], place: string): ReviewBar {
   const changes = review.review;
   const notes = [changes === null || changes.error !== "" ? "" : reviewCountLabel(changes)];
-  if (review.commitFailed) {
-    notes.push("the last approval didn't produce a commit");
-  }
   const label = form === "approve" ? "Approve changes" : "Review changes";
   return {
     form: "tinted",
@@ -230,7 +233,15 @@ function newCommitsBar(review: ReviewSummary, pass: number): ReviewBar {
   };
 }
 
-function barOf(review: ReviewSummary, want: Want): ReviewBar {
+// retryPushButton is Try again of a push that failed: it pushes the commit again, no pass is asked for.
+const RETRY_PUSH: ReviewButton = {
+  action: "retryPush",
+  label: "Try again",
+  variant: "primary",
+  loadingLabel: "Pushing…",
+};
+
+function barOf(review: ReviewSummary, want: Want): ReviewBar | null {
   const n = reviewPass(review);
   const place = `pass ${n}`;
   switch (want.kind) {
@@ -281,8 +292,12 @@ function barOf(review: ReviewSummary, want: Want): ReviewBar {
         place,
         progress: review.passBlocked,
         status: statusOf("Pass blocked", place),
-        actions: [reviewAgainButton()],
+        actions: [
+          asPullReviewStatus(review.status) === "pushing" ? RETRY_PUSH : reviewAgainButton(),
+        ],
       };
+    case "divergence":
+      return review.divergence === null ? null : divergenceBar(review.divergence, place);
   }
 }
 
@@ -294,6 +309,7 @@ const REVIEW_KINDS: readonly SituationKind[] = [
   "new_commits",
   "pr_trouble",
   "pass_blocked",
+  "divergence",
 ];
 
 // situationWant is what a situation of the review itself asks for; null for one of its conversation.
@@ -337,6 +353,8 @@ function pausedWant(review: ReviewSummary): Want | null {
       return { kind: "pr_trouble", form: "" };
     case "pass_blocked":
       return { kind: "pass_blocked", form: "" };
+    case "diverged":
+      return { kind: "divergence", form: "" };
     default:
       return null;
   }
@@ -347,10 +365,11 @@ function situationRequestOf(
   review: ReviewSummary,
   situation: Situation,
   pending: PendingRequest | null,
-): ReviewRequestModel {
+): ReviewRequestModel | null {
   const want = situationWant(situation);
   if (want !== null) {
-    return drawn(situation, barOf(review, want));
+    const bar = barOf(review, want);
+    return bar === null ? null : drawn(situation, bar);
   }
   const session = {
     stage: review.sessionStage === "" ? REVIEW_STAGE : review.sessionStage,
@@ -363,7 +382,6 @@ function situationRequestOf(
     pending,
     {
       label: "Waiting for the report",
-      ...(review.unreadableReport === "" ? {} : { progress: review.unreadableReport }),
       actions: [],
     },
   );
@@ -381,16 +399,21 @@ export function reviewRequestOf(
 ): ReviewRequestModel | null {
   if (isPausedReview(review)) {
     const want = pausedWant(review);
-    return want === null
+    const bar = want === null ? null : barOf(review, want);
+    return bar === null
       ? null
-      : { ...clean(barOf(review, want)), form: "quiet", glyph: "paused", situationId: null };
+      : { ...clean(bar), form: "quiet", glyph: "paused", situationId: null };
   }
   const situation = reviewSituation(review);
   if (situation === null) {
     return null;
   }
+  const request = situationRequestOf(review, situation, pending);
+  if (request === null) {
+    return null;
+  }
   return {
-    ...situationRequestOf(review, situation, pending),
+    ...request,
     time: {
       short: compactWait(situation.startedAt, now),
       long: spokenWait(situation.startedAt, now),

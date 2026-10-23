@@ -15,11 +15,14 @@ import { useTaskRequest } from "@/features/task/useTaskRequest";
 import { focusFindingToDecide, focusRequest } from "@/lib/focus";
 import type { TaskSummary } from "@/lib/wails";
 import {
+  adoptTask,
   applyPRFindings,
   approvePR,
   approveRestOfPRFindings,
   approveStep,
+  askAgainTask,
   changeClonePath,
+  checkAgainTask,
   closeTask,
   closeTaskInPlace,
   continueStage,
@@ -78,6 +81,12 @@ function run(button: TaskRequestButton, task: TaskSummary, edited: PrDraft | nul
       return retryPR(taskId);
     case "changePath":
       return changeClonePath(task.repositoryId);
+    case "checkAgain":
+      return checkAgainTask(taskId);
+    case "askAgain":
+      return askAgainTask(taskId);
+    case "adopt":
+      return adoptTask(taskId, button.choice ?? "");
     default:
       return Promise.resolve();
   }
@@ -91,6 +100,7 @@ export interface TaskRequestProps {
 /** TaskRequest is the request bar of the task screen: what the step or the stage asks of the user. */
 export function TaskRequest({ task, tab }: TaskRequestProps) {
   const [running, setRunning] = useState<TaskRequestAction | null>(null);
+  const [runningChoice, setRunningChoice] = useState("");
   const [discarding, setDiscarding] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [cleaning, setCleaning] = useState(false);
@@ -156,6 +166,7 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
         return;
     }
     setRunning(button.action);
+    setRunningChoice(button.choice ?? "");
     try {
       const pass = task.pr?.currentPass;
       if (button.action === "approveRest" && pass !== undefined) {
@@ -192,6 +203,7 @@ export function TaskRequest({ task, tab }: TaskRequestProps) {
         actions={RequestButtons({
           buttons: request.actions,
           running,
+          runningChoice,
           onPress: (button) => void press(button),
         })}
       />

@@ -24,6 +24,7 @@ import type {
   DiscussionCard,
   DiscussionContextRequest,
   DiscussionSummary,
+  Divergence,
   Draft,
   DraftDecision,
   DraftRef,
@@ -262,6 +263,9 @@ export const api = {
   ),
   reviewAgain: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
   discardDraft: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  checkAgainTask: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  askAgainTask: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
+  adoptTask: vi.fn<(taskId: string, choice: string) => Promise<void>>(() => Promise.resolve()),
   retryPR: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
   refreshPR: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
   closeTask: vi.fn<(taskId: string) => Promise<void>>(() => Promise.resolve()),
@@ -289,6 +293,10 @@ export const api = {
   publishReview: vi.fn<(id: string, verdict: ReviewVerdict, withSummary: boolean) => Promise<void>>(
     () => Promise.resolve(),
   ),
+  checkAgainReview: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  askAgainReview: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  adoptReview: vi.fn<(id: string, choice: string) => Promise<void>>(() => Promise.resolve()),
+  retryPushReview: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   refreshReviewPR: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   applyReview: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   approveReview: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
@@ -309,6 +317,8 @@ export const api = {
   startDiscussion: vi.fn<(req: StartDiscussionRequest) => Promise<string>>(() =>
     Promise.resolve("discussion-1"),
   ),
+  checkAgainDiscussion: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  askAgainDiscussion: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   discussionContext: vi.fn<(req: DiscussionContextRequest) => Promise<string>>(() =>
     Promise.resolve("## Board\n"),
   ),
@@ -816,6 +826,26 @@ export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
   };
 }
 
+export function makeDivergence(overrides: Partial<Divergence> = {}): Divergence {
+  return {
+    stage: "step:1",
+    kind: "commit_missing",
+    branch: "feature/login",
+    base: "main",
+    commit: "abc1234",
+    files: 0,
+    all: false,
+    pass: 0,
+    approved: 0,
+    path: "",
+    reason: "",
+    candidates: [],
+    prs: [],
+    startedAt: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
 export function makeTaskConversation(overrides: Partial<TaskConversation> = {}): TaskConversation {
   return { stage: "prd", startedAt: "2026-09-05T10:00:00Z", ...overrides };
 }
@@ -918,7 +948,6 @@ export function makeStep(overrides: Partial<Step> = {}): Step {
     commitSha: "",
     commitSubject: "",
     committedAt: "",
-    commitFailed: false,
     model: "claude-opus-5-5[1m]",
     effort: "high",
     adjusted: false,
@@ -1024,7 +1053,6 @@ export function makePullRequest(overrides: Partial<PullRequest> = {}): PullReque
     currentPass: 0,
     unreadableReport: "",
     review: null,
-    commitFailed: false,
     reviewRound: 0,
     implementer: null,
     implementerStarted: false,
@@ -1377,7 +1405,6 @@ export function makeReviewSummary(overrides: Partial<ReviewSummary> = {}): Revie
     publishError: "",
     passBlocked: "",
     unreadableReport: "",
-    commitFailed: false,
     review: null,
     verdicts: ["approve", "request_changes", "comment"],
     canPublish: false,

@@ -362,7 +362,6 @@ func fromPullRequest(pr *flow.PullRequest) *PullRequest {
 		CurrentPass:      currentPassNumber(pr.Pass),
 		UnreadableReport: pr.Unreadable,
 		Review:           fromReview(pr.Review),
-		CommitFailed:     pr.CommitFailed,
 
 		PRNumber:     pr.PR.Number,
 		PRURL:        pr.PR.URL,

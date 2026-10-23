@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import {
   makeDiscussion,
+  makeDivergence,
   makeDraft,
   makeDraftRef,
   makeEntry,
@@ -295,5 +296,23 @@ describe("DiscussionRequest", () => {
       expect(within(request()).getByRole("status")).toBeEmptyDOMElement();
       expect(useAppStore.getState().announcement).toBeNull();
     });
+  });
+
+  it("checks the drafts again and asks the agent to fix them", async () => {
+    const { user } = bar({
+      status: "diverged",
+      divergence: makeDivergence({
+        stage: "discussion",
+        kind: "drafts_unreadable",
+        reason: "No title.",
+      }),
+      situations: [situation("divergence", "error")],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Check again" }));
+    await user.click(screen.getByRole("button", { name: "Ask the agent again" }));
+
+    expect(api.checkAgainDiscussion).toHaveBeenCalledWith("discussion-1");
+    expect(api.askAgainDiscussion).toHaveBeenCalledWith("discussion-1");
   });
 });

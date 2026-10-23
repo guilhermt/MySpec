@@ -22,6 +22,7 @@ import {
   makeBoard,
   makeDiscussion,
   makeDiscussionCard,
+  makeDivergence,
   makeDraft,
   makePRCheck,
   makePRImplementer,
@@ -370,6 +371,18 @@ describe("the line 2 of a task with a situation", () => {
       short,
     });
   });
+
+  it("says what the app found when the task is not as expected", () => {
+    const task = taskWith({
+      situations: [situation({ kind: "divergence", group: "error", place: PR_PLACE })],
+      divergence: makeDivergence({ stage: "pr", kind: "pr_not_opened", base: "main" }),
+    });
+
+    expect(taskLine(task)).toEqual({
+      long: "Not as expected · none on GitHub",
+      short: "Not as expected",
+    });
+  });
 });
 
 describe("the line 2 of a review with a situation", () => {
@@ -425,6 +438,18 @@ describe("the line 2 of a review with a situation", () => {
     expect(reviewRow(reviewWith({ situations: [situation(fields)] }), NOW).line2).toEqual({
       long,
       short,
+    });
+  });
+
+  it("says what the app found when the review is not as expected", () => {
+    const review = reviewWith({
+      situations: [situation({ kind: "divergence", group: "error", place: REVIEW_PLACE })],
+      divergence: makeDivergence({ stage: "review", kind: "report_missing" }),
+    });
+
+    expect(reviewRow(review, NOW).line2).toEqual({
+      long: "Not as expected · no report",
+      short: "Not as expected",
     });
   });
 });
@@ -696,6 +721,14 @@ describe("the line of an item without a situation", () => {
       "turn",
     ],
     [
+      "a PR pushing the commit",
+      taskWith({ stage: "pr", pr: makePullRequest({ status: "pushing", prNumber: 7 }) }),
+      "app",
+      "PR review · pushing",
+      "PR review · pushing",
+      null,
+    ],
+    [
       "a PR committing the changes",
       taskWith({ stage: "pr", pr: makePullRequest({ status: "committing", prNumber: 7 }) }),
       "app",
@@ -855,6 +888,13 @@ describe("the line of an item without a situation", () => {
       "agent",
       "Pass 2 · applying",
       "Pass 2 · applying",
+    ],
+    [
+      "a review the app pushes",
+      reviewWith({ status: "pushing" }),
+      "app",
+      "Pass 2 · pushing",
+      "Pass 2 · pushing",
     ],
     [
       "a review the app commits",

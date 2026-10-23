@@ -140,6 +140,8 @@ describe("task status in the PR stage", () => {
     ["awaiting_reply", "PR review · waiting for your reply", "idle"],
     ["ready_to_approve", "PR review · ready to approve", "idle"],
     ["committing", "PR review · committing", "working"],
+    ["pushing", "PR review · pushing the commit", "working"],
+    ["diverged", "PR review · not as expected", "idle"],
   ] as const)("reads the pull request once it is open: %s", (status, label, tone) => {
     const task = prTask(makePullRequest({ status, prNumber: 12 }));
 

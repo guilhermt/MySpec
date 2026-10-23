@@ -513,15 +513,6 @@ func TestDeriveThePullRequestOfThePRStage(t *testing.T) {
 				"Review the changes of the review: the commit after the agent review didn't happen."),
 		},
 		{
-			"the last approval of the changes left no commit",
-			prInput(flow.PullRequest{
-				Status: flow.PRReadyToApprove, Review: &review.Snapshot{Staged: 2, Total: 2},
-				CommitFailed: true, SessionStage: session.PRReviewStage, Session: waiting,
-			}),
-			situation(attention.KindChangesReview, attention.FormApprove, 0,
-				"The last approval of the pull request didn't produce a commit."),
-		},
-		{
 			"ready to merge",
 			prInput(flow.PullRequest{Status: flow.PRDone, PR: task.PRDetails{Number: 1284}}),
 			situation(attention.KindMerge, attention.FormMerge, 0, "PR #1284 is ready to merge."),

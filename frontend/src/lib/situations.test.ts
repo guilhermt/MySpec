@@ -111,6 +111,7 @@ describe("situationLabel", () => {
     ["ready_to_archive", "", 0, "Ready to archive"],
     ["publish_failed", "", 0, "Publish failed"],
     ["pass_blocked", "", 0, "Pass blocked"],
+    ["divergence", "", 0, "Not as expected"],
     ["pr_trouble", "checks", 0, "Checks failed"],
     ["pr_trouble", "conflict", 0, "Conflict with base"],
     ["pr_trouble", "checks_conflict", 0, "Checks failed · conflict"],

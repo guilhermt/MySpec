@@ -2435,11 +2435,6 @@ export interface PullRequest {
     "review": Review | null;
 
     /**
-     * CommitFailed says the last approval of the review ended without a commit.
-     */
-    "commitFailed": boolean;
-
-    /**
      * ReviewRound is the reports with findings the agent review handed to the
      * implementer; 0 in manual mode.
      */
@@ -3225,11 +3220,6 @@ export interface ReviewSummary {
     "unreadableReport": string;
 
     /**
-     * CommitFailed is always false: a commit that did not happen is the divergence of the review.
-     */
-    "commitFailed": boolean;
-
-    /**
      * Review is the last reading of the worktree; apply mode only.
      */
     "review": Review | null;
@@ -3789,11 +3779,6 @@ export interface Step {
      * done only: the committer date, RFC 3339; "" when unknown
      */
     "committedAt": string;
-
-    /**
-     * always false: a commit that did not happen is the divergence of the task
-     */
-    "commitFailed": boolean;
 
     /**
      * what the step runs with, or will run with

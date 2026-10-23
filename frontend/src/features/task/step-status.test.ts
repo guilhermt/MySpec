@@ -49,6 +49,7 @@ describe("hasStepSession", () => {
     ["nothing_to_commit", true],
     ["review_failed", true],
     ["committing", true],
+    ["diverged", true],
     ["done", false],
   ])("knows whether %s has a conversation", (status, expected) => {
     expect(hasStepSession(makeStep({ status }))).toBe(expected);
@@ -73,6 +74,7 @@ describe("step status", () => {
     ["nothing_to_commit", "Nothing to approve", "idle"],
     ["review_failed", "Can't read the worktree", "idle"],
     ["committing", "Committing", "working"],
+    ["diverged", "Not as expected", "idle"],
     ["done", "Done", "done"],
   ])("reads %s", (status, label, tone) => {
     const step = makeStep({ status });

@@ -8,7 +8,13 @@ import {
   discussionStarters,
 } from "@/features/discussion/discussion-request";
 import type { DiscussionSummary, Draft, Situation } from "@/lib/wails";
-import { makeDiscussion, makeDraft, makeDraftRef, makeSituation } from "@/test/wails-mock";
+import {
+  makeDiscussion,
+  makeDivergence,
+  makeDraft,
+  makeDraftRef,
+  makeSituation,
+} from "@/test/wails-mock";
 
 const NOW = Date.parse("2026-09-24T15:00:00Z");
 const SIX_MINUTES_AGO = new Date(NOW - 6 * 60_000).toISOString();
@@ -394,19 +400,17 @@ describe("discussionRequestOf, the situations of the conversation", () => {
       },
     ],
     [
-      "the drafts that can't be read",
+      "a reply, with the drafts unread",
       waiting(situation("reply"), [draftOf("d1")], {
         unreadableDrafts: "Draft invoice-overage: it has no ### Title.",
       }),
       {
         form: "tinted",
         glyph: "wait",
-        label: "Waiting for the drafts",
+        label: "Waiting for reply",
         place: "round 1",
         time: WAIT,
-        progress: "ask the agent to fix drafts.md below",
-        progressTooltip: "ask the agent to fix drafts.md below",
-        status: "Waiting for the drafts · round 1",
+        status: "Waiting for reply · round 1",
         actions: [],
         situationId: "s-reply",
         focus: "composer",
@@ -414,7 +418,7 @@ describe("discussionRequestOf, the situations of the conversation", () => {
       },
     ],
     [
-      "the drafts that can't be read before a good reading",
+      "a reply before a good reading of the drafts",
       waiting(situation("reply"), [], {
         round: 0,
         unreadableDrafts: "Draft invoice-overage: it has no ### Title.",
@@ -422,12 +426,10 @@ describe("discussionRequestOf, the situations of the conversation", () => {
       {
         form: "tinted",
         glyph: "wait",
-        label: "Waiting for the drafts",
+        label: "Waiting for reply",
         place: "Discussing",
         time: WAIT,
-        progress: "ask the agent to fix drafts.md below",
-        progressTooltip: "ask the agent to fix drafts.md below",
-        status: "Waiting for the drafts · Discussing",
+        status: "Waiting for reply · Discussing",
         actions: [],
         situationId: "s-reply",
         focus: "composer",
@@ -436,6 +438,61 @@ describe("discussionRequestOf, the situations of the conversation", () => {
     ],
   ])("draws %s", (_name, found, bar) => {
     expect(discussionRequestOf(found, NOW, { kind: "question", questions: 2 })).toEqual(bar);
+  });
+});
+
+describe("discussionRequestOf, a divergence", () => {
+  const diverged = (overrides: Partial<DiscussionSummary> = {}) =>
+    waiting(situation("divergence", "error"), [draftOf("d1")], {
+      status: "diverged",
+      divergence: makeDivergence({
+        stage: "discussion",
+        kind: "drafts_unreadable",
+        reason: "Draft invoice-overage: it has no ### Title.",
+      }),
+      ...overrides,
+    });
+
+  it("asks the agent again or checks again", () => {
+    expect(discussionRequestOf(diverged(), NOW, null)).toEqual({
+      form: "error",
+      glyph: "error",
+      label: "Not as expected",
+      place: "round 1",
+      time: ERROR,
+      progress:
+        "Expected drafts.md in the format of the discussion · found Draft invoice-overage: it has no ### Title",
+      progressTooltip:
+        "MySpec expected drafts.md in the format of the discussion. It found Draft invoice-overage: it has no ### Title.",
+      status: "Not as expected · round 1",
+      actions: [
+        {
+          action: "askAgain",
+          label: "Ask the agent again",
+          variant: "primary",
+          loadingLabel: "Asking…",
+        },
+        {
+          action: "checkAgain",
+          label: "Check again",
+          variant: "secondary",
+          loadingLabel: "Checking…",
+        },
+      ],
+      situationId: "s-divergence",
+      focus: "primary",
+      target: null,
+    });
+  });
+
+  it("is quiet while the discussion is paused", () => {
+    const paused = diverged({ sessionStatus: "paused", situations: [] });
+
+    expect(discussionRequestOf(paused, NOW, null)).toMatchObject({
+      form: "quiet",
+      glyph: "paused",
+      label: "Not as expected",
+    });
   });
 });
 
@@ -526,7 +583,6 @@ describe("discussionRequestOf, paused and at rest", () => {
 
   it.each<[string, Partial<DiscussionSummary>]>([
     ["paused while discussing", { status: "discussing", sessionStatus: "paused" }],
-    ["paused waiting for the drafts", { status: "awaiting_drafts", sessionStatus: "paused" }],
     ["paused during a run", { status: "publishing", sessionStatus: "paused" }],
     ["at rest without a situation", { status: "discussing" }],
     ["publishing without a situation", { status: "publishing", publishing: true }],
