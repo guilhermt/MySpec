@@ -258,6 +258,7 @@ func info(
 		ContextPath:      stored.ContextPath(),
 		Repository:       repo.FullName(),
 		Branch:           stored.HeadBranch,
+		HeadBranch:       stored.HeadBranch,
 		BaseBranch:       remoteRef(stored.BaseBranch),
 		ReviewPath:       stored.ReportPath(pass),
 		PRNumber:         strconv.Itoa(stored.Number),

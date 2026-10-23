@@ -562,6 +562,11 @@ describe("permissionKeys", () => {
       { suggestions: '[{"type":"addRules"}]', suppressAlwaysAllow: true },
       2,
     ],
+    [
+      "a deviation, even with a rule offered",
+      { suggestions: '[{"type":"addRules"}]', deviation: true },
+      2,
+    ],
   ])("counts %s", (_name, overrides, keys) => {
     expect(permissionKeys({ ...PERMISSION, ...overrides })).toBe(keys);
   });

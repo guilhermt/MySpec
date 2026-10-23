@@ -2202,6 +2202,12 @@ export interface PermissionEntry {
      * for the main thread.
      */
     "parentToolUseId": string;
+
+    /**
+     * Deviation says the action is outside what the stage of the session does:
+     * a hook of the contract asked, and DecisionReason says what is expected.
+     */
+    "deviation": boolean;
 }
 
 /**

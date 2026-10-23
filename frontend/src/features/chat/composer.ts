@@ -114,10 +114,15 @@ function hasSuggestions(raw: string): boolean {
 
 /**
  * permissionKeys is how many answers the card of a permission has, one key each: Allow and Deny…,
- * and Allow for this session between them when the CLI offered a rule to remember.
+ * and Allow for this session between them when the CLI offered a rule to remember. A deviation
+ * is allowed one action at a time, so it never has the middle one.
  */
 export function permissionKeys(permission: PermissionEntry): 2 | 3 {
-  return !permission.suppressAlwaysAllow && hasSuggestions(permission.suggestions) ? 3 : 2;
+  return !permission.deviation &&
+    !permission.suppressAlwaysAllow &&
+    hasSuggestions(permission.suggestions)
+    ? 3
+    : 2;
 }
 
 // questionPlaceholder is the placeholder with a question pending: the keys of its options, or with

@@ -245,6 +245,43 @@ func TestStartOpensEveryExtraDirectory(t *testing.T) {
 	}
 }
 
+func TestStartPassesTheSettingsOnlyWhenThereAreSome(t *testing.T) {
+	t.Parallel()
+
+	const settings = `{"hooks":{"PreToolUse":[]}}`
+	withSettings := argvConfig(t)
+	withSettings.Model = "claude-opus-5"
+	withSettings.Effort = "high"
+	withSettings.Settings = settings
+	without := argvConfig(t)
+	without.Model = "claude-opus-5"
+	without.Effort = "high"
+
+	base := append(slices.Clone(claude.Args),
+		"--session-id", sessionID, "--model", "claude-opus-5", "--effort", "high")
+	tests := map[string]struct {
+		cfg  claude.Config
+		want []string
+	}{
+		"with settings": {withSettings, append(slices.Clone(base), "--settings", settings)},
+		"without":       {without, base},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			exit := exitOf(t, start(t, tc.cfg))
+			if exit.Code != 0 {
+				t.Fatalf("exit code = %d, want 0", exit.Code)
+			}
+			got := strings.Split(strings.TrimRight(exit.Stderr, "\n"), "\n")
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("command line mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestStartLeavesTheEffortOutForAModelThatTakesNone(t *testing.T) {
 	t.Parallel()
 

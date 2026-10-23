@@ -1070,6 +1070,7 @@ func fromPermission(p *session.PermissionEntry) *PermissionEntry {
 		DenyMessage:         p.DenyMessage,
 		AnsweredAt:          answeredAt,
 		ParentToolUseID:     p.ParentToolUseID,
+		Deviation:           p.Deviation,
 	}
 }
 

@@ -11,6 +11,7 @@ icons/myspec.png                       a imagem das notificações
 myspec.db                              o banco SQLite
 prompts/<nome>.md                      só os prompts editados pelo usuário
 sounds/chime.wav                       o som das notificações
+hooks/<sessão>.json                    o estado do contrato de git e GitHub de cada sessão aberta
 card-images/<id>                       o cache das imagens dos corpos dos cards
 tasks/<dono>/<nome>/<task>/            os artefatos de cada task
 reviews/<dono>/<nome>/pr-<n>-<id>/     os artefatos de cada review de pull request
@@ -18,6 +19,10 @@ discussions/<dono do board>/<n>/<id>/  os artefatos de cada discussão
 worktrees/<dono>/<nome>/<task>/        a worktree de cada task
 worktrees/<dono>/<nome>/pr_<n>/        a worktree de cada review de pull request ativo
 ```
+
+### Estado do contrato
+
+`hooks/` guarda um JSON por sessão aberta, com o papel, o turno, a branch, a base e o step que o hook do Claude Code lê a cada comando de git ou GitHub (ver [O contrato de git e GitHub](./sessions.md#o-contrato-de-git-e-github)). Cada arquivo é escrito por um temporário e um rename, com permissão `0600` numa pasta `0700`, é apagado quando a sessão fecha, e a pasta inteira é esvaziada quando o app abre.
 
 ### Imagens dos cards
 

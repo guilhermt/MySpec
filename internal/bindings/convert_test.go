@@ -4336,10 +4336,13 @@ func TestFromEntryCarriesTheBackgroundFieldsOfActionsPermissionsAndMarkers(t *te
 	}
 
 	permission := bindings.FromEntry("t1", session.Entry{Kind: session.KindPermission, Permission: &session.PermissionEntry{
-		ParentToolUseID: "toolu_1",
+		ParentToolUseID: "toolu_1", Deviation: true,
 	}})
 	if got := permission.Permission.ParentToolUseID; got != "toolu_1" {
 		t.Errorf("permission parent = %q, want toolu_1", got)
+	}
+	if !permission.Permission.Deviation {
+		t.Error("permission deviation = false, want true")
 	}
 
 	marker := bindings.FromEntry("t1", session.Entry{Kind: session.KindMarker, Marker: &session.MarkerEntry{

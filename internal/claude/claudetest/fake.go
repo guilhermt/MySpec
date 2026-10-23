@@ -255,6 +255,11 @@ func validateArgs(args []string) error {
 	if slices.Contains(args, "--effort") && flagValue(args, "--effort") == "" {
 		return errors.New("--effort is empty")
 	}
+	// --settings carries the hook of the contract; the fake accepts it and
+	// never runs it.
+	if slices.Contains(args, "--settings") && flagValue(args, "--settings") == "" {
+		return errors.New("--settings is empty")
+	}
 	return nil
 }
 
@@ -541,7 +546,9 @@ func (f *fake) play(scenario string) int {
 		case "tool":
 			f.toolTurn(text)
 		case "permission":
-			f.permissionTurn()
+			f.permissionTurn(false)
+		case "deviation":
+			f.permissionTurn(true)
 		case "question":
 			f.questionTurn()
 		case "slow":
@@ -775,8 +782,14 @@ func (f *fake) toolTurn(text string) {
 	f.result("success", false, text, "completed")
 }
 
-// permissionTurn asks to run a Bash command and reacts to the answer.
-func (f *fake) permissionTurn() {
+// DeviationReason is what the hook of the contract tells in the deviation
+// scenario, whose Bash call it stops.
+const DeviationReason = "\x1b[1mThis is outside what this stage does: \x1b[0mthis stage only writes its document."
+
+// permissionTurn asks to run a Bash command and reacts to the answer. A
+// deviation is the ask of the hook of the contract: it carries its reason and
+// no suggestions.
+func (f *fake) permissionTurn(deviation bool) {
 	f.emitInit()
 	messageID := f.nextID("msg")
 	f.messageStart(messageID)
@@ -785,7 +798,11 @@ func (f *fake) permissionTurn() {
 	input := map[string]any{"command": BashCommand, "description": "Create hello.txt with the word hi"}
 	f.streamToolUse(0, messageID, toolUseID, "Bash", input)
 
-	f.askBash(toolUseID, input)
+	if deviation {
+		f.askDeviation(toolUseID, input)
+	} else {
+		f.askBash(toolUseID, input)
+	}
 
 	answer, ok := f.awaitPermission()
 	if !ok {
@@ -807,6 +824,25 @@ func (f *fake) permissionTurn() {
 	f.endMessage()
 	f.assistantText(messageID, reply)
 	f.result("success", false, reply, "completed")
+}
+
+// askDeviation asks the app to allow a Bash call the hook of the contract
+// stopped, the way the CLI reports an ask of a hook.
+func (f *fake) askDeviation(toolUseID string, input map[string]any) {
+	f.emitRaw(map[string]any{
+		"type":       "control_request",
+		"request_id": f.nextID("req"),
+		"request": map[string]any{
+			"subtype":              "can_use_tool",
+			"tool_name":            "Bash",
+			"display_name":         "Bash",
+			"input":                input,
+			"description":          "Create hello.txt with the word hi",
+			"decision_reason":      DeviationReason,
+			"decision_reason_type": "hook",
+			"tool_use_id":          toolUseID,
+		},
+	})
 }
 
 // askBash asks the app to allow a Bash call, with the suggestions of a rule for

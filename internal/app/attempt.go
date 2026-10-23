@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/cardimages"
+	"github.com/guilhermt/myspec/internal/contract"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/editor"
@@ -192,10 +194,21 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	}); err != nil {
 		return fmt.Errorf("read review mode default: %w", err)
 	}
+	// A failure to find the executable leaves the contract off: the sessions
+	// run without the hook that applies it.
+	hooksDir, hookCommand := filepath.Join(a.dirs.Data, "hooks"), ""
+	if exe, exeErr := os.Executable(); exeErr != nil {
+		log.Error("hook command failed", "error", exeErr)
+		hooksDir = ""
+	} else {
+		hookCommand = contract.HookCommand(exe, hooksDir)
+	}
 	sessions := session.New(session.Deps{
-		Sessions: st.Sessions,
-		Entries:  st.Entries,
-		Launcher: claudeLauncher{log: log, effort: modelsSvc.ProcessEffort},
+		HooksDir:    hooksDir,
+		HookCommand: hookCommand,
+		Sessions:    st.Sessions,
+		Entries:     st.Entries,
+		Launcher:    claudeLauncher{log: log, effort: modelsSvc.ProcessEffort},
 		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
 			return prompts.Render(a.dirs.Data, stage, vars)
 		},

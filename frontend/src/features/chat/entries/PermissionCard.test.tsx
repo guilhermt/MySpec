@@ -211,6 +211,56 @@ describe("PermissionCard pending", () => {
   });
 });
 
+describe("PermissionCard of a deviation", () => {
+  const REASON = "This is outside what this stage does: this stage only writes its document.";
+  const DEVIATION = permission({
+    suggestions: '[{"type":"addRules"}]',
+    decisionReason: REASON,
+    deviation: true,
+  });
+
+  it("says it is outside the stage, with the reason under the command", () => {
+    card(DEVIATION);
+
+    expect(screen.getByText("Outside this stage")).toBeInTheDocument();
+    expect(screen.getByText(REASON)).toBeInTheDocument();
+    expect(screen.getByRole("article")).toHaveAccessibleName("Permission, answer with 1 to 2");
+  });
+
+  it("offers Allow and Deny only, with the focus on Allow", () => {
+    card({ ...DEVIATION, defaultToNo: true });
+
+    expect(screen.queryByRole("button", { name: /Allow for this session/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Allow/ })).toHaveAttribute("data-default-focus");
+    expect(screen.getByRole("button", { name: /Deny/ })).not.toHaveAttribute("data-default-focus");
+  });
+
+  it("allows with 1 and denies at once with 2, with no text", async () => {
+    const { user } = card(DEVIATION);
+
+    await user.click(screen.getByRole("button", { name: /Deny/ }));
+
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(api.answerPermission).toHaveBeenCalledWith("task-1", "prd", "req-1", "deny", "");
+  });
+
+  it("answers with the keys on the card", async () => {
+    const { user } = card(DEVIATION);
+
+    screen.getByRole("article").focus();
+    await user.keyboard("1");
+
+    expect(api.answerPermission).toHaveBeenCalledWith("task-1", "prd", "req-1", "allow", "");
+  });
+
+  it("says Denied without the message once answered", () => {
+    card({ ...DEVIATION, status: "denied", denyMessage: REASON });
+
+    expect(screen.getByText("Denied")).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(REASON))).toBeNull();
+  });
+});
+
 describe("PermissionCard settled", () => {
   it("is flat with the decision and its time in the tooltip", async () => {
     const { user } = card(permission({ status: "allowed", answeredAt: "2026-09-29T09:19:00Z" }));

@@ -1663,6 +1663,7 @@ function payloadOf(kind: EntryKind): Omit<Entry, "id" | "seq" | "turnId" | "kind
           denyMessage: "",
           answeredAt: "",
           parentToolUseId: "",
+          deviation: false,
         },
       };
     case "question":

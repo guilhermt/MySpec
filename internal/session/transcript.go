@@ -198,6 +198,9 @@ type PermissionEntry struct {
 	// ParentToolUseID is the Agent/Task action of the subagent that asks; "" for
 	// the main thread and in old transcripts.
 	ParentToolUseID string `json:"parentToolUseId,omitempty"`
+	// Deviation says a hook of the contract asked: the action is outside what
+	// the stage of the session does, and DecisionReason says what is expected.
+	Deviation bool `json:"deviation,omitempty"`
 }
 
 // QuestionOption is one answer offered for a question.
