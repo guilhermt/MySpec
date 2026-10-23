@@ -1,6 +1,7 @@
 package task_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -344,5 +346,109 @@ func TestReadArtifactRefusesAnythingButThePRArtifacts(t *testing.T) {
 			_, err := f.service.ReadArtifact(created.ID, artifact)
 			wantErrIs(t, err, task.ErrNotFound)
 		})
+	}
+}
+
+func TestReadDraftAcceptsTheVariationsOfADraft(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		content string
+		title   string
+		body    string
+	}{
+		{"a plain draft", "---\ntitle: Add login\n---\n\nThe body.\n", "Add login", "The body."},
+		{"a byte order mark", "\ufeff---\ntitle: Add login\n---\nThe body.\n", "Add login", "The body."},
+		{"blank lines before the fence", "\n\n---\ntitle: Add login\n---\nThe body.\n", "Add login", "The body."},
+		{"a key in capitals", "---\nTitle: Add login\n---\nThe body.\n", "Add login", "The body."},
+		{"a title in quotes", "---\ntitle: \"Add login\"\n---\nThe body.\n", "Add login", "The body."},
+		{"a title in bold", "---\ntitle: '**Add login**'\n---\nThe body.\n", "Add login", "The body."},
+		{"a title in bold and quotes", "---\ntitle: **\"Add login\"**\n---\nThe body.\n", "Add login", "The body."},
+		{"a body that repeats the title", "---\ntitle: Add login\n---\n\n# Add login\n\nThe body.\n", "Add login", "The body."},
+		{"a body with another heading", "---\ntitle: Add login\n---\n# Overview\n\nThe body.\n", "Add login", "# Overview\n\nThe body."},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			path := filepath.Join(t.TempDir(), "draft.md")
+			writeFile(t, path, test.content)
+
+			got, ok, err := task.ReadDraft(path)
+			if err != nil || !ok {
+				t.Fatalf("ReadDraft() = %+v, %t, %v, want the draft", got, ok, err)
+			}
+			if got.Title != test.title || got.Body != test.body {
+				t.Errorf("ReadDraft() = %q / %q, want %q / %q", got.Title, got.Body, test.title, test.body)
+			}
+		})
+	}
+}
+
+func TestReadDraftSaysWhyADraftCannotBeRead(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		content string
+		reason  string
+	}{
+		{"without front matter", "Just text.\n", "The draft can't be read: it has no front matter."},
+		{"without a title", "---\nbase: dev\n---\nThe body.\n", "The draft can't be read: it has no title."},
+		{"without a description", "---\ntitle: Add login\n---\n\n", "The draft can't be read: it has no description."},
+		{"with a body that is only its title", "---\ntitle: Add login\n---\n# Add login\n", "The draft can't be read: it has no description."},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			path := filepath.Join(t.TempDir(), "draft.md")
+			writeFile(t, path, test.content)
+
+			_, ok, err := task.ReadDraft(path)
+			if ok || !errors.Is(err, task.ErrDraftUnreadable) {
+				t.Fatalf("ReadDraft() ok = %t, error = %v, want ErrDraftUnreadable", ok, err)
+			}
+			if got := task.DraftReason(err); got != test.reason {
+				t.Errorf("DraftReason() = %q, want %q", got, test.reason)
+			}
+		})
+	}
+}
+
+func TestReadDraftTellsAFileThatIsNotThereFromOneItCannotRead(t *testing.T) {
+	t.Parallel()
+
+	_, ok, err := task.ReadDraft(filepath.Join(t.TempDir(), "draft.md"))
+	if ok || err != nil {
+		t.Errorf("ReadDraft() ok = %t, error = %v, want neither", ok, err)
+	}
+
+	_, ok, err = task.ReadDraft(t.TempDir())
+	if ok || err == nil || errors.Is(err, task.ErrDraftUnreadable) {
+		t.Errorf("ReadDraft() of a folder: ok = %t, error = %v, want a read error", ok, err)
+	}
+	if got := task.DraftReason(err); got != "The draft can't be read." {
+		t.Errorf("DraftReason() = %q, want the generic sentence", got)
+	}
+}
+
+func TestResolvePRReportFindsTheReportOfThePass(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login")
+	writeFile(t, filepath.Join(created.ArtifactsDir, "my-review.md"), "---\nstatus: clean\npass: 1\n---\nAll good.\n")
+
+	got, err := task.ResolvePRReport(created, 1)
+	if err != nil {
+		t.Fatalf("ResolvePRReport() error = %v", err)
+	}
+	if got.Resolution != prreport.ResolutionFound || !got.Report.Clean {
+		t.Fatalf("ResolvePRReport() = %+v, want the clean report found", got)
+	}
+	if _, statErr := os.Stat(created.ReviewPath(1)); statErr != nil {
+		t.Errorf("the report at the agreed path: %v, want it copied", statErr)
 	}
 }

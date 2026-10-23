@@ -534,3 +534,42 @@ func TestReasonSaysTheRuleAsTheUserReadsIt(t *testing.T) {
 		}
 	}
 }
+
+func TestParseArtifactAcceptsEveryVariationOfTheFormat(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		content string
+	}{
+		{"a status in capitals", "---\nstatus: Drafts\n---\n\n## Draft: one\n- Kind: new\n- Repository: acme/web\n\n### Title\nOne\n\n### Body\nOne.\n"},
+		{"a key in capitals", "---\nStatus: drafts\n---\n\n## Draft: one\n- Kind: new\n- Repository: acme/web\n\n### Title\nOne\n\n### Body\nOne.\n"},
+		{"a byte order mark", "\ufeff---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: new\n- Repository: acme/web\n\n### Title\nOne\n\n### Body\nOne.\n"},
+		{"a draft heading in lowercase", "---\nstatus: drafts\n---\n\n## draft: one\n- Kind: new\n- Repository: acme/web\n\n### Title\nOne\n\n### Body\nOne.\n"},
+		{"a draft heading without the colon", "---\nstatus: drafts\n---\n\n## Draft one\n- Kind: new\n- Repository: acme/web\n\n### Title\nOne\n\n### Body\nOne.\n"},
+		{"a draft heading with a dash", "---\nstatus: drafts\n---\n\n## Draft - one\n- Kind: new\n- Repository: acme/web\n\n### Title\nOne\n\n### Body\nOne.\n"},
+		{"asterisk fields", "---\nstatus: drafts\n---\n\n## Draft: one\n* Kind: new\n* Repository: acme/web\n\n### Title\nOne\n\n### Body\nOne.\n"},
+		{"bold labels", "---\nstatus: drafts\n---\n\n## Draft: one\n- **Kind**: new\n- **Repository:** acme/web\n\n### Title\nOne\n\n### Body\nOne.\n"},
+		{"bold values", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: **new**\n- Repository: **acme/web**\n\n### Title\nOne\n\n### Body\nOne.\n"},
+		{"headings with a colon", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: new\n- Repository: acme/web\n\n### Title:\nOne\n\n### Body:\nOne.\n"},
+		{"headings in lowercase", "---\nstatus: drafts\n---\n\n## Draft: one\n- Kind: new\n- Repository: acme/web\n\n### title\nOne\n\n### BODY\nOne.\n"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := discussion.ParseArtifact(test.content)
+			if err != nil {
+				t.Fatalf("parse artifact: %v", err)
+			}
+			if len(got.Drafts) != 1 {
+				t.Fatalf("drafts = %+v, want one", got.Drafts)
+			}
+			draft := got.Drafts[0]
+			if draft.ID != "one" || draft.Kind != discussion.KindNew || draft.Repository != "acme/web" ||
+				draft.Title != "One" || draft.Body != "One." {
+				t.Errorf("draft = %+v, want one / new / acme/web / One / One.", draft)
+			}
+		})
+	}
+}

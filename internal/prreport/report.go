@@ -26,19 +26,22 @@ const (
 	statusChanges = "changes" // the pass has findings
 )
 
-// findingsHeading opens the section of the findings in a report.
-const findingsHeading = "## Findings"
+// findingsHeading opens the section of the findings in a report: "## Findings",
+// "## 2. Findings", "## **Findings**", "## Findings:", in any case.
+var findingsHeading = regexp.MustCompile(`(?i)^##\s+(?:\d+[.)]\s*)?\**\s*findings\s*:?\s*\**\s*:?\s*$`)
 
 // generalLocation is the location of a finding that points at no line.
 const generalLocation = "general"
 
 // findingHeading opens one finding, with its number and, after it, the
 // title of what is wrong: "### 1 · Title", "### 1. Title", "### 1 - Title",
-// "### 1: Title", "### 1 **Title**". The title may be missing.
-var findingHeading = regexp.MustCompile(`^###\s+(\d+)\b\s*(?:[·.:\-–—]\s*)?(.*)$`)
+// "### 1: Title", "### 1) Title", "### 1 **Title**", "### Finding 1: Title",
+// "#### #1 Title". The title may be missing.
+var findingHeading = regexp.MustCompile(`(?i)^#{3,4}\s+(?:finding\s+)?#?(\d+)\b\s*(?:[·.:\-–—)]\s*)?(.*)$`)
 
-// locationLine is the first line of a finding, which says where it points.
-var locationLine = regexp.MustCompile(`^Location:\s*(.+)$`)
+// locationLine is the first line of a finding, which says where it points:
+// "Location: x", "- Location: x", "**Location:** x", "**Location**: x".
+var locationLine = regexp.MustCompile(`(?i)^(?:[-*]\s+)?\**location\**\s*:\s*\**\s*(.+)$`)
 
 // ErrUnreadable is a report the app cannot act on: the agent wrote it in a
 // shape the product does not define.
@@ -128,7 +131,7 @@ func Reason(err error) string {
 
 // parseStatus reads the verdict of the header.
 func parseStatus(value string) (clean bool, err error) {
-	switch strings.TrimSpace(value) {
+	switch strings.ToLower(strings.TrimSpace(strings.Trim(value, "*"))) {
 	case statusClean:
 		return true, nil
 	case statusChanges:
@@ -158,7 +161,7 @@ func checkPass(value string, pass int) error {
 func splitFindings(body string) (summary string, findings []string) {
 	lines := strings.Split(strings.ReplaceAll(body, "\r", ""), "\n")
 	for i, line := range lines {
-		if strings.TrimRight(line, " \t") == findingsHeading {
+		if findingsHeading.MatchString(line) {
 			return strings.TrimSpace(strings.Join(lines[:i], "\n")), lines[i+1:]
 		}
 	}
@@ -251,7 +254,7 @@ func parseFinding(number int, title string, lines []string) (ParsedFinding, erro
 		return ParsedFinding{}, fmt.Errorf("%w: finding %d does not open with its location",
 			ErrUnreadable, number)
 	}
-	path, line, err := parseLocation(number, match[1])
+	path, line, err := parseLocation(number, strings.TrimSuffix(match[1], "**"))
 	if err != nil {
 		return ParsedFinding{}, err
 	}

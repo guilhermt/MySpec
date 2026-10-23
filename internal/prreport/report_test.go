@@ -309,3 +309,58 @@ func writeFile(t *testing.T, dir, name, content string) {
 		t.Fatalf("write %s: %v", name, err)
 	}
 }
+
+func TestAReportIsReadWithEveryVariationOfItsFormat(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		content string
+		clean   bool
+		number  int
+		title   string
+		path    string
+		line    int
+	}{
+		{"a status in capitals", "---\nstatus: CLEAN\n---\nAll good.\n", true, 0, "", "", 0},
+		{"a status in bold", "---\nstatus: '**changes**'\n---\n## Findings\n### 1 T\nLocation: a.go:1\n\nx\n", false, 1, "T", "a.go", 1},
+		{"a key in capitals", "---\nStatus: Changes\n---\n## Findings\n### 1 T\nLocation: a.go:1\n\nx\n", false, 1, "T", "a.go", 1},
+		{"a byte order mark", "\ufeff---\nstatus: clean\n---\nOk.\n", true, 0, "", "", 0},
+		{"a numbered heading", "---\nstatus: changes\n---\n## 2. Findings\n### 1 T\nLocation: a.go:1\n\nx\n", false, 1, "T", "a.go", 1},
+		{"a bold heading", "---\nstatus: changes\n---\n## **Findings**\n### 1 T\nLocation: a.go:1\n\nx\n", false, 1, "T", "a.go", 1},
+		{"a heading with a colon", "---\nstatus: changes\n---\n## findings:\n### 1 T\nLocation: a.go:1\n\nx\n", false, 1, "T", "a.go", 1},
+		{"a finding of four hashes", "---\nstatus: changes\n---\n## Findings\n#### 1 T\nLocation: a.go:1\n\nx\n", false, 1, "T", "a.go", 1},
+		{"a finding with a word", "---\nstatus: changes\n---\n## Findings\n### Finding 2: T\nLocation: a.go:1\n\nx\n", false, 2, "T", "a.go", 1},
+		{"a finding with a hash", "---\nstatus: changes\n---\n## Findings\n### #3 T\nLocation: a.go:1\n\nx\n", false, 3, "T", "a.go", 1},
+		{"a finding with a parenthesis", "---\nstatus: changes\n---\n## Findings\n### 4) T\nLocation: a.go:1\n\nx\n", false, 4, "T", "a.go", 1},
+		{"a location in a list", "---\nstatus: changes\n---\n## Findings\n### 1 T\n- Location: a.go:5\n\nx\n", false, 1, "T", "a.go", 5},
+		{"a location in bold", "---\nstatus: changes\n---\n## Findings\n### 1 T\n**Location:** `a.go:6`\n\nx\n", false, 1, "T", "a.go", 6},
+		{"a bold location label", "---\nstatus: changes\n---\n## Findings\n### 1 T\n**Location**: a.go:7\n\nx\n", false, 1, "T", "a.go", 7},
+		{"a location in bold altogether", "---\nstatus: changes\n---\n## Findings\n### 1 T\n**Location: a.go:8**\n\nx\n", false, 1, "T", "a.go", 8},
+		{"a location in lowercase", "---\nstatus: changes\n---\n## Findings\n### 1 T\nlocation: a.go:9\n\nx\n", false, 1, "T", "a.go", 9},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := prreport.ParseReport(test.content, 1)
+			if err != nil {
+				t.Fatalf("parse report: %v", err)
+			}
+			if got.Clean != test.clean {
+				t.Errorf("Clean = %t, want %t", got.Clean, test.clean)
+			}
+			if test.clean {
+				return
+			}
+			if len(got.Findings) != 1 {
+				t.Fatalf("findings = %+v, want one", got.Findings)
+			}
+			finding := got.Findings[0]
+			if finding.Number != test.number || finding.Title != test.title ||
+				finding.Path != test.path || finding.Line != test.line {
+				t.Errorf("finding = %+v, want %d %q %s:%d", finding, test.number, test.title, test.path, test.line)
+			}
+		})
+	}
+}

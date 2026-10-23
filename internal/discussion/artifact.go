@@ -19,17 +19,26 @@ const (
 	statusNone   = "none"   // the discussion ended without a card
 )
 
-// The headings that close the metadata of a draft and open its two texts.
+// The headings that close the metadata of a draft and open its two texts, as
+// the messages name them; titleHeadingLine and bodyHeadingLine read them.
 const (
 	titleHeading = "### Title"
 	bodyHeading  = "### Body"
 )
 
 // draftOpening opens a draft block, with whatever the agent wrote as its id.
-var draftOpening = regexp.MustCompile(`^##\s+Draft:\s*(.*)$`)
+var draftOpening = regexp.MustCompile(`(?i)^##\s+draft\b\s*[:\-–—]?\s*(.*)$`)
 
-// metadataLine is one field of a draft, between its heading and its title.
-var metadataLine = regexp.MustCompile(`(?i)^-\s*(Kind|Card|Repository|Module|Epic|Depends on)\s*:\s*(.*)$`)
+// metadataLine is one field of a draft, between its heading and its title:
+// "- Kind: epic", "* Kind: epic", "- **Kind**: epic", "- **Kind:** epic".
+var metadataLine = regexp.MustCompile(`(?i)^[-*]\s*\**\s*(Kind|Card|Repository|Module|Epic|Depends on)\s*\**\s*:\s*\**\s*(.*?)\s*\**$`)
+
+// titleHeadingLine and bodyHeadingLine read the headings that open the title
+// and the body of a draft, in any case and with a colon after the name.
+var (
+	titleHeadingLine = regexp.MustCompile(`(?i)^###\s+title\s*:?\s*$`)
+	bodyHeadingLine  = regexp.MustCompile(`(?i)^###\s+body\s*:?\s*$`)
+)
 
 // repositoryName is a repository as a draft names it: owner/name.
 var repositoryName = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
@@ -109,7 +118,7 @@ func ParseArtifact(content string) (Artifact, error) {
 	if fields == nil {
 		return Artifact{}, fmt.Errorf("%w: it has no front matter", ErrUnreadable)
 	}
-	status := strings.TrimSpace(fields["status"])
+	status := strings.ToLower(strings.TrimSpace(fields["status"]))
 	if status != statusDrafts && status != statusNone {
 		return Artifact{}, fmt.Errorf("%w: status %q is neither %s nor %s",
 			ErrUnreadable, fields["status"], statusDrafts, statusNone)
@@ -214,7 +223,7 @@ func parseBlock(id string, lines []string) (ParsedDraft, error) {
 func parseMetadata(id string, lines []string) (fields map[string]string, rest []string, err error) {
 	fields = map[string]string{}
 	for i, line := range lines {
-		if strings.TrimRight(line, " \t") == titleHeading {
+		if titleHeadingLine.MatchString(strings.TrimRight(line, " \t")) {
 			return fields, lines[i+1:], nil
 		}
 		if strings.TrimSpace(line) == "" {
@@ -239,7 +248,7 @@ func parseMetadata(id string, lines []string) (fields map[string]string, rest []
 func parseTexts(id string, lines []string) (title, body string, err error) {
 	at := -1
 	for i, line := range lines {
-		if strings.TrimRight(line, " \t") == bodyHeading {
+		if bodyHeadingLine.MatchString(strings.TrimRight(line, " \t")) {
 			at = i
 			break
 		}
