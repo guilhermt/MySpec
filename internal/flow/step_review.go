@@ -7,8 +7,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewmode"
@@ -47,15 +49,6 @@ func stepReviewKey(taskID string, number int) session.Key {
 // agent mode and nothing took its review back to the user.
 func agentReviewed(t task.Task, number int, run task.StepRun) bool {
 	return t.ReviewModes.Step(number) == reviewmode.Agent && run.Fallback == ""
-}
-
-// reportOf is the report of one pass, if it was written.
-func reportOf(reports []task.ReviewReport, pass int) (task.ReviewReport, bool) {
-	index := slices.IndexFunc(reports, func(r task.ReviewReport) bool { return r.Pass == pass })
-	if index < 0 {
-		return task.ReviewReport{}, false
-	}
-	return reports[index], true
 }
 
 // implementerReply is what the implementer said last, as the reviewer reads it.
@@ -104,8 +97,6 @@ func agentState(state *StepState, run task.StepRun, implementerIdle bool, snap r
 	switch {
 	case run.ReviewPass > run.ReportedPass:
 		state.Status, state.ReviewPass = StepAgentReview, run.ReviewPass
-		_, written := reportOf(state.Reports, run.ReviewPass)
-		state.ReportMissing = state.ReviewerStage != "" && state.Reviewer.Idle && !state.Reviewer.TurnFailed && !written
 	case implementerIdle && read && snap.Err != "":
 		state.Status = StepReviewFailed
 	case implementerIdle && read && snap.Total == 0:
@@ -137,9 +128,11 @@ func (s *Service) openStepReviewer(
 // evaluateAgentReview drives the agent review of the current step of a task
 // once its implementer rests: it asks for a pass, or acts on the report a pass
 // left behind. A reviewer that works, asks, is paused or failed is where the
-// step waits, and so is a turn of the implementer that failed.
+// step waits, and so is a turn of the implementer that failed, and a divergence
+// of the step: the loop does not act on a step the app found otherwise than it
+// expected.
 func (s *Service) evaluateAgentReview(
-	ctx context.Context, t task.Task, a task.Artifacts, step task.Step, wt worktree.Worktree,
+	ctx context.Context, t task.Task, step task.Step, wt worktree.Worktree,
 	run task.StepRun, implementer session.Summary, snap review.Snapshot,
 ) {
 	if implementer.TurnFailed {
@@ -150,13 +143,10 @@ func (s *Service) evaluateAgentReview(
 		return
 	}
 	if run.ReviewPass > run.ReportedPass {
-		report, written := reportOf(a.StepReports[step.Number], run.ReviewPass)
-		if !written {
-			// The reviewer stopped without its report: the user sorts it out in
-			// its conversation.
-			return
-		}
-		s.actOnStepReport(ctx, t, step, report)
+		s.evaluateStepReport(ctx, t, step, run.ReviewPass)
+		return
+	}
+	if _, diverged := s.divergences.Get(t.ID); diverged {
 		return
 	}
 	if snap.Total == 0 {
@@ -170,6 +160,108 @@ func (s *Service) evaluateAgentReview(
 		return
 	}
 	s.askStepPass(ctx, t, step, wt, run, repo)
+}
+
+// evaluateStepReport looks for the report of the pass under way, which the
+// reviewer should have written by now. A report that is there ends the
+// divergences about it and is acted on, unless the step has another divergence;
+// one that isn't, can't be read or could be one of several files is the
+// divergence of the step, and the user decides.
+func (s *Service) evaluateStepReport(ctx context.Context, t task.Task, step task.Step, pass int) {
+	res, err := task.ResolveStepReport(t, step.Number, pass)
+	if err != nil {
+		s.log.Error("resolve step review report failed", "task", t.ID, "step", step.Number, "pass", pass, "error", err)
+		return
+	}
+	stage := session.StepReviewStage(step.Number)
+	facts := divergence.Facts{Pass: pass, Path: stepReportName(step.Number, pass)}
+	switch res.Resolution {
+	case prreport.ResolutionFound:
+		if err := s.divergences.Clear(ctx, t.ID, reportKinds...); err != nil {
+			s.log.Error("clear divergence failed", "task", t.ID, "step", step.Number, "error", err)
+			return
+		}
+		if _, diverged := s.divergences.Get(t.ID); diverged {
+			return
+		}
+		s.actOnStepReport(ctx, t, step, res.Report)
+	case prreport.ResolutionMissing:
+		s.diverge(ctx, t, stage, divergence.KindReportMissing, facts)
+	case prreport.ResolutionUnreadable:
+		facts.Reason = res.Reason
+		s.diverge(ctx, t, stage, divergence.KindReportUnreadable, facts)
+	case prreport.ResolutionAmbiguous:
+		facts.Candidates = res.Candidates
+		s.diverge(ctx, t, stage, divergence.KindReportsAmbiguous, facts)
+	}
+}
+
+// stepReportName is the report of one pass of a step relative to the artifacts
+// folder of its task, as a divergence names it.
+func stepReportName(number, pass int) string {
+	return task.StepReviewsDirName + "/" + task.StepReportFile(number, pass)
+}
+
+// askStepReportAgain asks the reviewer of a step for the report of the pass
+// under way once more. The pass is recorded as asked for before the message, as
+// it is when the app asks for it the first time, and a send that fails brings
+// the divergence back. The caller holds the lock of the task.
+func (s *Service) askStepReportAgain(ctx context.Context, d divergence.Divergence) error {
+	t, step, run, err := s.currentStepOf(d.ItemID)
+	if err != nil {
+		return err
+	}
+	if run == nil || run.Status != task.StepStarted || d.Stage != session.StepReviewStage(step.Number) ||
+		run.ReviewPass <= run.ReportedPass {
+		return fmt.Errorf("ask again about step %d of task %s: %w", step.Number, d.ItemID, ErrStepNotStarted)
+	}
+	pass := run.ReviewPass
+	key := stepReviewKey(d.ItemID, step.Number)
+	sum, open := s.sessions.Summary(key)
+	if !open {
+		return fmt.Errorf("ask again about step %d of task %s: %w", step.Number, d.ItemID, session.ErrNotFound)
+	}
+	if sum.Status == session.StatusPaused {
+		if err := s.sessions.Resume(ctx, key); err != nil {
+			return err
+		}
+	}
+
+	if _, err := s.tasks.SetStepPass(ctx, d.ItemID, step.Number, pass); err != nil {
+		return err
+	}
+	if err := s.divergences.Clear(ctx, d.ItemID, reportKinds...); err != nil {
+		return err
+	}
+	message := session.AppMessage{
+		Kind: session.AppAgain, Pass: pass,
+		Text: reportAgainMessage(pass, t.StepReportPath(step.Number, pass), d.Facts.Reason),
+	}
+	if err := s.sessions.SendFromApp(ctx, key, message); err != nil {
+		s.reopen(ctx, d)
+		return err
+	}
+	s.log.Info("step review report asked again", "task", d.ItemID, "step", step.Number, "pass", pass)
+	return nil
+}
+
+// adoptStepReport takes one of the files that could be the report of the pass
+// as the report: it is copied to the agreed path, and the evaluation that
+// follows reads it. The caller holds the lock of the task.
+func (s *Service) adoptStepReport(d divergence.Divergence, choice string) error {
+	if !hasCandidate(d, choice) {
+		return fmt.Errorf("adopt %q in task %s: %w", choice, d.ItemID, ErrNoCandidate)
+	}
+	t, ok := s.tasks.Get(d.ItemID)
+	if !ok {
+		return fmt.Errorf("adopt in task %s: %w", d.ItemID, task.ErrNotFound)
+	}
+	if err := prreport.AdoptReport(t.ArtifactsDir, choice, d.Facts.Path); err != nil {
+		return fmt.Errorf("adopt %q in task %s: %w", choice, d.ItemID, err)
+	}
+	s.log.Info("step review report adopted", "task", d.ItemID, "path", choice)
+	s.Check(d.ItemID)
+	return nil
 }
 
 // askStepPass asks the reviewer of a step for the pass after the last report:
@@ -238,7 +330,6 @@ func (s *Service) commitReviewedStep(ctx context.Context, t task.Task, step task
 		s.log.Error("record committing step failed", "task", t.ID, "step", step.Number, "error", err)
 		return
 	}
-	s.setNoCommit(t.ID, false)
 	app := session.AppMessage{Text: message, Kind: session.AppCommitAll}
 	if err := s.sessions.SendFromApp(ctx, stepKey(t.ID, step.Number), app); err != nil {
 		if _, setErr := s.tasks.SetStepRun(ctx, t.ID, step.Number, task.StepStarted, nil); setErr != nil {
@@ -307,6 +398,10 @@ func (s *Service) ReviewStepMyself(ctx context.Context, id string) error {
 		return fmt.Errorf("review step %d of task %s yourself: %w", step.Number, id, ErrNoAgentReview)
 	}
 	if err := s.fallBack(ctx, id, step.Number, task.FallbackTakenOver); err != nil {
+		return err
+	}
+	// The pass under way is cut short: no report is owed any more.
+	if err := s.divergences.Clear(ctx, id, reportKinds...); err != nil {
 		return err
 	}
 	key := stepReviewKey(id, step.Number)

@@ -113,11 +113,10 @@ func TestFromTasksCarriesTheAgentReviewOfAStep(t *testing.T) {
 
 	states := []flow.StepState{
 		{
-			Step:          task.Step{Number: 1, File: "1-first.md", Title: "First"},
-			Status:        flow.StepAgentReview,
-			ReviewMode:    reviewmode.Agent,
-			ReviewPass:    2,
-			ReportMissing: true,
+			Step:       task.Step{Number: 1, File: "1-first.md", Title: "First"},
+			Status:     flow.StepAgentReview,
+			ReviewMode: reviewmode.Agent,
+			ReviewPass: 2,
 			Reports: []task.ReviewReport{
 				{Pass: 1, File: "1-review-1.md"},
 				{Pass: 2, File: "1-review-2.md", Clean: true},
@@ -143,9 +142,8 @@ func TestFromTasksCarriesTheAgentReviewOfAStep(t *testing.T) {
 	want := []bindings.Step{
 		{
 			Number: 1, File: "1-first.md", Title: "First", Status: "agent_review",
-			ReviewMode:    "agent",
-			ReviewPass:    2,
-			ReportMissing: true,
+			ReviewMode: "agent",
+			ReviewPass: 2,
 			Reports: []bindings.StepReport{
 				{Pass: 1, File: "1-review-1.md"},
 				{Pass: 2, File: "1-review-2.md", Clean: true},
@@ -420,10 +418,9 @@ func TestFromTasksCarriesTheCommitOfAStepThatIsOver(t *testing.T) {
 			CommittedAt:   time.Date(2026, 9, 20, 14, 30, 0, 0, time.UTC),
 		},
 		{
-			Step:         task.Step{Number: 2, File: "2-second.md", Title: "Second"},
-			Status:       flow.StepReadyToApprove,
-			Review:       &review.Snapshot{Staged: 2, Total: 2},
-			CommitFailed: true,
+			Step:   task.Step{Number: 2, File: "2-second.md", Title: "Second"},
+			Status: flow.StepReadyToApprove,
+			Review: &review.Snapshot{Staged: 2, Total: 2},
 		},
 	}
 
@@ -439,9 +436,6 @@ func TestFromTasksCarriesTheCommitOfAStepThatIsOver(t *testing.T) {
 	}
 	if got[0].Review != nil {
 		t.Errorf("review = %+v, want nil on a step that is over", got[0].Review)
-	}
-	if !got[1].CommitFailed {
-		t.Error("commitFailed = false, want the warning of the step the user is on")
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
@@ -103,6 +104,7 @@ type Sessions interface {
 	MarkDraftApproved(ctx context.Context, k session.Key, title string)
 	MarkChangesApproved(ctx context.Context, k session.Key, files int)
 	MarkPlanInvalid(ctx context.Context, k session.Key, problems []session.PlanProblem)
+	MarkDivergence(ctx context.Context, k session.Key, d divergence.Divergence)
 }
 
 // Repositories is what the flow needs from internal/repository.
@@ -152,6 +154,7 @@ type Deps struct {
 	Repositories Repositories
 	Review       Reviews
 	GH           GH
+	Divergences  Divergences
 	Log          *slog.Logger
 	// RenderPrompt turns a prompt of the data directory into the message the
 	// app sends; the flow uses it for the commit prompt.
@@ -187,6 +190,7 @@ type Service struct {
 	repositories Repositories
 	review       Reviews
 	gh           GH
+	divergences  Divergences
 	log          *slog.Logger
 	onChange     func(taskID string)
 
@@ -207,10 +211,6 @@ type taskLock struct {
 	preparing bool               // a prepare goroutine exists for the task
 	cancel    context.CancelFunc // cancels it; nil when there is none
 	phase     Phase              // what that goroutine is doing
-	// noCommit says the last approval of the step ended without a commit. It
-	// is transient on purpose: reopening the app leaves the step ready to
-	// approve, which is what git says.
-	noCommit bool
 
 	// pr is the asynchronous work of the PR stage, while one is under way; the
 	// lock of the task is not held while it runs.

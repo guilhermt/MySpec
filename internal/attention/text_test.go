@@ -39,7 +39,6 @@ func TestNotificationBodies(t *testing.T) {
 		// The reviewer of a step.
 		{"reviewer question", reviewerBody(KindQuestion, 3), "The reviewer of step 3 has a question."},
 		{"reviewer permission", reviewerBody(KindPermission, 3), "The reviewer of step 3 asks for a permission."},
-		{"reviewer without report", reviewerBody(KindReply, 3), "The reviewer of step 3 stopped without writing its report."},
 		{"reviewer error", reviewerBody(KindSessionError, 3), "The review of step 3 stopped with an error."},
 
 		// The stages.
@@ -50,12 +49,11 @@ func TestNotificationBodies(t *testing.T) {
 		// The steps.
 		{"step blocked", stepBlockedBody(5, task.BlockDirty), "Step 5 can't start: the worktree has uncommitted changes."},
 		{"worktree unreadable", worktreeUnreadableBody(3), "Step 3: the worktree can't be read."},
-		{"step to review", stepReviewBody(4, FormReview, false, "", 7), "Step 4 is ready for your review. 7 files changed."},
-		{"step to review, one file", stepReviewBody(4, FormReview, false, "", 1), "Step 4 is ready for your review. 1 file changed."},
-		{"step to review, no reading", stepReviewBody(4, FormReview, false, "", -1), "Step 4 is ready for your review."},
-		{"no commit after approval", stepReviewBody(4, FormApprove, true, "", 7), "Step 4: the last approval didn't produce a commit."},
-		{"no commit fallback", stepReviewBody(4, FormReview, true, task.FallbackNoCommit, 7), "Step 4: the last approval didn't produce a commit."},
-		{"agent review gave up", stepReviewBody(3, FormReview, false, task.FallbackRoundsExhausted, 2), "Step 3: the agent review didn't come clean after 3 rounds. It's yours now."},
+		{"step to review", stepReviewBody(4, "", 7), "Step 4 is ready for your review. 7 files changed."},
+		{"step to review, one file", stepReviewBody(4, "", 1), "Step 4 is ready for your review. 1 file changed."},
+		{"step to review, no reading", stepReviewBody(4, "", -1), "Step 4 is ready for your review."},
+		{"no commit fallback", stepReviewBody(4, task.FallbackNoCommit, 7), "Step 4: the last approval didn't produce a commit."},
+		{"agent review gave up", stepReviewBody(3, task.FallbackRoundsExhausted, 2), "Step 3: the agent review didn't come clean after 3 rounds. It's yours now."},
 		{"step empty", stepEmptyBody(6), "Step 6 finished without changes."},
 
 		// The pull request of a task.

@@ -214,8 +214,8 @@ type Step struct {
 	Title  string `json:"title"`
 	// Status is not_started, preparing, blocked, implementing, agent_review,
 	// addressing_review, awaiting_review, in_review, ready_to_approve,
-	// nothing_to_commit, review_failed, committing or done, a string for the
-	// same reason as State.Theme.
+	// nothing_to_commit, review_failed, committing, diverged or done, a string
+	// for the same reason as State.Theme.
 	Status string `json:"status"`
 	// Phase is fetching, creating or checking while preparing; "" otherwise.
 	Phase        string     `json:"phase"`
@@ -226,7 +226,7 @@ type Step struct {
 	CommitSHA     string  `json:"commitSha"`     // done only
 	CommitSubject string  `json:"commitSubject"` // done only
 	CommittedAt   string  `json:"committedAt"`   // done only: the committer date, RFC 3339; "" when unknown
-	CommitFailed  bool    `json:"commitFailed"`  // the last approval ended without a commit
+	CommitFailed  bool    `json:"commitFailed"`  // always false: a commit that did not happen is the divergence of the task
 
 	Model         string `json:"model"` // what the step runs with, or will run with
 	Effort        string `json:"effort"`
@@ -245,7 +245,7 @@ type Step struct {
 	ReviewFallback string        `json:"reviewFallback"`
 	ReviewPass     int           `json:"reviewPass"`    // agent_review only: the pass under way
 	ReviewRound    int           `json:"reviewRound"`   // addressing_review only: the report the implementer addresses
-	ReportMissing  bool          `json:"reportMissing"` // agent_review only: the reviewer rests without the report of the pass
+	ReportMissing  bool          `json:"reportMissing"` // always false: a pass without its report is the divergence of the task
 	Reports        []StepReport  `json:"reports"`       // the reports of the agent review, by pass; never nil
 	Reviewer       *AgentSession `json:"reviewer"`      // nil while the step has no reviewer conversation open
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"maps"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
@@ -1353,6 +1355,12 @@ func (m *memSessions) MarkChangesApproved(_ context.Context, k session.Key, file
 	m.mark(k, session.MarkerEntry{Type: session.MarkerChangesApproved, Files: files})
 }
 
+func (m *memSessions) MarkDivergence(_ context.Context, k session.Key, d divergence.Divergence) {
+	m.mark(k, session.MarkerEntry{
+		Type: session.MarkerDivergence, Divergence: &divergence.Mark{Kind: d.Kind, Facts: d.Facts},
+	})
+}
+
 func (m *memSessions) MarkPlanInvalid(_ context.Context, k session.Key, problems []session.PlanProblem) {
 	m.mark(k, session.MarkerEntry{Type: session.MarkerPlanInvalid, Problems: problems})
 }
@@ -1936,6 +1944,36 @@ func (m *memReviews) reviewCalls() []string {
 	return slices.Clone(m.calls)
 }
 
+// memDivergenceStore is an in-memory divergence.Store, under the real
+// divergence service the flow runs against.
+type memDivergenceStore struct {
+	mu   sync.Mutex
+	rows map[string]divergence.Row
+}
+
+func (m *memDivergenceStore) Divergences(context.Context) ([]divergence.Row, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return slices.Collect(maps.Values(m.rows)), nil
+}
+
+func (m *memDivergenceStore) PutDivergence(_ context.Context, row divergence.Row) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.rows[row.ItemID] = row
+	return nil
+}
+
+func (m *memDivergenceStore) DeleteDivergence(_ context.Context, itemID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	delete(m.rows, itemID)
+	return nil
+}
+
 // memGH is an in-memory flow.GH: it answers with the login and the pull
 // requests a test seeds, and records what it was asked.
 type memGH struct {
@@ -2085,6 +2123,7 @@ type fixture struct {
 	repositories *memRepositories
 	reviews      *memReviews
 	gh           *memGH
+	divergences  *divergence.Service
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -2097,6 +2136,7 @@ func newFixture(t *testing.T) *fixture {
 		repositories: newRepositories(),
 		reviews:      newReviews(),
 		gh:           newGH(),
+		divergences:  divergence.New(divergence.Deps{Store: &memDivergenceStore{rows: map[string]divergence.Row{}}}),
 	}
 	f.service = flow.New(flow.Deps{
 		Tasks:        f.tasks,
@@ -2105,6 +2145,7 @@ func newFixture(t *testing.T) *fixture {
 		Repositories: f.repositories,
 		Review:       f.reviews,
 		GH:           f.gh,
+		Divergences:  f.divergences,
 		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
 			switch stage {
 			case prompts.StageCommit:
@@ -2328,4 +2369,40 @@ func (m *memWorktrees) failRemove(err error) {
 	defer m.mu.Unlock()
 
 	m.removeErr = err
+}
+
+// diverge opens a divergence of a task the way a flow does, which is how a test
+// says what the app found before.
+func (f *fixture) diverge(t *testing.T, tk task.Task, stage string, kind divergence.Kind, facts divergence.Facts) {
+	t.Helper()
+
+	d := divergence.Divergence{ItemID: tk.ID, Stage: stage, Kind: kind, Facts: facts}
+	if _, err := f.divergences.Open(t.Context(), d); err != nil {
+		t.Fatalf("Open() = %v, want nil", err)
+	}
+}
+
+// wantDivergence fails the test unless task-1 has this divergence open.
+func (f *fixture) wantDivergence(t *testing.T, stage string, kind divergence.Kind, facts divergence.Facts) {
+	t.Helper()
+
+	d, ok := f.divergences.Get("task-1")
+	if !ok {
+		t.Fatalf("divergence = none, want %s in %s", kind, stage)
+	}
+	if d.Stage != stage || d.Kind != kind {
+		t.Errorf("divergence = %s in %s, want %s in %s", d.Kind, d.Stage, kind, stage)
+	}
+	if !reflect.DeepEqual(facts, d.Facts) {
+		t.Errorf("facts = %+v, want %+v", d.Facts, facts)
+	}
+}
+
+// wantNoDivergence fails the test when task-1 has a divergence open.
+func (f *fixture) wantNoDivergence(t *testing.T) {
+	t.Helper()
+
+	if d, ok := f.divergences.Get("task-1"); ok {
+		t.Errorf("divergence = %s in %s, want none", d.Kind, d.Stage)
+	}
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
 	"github.com/guilhermt/myspec/internal/prompts"
@@ -37,6 +38,7 @@ const (
 	StepNothingToCommit  StepStatus = "nothing_to_commit" // the worktree has no change at all
 	StepReviewFailed     StepStatus = "review_failed"     // the worktree could not be read
 	StepCommitting       StepStatus = "committing"
+	StepDiverged         StepStatus = "diverged" // the agent left the step otherwise than the app expected
 	StepDone             StepStatus = "done"
 )
 
@@ -70,11 +72,7 @@ type StepState struct {
 	Fallback     task.ReviewFallback // why a step that started under the agent review is reviewed by the user
 	ReviewPass   int                 // agent_review only: the pass under way
 	ReviewRound  int                 // addressing_review only: the report the implementer addresses
-	// ReportMissing says the reviewer rests without the report of the pass
-	// under way, which the user sorts out in its conversation; agent_review
-	// only.
-	ReportMissing bool
-	Reports       []task.ReviewReport // the reports of the agent review, by pass
+	Reports      []task.ReviewReport // the reports of the agent review, by pass
 	// ReviewerStage is the key of the conversation of the reviewer, "" while
 	// the step has none open, and Reviewer is its summary.
 	ReviewerStage string
@@ -83,7 +81,10 @@ type StepState struct {
 	CommitSHA     string // done only
 	CommitSubject string
 	CommittedAt   time.Time // done only; zero when unknown
-	CommitFailed  bool      // the last approval ended without a commit
+
+	// Divergence is what the app expected of the step and did not find; nil for
+	// none. It belongs to the current step only.
+	Divergence *divergence.Divergence
 }
 
 // ModelEditable reports whether the model and effort of the step can still
@@ -118,9 +119,10 @@ func (s *Service) Steps(id string) []StepState {
 	a, _ := s.tasks.Artifacts(id)
 	runs := s.tasks.StepRuns(id)
 	phase := s.phaseOf(id)
-	// The warning belongs to the step the user is on, which is the first one
+	// A divergence belongs to the step the user is on, which is the first one
 	// without a commit; every other step is either done or still to come.
-	noCommit := s.noCommitOf(id)
+	current, _ := currentStep(a.Plan, runs)
+	d, diverged := s.divergences.Get(id)
 
 	states := make([]StepState, 0, len(a.Plan.Steps))
 	for _, step := range a.Plan.Steps {
@@ -165,8 +167,14 @@ func (s *Service) Steps(id string) []StepState {
 				state.CommitSHA, state.CommitSubject, state.CommittedAt = run.CommitSHA, run.CommitSubject, run.CommittedAt
 			}
 		}
-		if state.Status != StepDone && noCommit {
-			state.CommitFailed, noCommit = true, false
+		if diverged && step.Number == current.Number &&
+			(d.Stage == session.StepStage(step.Number) || d.Stage == session.StepReviewStage(step.Number)) {
+			state.Divergence = &d
+			// The divergence shows once the implementer rests: a session that
+			// works still has the floor.
+			if sum, open := s.sessions.Summary(stepKey(id, step.Number)); open && sum.Idle {
+				state.Status = StepDiverged
+			}
 		}
 		state.Choice = t.Models.Step(step.Number)
 		state.Adjusted = state.Status == StepNotStarted && t.Models.Adjusted(step.Number)
@@ -295,28 +303,6 @@ func (s *Service) phaseOf(id string) Phase {
 	defer s.mu.Unlock()
 
 	return l.phase
-}
-
-// setNoCommit records whether the last approval of the current step of a task
-// ended without a commit.
-func (s *Service) setNoCommit(id string, v bool) {
-	l := s.lockOf(id)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	l.noCommit = v
-}
-
-// noCommitOf reports whether the last approval of the current step of a task
-// ended without a commit.
-func (s *Service) noCommitOf(id string) bool {
-	l := s.lockOf(id)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return l.noCommit
 }
 
 // prepare fetches, creates and checks the worktree of the current step of a
@@ -589,42 +575,46 @@ func (s *Service) evaluateStep(ctx context.Context, t task.Task) {
 	}
 	if committing {
 		if idle {
-			s.commitMissed(ctx, t, step, run)
+			s.commitMissed(ctx, t, step, wt, run, snap)
 		}
 		// A commit turn under way is not the loop's to act on: the report it
 		// followed was already acted on.
 		return
 	}
 	if agentReviewed(t, step.Number, run) {
-		s.evaluateAgentReview(ctx, t, a, step, wt, run, sum, snap)
+		s.evaluateAgentReview(ctx, t, step, wt, run, sum, snap)
 	}
 }
 
 // commitMissed gives back a step whose commit turn ended with the branch where
-// it was: whatever the agent did, it did not commit. A step under the agent
-// review goes to the user for good, and that is recorded first, so that a
-// failure never leaves it started under a review that asks for a new pass.
-func (s *Service) commitMissed(ctx context.Context, t task.Task, step task.Step, run task.StepRun) {
-	if agentReviewed(t, step.Number, run) {
-		if err := s.fallBack(ctx, t.ID, step.Number, task.FallbackNoCommit); err != nil {
-			s.log.Error("record step review fallback failed", "task", t.ID, "step", step.Number, "error", err)
-			return
-		}
-	}
+// it was: whatever the agent did, it did not commit. The step is the user's
+// again, and the divergence says what the app asked for and what it found.
+func (s *Service) commitMissed(
+	ctx context.Context, t task.Task, step task.Step, wt worktree.Worktree, run task.StepRun, snap review.Snapshot,
+) {
 	if _, err := s.tasks.SetStepRun(ctx, t.ID, step.Number, task.StepStarted, nil); err != nil {
 		s.log.Error("record started step failed", "task", t.ID, "step", step.Number, "error", err)
 		return
 	}
-	s.setNoCommit(t.ID, true)
-	s.log.Warn("commit did not happen", "task", t.ID, "step", step.Number)
+	s.diverge(ctx, t, session.StepStage(step.Number), divergence.KindCommitMissing, divergence.Facts{
+		Branch: wt.Branch,
+		Commit: task.ShortSHA(run.StartCommit),
+		Files:  snap.Total,
+		All:    agentReviewed(t, step.Number, run),
+	})
 }
 
 // completeStep records the commit a step produced, closes its session and
 // starts the next one. A task whose last step is committed moves on to the PR
-// stage.
+// stage. Any commit past the one the step started on completes it, the one the
+// user allowed in a deviation included, and ends the divergence the step had.
 func (s *Service) completeStep(
 	ctx context.Context, t task.Task, plan task.Plan, step task.Step, wt worktree.Worktree, head string,
 ) {
+	if err := s.divergences.Clear(ctx, t.ID); err != nil {
+		s.log.Error("clear divergence failed", "task", t.ID, "step", step.Number, "error", err)
+		return
+	}
 	commit, err := s.worktrees.Commit(ctx, wt, head)
 	if err != nil {
 		// The commit is a fact of the branch; its subject is a nicety.
@@ -637,7 +627,6 @@ func (s *Service) completeStep(
 	}
 	s.sessions.MarkCommitted(ctx, stepKey(t.ID, step.Number), task.ShortSHA(commit.SHA), commit.Subject, false, 0)
 	s.review.Forget(t.ID)
-	s.setNoCommit(t.ID, false)
 	if err := s.sessions.Close(ctx, stepKey(t.ID, step.Number)); err != nil {
 		s.log.Error("close step session failed", "task", t.ID, "step", step.Number, "error", err)
 	}
@@ -769,10 +758,27 @@ func (s *Service) ApproveStep(ctx context.Context, id string) error {
 		return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, ErrStepNotReady)
 	}
 
+	if err := s.commitStep(ctx, t, step, false, snap.Total, true); err != nil {
+		return err
+	}
+	s.log.Info("step approved", "task", id, "step", step.Number, "files", snap.Total)
+	return nil
+}
+
+// commitStep asks the agent that implemented a step to commit, what is staged
+// or every change of the worktree. A paused session is resumed first, and the
+// agent has to be at rest. The step is recorded as committing before the
+// prompt goes, and a send that fails gives it back, with the divergence the
+// commit had. approval marks the user's approval in the conversation. The
+// caller holds the lock of the task.
+func (s *Service) commitStep(
+	ctx context.Context, t task.Task, step task.Step, all bool, files int, approval bool,
+) error {
+	id := t.ID
 	key := stepKey(id, step.Number)
 	sum, open := s.sessions.Summary(key)
 	if !open {
-		return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, session.ErrNotFound)
+		return fmt.Errorf("commit step %d of task %s: %w", step.Number, id, session.ErrNotFound)
 	}
 	if sum.Status == session.StatusPaused {
 		if resumeErr := s.sessions.Resume(ctx, key); resumeErr != nil {
@@ -780,31 +786,76 @@ func (s *Service) ApproveStep(ctx context.Context, id string) error {
 		}
 		sum, open = s.sessions.Summary(key)
 		if !open {
-			return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, session.ErrNotFound)
+			return fmt.Errorf("commit step %d of task %s: %w", step.Number, id, session.ErrNotFound)
 		}
 	}
 	if !sum.Idle {
-		return fmt.Errorf("approve step %d of task %s: %w", step.Number, id, ErrStepBusy)
+		return fmt.Errorf("commit step %d of task %s: %w", step.Number, id, ErrStepBusy)
 	}
 
-	message, err := s.renderPrompt(prompts.StageCommit, commitVars(t))
+	vars := commitVars(t)
+	vars.CommitAll = all
+	message, err := s.renderPrompt(prompts.StageCommit, vars)
 	if err != nil {
 		return err
 	}
 	if _, err := s.tasks.SetStepRun(ctx, id, step.Number, task.StepCommitting, nil); err != nil {
 		return err
 	}
-	s.setNoCommit(id, false)
-	s.sessions.MarkChangesApproved(ctx, key, snap.Total)
-	app := session.AppMessage{Text: message, Kind: session.AppCommit}
-	if err := s.sessions.SendFromApp(ctx, key, app); err != nil {
+	previous, hadPrevious := s.divergences.Get(id)
+	if err := s.divergences.Clear(ctx, id, divergence.KindCommitMissing); err != nil {
+		s.giveBackStep(ctx, id, step.Number)
+		return err
+	}
+	if approval {
+		s.sessions.MarkChangesApproved(ctx, key, files)
+	}
+	kind := session.AppCommit
+	if all {
+		kind = session.AppCommitAll
+	}
+	if err := s.sessions.SendFromApp(ctx, key, session.AppMessage{Text: message, Kind: kind}); err != nil {
 		// The button stays where the user left it: the step is theirs again.
-		if _, setErr := s.tasks.SetStepRun(ctx, id, step.Number, task.StepStarted, nil); setErr != nil {
-			s.log.Error("record started step failed", "task", id, "step", step.Number, "error", setErr)
+		s.giveBackStep(ctx, id, step.Number)
+		if hadPrevious && previous.Kind == divergence.KindCommitMissing {
+			s.reopen(ctx, previous)
 		}
 		return err
 	}
-	s.log.Info("step approved", "task", id, "step", step.Number, "files", snap.Total)
+	return nil
+}
+
+// giveBackStep records a step that was about to commit as started again.
+func (s *Service) giveBackStep(ctx context.Context, id string, number int) {
+	if _, err := s.tasks.SetStepRun(ctx, id, number, task.StepStarted, nil); err != nil {
+		s.log.Error("record started step failed", "task", id, "step", number, "error", err)
+	}
+}
+
+// askStepCommitAgain asks the implementer of a step for the commit its last
+// commit turn did not make, as the approval of the step does. A step the user
+// reviews, and whose divergence asked for the staged changes only, has to be
+// ready to approve first. The caller holds the lock of the task.
+func (s *Service) askStepCommitAgain(ctx context.Context, d divergence.Divergence) error {
+	t, step, run, err := s.currentStepOf(d.ItemID)
+	if err != nil {
+		return err
+	}
+	if run == nil || run.Status != task.StepStarted || d.Stage != session.StepStage(step.Number) {
+		return fmt.Errorf("ask again about step %d of task %s: %w", step.Number, d.ItemID, ErrStepNotStarted)
+	}
+	files := d.Facts.Files
+	if !d.Facts.All {
+		snap, read := s.review.Snapshot(d.ItemID)
+		if !read || snap.Err != "" || !snap.Ready() {
+			return fmt.Errorf("ask again about step %d of task %s: %w", step.Number, d.ItemID, ErrStepNotReady)
+		}
+		files = snap.Total
+	}
+	if err := s.commitStep(ctx, t, step, d.Facts.All, files, false); err != nil {
+		return err
+	}
+	s.log.Info("step asked to commit again", "task", d.ItemID, "step", step.Number, "all", d.Facts.All)
 	return nil
 }
 
@@ -887,6 +938,9 @@ func (s *Service) DiscardStep(ctx context.Context, id string, cleanWorktree bool
 	if err := s.tasks.ClearStepReview(ctx, id, step.Number); err != nil {
 		return err
 	}
+	if err := s.divergences.Clear(ctx, id); err != nil {
+		return err
+	}
 	if _, err := s.tasks.SetStepRun(ctx, id, step.Number, task.StepPreparing, nil); err != nil {
 		return err
 	}
@@ -956,6 +1010,9 @@ func (s *Service) tearDownSteps(ctx context.Context, t task.Task) error {
 		return err
 	}
 	if err := s.tasks.ClearStepRuns(ctx, t.ID); err != nil {
+		return err
+	}
+	if err := s.divergences.Clear(ctx, t.ID); err != nil {
 		return err
 	}
 	s.log.Info("steps torn down", "task", t.ID, "steps", len(runs))
@@ -1034,6 +1091,7 @@ func (s *Service) Delete(ctx context.Context, id string) (DeleteResult, error) {
 		return DeleteResult{}, err
 	}
 	s.sessions.ForgetTask(id)
+	s.divergences.Forget(id)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

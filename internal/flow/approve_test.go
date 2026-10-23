@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/review"
@@ -276,7 +277,7 @@ func TestTheLastStepOfAPlanIsConcludedWithNothingAfterIt(t *testing.T) {
 	})
 }
 
-func TestACommitTurnThatEndsWithoutACommitGivesTheStepBack(t *testing.T) {
+func TestACommitTurnThatEndsWithoutACommitIsADivergenceOfTheStep(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -289,23 +290,164 @@ func TestACommitTurnThatEndsWithoutACommitGivesTheStepBack(t *testing.T) {
 	f.sessions.goIdle("task-1")
 	f.service.Check("task-1")
 
-	f.waitStep(t, "task-1", 1, flow.StepReadyToApprove)
+	f.waitStep(t, "task-1", 1, flow.StepDiverged)
 	// The decision is taken on a reading newer than the turn, not on one the
 	// debounce still owes.
 	if !slices.Contains(f.reviews.reviewCalls(), "refresh:task-1") {
 		t.Errorf("review calls = %q, want the worktree read again", f.reviews.reviewCalls())
 	}
-	// The step is given back before the missing commit is recorded, so it reads
-	// ready to approve while the warning can still be on its way.
-	waitFor(t, "the user to be told the commit did not happen", func() bool {
-		return f.stepState(t, "task-1", 1).CommitFailed
+	f.wantDivergence(t, session.StepStage(1), divergence.KindCommitMissing, divergence.Facts{
+		Branch: "task-1", Commit: task.ShortSHA(startCommit), Files: 3,
 	})
+	state := f.stepState(t, "task-1", 1)
+	if state.Divergence == nil || state.Review == nil {
+		t.Errorf("step 1 = %+v, want the divergence with the reading that was there", state)
+	}
+	markers := f.sessions.marked(session.MarkerDivergence)
+	if len(markers) != 1 || markers[0].Key != implementerKey("task-1", 1) ||
+		markers[0].Marker.Divergence.Kind != divergence.KindCommitMissing {
+		t.Errorf("divergence markers = %+v, want one in the conversation of the step", markers)
+	}
 
-	// Approving again clears the warning.
+	// Approving again ends the divergence.
 	if err := f.service.ApproveStep(t.Context(), "task-1"); err != nil {
 		t.Fatalf("ApproveStep() = %v, want nil", err)
 	}
-	if state := f.stepState(t, "task-1", 1); state.CommitFailed {
-		t.Error("CommitFailed = true, want it cleared by the new approval")
+	f.wantNoDivergence(t)
+}
+
+func TestAskingForTheCommitAgainActsAsTheApprovalDid(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	readyToApprove(t, f, twoStepPlan(), staged(3, 3))
+	if err := f.service.ApproveStep(t.Context(), "task-1"); err != nil {
+		t.Fatalf("ApproveStep() = %v, want nil", err)
 	}
+	f.sessions.goIdle("task-1")
+	f.service.Check("task-1")
+	f.waitStep(t, "task-1", 1, flow.StepDiverged)
+
+	if err := f.service.AskAgain(t.Context(), "task-1"); err != nil {
+		t.Fatalf("AskAgain() = %v, want nil", err)
+	}
+	f.wantNoDivergence(t)
+	if got := f.stepState(t, "task-1", 1).Status; got != flow.StepCommitting {
+		t.Errorf("status = %q, want committing", got)
+	}
+	want := []session.AppMessage{{Kind: session.AppCommit}, {Kind: session.AppCommit}}
+	if diff := cmp.Diff(want, f.sessions.sentApps()); diff != "" {
+		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
+	}
+	// The user approved once: asking again is not a second approval.
+	if n := len(f.sessions.marked(session.MarkerChangesApproved)); n != 1 {
+		t.Errorf("approval markers = %d, want 1", n)
+	}
+}
+
+func TestAskingForTheCommitAgainNeedsTheStepReadyWhenTheUserReviewsIt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	readyToApprove(t, f, twoStepPlan(), staged(3, 3))
+	if err := f.service.ApproveStep(t.Context(), "task-1"); err != nil {
+		t.Fatalf("ApproveStep() = %v, want nil", err)
+	}
+	f.sessions.goIdle("task-1")
+	f.service.Check("task-1")
+	f.waitStep(t, "task-1", 1, flow.StepDiverged)
+
+	// The user unstaged a file in the meantime.
+	f.reviews.setSnapshot(staged(2, 3))
+	wantErrIs(t, f.service.AskAgain(t.Context(), "task-1"), flow.ErrStepNotReady)
+	if _, ok := f.divergences.Get("task-1"); !ok {
+		t.Error("the divergence ended, want it kept for a refused request")
+	}
+}
+
+func TestAFailedAskAgainForTheCommitKeepsTheDivergence(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	readyToApprove(t, f, twoStepPlan(), staged(3, 3))
+	if err := f.service.ApproveStep(t.Context(), "task-1"); err != nil {
+		t.Fatalf("ApproveStep() = %v, want nil", err)
+	}
+	f.sessions.goIdle("task-1")
+	f.service.Check("task-1")
+	f.waitStep(t, "task-1", 1, flow.StepDiverged)
+
+	f.sessions.failWith(errStart)
+	wantErrIs(t, f.service.AskAgain(t.Context(), "task-1"), errStart)
+	if _, ok := f.divergences.Get("task-1"); !ok {
+		t.Error("the divergence ended, want it back after the failed send")
+	}
+	f.waitStep(t, "task-1", 1, flow.StepDiverged)
+}
+
+func TestACommitTheUserAllowedCompletesTheStepAndEndsItsDivergence(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	readyToApprove(t, f, twoStepPlan(), staged(3, 3))
+	if err := f.service.ApproveStep(t.Context(), "task-1"); err != nil {
+		t.Fatalf("ApproveStep() = %v, want nil", err)
+	}
+	f.sessions.goIdle("task-1")
+	f.service.Check("task-1")
+	f.waitStep(t, "task-1", 1, flow.StepDiverged)
+
+	// The agent commits on its own, in a turn the user allowed.
+	f.reviews.setSnapshot(review.Snapshot{Head: commitSHA})
+	f.service.Check("task-1")
+	f.waitStep(t, "task-1", 1, flow.StepDone)
+	f.wantNoDivergence(t)
+}
+
+func TestCheckingAgainNeedsADivergence(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	readyToApprove(t, f, plan(), staged(3, 3))
+	wantErrIs(t, f.service.CheckAgain(t.Context(), "task-1"), flow.ErrNoDivergence)
+	wantErrIs(t, f.service.AskAgain(t.Context(), "task-1"), flow.ErrNoDivergence)
+	wantErrIs(t, f.service.Adopt(t.Context(), "task-1", ""), flow.ErrNoDivergence)
+}
+
+func TestCheckingAgainReadsTheWorktreeAndEvaluates(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	readyToApprove(t, f, twoStepPlan(), staged(3, 3))
+	tk, _ := f.tasks.Get("task-1")
+	f.diverge(t, tk, session.StepStage(1), divergence.KindCommitMissing, divergence.Facts{Files: 3})
+
+	before := f.tasks.inspectCount()
+	if err := f.service.CheckAgain(t.Context(), "task-1"); err != nil {
+		t.Fatalf("CheckAgain() = %v, want nil", err)
+	}
+	f.waitEvaluations(t, before+1)
+	if !slices.Contains(f.reviews.reviewCalls(), "refresh:task-1") {
+		t.Errorf("review calls = %q, want the worktree read again", f.reviews.reviewCalls())
+	}
+
+	// The user committed by hand: the evaluation completes the step.
+	f.reviews.setSnapshot(review.Snapshot{Head: commitSHA})
+	if err := f.service.CheckAgain(t.Context(), "task-1"); err != nil {
+		t.Fatalf("CheckAgain() = %v, want nil", err)
+	}
+	f.waitStep(t, "task-1", 1, flow.StepDone)
+	f.wantNoDivergence(t)
+}
+
+func TestAskingAgainRefusesWhatHasNoRequestToTheAgent(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	readyToApprove(t, f, plan(), staged(3, 3))
+	tk, _ := f.tasks.Get("task-1")
+	f.diverge(t, tk, "pr", divergence.KindPushRejected, divergence.Facts{Branch: "task-1"})
+
+	wantErrIs(t, f.service.AskAgain(t.Context(), "task-1"), flow.ErrNotAskable)
+	wantErrIs(t, f.service.Adopt(t.Context(), "task-1", ""), flow.ErrNotAdoptable)
 }

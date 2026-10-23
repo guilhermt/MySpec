@@ -3750,8 +3750,8 @@ export interface Step {
     /**
      * Status is not_started, preparing, blocked, implementing, agent_review,
      * addressing_review, awaiting_review, in_review, ready_to_approve,
-     * nothing_to_commit, review_failed, committing or done, a string for the
-     * same reason as State.Theme.
+     * nothing_to_commit, review_failed, committing, diverged or done, a string
+     * for the same reason as State.Theme.
      */
     "status": string;
 
@@ -3791,7 +3791,7 @@ export interface Step {
     "committedAt": string;
 
     /**
-     * the last approval ended without a commit
+     * always false: a commit that did not happen is the divergence of the task
      */
     "commitFailed": boolean;
 
@@ -3846,7 +3846,7 @@ export interface Step {
     "reviewRound": number;
 
     /**
-     * agent_review only: the reviewer rests without the report of the pass
+     * always false: a pass without its report is the divergence of the task
      */
     "reportMissing": boolean;
 

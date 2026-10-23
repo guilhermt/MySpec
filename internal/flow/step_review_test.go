@@ -1,13 +1,16 @@
 package flow_test
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
@@ -33,6 +36,7 @@ func startAgentStep(t *testing.T, f *fixture, snap review.Snapshot) {
 	f.worktrees.setStatus(git.Status{Head: startCommit})
 	f.reviews.setSnapshot(snap)
 	implementing(f, "task-1", twoStepPlan())
+	f.tasks.useDir("task-1", t.TempDir())
 	f.service.Sync(t.Context())
 	f.waitStep(t, "task-1", 1, flow.StepImplementing)
 	f.waitStepSession(t, "task-1", 1)
@@ -51,9 +55,45 @@ func underAgentReview(t *testing.T, f *fixture) {
 	f.waitReviewer(t, "task-1", 1)
 }
 
+// stepReportText is the report of a pass as the reviewer writes it: the header
+// and, with changes, two findings.
+func stepReportText(number int, report task.ReviewReport) string {
+	status, body := "changes", "## Findings\n\n### 1. First\n\nText.\n\n### 2. Second\n\nText.\n"
+	if report.Clean {
+		status, body = "clean", "## Findings\n\nNone.\n"
+	}
+	return "---\nstep: " + strconv.Itoa(number) + "\npass: " + strconv.Itoa(report.Pass) +
+		"\nstatus: " + status + "\n---\n\n" + body
+}
+
+// writeStepFile puts a file in the artifacts folder of task-1.
+func (f *fixture) writeStepFile(t *testing.T, name, content string) {
+	t.Helper()
+
+	tk, _ := f.tasks.Get("task-1")
+	path := filepath.Join(tk.ArtifactsDir, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("create %s: %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+// writeStepReport is the reviewer writing the report of a pass of a step, at the
+// path the app gave it.
+func (f *fixture) writeStepReport(t *testing.T, number int, report task.ReviewReport) {
+	t.Helper()
+
+	f.tasks.setStepReports("task-1", number, report)
+	f.writeStepFile(t, "step-reviews/"+task.StepReportFile(number, report.Pass), stepReportText(number, report))
+}
+
 // reviewerWrites is the reviewer of step 1 ending its pass with a report.
-func reviewerWrites(f *fixture, report task.ReviewReport) {
-	f.tasks.setStepReports("task-1", 1, report)
+func reviewerWrites(t *testing.T, f *fixture, report task.ReviewReport) {
+	t.Helper()
+
+	f.writeStepReport(t, 1, report)
 	f.sessions.goIdleSession(reviewerKey("task-1", 1))
 	f.service.Check("task-1")
 }
@@ -71,7 +111,7 @@ func reportDelivered(t *testing.T, f *fixture) {
 	t.Helper()
 
 	underAgentReview(t, f)
-	reviewerWrites(f, stepReport(1, 1, false))
+	reviewerWrites(t, f, stepReport(1, 1, false))
 	f.waitSessionCall(t, "markStep:task-1:step_review:1:pass=1:clean=false:findings=2")
 }
 
@@ -495,7 +535,7 @@ func TestTheLoopWaitsWhileTheReviewerWorks(t *testing.T) {
 
 	f := newFixture(t)
 	underAgentReview(t, f)
-	f.tasks.setStepReports("task-1", 1, stepReport(1, 1, false))
+	f.writeStepReport(t, 1, stepReport(1, 1, false))
 	f.sessions.setSummary("task-1", session.Summary{
 		Stage: session.StepReviewStage(1), Status: session.StatusWorking, TurnRunning: true,
 	})
@@ -511,27 +551,206 @@ func TestTheLoopWaitsWhileTheReviewerWorks(t *testing.T) {
 	}
 }
 
-func TestAPassWithoutAReportWaitsForTheUser(t *testing.T) {
+func TestAPassWithoutAReportIsADivergenceOfTheStep(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	underAgentReview(t, f)
 	f.sessions.goIdleSession(reviewerKey("task-1", 1))
-	before := f.tasks.inspectCount()
 	f.service.Check("task-1")
-	f.waitEvaluated(t, "task-1", before)
+	f.waitStep(t, "task-1", 1, flow.StepDiverged)
 
 	if sent := f.sessions.sent(); len(sent) != 0 {
 		t.Errorf("messages = %q, want none without a report", sent)
 	}
-	if state := f.stepState(t, "task-1", 1); state.Status != flow.StepAgentReview || !state.ReportMissing {
-		t.Errorf("step 1 = %+v, want the pass under way with its report missing", state)
+	want := divergence.Facts{Pass: 1, Path: "step-reviews/1-review-1.md"}
+	f.wantDivergence(t, session.StepReviewStage(1), divergence.KindReportMissing, want)
+	if state := f.stepState(t, "task-1", 1); state.Divergence == nil {
+		t.Errorf("step 1 = %+v, want the divergence", state)
+	}
+	if got := f.sessions.marked(session.MarkerDivergence); len(got) != 1 {
+		t.Errorf("divergence markers = %d, want one", len(got))
 	}
 
-	// The user sorts it out with the reviewer, which writes the report.
-	f.tasks.setStepReports("task-1", 1, stepReport(1, 1, false))
+	// Evaluating again leaves the same divergence and marks nothing new.
+	before := f.tasks.inspectCount()
+	f.service.Check("task-1")
+	f.waitEvaluated(t, "task-1", before)
+	if got := f.sessions.marked(session.MarkerDivergence); len(got) != 1 {
+		t.Errorf("divergence markers = %d, want the one divergence marked once", len(got))
+	}
+
+	// The user sorts it out with the reviewer, which writes the report: the
+	// divergence ends and the loop acts on it.
+	f.writeStepReport(t, 1, stepReport(1, 1, false))
 	f.service.Check("task-1")
 	f.waitSessionCall(t, "send:task-1:step:1")
+	f.wantNoDivergence(t)
+}
+
+func TestAReportOutsideItsPathIsCopiedToIt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	underAgentReview(t, f)
+	f.sessions.goIdleSession(reviewerKey("task-1", 1))
+	f.writeStepFile(t, "review.md", stepReportText(1, stepReport(1, 1, false)))
+	f.service.Check("task-1")
+	f.waitSessionCall(t, "send:task-1:step:1")
+
+	tk, _ := f.tasks.Get("task-1")
+	if _, err := os.Stat(tk.StepReportPath(1, 1)); err != nil {
+		t.Errorf("report at the agreed path: %v, want the copy", err)
+	}
+	f.wantNoDivergence(t)
+}
+
+func TestAReportThatCannotBeReadIsADivergenceOfTheStep(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	underAgentReview(t, f)
+	f.sessions.goIdleSession(reviewerKey("task-1", 1))
+	f.writeStepFile(t, "step-reviews/1-review-1.md", "---\nstep: 1\npass: 1\nstatus: maybe\n---\n\nText.\n")
+	f.service.Check("task-1")
+	f.waitStep(t, "task-1", 1, flow.StepDiverged)
+
+	d, _ := f.divergences.Get("task-1")
+	if d.Kind != divergence.KindReportUnreadable || d.Stage != session.StepReviewStage(1) || d.Facts.Pass != 1 ||
+		d.Facts.Path != "step-reviews/1-review-1.md" || !strings.Contains(d.Facts.Reason, "neither clean nor changes") {
+		t.Errorf("divergence = %+v, want the unreadable report of pass 1", d)
+	}
+	if sent := f.sessions.sent(); len(sent) != 0 {
+		t.Errorf("messages = %q, want none for a report the app can't read", sent)
+	}
+}
+
+func TestSeveralReportsAreADivergenceOfTheStepAndOneCanBeAdopted(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	underAgentReview(t, f)
+	f.sessions.goIdleSession(reviewerKey("task-1", 1))
+	f.writeStepFile(t, "a-review.md", stepReportText(1, stepReport(1, 1, false)))
+	f.writeStepFile(t, "b-review.md", stepReportText(1, stepReport(1, 1, true)))
+	f.service.Check("task-1")
+	f.waitStep(t, "task-1", 1, flow.StepDiverged)
+
+	want := divergence.Facts{Pass: 1, Path: "step-reviews/1-review-1.md", Candidates: []string{"a-review.md", "b-review.md"}}
+	f.wantDivergence(t, session.StepReviewStage(1), divergence.KindReportsAmbiguous, want)
+
+	wantErrIs(t, f.service.Adopt(t.Context(), "task-1", "c-review.md"), flow.ErrNoCandidate)
+	if err := f.service.Adopt(t.Context(), "task-1", "b-review.md"); err != nil {
+		t.Fatalf("Adopt() = %v, want nil", err)
+	}
+	// The adopted file is the report, and it is clean: the step is committed.
+	f.waitSessionCall(t, "send:task-1:step:1")
+	f.wantNoDivergence(t)
+	if want := []string{commitAllPrompt("task-1")}; !slices.Equal(f.sessions.sent(), want) {
+		t.Errorf("messages = %q, want %q", f.sessions.sent(), want)
+	}
+}
+
+func TestAskingForTheReportAgainRepeatsTheInstructionOnce(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	underAgentReview(t, f)
+	f.sessions.goIdleSession(reviewerKey("task-1", 1))
+	f.service.Check("task-1")
+	f.waitStep(t, "task-1", 1, flow.StepDiverged)
+
+	if err := f.service.AskAgain(t.Context(), "task-1"); err != nil {
+		t.Fatalf("AskAgain() = %v, want nil", err)
+	}
+	tk, _ := f.tasks.Get("task-1")
+	wantMessage := "The report of pass 1 isn't at `" + tk.StepReportPath(1, 1) + "`. " +
+		"Write it there, in the format the instructions of this session give, and stop."
+	if sent := f.sessions.sent(); len(sent) != 1 || sent[0] != wantMessage {
+		t.Errorf("messages = %q, want %q", sent, wantMessage)
+	}
+	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppAgain, Pass: 1}}, f.sessions.sentApps()); diff != "" {
+		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
+	}
+	f.wantNoDivergence(t)
+
+	// The instruction is the last one: without a report the divergence opens
+	// again, and it is marked again.
+	f.sessions.goIdleSession(reviewerKey("task-1", 1))
+	f.service.Check("task-1")
+	f.waitStep(t, "task-1", 1, flow.StepDiverged)
+	if got := f.sessions.marked(session.MarkerDivergence); len(got) != 2 {
+		t.Errorf("divergence markers = %d, want one per divergence", len(got))
+	}
+}
+
+func TestAskingForTheReportAgainTellsWhyItCantBeRead(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	underAgentReview(t, f)
+	f.sessions.goIdleSession(reviewerKey("task-1", 1))
+	f.writeStepFile(t, "step-reviews/1-review-1.md", "---\nstep: 1\npass: 1\nstatus: maybe\n---\n\nText.\n")
+	f.service.Check("task-1")
+	f.waitStep(t, "task-1", 1, flow.StepDiverged)
+
+	if err := f.service.AskAgain(t.Context(), "task-1"); err != nil {
+		t.Fatalf("AskAgain() = %v, want nil", err)
+	}
+	sent := f.sessions.sent()
+	if len(sent) != 1 || !strings.Contains(sent[0], "can't be read: status \"maybe\" is neither clean nor changes. Rewrite it there") {
+		t.Errorf("messages = %q, want the reason and the instruction to rewrite", sent)
+	}
+}
+
+func TestAFailedAskAgainKeepsTheDivergence(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	underAgentReview(t, f)
+	f.sessions.goIdleSession(reviewerKey("task-1", 1))
+	f.service.Check("task-1")
+	f.waitStep(t, "task-1", 1, flow.StepDiverged)
+
+	f.sessions.failWith(errStart)
+	wantErrIs(t, f.service.AskAgain(t.Context(), "task-1"), errStart)
+	f.wantDivergence(t, session.StepReviewStage(1), divergence.KindReportMissing,
+		divergence.Facts{Pass: 1, Path: "step-reviews/1-review-1.md"})
+}
+
+func TestTheLoopDoesNotActWhileTheStepDiverges(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	startAgentStep(t, f, staged(0, 2))
+	tk, _ := f.tasks.Get("task-1")
+	f.diverge(t, tk, session.StepStage(1), divergence.KindCommitMissing, divergence.Facts{All: true})
+	f.sessions.goIdleSession(implementerKey("task-1", 1))
+	before := f.tasks.inspectCount()
+	f.service.Check("task-1")
+	f.waitEvaluated(t, "task-1", before)
+
+	if _, open := f.sessions.Summary(reviewerKey("task-1", 1)); open {
+		t.Error("the reviewer started, want the loop to wait on the divergence")
+	}
+	if got := f.stepState(t, "task-1", 1).Status; got != flow.StepDiverged {
+		t.Errorf("status = %q, want diverged", got)
+	}
+}
+
+func TestTakingTheReviewBackEndsTheDivergenceOfTheReport(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	underAgentReview(t, f)
+	f.sessions.goIdleSession(reviewerKey("task-1", 1))
+	f.service.Check("task-1")
+	f.waitStep(t, "task-1", 1, flow.StepDiverged)
+
+	if err := f.service.ReviewStepMyself(t.Context(), "task-1"); err != nil {
+		t.Fatalf("ReviewStepMyself() = %v, want nil", err)
+	}
+	f.wantNoDivergence(t)
 }
 
 func TestAReportWithChangesGoesToTheImplementer(t *testing.T) {
@@ -612,7 +831,7 @@ func TestACleanReportGetsTheStepCommittedWithEveryChange(t *testing.T) {
 
 	f := newFixture(t)
 	underAgentReview(t, f)
-	reviewerWrites(f, stepReport(1, 1, true))
+	reviewerWrites(t, f, stepReport(1, 1, true))
 	f.waitSessionCall(t, "markStep:task-1:step_review:1:pass=1:clean=true:findings=0")
 
 	if want := []string{commitAllPrompt("task-1")}; !slices.Equal(f.sessions.sent(), want) {
@@ -640,7 +859,7 @@ func TestACommitTurnUnderWayAsksForNoPass(t *testing.T) {
 
 	f := newFixture(t)
 	underAgentReview(t, f)
-	reviewerWrites(f, stepReport(1, 1, true))
+	reviewerWrites(t, f, stepReport(1, 1, true))
 	f.waitSessionCall(t, "markStep:task-1:step_review:1:pass=1:clean=true:findings=0")
 
 	// The implementer commits, the reviewer rests and the worktree still has the
@@ -663,7 +882,7 @@ func TestAReportThatCannotBeSentIsActedOnAgain(t *testing.T) {
 	f := newFixture(t)
 	underAgentReview(t, f)
 	f.sessions.failWith(errStart)
-	f.tasks.setStepReports("task-1", 1, stepReport(1, 1, false))
+	f.writeStepReport(t, 1, stepReport(1, 1, false))
 	f.sessions.goIdleSession(reviewerKey("task-1", 1))
 	before := f.tasks.inspectCount()
 	f.service.Check("task-1")
@@ -692,8 +911,8 @@ func TestTheLastRoundThatStillAsksForChangesHandsTheStepToTheUser(t *testing.T) 
 	f.tasks.setStepRun("task-1", task.StepRun{
 		Number: 1, Status: task.StepStarted, StartCommit: startCommit, ReviewPass: 4, ReportedPass: 3,
 	})
-	f.tasks.setStepReports("task-1", 1,
-		stepReport(1, 1, false), stepReport(1, 2, false), stepReport(1, 3, false), stepReport(1, 4, false))
+	f.tasks.useDir("task-1", t.TempDir())
+	f.writeStepReport(t, 1, stepReport(1, 4, false))
 
 	// Both conversations come back at rest.
 	f.service.Sync(t.Context())
@@ -715,28 +934,40 @@ func TestTheLastRoundThatStillAsksForChangesHandsTheStepToTheUser(t *testing.T) 
 	}
 }
 
-func TestACommitAfterACleanReportThatDoesNotHappenHandsTheStepToTheUser(t *testing.T) {
+func TestACommitAfterACleanReportThatDoesNotHappenIsADivergenceOfTheStep(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	underAgentReview(t, f)
-	reviewerWrites(f, stepReport(1, 1, true))
+	reviewerWrites(t, f, stepReport(1, 1, true))
 	f.waitSessionCall(t, "markStep:task-1:step_review:1:pass=1:clean=true:findings=0")
 
 	// The implementer stops with the branch exactly where it was.
 	f.sessions.goIdleSession(implementerKey("task-1", 1))
 	f.service.Check("task-1")
-	f.waitStep(t, "task-1", 1, flow.StepAwaitingReview)
-	// The step is given back before the missing commit is recorded.
-	waitFor(t, "the user to be told the commit did not happen", func() bool {
-		return f.stepState(t, "task-1", 1).CommitFailed
-	})
+	f.waitStep(t, "task-1", 1, flow.StepDiverged)
 
-	if calls := f.tasks.recorded(); !slices.Contains(calls, "stepFallback:task-1:1:commit_failed") {
-		t.Errorf("task calls = %v, want the fallback recorded", calls)
+	want := divergence.Facts{Branch: "task-1", Commit: task.ShortSHA(startCommit), Files: 2, All: true}
+	f.wantDivergence(t, session.StepStage(1), divergence.KindCommitMissing, want)
+	// The review stays under the agent: no fallback is recorded.
+	if calls := f.tasks.recorded(); slices.ContainsFunc(calls, func(c string) bool { return strings.HasPrefix(c, "stepFallback:") }) {
+		t.Errorf("task calls = %v, want no fallback recorded", calls)
 	}
-	if got := f.stepState(t, "task-1", 1).ReviewMode; got != reviewmode.Manual {
-		t.Errorf("review mode = %q, want manual", got)
+	if got := f.stepState(t, "task-1", 1).ReviewMode; got != reviewmode.Agent {
+		t.Errorf("review mode = %q, want agent", got)
+	}
+
+	// Asking again sends the same commit-all instruction and ends the divergence.
+	if err := f.service.AskAgain(t.Context(), "task-1"); err != nil {
+		t.Fatalf("AskAgain() = %v, want nil", err)
+	}
+	f.wantNoDivergence(t)
+	if got := f.stepState(t, "task-1", 1).Status; got != flow.StepCommitting {
+		t.Errorf("status = %q, want committing", got)
+	}
+	apps := f.sessions.sentApps()
+	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppCommitAll}, {Kind: session.AppCommitAll}}, apps); diff != "" {
+		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
 	}
 }
 

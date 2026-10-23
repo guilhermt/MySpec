@@ -300,6 +300,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 		Repositories: repositories,
 		Review:       reviews,
 		GH:           ghRunner,
+		Divergences:  divergences,
 		Log:          log,
 		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
 			return prompts.Render(a.dirs.Data, stage, vars)

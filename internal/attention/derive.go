@@ -170,7 +170,7 @@ func stepSituation(
 	if step.Review != nil && step.Review.Err == "" {
 		files = step.Review.Total
 	}
-	found := newFound(t, place, KindStepReview, stepReviewBody(n, form, step.CommitFailed, step.Fallback, files))
+	found := newFound(t, place, KindStepReview, stepReviewBody(n, step.Fallback, files))
 	found.Form = form
 	if form == FormStaged && step.Review != nil {
 		found.Percent = step.Review.Percent()
@@ -194,9 +194,6 @@ func reviewerSituation(t task.Task, step flow.StepState, d *divergence.Divergenc
 	}
 	if d != nil && d.Stage == session.StepReviewStage(n) {
 		return newFound(t, place, KindDivergence, divergenceBody(*d, 0)), true
-	}
-	if step.ReportMissing {
-		return newFound(t, place, KindReply, reviewerBody(KindReply, n)), true
 	}
 	return Found{}, false
 }

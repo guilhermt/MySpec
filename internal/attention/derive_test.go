@@ -184,13 +184,6 @@ func TestDeriveTheCurrentStep(t *testing.T) {
 			situation(attention.KindStepReview, attention.FormApprove, 0, "Step 2 is ready for your review. 3 files changed."),
 		},
 		{
-			"the last approval left no commit",
-			stepInput(flow.StepState{
-				Status: flow.StepReadyToApprove, Review: &review.Snapshot{Staged: 3, Total: 3}, CommitFailed: true,
-			}, waiting),
-			situation(attention.KindStepReview, attention.FormApprove, 0, "Step 2: the last approval didn't produce a commit."),
-		},
-		{
 			"nothing to commit",
 			stepInput(flow.StepState{Status: flow.StepNothingToCommit, Review: &review.Snapshot{}}, waiting),
 			situation(attention.KindStepEmpty, attention.FormNone, 0, "Step 2 finished without changes."),
@@ -224,7 +217,7 @@ func TestDeriveTheCurrentStep(t *testing.T) {
 			"fell to the user without the commit",
 			stepInput(flow.StepState{
 				Status: flow.StepAwaitingReview, Review: &review.Snapshot{Total: 3},
-				CommitFailed: true, Fallback: task.FallbackNoCommit,
+				Fallback: task.FallbackNoCommit,
 			}, waiting),
 			situation(attention.KindStepReview, attention.FormReview, 0, "Step 2: the last approval didn't produce a commit."),
 		},
@@ -250,9 +243,9 @@ func TestDeriveTheReviewerOfTheCurrentStep(t *testing.T) {
 
 	// underReview is step 2 in a pass of the agent review, with its implementer
 	// in the state given and its reviewer in the one given.
-	underReview := func(implementer, reviewer session.Summary, missing bool) attention.Input {
+	underReview := func(implementer, reviewer session.Summary) attention.Input {
 		return stepInput(flow.StepState{
-			Status: flow.StepAgentReview, ReviewPass: 1, ReportMissing: missing,
+			Status: flow.StepAgentReview, ReviewPass: 1,
 			ReviewerStage: session.StepReviewStage(2), Reviewer: reviewer,
 		}, implementer)
 	}
@@ -270,36 +263,31 @@ func TestDeriveTheReviewerOfTheCurrentStep(t *testing.T) {
 		want []attention.Found
 	}{
 		{"no reviewer", stepInput(flow.StepState{Status: flow.StepImplementing}, summary(session.StatusWorking, false)), nil},
-		{"the reviewer is working", underReview(waiting, summary(session.StatusWorking, false), false), nil},
-		{"the reviewer is paused", underReview(waiting, summary(session.StatusPaused, false), false), nil},
+		{"the reviewer is working", underReview(waiting, summary(session.StatusWorking, false)), nil},
+		{"the reviewer is paused", underReview(waiting, summary(session.StatusPaused, false)), nil},
 		{
 			"the reviewer has a question",
-			underReview(waiting, summary(session.StatusNeedsAnswer, false), false),
+			underReview(waiting, summary(session.StatusNeedsAnswer, false)),
 			[]attention.Found{reviewer(attention.KindQuestion, "The reviewer of step 2 has a question.")},
 		},
 		{
 			"the reviewer asks for a permission",
-			underReview(waiting, summary(session.StatusNeedsPermission, false), false),
+			underReview(waiting, summary(session.StatusNeedsPermission, false)),
 			[]attention.Found{reviewer(attention.KindPermission, "The reviewer of step 2 asks for a permission.")},
 		},
 		{
 			"the reviewer stopped with an error",
-			underReview(waiting, summary(session.StatusError, false), false),
+			underReview(waiting, summary(session.StatusError, false)),
 			[]attention.Found{reviewer(attention.KindSessionError, "The review of step 2 stopped with an error.")},
 		},
 		{
 			"the last turn of the reviewer failed",
-			underReview(waiting, failedTurn, false),
+			underReview(waiting, failedTurn),
 			[]attention.Found{reviewer(attention.KindSessionError, "The review of step 2 stopped with an error.")},
 		},
 		{
-			"the pass ended without its report",
-			underReview(waiting, waiting, true),
-			[]attention.Found{reviewer(attention.KindReply, "The reviewer of step 2 stopped without writing its report.")},
-		},
-		{
 			"the implementer and the reviewer both wait",
-			underReview(summary(session.StatusNeedsPermission, false), summary(session.StatusNeedsAnswer, false), false),
+			underReview(summary(session.StatusNeedsPermission, false), summary(session.StatusNeedsAnswer, false)),
 			[]attention.Found{
 				{
 					TaskID: taskID, Place: attention.Place{Kind: attention.PlaceStep, Step: 2},

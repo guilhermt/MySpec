@@ -23,6 +23,7 @@ import (
 	"github.com/guilhermt/myspec/internal/claude/claudetest"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
@@ -518,6 +519,7 @@ func newFixture(t *testing.T) *fixture {
 		Worktrees:    f.worktrees,
 		Repositories: f.repositories,
 		Review:       f.reviews,
+		Divergences:  divergence.New(divergence.Deps{Store: st, Log: log}),
 		Log:          log,
 		RenderPrompt: func(stage prompts.Stage, vars prompts.Vars) (string, error) {
 			return prompts.Render(f.dataDir, stage, vars)

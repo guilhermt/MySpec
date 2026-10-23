@@ -724,7 +724,6 @@ func fromSteps(states []flow.StepState) []Step {
 			CommitSHA:     state.CommitSHA,
 			CommitSubject: state.CommitSubject,
 			CommittedAt:   timeOrEmpty(state.CommittedAt),
-			CommitFailed:  state.CommitFailed,
 
 			Model:         string(state.Choice.Model),
 			Effort:        string(state.Choice.Effort),
@@ -737,7 +736,6 @@ func fromSteps(states []flow.StepState) []Step {
 			ReviewFallback:     string(state.Fallback),
 			ReviewPass:         state.ReviewPass,
 			ReviewRound:        state.ReviewRound,
-			ReportMissing:      state.ReportMissing,
 			Reports:            fromStepReports(state.Reports),
 			Reviewer:           fromAgentSession(state.ReviewerStage, state.Reviewer),
 		}

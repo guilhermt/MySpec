@@ -113,15 +113,15 @@ func worktreeUnreadableBody(n int) string {
 	return "Step " + strconv.Itoa(n) + ": the worktree can't be read."
 }
 
-// stepReviewBody is the notification of a step to review. One that starts
-// ready to approve, or that went to the user because the commit after a clean
-// agent review did not happen, says the commit did not happen; one the agent
-// review could not bring clean says so. files is how many files changed, -1
-// when the worktree was not read.
-func stepReviewBody(n int, form Form, commitFailed bool, fallback task.ReviewFallback, files int) string {
+// stepReviewBody is the notification of a step to review. One that went to the
+// user because the commit after a clean agent review did not happen, which a
+// task recorded before divergences may have, says the commit did not happen;
+// one the agent review could not bring clean says so. files is how many files
+// changed, -1 when the worktree was not read.
+func stepReviewBody(n int, fallback task.ReviewFallback, files int) string {
 	step := "Step " + strconv.Itoa(n)
 	switch {
-	case commitFailed && (form == FormApprove || fallback == task.FallbackNoCommit):
+	case fallback == task.FallbackNoCommit:
 		return step + ": the last approval didn't produce a commit."
 	case fallback == task.FallbackRoundsExhausted:
 		return fmt.Sprintf("%s: the agent review didn't come clean after %d rounds. It's yours now.", step, flow.MaxReviewRounds)
@@ -135,8 +135,8 @@ func stepReviewBody(n int, form Form, commitFailed bool, fallback task.ReviewFal
 }
 
 // reviewerBody is the notification of a situation in the conversation that
-// reviews a step: a permission, a question, a pass that ended without its
-// report, or else the error the session stopped with.
+// reviews a step: a permission, a question, or else the error the session
+// stopped with.
 func reviewerBody(kind Kind, n int) string {
 	step := strconv.Itoa(n)
 	switch kind {
@@ -144,8 +144,6 @@ func reviewerBody(kind Kind, n int) string {
 		return "The reviewer of step " + step + " asks for a permission."
 	case KindQuestion:
 		return "The reviewer of step " + step + " has a question."
-	case KindReply:
-		return "The reviewer of step " + step + " stopped without writing its report."
 	default:
 		return "The review of step " + step + " stopped with an error."
 	}
