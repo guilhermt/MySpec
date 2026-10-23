@@ -163,6 +163,13 @@ func TestRefusedContextUsageChangesNothing(t *testing.T) {
 	proc.emit(t, `{"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"auto","pre_tokens":120000}}`)
 	waitFor(t, "the second request", func() bool { return len(proc.requests()) == 2 })
 	proc.emit(t, fmt.Sprintf(`{"type":"control_response","response":{"subtype":"error","request_id":%q,"error":"nope"}}`, proc.requests()[1]))
+	// A third request, asked by an event after the error, marks it handled.
+	proc.emit(t, `{"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"auto","pre_tokens":100000}}`)
+	waitFor(t, "the third request", func() bool { return len(proc.requests()) == 3 })
+	if got := percentOf(t, f); got == nil || *got != 50 {
+		t.Fatalf("ContextPercent = %v after the refusal, want 50", got)
+	}
+
 	proc.messageStart(t, 40000)
 
 	wantPercent(t, f, 20)
