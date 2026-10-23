@@ -675,6 +675,13 @@ func (m *memTasks) MarkPRPassSent(_ context.Context, id string, pass int) error 
 	})
 }
 
+func (m *memTasks) SetPRPassChanged(_ context.Context, id string, pass int) error {
+	return m.mutatePass(id, pass, "setPRPassChanged", func(p *task.PRPass) error {
+		p.Changed = true
+		return nil
+	})
+}
+
 func (m *memTasks) UnmarkPRPassSent(_ context.Context, id string, pass int) error {
 	return m.mutatePass(id, pass, "unmarkPRPassSent", func(p *task.PRPass) error {
 		p.SentAt = time.Time{}
@@ -1751,6 +1758,14 @@ func (m *memWorktrees) Merging(_ context.Context, wt worktree.Worktree) (bool, e
 
 	m.calls = append(m.calls, "merging:"+wt.TaskID)
 	return m.merging, nil
+}
+
+// setMerging makes the worktree a merge is under way in.
+func (m *memWorktrees) setMerging(v bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.merging = v
 }
 
 // failPush makes every push fail with err.

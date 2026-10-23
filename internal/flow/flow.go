@@ -60,6 +60,7 @@ type Tasks interface {
 	SetPRFindingText(ctx context.Context, id string, pass, number int, text string) error
 	ApproveRestOfPRFindings(ctx context.Context, id string, pass int) error
 	MarkPRPassSent(ctx context.Context, id string, pass int) error
+	SetPRPassChanged(ctx context.Context, id string, pass int) error
 	UnmarkPRPassSent(ctx context.Context, id string, pass int) error
 	StepRuns(id string) []task.StepRun
 	SetStepRun(ctx context.Context, id string, number int, status task.StepStatus, block *task.StepBlock) (task.StepRun, error)

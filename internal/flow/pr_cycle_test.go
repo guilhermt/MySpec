@@ -505,7 +505,8 @@ func TestReviewingAgainStartsAPassOverTheSamePullRequest(t *testing.T) {
 	}
 
 	// The clean report of the first pass does not close the review asked for
-	// again: the agent rested without the report of the new pass.
+	// again: the agent rested without the report of the new pass, which is a
+	// divergence.
 	f.sessions.goIdle("task-1")
 	before := f.tasks.inspectCount()
 	f.service.Check("task-1")
@@ -513,9 +514,11 @@ func TestReviewingAgainStartsAPassOverTheSamePullRequest(t *testing.T) {
 	if run, _ := f.tasks.prRun("task-1"); run.Status != task.PRReviewing {
 		t.Errorf("status = %q, want reviewing until the report of the new pass is in", run.Status)
 	}
-	if got := f.prState(t, "task-1").Status; got != flow.PRAwaitingReply {
-		t.Errorf("status = %q, want awaiting_reply", got)
+	if got := f.prState(t, "task-1").Status; got != flow.PRDiverged {
+		t.Errorf("status = %q, want diverged", got)
 	}
+	f.wantDivergence(t, session.PRReviewStage, divergence.KindReportMissing,
+		divergence.Facts{Pass: 2, Path: "pr/review-2.md"})
 
 	// The clean report of that pass is what closes it.
 	reportsWritten(t, f, reports(2, true))

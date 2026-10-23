@@ -117,7 +117,12 @@ func (s *Service) AskAgain(ctx context.Context, id string) error {
 		}
 		return s.askStepCommitAgain(ctx, d)
 	case divergence.KindReportMissing, divergence.KindReportUnreadable, divergence.KindReportsAmbiguous:
+		if isPRStage(d.Stage) {
+			return s.askPRReportAgain(ctx, d)
+		}
 		return s.askStepReportAgain(ctx, d)
+	case divergence.KindNoChanges:
+		return s.askPassWorkAgain(ctx, d)
 	case divergence.KindDraftMissing, divergence.KindDraftUnreadable:
 		return s.askDraftAgain(ctx, d)
 	default:
@@ -140,6 +145,8 @@ func (s *Service) Adopt(ctx context.Context, id, choice string) error {
 	switch d.Kind {
 	case divergence.KindReportsAmbiguous:
 		return s.adoptStepReport(d, choice)
+	case divergence.KindNoChanges:
+		return s.adoptPassWork(ctx, d)
 	case divergence.KindPRWrongBase, divergence.KindPROtherBranch, divergence.KindPRsAmbiguous:
 		return s.adoptPR(ctx, d, choice)
 	default:

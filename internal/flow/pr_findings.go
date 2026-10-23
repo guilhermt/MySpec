@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
@@ -66,15 +67,28 @@ func (s *Service) evaluateReport(
 		if !idle {
 			return run, pass, false
 		}
-		report, found, err := prreport.ReadReport(t.ReviewPath(pass.Pass), pass.Pass)
+		res, err := task.ResolvePRReport(t, pass.Pass)
 		if err != nil {
-			s.reportUnreadable(t.ID, pass.Pass, err)
+			s.log.Error("resolve pr review report failed", "task", t.ID, "pass", pass.Pass, "error", err)
 			return run, pass, false
 		}
-		if !found {
+		facts := divergence.Facts{Pass: pass.Pass, Path: prReportName(pass.Pass)}
+		switch res.Resolution {
+		case prreport.ResolutionMissing:
+			s.diverge(ctx, t, key.Stage, divergence.KindReportMissing, facts)
 			return run, pass, false
+		case prreport.ResolutionUnreadable:
+			facts.Reason = res.Reason
+			s.diverge(ctx, t, key.Stage, divergence.KindReportUnreadable, facts)
+			return run, pass, false
+		case prreport.ResolutionAmbiguous:
+			facts.Candidates = res.Candidates
+			s.diverge(ctx, t, key.Stage, divergence.KindReportsAmbiguous, facts)
+			return run, pass, false
+		case prreport.ResolutionFound:
 		}
-		return s.recordReportOf(ctx, t, wt, run, key, report)
+		s.clearDivergence(ctx, t.ID, reportKinds...)
+		return s.recordReportOf(ctx, t, wt, run, key, res.Report)
 
 	case idle && !pass.Clean && !pass.Sent():
 		report, found, err := prreport.ReadReport(t.ReviewPath(pass.Pass), pass.Pass)
@@ -311,3 +325,7 @@ func (s *Service) ApplyPRFindings(ctx context.Context, id string) error {
 		"task", id, "pass", current.Pass, "approved", approved, "discarded", discarded)
 	return nil
 }
+
+// prReportName is the report of one pass of the review of the pull request
+// relative to the artifacts folder of its task, as a divergence names it.
+func prReportName(pass int) string { return task.PRDirName + "/" + task.ReviewFile(pass) }

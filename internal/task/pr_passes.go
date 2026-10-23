@@ -205,6 +205,24 @@ func (s *Service) UnmarkPRPassSent(ctx context.Context, id string, pass int) err
 	return s.setPRPassSent(ctx, id, pass, time.Time{})
 }
 
+// SetPRPassChanged records that the work on the approved findings of a pass
+// changed the worktree, or that the user adopted the pass as applied.
+func (s *Service) SetPRPassChanged(ctx context.Context, id string, pass int) error {
+	stored, ok := s.prPass(id, pass)
+	if !ok {
+		return fmt.Errorf("set changed of pr pass %d of task %s: %w", pass, id, ErrNotFound)
+	}
+	if stored.Changed {
+		return nil
+	}
+	stored.Changed = true
+	if err := s.writePRPass(ctx, stored); err != nil {
+		return err
+	}
+	s.changed()
+	return nil
+}
+
 // setPRPassSent rewrites when the approved findings of a pass were sent.
 func (s *Service) setPRPassSent(ctx context.Context, id string, pass int, at time.Time) error {
 	stored, ok := s.prPass(id, pass)

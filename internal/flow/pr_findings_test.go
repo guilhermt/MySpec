@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
@@ -280,6 +281,12 @@ func TestAStructuredPassIsShownByItsReportAndWhatTheUserDecidedAboutIt(t *testin
 			[]task.PRPass{sentPass(decidedPass(1, approved))},
 			nil, reviewing,
 			false, false, reviewed(0, 0), true, flow.PRInReview,
+		},
+		{
+			"sent, changed, and nothing left to review",
+			[]task.PRPass{changedPass(decidedPass(1, approved))},
+			nil, reviewing,
+			false, false, reviewed(0, 0), true, flow.PRDone,
 		},
 		{
 			"sent, the worktree not read",
@@ -830,14 +837,15 @@ func TestAReportTheParserRefusesLeavesThePassWaitingForAReplyWithTheReason(t *te
 	writeReport(t, f, 1, "---\nstatus: maybe\n---\n\nThe summary.\n")
 	f.service.Check("task-1")
 
-	waitFor(t, "the reason the report can't be read", func() bool { return f.prState(t, "task-1").Unreadable != "" })
+	waitFor(t, "the divergence of the report", func() bool { return f.prState(t, "task-1").Divergence != nil })
 
 	state := f.prState(t, "task-1")
-	if !strings.HasPrefix(state.Unreadable, "The report can't be read: ") {
-		t.Errorf("unreadable = %q, want the reason in the words of the product", state.Unreadable)
+	if state.Divergence.Kind != divergence.KindReportUnreadable ||
+		!strings.HasPrefix(state.Divergence.Facts.Reason, "The report can't be read: ") {
+		t.Errorf("divergence = %+v, want report_unreadable with the reason in the words of the product", state.Divergence)
 	}
-	if state.Status != flow.PRAwaitingReply {
-		t.Errorf("status = %q, want awaiting_reply", state.Status)
+	if state.Status != flow.PRDiverged {
+		t.Errorf("status = %q, want diverged", state.Status)
 	}
 	if currentPassOf(t, f).Recorded {
 		t.Error("the pass is recorded, want nothing written")
@@ -846,8 +854,8 @@ func TestAReportTheParserRefusesLeavesThePassWaitingForAReplyWithTheReason(t *te
 	writeReport(t, f, 1, reportOf("changes", "First | internal/a.go:3 | The first."))
 	f.service.Check("task-1")
 	waitFor(t, "the report to be recorded", func() bool { return currentPassOf(t, f).Recorded })
-	if got := f.prState(t, "task-1").Unreadable; got != "" {
-		t.Errorf("unreadable = %q, want it cleared by a readable report", got)
+	if d := f.prState(t, "task-1").Divergence; d != nil {
+		t.Errorf("divergence = %+v, want it cleared by a readable report", d)
 	}
 }
 
@@ -1300,7 +1308,7 @@ func TestReviewingAgainAfterAnUnreadableReportReplacesThePassNotRecorded(t *test
 	f.service.Sync(t.Context())
 	writeReport(t, f, 1, "---\nstatus: maybe\n---\n\nThe summary.\n")
 	f.service.Check("task-1")
-	waitFor(t, "the reason the report can't be read", func() bool { return f.prState(t, "task-1").Unreadable != "" })
+	waitFor(t, "the divergence of the report", func() bool { return f.prState(t, "task-1").Divergence != nil })
 	f.gh.setPR("task-1", withChecks(noChecks()))
 
 	if err := f.service.ReviewAgain(t.Context(), "task-1"); err != nil {
@@ -1309,7 +1317,7 @@ func TestReviewingAgainAfterAnUnreadableReportReplacesThePassNotRecorded(t *test
 
 	waitFor(t, "the pass to be asked for again", func() bool {
 		asked, _ := passRows(f)
-		return asked == 1 && f.prState(t, "task-1").Unreadable == ""
+		return asked == 1 && f.prState(t, "task-1").Divergence == nil
 	})
 	passes := f.tasks.PRPasses("task-1")
 	if len(passes) != 1 || passes[0].Pass != 1 || passes[0].Recorded {

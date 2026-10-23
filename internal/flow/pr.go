@@ -331,9 +331,12 @@ func reviewingStatus(
 		// With the agent review, the second is transient: the evaluation asks the
 		// reviewer for the local pass.
 		return PRAddressingReview
+	case pass.Sent() && !changed && pass.Changed:
+		// The instant between the pass resolved and the end of the review.
+		return awaitingStatus(run)
 	case pass.Sent():
 		if !changed {
-			return PRInReview // the agent changed nothing: No file changed
+			return PRInReview // the divergence of the pass that changed nothing is open
 		}
 		return changesStatus(snap)
 	case !pass.Recorded && facts.idle:
@@ -919,6 +922,12 @@ func (s *Service) evaluateReview(ctx context.Context, t task.Task, run task.PRRu
 	if !sum.Idle || working {
 		return
 	}
+	if structured {
+		s.evaluatePassWork(ctx, t, run, pass)
+		if s.resolvedWithoutCommit(ctx, t, wt, run, pass) {
+			return
+		}
+	}
 	s.passDue(ctx, t, wt, run)
 }
 
@@ -972,6 +981,9 @@ func (s *Service) passDue(ctx context.Context, t task.Task, wt worktree.Worktree
 		// reviewed commit that is empty is a pass asked again, with nothing
 		// pushed: a reading without checks is believed at once.
 		_ = s.beginChecksWait(ctx, t.ID, run.ReviewedCommit != "")
+		return
+	}
+	if s.resolvedByCommit(ctx, t, wt, run, head, checks) {
 		return
 	}
 	s.askPass(ctx, t, wt, run, prReviewKey(t.ID), head, checks)
@@ -1096,6 +1108,7 @@ func (s *Service) startReview(
 		return
 	}
 	s.setUnreadable(t.ID, "")
+	s.clearDivergence(ctx, t.ID, reportKinds...)
 	if err := s.sessions.Start(ctx, prReviewInfo(t, wt, base, repo, run.PR, pass, checks, s.tasks.PRPasses(t.ID)), false); err != nil {
 		s.setPassAsked(t.ID, "")
 		s.unaskPass(ctx, t.ID, pass)
@@ -1174,6 +1187,7 @@ func (s *Service) askPass(
 		return
 	}
 	s.setUnreadable(t.ID, "")
+	s.clearDivergence(ctx, t.ID, reportKinds...)
 	s.markChecks(ctx, key, pass, checks)
 	app := session.AppMessage{Text: message, Kind: session.AppPRPass, Pass: pass}
 	if err := s.sessions.SendFromApp(ctx, key, app); err != nil {
