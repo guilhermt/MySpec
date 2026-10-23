@@ -84,16 +84,13 @@
   --tree-pad: 0.5rem; --row-pad-y: 0.375rem; --row-gap: 0.25rem; --line-gap: 0.125rem; --section-gap: 1.5rem;
   --epic-indent: 1rem; --guide-x: 0.9375rem;
 
-  /* Layout: continuous widths, one rule per container (structure.md §6): the sidebar, its collapsed strip, and the
-     panel of an open item, beside the conversation or over it (structure.md §3). */
+  /* Layout: continuous widths, one rule per container (structure.md §6): the sidebar and its collapsed strip. */
   --sidebar-width: round(down, clamp(18rem, calc(8vw + 12.5rem), 23.75rem), 1px);
   --sidebar-collapsed: 3.75rem;
-  --panel-width: clamp(22.5rem, 28%, 30rem);
 
-  /* Layout of lists, list panels, wide dialogs and Settings (components.md, Tamanhos de layout). The list column is
+  /* Layout of lists, wide dialogs and Settings (components.md, Tamanhos de layout). The list column is
      the scan width of a row; the columns of a row are fixed so they line up from row to row. */
   --list-measure: calc(var(--measure) + var(--space-16) * 5);      /* the board, Reviews and History lists: 70rem */
-  --panel-card-width: clamp(22.5rem, 42%, 40rem);                  /* the card and pull request panel: a body is read there */
   --size-dialog-wide: calc(var(--size-dialog) + var(--space-16) + var(--space-8));  /* creation and start dialogs: a 64-character name fits */
   --col-num: var(--space-12);                                      /* card row: #474 */
   --col-epic: calc(var(--space-16) * 2.25);                        /* card row: the epic's title */
