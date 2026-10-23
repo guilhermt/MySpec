@@ -47,6 +47,10 @@ export function PanelResizer({ geometry }: PanelResizerProps) {
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    // A modified arrow belongs to someone else, such as Alt+← going back in the history.
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+      return;
+    }
     const step =
       event.key === "ArrowLeft" ? PANEL_KEY_STEP : event.key === "ArrowRight" ? -PANEL_KEY_STEP : 0;
     if (step === 0) {

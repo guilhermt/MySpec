@@ -160,6 +160,15 @@ describe("AuxPanel", () => {
       expect(panel).toHaveStyle({ width: "448px" });
     });
 
+    it("leaves a modified arrow, such as Alt+←, to the history", async () => {
+      const { user, panel, handle } = await opened();
+      handle.focus();
+
+      await user.keyboard("{Alt>}{ArrowLeft}{/Alt}");
+      expect(panel).toHaveStyle({ width: "448px" });
+      expect(handle).toHaveAttribute("aria-valuenow", "448");
+    });
+
     it("follows the pointer in a drag, and marks the window while it lasts", async () => {
       const { panel, handle } = await opened();
 
