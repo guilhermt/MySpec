@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/models"
@@ -265,10 +266,15 @@ func (s *Service) evaluateAgentPR(
 		s.log.Warn("read worktree failed", "task", t.ID, "path", wt.Path, "error", err)
 		return
 	}
-	if _, diverged := s.divergences.Get(t.ID); diverged && status.Head == run.ReviewedCommit {
-		// The loop waits for the user; a commit that moved the branch is what
-		// some divergences wait for, and the pass it is owed clears them.
-		return
+	if _, diverged := s.divergences.Get(t.ID); diverged {
+		// A commit that moved the branch is the one a missing commit waits for;
+		// any other divergence holds the loop until the user sorts it out.
+		if status.Head != run.ReviewedCommit {
+			s.clearDivergence(ctx, t.ID, divergence.KindCommitMissing)
+		}
+		if _, still := s.divergences.Get(t.ID); still {
+			return
+		}
 	}
 
 	passes := s.tasks.PRPasses(t.ID)

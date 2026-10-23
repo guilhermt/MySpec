@@ -60,7 +60,7 @@ func TestAskingAgainForAMissingReportSendsTheSamePassOnce(t *testing.T) {
 		t.Fatalf("ask again: %v", err)
 	}
 
-	want := "The report of pass 1 isn't at `review-1.md`. Write it there, in the format the instructions of this session give, and stop."
+	want := "The report of pass 1 isn't at `" + f.state(t, id).Review.ReportPath(1) + "`. Write it there, in the format the instructions of this session give, and stop."
 	if got := lastMessage(t, f); got != want {
 		t.Errorf("message = %q, want %q", got, want)
 	}
@@ -237,5 +237,25 @@ func TestADivergenceEndsWithTheReview(t *testing.T) {
 	}
 	if _, ok := f.divergences.Get(id); ok {
 		t.Error("the divergence outlived the review")
+	}
+}
+
+func TestApprovedFindingsThatChangeNothingAreADivergenceWhenThePassRecordedNoCommit(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := applyDecidedOn(t, f, "")
+	if err := f.service.Apply(t.Context(), id); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	f.watch.setSnapshot(review.Snapshot{Head: headHash})
+	f.sessions.goIdle(id)
+	f.diverged(t, id, divergence.KindNoChanges)
+
+	if passes := f.reviews.Passes(id); passes[0].Applied {
+		t.Errorf("passes = %+v, want the first one not applied", passes)
+	}
+	if got := f.worktrees.pushed(); len(got) != 0 {
+		t.Errorf("pushes = %v, want none", got)
 	}
 }

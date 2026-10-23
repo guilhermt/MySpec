@@ -1,11 +1,13 @@
 package attention
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/gh"
+	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/task"
 )
 
@@ -235,6 +237,8 @@ func TestDivergenceBody(t *testing.T) {
 		{"commit of the review fixes", divergence.Divergence{Kind: divergence.KindCommitMissing}, 0, "The commit of the review fixes didn't happen."},
 		{"report missing", divergence.Divergence{Kind: divergence.KindReportMissing, Facts: divergence.Facts{Pass: 2}}, 0, "Review 2 has no report."},
 		{"report unreadable", divergence.Divergence{Kind: divergence.KindReportUnreadable, Facts: divergence.Facts{Pass: 2, Reason: "The header has no pass."}}, 0, "Review 2 can't be read: the header has no pass."},
+		{"report unreadable with the reason prreport gives", divergence.Divergence{Kind: divergence.KindReportUnreadable, Facts: divergence.Facts{Pass: 2, Reason: prreport.Reason(fmt.Errorf("%w: the header has no pass", prreport.ErrUnreadable))}}, 0, "Review 2 can't be read: the header has no pass."},
+		{"report unreadable with the generic reason prreport gives", divergence.Divergence{Kind: divergence.KindReportUnreadable, Facts: divergence.Facts{Pass: 2, Reason: prreport.Reason(prreport.ErrUnreadable)}}, 0, "Review 2 can't be read."},
 		{"report unreadable without a reason", divergence.Divergence{Kind: divergence.KindReportUnreadable, Facts: divergence.Facts{Pass: 2}}, 0, "Review 2 can't be read."},
 		{"reports ambiguous", divergence.Divergence{Kind: divergence.KindReportsAmbiguous, Facts: divergence.Facts{Pass: 2, Candidates: []string{"a.md", "b.md"}}}, 0, "Review 2 has 2 possible reports."},
 		{"draft missing", divergence.Divergence{Kind: divergence.KindDraftMissing}, 0, "The draft of the pull request isn't there."},

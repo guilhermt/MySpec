@@ -160,7 +160,7 @@ func ResolveStepReport(t Task, number, pass int) (StepResolution, error) {
 		return StepResolution{}, fmt.Errorf("read report %s: %w", path, err)
 	}
 
-	candidates, err := prreport.FindCandidates(t.ArtifactsDir, func(fields map[string]string, _ string) bool {
+	candidates, err := prreport.FindStepCandidates(t.ArtifactsDir, func(fields map[string]string, _ string) bool {
 		if !prreport.Declares(fields["step"], number) || !prreport.Declares(fields["pass"], pass) {
 			return false
 		}

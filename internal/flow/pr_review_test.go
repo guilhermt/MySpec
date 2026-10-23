@@ -1231,3 +1231,34 @@ func TestSetPRReviewModeIsRefusedOnceTheReviewBegan(t *testing.T) {
 		wantErrIs(t, f.service.SetPRReviewMode(t.Context(), "nope", reviewmode.Agent), task.ErrNotFound)
 	})
 }
+
+func TestAnAgentReviewWithARefusedPushAsksForNoPassOfTheNewHead(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	agentReview(t, f, cleanPass(1))
+	f.tasks.setPRRun("task-1", task.PRRun{
+		Status: task.PRReviewing, PR: openPR(), ReportedPass: 1, ReviewedCommit: "0123456789abcdef",
+	})
+	// The commit of the round is in the worktree, and the remote refused it.
+	f.worktrees.setNotPushed(true)
+	f.diverge(t, task.Task{ID: "task-1"}, session.PRReviewStage, divergence.KindPushRejected, divergence.Facts{
+		Branch: "task-1", Commit: task.ShortSHA(startCommit),
+	})
+
+	f.service.Check("task-1")
+	f.waitEvaluations(t, 1)
+
+	if run, _ := f.tasks.prRun("task-1"); run.Status != task.PRReviewing {
+		t.Errorf("status = %q, want the review to wait for the user", run.Status)
+	}
+	if passes := appMessagesOf(f, session.AppPRPass); len(passes) != 0 {
+		t.Errorf("passes = %+v, want none of a commit GitHub doesn't have", passes)
+	}
+	if pushed := f.worktrees.pushed(); len(pushed) != 0 {
+		t.Errorf("pushes = %q, want none until the user asks", pushed)
+	}
+	f.wantDivergence(t, session.PRReviewStage, divergence.KindPushRejected, divergence.Facts{
+		Branch: "task-1", Commit: task.ShortSHA(startCommit),
+	})
+}

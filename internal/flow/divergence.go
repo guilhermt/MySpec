@@ -87,14 +87,35 @@ func (s *Service) CheckAgain(ctx context.Context, id string) error {
 			s.setRetryPush(id)
 		}
 		if d.Kind == divergence.KindPushRejected && d.Stage == session.PRStage {
-			// The branch of a pull request that was never opened is pushed by the
-			// next approval of the draft: what the user did about the remote is
-			// what that push finds out.
-			s.clearDivergence(ctx, id, divergence.KindPushRejected)
+			// The draft was approved when the remote refused the branch: the
+			// opening is tried again with it, and its push is what finds out what
+			// the user did about the remote.
+			return s.reopenPR(ctx, id)
 		}
 		s.spawnPRWork(id, s.checkPR)
 	}
 	s.Check(id)
+	return nil
+}
+
+// reopenPR tries the opening of a pull request again, with the draft the user
+// approved, after the remote refused its branch.
+func (s *Service) reopenPR(ctx context.Context, id string) error {
+	l := s.lockOf(id)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	run, ok := s.tasks.PRRun(id)
+	if !ok || run.PR.Number > 0 || (run.Status != task.PRDrafting && run.Status != task.PROpening) {
+		s.spawnPRWork(id, s.checkPR)
+		s.Check(id)
+		return nil
+	}
+	if _, err := s.tasks.SetPRRun(ctx, id, task.PROpening, nil); err != nil {
+		return err
+	}
+	s.log.Info("pull request opening again", "task", id)
+	s.spawnPRWork(id, s.openWork)
 	return nil
 }
 
@@ -181,9 +202,10 @@ func (s *Service) askDraftAgain(ctx context.Context, d divergence.Divergence) er
 }
 
 // adoptPR takes the pull request the app found as the one of the task: it is
-// read by its number and recorded, and the task reads it and pushes to it from
-// then on. The caller holds the lock of the task.
-func (s *Service) adoptPR(ctx context.Context, d divergence.Divergence, choice string) error {
+// read by its number and recorded on the goroutine of the stage, and the task
+// reads it and pushes to it from then on. The caller holds the lock of the
+// task, which never waits for the network.
+func (s *Service) adoptPR(_ context.Context, d divergence.Divergence, choice string) error {
 	if choice == "" && len(d.Facts.PRs) == 1 {
 		choice = strconv.Itoa(d.Facts.PRs[0].Number)
 	}
@@ -194,15 +216,22 @@ func (s *Service) adoptPR(ctx context.Context, d divergence.Divergence, choice s
 	if !ok {
 		return fmt.Errorf("adopt %q in task %s: %w", choice, d.ItemID, ErrNoWorktree)
 	}
-	readCtx, cancel := context.WithTimeout(ctx, prCheckTimeout)
-	defer cancel()
 	number, _ := strconv.Atoi(choice)
-	pr, err := s.viewPRNumber(readCtx, wt, number)
-	if err != nil {
-		return fmt.Errorf("adopt %q in task %s: %w", choice, d.ItemID, err)
+	adopt := func(ctx context.Context, id string) {
+		pr, err := s.viewPRNumber(ctx, wt, number)
+		if err != nil {
+			// The divergence stays open: the user adopts again, or checks again.
+			if ctx.Err() == nil {
+				s.log.Warn("adopt pull request failed", "task", id, "number", number, "error", err)
+			}
+			return
+		}
+		s.recordPR(id, pr, false)
+		s.log.Info("pull request adopted", "task", id, "number", pr.Number)
 	}
-	s.recordPR(d.ItemID, pr, false)
-	s.log.Info("pull request adopted", "task", d.ItemID, "number", pr.Number)
+	if !s.trySpawnPRWork(d.ItemID, adopt) {
+		return fmt.Errorf("adopt %q in task %s: %w", choice, d.ItemID, ErrStepBusy)
+	}
 	return nil
 }
 

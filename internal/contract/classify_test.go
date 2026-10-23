@@ -49,6 +49,10 @@ func TestGitCommandsAreClassifiedByWhatTheyDo(t *testing.T) {
 		{"git reflog", contract.KindRead},
 		{"git reflog show HEAD", contract.KindRead},
 		{"git reflog expire --all", contract.KindOther},
+		{"git reflog delete HEAD@{1}", contract.KindOther},
+		{"git reflog -n 20", contract.KindRead},
+		{"git reflog --date=iso", contract.KindRead},
+		{"git reflog HEAD", contract.KindRead},
 		{"git worktree list", contract.KindRead},
 		{"git stash list", contract.KindRead},
 		{"git stash show -p", contract.KindRead},
@@ -92,6 +96,7 @@ func TestGitCommandsAreClassifiedByWhatTheyDo(t *testing.T) {
 		{"git checkout HEAD -- a.go", contract.KindLocal},
 		{"git checkout -b feature", contract.KindBranch},
 		{"git checkout main", contract.KindBranch},
+		{"git checkout main --", contract.KindBranch},
 		{"git checkout --detach abc", contract.KindBranch},
 		{"git switch main", contract.KindBranch},
 		{"git reset", contract.KindLocal},
@@ -318,13 +323,13 @@ func TestAGitHubMCPToolIsAnActionAndNothingElseIs(t *testing.T) {
 	}
 }
 
-func TestABashInputWithoutACommandHasNoActions(t *testing.T) {
+func TestABashInputWithoutACommandIsOther(t *testing.T) {
 	t.Parallel()
 
-	if got := contract.Classify("Bash", json.RawMessage(`not json`)); got != nil {
-		t.Errorf("actions = %+v, want nil", got)
-	}
-	if got := contract.Classify("Bash", json.RawMessage(`{}`)); got != nil {
-		t.Errorf("actions = %+v, want nil", got)
+	for _, in := range []string{`not json`, `{}`, `{"command": 3}`} {
+		got := contract.Classify("Bash", json.RawMessage(in))
+		if len(got) != 1 || got[0].Kind != contract.KindOther {
+			t.Errorf("Classify(%s) = %+v, want one KindOther action", in, got)
+		}
 	}
 }

@@ -14,17 +14,17 @@ var gitOrGH = regexp.MustCompile(`\b(git|gh)\b`)
 var mutationWord = regexp.MustCompile(`(?i)\bmutation\b`)
 
 // Classify lists the git and GitHub actions of a tool call, nil when it has
-// none.
+// none. A shell input without a string command is one KindOther action.
 func Classify(tool string, input json.RawMessage) []Action {
 	switch tool {
 	case "Bash", "PowerShell":
 		var in struct {
-			Command string `json:"command"`
+			Command *string `json:"command"`
 		}
-		if json.Unmarshal(input, &in) != nil {
-			return nil
+		if json.Unmarshal(input, &in) != nil || in.Command == nil {
+			return []Action{{Kind: KindOther, Command: string(input)}}
 		}
-		return classifyScript(in.Command)
+		return classifyScript(*in.Command)
 	}
 	return classifyMCP(tool)
 }
@@ -233,7 +233,7 @@ func classifyGit(args []string) Kind {
 
 	switch sub {
 	case "reflog":
-		if len(a) == 0 || a[0] == "show" {
+		if len(a) == 0 || !slices.Contains([]string{"expire", "delete", "drop"}, a[0]) {
 			return KindRead
 		}
 	case "worktree":
@@ -381,7 +381,7 @@ func gitCheckout(a []string) Kind {
 	}) {
 		return KindBranch
 	}
-	if slices.Contains(a, "--") {
+	if i := slices.Index(a, "--"); i >= 0 && i < len(a)-1 {
 		return KindLocal
 	}
 	return KindBranch

@@ -695,7 +695,7 @@ func TestACommitThatWentUpIsMarkedWithItsSubjectAndThePullRequest(t *testing.T) 
 	}
 }
 
-func TestACommitIsMarkedOnlyOnceThePassAfterItIsRecorded(t *testing.T) {
+func TestACommitIsMarkedOnlyOnceTheStoreRecordsIt(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -703,7 +703,7 @@ func TestACommitIsMarkedOnlyOnceThePassAfterItIsRecorded(t *testing.T) {
 		fail func(*memReviewStore, error)
 	}{
 		{"the pass is not marked applied", (*memReviewStore).failUpsertPass},
-		{"the next pass is not asked for", (*memReviewStore).failUpdate},
+		{"the pushing phase is not recorded", (*memReviewStore).failUpdate},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -730,4 +730,55 @@ func TestACommitIsMarkedOnlyOnceThePassAfterItIsRecorded(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAPassWaitingForTheChecksIsNotFoundMissing(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := committing(t, f)
+	f.watch.setSnapshot(review.Snapshot{Head: commitHash})
+	f.sessions.goIdle(id)
+	f.evaluated(t, id, func(s reviewflow.State) bool {
+		return s.Review.Phase == prreview.PhaseWaitingChecks
+	}, "the second pass to wait for the checks")
+
+	f.settled(t, id)
+
+	state := f.state(t, id)
+	if state.Divergence != nil || state.Review.Phase != prreview.PhaseWaitingChecks {
+		t.Errorf("phase, divergence = %q, %+v, want waiting for the checks and no divergence",
+			state.Review.Phase, state.Divergence)
+	}
+	if got := f.sessions.markersOf(session.MarkerDivergence); len(got) != 0 {
+		t.Errorf("divergence markers = %+v, want none", got)
+	}
+}
+
+func TestACommitMadeByHandAfterAMissingCommitGoesUp(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := committing(t, f)
+	f.sessions.goIdle(id)
+	f.evaluated(t, id, func(s reviewflow.State) bool {
+		return s.Divergence != nil && s.Divergence.Kind == divergence.KindCommitMissing
+	}, "the commit to be found missing")
+
+	f.watch.setSnapshot(review.Snapshot{Head: commitHash})
+	f.evaluated(t, id, func(s reviewflow.State) bool {
+		return s.Review.Phase == prreview.PhaseWaitingChecks
+	}, "the commit made by hand to go up")
+
+	state := f.state(t, id)
+	if state.Divergence != nil {
+		t.Errorf("divergence = %+v, want it ended", state.Divergence)
+	}
+	if got := f.worktrees.pushed(); !slices.Equal(got, []string{"cache-boards"}) {
+		t.Errorf("pushes = %v, want the branch of the pull request once", got)
+	}
+	if passes := f.reviews.Passes(id); !passes[0].Applied {
+		t.Errorf("passes = %+v, want the first one applied", passes)
+	}
+	f.committedMarked(t, 1)
 }

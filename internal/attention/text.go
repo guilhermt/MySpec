@@ -348,6 +348,18 @@ func homeTilde(text string) string {
 	return homePath.ReplaceAllString(text, "${1}~${2}")
 }
 
+// unreadableRule is the rule a report breaks, from the reason prreport.Reason
+// and the flows write, which already says the report can't be read: "" for
+// the reason with no rule.
+func unreadableRule(reason string) string {
+	const prefix = "The report can't be read"
+	rest, ok := strings.CutPrefix(reason, prefix)
+	if !ok {
+		return reason
+	}
+	return strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(rest, ":"), "."))
+}
+
 // reasonPart closes the opening of a notification with why it happened: ": "
 // and the reason, ended by a period unless it already ends in a mark, or just
 // the period when there is none.
@@ -502,7 +514,7 @@ func divergenceBody(d divergence.Divergence, step int) string {
 	case divergence.KindReportMissing:
 		return review + " has no report."
 	case divergence.KindReportUnreadable:
-		return review + " can't be read" + reasonPart(f.Reason)
+		return review + " can't be read" + reasonPart(unreadableRule(f.Reason))
 	case divergence.KindReportsAmbiguous:
 		return fmt.Sprintf("%s has %d possible reports.", review, len(f.Candidates))
 	case divergence.KindDraftMissing:

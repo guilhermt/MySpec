@@ -546,9 +546,13 @@ func (f *fake) play(scenario string) int {
 		case "tool":
 			f.toolTurn(text)
 		case "permission":
-			f.permissionTurn(false)
+			f.permissionTurn("", "")
 		case "deviation":
-			f.permissionTurn(true)
+			f.permissionTurn(DeviationReason, "hook")
+		case "hook_reason":
+			f.permissionTurn(HookReason, "hook")
+		case "prefixed_rule":
+			f.permissionTurn(DeviationReason, "rule")
 		case "question":
 			f.questionTurn()
 		case "slow":
@@ -786,10 +790,14 @@ func (f *fake) toolTurn(text string) {
 // scenario, whose Bash call it stops.
 const DeviationReason = "\x1b[1mThis is outside what this stage does: \x1b[0mthis stage only writes its document."
 
-// permissionTurn asks to run a Bash command and reacts to the answer. A
-// deviation is the ask of the hook of the contract: it carries its reason and
-// no suggestions.
-func (f *fake) permissionTurn(deviation bool) {
+// HookReason is what a hook other than the one of the contract tells in the
+// hook_reason scenario: a reason without the prefix of a deviation.
+const HookReason = "Another hook wants to look at this command."
+
+// permissionTurn asks to run a Bash command and reacts to the answer. An ask
+// with a reason carries it and its type and no suggestions, as the hook of the
+// contract asks; "" is the plain ask of a Bash call.
+func (f *fake) permissionTurn(reason, kind string) {
 	f.emitInit()
 	messageID := f.nextID("msg")
 	f.messageStart(messageID)
@@ -798,8 +806,8 @@ func (f *fake) permissionTurn(deviation bool) {
 	input := map[string]any{"command": BashCommand, "description": "Create hello.txt with the word hi"}
 	f.streamToolUse(0, messageID, toolUseID, "Bash", input)
 
-	if deviation {
-		f.askDeviation(toolUseID, input)
+	if reason != "" {
+		f.askDeviation(toolUseID, input, reason, kind)
 	} else {
 		f.askBash(toolUseID, input)
 	}
@@ -828,7 +836,7 @@ func (f *fake) permissionTurn(deviation bool) {
 
 // askDeviation asks the app to allow a Bash call the hook of the contract
 // stopped, the way the CLI reports an ask of a hook.
-func (f *fake) askDeviation(toolUseID string, input map[string]any) {
+func (f *fake) askDeviation(toolUseID string, input map[string]any, reason, kind string) {
 	f.emitRaw(map[string]any{
 		"type":       "control_request",
 		"request_id": f.nextID("req"),
@@ -838,8 +846,8 @@ func (f *fake) askDeviation(toolUseID string, input map[string]any) {
 			"display_name":         "Bash",
 			"input":                input,
 			"description":          "Create hello.txt with the word hi",
-			"decision_reason":      DeviationReason,
-			"decision_reason_type": "hook",
+			"decision_reason":      reason,
+			"decision_reason_type": kind,
 			"tool_use_id":          toolUseID,
 		},
 	})

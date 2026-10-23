@@ -1266,8 +1266,9 @@ const ROWS: Row[] = [
     control: "Try again",
     state: "a push that failed",
     draw: review({
-      status: "pushing",
+      status: "pass_blocked",
       passBlocked: "The push failed.",
+      pushBlocked: true,
       situations: [situation("pass_blocked", "", "error")],
     }),
     where: "bar",

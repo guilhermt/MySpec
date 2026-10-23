@@ -426,19 +426,25 @@ func (s *Service) beginPR(ctx context.Context, t task.Task) error {
 // the task already has work under way. The context is born here so that a
 // cancellation between the spawn and the first call reaches it.
 func (s *Service) spawnPRWork(id string, work func(context.Context, string)) {
+	s.trySpawnPRWork(id, work)
+}
+
+// trySpawnPRWork is spawnPRWork that says whether the work started: false when
+// the flow is closed or the stage is busy.
+func (s *Service) trySpawnPRWork(id string, work func(context.Context, string)) bool {
 	l := s.lockOf(id)
 
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
-		return
+		return false
 	}
 	if l.pr != nil && l.pr.running {
 		// The stage is busy: the work is asked for again by the evaluation that
 		// follows the one under way, which decides on the state it leaves.
 		l.pr.pending = true
 		s.mu.Unlock()
-		return
+		return false
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	l.pr = &prWork{running: true, cancel: cancel}
@@ -448,6 +454,7 @@ func (s *Service) spawnPRWork(id string, work func(context.Context, string)) {
 		work(ctx, id)
 	})
 	s.mu.Unlock()
+	return true
 }
 
 // finishPRWork forgets the work of the PR stage and releases its context. A
@@ -720,6 +727,7 @@ func (s *Service) blockPR(id string, reason task.PRBlockReason, detail string) {
 	ctx, cancel := context.WithTimeout(context.Background(), evaluateTimeout)
 	defer cancel()
 
+	s.setOpenBlocked(id, false)
 	block := &task.PRBlock{Reason: reason, Detail: detail}
 	if _, err := s.tasks.SetPRRun(ctx, id, task.PRBlocked, block); err != nil {
 		s.log.Error("record blocked pull request failed", "task", id, "error", err)
@@ -770,9 +778,6 @@ func (s *Service) evaluatePR(ctx context.Context, t task.Task) {
 		// A pull request opened by hand while the draft waits is found by asking
 		// GitHub, and the draft the agent left, or did not, is read from disk.
 		if open && sum.Idle {
-			if !sum.TurnFailed {
-				s.checkDraft(ctx, t)
-			}
 			s.spawnPRWork(t.ID, s.checkPR)
 		}
 	case task.PROpening:
@@ -970,6 +975,13 @@ func (s *Service) passDue(ctx context.Context, t task.Task, wt worktree.Worktree
 	}
 	// A commit that moved the branch is the one a divergence asked for.
 	s.clearDivergence(ctx, t.ID, divergence.KindCommitMissing)
+	// A pass that changed nothing is answered by the commit as well.
+	s.clearDivergence(ctx, t.ID, divergence.KindNoChanges)
+	if _, diverged := s.divergences.Get(t.ID); diverged {
+		// Any other divergence, such as a rejected push, leaves the head off the
+		// remote: neither the checks nor a pass are read of it.
+		return
+	}
 	checks := s.takeChecks(t.ID)
 	if checks == nil {
 		// A wait that could not be recorded is begun again by the evaluation
@@ -1804,8 +1816,9 @@ func (s *Service) RetryPR(ctx context.Context, id string) error {
 		s.spawnPRWork(id, s.pushWork)
 		return nil
 	}
-	if reopens := run.Block != nil && run.PR.Number == 0 &&
-		(run.Block.Reason == task.PRBlockOpenFailed || run.Block.Reason == task.PRBlockPushFailed); reopens {
+	fromOpen := s.takeOpenBlocked(id)
+	if reopens := run.Block != nil && run.PR.Number == 0 && (fromOpen ||
+		run.Block.Reason == task.PRBlockOpenFailed || run.Block.Reason == task.PRBlockPushFailed); reopens {
 		if _, err := s.tasks.SetPRRun(ctx, id, task.PROpening, nil); err != nil {
 			return err
 		}

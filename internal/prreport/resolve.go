@@ -56,6 +56,10 @@ var (
 	// passReportName is the name of a report of a pass of the pull request
 	// review, which is already where the app looks for it.
 	passReportName = regexp.MustCompile(`^review-\d+\.md$`)
+	// stepReportName is the name of a report of a pass of the agent review of
+	// a step inside the step-reviews folder, which is already where the app
+	// looks for it.
+	stepReportName = regexp.MustCompile(`^step-reviews/\d+-review-\d+\.md$`)
 )
 
 // Resolve finds the report of pass in the artifacts folder dir: the file at
@@ -108,6 +112,18 @@ func Resolve(dir, name string, pass int) (Result, error) {
 // reports already where the app looks for them and hidden files are not
 // candidates.
 func FindCandidates(dir string, match func(fields map[string]string, content string) bool) ([]string, error) {
+	return findCandidates(dir, skippedDirs, match)
+}
+
+// FindStepCandidates is FindCandidates for the reports of the agent review of
+// a step: it also searches the step-reviews folder, where the step reviewer
+// writes, and leaves out only the reports already at their agreed names there.
+func FindStepCandidates(dir string, match func(fields map[string]string, content string) bool) ([]string, error) {
+	dirs := slices.DeleteFunc(slices.Clone(skippedDirs), func(d string) bool { return d == "step-reviews" })
+	return findCandidates(dir, dirs, match)
+}
+
+func findCandidates(dir string, skipDirs []string, match func(fields map[string]string, content string) bool) ([]string, error) {
 	var found []string
 	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -128,14 +144,14 @@ func FindCandidates(dir string, match func(fields map[string]string, content str
 			if rel == "." {
 				return nil
 			}
-			if strings.HasPrefix(base, ".") || slices.Contains(skippedDirs, base) ||
+			if strings.HasPrefix(base, ".") || slices.Contains(skipDirs, base) ||
 				strings.Count(rel, "/") >= maxCandidateDepth {
 				return filepath.SkipDir
 			}
 			return nil
 		}
 		if !entry.Type().IsRegular() || !strings.HasSuffix(base, ".md") || strings.HasPrefix(base, ".") ||
-			slices.Contains(skippedFiles, rel) || passReportName.MatchString(base) {
+			slices.Contains(skippedFiles, rel) || passReportName.MatchString(base) || stepReportName.MatchString(rel) {
 			return nil
 		}
 

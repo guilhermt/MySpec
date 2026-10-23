@@ -372,9 +372,10 @@ describe("reviewRequestOf, the situations of the review", () => {
     [
       "a push that failed",
       waiting(situation("pass_blocked", "error"), {
-        status: "pushing",
+        status: "pass_blocked",
         passes: [makeReviewPass()],
         passBlocked: "The push failed.",
+        pushBlocked: true,
       }),
       {
         form: "error",

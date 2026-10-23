@@ -223,8 +223,9 @@ describe("ReviewRequest", () => {
 
   it("pushes the commit again after a push that failed", async () => {
     const { user } = bar({
-      status: "pushing",
+      status: "pass_blocked",
       passBlocked: "The push failed.",
+      pushBlocked: true,
       situations: [situation("pass_blocked", "", "error")],
     });
 

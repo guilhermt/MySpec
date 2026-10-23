@@ -292,9 +292,7 @@ function barOf(review: ReviewSummary, want: Want): ReviewBar | null {
         place,
         progress: review.passBlocked,
         status: statusOf("Pass blocked", place),
-        actions: [
-          asPullReviewStatus(review.status) === "pushing" ? RETRY_PUSH : reviewAgainButton(),
-        ],
+        actions: [review.pushBlocked ? RETRY_PUSH : reviewAgainButton()],
       };
     case "divergence":
       return review.divergence === null ? null : divergenceBar(review.divergence, place);

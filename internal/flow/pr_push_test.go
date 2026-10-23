@@ -271,3 +271,40 @@ func TestAskingForTheCommitAgainInTheAgentReviewCommitsEverything(t *testing.T) 
 		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
 	}
 }
+
+func TestARefusedPushToTheBranchOfThePullRequestNamesThatBranch(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	unpushed(t, f)
+	run, _ := f.tasks.prRun("task-1")
+	run.PR.Head = "feature/login"
+	f.tasks.setPRRun("task-1", run)
+	f.worktrees.failPush(pushRejected())
+
+	f.service.Check("task-1")
+
+	if d := f.waitDivergence(t, divergence.KindPushRejected); d.Facts.Branch != "feature/login" {
+		t.Errorf("branch = %q, want the one that was pushed", d.Facts.Branch)
+	}
+}
+
+func TestANetworkFailureAfterARefusedPushShowsTheBlock(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	unpushed(t, f)
+	f.worktrees.failPush(pushRejected())
+	f.service.Check("task-1")
+	f.waitDivergence(t, divergence.KindPushRejected)
+	f.waitPRStatus(t, "task-1", task.PRReviewing)
+
+	f.worktrees.failPush(errors.New("git: network is unreachable"))
+	if err := f.service.CheckAgain(t.Context(), "task-1"); err != nil {
+		t.Fatalf("CheckAgain() = %v, want nil", err)
+	}
+
+	f.waitPRStatus(t, "task-1", task.PRBlocked)
+	f.wantNoDivergence(t)
+	f.waitPR(t, "task-1", flow.PRBlocked)
+}

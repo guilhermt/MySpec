@@ -1569,6 +1569,36 @@ func TestADivergenceIsMarkedInTheConversation(t *testing.T) {
 	}
 }
 
+func TestADivergenceIsMarkedInAClosedConversation(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	f.start(t, taskInfo(t, "t1"))
+	f.waitIdle(t, prd("t1"))
+	if err := f.service.Close(t.Context(), prd("t1")); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	before := f.entriesOf(t, prd("t1"), session.KindMarker)
+
+	d := divergence.Divergence{
+		ItemID: "t1", Stage: "prd", Kind: divergence.KindPushRejected,
+		Facts: divergence.Facts{Branch: "153-x", Commit: "a1b2c3d", Reason: "fetch first"},
+	}
+	f.service.MarkDivergence(t.Context(), prd("t1"), d)
+
+	markers := f.entriesOf(t, prd("t1"), session.KindMarker)
+	if len(markers) != len(before)+1 {
+		t.Fatalf("markers = %d, want %d", len(markers), len(before)+1)
+	}
+	last := markers[len(markers)-1]
+	if last.Marker.Type != session.MarkerDivergence || last.Marker.Divergence.Kind != divergence.KindPushRejected {
+		t.Errorf("last marker = %+v, want the divergence", last.Marker)
+	}
+	if len(before) > 0 && last.Seq <= before[len(before)-1].Seq {
+		t.Errorf("seq = %d, want after %d", last.Seq, before[len(before)-1].Seq)
+	}
+}
+
 func TestAPlanInvalidMarkerIsRecordedOnlyWhenTheProblemsChange(t *testing.T) {
 	t.Parallel()
 

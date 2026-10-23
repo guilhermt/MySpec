@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/guilhermt/myspec/internal/divergence"
@@ -85,15 +87,12 @@ func TestAPushTheRemoteRefusesGivesTheDraftBackWithADivergence(t *testing.T) {
 		t.Errorf("divergence = %+v, want push_rejected at hand", pr.Divergence)
 	}
 
-	// The user sorted the remote out: checking again gives them the draft back,
-	// and the next approval pushes and opens.
+	// The user sorted the remote out: "Try the push again" opens the pull
+	// request with the draft they approved, without a new approval.
 	f.worktrees.failPush(nil)
 	if err := f.service.CheckAgain(t.Context(), "task-1"); err != nil {
 		t.Fatalf("CheckAgain() = %v, want nil", err)
 	}
-	f.wantNoDivergence(t)
-	f.waitPR(t, "task-1", flow.PRDraftReady)
-	openDraft(t, f)
 	f.waitPRRun(t, "the pull request to be recorded", func(run task.PRRun) bool { return run.PR.Number == 7 })
 	f.wantNoDivergence(t)
 }
@@ -526,4 +525,115 @@ func contains(calls []string, call string) bool {
 		}
 	}
 	return false
+}
+
+func TestTheOpeningUsesTheTitleAndDescriptionAsTheUserApprovedThem(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	drafting(t, f)
+	title := "`flow`: read the PR by `number`"
+	body := "# `flow`: read the PR by `number`\n\nIt reads the pull request by its number."
+
+	if err := f.service.OpenPR(t.Context(), "task-1", title, body); err != nil {
+		t.Fatalf("OpenPR() = %v, want nil", err)
+	}
+
+	f.waitPRRun(t, "the pull request to be recorded", func(run task.PRRun) bool { return run.PR.Number == 7 })
+	created := f.gh.createdPRs()
+	if len(created) != 1 || created[0].title != title || created[0].body != body {
+		t.Errorf("created = %+v, want the title %q and the body %q untouched", created, title, body)
+	}
+}
+
+func TestTryingAgainAnOpeningThatFailedBeforeCreatingRepeatsTheOpening(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	drafting(t, f)
+	f.gh.failList(gh.ErrNotAuthenticated)
+	openDraft(t, f)
+	f.waitPR(t, "task-1", flow.PRBlocked)
+	if block := f.prState(t, "task-1").Block; block == nil || block.Reason != task.PRBlockGHAuth {
+		t.Fatalf("block = %+v, want gh_unauthenticated", block)
+	}
+
+	f.gh.failList(nil)
+	if err := f.service.RetryPR(t.Context(), "task-1"); err != nil {
+		t.Fatalf("RetryPR() = %v, want nil", err)
+	}
+
+	f.waitPRRun(t, "the pull request to be recorded", func(run task.PRRun) bool { return run.PR.Number == 7 })
+	if created := f.gh.createdPRs(); len(created) != 1 || created[0].title != "Add the login screen" {
+		t.Errorf("created = %+v, want the approved draft opened", created)
+	}
+	for _, call := range f.sessions.recorded() {
+		if call == "start:task-1:pr:restarted=false" {
+			t.Errorf("session calls = %q, want the draft left alone", f.sessions.recorded())
+		}
+	}
+}
+
+func TestAPushThatFailsAfterARefusalShowsTheBlockNotTheRefusal(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	drafting(t, f)
+	f.worktrees.failPush(pushRejected())
+	openDraft(t, f)
+	f.waitDivergence(t, divergence.KindPushRejected)
+	f.waitPRStatus(t, "task-1", task.PRDrafting)
+
+	f.worktrees.failPush(errors.New("git push: could not resolve host"))
+	if err := f.service.CheckAgain(t.Context(), "task-1"); err != nil {
+		t.Fatalf("CheckAgain() = %v, want nil", err)
+	}
+
+	f.waitPR(t, "task-1", flow.PRBlocked)
+	f.wantNoDivergence(t)
+	if block := f.prState(t, "task-1").Block; block == nil || block.Reason != task.PRBlockPushFailed {
+		t.Errorf("block = %+v, want push_failed", block)
+	}
+}
+
+func TestAPullRequestOpenedByHandIsFoundBeforeTheMissingDraftIsReported(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	inPR(f, "task-1", plan(), task.PRDrafting)
+	f.tasks.useDir("task-1", t.TempDir())
+	f.sessions.setSummary("task-1", idlePRSession)
+	f.gh.setPR("task-1", samePR)
+
+	f.service.Check("task-1")
+
+	f.waitPRRun(t, "the pull request to be recorded", func(run task.PRRun) bool { return run.PR.Number == samePR.Number })
+	if marked := f.sessions.marked(session.MarkerDivergence); len(marked) != 0 {
+		t.Errorf("divergences marked = %+v, want none about a draft a found pull request makes moot", marked)
+	}
+}
+
+func TestAnAdoptionWhoseReadingFailsKeepsTheDivergence(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	tk := drafting(t, f)
+	f.diverge(t, tk, session.PRStage, divergence.KindPRWrongBase, divergence.Facts{
+		Branch: "task-1", Base: "dev", PRs: []divergence.PR{{Number: 9, Base: "main", Head: "task-1"}},
+	})
+	f.gh.failView(errors.New("gh: timeout"))
+
+	if err := f.service.Adopt(t.Context(), "task-1", ""); err != nil {
+		t.Fatalf("Adopt() = %v, want nil: the reading goes out on the stage", err)
+	}
+
+	waitFor(t, "the reading of the pull request", func() bool {
+		return slices.ContainsFunc(f.gh.ghCalls(), func(c string) bool { return strings.HasPrefix(c, "view:") })
+	})
+	if d, ok := f.divergences.Get("task-1"); !ok || d.Kind != divergence.KindPRWrongBase {
+		t.Errorf("divergence = %+v, want pr_wrong_base kept", d)
+	}
+	if run, _ := f.tasks.prRun("task-1"); run.PR.Number != 0 {
+		t.Errorf("pull request = %d, want none recorded", run.PR.Number)
+	}
 }

@@ -525,6 +525,31 @@ func TestResolveStepReportCopiesTheOneReportOfTheStepAndThePass(t *testing.T) {
 	}
 }
 
+func TestResolveStepReportCopiesAReportOfTheStepReviewsFolder(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	created := f.create(t, "add-login")
+	content := stepReportFile(3, 2, "clean", "## Findings\n\nNone.\n")
+	if err := os.MkdirAll(filepath.Join(created.ArtifactsDir, task.StepReviewsDirName), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(created.ArtifactsDir, task.StepReviewsDirName, "step-3-pass-2.md"), content)
+	// A report already at its agreed name is no candidate for another pass.
+	writeFile(t, created.StepReportPath(3, 1), stepReportFile(3, 2, "clean", "x"))
+
+	got, err := task.ResolveStepReport(created, 3, 2)
+	if err != nil {
+		t.Fatalf("ResolveStepReport() error = %v", err)
+	}
+	if got.Resolution != prreport.ResolutionFound || !got.Report.Clean {
+		t.Fatalf("ResolveStepReport() = %+v, want the clean pass found", got)
+	}
+	if copied, readErr := os.ReadFile(created.StepReportPath(3, 2)); readErr != nil || string(copied) != content {
+		t.Errorf("agreed path = %q (%v), want the report", copied, readErr)
+	}
+}
+
 func TestResolveStepReportSortsOutMissingAndAmbiguous(t *testing.T) {
 	t.Parallel()
 

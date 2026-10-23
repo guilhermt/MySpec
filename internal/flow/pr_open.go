@@ -4,12 +4,15 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/guilhermt/myspec/internal/divergence"
+	"github.com/guilhermt/myspec/internal/frontmatter"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/session"
@@ -109,8 +112,13 @@ func (s *Service) checkDraftedPR(ctx context.Context, t task.Task, wt worktree.W
 	case pr.Number > 0:
 		s.recordPR(t.ID, pr, false)
 	default:
-		// What a divergence named is gone: the draft is waiting again.
+		// What a divergence named is gone: the draft is waiting again, and with
+		// no pull request on GitHub the draft the agent left is what is read.
 		s.clearDivergence(ctx, t.ID, prFoundKinds...)
+		key := session.Key{TaskID: t.ID, Stage: session.PRStage}
+		if sum, open := s.sessions.Summary(key); run.Status == task.PRDrafting && open && sum.Idle && !sum.TurnFailed {
+			s.checkDraft(ctx, t)
+		}
 	}
 }
 
@@ -157,13 +165,13 @@ func (s *Service) openWork(ctx context.Context, id string) {
 				Branch: wt.Branch, Commit: task.ShortSHA(head), Reason: gitSaid(err),
 			})
 		default:
-			s.blockPR(id, task.PRBlockPushFailed, err.Error())
+			s.blockOpen(ctx, id, task.PRBlockPushFailed, err)
 		}
 		return
 	}
 	s.clearDivergence(ctx, id, divergence.KindPushRejected)
 
-	draft, found, err := task.ReadDraft(t.DraftPath())
+	draft, found, err := readApprovedDraft(t.DraftPath())
 	if err != nil || !found {
 		// The approval wrote the draft a moment ago: whoever changed it since
 		// leaves the user with a draft that the agent has to write again.
@@ -175,12 +183,12 @@ func (s *Service) openWork(ctx context.Context, id string) {
 	number, _, err := s.gh.CreatePR(createCtx, wt.Path, strings.TrimPrefix(base, "origin/"), wt.Branch, draft.Title, draft.Body)
 	cancel()
 	if err != nil {
-		s.blockPRUnlessCancelled(ctx, id, openReason(err), err)
+		s.blockOpen(ctx, id, openReason(err), err)
 		return
 	}
 	pr, err := s.viewPRNumber(ctx, wt, number)
 	if err != nil {
-		s.blockPRUnlessCancelled(ctx, id, ghReason(err), err)
+		s.blockOpen(ctx, id, ghReason(err), err)
 		return
 	}
 	s.recordPR(id, pr, false)
@@ -209,12 +217,12 @@ func (s *Service) openTarget(ctx context.Context, id string) (task.Task, worktre
 	}
 	wt, ok := s.worktrees.Get(id)
 	if !ok {
-		s.blockPR(id, task.PRBlockNoWorktree, noWorktreeDetail)
+		s.blockOpen(ctx, id, task.PRBlockNoWorktree, errors.New(noWorktreeDetail))
 		return task.Task{}, worktree.Worktree{}, "", false
 	}
 	base, err := s.worktrees.Base(ctx, wt)
 	if err != nil {
-		s.blockPRUnlessCancelled(ctx, id, task.PRBlockGitFailed, err)
+		s.blockOpen(ctx, id, task.PRBlockGitFailed, err)
 		return task.Task{}, worktree.Worktree{}, "", false
 	}
 	return t, wt, base, true
@@ -228,7 +236,7 @@ func (s *Service) openFound(ctx context.Context, t task.Task, wt worktree.Worktr
 	switch {
 	case ctx.Err() != nil:
 	case err != nil:
-		s.blockPR(t.ID, ghReason(err), err.Error())
+		s.blockOpen(ctx, t.ID, ghReason(err), err)
 	case d != nil:
 		s.giveBackDraft(ctx, t.ID)
 		s.diverge(ctx, t, d.Stage, d.Kind, d.Facts)
@@ -238,6 +246,76 @@ func (s *Service) openFound(ctx context.Context, t task.Task, wt worktree.Worktr
 		return false
 	}
 	return true
+}
+
+// blockOpen blocks the PR stage over a failure of the opening of its pull
+// request, unless the work was cancelled. The block remembers that it came
+// from the opening, so that trying again repeats the opening with the draft
+// the user approved; an earlier refusal of the push is no longer what the
+// stage shows.
+func (s *Service) blockOpen(ctx context.Context, id string, reason task.PRBlockReason, err error) {
+	if ctx.Err() != nil {
+		return
+	}
+	s.clearDivergence(ctx, id, divergence.KindPushRejected)
+	s.blockPR(id, reason, err.Error())
+	s.setOpenBlocked(id, true)
+}
+
+// setOpenBlocked records whether the block of the PR stage came from the
+// opening of the pull request.
+func (s *Service) setOpenBlocked(id string, blocked bool) {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	l.openBlocked = blocked
+}
+
+// takeOpenBlocked says whether the block of the PR stage came from the opening
+// of the pull request, and forgets it.
+func (s *Service) takeOpenBlocked(id string) bool {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	blocked := l.openBlocked
+	l.openBlocked = false
+	return blocked
+}
+
+// readApprovedDraft reads the draft the approval wrote, as WriteDraft wrote
+// it: the title and the description are the ones the user approved, without
+// the tolerances that reading a draft of the agent has. ok is false when the
+// file is not there or is not in the shape the app writes.
+func readApprovedDraft(path string) (task.Draft, bool, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return task.Draft{}, false, nil
+		}
+		return task.Draft{}, false, err
+	}
+	lines := strings.Split(strings.ReplaceAll(string(content), "\r\n", "\n"), "\n")
+	if len(lines) == 0 || lines[0] != frontmatter.Fence {
+		return task.Draft{}, false, nil
+	}
+	title := ""
+	for i, line := range lines[1:] {
+		if line == frontmatter.Fence {
+			body := strings.TrimSpace(strings.Join(lines[i+2:], "\n"))
+			if title == "" || body == "" {
+				return task.Draft{}, false, nil
+			}
+			return task.Draft{Present: true, Title: title, Body: body}, true, nil
+		}
+		if value, found := strings.CutPrefix(line, "title: "); found {
+			title = strings.TrimSpace(value)
+		}
+	}
+	return task.Draft{}, false, nil
 }
 
 // giveBackDraft records the draft of a task as waiting again, which is where
@@ -329,15 +407,19 @@ func (s *Service) pushWork(ctx context.Context, id string) {
 		return
 	}
 	head := s.headOf(ctx, wt)
-	if err := s.worktrees.Push(ctx, wt, cmp.Or(run.PR.Head, wt.Branch)); err != nil {
+	ref := cmp.Or(run.PR.Head, wt.Branch)
+	if err := s.worktrees.Push(ctx, wt, ref); err != nil {
 		switch {
 		case ctx.Err() != nil:
 		case errors.Is(err, git.ErrPushRejected):
 			s.backToReview(ctx, id)
 			s.diverge(ctx, t, session.PRReviewStage, divergence.KindPushRejected, divergence.Facts{
-				Branch: wt.Branch, Commit: task.ShortSHA(head), Reason: gitSaid(err),
+				Branch: ref, Commit: task.ShortSHA(head), Reason: gitSaid(err),
 			})
 		default:
+			// A push that failed for another reason says nothing of the remote:
+			// the block, not an earlier refusal, is what the stage shows.
+			s.clearDivergence(ctx, id, divergence.KindPushRejected)
 			s.blockPR(id, task.PRBlockPushFailed, err.Error())
 		}
 		return

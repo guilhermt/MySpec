@@ -2870,6 +2870,24 @@ func TestFromReviewsOffersABlockedPassAgainWithItsReason(t *testing.T) {
 	}
 }
 
+func TestFromReviewsMarksABlockedPushApartFromABlockedPass(t *testing.T) {
+	t.Parallel()
+
+	pushing := reviewState(reviewflow.StatusPassBlocked, recordedPass(1, prreview.DecisionNone))
+	pushing.Review.Phase = prreview.PhasePushing
+	pushing.PassBlocked = "gh is not logged in"
+	if got := bindings.FromReviews([]reviewflow.State{pushing}, nil, reviewRepos)[0]; !got.PushBlocked {
+		t.Error("pushBlocked = false, want true on a push that failed")
+	}
+
+	waiting := reviewState(reviewflow.StatusPassBlocked, recordedPass(1, prreview.DecisionNone))
+	waiting.Review.Phase = prreview.PhaseWaitingChecks
+	waiting.PassBlocked = "gh is not logged in"
+	if got := bindings.FromReviews([]reviewflow.State{waiting}, nil, reviewRepos)[0]; got.PushBlocked {
+		t.Error("pushBlocked = true, want false on a pass that could not start")
+	}
+}
+
 func TestFromReviewsCarriesThePassesTheVerdictsAndTheSituationsOfAReview(t *testing.T) {
 	t.Parallel()
 

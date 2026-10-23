@@ -152,7 +152,7 @@ func (s *Service) askReportAgain(ctx context.Context, d divergence.Divergence) e
 		return err
 	}
 	message := session.AppMessage{
-		Kind: session.AppAgain, Pass: d.Facts.Pass, Text: reportAgainMessage(d.Facts.Pass, d.Facts.Path, d.Facts.Reason),
+		Kind: session.AppAgain, Pass: d.Facts.Pass, Text: reportAgainMessage(d.Facts.Pass, stored.ReportPath(d.Facts.Pass), d.Facts.Reason),
 	}
 	if err = s.sessions.SendFromApp(ctx, sessionKey(d.ItemID), message); err != nil {
 		s.reopen(ctx, d)

@@ -39,7 +39,9 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 
 	if sum.Idle {
 		switch {
-		case stored.AskedPass > stored.ReportedPass:
+		case stored.AskedPass > stored.ReportedPass && stored.Phase != prreview.PhaseWaitingChecks:
+			// While the checks run, the pass is asked for but has not reached
+			// the agent yet: an idle session there says nothing about it.
 			s.recordAsked(ctx, stored, wt, key)
 		case stored.ReportedPass > 0:
 			s.rereadPass(ctx, stored)

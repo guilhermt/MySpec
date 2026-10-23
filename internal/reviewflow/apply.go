@@ -136,7 +136,7 @@ func (s *Service) evaluateApply(ctx context.Context, id string, wt worktree.Work
 	case prreview.PhaseApplying:
 		s.watch.Track(id, wt, idle)
 		if idle {
-			s.evaluateApplied(ctx, stored)
+			s.evaluateApplied(ctx, stored, wt)
 		}
 	case prreview.PhaseCommitting:
 		if idle {
@@ -152,8 +152,10 @@ func (s *Service) evaluateApply(ctx context.Context, id string, wt worktree.Work
 
 // evaluateApplied looks at the worktree once the agent rests after the fixes
 // were sent: with no file changed and no commit, the approved findings changed
-// nothing, which is a divergence; any change ends it.
-func (s *Service) evaluateApplied(ctx context.Context, stored prreview.Review) {
+// nothing, which is a divergence; any change ends it. A commit made with
+// nothing left to change, as by hand after a missing commit, goes up as the
+// commit of the pass.
+func (s *Service) evaluateApplied(ctx context.Context, stored prreview.Review, wt worktree.Worktree) {
 	snap, read := s.watch.Refresh(stored.ID)
 	if !read || snap.Err != "" {
 		return
@@ -165,7 +167,11 @@ func (s *Service) evaluateApplied(ctx context.Context, stored prreview.Review) {
 		s.clearDivergence(ctx, stored.ID, divergence.KindNoChanges)
 		return
 	}
-	if snap.Head == "" || snap.Head != s.commitBaseOf(stored) {
+	if snap.Head == "" {
+		return
+	}
+	if base := s.commitBaseOf(stored); base != "" && snap.Head != base {
+		s.commitMade(ctx, stored, wt, snap.Head)
 		return
 	}
 	last, ok := s.passOf(stored.ID, stored.ReportedPass)
@@ -199,7 +205,11 @@ func (s *Service) evaluateCommit(ctx context.Context, stored prreview.Review, wt
 		s.notify(stored.ID)
 		return
 	}
+	s.commitMade(ctx, stored, wt, snap.Head)
+}
 
+// commitMade takes the commit of a pass up to the pull request.
+func (s *Service) commitMade(ctx context.Context, stored prreview.Review, wt worktree.Worktree, head string) {
 	id := stored.ID
 	// The fixes of the pass are in a commit whatever becomes of the push, and
 	// the next pass lists them as applied. The conversation marks the commit
@@ -213,15 +223,15 @@ func (s *Service) evaluateCommit(ctx context.Context, stored prreview.Review, wt
 		return
 	}
 	s.clearDivergence(ctx, id)
-	s.markCommit(ctx, id, wt, snap.Head, stored.Number)
+	s.markCommit(ctx, id, wt, head, stored.Number)
 	s.watch.Forget(id)
-	s.log.Info("review commit made", "review", id, "commit", snap.Head)
+	s.log.Info("review commit made", "review", id, "commit", head)
 	s.notify(id)
 	s.spawnPush(id)
 }
 
-// markCommit records in the conversation the commit that went up to the pull
-// request; a commit that cannot be read is recorded without its subject.
+// markCommit records in the conversation the commit of the pass, before it is
+// pushed; a commit that cannot be read is recorded without its subject.
 func (s *Service) markCommit(ctx context.Context, id string, wt worktree.Worktree, head string, number int) {
 	commit := git.Commit{SHA: head}
 	read, err := s.worktrees.Commit(ctx, wt, head)

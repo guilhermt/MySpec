@@ -3214,6 +3214,12 @@ export interface ReviewSummary {
     "passBlocked": string;
 
     /**
+     * PushBlocked is true when what is blocked is the push of the commits, which
+     * the user asks for again; pass_blocked only.
+     */
+    "pushBlocked": boolean;
+
+    /**
      * UnreadableReport is why the report of the pass the app asked for could
      * not be read; "" otherwise.
      */
@@ -3829,11 +3835,6 @@ export interface Step {
      * addressing_review only: the report the implementer addresses
      */
     "reviewRound": number;
-
-    /**
-     * always false: a pass without its report is the divergence of the task
-     */
-    "reportMissing": boolean;
 
     /**
      * the reports of the agent review, by pass; never nil

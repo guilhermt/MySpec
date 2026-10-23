@@ -231,4 +231,19 @@ func TestAHookReasonWithoutThePrefixIsNotADeviation(t *testing.T) {
 	if request.Permission.Deviation {
 		t.Error("Deviation = true for a permission with no hook reason, want false")
 	}
+
+	for _, scenario := range []string{"hook_reason", "prefixed_rule"} {
+		f := newContractFixture(t, scenario)
+		f.start(t, taskInfo(t, "t1"))
+		f.waitStatus(t, prd("t1"), "the ask", func(s session.Summary) bool {
+			return s.Status == session.StatusNeedsPermission
+		})
+		p := f.entriesOf(t, prd("t1"), session.KindPermission)[0].Permission
+		if p.Deviation {
+			t.Errorf("%s: Deviation = true, want false: only the hook with the prefix asks for a deviation", scenario)
+		}
+		if p.DecisionReason == "" {
+			t.Errorf("%s: DecisionReason is empty, want the reason the ask carried", scenario)
+		}
+	}
 }

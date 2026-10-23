@@ -230,6 +230,9 @@ type taskLock struct {
 	// retryPush lets the next evaluation push a commit the remote refused: the
 	// user asked for it to be checked again.
 	retryPush bool
+	// openBlocked says that the block of the PR stage came from the opening of
+	// the pull request, which trying again repeats.
+	openBlocked bool
 	// checkError is what the last reading of a pull request awaiting its merge
 	// said when it failed; "" when it succeeded.
 	checkError string

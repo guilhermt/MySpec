@@ -1781,6 +1781,7 @@ func FromReviews(
 			Trouble:          fromTrouble(stored.Trouble),
 			PublishError:     stored.PublishError,
 			PassBlocked:      state.PassBlocked,
+			PushBlocked:      state.Status == reviewflow.StatusPassBlocked && stored.Phase == prreview.PhasePushing,
 			UnreadableReport: state.UnreadableReport,
 			Review:           fromReview(state.Watch),
 			Verdicts:         verdictsOf(stored),
@@ -1846,7 +1847,7 @@ func canPublish(state reviewflow.State) bool {
 // the user's review do not hold a pass back, as on the pull request of a task.
 func canReviewAgain(state reviewflow.State) bool {
 	if state.Status == reviewflow.StatusPassBlocked {
-		return true
+		return state.Review.Phase != prreview.PhasePushing
 	}
 	if state.Review.AskedPass != state.Review.ReportedPass {
 		return false

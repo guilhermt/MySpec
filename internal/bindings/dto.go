@@ -242,11 +242,10 @@ type Step struct {
 	// step that started under the agent review is reviewed by the user; ""
 	// while its mode holds.
 	ReviewFallback string        `json:"reviewFallback"`
-	ReviewPass     int           `json:"reviewPass"`    // agent_review only: the pass under way
-	ReviewRound    int           `json:"reviewRound"`   // addressing_review only: the report the implementer addresses
-	ReportMissing  bool          `json:"reportMissing"` // always false: a pass without its report is the divergence of the task
-	Reports        []StepReport  `json:"reports"`       // the reports of the agent review, by pass; never nil
-	Reviewer       *AgentSession `json:"reviewer"`      // nil while the step has no reviewer conversation open
+	ReviewPass     int           `json:"reviewPass"`  // agent_review only: the pass under way
+	ReviewRound    int           `json:"reviewRound"` // addressing_review only: the report the implementer addresses
+	Reports        []StepReport  `json:"reports"`     // the reports of the agent review, by pass; never nil
+	Reviewer       *AgentSession `json:"reviewer"`    // nil while the step has no reviewer conversation open
 }
 
 // StepReport is one pass of the agent review of a step.
@@ -1771,6 +1770,9 @@ type ReviewSummary struct {
 	// PublishError is why the last publication failed; "" otherwise.
 	PublishError string `json:"publishError"`
 	PassBlocked  string `json:"passBlocked"` // why the pass the app asked for could not start; "" otherwise
+	// PushBlocked is true when what is blocked is the push of the commits, which
+	// the user asks for again; pass_blocked only.
+	PushBlocked bool `json:"pushBlocked"`
 	// UnreadableReport is why the report of the pass the app asked for could
 	// not be read; "" otherwise.
 	UnreadableReport string `json:"unreadableReport"`

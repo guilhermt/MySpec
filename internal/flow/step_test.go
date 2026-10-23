@@ -63,6 +63,9 @@ func TestAFinishedOneShotDocumentStartsItsStepInTheRepository(t *testing.T) {
 	if want := worktree.Path(dataDir, "dev", "web", "task-1"); info.Dir != want {
 		t.Errorf("session dir = %q, want %q", info.Dir, want)
 	}
+	if info.Branch != "task-1" {
+		t.Errorf("session branch = %q, want the branch of the worktree", info.Branch)
+	}
 }
 
 func TestAFinishedPlanStartsTheFirstStepInItsWorktree(t *testing.T) {

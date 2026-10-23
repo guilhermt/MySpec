@@ -1260,7 +1260,39 @@ func (s *Service) MarkChangesApproved(ctx context.Context, k Key, files int) {
 // after its one instruction. The caller only asks for it when the divergence is
 // new.
 func (s *Service) MarkDivergence(ctx context.Context, k Key, d divergence.Divergence) {
-	s.mark(ctx, k, &MarkerEntry{Type: MarkerDivergence, Divergence: &divergence.Mark{Kind: d.Kind, Facts: d.Facts}})
+	marker := &MarkerEntry{Type: MarkerDivergence, Divergence: &divergence.Mark{Kind: d.Kind, Facts: d.Facts}}
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if r, ok := s.runs[k]; ok {
+		s.appendLocked(ctx, r, Entry{Kind: KindMarker, Marker: marker}, n)
+		return
+	}
+	s.markClosedLocked(ctx, k, marker)
+}
+
+// markClosedLocked writes a marker at the end of the stored conversation of a
+// session that is not open, without opening it; a session that was never
+// started has no conversation and gets nothing. The caller holds the mutex.
+func (s *Service) markClosedLocked(ctx context.Context, k Key, marker *MarkerEntry) {
+	rec, err := s.sessions.Get(ctx, k.TaskID, k.Stage)
+	if err != nil {
+		if !errors.Is(err, ErrNotFound) {
+			s.log.Error("read session failed", "task", k.TaskID, "stage", k.Stage, "error", err)
+		}
+		return
+	}
+	maxSeq, err := s.entries.MaxSeq(ctx, rec.ID)
+	if err != nil {
+		s.log.Error("read entries failed", "task", k.TaskID, "stage", k.Stage, "error", err)
+		return
+	}
+	e := Entry{ID: s.newID(), Seq: maxSeq + 1, Kind: KindMarker, Marker: marker, CreatedAt: s.now().UTC()}
+	if err = s.entries.Insert(ctx, rec.ID, e); err != nil {
+		s.log.Error("insert entry failed", "task", k.TaskID, "entry", e.ID, "error", err)
+	}
 }
 
 // MarkPlanInvalid records the problems of a plan that is not valid, unless

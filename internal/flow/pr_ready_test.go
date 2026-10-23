@@ -368,3 +368,26 @@ func TestAskingForAMissingReportAgainSendsTheMessageOnce(t *testing.T) {
 		t.Errorf("messages mismatch (-want +got):\n%s", diff)
 	}
 }
+
+func TestACommitOverAPassThatChangedNothingIsReviewed(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	structured(t, f, sentPass(decidedPass(1, approved)))
+	implementerAtRest(f)
+	f.reviews.setSnapshot(unmoved(0))
+	f.service.Check("task-1")
+	f.waitDivergence(t, divergence.KindNoChanges)
+
+	// The implementer, or the user, commits the fixes: the worktree is clean
+	// and the branch moved.
+	f.reviews.setSnapshot(review.Snapshot{Head: commitSHA})
+	f.worktrees.setStatus(git.Status{Head: commitSHA})
+	f.gh.setPR("task-1", withChecks(failingChecks()))
+	f.service.Check("task-1")
+
+	waitFor(t, "the prompt of the second pass", func() bool {
+		return f.sessions.sentCount(reviewPrompt(f.reviewPath(2))) > 0
+	})
+	f.wantNoDivergence(t)
+}

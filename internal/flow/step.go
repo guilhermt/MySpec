@@ -667,6 +667,7 @@ func stepInfo(
 		ID:           t.ID,
 		Name:         t.Name,
 		Dir:          wt.Path,
+		Branch:       wt.Branch,
 		ArtifactsDir: t.ArtifactsDir,
 		Stage:        session.StepStage(step.Number),
 		Prompt:       prompts.StageStep,

@@ -235,7 +235,17 @@ describe("PermissionCard of a deviation", () => {
     expect(screen.getByRole("button", { name: /Deny/ })).not.toHaveAttribute("data-default-focus");
   });
 
-  it("allows with 1 and denies at once with 2, with no text", async () => {
+  it("denies at once with 2, with no text", async () => {
+    const { user } = card(DEVIATION);
+
+    screen.getByRole("article").focus();
+    await user.keyboard("2");
+
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(api.answerPermission).toHaveBeenCalledWith("task-1", "prd", "req-1", "deny", "");
+  });
+
+  it("denies at once from Deny, with no text", async () => {
     const { user } = card(DEVIATION);
 
     await user.click(screen.getByRole("button", { name: /Deny/ }));
