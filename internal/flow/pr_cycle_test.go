@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
@@ -199,10 +200,10 @@ func TestApprovePRCommitsThroughTheImplementer(t *testing.T) {
 		t.Errorf("status = %q, want committing", run.Status)
 	}
 	sent := f.sessions.sent()
-	if len(sent) != 1 || !strings.Contains(sent[0], prompts.PushInstruction) {
-		t.Errorf("sent = %q, want the commit prompt with the push instruction", sent)
+	if len(sent) != 1 || strings.Contains(sent[0], prompts.PushInstruction) {
+		t.Errorf("sent = %q, want the commit prompt without the push instruction", sent)
 	}
-	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppCommitPush}}, f.sessions.sentApps()); diff != "" {
+	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppCommit}}, f.sessions.sentApps()); diff != "" {
 		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
 	}
 	approved := []keyedMarker{{Key: fixKeyOf, Marker: session.MarkerEntry{Type: session.MarkerChangesApproved, Files: 3}}}
@@ -247,11 +248,8 @@ func TestACommitOfAReviewStartsTheNextPass(t *testing.T) {
 	if diff := cmp.Diff(session.AppMessage{Kind: session.AppPRPass, Pass: 2}, apps[len(apps)-1]); diff != "" {
 		t.Errorf("app message mismatch (-want +got):\n%s", diff)
 	}
-	if state := f.prState(t, "task-1"); state.CommitFailed {
-		t.Error("the approval is reported as having produced no commit")
-	}
 	committed := []keyedMarker{{Key: fixKeyOf, Marker: session.MarkerEntry{
-		Type: session.MarkerCommitted, SHA: commitSHA[:7], Subject: "Do the work of the step", Pushed: true, Number: 7,
+		Type: session.MarkerCommitted, SHA: commitSHA[:7], Subject: "Do the work of the step", Pushed: false, Number: 7,
 	}}}
 	if diff := cmp.Diff(committed, f.sessions.marked(session.MarkerCommitted)); diff != "" {
 		t.Errorf("committed markers mismatch (-want +got):\n%s", diff)
@@ -294,9 +292,13 @@ func TestACommitTurnOfAReviewThatCommitsNothingGivesTheTaskBack(t *testing.T) {
 		run, ok := f.tasks.prRun("task-1")
 		return ok && run.Status == task.PRReviewing
 	})
-	waitFor(t, "the warning of the missing commit", func() bool {
-		return f.prState(t, "task-1").CommitFailed
-	})
+	d := f.waitDivergence(t, divergence.KindCommitMissing)
+	if d.Stage != session.PRReviewStage && d.Stage != session.PRFixStage {
+		t.Errorf("divergence stage = %q, want the conversation of the commit", d.Stage)
+	}
+	if got := f.prState(t, "task-1"); got.Status != flow.PRDiverged || got.Divergence == nil {
+		t.Errorf("status = %q with divergence %v, want diverged", got.Status, got.Divergence)
+	}
 }
 
 func TestACleanReportClosesThePullRequest(t *testing.T) {

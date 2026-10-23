@@ -1,6 +1,7 @@
 package flow
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"path/filepath"
@@ -269,4 +270,86 @@ func gitSaid(err error) string {
 		return gitErr.Output
 	}
 	return err.Error()
+}
+
+// pushed says whether the remote has the commit the worktree is at. A reading
+// that fails counts as pushed, so that a git that can't be read is never pushed
+// to.
+func (s *Service) pushed(ctx context.Context, wt worktree.Worktree, ref string) bool {
+	ok, err := s.worktrees.Pushed(ctx, wt, ref)
+	if err != nil {
+		s.log.Warn("read pushed commit failed", "task", wt.TaskID, "path", wt.Path, "error", err)
+		return true
+	}
+	return ok
+}
+
+// pushAllowed says whether the app may push the commit of a task now. It may
+// not push one the remote refused until the user asks for it to be checked
+// again; letting it push spends that request.
+func (s *Service) pushAllowed(ctx context.Context, id string, wt worktree.Worktree) bool {
+	d, ok := s.divergences.Get(id)
+	if !ok || d.Kind != divergence.KindPushRejected || d.Facts.Commit != task.ShortSHA(s.headOf(ctx, wt)) {
+		return true
+	}
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	allowed := l.retryPush
+	l.retryPush = false
+	return allowed
+}
+
+// setRetryPush lets the next evaluation push a commit the remote refused.
+func (s *Service) setRetryPush(id string) {
+	l := s.lockOf(id)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	l.retryPush = true
+}
+
+// pushWork pushes the commit of a task to its pull request. It runs on the
+// goroutine of the stage, and a context that is cancelled records nothing.
+func (s *Service) pushWork(ctx context.Context, id string) {
+	t, ok := s.prTask(ctx, id)
+	if !ok {
+		return
+	}
+	wt, ok := s.worktrees.Get(id)
+	if !ok {
+		s.blockPR(id, task.PRBlockNoWorktree, noWorktreeDetail)
+		return
+	}
+	run, ok := s.tasks.PRRun(id)
+	if !ok {
+		return
+	}
+	head := s.headOf(ctx, wt)
+	if err := s.worktrees.Push(ctx, wt, cmp.Or(run.PR.Head, wt.Branch)); err != nil {
+		switch {
+		case ctx.Err() != nil:
+		case errors.Is(err, git.ErrPushRejected):
+			s.backToReview(ctx, id)
+			s.diverge(ctx, t, session.PRReviewStage, divergence.KindPushRejected, divergence.Facts{
+				Branch: wt.Branch, Commit: task.ShortSHA(head), Reason: gitSaid(err),
+			})
+		default:
+			s.blockPR(id, task.PRBlockPushFailed, err.Error())
+		}
+		return
+	}
+	s.clearDivergence(ctx, id, divergence.KindPushRejected)
+	s.backToReview(ctx, id)
+	s.Check(id)
+}
+
+// backToReview records the review of a pull request as running again.
+func (s *Service) backToReview(ctx context.Context, id string) {
+	if _, err := s.tasks.SetPRRun(ctx, id, task.PRReviewing, nil); err != nil {
+		s.log.Error("record reviewing pull request failed", "task", id, "error", err)
+	}
 }

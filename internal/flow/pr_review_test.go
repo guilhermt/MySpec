@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/git"
@@ -103,8 +104,8 @@ func TestApprovePRStartsTheImplementerWhenItHasNoConversation(t *testing.T) {
 	}
 
 	info, ok := f.sessions.info(fixKeyOf)
-	if !ok || info.Request.Kind != session.AppCommitPush || !strings.Contains(info.Request.Text, prompts.PushInstruction) {
-		t.Errorf("first request = %+v, want the commit with the push", info.Request)
+	if !ok || info.Request.Kind != session.AppCommit || strings.Contains(info.Request.Text, prompts.PushInstruction) {
+		t.Errorf("first request = %+v, want the commit without the push", info.Request)
 	}
 	approvals := []keyedMarker{{Key: fixKeyOf, Marker: session.MarkerEntry{Type: session.MarkerChangesApproved, Files: 3}}}
 	if diff := cmp.Diff(approvals, f.sessions.marked(session.MarkerChangesApproved)); diff != "" {
@@ -127,7 +128,7 @@ func TestApprovePRMarksTheApprovalBeforeTheCommitInTheConversationOfTheImplement
 	if diff := cmp.Diff([]int{1}, f.sessions.markersBeforeSends()); diff != "" {
 		t.Errorf("markers before the sends mismatch (-want +got):\n%s", diff)
 	}
-	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppCommitPush}}, f.sessions.sentApps()); diff != "" {
+	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppCommit}}, f.sessions.sentApps()); diff != "" {
 		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -191,7 +192,7 @@ func TestApprovePRAcceptsACleanPassWithChanges(t *testing.T) {
 	if run, _ := f.tasks.prRun("task-1"); run.Status != task.PRCommitting {
 		t.Errorf("status = %q, want committing", run.Status)
 	}
-	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppCommitPush}}, f.sessions.sentApps()); diff != "" {
+	if diff := cmp.Diff([]session.AppMessage{{Kind: session.AppCommit}}, f.sessions.sentApps()); diff != "" {
 		t.Errorf("app messages mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -276,7 +277,10 @@ func TestTheCommitOfTheImplementerIsWaitedOn(t *testing.T) {
 	unmoved.Head = startCommit
 	f.reviews.setSnapshot(unmoved)
 	f.service.Check("task-1")
-	waitFor(t, "the approval to go back to the user", func() bool { return f.prState(t, "task-1").CommitFailed })
+	f.waitDivergence(t, divergence.KindCommitMissing)
+	if run, _ := f.tasks.prRun("task-1"); run.Status != task.PRReviewing {
+		t.Errorf("status = %q, want the review back with the user", run.Status)
+	}
 }
 
 func TestACommitAskedBeforeTheImplementerIsWaitedOnInTheConversationOfTheReviewer(t *testing.T) {
@@ -297,7 +301,7 @@ func TestACommitAskedBeforeTheImplementerIsWaitedOnInTheConversationOfTheReviewe
 
 	f.waitPRRun(t, "the review after the commit", func(run task.PRRun) bool { return run.Status != task.PRCommitting })
 	committed := []keyedMarker{{Key: reviewKeyOf, Marker: session.MarkerEntry{
-		Type: session.MarkerCommitted, SHA: commitSHA[:7], Subject: "Do the work of the step", Pushed: true, Number: 7,
+		Type: session.MarkerCommitted, SHA: commitSHA[:7], Subject: "Do the work of the step", Pushed: false, Number: 7,
 	}}}
 	if diff := cmp.Diff(committed, f.sessions.marked(session.MarkerCommitted)); diff != "" {
 		t.Errorf("committed markers mismatch (-want +got):\n%s", diff)
@@ -832,7 +836,7 @@ func TestTheReviewerReviewsAgainOnceTheImplementerIsDone(t *testing.T) {
 	if pass.Pass != 2 || len(f.tasks.PRPasses("task-1")) != 2 {
 		t.Errorf("pass = %+v with passes %+v, want the second one asked", pass, f.tasks.PRPasses("task-1"))
 	}
-	if kinds := appMessagesOf(f, session.AppCommitAllPush); len(kinds) != 0 {
+	if kinds := appMessagesOf(f, session.AppCommitAll); len(kinds) != 0 {
 		t.Errorf("commit messages = %+v, want nothing committed", kinds)
 	}
 	if slices.Contains(f.sessions.recorded(), "send:task-1:pr_fix") {
@@ -840,7 +844,7 @@ func TestTheReviewerReviewsAgainOnceTheImplementerIsDone(t *testing.T) {
 	}
 }
 
-func TestACleanAgentReportWithChangesIsCommittedAndPushedByTheImplementer(t *testing.T) {
+func TestACleanAgentReportWithChangesIsCommittedByTheImplementer(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -851,7 +855,7 @@ func TestACleanAgentReportWithChangesIsCommittedAndPushedByTheImplementer(t *tes
 	f.service.Check("task-1")
 
 	f.waitPRRun(t, "the commit to be asked", func(run task.PRRun) bool { return run.Status == task.PRCommitting })
-	waitFor(t, "the commit message", func() bool { return len(appMessagesOf(f, session.AppCommitAllPush)) > 0 })
+	waitFor(t, "the commit message", func() bool { return len(appMessagesOf(f, session.AppCommitAll)) > 0 })
 	if !slices.Contains(f.sessions.recorded(), "send:task-1:pr_fix") {
 		t.Errorf("session calls = %q, want the commit sent to the implementer", f.sessions.recorded())
 	}
@@ -920,7 +924,7 @@ func TestTheSixthReportWithFindingsFallsBackToTheUser(t *testing.T) {
 	}
 }
 
-func TestACommitThatDoesNotHappenFallsBackToTheUser(t *testing.T) {
+func TestACommitThatDoesNotHappenInTheAgentReviewIsADivergence(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
@@ -936,12 +940,12 @@ func TestACommitThatDoesNotHappenFallsBackToTheUser(t *testing.T) {
 
 	f.service.Check("task-1")
 
-	f.waitPRRun(t, "the fallback", func(run task.PRRun) bool { return run.Fallback == task.FallbackNoCommit })
-	calls := f.tasks.recorded()
-	fallback := slices.Index(calls, "prFallback:commit_failed:task-1")
-	back := slices.Index(calls, "pr:reviewing:task-1")
-	if fallback < 0 || back < fallback {
-		t.Errorf("task calls = %q, want the fallback recorded before the review goes on", calls)
+	f.waitDivergence(t, divergence.KindCommitMissing)
+	f.wantDivergence(t, session.PRFixStage, divergence.KindCommitMissing, divergence.Facts{
+		Branch: "task-1", Commit: task.ShortSHA(startCommit), Files: 1, All: true,
+	})
+	if run, _ := f.tasks.prRun("task-1"); run.Fallback != "" {
+		t.Errorf("fallback = %q, want the agent review kept", run.Fallback)
 	}
 }
 

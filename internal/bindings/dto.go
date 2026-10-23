@@ -358,9 +358,8 @@ type CloseResult struct {
 type PullRequest struct {
 	// Status is preparing, blocked, drafting, draft_ready, awaiting_reply,
 	// opening, reviewing, addressing_review, waiting_checks, awaiting_decision,
-	// in_review,
-	// ready_to_approve, committing, done, trouble, merged, pr_closed, closing,
-	// closed or diverged, a string for the same reason as State.Theme.
+	// in_review, ready_to_approve, committing, pushing, done, trouble, merged,
+	// pr_closed, closing, closed or diverged, a string for the same reason as State.Theme.
 	Status       string   `json:"status"`
 	Block        *PRBlock `json:"block"` // blocked only
 	WorktreePath string   `json:"worktreePath"`

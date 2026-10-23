@@ -212,7 +212,7 @@ A cada avaliação o loop faz uma de seis coisas, e a primeira linha desta tabel
 | Caso | Ação |
 |---|---|
 | o head da branch não é o que um relatório cobriu (o commit do app subiu, ou uma passada foi pedida de novo) | pedir a passada, depois dos checks |
-| relatório limpo e alterações na worktree | pedir ao implementador o commit com push |
+| relatório limpo e alterações na worktree | pedir ao implementador o commit |
 | relatório limpo | encerrar o review |
 | relatório com apontamentos, não enviado, e cinco rodadas já entregues | passar o review ao usuário, `rounds_exhausted` |
 | relatório com apontamentos, não enviado | entregar o relatório ao implementador |
@@ -220,13 +220,13 @@ A cada avaliação o loop faz uma de seis coisas, e a primeira linha desta tabel
 
 - **Entregar o relatório** é uma mensagem fixa do app (`report`) na conversa do implementador, com o caminho e o conteúdo inteiro do relatório, a rodada e o teto, e o pedido de tratar cada apontamento, corrigindo ou contestando, de terminar a resposta com uma linha por apontamento e de não commitar. A sessão do implementador nasce no primeiro envio, e uma conversa fechada é reaberta antes dele. A passada é marcada como enviada antes da mensagem e desmarcada quando o envio falha.
 - **Pedir a passada local** é a mensagem fixa `pr_pass` na conversa do revisor, com a última resposta do implementador, o caminho do novo relatório e o `## GitHub status` da última leitura, montado por `prompts.PRChecksSection`. O pedido é gravado como o de qualquer passada, mas nada é lido do GitHub, e por isso não há `checks_read` nem nova referência: nada mudou lá.
-- **Pedir o commit com push** renderiza o prompt de commit com tudo o que mudou na worktree e com push, grava a PR como `committing` e o envia ao implementador como `commit_all_push`. Quando o envio falha, a PR volta a `reviewing`.
+- **Pedir o commit** renderiza o prompt de commit, sem push, com tudo o que mudou na worktree, grava a PR como `committing` e o envia ao implementador como `commit_all`. Quando o envio falha, a PR volta a `reviewing`. O commit nunca é empurrado pelo agente: o app sobe o head da task para a pull request (abaixo).
 - **Encerrar o review** fecha as duas conversas e deixa a PR em `done`.
 - **Passar ao usuário** grava o fallback sem enviar o relatório: a passada fica gravada e não enviada, e passa a ser o cartão de apontamentos do `Manual`.
 
 O teto é `flow.MaxPRReviewRounds`, cinco rodadas contadas sobre o review todo: uma rodada é uma passada estruturada já enviada ao implementador (`sent_at` preenchido), de modo que o número é derivado e não existe contador. Ele só existe no modo `Agent`, porque uma task `Manual` nunca vira `Agent`.
 
-O modo do review da pull request fica em `tasks.review_modes`, o JSON que guarda também o dos steps, e `pr_runs.review_fallback` guarda por que o review passou ao usuário, `taken_over`, `rounds_exhausted` ou `commit_failed`. Com o fallback gravado, a PR é derivada exatamente como no modo `Manual`, e o loop não age mais sobre ela. O resto, o status `addressing_review`, a rodada, a passada e o modo efetivo (`flow.PRReviewModeOf`), é derivado dessas colunas, de `pr_passes`, das duas sessões, da worktree e dos relatórios no disco. O modo é editável (`flow.PRReviewModeEditable`) até a pull request ser encontrada: `recordPR` grava o número e o `reviewing` na mesma leitura, então uma PR que existe é uma PR cujo review começou.
+O modo do review da pull request fica em `tasks.review_modes`, o JSON que guarda também o dos steps, e `pr_runs.review_fallback` guarda por que o review passou ao usuário, `taken_over` ou `rounds_exhausted`. Com o fallback gravado, a PR é derivada exatamente como no modo `Manual`, e o loop não age mais sobre ela. O resto, o status `addressing_review`, a rodada, a passada e o modo efetivo (`flow.PRReviewModeOf`), é derivado dessas colunas, de `pr_passes`, das duas sessões, da worktree e dos relatórios no disco. O modo é editável (`flow.PRReviewModeEditable`) até a pull request ser encontrada: `recordPR` grava o número e o `reviewing` na mesma leitura, então uma PR que existe é uma PR cujo review começou.
 
 O `pr_runs.reviewed_commit` vazio quer dizer que nenhum relatório cobre o head. É ele que faz a avaliação pedir uma passada depois de **Review again**, de um reinício ou de um bloqueio, sem depender da memória do processo: o head não é o de um relatório, e a passada vem depois de uma leitura do GitHub em que a ausência de checks vale de imediato, porque nada foi empurrado.
 
@@ -234,9 +234,11 @@ O `pr_runs.reviewed_commit` vazio quer dizer que nenhum relatório cobre o head.
 
 **Review myself** grava o fallback `taken_over`. Com uma passada do revisor em curso sem relatório, interrompe o turno; se a worktree tem alterações, a passada pedida é desfeita e o arquivo do relatório removido, e as alterações do loop vão ao review por stage, sobre a passada enviada anterior; sem alterações, a passada fica pedida e sem relatório, e a PR espera uma resposta no compositor, com **Review again**. Um implementador trabalhando termina o turno, e a espera dos checks continua. Com o agente revisando, **Review again** só vale com a PR em `done`, e **Approve** e a decisão dos apontamentos são recusados: ninguém decide nem dá stage.
 
-Quando o turno de commit termina sem que o head ande, o fallback `commit_failed` é gravado antes de a PR voltar a `reviewing`, pela mesma razão do step: uma falha nunca deixa a PR num review que pediria uma passada.
+**O push é do app.** Com a pull request aberta, a avaliação do review confere, antes de olhar a passada, se o head da worktree está no remoto (`worktrees.Pushed`, sobre `pr_runs.pr_head` ou a branch da task; uma leitura que falha conta como empurrado). Um head fora dele grava a PR como `pushing` e `pushWork` o sobe com `git push`, nunca forçado; o sucesso devolve a PR a `reviewing`, e a avaliação seguinte vê o head novo e pede a passada depois dos checks. Um push que o remoto recusa devolve a PR a `reviewing` e abre `push_rejected` na conversa `pr_review`; o app não repete o push do mesmo commit até **Check again** liberar uma tentativa. Qualquer outra falha bloqueia a etapa com `push_failed`, e **Retry** repete só o push.
 
-Reabrir o app reabre a conversa do revisor e a do implementador, quando ela existe, em `reviewing` e `committing` e durante a espera dos checks, e o loop segue do que as colunas e os relatórios dizem. Com o review encerrado, a pull request mergeada ou fechada ou a task encerrada, as sessões são fechadas; descartar a etapa de PR apaga as três conversas da etapa.
+Quando o turno de commit termina sem que o head ande, a PR volta a `reviewing` e o app abre a divergência `commit_missing` na conversa que recebeu o pedido, com a branch, o commit, os arquivos e se o pedido era de tudo (`All`, o modo `Agent`). O loop do `Agent` não age enquanto ela está aberta. **Ask again** reenvia o pedido de commit, com `commit_all` quando `All`, e no `Manual` exige as mudanças em stage; um commit que move o head apaga a divergência.
+
+Reabrir o app reabre a conversa do revisor e a do implementador, quando ela existe, em `reviewing`, `committing` e `pushing` e durante a espera dos checks, e o loop segue do que as colunas e os relatórios dizem. Com o review encerrado, a pull request mergeada ou fechada ou a task encerrada, as sessões são fechadas; descartar a etapa de PR apaga as três conversas da etapa.
 
 ## Fakes para testes
 

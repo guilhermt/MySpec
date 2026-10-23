@@ -226,9 +226,9 @@ type taskLock struct {
 	// unreadable is why the report of the current structured pass, or its
 	// rewrite, can't be read; "" once one is read.
 	unreadable string
-	// prNoCommit says the last approval of the review of the pull request ended
-	// without a commit. Like noCommit, it is transient on purpose.
-	prNoCommit bool
+	// retryPush lets the next evaluation push a commit the remote refused: the
+	// user asked for it to be checked again.
+	retryPush bool
 	// checkError is what the last reading of a pull request awaiting its merge
 	// said when it failed; "" when it succeeded.
 	checkError string

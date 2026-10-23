@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/guilhermt/myspec/internal/divergence"
+	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/task"
 )
@@ -80,6 +81,11 @@ func (s *Service) CheckAgain(ctx context.Context, id string) error {
 		s.review.Refresh(id)
 	}
 	if t, ok := s.tasks.Get(id); ok && t.Stage == task.StagePR {
+		if d.Kind == divergence.KindPushRejected && d.Stage == session.PRReviewStage {
+			// The remote may take the commit now: the push that was held is tried
+			// in the evaluation that follows.
+			s.setRetryPush(id)
+		}
 		if d.Kind == divergence.KindPushRejected && d.Stage == session.PRStage {
 			// The branch of a pull request that was never opened is pushed by the
 			// next approval of the draft: what the user did about the remote is
@@ -106,6 +112,9 @@ func (s *Service) AskAgain(ctx context.Context, id string) error {
 	}
 	switch d.Kind {
 	case divergence.KindCommitMissing:
+		if isPRStage(d.Stage) {
+			return s.askPRCommitAgain(ctx, d)
+		}
 		return s.askStepCommitAgain(ctx, d)
 	case divergence.KindReportMissing, divergence.KindReportUnreadable, divergence.KindReportsAmbiguous:
 		return s.askStepReportAgain(ctx, d)
@@ -213,4 +222,58 @@ func draftAgainMessage(path, reason string) string {
 	}
 	reason = strings.TrimSuffix(strings.TrimPrefix(reason, draftUnreadablePrefix), ".")
 	return fmt.Sprintf("The draft of the pull request at `%s` can't be read: %s. Rewrite it there, with the header the instructions of this session give, and stop.", path, reason)
+}
+
+// askPRCommitAgain asks the implementer of a pull request review for the commit
+// its last commit turn did not make, as the approval of the review does. A
+// review by hand whose divergence asked for the staged changes only has to be
+// ready to approve first. The caller holds the lock of the task.
+func (s *Service) askPRCommitAgain(ctx context.Context, d divergence.Divergence) error {
+	t, run, err := s.prOf(d.ItemID)
+	if err != nil {
+		return err
+	}
+	if run.Status != task.PRReviewing {
+		return fmt.Errorf("ask again about the commit of task %s: %w", d.ItemID, ErrStepNotReady)
+	}
+	files := d.Facts.Files
+	if !d.Facts.All {
+		snap, read := s.review.Snapshot(d.ItemID)
+		if !read || snap.Err != "" || !snap.Ready() {
+			return fmt.Errorf("ask again about the commit of task %s: %w", d.ItemID, ErrStepNotReady)
+		}
+		files = snap.Total
+	}
+	if err = s.fixerAtRest(ctx, d.ItemID); err != nil {
+		return fmt.Errorf("ask again about the commit of task %s: %w", d.ItemID, err)
+	}
+	vars := commitVars(t)
+	vars.CommitAll = d.Facts.All
+	message, err := s.renderPrompt(prompts.StageCommit, vars)
+	if err != nil {
+		return err
+	}
+	if _, err := s.tasks.SetPRRun(ctx, d.ItemID, task.PRCommitting, nil); err != nil {
+		return err
+	}
+	if err := s.divergences.Clear(ctx, d.ItemID, divergence.KindCommitMissing); err != nil {
+		s.backToReview(ctx, d.ItemID)
+		return err
+	}
+	kind := session.AppCommit
+	if d.Facts.All {
+		kind = session.AppCommitAll
+	}
+	app := session.AppMessage{Text: message, Kind: kind}
+	var approved func()
+	if !d.Facts.All {
+		approved = func() { s.sessions.MarkChangesApproved(ctx, prFixKey(d.ItemID), files) }
+	}
+	if err := s.sendToFixer(ctx, t, run, app, approved); err != nil {
+		s.backToReview(ctx, d.ItemID)
+		s.reopen(ctx, d)
+		return err
+	}
+	s.log.Info("pr review asked to commit again", "task", d.ItemID, "all", d.Facts.All)
+	return nil
 }

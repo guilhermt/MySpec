@@ -43,6 +43,7 @@ const (
 	PRInReview         PRStatus = "in_review"         // the applied changes are being reviewed
 	PRReadyToApprove   PRStatus = "ready_to_approve"
 	PRCommitting       PRStatus = "committing"
+	PRPushing          PRStatus = "pushing"   // the app pushes the commit of the task to the pull request
 	PRDone             PRStatus = "done"      // the review closed clean, or with every finding of its pass discarded, and the pull request is still open
 	PRTrouble          PRStatus = "trouble"   // as done, and a check failed or a conflict with the base came up since
 	PRMerged           PRStatus = "merged"    // the pull request was merged; the task awaits closing
@@ -85,8 +86,8 @@ type PullRequest struct {
 	// waits for it.
 	CloneMissing bool
 
-	// CommitFailed says the last approval of the review ended without a commit,
-	// the way a step says it.
+	// CommitFailed is always false: a commit that did not happen is the
+	// divergence of the pull request.
 	CommitFailed bool
 
 	// Divergence is what the app expected of the pull request and did not
@@ -172,7 +173,6 @@ func (s *Service) prState(t task.Task, run task.PRRun, art task.PRArtifacts) Pul
 	}
 	snap, read := s.review.Snapshot(t.ID)
 	pr.Review = reading(snap, read)
-	pr.CommitFailed = s.prNoCommit(t.ID)
 	if d, ok := s.divergences.Get(t.ID); ok && isPRStage(d.Stage) {
 		pr.Divergence = &d
 	}
@@ -228,7 +228,7 @@ func prSessionStage(status task.PRStatus) string {
 	switch status {
 	case task.PRDrafting, task.PROpening:
 		return session.PRStage
-	case task.PRReviewing, task.PRWaitingChecks, task.PRCommitting:
+	case task.PRReviewing, task.PRWaitingChecks, task.PRCommitting, task.PRPushing:
 		// The conversation of the review, when there is one, stays in sight
 		// while the next pass waits for the checks.
 		return session.PRReviewStage
@@ -281,6 +281,8 @@ func prStatus(run task.PRRun, art task.PRArtifacts, facts prFacts, snap review.S
 		return PRWaitingChecks
 	case task.PRCommitting:
 		return PRCommitting
+	case task.PRPushing:
+		return PRPushing
 	case task.PRDone:
 		return awaitingStatus(run)
 	case task.PRClosing:
@@ -668,7 +670,8 @@ func (s *Service) clearDivergence(ctx context.Context, id string, kinds ...diver
 // inReview reports whether the review of a pull request already began and is
 // not over.
 func inReview(status task.PRStatus) bool {
-	return status == task.PRReviewing || status == task.PRWaitingChecks || status == task.PRCommitting
+	return status == task.PRReviewing || status == task.PRWaitingChecks || status == task.PRCommitting ||
+		status == task.PRPushing
 }
 
 // prDetails is what the app records of a reading of a pull request.
@@ -774,8 +777,12 @@ func (s *Service) evaluatePR(ctx context.Context, t task.Task) {
 			s.spawnPRWork(t.ID, s.checkPR)
 		}
 	case task.PROpening:
-		// Nothing to evaluate: openWork, started by the approval of the draft and
-		// by the resume of the stage, is what acts.
+		// openWork, started by the approval of the draft and by the resume of the
+		// stage, is what acts; asked again here, it runs once the work that kept
+		// the stage busy when the draft was approved is over.
+		s.spawnPRWork(t.ID, s.openWork)
+	case task.PRPushing:
+		s.spawnPRWork(t.ID, s.pushWork)
 	case task.PRCommitting:
 		if back, done := s.evaluatePRCommit(ctx, t, run); done {
 			// The commit landed the task back in its review, and the pass it asks
@@ -821,6 +828,16 @@ func (s *Service) evaluateReview(ctx context.Context, t task.Task, run task.PRRu
 	if !ok {
 		return
 	}
+	if run.PR.Number > 0 && !s.pushed(ctx, wt, cmp.Or(run.PR.Head, wt.Branch)) && s.pushAllowed(ctx, t.ID, wt) {
+		// The commit of the task is not on the pull request yet: the app pushes it.
+		if _, err := s.tasks.SetPRRun(ctx, t.ID, task.PRPushing, nil); err != nil {
+			s.log.Error("record pushing pull request failed", "task", t.ID, "error", err)
+			return
+		}
+		s.spawnPRWork(t.ID, s.pushWork)
+		return
+	}
+
 	key := prReviewKey(t.ID)
 	sum, open := s.sessions.Summary(key)
 	exists := open
@@ -946,6 +963,8 @@ func (s *Service) passDue(ctx context.Context, t task.Task, wt worktree.Worktree
 	if head == "" || head == run.ReviewedCommit || s.passAsked(t.ID) == head {
 		return
 	}
+	// A commit that moved the branch is the one a divergence asked for.
+	s.clearDivergence(ctx, t.ID, divergence.KindCommitMissing)
 	checks := s.takeChecks(t.ID)
 	if checks == nil {
 		// A wait that could not be recorded is begun again by the evaluation
@@ -1004,28 +1023,19 @@ func (s *Service) evaluatePRCommit(ctx context.Context, t task.Task, run task.PR
 		return task.PRRun{}, false
 	}
 
-	unmoved := snap.Head == "" || snap.Head == run.ReviewedCommit
-	agent := unmoved && prAgentReviewed(t, run)
-	if agent {
-		// Recorded before the task goes back to reviewing, so that a failure never
-		// leaves the review in a state that asks for a pass.
-		if _, err := s.tasks.SetPRFallback(ctx, t.ID, task.FallbackNoCommit); err != nil {
-			s.log.Error("record pr review fallback failed", "task", t.ID, "error", err)
-			return task.PRRun{}, false
-		}
-		s.log.Info("pr review fell back", "task", t.ID, "reason", string(task.FallbackNoCommit))
-	}
 	back, err := s.tasks.SetPRRun(ctx, t.ID, task.PRReviewing, nil)
 	if err != nil {
 		s.log.Error("record reviewing pull request failed", "task", t.ID, "error", err)
 		return task.PRRun{}, false
 	}
-	if unmoved {
+	if snap.Head == "" || snap.Head == run.ReviewedCommit {
 		// The agent finished its turn and the branch is where it was: whatever
 		// it did, it did not commit, and the task goes back to the user.
-		if !agent {
-			s.setPRNoCommit(t.ID, true)
-		}
+		wt, _ := s.worktrees.Get(t.ID)
+		s.diverge(ctx, t, key.Stage, divergence.KindCommitMissing, divergence.Facts{
+			Branch: wt.Branch, Commit: task.ShortSHA(run.ReviewedCommit), Files: snap.Total,
+			All: prAgentReviewed(t, run),
+		})
 		s.log.Warn("commit did not happen", "task", t.ID)
 		return back, true
 	}
@@ -1060,7 +1070,7 @@ func (s *Service) markPRCommit(ctx context.Context, id string, key session.Key, 
 			commit = read
 		}
 	}
-	s.sessions.MarkCommitted(ctx, key, task.ShortSHA(commit.SHA), commit.Subject, true, number)
+	s.sessions.MarkCommitted(ctx, key, task.ShortSHA(commit.SHA), commit.Subject, false, number)
 }
 
 // startReview opens the conversation that reviews the pull request of a task
@@ -1280,28 +1290,6 @@ func (s *Service) setCheckError(id, message string) {
 	l.checkError = message
 }
 
-// setPRNoCommit records whether the last approval of the review of the pull
-// request ended without a commit.
-func (s *Service) setPRNoCommit(id string, v bool) {
-	l := s.lockOf(id)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	l.prNoCommit = v
-}
-
-// prNoCommit reports whether the last approval of the review of the pull
-// request ended without a commit.
-func (s *Service) prNoCommit(id string) bool {
-	l := s.lockOf(id)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return l.prNoCommit
-}
-
 // resumePR picks up a task in the PR stage where the app left it. A preparation
 // under way holds the lock, and then there is nothing to resume.
 func (s *Service) resumePR(ctx context.Context, t task.Task) {
@@ -1325,6 +1313,10 @@ func (s *Service) resumePR(ctx context.Context, t task.Task) {
 		// what GitHub has.
 		s.reopenPRSession(ctx, t, run, false)
 		s.spawnPRWork(t.ID, s.openResumed)
+	case task.PRPushing:
+		s.reopenPRSession(ctx, t, run, true)
+		s.reopenFixer(ctx, t, run)
+		s.spawnPRWork(t.ID, s.pushWork)
 	case task.PRReviewing, task.PRCommitting:
 		s.reopenPRSession(ctx, t, run, true)
 		s.reopenFixer(ctx, t, run)
@@ -1568,7 +1560,8 @@ func (s *Service) OpenPR(ctx context.Context, id, title, body string) error {
 }
 
 // ApprovePR approves the review of the changes a pass of the pull request
-// review produced and asks the implementer to commit and push them.
+// review produced and asks the implementer to commit them. The app pushes the
+// commit.
 func (s *Service) ApprovePR(ctx context.Context, id string) error {
 	l := s.lockOf(id)
 	l.mu.Lock()
@@ -1608,23 +1601,23 @@ func (s *Service) ApprovePR(ctx context.Context, id string) error {
 		return fmt.Errorf("approve the review of task %s: %w", id, err)
 	}
 
-	vars := commitVars(t)
-	// The commit belongs to a pull request that is already open, so it goes up
-	// with it.
-	vars.Push = true
-	message, err := s.renderPrompt(prompts.StageCommit, vars)
+	message, err := s.renderPrompt(prompts.StageCommit, commitVars(t))
 	if err != nil {
 		return err
 	}
 	if _, err := s.tasks.SetPRRun(ctx, id, task.PRCommitting, nil); err != nil {
 		return err
 	}
-	s.setPRNoCommit(id, false)
-	app := session.AppMessage{Text: message, Kind: session.AppCommitPush}
+	previous, hadPrevious := s.divergences.Get(id)
+	s.clearDivergence(ctx, id, divergence.KindCommitMissing)
+	app := session.AppMessage{Text: message, Kind: session.AppCommit}
 	approved := func() { s.sessions.MarkChangesApproved(ctx, prFixKey(id), snap.Total) }
 	if err := s.sendToFixer(ctx, t, run, app, approved); err != nil {
 		if _, setErr := s.tasks.SetPRRun(ctx, id, task.PRReviewing, nil); setErr != nil {
 			s.log.Error("record reviewing pull request failed", "task", id, "error", setErr)
+		}
+		if hadPrevious && previous.Kind == divergence.KindCommitMissing {
+			s.reopen(ctx, previous)
 		}
 		return err
 	}
@@ -1723,7 +1716,6 @@ func (s *Service) askAgain(ctx context.Context, id string, run task.PRRun) error
 	if _, err := s.tasks.SetPRReviewed(ctx, id, "", run.ReportedPass); err != nil {
 		return err
 	}
-	s.setPRNoCommit(id, false)
 	s.log.Info("pr review restarted", "task", id, "pass", run.ReportedPass+1)
 	// Nothing was pushed: a reading without checks is believed at once.
 	return s.beginChecksWait(ctx, id, false)
@@ -1793,6 +1785,15 @@ func (s *Service) RetryPR(ctx context.Context, id string) error {
 	}
 	// What failed is what is repeated: the opening, with the draft the user
 	// approved, or the whole preparation of the stage.
+	if run.Block != nil && run.Block.Reason == task.PRBlockPushFailed && run.PR.Number > 0 {
+		// The commit of the review did not go up: only the push is repeated.
+		if _, err := s.tasks.SetPRRun(ctx, id, task.PRPushing, nil); err != nil {
+			return err
+		}
+		s.log.Info("pull request retried", "task", id)
+		s.spawnPRWork(id, s.pushWork)
+		return nil
+	}
 	if reopens := run.Block != nil && run.PR.Number == 0 &&
 		(run.Block.Reason == task.PRBlockOpenFailed || run.Block.Reason == task.PRBlockPushFailed); reopens {
 		if _, err := s.tasks.SetPRRun(ctx, id, task.PROpening, nil); err != nil {

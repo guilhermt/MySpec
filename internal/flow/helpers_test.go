@@ -1559,6 +1559,7 @@ type memWorktrees struct {
 	removeErr error
 	merging   bool          // whether a merge is in progress in every worktree
 	notPushed bool          // whether the head is said to be missing from the remote
+	pushedErr error         // what reading whether the head is on the remote fails with
 	pushes    []string      // the branches pushed, in order
 	block     chan struct{} // when set, Ensure waits on it or on the context
 	linger    chan struct{} // when set, a cancelled Ensure waits on it before it returns
@@ -1738,6 +1739,9 @@ func (m *memWorktrees) Pushed(_ context.Context, wt worktree.Worktree, branch st
 	defer m.mu.Unlock()
 
 	m.calls = append(m.calls, "pushed:"+wt.TaskID+":"+branch)
+	if m.pushedErr != nil {
+		return false, m.pushedErr
+	}
 	return !m.notPushed, nil
 }
 
@@ -1755,6 +1759,22 @@ func (m *memWorktrees) failPush(err error) {
 	defer m.mu.Unlock()
 
 	m.pushErr = err
+}
+
+// setNotPushed says whether the head is missing from the remote.
+func (m *memWorktrees) setNotPushed(v bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.notPushed = v
+}
+
+// failPushed makes reading whether the head is on the remote fail with err.
+func (m *memWorktrees) failPushed(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.pushedErr = err
 }
 
 // pushed are the branches the app pushed, in order.
