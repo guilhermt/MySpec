@@ -108,7 +108,7 @@ func TestViewPRReadsWhatARealGhAnswersWithTheTimesOfTheChecks(t *testing.T) {
 func TestViewPRReadsThePullRequestOfTheBranch(t *testing.T) {
 	t.Parallel()
 	r, fake := runner(t, map[string]ghtest.Reply{
-		"pr": {Stdout: `{"number":42,"url":"https://github.com/acme/api/pull/42","state":"OPEN","baseRefName":"dev",` +
+		"pr": {Stdout: `{"number":42,"url":"https://github.com/acme/api/pull/42","state":"OPEN","baseRefName":"dev","headRefName":"login-screen",` +
 			`"mergeable":"MERGEABLE","mergedBy":null,"mergedAt":null,"statusCheckRollup":[` +
 			`{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"https://github.com/acme/api/actions/runs/1"},` +
 			`{"__typename":"StatusContext","context":"ci/deploy","state":"PENDING","targetUrl":"https://ci.example.com/2"}]}`},
@@ -124,6 +124,7 @@ func TestViewPRReadsThePullRequestOfTheBranch(t *testing.T) {
 		URL:    "https://github.com/acme/api/pull/42",
 		State:  gh.StateOpen,
 		Base:   "dev",
+		Head:   "login-screen",
 		Checks: gh.PRChecks{
 			Checks: []gh.Check{
 				{Name: "test", URL: "https://github.com/acme/api/actions/runs/1", Conclusion: "success", State: gh.CheckPassed},
@@ -140,7 +141,7 @@ func TestViewPRReadsThePullRequestOfTheBranch(t *testing.T) {
 	if len(calls) != 1 {
 		t.Fatalf("calls = %+v, want one", calls)
 	}
-	if calls[0].Args != "pr view login-screen --json number,url,state,baseRefName,mergeable,statusCheckRollup,mergedBy,mergedAt" {
+	if calls[0].Args != "pr view login-screen --json number,url,state,baseRefName,headRefName,mergeable,statusCheckRollup,mergedBy,mergedAt" {
 		t.Errorf("args = %q, want the branch and the fields the app reads", calls[0].Args)
 	}
 	if calls[0].Dir != dir {
@@ -518,4 +519,139 @@ func TestAccountReturnsTheErrorOfAGhThatFails(t *testing.T) {
 	if !errors.As(err, &ghErr) {
 		t.Errorf("Account() = %v, want the gh error", err)
 	}
+}
+
+func TestViewPRAcceptsTheNumberOfThePullRequestAsTheRef(t *testing.T) {
+	t.Parallel()
+	r, fake := runner(t, map[string]ghtest.Reply{"pr": {Stdout: `{"number":42,"state":"OPEN","headRefName":"login-screen"}`}})
+
+	got, err := r.ViewPR(t.Context(), t.TempDir(), "42")
+	if err != nil {
+		t.Fatalf("ViewPR(42) = %v, want nil", err)
+	}
+	if got.Number != 42 || got.Head != "login-screen" {
+		t.Errorf("ViewPR(42) = %+v, want number 42 on login-screen", got)
+	}
+	if calls := fake.Calls(t); len(calls) != 1 || !strings.HasPrefix(calls[0].Args, "pr view 42 --json ") {
+		t.Errorf("calls = %+v, want gh pr view 42", calls)
+	}
+}
+
+func TestOpenPRsListsTheOpenPullRequestsOfTheRepository(t *testing.T) {
+	t.Parallel()
+	r, fake := runner(t, map[string]ghtest.Reply{
+		"pr": {Stdout: `[{"number":42,"url":"https://github.com/acme/api/pull/42","baseRefName":"dev","headRefName":"login","headRefOid":"abc"},` +
+			`{"number":7,"url":"https://github.com/acme/api/pull/7","baseRefName":"main","headRefName":"fix","headRefOid":"def"}]`},
+	})
+
+	dir := t.TempDir()
+	got, err := r.OpenPRs(t.Context(), dir)
+	if err != nil {
+		t.Fatalf("OpenPRs() = %v, want nil", err)
+	}
+	want := []gh.PRHead{
+		{Number: 42, URL: "https://github.com/acme/api/pull/42", Base: "dev", Head: "login", HeadOID: "abc"},
+		{Number: 7, URL: "https://github.com/acme/api/pull/7", Base: "main", Head: "fix", HeadOID: "def"},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("OpenPRs() mismatch (-want +got):\n%s", diff)
+	}
+
+	calls := fake.Calls(t)
+	if len(calls) != 1 {
+		t.Fatalf("calls = %+v, want one", calls)
+	}
+	wantArgs := "pr list --state open --limit 100 --json number,url,baseRefName,headRefName,headRefOid"
+	if calls[0].Args != wantArgs || calls[0].Dir != dir {
+		t.Errorf("call = %+v, want %q in %q", calls[0], wantArgs, dir)
+	}
+}
+
+func TestOpenPRsIsEmptyWithNoOpenPullRequest(t *testing.T) {
+	t.Parallel()
+	r, _ := runner(t, map[string]ghtest.Reply{"pr": {Stdout: "[]"}})
+
+	got, err := r.OpenPRs(t.Context(), t.TempDir())
+	if err != nil || len(got) != 0 {
+		t.Errorf("OpenPRs() = %v, %v, want none and nil", got, err)
+	}
+}
+
+func TestOpenPRsReportsAGhWithNoLogin(t *testing.T) {
+	t.Parallel()
+	r, _ := runner(t, map[string]ghtest.Reply{"pr": {Stderr: "To get started with GitHub CLI, run: gh auth login", Exit: 1}})
+
+	if _, err := r.OpenPRs(t.Context(), t.TempDir()); !errors.Is(err, gh.ErrNotAuthenticated) {
+		t.Errorf("OpenPRs() = %v, want ErrNotAuthenticated", err)
+	}
+}
+
+func TestOpenPRsFailsOnAnAnswerThatIsNotJSON(t *testing.T) {
+	t.Parallel()
+	r, _ := runner(t, map[string]ghtest.Reply{"pr": {Stdout: "nope"}})
+
+	if _, err := r.OpenPRs(t.Context(), t.TempDir()); err == nil {
+		t.Error("OpenPRs() = nil, want an error")
+	}
+}
+
+func TestCreatePROpensThePullRequestWithTheBodyOnTheStandardInput(t *testing.T) {
+	t.Parallel()
+	r, fake := runner(t, map[string]ghtest.Reply{
+		"pr": {Stdout: "Warning: 1 uncommitted change\n\nhttps://github.com/acme/api/pull/42\n"},
+	})
+
+	dir := t.TempDir()
+	number, url, err := r.CreatePR(t.Context(), dir, "dev", "login", "Add the login", "Adds the login screen.\n")
+	if err != nil {
+		t.Fatalf("CreatePR() = %v, want nil", err)
+	}
+	if number != 42 || url != "https://github.com/acme/api/pull/42" {
+		t.Errorf("CreatePR() = %d, %q, want 42 and the URL", number, url)
+	}
+
+	calls := fake.Calls(t)
+	if len(calls) != 1 {
+		t.Fatalf("calls = %+v, want one", calls)
+	}
+	want := "pr create --base dev --head login --title Add the login --body-file -"
+	if calls[0].Args != want || calls[0].Dir != dir {
+		t.Errorf("call = %+v, want %q in %q", calls[0], want, dir)
+	}
+	if got := fake.Stdin(t); got != "Adds the login screen.\n" {
+		t.Errorf("stdin = %q, want the body", got)
+	}
+}
+
+func TestCreatePRFailsOnAnAnswerWithNoPullRequestNumber(t *testing.T) {
+	t.Parallel()
+	r, _ := runner(t, map[string]ghtest.Reply{"pr": {Stdout: "https://github.com/acme/api"}})
+
+	if _, _, err := r.CreatePR(t.Context(), t.TempDir(), "dev", "login", "t", "b"); err == nil {
+		t.Error("CreatePR() = nil, want an error for a URL with no number")
+	}
+}
+
+func TestCreatePRReportsGhFailures(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no login", func(t *testing.T) {
+		t.Parallel()
+		r, _ := runner(t, map[string]ghtest.Reply{"pr": {Stderr: "run: gh auth login", Exit: 1}})
+
+		_, _, err := r.CreatePR(t.Context(), t.TempDir(), "dev", "login", "t", "b")
+		if !errors.Is(err, gh.ErrNotAuthenticated) {
+			t.Errorf("CreatePR() = %v, want ErrNotAuthenticated", err)
+		}
+	})
+	t.Run("a refusal", func(t *testing.T) {
+		t.Parallel()
+		r, _ := runner(t, map[string]ghtest.Reply{"pr": {Stderr: "a pull request already exists", Exit: 1}})
+
+		_, _, err := r.CreatePR(t.Context(), t.TempDir(), "dev", "login", "t", "b")
+		var ghErr *gh.Error
+		if !errors.As(err, &ghErr) || errors.Is(err, gh.ErrNotAuthenticated) {
+			t.Errorf("CreatePR() = %v, want the gh error", err)
+		}
+	})
 }

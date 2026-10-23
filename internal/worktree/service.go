@@ -374,6 +374,49 @@ func (s *Service) Commit(ctx context.Context, wt Worktree, rev string) (git.Comm
 	})
 }
 
+// Push pushes HEAD of the worktree to branch on origin, never forcing.
+func (s *Service) Push(ctx context.Context, wt Worktree, branch string) error {
+	unlock := s.lockRepo(wt.RepoPath)
+	defer unlock()
+
+	return do(ctx, FetchTimeout, func(ctx context.Context) error {
+		return s.git.Push(ctx, wt.Path, "HEAD", branch)
+	})
+}
+
+// Pushed reports whether the remote has the commit the worktree is at, as
+// origin/branch last said: false when HEAD is empty or the remote lacks the
+// branch. It asks no network.
+func (s *Service) Pushed(ctx context.Context, wt Worktree, branch string) (bool, error) {
+	unlock := s.lockRepo(wt.RepoPath)
+	defer unlock()
+
+	return ask(ctx, CommandTimeout, func(ctx context.Context) (bool, error) {
+		status, err := s.git.Status(ctx, wt.Path)
+		if err != nil {
+			return false, err
+		}
+		if status.Head == "" {
+			return false, nil
+		}
+		remote, err := s.git.RemoteHead(ctx, wt.Path, branch)
+		if err != nil {
+			return false, err
+		}
+		return remote != "" && remote == status.Head, nil
+	})
+}
+
+// Merging reports whether a merge is under way in the worktree.
+func (s *Service) Merging(ctx context.Context, wt Worktree) (bool, error) {
+	unlock := s.lockRepo(wt.RepoPath)
+	defer unlock()
+
+	return ask(ctx, CommandTimeout, func(ctx context.Context) (bool, error) {
+		return s.git.MergeInProgress(ctx, wt.Path)
+	})
+}
+
 // Clean throws away every change of a worktree: tracked files are restored,
 // untracked ones removed. Ignored files stay.
 func (s *Service) Clean(ctx context.Context, wt Worktree) error {

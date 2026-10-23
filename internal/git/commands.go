@@ -32,6 +32,10 @@ const (
 	noMatchingRefs = 2
 )
 
+// ErrPushRejected reports a push the remote refused because it has commits the
+// branch does not.
+var ErrPushRejected = errors.New("git: the remote has commits the branch does not")
+
 // ErrNoRemote reports that the repository has no remote of the name asked for.
 var ErrNoRemote = errors.New("git: no such remote")
 
@@ -496,4 +500,65 @@ func (r *Runner) PushAtomic(ctx context.Context, dir, remote string, refs ...str
 	args := append([]string{"push", "--atomic", "--quiet", remote}, refs...)
 	_, err := r.Run(ctx, dir, args...)
 	return err
+}
+
+// Push pushes src to the branch dst of origin. It never forces: a remote that
+// is ahead refuses with ErrPushRejected over what git said.
+func (r *Runner) Push(ctx context.Context, dir, src, dst string) error {
+	_, stdout, err := r.run(ctx, dir, "push", "--porcelain", "origin", src+":refs/heads/"+dst)
+	if err == nil {
+		return nil
+	}
+	if rejected(stdout) {
+		return fmt.Errorf("%w: %w", ErrPushRejected, err)
+	}
+	return err
+}
+
+// rejected reports whether the porcelain output of a push has a ref the remote
+// refused for being ahead. Only that stream says it: the stderr of a push is
+// prose for people.
+func rejected(porcelain string) bool {
+	for line := range strings.SplitSeq(porcelain, "\n") {
+		if !strings.HasPrefix(line, "!") {
+			continue
+		}
+		if !strings.Contains(line, "[rejected]") && !strings.Contains(line, "[remote rejected]") {
+			continue
+		}
+		if strings.Contains(line, "fetch first") || strings.Contains(line, "non-fast-forward") {
+			return true
+		}
+	}
+	return false
+}
+
+// MergeInProgress reports whether a merge is under way at dir, which is when
+// MERGE_HEAD exists.
+func (r *Runner) MergeInProgress(ctx context.Context, dir string) (bool, error) {
+	_, err := r.Run(ctx, dir, "rev-parse", "-q", "--verify", "MERGE_HEAD")
+	if err == nil {
+		return true, nil
+	}
+
+	var gitErr *Error
+	if errors.As(err, &gitErr) && gitErr.ExitCode == refNotFound && gitErr.Output == "" {
+		return false, nil
+	}
+	return false, err
+}
+
+// RemoteHead is the commit origin/branch points at, as last fetched or pushed,
+// or "" when there is no such remote-tracking branch.
+func (r *Runner) RemoteHead(ctx context.Context, dir, branch string) (string, error) {
+	out, err := r.Run(ctx, dir, "rev-parse", "-q", "--verify", "refs/remotes/origin/"+branch)
+	if err == nil {
+		return out, nil
+	}
+
+	var gitErr *Error
+	if errors.As(err, &gitErr) && gitErr.ExitCode == refNotFound {
+		return "", nil
+	}
+	return "", err
 }

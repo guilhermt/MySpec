@@ -908,3 +908,103 @@ func TestPushAtomicUpdatesNothingWhenTheRemoteRefusesThePush(t *testing.T) {
 		t.Errorf("tags on origin = %q, want none", got)
 	}
 }
+
+func TestPushSendsTheCommitToTheBranchOfTheRemote(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+	origin := gittest.Run(t, dir, "remote", "get-url", "origin")
+	gittest.Commit(t, dir, "a.txt", "a\n", "Add a")
+
+	if err := runner.Push(t.Context(), dir, "HEAD", "feature"); err != nil {
+		t.Fatalf("Push(HEAD, feature) = %v, want nil", err)
+	}
+
+	if got, want := gittest.Run(t, origin, "rev-parse", "feature"), headOf(t, dir); got != want {
+		t.Errorf("origin feature = %s, want %s", got, want)
+	}
+	if got, err := runner.RemoteHead(t.Context(), dir, "feature"); err != nil || got != headOf(t, dir) {
+		t.Errorf("RemoteHead(feature) = %q, %v, want the pushed commit", got, err)
+	}
+}
+
+func TestPushIsRejectedWhenTheRemoteHasCommitsTheBranchDoesNot(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+	origin := gittest.Run(t, dir, "remote", "get-url", "origin")
+	other := gittest.Clone(t, origin, filepath.Join(t.TempDir(), "other"))
+	gittest.Commit(t, other, "b.txt", "b\n", "Add b")
+	if err := runner.Push(t.Context(), other, "HEAD", "feature"); err != nil {
+		t.Fatalf("Push from the other clone = %v, want nil", err)
+	}
+	gittest.Commit(t, dir, "a.txt", "a\n", "Add a")
+	before := gittest.Run(t, origin, "rev-parse", "feature")
+
+	err := runner.Push(t.Context(), dir, "HEAD", "feature")
+	if !errors.Is(err, git.ErrPushRejected) {
+		t.Fatalf("Push(HEAD, feature) = %v, want ErrPushRejected", err)
+	}
+	var gitErr *git.Error
+	if !errors.As(err, &gitErr) {
+		t.Errorf("Push(HEAD, feature) = %v, want the git error underneath", err)
+	}
+	if got := gittest.Run(t, origin, "rev-parse", "feature"); got != before {
+		t.Errorf("origin feature = %s, want it left at %s", got, before)
+	}
+}
+
+func TestPushFailsAsItIsWhenTheRemoteIsGone(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+	gittest.Run(t, dir, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "gone.git"))
+
+	err := runner.Push(t.Context(), dir, "HEAD", "feature")
+	var gitErr *git.Error
+	if !errors.As(err, &gitErr) {
+		t.Fatalf("Push(HEAD, feature) = %v, want *git.Error", err)
+	}
+	if errors.Is(err, git.ErrPushRejected) {
+		t.Errorf("Push(HEAD, feature) = %v, want a failure that is no rejection", err)
+	}
+}
+
+func TestMergeInProgressAnswersForAMergeUnderWayAndForNone(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+
+	got, err := runner.MergeInProgress(t.Context(), dir)
+	if err != nil || got {
+		t.Fatalf("MergeInProgress() = %v, %v, want false and nil", got, err)
+	}
+
+	gittest.Run(t, dir, "checkout", "-q", "-b", "side")
+	gittest.Commit(t, dir, "f.txt", "side\n", "Side")
+	gittest.Run(t, dir, "checkout", "-q", "main")
+	gittest.Commit(t, dir, "f.txt", "main\n", "Main")
+	if _, mergeErr := runner.Run(t.Context(), dir, "merge", "side"); mergeErr == nil {
+		t.Fatal("merge side = nil, want a conflict")
+	}
+
+	got, err = runner.MergeInProgress(t.Context(), dir)
+	if err != nil || !got {
+		t.Errorf("MergeInProgress() = %v, %v, want true and nil", got, err)
+	}
+}
+
+func TestMergeInProgressFailsOutsideARepository(t *testing.T) {
+	t.Parallel()
+	runner, _ := repo(t)
+
+	if _, err := runner.MergeInProgress(t.Context(), t.TempDir()); err == nil {
+		t.Error("MergeInProgress outside a repository = nil, want an error")
+	}
+}
+
+func TestRemoteHeadIsEmptyForABranchTheRemoteDoesNotHave(t *testing.T) {
+	t.Parallel()
+	runner, dir := repo(t)
+
+	got, err := runner.RemoteHead(t.Context(), dir, "nope")
+	if err != nil || got != "" {
+		t.Errorf("RemoteHead(nope) = %q, %v, want empty and nil", got, err)
+	}
+}
