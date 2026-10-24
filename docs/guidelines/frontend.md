@@ -6,6 +6,7 @@ React 19, TypeScript em modo strict, Vite, Tailwind CSS 4, shadcn/ui sobre Base 
 
 - `lib/wails.ts` é o único arquivo que importa `@bindings/*` e `@wailsio/runtime`. Ele reexporta os tipos, define as uniões de strings, as funções `asX` que estreitam os enums, o objeto `api` e as funções `onX` dos eventos.
 - Um DTO novo ou um método novo no Go entra em `lib/wails.ts` (tipo, `asX` se for enum, função em `api`) e em `test/wails-mock.ts` (mock da função e fábrica `makeX`), sempre juntos.
+- Os nomes de etapa, de status, de conversa e o texto e as ações das divergências também são ditos pelo Go às sessões. Mudar um deles segue a regra de [Rótulos que o Go repete](./testing.md#rótulos-que-o-go-repete).
 - O `State` que chega é a verdade. O frontend não deriva estado de produto; deriva apresentação: rótulos, tons, o que mostrar onde.
 
 ## Store e ações

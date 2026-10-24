@@ -106,6 +106,10 @@ O jsdom roda sem CSS: nenhum teste do frontend vê a cascata, o layout nem o pix
 - Eventos do Go são simulados chamando as ações do store (`applyState`, `applyTranscriptEvent`), não disparando o runtime.
 - Um item de menu que abre um diálogo entrega o foco a ele, e o menu não o toma de volta. O jsdom não toca a animação de saída do menu, então a devolução do foco viria antes de o diálogo abrir e nada a veria; `withMenuExitAnimation` de `src/test/menu-exit.ts` dá ao menu uma saída de 50 ms, e `menuGone` espera ele sair e o quadro seguinte, para o teste provar o foco no diálogo depois da devolução, como no app.
 
+### Rótulos que o Go repete
+
+Os rótulos da interface que `internal/selfcontext` repete em Go ficam em `frontend/src/test/ui-labels.json`, lido por `src/test/ui-labels.test.ts` e por `internal/selfcontext/labels_test.go`. Mudar um desses rótulos no TypeScript exige mudar o JSON e a tabela Go.
+
 ## O que um teste novo cobre
 
 Uma mudança traz testes para o comportamento que ela adiciona e para o que ela muda, em cada camada que toca: a regra no pacote de domínio, a orquestração em `flow`, a conversão em `bindings`, a apresentação no `.ts` e a interação no componente. A cobertura é consequência disso, não o objetivo: um teste que existe só para cobrir linhas não diz nada quando quebra.
