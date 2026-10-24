@@ -38,7 +38,7 @@ type EntryRepository interface {
 // Process is the running CLI, as internal/claude provides it.
 type Process interface {
 	Events() <-chan claude.Event
-	Send(text string, imgs []claude.Image) error
+	Send(state, text string, imgs []claude.Image) error
 	Interrupt() (string, error)
 	Initialize() error
 	StopTask(taskID string) (string, error)
@@ -175,6 +175,15 @@ type Deps struct {
 	// contract.HookCommand.
 	HooksDir    string
 	HookCommand string
+	// Identity is what a session knows of MySpec and of its own role, which
+	// every process of the session appends to the system prompt of the CLI; nil
+	// appends nothing.
+	Identity func(t TaskInfo) string
+	// ItemState is the state of the item of a session as the app reads it now,
+	// which goes ahead of every message that opens a turn. It is called without
+	// the mutex of the service, because it reads the sessions back; nil sends
+	// no state.
+	ItemState func(k Key) (string, error)
 }
 
 // The errors the service reports to its callers.
@@ -248,6 +257,8 @@ type Service struct {
 	onTranscript  func(ev TranscriptEvent)
 	hooksDir      string
 	hookCommand   string
+	identity      func(TaskInfo) string
+	itemState     func(Key) (string, error)
 
 	mu            sync.Mutex
 	runs          map[Key]*run
@@ -273,6 +284,8 @@ func New(deps Deps) *Service {
 		onTranscript:  deps.OnTranscript,
 		hooksDir:      deps.HooksDir,
 		hookCommand:   deps.HookCommand,
+		identity:      deps.Identity,
+		itemState:     deps.ItemState,
 		runs:          map[Key]*run{},
 		conversations: map[string][]Conversation{},
 	}

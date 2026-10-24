@@ -968,7 +968,7 @@ func TestUsageContextTokens(t *testing.T) {
 func TestUserMessageIsWhatTheCLIExpects(t *testing.T) {
 	t.Parallel()
 
-	line := claude.UserMessage("write the PRD", nil)
+	line := claude.UserMessage("", "write the PRD", nil)
 	if strings.ContainsAny(string(line), "\n") {
 		t.Errorf("UserMessage() = %s, want no newline", line)
 	}
@@ -987,10 +987,23 @@ func TestUserMessageWithImages(t *testing.T) {
 
 	tests := []struct {
 		name   string
+		state  string
 		text   string
 		images []claude.Image
 		want   string
 	}{
+		{
+			name:   "state comes before the label, the image and the text",
+			state:  "state of the item",
+			text:   "go",
+			images: []claude.Image{labelled},
+			want:   `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"state of the item"},{"type":"text","text":"Image 2: attached by the user."},{"type":"image","source":{"type":"base64","media_type":"image/jpeg","data":"eHl6"}},{"type":"text","text":"go"}]},"parent_tool_use_id":null}`,
+		},
+		{
+			name:  "state alone is the only block",
+			state: "state of the item",
+			want:  `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"state of the item"}]},"parent_tool_use_id":null}`,
+		},
 		{
 			name:   "image and text",
 			text:   "what is this?",
@@ -1013,7 +1026,7 @@ func TestUserMessageWithImages(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := claude.UserMessage(tt.text, tt.images); string(got) != tt.want {
+			if got := claude.UserMessage(tt.state, tt.text, tt.images); string(got) != tt.want {
 				t.Errorf("UserMessage() = %s, want %s", got, tt.want)
 			}
 		})

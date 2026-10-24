@@ -395,11 +395,16 @@ type userMessageLine struct {
 	ParentToolUseID *string         `json:"parent_tool_use_id"`
 }
 
-// UserMessage is what the app writes to ask for a turn. The images come first,
-// each introduced by its label when it has one, and the text last, only when
-// there is some: the API refuses an empty text block.
-func UserMessage(text string, images []Image) []byte {
-	content := make([]any, 0, 2*len(images)+1)
+// UserMessage is what the app writes to ask for a turn. The state of the item
+// comes first, when there is one, because it is context for the message and not
+// part of what the user wrote; then the images, each introduced by its label
+// when it has one; and the text last, only when there is some: the API refuses
+// an empty text block.
+func UserMessage(state, text string, images []Image) []byte {
+	content := make([]any, 0, 2*len(images)+2)
+	if state != "" {
+		content = append(content, textBlock{Type: "text", Text: state})
+	}
 	for _, img := range images {
 		if img.Label != "" {
 			content = append(content, textBlock{Type: "text", Text: img.Label})

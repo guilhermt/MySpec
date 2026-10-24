@@ -34,6 +34,10 @@ type Config struct {
 	// Settings is the JSON the CLI loads on top of the settings of the
 	// machine, with --settings; "" passes none.
 	Settings string
+	// AppendSystemPrompt is what the CLI appends to its system prompt, with
+	// --append-system-prompt: what the session knows of MySpec and of its role;
+	// "" passes none.
+	AppendSystemPrompt string
 }
 
 // Args are the fixed CLI flags every session gets.
@@ -94,7 +98,7 @@ func Start(ctx context.Context, cfg Config, log *slog.Logger) (*Process, error) 
 	}
 
 	//nolint:gosec // G204: the binary path comes from Locate or an explicit override
-	cmd := exec.Command(cfg.Binary, slices.Concat(Args, sessionArgs(cfg), choiceArgs(cfg), dirArgs(cfg), settingsArgs(cfg))...)
+	cmd := exec.Command(cfg.Binary, slices.Concat(Args, sessionArgs(cfg), choiceArgs(cfg), dirArgs(cfg), settingsArgs(cfg), systemPromptArgs(cfg))...)
 	cmd.Dir = cfg.Dir
 	cmd.Env = cfg.Env
 	// Its own group, so Terminate and Kill also reach the shells the CLI
@@ -151,9 +155,10 @@ func (p *Process) Events() <-chan Event {
 	return p.events
 }
 
-// Send writes a user message, with its images. It fails once the input is closed.
-func (p *Process) Send(text string, images []Image) error {
-	if err := p.write(UserMessage(text, images)); err != nil {
+// Send writes a user message: the state of the item first, when there is one,
+// then the images and the text. It fails once the input is closed.
+func (p *Process) Send(state, text string, images []Image) error {
+	if err := p.write(UserMessage(state, text, images)); err != nil {
 		return fmt.Errorf("send user message: %w", err)
 	}
 	return nil
@@ -392,6 +397,15 @@ func settingsArgs(cfg Config) []string {
 		return nil
 	}
 	return []string{"--settings", cfg.Settings}
+}
+
+// systemPromptArgs pass what the session appends to the system prompt of the
+// CLI, which every process of the session starts with.
+func systemPromptArgs(cfg Config) []string {
+	if cfg.AppendSystemPrompt == "" {
+		return nil
+	}
+	return []string{"--append-system-prompt", cfg.AppendSystemPrompt}
 }
 
 // tailBuffer keeps the last limit bytes written to it, which is all the app
