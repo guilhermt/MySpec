@@ -32,6 +32,7 @@ import (
 	"github.com/guilhermt/myspec/internal/review"
 	"github.com/guilhermt/myspec/internal/reviewflow"
 	"github.com/guilhermt/myspec/internal/reviewmode"
+	"github.com/guilhermt/myspec/internal/selfcontext"
 	"github.com/guilhermt/myspec/internal/session"
 	"github.com/guilhermt/myspec/internal/store"
 	"github.com/guilhermt/myspec/internal/task"
@@ -223,6 +224,8 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 			a.discussionFlow.Check(k.TaskID)
 		},
 		OnTranscript: a.emitTranscript,
+		Identity:     selfcontext.Identity,
+		ItemState:    a.itemState,
 	})
 	if err = withTimeout(ctx, sessions.LoadConversations); err != nil {
 		return fmt.Errorf("read sessions: %w", err)
