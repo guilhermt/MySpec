@@ -79,7 +79,7 @@ func start(t *testing.T, cfg claude.Config) *claude.Process {
 func send(t *testing.T, p *claude.Process, text string) {
 	t.Helper()
 
-	if err := p.Send(text, nil); err != nil {
+	if err := p.Send("", text, nil); err != nil {
 		t.Fatalf("Send(%q) = %v, want nil", text, err)
 	}
 }
@@ -282,6 +282,42 @@ func TestStartPassesTheSettingsOnlyWhenThereAreSome(t *testing.T) {
 	}
 }
 
+func TestStartPassesTheSystemPromptOnlyWhenThereIsOne(t *testing.T) {
+	t.Parallel()
+
+	withPrompt := argvConfig(t)
+	withPrompt.Model = "claude-opus-5"
+	withPrompt.Effort = "high"
+	withPrompt.AppendSystemPrompt = "who you are"
+	without := argvConfig(t)
+	without.Model = "claude-opus-5"
+	without.Effort = "high"
+
+	base := append(slices.Clone(claude.Args),
+		"--session-id", sessionID, "--model", "claude-opus-5", "--effort", "high")
+	tests := map[string]struct {
+		cfg  claude.Config
+		want []string
+	}{
+		"with a prompt": {withPrompt, append(slices.Clone(base), "--append-system-prompt", "who you are")},
+		"without":       {without, base},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			exit := exitOf(t, start(t, tc.cfg))
+			if exit.Code != 0 {
+				t.Fatalf("exit code = %d, want 0", exit.Code)
+			}
+			got := strings.Split(strings.TrimRight(exit.Stderr, "\n"), "\n")
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("command line mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestStartLeavesTheEffortOutForAModelThatTakesNone(t *testing.T) {
 	t.Parallel()
 
@@ -462,7 +498,7 @@ func TestCloseInputEndsTheProcessAndRefusesWrites(t *testing.T) {
 		t.Errorf("CloseInput() twice = %v, want nil", err)
 	}
 
-	if err := p.Send("too late", nil); !errors.Is(err, claude.ErrInputClosed) {
+	if err := p.Send("", "too late", nil); !errors.Is(err, claude.ErrInputClosed) {
 		t.Errorf("Send() = %v, want ErrInputClosed", err)
 	}
 	if _, err := p.Interrupt(); !errors.Is(err, claude.ErrInputClosed) {

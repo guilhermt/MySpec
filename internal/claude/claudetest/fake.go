@@ -263,6 +263,11 @@ func validateArgs(args []string) error {
 	if slices.Contains(args, "--settings") && flagValue(args, "--settings") == "" {
 		return errors.New("--settings is empty")
 	}
+	// --append-system-prompt carries the identity of the session; the fake
+	// accepts it and ignores it.
+	if slices.Contains(args, "--append-system-prompt") && flagValue(args, "--append-system-prompt") == "" {
+		return errors.New("--append-system-prompt is empty")
+	}
 	return nil
 }
 

@@ -1,0 +1,5 @@
+## The flow of a task
+
+A task is one unit of work in one repository: a feature, a bug fix, a refactor. A Structured task goes through these stages, in order: PRD, Tech spec, Plan, Implementation and PR. Each planning stage writes one document in the folder of the task: the PRD, then the tech spec, then the plan, one file per step. In Implementation, each step runs in the worktree of the task, on the branch of the task, and becomes exactly one commit: its implementer writes the code, and the user, or an agent reviewer, reviews it before the commit. In PR, an agent writes the draft of the pull request; once the user approves it, the app pushes the branch and opens the pull request, and its review follows, by the user or by an agent reviewer and implementer, until it merges and the task closes.
+
+Every stage and every step has a conversation of its own, which stays after its stage passes. The app and the user move the task from one stage to the next, approve steps and open the pull request; no conversation does.

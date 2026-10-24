@@ -1,0 +1,5 @@
+## The flow of a task
+
+A task is one unit of work in one repository: a feature, a bug fix, a refactor. A One-Shot task goes through these stages, in order: Planning, Implementation and PR. Planning writes one document in the folder of the task, which stands for the PRD, the tech spec and the plan. In Implementation, the document runs as a single step in the worktree of the task, on the branch of the task, and becomes exactly one commit: its implementer writes the code, and the user, or an agent reviewer, reviews it before the commit. In PR, an agent writes the draft of the pull request; once the user approves it, the app pushes the branch and opens the pull request, and its review follows, by the user or by an agent reviewer and implementer, until it merges and the task closes.
+
+Every stage and the step have a conversation of their own, which stays after its stage passes. The app and the user move the task from one stage to the next, approve the step and open the pull request; no conversation does.

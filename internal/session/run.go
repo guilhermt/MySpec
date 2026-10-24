@@ -42,6 +42,11 @@ type run struct {
 	retryReason  string    // retryReasonOf the error
 	turnFailed   bool      // the last turn ended in an error; the next turn clears it
 
+	// preparing says the state of the item is being read for the first queued
+	// message, off the mutex; prepared is that reading, for that message only.
+	preparing bool
+	prepared  *preparedState
+
 	tasks       map[string]*cliTask        // task_id -> the tasks the current process runs, in the foreground or the background
 	wakes       []Wake                     // the returns that arrived with no turn, for the marker that opens the next one
 	monitors    map[string]monitorCall     // tool_use_id -> the Monitor calls of the current process, until their task starts
@@ -148,6 +153,13 @@ func (t *cliTask) live() bool {
 type monitorCall struct {
 	timeout    time.Duration
 	persistent bool
+}
+
+// preparedState is the state of the item read for one queued message, which
+// goes with it only if it leaves right after the reading.
+type preparedState struct {
+	entryID string
+	text    string
 }
 
 // graces are how long stopProcess waits at each step before escalating.
@@ -323,7 +335,7 @@ func (r *run) summary() Summary {
 		sum.Status = StatusNeedsAnswer
 	case r.permission != nil:
 		sum.Status = StatusNeedsPermission
-	case r.turn != nil || r.startTimer != nil || r.backgroundWork():
+	case r.turn != nil || r.preparing || r.startTimer != nil || r.backgroundWork():
 		sum.Status = StatusWorking
 	default:
 		sum.Status = StatusWaiting
@@ -460,6 +472,9 @@ func (s *Service) ensureProcessLocked(ctx context.Context, r *run, n *notes) err
 	if s.hookCommand != "" {
 		cfg.Settings = contract.Settings(s.hookCommand)
 	}
+	if s.identity != nil {
+		cfg.AppendSystemPrompt = s.identity(r.task)
+	}
 	p, err := s.launcher.Start(startCtx, cfg)
 	if err != nil {
 		return s.failStart(ctx, r, n, ErrorStartFailed, "Could not start Claude Code: "+err.Error(), err)
@@ -552,7 +567,7 @@ func (s *Service) enqueueLocked(ctx context.Context, r *run, u *UserEntry, n *no
 // free to take one, starting the process if needed. It reports whether a
 // message went out. The caller holds the mutex.
 func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool {
-	if r.rec.Paused || r.stopping || r.turn != nil || r.permission != nil || len(r.pending) == 0 {
+	if r.rec.Paused || r.stopping || r.preparing || r.turn != nil || r.permission != nil || len(r.pending) == 0 {
 		return false
 	}
 	if r.proc != nil && r.procChoice != r.rec.Choice {
@@ -572,11 +587,21 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 		go s.restartProcess(r.key(), r.procGen)
 		return false
 	}
+	e := r.pending[0]
+	// The state of the item is read off the mutex, right before the message
+	// leaves; a reading for another message, or none, means reading again.
+	if s.itemState != nil && (r.prepared == nil || r.prepared.entryID != e.ID) {
+		s.prepareStateLocked(r, e.ID)
+		return false
+	}
+	state := ""
+	if r.prepared != nil {
+		state, r.prepared = r.prepared.text, nil
+	}
 	if err := s.ensureProcessLocked(ctx, r, n); err != nil {
 		return false
 	}
 
-	e := r.pending[0]
 	text := e.User.Text
 	if e.User.Prompt {
 		vars := prompts.Vars{
@@ -644,7 +669,7 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 
 	sent := s.imagesOf(r, e.User)
 	s.writeContractLocked(r, turnOf(e, r.task))
-	if err := r.proc.Send(text, sent); err != nil {
+	if err := r.proc.Send(state, text, sent); err != nil {
 		// The process is gone or going; its exit reports the failure.
 		s.log.Warn("send to claude failed", "task", r.task.ID, "error", err)
 		if err := r.proc.Terminate(); err != nil {
@@ -673,6 +698,46 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 	s.armStartLocked(r)
 	n.state(r.key())
 	return true
+}
+
+// prepareStateLocked reads the state of the item for the first queued message
+// on a goroutine of its own, because the reading takes the mutex back. The
+// caller holds the mutex.
+func (s *Service) prepareStateLocked(r *run, entryID string) {
+	r.preparing = true
+	go s.prepareState(r.key(), r, entryID)
+}
+
+// prepareState reads the state of the item and delivers the first queued
+// message with it. A reading that fails is logged and the message goes
+// without one; a message that can't leave right now drops the reading, and
+// the next attempt reads again.
+func (s *Service) prepareState(k Key, r *run, entryID string) {
+	text, err := s.itemState(k)
+	if err != nil {
+		s.log.Warn("session state failed", "task", k.TaskID, "stage", k.Stage, "error", err)
+		text = ""
+	}
+
+	ctx, cancel := bgCtx()
+	defer cancel()
+	n := &notes{}
+	defer s.flush(n)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.runs[k] != r {
+		return
+	}
+	r.preparing = false
+	r.prepared = &preparedState{entryID: entryID, text: text}
+	if !s.flushPendingLocked(ctx, r, n) {
+		r.prepared = nil
+		if r.turn == nil {
+			s.armIdleLocked(r)
+		}
+	}
+	n.state(k)
 }
 
 // openAgentTurnLocked starts a turn the CLI opened on its own, with the woke
@@ -719,7 +784,7 @@ func (s *Service) idleExpired(k Key, gen int) {
 		return
 	}
 	r.idleTimer = nil
-	if r.proc == nil || r.stopping || r.turn != nil || r.permission != nil || len(r.pending) > 0 || r.backgroundWork() {
+	if r.proc == nil || r.stopping || r.preparing || r.turn != nil || r.permission != nil || len(r.pending) > 0 || r.backgroundWork() {
 		return
 	}
 	go s.stopProcess(k, gen, false, defaultGraces)

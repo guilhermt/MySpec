@@ -417,6 +417,12 @@ type fixture struct {
 	launcher *fakeLauncher
 	hooksDir string // the folder of the contract states; "" leaves the contract off
 
+	// What the session knows of MySpec, as the app gives it; nil leaves each
+	// off.
+	identity  func(session.TaskInfo) string
+	itemState func(session.Key) (string, error)
+	log       *slog.Logger // nil discards the log
+
 	mu      sync.Mutex
 	now     time.Time
 	states  []session.Key
@@ -467,6 +473,28 @@ func newFixtureLimits(t *testing.T, launcher *fakeLauncher, idle time.Duration, 
 	return f
 }
 
+// newSelfContextFixture builds a Service that gives its sessions an identity and
+// the state of their item, over a given launcher.
+func newSelfContextFixture(
+	t *testing.T, launcher *fakeLauncher, identity func(session.TaskInfo) string,
+	itemState func(session.Key) (string, error), logger *slog.Logger,
+) *fixture {
+	t.Helper()
+
+	entries := &memEntries{}
+	f := &fixture{
+		sessions:  newMemSessions(entries),
+		entries:   entries,
+		launcher:  launcher,
+		now:       base,
+		identity:  identity,
+		itemState: itemState,
+		log:       logger,
+	}
+	f.build(t, 0, limits{})
+	return f
+}
+
 // newContractFixture builds a Service that writes the contract states of its
 // sessions in a folder of the test.
 func newContractFixture(t *testing.T, scenario string) *fixture {
@@ -489,7 +517,10 @@ func newContractFixture(t *testing.T, scenario string) *fixture {
 func (f *fixture) restart(t *testing.T) *fixture {
 	t.Helper()
 
-	next := &fixture{sessions: f.sessions, entries: f.entries, launcher: f.launcher, hooksDir: f.hooksDir, now: f.clock()}
+	next := &fixture{
+		sessions: f.sessions, entries: f.entries, launcher: f.launcher, hooksDir: f.hooksDir, now: f.clock(),
+		identity: f.identity, itemState: f.itemState, log: f.log,
+	}
 	next.build(t, 0, limits{})
 	return next
 }
@@ -504,14 +535,20 @@ func (f *fixture) build(t *testing.T, idle time.Duration, l limits) {
 	if f.hooksDir != "" {
 		hookCommand = "'/opt/myspec' --claude-hook '" + f.hooksDir + "'"
 	}
+	logger := f.log
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	f.service = session.New(session.Deps{
+		Identity:     f.identity,
+		ItemState:    f.itemState,
 		HooksDir:     f.hooksDir,
 		HookCommand:  hookCommand,
 		Sessions:     f.sessions,
 		Entries:      f.entries,
 		Launcher:     f.launcher,
 		RenderPrompt: renderPrompt,
-		Log:          slog.New(slog.DiscardHandler),
+		Log:          logger,
 		Now:          f.clock,
 		NewID: func() string {
 			idMu.Lock()

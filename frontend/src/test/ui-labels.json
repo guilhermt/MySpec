@@ -1,0 +1,268 @@
+{
+  "stages": {
+    "prd": "PRD",
+    "tech_spec": "Tech spec",
+    "plan": "Plan",
+    "one_shot": "Planning",
+    "implementation": "Implementation",
+    "pr": "PR"
+  },
+  "modes": { "structured": "Structured", "one_shot": "One-Shot" },
+  "reviewModes": { "manual": "Manual", "agent": "Agent" },
+  "stepStatuses": {
+    "not_started": "Not started",
+    "preparing": "Preparing",
+    "blocked": "Blocked",
+    "implementing": "Implementing",
+    "agent_review": "Agent review",
+    "addressing_review": "Addressing review",
+    "awaiting_review": "Awaiting review",
+    "in_review": "In review",
+    "ready_to_approve": "Ready to approve",
+    "nothing_to_commit": "Nothing to approve",
+    "review_failed": "Can't read the worktree",
+    "committing": "Committing",
+    "diverged": "Not as expected",
+    "done": "Done"
+  },
+  "prStatuses": {
+    "preparing": "Checking GitHub",
+    "blocked": "Blocked",
+    "drafting": "Preparing the draft",
+    "draft_ready": "Draft waiting for your OK",
+    "awaiting_reply": "Waiting for your reply",
+    "opening": "Opening the pull request",
+    "reviewing": "Reviewing the pull request",
+    "addressing_review": "Addressing the review",
+    "waiting_checks": "Waiting for checks",
+    "awaiting_decision": "Waiting for your decision",
+    "in_review": "In review",
+    "ready_to_approve": "Ready to approve",
+    "committing": "Committing",
+    "pushing": "Pushing the commit",
+    "diverged": "Not as expected",
+    "done": "Waiting for the merge",
+    "merged": "Merged · ready to close",
+    "pr_closed": "Closed without merge",
+    "closing": "Closing",
+    "closed": "Closed"
+  },
+  "troubles": [
+    {
+      "trouble": { "failedChecks": ["lint", "test"], "conflict": false },
+      "base": "main",
+      "label": "Checks failed: lint, test"
+    },
+    {
+      "trouble": { "failedChecks": [], "conflict": true },
+      "base": "main",
+      "label": "Conflict with main"
+    },
+    {
+      "trouble": { "failedChecks": ["lint"], "conflict": true },
+      "base": "",
+      "label": "Checks failed: lint · conflict with the base"
+    }
+  ],
+  "voices": {
+    "prd": "PRD agent",
+    "tech_spec": "Tech spec agent",
+    "plan": "Plan agent",
+    "one_shot": "Planning agent",
+    "pr": "PR agent",
+    "pr_review": "Reviewer",
+    "pr_fix": "Implementer",
+    "review": "Reviewer",
+    "discussion": "Discussion agent",
+    "step:3": "Implementer",
+    "step_review:3": "Reviewer"
+  },
+  "divergences": [
+    {
+      "stage": "step:3",
+      "kind": "commit_missing",
+      "facts": { "branch": "feature/login", "commit": "abc1234", "files": 4, "all": true },
+      "expected": "a commit on feature/login after abc1234",
+      "found": "no commit, and 4 files changed in the worktree",
+      "actions": ["Ask the agent again", "Check again"]
+    },
+    {
+      "stage": "step:3",
+      "kind": "commit_missing",
+      "facts": { "branch": "feature/login", "commit": "abc1234", "files": 1 },
+      "expected": "a commit on feature/login after abc1234",
+      "found": "no commit, and 1 file changed in the worktree",
+      "actions": ["Ask the agent again", "Check again"]
+    },
+    {
+      "stage": "step:3",
+      "kind": "commit_missing",
+      "facts": { "branch": "feature/login", "commit": "abc1234", "files": 0 },
+      "expected": "a commit on feature/login after abc1234",
+      "found": "no commit, and the worktree has no changes",
+      "actions": ["Ask the agent again", "Check again"]
+    },
+    {
+      "stage": "pr_fix",
+      "kind": "commit_missing",
+      "facts": { "branch": "feature/login", "commit": "abc1234", "files": 2 },
+      "expected": "a commit on feature/login after abc1234",
+      "found": "no commit, and 2 files changed in the worktree",
+      "actions": ["Ask the implementer again", "Check again"]
+    },
+    {
+      "stage": "step_review:3",
+      "kind": "report_missing",
+      "facts": { "pass": 2, "path": "step-reviews/step-3-pass-2.md" },
+      "expected": "the report of pass 2 at step-reviews/step-3-pass-2.md",
+      "found": "no report",
+      "actions": ["Ask the reviewer again", "Check again"]
+    },
+    {
+      "stage": "step_review:3",
+      "kind": "report_unreadable",
+      "facts": {
+        "pass": 2,
+        "path": "step-reviews/step-3-pass-2.md",
+        "reason": "The report can't be read: the verdict is missing."
+      },
+      "expected": "the report of pass 2 at step-reviews/step-3-pass-2.md",
+      "found": "a report that can't be read: the verdict is missing",
+      "actions": ["Ask the reviewer again", "Check again"]
+    },
+    {
+      "stage": "step_review:3",
+      "kind": "reports_ambiguous",
+      "facts": {
+        "pass": 2,
+        "path": "step-reviews/step-3-pass-2.md",
+        "candidates": ["step-reviews/a.md", "notes/b.md"]
+      },
+      "expected": "the report of pass 2 at step-reviews/step-3-pass-2.md",
+      "found": "2 files that could be it: step-reviews/a.md, notes/b.md",
+      "actions": ["Adopt a.md", "Adopt b.md", "Check again"]
+    },
+    {
+      "stage": "pr",
+      "kind": "draft_missing",
+      "facts": { "path": "pr/draft.md" },
+      "expected": "the draft of the pull request at pr/draft.md",
+      "found": "no draft",
+      "actions": ["Ask the agent again", "Check again"]
+    },
+    {
+      "stage": "pr",
+      "kind": "draft_unreadable",
+      "facts": { "path": "pr/draft.md", "reason": "the title is empty." },
+      "expected": "the draft of the pull request at pr/draft.md",
+      "found": "a draft that can't be read: the title is empty",
+      "actions": ["Ask the agent again", "Check again"]
+    },
+    {
+      "stage": "pr_fix",
+      "kind": "no_changes",
+      "facts": { "pass": 2, "approved": 1 },
+      "expected": "changes for the approved finding of pass 2",
+      "found": "no file changed",
+      "actions": ["Continue without changes", "Ask the implementer again", "Check again"]
+    },
+    {
+      "stage": "pr_fix",
+      "kind": "no_changes",
+      "facts": { "pass": 2, "approved": 3 },
+      "expected": "changes for the 3 approved findings of pass 2",
+      "found": "no file changed",
+      "actions": ["Continue without changes", "Ask the implementer again", "Check again"]
+    },
+    {
+      "stage": "pr",
+      "kind": "pr_wrong_base",
+      "facts": {
+        "base": "main",
+        "prs": [
+          {
+            "number": 7,
+            "url": "https://github.com/acme/web/pull/7",
+            "base": "dev",
+            "head": "feature/login"
+          }
+        ]
+      },
+      "expected": "a pull request into main",
+      "found": "#7 into dev",
+      "actions": ["Adopt #7", "Check again"]
+    },
+    {
+      "stage": "pr",
+      "kind": "pr_other_branch",
+      "facts": {
+        "branch": "feature/login",
+        "prs": [
+          {
+            "number": 8,
+            "url": "https://github.com/acme/web/pull/8",
+            "base": "main",
+            "head": "other"
+          }
+        ]
+      },
+      "expected": "a pull request from feature/login",
+      "found": "#8 from other, with the head of the task",
+      "actions": ["Adopt #8", "Check again"]
+    },
+    {
+      "stage": "pr",
+      "kind": "prs_ambiguous",
+      "facts": {
+        "branch": "feature/login",
+        "prs": [
+          {
+            "number": 1,
+            "url": "https://github.com/acme/web/pull/1",
+            "base": "main",
+            "head": "feature/login"
+          },
+          {
+            "number": 2,
+            "url": "https://github.com/acme/web/pull/2",
+            "base": "main",
+            "head": "feature/login"
+          },
+          {
+            "number": 3,
+            "url": "https://github.com/acme/web/pull/3",
+            "base": "main",
+            "head": "feature/login"
+          }
+        ]
+      },
+      "expected": "one pull request from feature/login",
+      "found": "#1, #2 and #3",
+      "actions": ["Adopt #1", "Adopt #2", "Adopt #3", "Check again"]
+    },
+    {
+      "stage": "pr",
+      "kind": "pr_not_opened",
+      "facts": { "base": "main" },
+      "expected": "the pull request into main, approved in the draft",
+      "found": "none on GitHub",
+      "actions": ["Open the pull request", "Check again"]
+    },
+    {
+      "stage": "pr_fix",
+      "kind": "push_rejected",
+      "facts": { "branch": "feature/login", "commit": "abc1234" },
+      "expected": "feature/login on origin with abc1234",
+      "found": "origin has commits feature/login doesn't",
+      "actions": ["Try the push again"]
+    },
+    {
+      "stage": "discussion",
+      "kind": "drafts_unreadable",
+      "facts": { "reason": "draft 2 has no title." },
+      "expected": "drafts.md in the format of the discussion",
+      "found": "draft 2 has no title",
+      "actions": ["Ask the agent again", "Check again"]
+    }
+  ]
+}
