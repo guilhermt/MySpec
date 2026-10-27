@@ -1,4 +1,3 @@
-import { ArrowRight } from "lucide-react";
 import { type ReactNode, type Ref, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { observeSize } from "./fits";
@@ -263,7 +262,7 @@ export function PlaceHeader({
         <IconButton
           ref={forwardRef}
           label={`Forward to ${forward.title}`}
-          icon={ArrowRight}
+          icon={ICONS.promote}
           shortcut="Alt+→"
           size="sm"
           onClick={forward.onClick}

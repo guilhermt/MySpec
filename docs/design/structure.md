@@ -364,6 +364,7 @@ Sob o cabeçalho, na medida da conversa, quando algo bloqueia sem ser a situaç�
 | `Enter` | Home | Abre **Continue** |
 | ↑↓ `Home` `End` | Lista (board, Reviews, History) | Percorrem as linhas e os cabeçalhos visíveis |
 | ←→ | Lista do board e de Reviews | Recolhem e expandem a seção |
+| ←→ ↑↓ `Home` `End` `Ctrl+Home` `Ctrl+End` | Matriz de Deploys | Percorrem as células e as passagens: ←→ na linha, ↑↓ entre as linhas e os boards, `Home` e `End` nas pontas da linha, com `Ctrl` nas da matriz |
 | ←→ | Borda de um painel | Alarga e estreita o painel |
 | `Enter` | Lista do board e de Reviews | Abre ou fecha o painel; num cabeçalho, recolhe ou expande |
 | `/` | Board, History | Foca a busca; `↓` volta à lista |
@@ -405,6 +406,7 @@ O design funciona de 1100 a 2600 px, sem pontos fixos de janela. Cada regra depe
 | Painéis do item | A regra da seção 3; o usuário os alarga pela borda |
 | Lista do board e de Reviews | 70rem centrada. Abaixo de 1040 px de lista, o que não é número, título e teclas desce para uma segunda linha; o título tem sempre um terço da linha. O painel da lista (`clamp(360px, 42%, 640px)`) fica ao lado enquanto a lista mantém 440 px, o que, na largura padrão, vale exatamente a partir de 800 px de área principal (a janela de 1100 px dá 812); o usuário o alarga pela borda |
 | Lista do History | As colunas até 860 px de lista; abaixo, onde e o resultado descem para a segunda linha |
+| Matriz de Deploys | A grade do board com o nome do repositório, as células e as passagens; abaixo de 48rem de largura da seção do board, o nome desce para uma linha acima das células e as passagens encolhem para a seta e o número |
 | Settings | A navegação à esquerda e a página de `--measure`; abaixo de 820 px de área principal, a navegação é uma linha acima da página; abaixo de 720 px, as ações de uma linha de Settings descem para baixo do texto |
 | Diálogos | O mínimo em 480 px (`--size-dialog`), o largo em 576 px (`--size-dialog-wide`), os dois a `8vh` do topo, crescendo para baixo, centrados na janela inteira; a tela cheia, a janela menos `--space-8` de cada lado |
 | Barras | Quebram em duas linhas antes de esconder uma ação |

@@ -1,10 +1,16 @@
-import { act, screen } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DeploysView } from "@/features/deploys/DeploysView";
 import { api, type Deploys } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
-import { makeDeployBoard, makeDeployRepository, makeDeploys, makeState } from "@/test/wails-mock";
+import {
+  makeDeployBoard,
+  makeDeployEnvironment,
+  makeDeployRepository,
+  makeDeploys,
+  makeState,
+} from "@/test/wails-mock";
 
 const READ_AT = "2026-09-16T12:00:00Z";
 
@@ -182,6 +188,151 @@ describe("DeploysView", () => {
       );
 
       expect(screen.getByRole("alert")).toHaveTextContent("Couldn't read the deploys");
+    });
+  });
+
+  describe("the matrix", () => {
+    const REPO = {
+      id: "api",
+      name: "api",
+      fullName: "dev/api",
+      readAt: READ_AT,
+      environments: [
+        makeDeployEnvironment({ state: "up_to_date" }),
+        makeDeployEnvironment({
+          position: 1,
+          name: "Staging",
+          previousName: "Development",
+          state: "pending",
+          pending: true,
+          promotion: {
+            commits: 3,
+            partial: false,
+            ahead: 3,
+            pendingSince: "",
+            pullRequests: [],
+            deployPr: null,
+            otherDeployPrs: 0,
+          },
+        }),
+      ],
+    };
+
+    function matrix(repository = {}, deploys: Partial<Deploys> = {}) {
+      return view({
+        boards: [
+          makeDeployBoard({
+            title: "Roadmap",
+            repositories: [makeDeployRepository({ ...REPO, ...repository })],
+          }),
+        ],
+        ...deploys,
+      });
+    }
+
+    it("draws a grid for the board with a cell for each environment and a passage between", () => {
+      matrix();
+
+      const grid = screen.getByRole("grid", { name: "Roadmap deploys" });
+      expect(within(grid).getByRole("rowheader")).toHaveTextContent("api");
+      expect(
+        within(grid).getByRole("gridcell", { name: "api · Development · deployed" }),
+      ).toBeInTheDocument();
+      expect(
+        within(grid).getByRole("gridcell", {
+          name: "api · Development to Staging · 3 commits to deploy",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        within(grid).getByRole("gridcell", { name: "api · Staging · pending: 3 commits" }),
+      ).toBeInTheDocument();
+    });
+
+    it("shows the failed row with its old reading and Try again, which reads that repository", async () => {
+      const { user } = matrix({
+        failure: { reason: "failed", message: "rate limited", failedAt: "" },
+      });
+
+      expect(
+        screen.getByRole("gridcell", { name: /^api · Staging · pending/ }),
+      ).toHaveAccessibleName(/from the reading of/);
+      const line = screen.getByText("Couldn't read api").closest("div");
+      expect(line).toHaveTextContent("rate limited");
+      await user.click(within(line as HTMLElement).getByRole("button", { name: "Try again" }));
+
+      expect(api.refreshDeployRepository).toHaveBeenCalledWith("api");
+    });
+
+    it("says Reading… instead of Try again while the failed row is read", () => {
+      matrix({ reading: true, failure: { reason: "failed", message: "x", failedAt: "" } });
+
+      expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+      expect(screen.getByText("Couldn't read api").closest("div")).toHaveTextContent("Reading…");
+    });
+
+    it("records the cell or the passage that was clicked as the open one", async () => {
+      const { user } = matrix();
+      const cell = screen.getByRole("gridcell", { name: /^api · Staging/ });
+      const passage = screen.getByRole("gridcell", { name: /^api · Development to Staging/ });
+
+      await user.click(cell);
+      expect(cell).toHaveAttribute("aria-selected", "true");
+      expect(passage).toHaveAttribute("aria-selected", "false");
+
+      await user.click(passage);
+      expect(passage).toHaveAttribute("aria-selected", "true");
+      expect(cell).toHaveAttribute("aria-selected", "false");
+
+      await user.click(passage);
+      expect(passage).toHaveAttribute("aria-selected", "false");
+    });
+
+    it("flashes the cell that changed between two readings, and announces it", () => {
+      vi.useFakeTimers();
+      matrix();
+      const staging = () => screen.getByRole("gridcell", { name: /^api · Staging/ });
+      expect(staging()).not.toHaveClass("row-flash");
+
+      act(() =>
+        useAppStore.getState().applyState(
+          makeState({
+            deploys: makeDeploys({
+              readAt: READ_AT,
+              boards: [
+                makeDeployBoard({
+                  title: "Roadmap",
+                  repositories: [
+                    makeDeployRepository({
+                      ...REPO,
+                      environments: [
+                        REPO.environments[0] ?? makeDeployEnvironment(),
+                        {
+                          ...(REPO.environments[1] ?? makeDeployEnvironment()),
+                          state: "up_to_date",
+                          pending: false,
+                        },
+                      ],
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          }),
+        ),
+      );
+
+      expect(staging()).toHaveClass("row-flash");
+      expect(useAppStore.getState().announcement?.text).toBe("api · Staging is up to date");
+
+      act(() => vi.advanceTimersByTime(2_000));
+      expect(staging()).not.toHaveClass("row-flash");
+    });
+
+    it("neither flashes nor announces the first snapshot", () => {
+      matrix();
+
+      expect(screen.getByRole("gridcell", { name: /^api · Staging/ })).not.toHaveClass("row-flash");
+      expect(useAppStore.getState().announcement).toBeNull();
     });
   });
 });
