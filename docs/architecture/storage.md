@@ -64,6 +64,10 @@ A rodada reúne os rascunhos de uma leitura do artefato e as revisões deles, e 
 
 O artefato no disco é do agente e o produto nunca o reescreve; tudo o que é do usuário ou do produto sobre ele fica nessas tabelas. Os passos de uma publicação são gravados um a um, porque é assim que **Retry** continua de onde parou sem criar nada duas vezes.
 
+### Deploys
+
+`board_deploys` guarda, por board, se os deploys estão ligados (`enabled`), com `board_id` como chave e `ON DELETE CASCADE`. `deploy_repositories` guarda, por repositório gerenciado, o `board_id` a que a configuração pertence e os ambientes em JSON (`environments`: nome, branch e workflow de cada um, em ordem, dois no mínimo). Os ambientes só existem na ordem da lista, que define as promoções, então ficam numa linha só e nunca são consultados um a um. Um repositório que sai do board ou do app perde a linha (`applyReleases` e `applyLinks` a apagam), um que troca de board perde a configuração do antigo, e um board removido leva as duas tabelas pela chave estrangeira. A leitura dos deploys no GitHub não é guardada: vive em memória.
+
 ### Prompts
 
 Os prompts padrão vivem no binário, em `internal/prompts/defaults/`. O diretório `prompts/` guarda apenas os que o usuário editou: `prd.md`, `tech_spec.md`, `plan.md`, `one_shot.md`, `step_review.md`, `commit.md`, `pr.md`, `pr_review.md`, `pr_fix.md` e `discussion.md`. Um prompt sem arquivo segue o padrão da versão que roda, e um arquivo idêntico ao padrão é removido quando o app inicia, para que um prompt restaurado volte a acompanhar as versões novas. O prompt é lido quando uma sessão começa. A hora de uma edição é a do arquivo (`EditedAt`), e a lista de prompts das configurações sai só dessas horas, sem ler nenhum texto (`prompts.List`). Cada prompt informa quantas linhas tem o texto e quantas tem o padrão, sem contar a quebra de linha final.

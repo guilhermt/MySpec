@@ -209,6 +209,7 @@ func (r *BoardsRepo) SaveFailure(ctx context.Context, boardID string, f board.Fa
 // applyLinks ties each repository of links to a board: a registered one gets
 // the board, and its clone when it has none; a new one is registered.
 func applyLinks(ctx context.Context, tx *sql.Tx, boardID string, links []board.Link) error {
+	const forget = `DELETE FROM deploy_repositories WHERE repository_id = ? AND board_id <> ?`
 	const link = `UPDATE repositories SET board_id = ? WHERE id = ?`
 	const path = `UPDATE repositories SET path = ? WHERE id = ? AND path = ''`
 	const insert = `INSERT INTO repositories (` + repositoryColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -222,6 +223,10 @@ func applyLinks(ctx context.Context, tx *sql.Tx, boardID string, links []board.L
 				return fmt.Errorf("insert repository %s/%s of board %s: %w", l.Owner, l.Name, boardID, err)
 			}
 			continue
+		}
+		// A repository that changes board loses the deploys of the old one.
+		if _, err := tx.ExecContext(ctx, forget, l.RepositoryID, boardID); err != nil {
+			return fmt.Errorf("forget deploys of repository %s: %w", l.RepositoryID, err)
 		}
 		if _, err := tx.ExecContext(ctx, link, boardID, l.RepositoryID); err != nil {
 			return fmt.Errorf("link repository %s to board %s: %w", l.RepositoryID, boardID, err)
@@ -239,10 +244,14 @@ func applyLinks(ctx context.Context, tx *sql.Tx, boardID string, links []board.L
 // applyReleases takes each repository of releases off its board, or out of the
 // app.
 func applyReleases(ctx context.Context, tx *sql.Tx, releases []board.Release) error {
+	const forget = `DELETE FROM deploy_repositories WHERE repository_id = ?`
 	const unlink = `UPDATE repositories SET board_id = NULL WHERE id = ?`
 	const remove = `DELETE FROM repositories WHERE id = ?`
 
 	for _, rel := range releases {
+		if _, err := tx.ExecContext(ctx, forget, rel.RepositoryID); err != nil {
+			return fmt.Errorf("forget deploys of repository %s: %w", rel.RepositoryID, err)
+		}
 		stmt := unlink
 		if rel.Remove {
 			stmt = remove

@@ -7,6 +7,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/guilhermt/myspec/internal/board"
+	"github.com/guilhermt/myspec/internal/deploys"
 	"github.com/guilhermt/myspec/internal/repository"
 	"github.com/guilhermt/myspec/internal/store"
 )
@@ -242,5 +243,60 @@ func TestBoardsAreListedByTitleIgnoringCase(t *testing.T) {
 	want := []board.Board{alpha, sameB, beta, zeta}
 	if diff := cmp.Diff(want, listBoards(t, s)); diff != "" {
 		t.Errorf("ListBoards() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+// deployConfigOf is the configuration of one repository on the given board.
+func deployConfigOf(boardID, repositoryID string) deploys.BoardConfig {
+	return deploys.BoardConfig{
+		BoardID: boardID,
+		Enabled: true,
+		Repositories: []deploys.RepositoryConfig{{
+			RepositoryID: repositoryID,
+			Environments: deployEnvironments("dev", "main"),
+		}},
+	}
+}
+
+func TestBoardsReleaseDropsTheDeploysOfTheRepository(t *testing.T) {
+	t.Parallel()
+	s := newDeployStore(t)
+	saveDeployConfig(t, s, deployConfigOf("board-1", webRepo))
+
+	err := s.Boards.UpdateBoard(t.Context(), newBoard("board-1", "Roadmap", 1), nil, []board.Release{{RepositoryID: webRepo}})
+	if err != nil {
+		t.Fatalf("UpdateBoard() = %v, want nil", err)
+	}
+	// The repository returns to the board: its old configuration must not come back.
+	err = s.Boards.UpdateBoard(t.Context(), newBoard("board-1", "Roadmap", 1), []board.Link{{RepositoryID: webRepo}}, nil)
+	if err != nil {
+		t.Fatalf("UpdateBoard() = %v, want nil", err)
+	}
+
+	want := []deploys.BoardConfig{{BoardID: "board-1", Enabled: true, Repositories: []deploys.RepositoryConfig{}}}
+	if diff := cmp.Diff(want, listDeployConfigs(t, s)); diff != "" {
+		t.Errorf("ListDeployConfigs() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestBoardsLinkToAnotherBoardDropsTheDeploysOfTheOldOne(t *testing.T) {
+	t.Parallel()
+	s := newDeployStore(t)
+	insertBoard(t, s, newBoard("board-2", "Other", 2))
+	saveDeployConfig(t, s, deployConfigOf("board-1", webRepo))
+
+	err := s.Boards.UpdateBoard(t.Context(), newBoard("board-2", "Other", 2), []board.Link{{RepositoryID: webRepo}}, nil)
+	if err != nil {
+		t.Fatalf("UpdateBoard() = %v, want nil", err)
+	}
+	// Back on the first board, nothing of the old configuration is left.
+	err = s.Boards.UpdateBoard(t.Context(), newBoard("board-1", "Roadmap", 1), []board.Link{{RepositoryID: webRepo}}, []board.Release{})
+	if err != nil {
+		t.Fatalf("UpdateBoard() = %v, want nil", err)
+	}
+
+	want := []deploys.BoardConfig{{BoardID: "board-1", Enabled: true, Repositories: []deploys.RepositoryConfig{}}}
+	if diff := cmp.Diff(want, listDeployConfigs(t, s)); diff != "" {
+		t.Errorf("ListDeployConfigs() mismatch (-want +got):\n%s", diff)
 	}
 }
