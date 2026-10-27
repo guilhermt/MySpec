@@ -1,6 +1,7 @@
 import { useViewedSituation } from "@/features/attention/useViewedSituation";
 import { BoardView } from "@/features/board/BoardView";
 import { usePendingStart } from "@/features/board/usePendingStart";
+import { DeploysView } from "@/features/deploys/DeploysView";
 import { DiscussionView } from "@/features/discussion/DiscussionView";
 import { NewDiscussionDialog } from "@/features/discussion/NewDiscussionDialog";
 import { ArchivedDiscussion } from "@/features/history/ArchivedDiscussion";
@@ -35,6 +36,8 @@ function LocationView() {
       return <BoardView key={location.id} boardId={location.id} />;
     case "reviews":
       return <ReviewsView />;
+    case "deploys":
+      return <DeploysView />;
     case "history":
       return <HistoryView />;
     case "settings":

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ICONS } from "@/components/system/icons";
 import { toastOf } from "@/features/notice/toasts";
+import type { DeployFinished } from "@/lib/wails";
 import type { Toast } from "@/store/app-store";
 import {
   makeArchivedDiscussion,
@@ -37,6 +38,7 @@ describe("toastOf a task", () => {
   it("says when it was closed", () => {
     expect(toastOf(taskToast(makeCloseResult({ closedAt })), NOW)).toEqual({
       icon: ICONS.archive,
+      tone: "default",
       text: "“Idempotency keys for payment intents” was archived",
       detail: "Closed at 15:02",
     });
@@ -89,6 +91,7 @@ describe("toastOf a review", () => {
 
     expect(toastOf(toast, NOW)).toEqual({
       icon: ICONS.merge,
+      tone: "default",
       text: "web#2288 was merged, and its review ended",
       detail: "Pass 2 was published at 13:10",
     });
@@ -133,8 +136,44 @@ describe("toastOf a discussion", () => {
 
     expect(toastOf({ id: "d", kind: "discussion", discussion }, NOW)).toEqual({
       icon: ICONS.archive,
+      tone: "default",
       text: "“Usage alerts at 80% of the plan” was archived",
       detail,
+    });
+  });
+});
+
+describe("toastOf a deploy", () => {
+  const finished = (overrides: Partial<DeployFinished>): Toast => ({
+    id: "deploy:repo-1:1:0",
+    kind: "deploy",
+    deploy: {
+      repositoryId: "repo-1",
+      position: 1,
+      fullName: "dev/api",
+      environment: "Staging",
+      succeeded: true,
+      seconds: 192,
+      runUrl: "",
+      ...overrides,
+    },
+  });
+
+  it("tells a deploy that succeeded and how long it took", () => {
+    expect(toastOf(finished({}), NOW)).toEqual({
+      icon: ICONS.deploy,
+      tone: "default",
+      text: "dev/api · Staging deployed",
+      detail: "In 3m 12s",
+    });
+  });
+
+  it("tells a deploy that failed in the error tone, with the time it ran for", () => {
+    expect(toastOf(finished({ succeeded: false, seconds: 42 }), NOW)).toEqual({
+      icon: ICONS.problem,
+      tone: "error",
+      text: "dev/api · Staging failed to deploy",
+      detail: "After 42s",
     });
   });
 });

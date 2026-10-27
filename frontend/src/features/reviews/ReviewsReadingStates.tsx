@@ -12,8 +12,13 @@ import { refreshPullRequests } from "@/store/actions";
 /** SKELETON_BARS is how many bars stand for the pull requests never read. */
 const SKELETON_BARS = 4;
 
-/** TryAgain reads the pull requests again, or says that they are being read. */
-function TryAgain({ reading }: { reading: boolean }) {
+export interface TryAgainProps {
+  reading: boolean;
+  onRetry: () => void;
+}
+
+/** TryAgain reads again, or says that a reading is running. */
+export function TryAgain({ reading, onRetry }: TryAgainProps) {
   return (
     <>
       <LiveRegion
@@ -28,7 +33,7 @@ function TryAgain({ reading }: { reading: boolean }) {
         )}
       </LiveRegion>
       {!reading && (
-        <Button variant="secondary" size="sm" onClick={() => void refreshPullRequests()}>
+        <Button variant="secondary" size="sm" onClick={onRetry}>
           Try again
         </Button>
       )}
@@ -51,7 +56,7 @@ export function ReviewsFailureStrips({ center, now }: ReviewsFailureStripsProps)
       title={strip.title}
       reason={strip.message}
       role={role}
-      action={<TryAgain reading={center.reading} />}
+      action={<TryAgain reading={center.reading} onRetry={() => void refreshPullRequests()} />}
       className="mt-(--space-4) mb-(--space-4)"
     />
   ));

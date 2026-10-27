@@ -55,7 +55,9 @@ export function useTreeKeyboard(
         lineOf(tree, target.id)?.focus();
       }
     };
-    const expanded = entry.kind === "node" && !collapsed.has(entry.id);
+    // Deploys has no children: it neither expands nor collapses.
+    const leaf = entry.kind === "node" && entry.node.kind === "deploys";
+    const expanded = entry.kind === "node" && !leaf && !collapsed.has(entry.id);
     const parent = () => entries.find((candidate) => candidate.id === entry.parentId);
 
     switch (event.key) {
@@ -72,7 +74,7 @@ export function useTreeKeyboard(
         focus(entries.at(-1));
         break;
       case "ArrowRight":
-        if (entry.kind !== "node") {
+        if (entry.kind !== "node" || leaf) {
           return;
         }
         if (expanded) {

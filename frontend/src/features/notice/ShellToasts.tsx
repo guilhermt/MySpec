@@ -17,12 +17,13 @@ function stay(kept: readonly ToastEntry[], toasts: readonly ToastEntry[]): Toast
 }
 
 /**
- * ShellToasts is the live region of the shell: the toasts of the tasks, reviews and discussions archived while not open,
+ * ShellToasts is the live region of the shell: the toasts of the tasks, reviews and discussions archived while not open and of the deploys that ended,
  * and what the store announces. A toast a newer one pushes out of the store stays for its exit.
  */
 export function ShellToasts() {
   const announcement = useAnnouncement();
   const toasts = useToasts();
+  const openDeploys = useAppStore((state) => state.openDeploys);
   const openInHistory = useAppStore((state) => state.openInHistory);
   const dismissToast = useAppStore((state) => state.dismissToast);
   const [kept, setKept] = useState<readonly ToastEntry[]>(toasts);
@@ -38,7 +39,7 @@ export function ShellToasts() {
     <ToastRegion announcement={announcement}>
       {stay(kept, toasts).map((toast) => {
         const inStore = toasts.some((next) => next.id === toast.id);
-        const { icon, text, detail } = toastOf(toast, now);
+        const { icon, text, detail, tone } = toastOf(toast, now);
         return (
           <Presence key={toast.id} onGone={() => forget(toast.id)}>
             {inStore && (
@@ -46,10 +47,21 @@ export function ShellToasts() {
                 icon={icon}
                 text={text}
                 {...(detail === null ? {} : { detail })}
-                action={{
-                  label: "Open in History",
-                  onClick: () => openInHistory(toast.kind, toast.id),
-                }}
+                tone={tone}
+                action={
+                  toast.kind === "deploy"
+                    ? {
+                        label: "Open in Deploys",
+                        onClick: () => {
+                          const { repositoryId, position } = toast.deploy;
+                          openDeploys(position >= 0 ? { repositoryId, position } : undefined);
+                        },
+                      }
+                    : {
+                        label: "Open in History",
+                        onClick: () => openInHistory(toast.kind, toast.id),
+                      }
+                }
                 onDismiss={() => {
                   forget(toast.id);
                   dismissToast(toast.id);

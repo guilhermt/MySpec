@@ -44,11 +44,25 @@ export function finalsLine(board: Board): string {
   return `Final: ${finals.length === 0 ? "None" : finals.join(", ")} · New cards: ${newCard?.name ?? "None"}`;
 }
 
-/** boardRowName is "Platform Roadmap, acme, 6 repositories, read 2m ago[, the last reading failed]". */
+/** deploysLine is "Deploys not set up", "Deploys off", "Deploys on · no repository" or "Deploys · 4 repositories". */
+export function deploysLine(board: Board): string {
+  const { configured, enabled, repositories } = board.deploys;
+  if (!configured) {
+    return "Deploys not set up";
+  }
+  if (!enabled) {
+    return "Deploys off";
+  }
+  return repositories === 0
+    ? "Deploys on · no repository"
+    : `Deploys · ${pluralize(repositories, "repository", "repositories")}`;
+}
+
+/** boardRowName is "Platform Roadmap, acme, 6 repositories, read 2m ago[, the last reading failed], Deploys off". */
 export function boardRowName(board: Board, count: number, now: number): string {
   const read = board.readAt === "" ? "not read yet" : `read ${age(board.readAt, now)}`;
   const failed = board.failure === null ? "" : ", the last reading failed";
-  return `${board.title}, ${board.owner}, ${pluralize(count, "repository", "repositories")}, ${read}${failed}`;
+  return `${board.title}, ${board.owner}, ${pluralize(count, "repository", "repositories")}, ${read}${failed}, ${deploysLine(board)}`;
 }
 
 /** removalSentence is "5 repositories move to No board and 1 leaves MySpec. Tasks keep their cards, …". */
@@ -68,7 +82,11 @@ export function removalSentence(removal: BoardRemoval): string {
   return `The board has no repositories. ${TRAILER}`;
 }
 
-/** removalLines are "To No board: …" and "Leaves MySpec: …, with no clone, tasks or reviews", each only when it has names. */
+/**
+ * removalLines are "To No board: …" and "Leaves MySpec: …, with no clone, tasks or reviews", each
+ * only when it has names, and, with a label of "", the sentence of the deploy configurations that
+ * go with the board.
+ */
 export function removalLines(
   board: Board,
   removal: BoardRemoval,
@@ -83,6 +101,12 @@ export function removalLines(
     lines.push({
       label: "Leaves MySpec:",
       names: `${namesOf(board.owner, leaving)}, with no clone, tasks or reviews`,
+    });
+  }
+  if (removal.deploys > 0) {
+    lines.push({
+      label: "",
+      names: `The deploy configuration of ${pluralize(removal.deploys, "repository", "repositories")} is removed.`,
     });
   }
   return lines;

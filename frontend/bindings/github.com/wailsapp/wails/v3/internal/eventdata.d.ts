@@ -12,6 +12,8 @@ import type * as bindings$0 from "../../../../guilhermt/myspec/internal/bindings
 declare module "@wailsio/runtime" {
     namespace Events {
         interface CustomEvents {
+            "deploy:finished": bindings$0.DeployFinished;
+            "deploy:open": bindings$0.DeployOpen;
             "situation:open": bindings$0.SituationOpen;
             "situation:started": bindings$0.SituationStarted;
             "startup:changed": bindings$0.Startup;

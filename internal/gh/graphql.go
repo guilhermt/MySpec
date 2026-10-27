@@ -87,7 +87,7 @@ func (r *Runner) GraphQL(ctx context.Context, query string, vars Vars) (Response
 		return Response{}, fmt.Errorf("%w: %w", ErrMissingScope, ghErr)
 	}
 	if hasType(resp.Errors, typeRateLimited) || strings.Contains(strings.ToLower(ghErr.Output), "rate limit") {
-		return Response{}, &RateLimitError{ResetAt: r.rateLimitReset(ctx)}
+		return Response{}, &RateLimitError{ResetAt: r.rateLimitReset(ctx, "graphql")}
 	}
 	if parsed && len(resp.Data) > 0 && string(resp.Data) != "null" {
 		return resp, nil
@@ -146,23 +146,22 @@ func hasType(errs []GraphQLError, kind string) bool {
 	return slices.ContainsFunc(errs, func(e GraphQLError) bool { return e.Type == kind })
 }
 
-// rateLimitReset asks gh when the GraphQL limit resets. When gh cannot say,
-// the limit is assumed to last rateLimitFallback from now.
-func (r *Runner) rateLimitReset(ctx context.Context) time.Time {
+// rateLimitReset asks gh when the limit of resource, "graphql" or "core",
+// resets. When gh cannot say, the limit is assumed to last rateLimitFallback
+// from now.
+func (r *Runner) rateLimitReset(ctx context.Context, resource string) time.Time {
 	fallback := time.Now().Add(rateLimitFallback)
 	out, err := r.Run(ctx, "", "api", "rate_limit")
 	if err != nil {
 		return fallback
 	}
 	var body struct {
-		Resources struct {
-			GraphQL struct {
-				Reset int64 `json:"reset"`
-			} `json:"graphql"`
+		Resources map[string]struct {
+			Reset int64 `json:"reset"`
 		} `json:"resources"`
 	}
-	if err := json.Unmarshal([]byte(out), &body); err != nil || body.Resources.GraphQL.Reset == 0 {
+	if err := json.Unmarshal([]byte(out), &body); err != nil || body.Resources[resource].Reset == 0 {
 		return fallback
 	}
-	return time.Unix(body.Resources.GraphQL.Reset, 0)
+	return time.Unix(body.Resources[resource].Reset, 0)
 }

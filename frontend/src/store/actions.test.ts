@@ -64,6 +64,8 @@ import {
   readEarlierConversation,
   refreshBoard,
   refreshCard,
+  refreshDeployRepository,
+  refreshDeploys,
   refreshPR,
   refreshPullRequests,
   refreshReviewPR,
@@ -85,6 +87,7 @@ import {
   saveReviewSummary,
   scanRepositories,
   sendMessageInPlace,
+  setDeployFilter,
   setDraftEpic,
   setDraftEpicInPlace,
   setDraftModule,
@@ -1156,6 +1159,44 @@ describe("review actions reported in the app notice", () => {
     expect(await setReviewFilters(filters)).toBe(false);
     expect(useAppStore.getState().error).toEqual({
       label: "Couldn't change the filters of Reviews",
+      detail: "disk full. Try again.",
+    });
+  });
+
+  it("read the deploys, and one repository of them, through their bindings", async () => {
+    await refreshDeploys();
+    await refreshDeployRepository("repo-1", "dev/api");
+
+    expect(api.refreshDeploys).toHaveBeenCalledOnce();
+    expect(api.refreshDeployRepository).toHaveBeenCalledWith("repo-1");
+    expect(useAppStore.getState().error).toBeNull();
+  });
+
+  it("report a deploy reading that failed in the app notice, naming the repository", async () => {
+    vi.mocked(api.refreshDeploys).mockRejectedValueOnce(new Error("gh is not signed in"));
+    await refreshDeploys();
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't refresh the deploys",
+      detail: "gh is not signed in. Check that gh is signed in.",
+    });
+
+    vi.mocked(api.refreshDeployRepository).mockRejectedValueOnce(new Error("rate limited"));
+    await refreshDeployRepository("repo-1", "dev/api");
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't read dev/api",
+      detail: "rate limited. Check that gh is signed in.",
+    });
+  });
+
+  it("answer whether the filter of Deploys was stored", async () => {
+    expect(await setDeployFilter("board-1")).toBe(true);
+    expect(api.setDeployFilter).toHaveBeenCalledWith("board-1");
+
+    vi.mocked(api.setDeployFilter).mockRejectedValueOnce(new Error("disk full"));
+
+    expect(await setDeployFilter("")).toBe(false);
+    expect(useAppStore.getState().error).toEqual({
+      label: "Couldn't change the filter of Deploys",
       detail: "disk full. Try again.",
     });
   });

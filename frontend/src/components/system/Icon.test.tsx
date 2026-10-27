@@ -38,8 +38,11 @@ describe("Icon", () => {
 
   it("maps each meaning to a different icon", () => {
     // go is the chevron: the arrow that goes to a place and the one that opens a row are one drawing.
-    const { go, ...others } = ICONS;
+    // forward is the short arrow of promote; moveDown is the arrow down of toEnd.
+    const { go, forward, moveDown, ...others } = ICONS;
     expect(go).toBe(ICONS.chevron);
+    expect(forward).toBe(ICONS.promote);
+    expect(moveDown).toBe(ICONS.toEnd);
     expect(new Set(Object.values(others)).size).toBe(Object.keys(others).length);
   });
 

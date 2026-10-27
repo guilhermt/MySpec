@@ -14,6 +14,7 @@ import (
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/claude/claudetest"
+	"github.com/guilhermt/myspec/internal/deploys"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/divergence"
@@ -2104,6 +2105,7 @@ func convertBoard(
 		func(id string) bool { return missing[id] },
 		cardTasks,
 		map[string]discussion.Writer{},
+		nil,
 	)
 	return got[0]
 }
@@ -2284,7 +2286,7 @@ func TestFromBoardsSaysTheDiscussionThatWroteACard(t *testing.T) {
 		[]board.Board{roadmap},
 		func(string) board.Stored { return board.Stored{Reading: reading, ReadAt: readAt} },
 		func(string) bool { return false },
-		nil, func(string) bool { return false }, nil, writers,
+		nil, func(string) bool { return false }, nil, writers, nil,
 	)[0]
 
 	want := []*bindings.WritingDiscussion{
@@ -2310,7 +2312,7 @@ func TestFromBoardsNeverHandsTheFrontendNull(t *testing.T) {
 		func(string) board.Stored { return board.Stored{Failure: failed, FailedAt: readAt} },
 		func(string) bool { return true },
 		nil, func(string) bool { return false }, nil,
-		map[string]discussion.Writer{},
+		map[string]discussion.Writer{}, nil,
 	)
 
 	want := []bindings.Board{{
@@ -2335,7 +2337,7 @@ func TestFromBoardsNeverHandsTheFrontendNull(t *testing.T) {
 		card.Siblings == nil || card.Dependencies == nil {
 		t.Errorf("card = %+v, want every list allocated", card)
 	}
-	if empty := bindings.FromBoards(nil, nil, nil, nil, nil, nil, nil); empty == nil {
+	if empty := bindings.FromBoards(nil, nil, nil, nil, nil, nil, nil, nil); empty == nil {
 		t.Error("FromBoards(nil) = nil, want an empty slice")
 	}
 }
@@ -4443,5 +4445,191 @@ func TestFromNewDiscussionDraftsKeepsTheOrderAndIsNeverNil(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("FromNewDiscussionDrafts() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestFromBoardsSumsUpTheDeploysOfABoard(t *testing.T) {
+	t.Parallel()
+
+	other := board.Board{ID: "board-2", Title: "Platform"}
+	configs := []deploys.BoardConfig{{
+		BoardID: "board-1", Enabled: true,
+		Repositories: []deploys.RepositoryConfig{{RepositoryID: "repo-1"}, {RepositoryID: "repo-2"}},
+	}}
+
+	got := bindings.FromBoards(
+		[]board.Board{roadmap, other},
+		func(string) board.Stored { return board.Stored{} },
+		func(string) bool { return false },
+		nil, func(string) bool { return false }, nil, nil, configs,
+	)
+
+	if want := (bindings.BoardDeploys{Configured: true, Enabled: true, Repositories: 2}); got[0].Deploys != want {
+		t.Errorf("Deploys of a configured board = %+v, want %+v", got[0].Deploys, want)
+	}
+	if want := (bindings.BoardDeploys{}); got[1].Deploys != want {
+		t.Errorf("Deploys of a board without configuration = %+v, want %+v", got[1].Deploys, want)
+	}
+}
+
+// deployOverview is a repository acme/web with three environments, in the
+// states the tests below tell apart, and a branch with a slash.
+func deployOverview() deploys.Overview {
+	at := time.Date(2026, time.September, 16, 12, 0, 0, 0, time.UTC)
+	failedRun := &deploys.Run{ID: 7, Status: deploys.RunFailed, Conclusion: "failure", URL: "https://github.com/acme/web/actions/runs/7", StartedAt: at, UpdatedAt: at.Add(time.Minute)}
+	runningRun := &deploys.Run{ID: 8, Status: deploys.RunRunning, URL: "https://github.com/acme/web/actions/runs/8", StartedAt: at.Add(time.Hour)}
+	okRun := &deploys.Run{ID: 9, Status: deploys.RunSucceeded, Conclusion: "success", StartedAt: at, UpdatedAt: at.Add(time.Minute)}
+	dev := deploys.Environment{Name: "Development", Branch: "dev/next", WorkflowName: "Deploy", WorkflowPath: ".github/workflows/deploy-dev.yml"}
+	staging := deploys.Environment{Name: "Staging", Branch: "staging", WorkflowName: "Deploy", WorkflowPath: ".github/workflows/deploy.yml"}
+	prod := deploys.Environment{Name: "Production", Branch: "main", WorkflowName: "Deploy", WorkflowPath: ".github/workflows/deploy.yml"}
+	return deploys.Overview{
+		ReadAt:  at,
+		Reading: true,
+		Filter:  deploys.Filter{BoardID: "board-1", Title: "Roadmap"},
+		Waiting: 2,
+		Failed:  true,
+		Failure: &deploys.Failure{Reason: deploys.ReasonRateLimited, ResetAt: at, FailedAt: at},
+		Boards: []deploys.BoardOverview{{
+			ID: "board-1", Title: "Roadmap", Shown: true,
+			Repositories: []deploys.RepositoryOverview{{
+				RepositoryID: "repo-1", Owner: "acme", Name: "web", ReadAt: at,
+				Environments: []deploys.EnvironmentOverview{
+					{
+						Position: 0, Environment: dev,
+						Reading: &deploys.EnvironmentReading{LastRun: runningRun, LastCompleted: failedRun},
+						View:    deploys.View{State: deploys.StateRunning, Running: true, Failed: true},
+					},
+					{
+						Position: 1, Environment: staging, PreviousName: "Development",
+						Reading: &deploys.EnvironmentReading{
+							LastRun: failedRun, LastCompleted: failedRun,
+							Promotion: &deploys.Promotion{
+								Commits: 3, Ahead: 4, PendingSince: at,
+								PullRequests:  []deploys.PullRequest{{Number: 5, Title: "Login", URL: "u", Author: "ana"}},
+								DeployPR:      &deploys.DeployPR{Number: 9, Title: "Deploy", URL: "pr", Draft: true, CreatedAt: at},
+								OpenDeployPRs: 3,
+							},
+						},
+						View:   deploys.View{State: deploys.StateFailed, Failed: true, Pending: true, PRReady: true, Available: deploys.AvailableMerge, Previous: deploys.HealthDeploying},
+						Action: &deploys.Action{Kind: deploys.KindMerge, Phase: deploys.PhaseFailed, Failure: "not mergeable", PR: 9},
+					},
+					{
+						Position: 2, Environment: prod, PreviousName: "Staging",
+						Reading: &deploys.EnvironmentReading{LastRun: okRun, LastCompleted: okRun},
+						View:    deploys.View{State: deploys.StateUpToDate},
+					},
+				},
+			}, {
+				RepositoryID: "repo-2", Owner: "acme", Name: "api",
+				Failure:      &deploys.Failure{Reason: deploys.ReasonNotFound, FailedAt: at},
+				Environments: []deploys.EnvironmentOverview{{Position: 0, Environment: dev, View: deploys.View{State: deploys.StateUnread}}},
+			}},
+		}},
+	}
+}
+
+func TestFromDeploysConvertsEveryStateOfAnEnvironment(t *testing.T) {
+	t.Parallel()
+
+	got := bindings.FromDeploys(deployOverview())
+
+	if got.ReadAt != "2026-09-16T12:00:00Z" || !got.Reading || !got.Failed || got.Waiting != 2 ||
+		got.Filter != (bindings.DeployFilter{BoardID: "board-1", Title: "Roadmap"}) {
+		t.Errorf("FromDeploys() header = %+v, want the overview's", got)
+	}
+	if got.Failure == nil || got.Failure.Reason != "rate_limited" || got.Failure.FailedAt != "2026-09-16T12:00:00Z" {
+		t.Errorf("FromDeploys() failure = %+v, want rate_limited", got.Failure)
+	}
+	repo := got.Boards[0].Repositories[0]
+	if repo.FullName != "acme/web" || repo.URL != "https://github.com/acme/web" {
+		t.Errorf("repository = %+v, want acme/web and its URL", repo)
+	}
+
+	dev, staging, prod := repo.Environments[0], repo.Environments[1], repo.Environments[2]
+	if dev.State != "running" || !dev.Running || dev.LastRun.Status != "running" || dev.LastRun.EndedAt != "" {
+		t.Errorf("the running environment = %+v, want running with no end", dev)
+	}
+	if dev.FailedRun == nil || dev.FailedRun.ID != 7 || dev.FailedRun.EndedAt != "2026-09-16T12:01:00Z" {
+		t.Errorf("the running environment's FailedRun = %+v, want run 7, which failed before", dev.FailedRun)
+	}
+	if staging.FailedRun != nil {
+		t.Errorf("FailedRun = %+v, want nil when the failed run is the last one", staging.FailedRun)
+	}
+	if prod.FailedRun != nil || prod.State != "up_to_date" || prod.LastRun.Status != "succeeded" {
+		t.Errorf("the up to date environment = %+v, want up_to_date with no FailedRun", prod)
+	}
+	wantPromotion := &bindings.DeployPromotion{
+		Commits: 3, Ahead: 4, PendingSince: "2026-09-16T12:00:00Z",
+		PullRequests:   []bindings.DeployPullRequest{{Number: 5, Title: "Login", URL: "u", Author: "ana"}},
+		DeployPR:       &bindings.DeployPR{Number: 9, Title: "Deploy", URL: "pr", Draft: true, CreatedAt: "2026-09-16T12:00:00Z"},
+		OtherDeployPRs: 2,
+	}
+	if diff := cmp.Diff(wantPromotion, staging.Promotion); diff != "" {
+		t.Errorf("Promotion mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(&bindings.DeployAction{Kind: "merge", Phase: "failed", Failure: "not mergeable", PR: 9}, staging.Action); diff != "" {
+		t.Errorf("Action mismatch (-want +got):\n%s", diff)
+	}
+	if staging.Available != "merge" || staging.Previous != "deploying" || !staging.Pending || !staging.PRReady {
+		t.Errorf("the failed environment = %+v, want merge available while the previous one deploys", staging)
+	}
+
+	unread := got.Boards[0].Repositories[1]
+	if unread.Failure == nil || unread.Failure.Reason != "not_found" || unread.ReadAt != "" {
+		t.Errorf("the repository that failed = %+v, want not_found and no reading", unread)
+	}
+	if e := unread.Environments[0]; e.State != "unread" || e.LastRun != nil || e.Promotion != nil || e.Action != nil {
+		t.Errorf("the unread environment = %+v, want no run, promotion or action", e)
+	}
+}
+
+func TestFromDeploysBuildsTheLinksOfAnEnvironmentWithASlashInItsBranch(t *testing.T) {
+	t.Parallel()
+
+	repo := bindings.FromDeploys(deployOverview()).Boards[0].Repositories[0]
+
+	if first := repo.Environments[0]; first.CompareURL != "" || first.PreviousBranch != "" ||
+		first.WorkflowURL != "https://github.com/acme/web/actions/workflows/deploy-dev.yml" {
+		t.Errorf("first environment = %+v, want no compare URL and the workflow file name in its URL", first)
+	}
+	second := repo.Environments[1]
+	if want := "https://github.com/acme/web/compare/staging...dev%2Fnext"; second.CompareURL != want {
+		t.Errorf("CompareURL = %q, want %q", second.CompareURL, want)
+	}
+	if second.PreviousBranch != "dev/next" || second.PreviousName != "Development" {
+		t.Errorf("previous = %q %q, want Development on dev/next", second.PreviousName, second.PreviousBranch)
+	}
+}
+
+func TestFromDeploysNeverHandsTheFrontendNull(t *testing.T) {
+	t.Parallel()
+
+	empty := bindings.FromDeploys(deploys.Overview{})
+	if empty.Boards == nil || empty.ReadAt != "" || empty.Failure != nil {
+		t.Errorf("FromDeploys(empty) = %+v, want empty slices and no reading", empty)
+	}
+	o := deployOverview()
+	o.Boards[0].Repositories[0].Environments[1].Reading.Promotion.PullRequests = nil
+	o.Boards[0].Repositories[0].Environments = nil
+	got := bindings.FromDeploys(o)
+	if got.Boards[0].Repositories[0].Environments == nil {
+		t.Error("Environments = nil, want an empty slice")
+	}
+}
+
+func TestFromDeployFinishedCarriesTheEndOfARun(t *testing.T) {
+	t.Parallel()
+
+	got := bindings.FromDeployFinished(deploys.Finished{
+		RepositoryID: "repo-1", FullName: "acme/web", Environment: "Staging", Position: -1,
+		Succeeded: true, Duration: 192 * time.Second, RunURL: "https://github.com/acme/web/actions/runs/9",
+	})
+
+	want := bindings.DeployFinished{
+		RepositoryID: "repo-1", Position: -1, FullName: "acme/web", Environment: "Staging",
+		Succeeded: true, Seconds: 192, RunURL: "https://github.com/acme/web/actions/runs/9",
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("FromDeployFinished() mismatch (-want +got):\n%s", diff)
 	}
 }

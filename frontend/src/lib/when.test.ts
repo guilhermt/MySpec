@@ -8,6 +8,7 @@ import {
   clockTime,
   dateAt,
   dayOf,
+  deployDuration,
   duration,
   fullTime,
   readClock,
@@ -162,6 +163,18 @@ describe("duration", () => {
     [-5_000, "0s"],
   ])("reads %i ms as %s", (ms, text) => {
     expect(duration(ms)).toBe(text);
+  });
+});
+
+describe("deployDuration", () => {
+  it.each([
+    [0, "0s"],
+    [42, "42s"],
+    [41.6, "42s"],
+    [4 * 60 + 12, "4m 12s"],
+    [60 * 60 + 3 * 60 + 20, "1h 3m"],
+  ])("reads %d seconds as %s", (seconds, text) => {
+    expect(deployDuration(seconds)).toBe(text);
   });
 });
 

@@ -97,6 +97,9 @@ type Deps struct {
 	// OnRead hands over what a reading saw of the cards, the reading's own and the
 	// extra ones, keyed by card key; may be nil.
 	OnRead func(boardID string, cards map[string]Card)
+	// OnLinks runs after the repositories are synced from a write of links or
+	// releases, so what keeps data per repository follows them; may be nil.
+	OnLinks func(ctx context.Context) error
 }
 
 // Service owns the registered boards and the last reading of each.
@@ -113,6 +116,7 @@ type Service struct {
 	onChange     func()
 	onRemove     func(boardID string)
 	onRead       func(boardID string, cards map[string]Card)
+	onLinks      func(ctx context.Context) error
 
 	// saveMu serialises the writes of readings, so each one replaces the
 	// reading the one before it stored. It is taken before mu.
@@ -161,9 +165,21 @@ func New(deps Deps) *Service {
 		onChange:     deps.OnChange,
 		onRemove:     deps.OnRemove,
 		onRead:       deps.OnRead,
+		onLinks:      deps.OnLinks,
 		stored:       map[string]Stored{},
 		reading:      map[string]bool{},
 	}
+}
+
+// syncDeploys tells whoever keeps data per repository that the links changed.
+func (s *Service) syncDeploys(ctx context.Context) error {
+	if s.onLinks == nil {
+		return nil
+	}
+	if err := s.onLinks(ctx); err != nil {
+		return fmt.Errorf("sync deploys: %w", err)
+	}
+	return nil
 }
 
 // Sync loads the registered boards and their stored readings. It does not call
@@ -678,6 +694,9 @@ func (s *Service) Add(ctx context.Context, rawURL string, p SaveParams) (Board, 
 	if err := s.repositories.Sync(ctx); err != nil {
 		return Board{}, fmt.Errorf("sync repositories: %w", err)
 	}
+	if err := s.syncDeploys(ctx); err != nil {
+		return Board{}, err
+	}
 
 	s.mu.Lock()
 	s.boards = append(s.boards, b)
@@ -722,6 +741,9 @@ func (s *Service) Update(ctx context.Context, id string, p SaveParams) error {
 	}
 	if err := s.repositories.Sync(ctx); err != nil {
 		return fmt.Errorf("sync repositories: %w", err)
+	}
+	if err := s.syncDeploys(ctx); err != nil {
+		return err
 	}
 
 	s.mu.Lock()
@@ -780,6 +802,9 @@ func (s *Service) Remove(ctx context.Context, id string) error {
 	if err := s.repositories.Sync(ctx); err != nil {
 		return fmt.Errorf("sync repositories: %w", err)
 	}
+	if err := s.syncDeploys(ctx); err != nil {
+		return err
+	}
 
 	s.mu.Lock()
 	if i := s.index(id); i >= 0 {
@@ -812,6 +837,9 @@ func (s *Service) AddRepository(ctx context.Context, boardID string, choice Repo
 	}
 	if err := s.repositories.Sync(ctx); err != nil {
 		return fmt.Errorf("sync repositories: %w", err)
+	}
+	if err := s.syncDeploys(ctx); err != nil {
+		return err
 	}
 
 	s.log.Info("board repository added", "board", boardID, "title", b.Title, "repository", choice.Owner+"/"+choice.Name)

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   boardRowName,
+  deploysLine,
   finalsLine,
   namesOf,
   projectRef,
@@ -51,6 +52,15 @@ describe("repositoriesLine", () => {
     const board = makeBoard({ owner: "ana", ownerType: "user", repositoryIds: ids(api) });
 
     expect(repositoriesLine(board, [api])).toBe("User · 1 repository: api");
+  });
+
+  it("adds the deploy configurations that go with the board", () => {
+    expect(removalLines(makeBoard(), makeBoardRemoval({ deploys: 3 }))).toEqual([
+      { label: "", names: "The deploy configuration of 3 repositories is removed." },
+    ]);
+    expect(removalLines(makeBoard(), makeBoardRemoval({ deploys: 1 }))).toEqual([
+      { label: "", names: "The deploy configuration of 1 repository is removed." },
+    ]);
   });
 
   it("writes owner/name in all when one repository is of another owner", () => {
@@ -107,11 +117,40 @@ describe("boardRowName", () => {
   const failure = { reason: "failed", message: "boom", failedAt: "2026-09-16T12:04:00Z" };
 
   it.each([
-    ["read", {}, "Roadmap, dev, 1 repository, read 5m ago"],
-    ["never read", { readAt: "" }, "Roadmap, dev, 1 repository, not read yet"],
-    ["failed", { failure }, "Roadmap, dev, 1 repository, read 5m ago, the last reading failed"],
+    ["read", {}, "Roadmap, dev, 1 repository, read 5m ago, Deploys not set up"],
+    ["never read", { readAt: "" }, "Roadmap, dev, 1 repository, not read yet, Deploys not set up"],
+    [
+      "failed",
+      { failure },
+      "Roadmap, dev, 1 repository, read 5m ago, the last reading failed, Deploys not set up",
+    ],
+    [
+      "with the deploys on",
+      { deploys: { configured: true, enabled: true, repositories: 2 } },
+      "Roadmap, dev, 1 repository, read 5m ago, Deploys · 2 repositories",
+    ],
   ])("names a board %s", (_name, overrides, want) => {
     expect(boardRowName(makeBoard(overrides), 1, NOW)).toBe(want);
+  });
+});
+
+describe("deploysLine", () => {
+  it.each([
+    ["not set up", { configured: false, enabled: false, repositories: 0 }, "Deploys not set up"],
+    ["off", { configured: true, enabled: false, repositories: 3 }, "Deploys off"],
+    [
+      "on without a repository",
+      { configured: true, enabled: true, repositories: 0 },
+      "Deploys on · no repository",
+    ],
+    ["on with one", { configured: true, enabled: true, repositories: 1 }, "Deploys · 1 repository"],
+    [
+      "on with several",
+      { configured: true, enabled: true, repositories: 4 },
+      "Deploys · 4 repositories",
+    ],
+  ])("says deploys %s", (_name, deploys, want) => {
+    expect(deploysLine(makeBoard({ deploys }))).toBe(want);
   });
 });
 

@@ -56,6 +56,17 @@ describe("RemoveBoardDialog", () => {
     expect(screen.queryByText("Leaves MySpec:")).not.toBeInTheDocument();
   });
 
+  it("says the deploy configurations that go with the board", async () => {
+    vi.mocked(api.previewRemoveBoard).mockResolvedValue(
+      makeBoardRemoval({ toNoBoard: 3, toNoBoardNames: ["dev/web"], deploys: 3 }),
+    );
+    dialog();
+
+    expect(
+      await screen.findByText("The deploy configuration of 3 repositories is removed."),
+    ).toBeInTheDocument();
+  });
+
   it("says the board has no repositories", async () => {
     vi.mocked(api.previewRemoveBoard).mockResolvedValue(makeBoardRemoval());
     dialog();

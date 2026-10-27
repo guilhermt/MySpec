@@ -1,5 +1,6 @@
 import * as AttentionService from "@bindings/attentionservice";
 import * as BoardService from "@bindings/boardservice";
+import * as DeployService from "@bindings/deployservice";
 import * as DiscussionService from "@bindings/discussionservice";
 import * as HistoryService from "@bindings/historyservice";
 import type {
@@ -17,6 +18,7 @@ import type {
   BackgroundItem,
   Board,
   BoardCard,
+  BoardDeploys,
   BoardFailure,
   BoardPreview,
   BoardRemoval,
@@ -40,6 +42,21 @@ import type {
   CreateTaskRequest,
   DeletePreview,
   DeleteResult,
+  DeployBoard,
+  DeployBranchOption,
+  DeployEnvironment,
+  DeployEnvironmentSettings,
+  DeployFailure,
+  DeployFinished,
+  DeployOpen,
+  DeployRepository,
+  DeployRepositoryChoice,
+  DeployRepositoryOptions,
+  DeployRepositorySettings,
+  DeployRun,
+  DeploySettings,
+  Deploys,
+  DeployWorkflow,
   DiscussionCard,
   DiscussionContextRequest,
   DiscussionRepository,
@@ -105,6 +122,7 @@ import type {
   ReviewSummary,
   RunningTask,
   SaveBoardRequest,
+  SaveDeploySettingsRequest,
   SaveNewDiscussionDraftRequest,
   SessionTasks,
   Situation,
@@ -160,6 +178,7 @@ export type {
   BackgroundItem,
   Board,
   BoardCard,
+  BoardDeploys,
   BoardFailure,
   BoardPreview,
   BoardRemoval,
@@ -183,6 +202,21 @@ export type {
   CreateTaskRequest,
   DeletePreview,
   DeleteResult,
+  DeployBoard,
+  DeployBranchOption,
+  DeployEnvironment,
+  DeployEnvironmentSettings,
+  DeployFailure,
+  DeployFinished,
+  DeployOpen,
+  DeployRepository,
+  DeployRepositoryChoice,
+  DeployRepositoryOptions,
+  DeployRepositorySettings,
+  DeployRun,
+  DeploySettings,
+  Deploys,
+  DeployWorkflow,
   DiscussionCard,
   DiscussionContextRequest,
   DiscussionRepository,
@@ -248,6 +282,7 @@ export type {
   ReviewSummary,
   RunningTask,
   SaveBoardRequest,
+  SaveDeploySettingsRequest,
   SaveNewDiscussionDraftRequest,
   SessionTasks,
   Situation,
@@ -634,6 +669,39 @@ export type PullRequestAction =
   | "clone"
   | "clone_missing"
   | "fork";
+
+/** DeployProblem is what keeps an environment from being read: its branch or its workflow is gone; "" when it reads. */
+export type DeployProblem = "" | "branch_missing" | "workflow_missing";
+
+/** DeployAvailable is the action an environment offers now; "" when none. */
+export type DeployAvailable = "" | "deploy" | "merge";
+
+/** DeployHealth is what the environment before one is doing that is worth a warning; "" when nothing. */
+export type DeployHealth = "" | "deploying" | "failed";
+
+/** DeployState is the main state of an environment; "" for a value the app doesn't know. */
+export type DeployState =
+  | ""
+  | "problem"
+  | "unread"
+  | "running"
+  | "failed"
+  | "pr_ready"
+  | "pending"
+  | "up_to_date"
+  | "no_deploy";
+
+/** DeployActionKind is what an action of the app does on an environment. */
+export type DeployActionKind = "" | "deploy" | "merge";
+
+/** DeployPhase is where an action of the app stands; "" when there is none. */
+export type DeployPhase = "" | "creating" | "merging" | "waiting_run" | "running" | "failed";
+
+/** DeployRunStatus is where a deploy run stands. */
+export type DeployRunStatus = "queued" | "running" | "succeeded" | "failed";
+
+/** DeployFilterGone is why the board of the filter of Deploys is no longer on the screen; "" when it is. */
+export type DeployFilterGone = "" | "no_deploys" | "removed";
 
 /** YourReviewState is the state of the last review the account of gh submitted on a pull request. */
 export type YourReviewState = "approved" | "changes_requested" | "commented" | "dismissed";
@@ -1554,6 +1622,99 @@ export function asPullRequestAction(value: string): PullRequestAction {
   }
 }
 
+export function asDeployProblem(value: string): DeployProblem {
+  switch (value) {
+    case "branch_missing":
+    case "workflow_missing":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asDeployState(value: string): DeployState {
+  switch (value) {
+    case "problem":
+    case "unread":
+    case "running":
+    case "failed":
+    case "pr_ready":
+    case "pending":
+    case "up_to_date":
+    case "no_deploy":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asDeployActionKind(value: string): DeployActionKind {
+  switch (value) {
+    case "deploy":
+    case "merge":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asDeployPhase(value: string): DeployPhase {
+  switch (value) {
+    case "creating":
+    case "merging":
+    case "waiting_run":
+    case "running":
+    case "failed":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asDeployAvailable(value: string): DeployAvailable {
+  switch (value) {
+    case "deploy":
+    case "merge":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asDeployHealth(value: string): DeployHealth {
+  switch (value) {
+    case "deploying":
+    case "failed":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asDeployRunStatus(value: string): DeployRunStatus {
+  switch (value) {
+    case "queued":
+    case "running":
+    case "succeeded":
+    case "failed":
+      return value;
+    // Queued claims the least of a run the app cannot place.
+    default:
+      return "queued";
+  }
+}
+
+export function asDeployFilterGone(value: string): DeployFilterGone {
+  switch (value) {
+    case "":
+    case "no_deploys":
+    case "removed":
+      return value;
+    default:
+      return "";
+  }
+}
+
 export function asYourReviewState(value: string): YourReviewState {
   switch (value) {
     case "approved":
@@ -1701,6 +1862,22 @@ export const api = {
   previewRemoveBoard: (id: string): Promise<BoardRemoval> => BoardService.PreviewRemoveBoard(id),
   removeBoard: (id: string): Promise<void> => BoardService.RemoveBoard(id),
   refreshBoard: (id: string): Promise<void> => BoardService.RefreshBoard(id),
+  refreshDeploys: (): Promise<void> => DeployService.RefreshDeploys(),
+  refreshDeployRepository: (repositoryId: string): Promise<void> =>
+    DeployService.RefreshDeployRepository(repositoryId),
+  setDeployFilter: (boardId: string): Promise<void> => DeployService.SetDeployFilter(boardId),
+  deploy: (repositoryId: string, position: number): Promise<void> =>
+    DeployService.Deploy(repositoryId, position),
+  merge: (repositoryId: string, position: number): Promise<void> =>
+    DeployService.Merge(repositoryId, position),
+  deploySettings: (boardId: string): Promise<DeploySettings> =>
+    DeployService.DeploySettings(boardId),
+  readDeployRepository: (
+    repositoryId: string,
+    branches: string[],
+  ): Promise<DeployRepositoryOptions> => DeployService.ReadDeployRepository(repositoryId, branches),
+  saveDeploySettings: (req: SaveDeploySettingsRequest): Promise<void> =>
+    DeployService.SaveDeploySettings(req),
   refreshCard: (boardId: string, key: string): Promise<void> =>
     BoardService.RefreshCard(boardId, key),
   cardContext: (boardId: string, key: string): Promise<string> =>
@@ -1927,4 +2104,12 @@ export function onSituationStarted(handler: (event: SituationStarted) => void): 
 
 export function onSituationOpen(handler: (event: SituationOpen) => void): () => void {
   return Events.On("situation:open", (event) => handler(event.data));
+}
+
+export function onDeployFinished(handler: (event: DeployFinished) => void): () => void {
+  return Events.On("deploy:finished", (event) => handler(event.data));
+}
+
+export function onDeployOpen(handler: (event: DeployOpen) => void): () => void {
+  return Events.On("deploy:open", (event) => handler(event.data));
 }

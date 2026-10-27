@@ -20,6 +20,8 @@ import { ALL_REPOSITORIES } from "@/lib/repositories";
 import type { DiscussionSummary, Place, ReviewSummary, Situation, TaskSummary } from "@/lib/wails";
 import {
   makeBoard,
+  makeDeployBoard,
+  makeDeploys,
   makeDiscussion,
   makeDiscussionCard,
   makeDivergence,
@@ -1315,8 +1317,31 @@ describe("nodeStatus", () => {
     rows: [],
   });
   const failure = { reason: "gh_failed", message: "gh is not signed in", failedAt: "" };
+  const deploys = (overrides: Partial<Extract<TreeNode, { kind: "deploys" }>>): TreeNode => ({
+    kind: "deploys",
+    id: "deploys",
+    waiting: 0,
+    failed: false,
+    reading: false,
+    failure: null,
+    ...overrides,
+  });
 
   it.each<[string, TreeNode, string | null]>([
+    ["Deploys waiting", deploys({ waiting: 3 }), "3 to deploy"],
+    ["Deploys failed", deploys({ failed: true }), "a deploy failed"],
+    [
+      "Deploys waiting and failed",
+      deploys({ waiting: 3, failed: true }),
+      "3 to deploy, a deploy failed",
+    ],
+    ["Deploys reading", deploys({ reading: true, waiting: 3 }), "reading"],
+    [
+      "Deploys failing",
+      deploys({ failure: "gh is not signed in", reading: true, waiting: 3 }),
+      "read failed: gh is not signed in",
+    ],
+    ["Deploys quiet", deploys({}), null],
     ["Reviews pending", reviews({ pending: 4 }), "4 pending"],
     ["Reviews reading", reviews({ reading: true, pending: 4 }), "reading"],
     [
@@ -1435,12 +1460,15 @@ describe("the tree", () => {
   const shape = (filter: string) =>
     sidebarTree(app, filter, NOW).map((node) => ({
       id: node.id,
-      notices: node.kind === "reviews" ? [] : node.notices.map((notice) => notice.id),
+      notices:
+        node.kind === "reviews" || node.kind === "deploys"
+          ? []
+          : node.notices.map((notice) => notice.id),
       epics:
         node.kind === "board"
           ? node.epics.map((epic) => [epic.id, epic.rows.map((row) => row.id)])
           : [],
-      rows: node.rows.map((row) => row.id),
+      rows: node.kind === "deploys" ? [] : node.rows.map((row) => row.id),
     }));
 
   it("orders Reviews, each board, then No board", () => {
@@ -1471,6 +1499,58 @@ describe("the tree", () => {
       "reviews",
       "board:board-1",
     ]);
+  });
+
+  it("puts Deploys after Reviews, only when a board has deploys, whatever the filter", () => {
+    const withDeploys = makeState({
+      ...app,
+      deploys: makeDeploys({
+        boards: [makeDeployBoard({ id: "board-1" })],
+        waiting: 3,
+        failed: true,
+      }),
+    });
+
+    for (const filter of [ALL_REPOSITORIES, "repo-2"]) {
+      const nodes = sidebarTree(withDeploys, filter, NOW);
+      expect(nodes.slice(0, 3).map((node) => node.id)).toEqual([
+        "reviews",
+        "deploys",
+        "board:board-1",
+      ]);
+    }
+    expect(sidebarTree(withDeploys, ALL_REPOSITORIES, NOW)[1]).toEqual({
+      kind: "deploys",
+      id: "deploys",
+      waiting: 3,
+      failed: true,
+      reading: false,
+      failure: null,
+    });
+    expect(sidebarTree(app, ALL_REPOSITORIES, NOW).map((node) => node.id)).not.toContain("deploys");
+  });
+
+  it("walks Deploys as a line with no children, and it holds no item", () => {
+    const withDeploys = makeState({
+      ...app,
+      deploys: makeDeploys({ boards: [makeDeployBoard()] }),
+    });
+    const nodes = sidebarTree(withDeploys, ALL_REPOSITORIES, NOW);
+
+    expect(
+      visibleEntries(nodes, new Set(["reviews"]))
+        .slice(0, 2)
+        .map((entry) => [entry.id, entry.level]),
+    ).toEqual([
+      ["reviews", 1],
+      ["deploys", 1],
+    ]);
+    expect(nodes.flatMap(nodeRows).map((row) => row.id)).toEqual(
+      sidebarTree(app, ALL_REPOSITORIES, NOW)
+        .flatMap(nodeRows)
+        .map((row) => row.id),
+    );
+    expect(nodesOfItem(nodes, "plain")).toEqual(["board:board-1"]);
   });
 
   it("tells the pending reviews and a missing clone", () => {

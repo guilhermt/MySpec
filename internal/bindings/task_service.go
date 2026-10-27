@@ -13,6 +13,7 @@ import (
 
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/cardimages"
+	"github.com/guilhermt/myspec/internal/deploys"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/editor"
@@ -1203,6 +1204,20 @@ var userMessages = []struct {
 	{repository.ErrCloned, "This repository is already cloned."},
 	{repository.ErrNoCloneFolder, "Choose a clone folder first."},
 	{board.ErrNotFound, "This board isn't registered."},
+	{deploys.ErrBusy, "A deploy action is already running on this environment."},
+	{deploys.ErrNothingToDeploy, "There is nothing to deploy."},
+	{deploys.ErrNoDeployPR, "There is no deploy pull request to merge."},
+	{deploys.ErrNotRead, "The deploys of this repository haven't been read yet."},
+	{deploys.ErrNoEnvironment, "That environment no longer exists."},
+	{deploys.ErrFirstEnvironment, "The first environment receives the pull requests of the tasks."},
+	{deploys.ErrTooFewEnvironments, "Each repository needs at least two environments."},
+	{deploys.ErrNoName, "Every environment needs a name."},
+	{deploys.ErrNoBranch, "Every environment needs a branch."},
+	{deploys.ErrNoWorkflow, "Choose the workflow of every environment."},
+	{deploys.ErrSameName, "Two environments of a repository can't share a name."},
+	{deploys.ErrSameBranch, "Two environments of a repository can't share a branch."},
+	{deploys.ErrNotOnBoard, "This repository is not managed by the board."},
+	{deploys.ErrBoardNotFound, "The board no longer exists."},
 	{board.ErrCardNotFound, "This card isn't in the last reading of the board."},
 	{models.ErrEmptyModel, "Choose a model."},
 	{models.ErrUnknownStage, "Unknown stage."},

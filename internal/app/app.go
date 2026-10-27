@@ -18,6 +18,7 @@ import (
 	"github.com/guilhermt/myspec/internal/bindings"
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/cardimages"
+	"github.com/guilhermt/myspec/internal/deploys"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/divergence"
@@ -89,6 +90,7 @@ type App struct {
 	review              *review.Service
 	flow                *flow.Service
 	pulls               *pulls.Service
+	deploys             *deploys.Service
 	prReviews           *prreview.Service
 	reviewFlow          *reviewflow.Service
 	discussions         *discussion.Service
@@ -303,6 +305,7 @@ func (a *App) shutdown() {
 	a.reviewFlow.Close()
 	a.discussionFlow.Close()
 	a.pulls.Close()
+	a.deploys.Close()
 	a.sessions.Shutdown(ctx)
 	// After the sessions, whose exits publish: a trailing publish would run
 	// after Run closed the store and the log.

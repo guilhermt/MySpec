@@ -14,6 +14,7 @@ import {
   flashOf,
   type ItemRow,
   nodeRows,
+  nodeStatus,
   type RowFlash,
   type RowTone,
   sidebarTree,
@@ -42,20 +43,35 @@ interface RailGroup {
   rows: ItemRow[];
   /** blocked is a failed reading or a missing clone in the node: the blocked glyph of its separator. */
   blocked: boolean;
-  /** pending is how many pull requests wait for a review, on the separator of Reviews. */
-  pending: number;
+  /** waiting is how many pull requests wait for a review, or environments for a deploy, on the separator of Reviews and Deploys. */
+  waiting: number;
+  /** failed is a deploy that failed: the error glyph on the separator of Deploys. */
+  failed: boolean;
+  /** label is what the separator says in words, the accessible name of the node; null when the node has no words for it. */
+  label: string | null;
 }
 
 function groupOf(node: TreeNode): RailGroup {
-  const blocked =
-    node.kind === "reviews"
-      ? node.failures.length > 0
-      : node.notices.length > 0 || (node.kind === "board" && node.board.failure !== null);
+  let blocked: boolean;
+  if (node.kind === "reviews") {
+    blocked = node.failures.length > 0;
+  } else if (node.kind === "deploys") {
+    blocked = node.failure !== null;
+  } else {
+    blocked = node.notices.length > 0 || (node.kind === "board" && node.board.failure !== null);
+  }
+  const place = node.kind === "reviews" || node.kind === "deploys";
+  const status = place ? nodeStatus(node) : null;
   return {
     id: node.id,
     rows: nodeRows(node),
     blocked,
-    pending: node.kind === "reviews" ? node.pending : 0,
+    waiting: node.kind === "reviews" ? node.pending : node.kind === "deploys" ? node.waiting : 0,
+    failed: node.kind === "deploys" && node.failed,
+    label:
+      place && status !== null
+        ? `${node.kind === "reviews" ? "Reviews" : "Deploys"}, ${status}`
+        : null,
   };
 }
 
@@ -70,9 +86,9 @@ interface RailSeparatorProps {
 const CENTERED =
   "absolute inset-y-0 left-[round(50%,1px)] flex translate-x-[round(-50%,1px)] items-center";
 
-/** RailSeparator is the line between two groups, with the ◇ of a failure and the count of Reviews. */
+/** RailSeparator is the line between two groups, with the ◇ of a failure, the error glyph of a failed deploy and the count of Reviews or Deploys. */
 function RailSeparator({ group }: RailSeparatorProps) {
-  const says = group.blocked || group.pending > 0;
+  const says = group.blocked || group.failed || group.waiting > 0;
   return (
     <div role="none" data-rail-separator="" className="relative h-(--space-4)">
       {/* Centred in the separator's even height the line would fall on a half pixel, so it sits
@@ -80,10 +96,14 @@ function RailSeparator({ group }: RailSeparatorProps) {
       <span className="absolute inset-x-(--space-2) top-(--space-2) h-(--border) bg-line-1" />
       {says && (
         // What the separator says breaks the line, on the sidebar's own tone.
-        <span className={cn(CENTERED, "gap-(--space-1) bg-surface-sidebar px-(--space-1)")}>
+        <span
+          {...(group.label === null ? {} : { role: "img", "aria-label": group.label })}
+          className={cn(CENTERED, "gap-(--space-1) bg-surface-sidebar px-(--space-1)")}
+        >
           {group.blocked && <StateGlyph state="blocked" size="sm" />}
-          {group.pending > 0 && (
-            <span className={cn(MICRO, "tabular-nums text-ink-3")}>{group.pending}</span>
+          {group.failed && <StateGlyph state="error" size="sm" />}
+          {group.waiting > 0 && (
+            <span className={cn(MICRO, "tabular-nums text-ink-3")}>{group.waiting}</span>
           )}
         </span>
       )}
@@ -221,7 +241,7 @@ export function SidebarRail() {
 
   const groups = (app === null ? [] : sidebarTree(app, filter, now))
     .map(groupOf)
-    .filter((group) => group.rows.length > 0 || group.blocked || group.pending > 0);
+    .filter((group) => group.rows.length > 0 || group.blocked || group.failed || group.waiting > 0);
   const entries: TreeEntry[] = groups.flatMap((group) =>
     group.rows.map((row) => ({ kind: "item", id: row.id, level: 2, parentId: group.id, row })),
   );

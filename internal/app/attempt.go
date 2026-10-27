@@ -14,6 +14,7 @@ import (
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/cardimages"
 	"github.com/guilhermt/myspec/internal/contract"
+	"github.com/guilhermt/myspec/internal/deploys"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/divergence"
@@ -270,6 +271,8 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 		Counts:    a.itemCounts,
 		TaskCards: a.boardTaskCards,
 		Log:       log, OnChange: a.publish, OnRead: a.onBoardRead, OnRemove: a.onBoardRemoved,
+		// Read when called, once a.deploys exists.
+		OnLinks: func(ctx context.Context) error { return a.deploys.Reload(ctx) },
 	})
 	newDiscussionDrafts := newdiscussion.New(newdiscussion.Deps{
 		Store: st,
@@ -278,6 +281,11 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 			return ok
 		},
 		Log: log, OnChange: a.publish,
+	})
+	deploySvc := deploys.New(deploys.Deps{
+		GitHub: ghRunner, Store: st.Deploys, Settings: st.Settings,
+		Repositories: repositories.List, Boards: boards.List,
+		Log: log, OnChange: a.publish, OnFinished: a.onDeployFinished,
 	})
 	worktrees := worktree.New(worktree.Deps{
 		Git: gitRunner, Store: st.Worktrees, DataDir: a.dirs.Data, Log: log,
@@ -362,6 +370,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	a.paintTitleBar(themeSvc.Effective())
 	a.reviewModes, a.boards = reviewModesSvc, boards
 	a.pulls, a.prReviews, a.reviewFlow = pullRequests, prReviews, reviewFlow
+	a.deploys = deploySvc
 	a.discussions, a.discussionFlow = discussions, discussionFlow
 	a.newDiscussionDrafts = newDiscussionDrafts
 	a.divergences = divergences
@@ -438,13 +447,14 @@ func (a *App) bound(
 			tasks, sessions, flowSvc, modelsSvc, reviewModesSvc, repositories, boards, cardImages, editor.Open,
 			a.discussions.DocumentOfCard, a.discussionFlow.UnseenDraftImages, a.hasConversation, log,
 		),
-		Board: bindings.NewBoardService(boards, a.discussions.DocumentOfCard, cardImages, log),
+		Board: bindings.NewBoardService(boards, a.discussions.DocumentOfCard, cardImages, a.deploys, log),
 		Review: bindings.NewReviewService(
 			a.reviewFlow, a.prReviews, a.pulls, a.worktrees, editor.Open, log,
 		),
 		Discussion: bindings.NewDiscussionService(a.discussionFlow, a.discussions, a.newDiscussionDrafts, repositories, cardImages, log),
 		Attention:  bindings.NewAttentionService(a.attention),
 		History:    bindings.NewHistoryService(a.historySources(), log),
+		Deploy:     bindings.NewDeployService(a.deploys, repositories.List, log),
 	}
 }
 
@@ -459,6 +469,7 @@ func (a *App) read(ctx context.Context) error {
 		{"boards", a.boards.Sync},
 		{"tasks", a.tasks.Sync},
 		{"review filters", a.pulls.Sync},
+		{"deploys", a.deploys.Sync},
 		{"reviews", a.prReviews.Sync},
 		{"discussions", a.discussions.Sync},
 		{"discussion drafts", a.newDiscussionDrafts.Load},
@@ -495,6 +506,8 @@ func (a *App) resume(ctx context.Context) {
 	// The first reading of the pull requests is what the Reviews view opens
 	// on; it runs in the background and reaches the interface with the state.
 	a.pulls.Refresh()
+	a.deploys.Refresh()
+	a.deploys.Start()
 }
 
 // markReady records that the services are bound and the app runs.

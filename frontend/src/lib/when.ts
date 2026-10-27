@@ -214,3 +214,8 @@ export function duration(ms: number): string {
   }
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
+
+/** deployDuration is the length of a deploy in seconds, as the notification of Go tells it: 42s, 4m 12s, 1h 3m. */
+export function deployDuration(seconds: number): string {
+  return duration(Math.round(seconds) * SECOND_MS);
+}

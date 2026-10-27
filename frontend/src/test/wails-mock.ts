@@ -21,6 +21,14 @@ import type {
   CreateTaskRequest,
   DeletePreview,
   DeleteResult,
+  DeployBoard,
+  DeployEnvironment,
+  DeployFinished,
+  DeployOpen,
+  DeployRepository,
+  DeployRepositoryOptions,
+  DeploySettings,
+  Deploys,
   DiscussionCard,
   DiscussionContextRequest,
   DiscussionSummary,
@@ -67,6 +75,7 @@ import type {
   ReviewVerdict,
   RunningTask,
   SaveBoardRequest,
+  SaveDeploySettingsRequest,
   SaveNewDiscussionDraftRequest,
   Situation,
   SituationOpen,
@@ -127,6 +136,20 @@ export const api = {
     Promise.resolve(makeBoardRemoval()),
   ),
   removeBoard: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  refreshDeploys: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  refreshDeployRepository: vi.fn<(repositoryId: string) => Promise<void>>(() => Promise.resolve()),
+  setDeployFilter: vi.fn<(boardId: string) => Promise<void>>(() => Promise.resolve()),
+  deploy: vi.fn<(repositoryId: string, position: number) => Promise<void>>(() => Promise.resolve()),
+  merge: vi.fn<(repositoryId: string, position: number) => Promise<void>>(() => Promise.resolve()),
+  deploySettings: vi.fn<(boardId: string) => Promise<DeploySettings>>(() =>
+    Promise.resolve(makeDeploySettings()),
+  ),
+  readDeployRepository: vi.fn<
+    (repositoryId: string, branches: string[]) => Promise<DeployRepositoryOptions>
+  >(() => Promise.resolve(makeDeployRepositoryOptions())),
+  saveDeploySettings: vi.fn<(req: SaveDeploySettingsRequest) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
   refreshBoard: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   refreshCard: vi.fn<(boardId: string, key: string) => Promise<void>>(() => Promise.resolve()),
   cardContext: vi.fn<(boardId: string, key: string) => Promise<string>>(() =>
@@ -376,6 +399,8 @@ let startupHandlers: ((startup: Startup) => void)[] = [];
 let stateHandlers: ((state: State) => void)[] = [];
 let transcriptHandlers: ((event: TranscriptEvent) => void)[] = [];
 let situationStartedHandlers: ((event: SituationStarted) => void)[] = [];
+let deployFinishedHandlers: ((event: DeployFinished) => void)[] = [];
+let deployOpenHandlers: ((event: DeployOpen) => void)[] = [];
 let situationOpenHandlers: ((event: SituationOpen) => void)[] = [];
 
 export const onStartupChanged = vi.fn((handler: (startup: Startup) => void): (() => void) => {
@@ -440,6 +465,20 @@ export function emitTranscript(event: TranscriptEvent): void {
   }
 }
 
+export const onDeployFinished = vi.fn((handler: (event: DeployFinished) => void): (() => void) => {
+  deployFinishedHandlers.push(handler);
+  return () => {
+    deployFinishedHandlers = deployFinishedHandlers.filter((registered) => registered !== handler);
+  };
+});
+
+export const onDeployOpen = vi.fn((handler: (event: DeployOpen) => void): (() => void) => {
+  deployOpenHandlers.push(handler);
+  return () => {
+    deployOpenHandlers = deployOpenHandlers.filter((registered) => registered !== handler);
+  };
+});
+
 /** emitSituationStarted delivers a situation:started event to every subscriber. */
 export function emitSituationStarted(event: SituationStarted): void {
   for (const handler of [...situationStartedHandlers]) {
@@ -450,6 +489,20 @@ export function emitSituationStarted(event: SituationStarted): void {
 /** emitSituationOpen delivers a situation:open event to every subscriber. */
 export function emitSituationOpen(event: SituationOpen): void {
   for (const handler of [...situationOpenHandlers]) {
+    handler(event);
+  }
+}
+
+/** emitDeployFinished delivers a deploy:finished event to every subscriber. */
+export function emitDeployFinished(event: DeployFinished): void {
+  for (const handler of [...deployFinishedHandlers]) {
+    handler(event);
+  }
+}
+
+/** emitDeployOpen delivers a deploy:open event to every subscriber. */
+export function emitDeployOpen(event: DeployOpen): void {
+  for (const handler of [...deployOpenHandlers]) {
     handler(event);
   }
 }
@@ -507,6 +560,7 @@ export function makeState(overrides: Partial<State> = {}): State {
     history: [],
     boards: [],
     reviewCenter: makeReviewCenter(),
+    deploys: makeDeploys(),
     reviews: [],
     reviewHistory: [],
     discussions: [],
@@ -636,6 +690,7 @@ export function makeBoard(overrides: Partial<Board> = {}): Board {
     viewer: "dev",
     cards: [],
     newCardStatus: "",
+    deploys: { configured: false, enabled: false, repositories: 0 },
     ...overrides,
   };
 }
@@ -746,12 +801,92 @@ export function makeBoardRepositoryOption(
     clones: [],
     otherBoard: "",
     release: "",
+    deploys: false,
     ...overrides,
   };
 }
 
 export function makeBoardRemoval(overrides: Partial<BoardRemoval> = {}): BoardRemoval {
-  return { toNoBoard: 0, removed: 0, toNoBoardNames: [], removedNames: [], ...overrides };
+  return {
+    toNoBoard: 0,
+    removed: 0,
+    toNoBoardNames: [],
+    removedNames: [],
+    deploys: 0,
+    ...overrides,
+  };
+}
+
+export function makeDeploys(overrides: Partial<Deploys> = {}): Deploys {
+  return {
+    boards: [],
+    readAt: "",
+    reading: false,
+    failure: null,
+    filter: { boardId: "", title: "" },
+    filterGone: "",
+    waiting: 0,
+    failed: false,
+    ...overrides,
+  };
+}
+
+export function makeDeployBoard(overrides: Partial<DeployBoard> = {}): DeployBoard {
+  return { id: "board-1", title: "Roadmap", shown: true, repositories: [], ...overrides };
+}
+
+export function makeDeployRepository(overrides: Partial<DeployRepository> = {}): DeployRepository {
+  return {
+    id: "repo-1",
+    owner: "dev",
+    name: "web",
+    fullName: "dev/web",
+    url: "https://github.com/dev/web",
+    reading: false,
+    readAt: "",
+    failure: null,
+    environments: [],
+    ...overrides,
+  };
+}
+
+export function makeDeployEnvironment(
+  overrides: Partial<DeployEnvironment> = {},
+): DeployEnvironment {
+  return {
+    position: 0,
+    name: "Development",
+    branch: "dev",
+    previousName: "",
+    previousBranch: "",
+    workflowName: "Deploy",
+    workflowUrl: "",
+    state: "up_to_date",
+    problem: "",
+    failed: false,
+    pending: false,
+    prReady: false,
+    running: false,
+    busy: false,
+    available: "",
+    previous: "",
+    lastRun: null,
+    failedRun: null,
+    promotion: null,
+    action: null,
+    compareUrl: "",
+    ...overrides,
+  };
+}
+
+export function makeDeploySettings(overrides: Partial<DeploySettings> = {}): DeploySettings {
+  return { boardId: "board-1", configured: false, enabled: false, repositories: [], ...overrides };
+}
+
+export function makeDeployRepositoryOptions(
+  overrides: Partial<DeployRepositoryOptions> = {},
+): DeployRepositoryOptions {
+  return { workflows: [], branches: [], failure: "", ...overrides };
 }
 
 export function makeBoardPreview(overrides: Partial<BoardPreview> = {}): BoardPreview {
@@ -1854,6 +1989,8 @@ export function resetWailsMock(): void {
   transcriptHandlers = [];
   situationStartedHandlers = [];
   situationOpenHandlers = [];
+  deployFinishedHandlers = [];
+  deployOpenHandlers = [];
   entrySeq = 0;
   for (const fn of Object.values(api)) {
     fn.mockClear();
@@ -1863,6 +2000,8 @@ export function resetWailsMock(): void {
   onTranscriptChanged.mockClear();
   onSituationStarted.mockClear();
   onSituationOpen.mockClear();
+  onDeployFinished.mockClear();
+  onDeployOpen.mockClear();
   api.getStartup.mockImplementation(() => Promise.resolve(makeStartup()));
   api.getState.mockImplementation(() => Promise.resolve(makeState()));
   api.scanRepositories.mockImplementation(() => Promise.resolve([]));
@@ -1872,6 +2011,8 @@ export function resetWailsMock(): void {
   api.previewEditBoard.mockImplementation(() => Promise.resolve(makeBoardPreview()));
   api.checkBoardRepository.mockImplementation(() => Promise.resolve(makeBoardRepositoryOption()));
   api.previewRemoveBoard.mockImplementation(() => Promise.resolve(makeBoardRemoval()));
+  api.deploySettings.mockImplementation(() => Promise.resolve(makeDeploySettings()));
+  api.readDeployRepository.mockImplementation(() => Promise.resolve(makeDeployRepositoryOptions()));
   api.cardContext.mockImplementation(() => Promise.resolve("### Card: Add the login screen\n"));
   api.cardImages.mockImplementation(() => Promise.resolve({ images: [], failures: [] }));
   api.createTask.mockImplementation(() => Promise.resolve("task-1"));
