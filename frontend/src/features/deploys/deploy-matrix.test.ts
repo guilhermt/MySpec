@@ -4,7 +4,9 @@ import {
   cellModel,
   changes,
   gridSlots,
+  keyNotice,
   moveFocus,
+  openUrl,
   passageModel,
 } from "@/features/deploys/deploy-matrix";
 import type { DeployEnvironment, DeployRepository, DeployRun } from "@/lib/wails";
@@ -511,5 +513,66 @@ describe("changes", () => {
       texts(before, snapshot(staging({ state: "pr_ready", action: action("merging") }))),
     ).toEqual([]);
     expect(changes(before, snapshot(staging({ state: "running" })))[0]?.key).toBe("api:1");
+  });
+});
+
+describe("keyNotice", () => {
+  it("says the first environment receives the pull requests of the tasks", () => {
+    expect(keyNotice(makeDeployEnvironment())).toBe(
+      "The first environment receives the pull requests of the tasks.",
+    );
+  });
+
+  it("sends a problem to Settings", () => {
+    expect(keyNotice(staging({ state: "problem", problem: "branch_missing" }))).toBe(
+      "Fix the configuration in Settings › Boards first.",
+    );
+  });
+
+  it("says an unread environment hasn't been read", () => {
+    expect(keyNotice(staging({ state: "unread" }))).toBe("Staging hasn't been read yet.");
+  });
+
+  it("says an action runs while the app acts", () => {
+    expect(keyNotice(staging({ busy: true }))).toBe("A deploy action is running on Staging.");
+  });
+
+  it("says there is nothing to deploy without an action available", () => {
+    expect(keyNotice(staging())).toBe("Nothing to deploy to Staging.");
+  });
+
+  it("is null when Deploy or Merge is available", () => {
+    expect(keyNotice(staging({ available: "deploy" }))).toBeNull();
+    expect(keyNotice(staging({ available: "merge" }))).toBeNull();
+  });
+});
+
+describe("openUrl", () => {
+  const RUN = "https://github.com/dev/api/actions/runs/1";
+
+  it("opens the last run from a cell, else the failed one", () => {
+    expect(openUrl(staging({ lastRun: run() }), "cell")).toBe(RUN);
+    expect(openUrl(staging({ failedRun: run({ url: "https://x/failed" }) }), "cell")).toBe(
+      "https://x/failed",
+    );
+  });
+
+  it("has nowhere to go from a cell without a run", () => {
+    expect(openUrl(staging(), "cell")).toBeNull();
+  });
+
+  it("opens the deploy pull request from a passage, else the comparison", () => {
+    expect(
+      openUrl(
+        staging({
+          promotion: promotion({ deployPr: deployPr() }),
+          compareUrl: "https://x/compare",
+        }),
+        "passage",
+      ),
+    ).toBe("https://github.com/dev/api/pull/88");
+    expect(openUrl(staging({ compareUrl: "https://x/compare" }), "passage")).toBe(
+      "https://x/compare",
+    );
   });
 });

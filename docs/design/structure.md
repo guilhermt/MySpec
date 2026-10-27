@@ -367,6 +367,9 @@ Sob o cabeçalho, na medida da conversa, quando algo bloqueia sem ser a situaç�
 | ←→ ↑↓ `Home` `End` `Ctrl+Home` `Ctrl+End` | Matriz de Deploys | Percorrem as células e as passagens: ←→ na linha, ↑↓ entre as linhas e os boards, `Home` e `End` nas pontas da linha, com `Ctrl` nas da matriz |
 | ←→ | Borda de um painel | Alarga e estreita o painel |
 | `Enter` | Lista do board e de Reviews | Abre ou fecha o painel; num cabeçalho, recolhe ou expande |
+| `Enter` | Matriz de Deploys | Abre o painel do ambiente da célula ou da passagem com o foco, ou o fecha quando é o aberto |
+| `O` | Matriz de Deploys, painel de deploy | Abre no GitHub o que o ambiente representa: da célula, o último run (ou o que falhou); da passagem, a pull request de deploy, senão a comparação das branches. Sem destino, o aviso `No deploy run yet.` |
+| `D` | Matriz de Deploys, painel de deploy | Age como o botão do painel, **Deploy to <Ambiente>** ou **Merge**; onde não age, o aviso diz por quê |
 | `/` | Board, History | Foca a busca; `↓` volta à lista |
 | `S` | Linha do card | **Start task** ou **Clone and continue**; onde não age, diz por quê |
 | `D` | Lista do board | Discussão com a seleção, ou com o card do foco |

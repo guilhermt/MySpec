@@ -666,6 +666,18 @@ export type PullRequestAction =
   | "clone_missing"
   | "fork";
 
+/** DeployProblem is what keeps an environment from being read: its branch or its workflow is gone; "" when it reads. */
+export type DeployProblem = "" | "branch_missing" | "workflow_missing";
+
+/** DeployAvailable is the action an environment offers now; "" when none. */
+export type DeployAvailable = "" | "deploy" | "merge";
+
+/** DeployHealth is what the environment before one is doing that is worth a warning; "" when nothing. */
+export type DeployHealth = "" | "deploying" | "failed";
+
+/** DeployRunStatus is where a deploy run stands. */
+export type DeployRunStatus = "queued" | "running" | "succeeded" | "failed";
+
 /** DeployFilterGone is why the board of the filter of Deploys is no longer on the screen; "" when it is. */
 export type DeployFilterGone = "" | "no_deploys" | "removed";
 
@@ -1588,6 +1600,49 @@ export function asPullRequestAction(value: string): PullRequestAction {
   }
 }
 
+export function asDeployProblem(value: string): DeployProblem {
+  switch (value) {
+    case "branch_missing":
+    case "workflow_missing":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asDeployAvailable(value: string): DeployAvailable {
+  switch (value) {
+    case "deploy":
+    case "merge":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asDeployHealth(value: string): DeployHealth {
+  switch (value) {
+    case "deploying":
+    case "failed":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asDeployRunStatus(value: string): DeployRunStatus {
+  switch (value) {
+    case "queued":
+    case "running":
+    case "succeeded":
+    case "failed":
+      return value;
+    // Queued claims the least of a run the app cannot place.
+    default:
+      return "queued";
+  }
+}
+
 export function asDeployFilterGone(value: string): DeployFilterGone {
   switch (value) {
     case "":
@@ -1750,6 +1805,10 @@ export const api = {
   refreshDeployRepository: (repositoryId: string): Promise<void> =>
     DeployService.RefreshDeployRepository(repositoryId),
   setDeployFilter: (boardId: string): Promise<void> => DeployService.SetDeployFilter(boardId),
+  deploy: (repositoryId: string, position: number): Promise<void> =>
+    DeployService.Deploy(repositoryId, position),
+  merge: (repositoryId: string, position: number): Promise<void> =>
+    DeployService.Merge(repositoryId, position),
   deploySettings: (boardId: string): Promise<DeploySettings> =>
     DeployService.DeploySettings(boardId),
   readDeployRepository: (

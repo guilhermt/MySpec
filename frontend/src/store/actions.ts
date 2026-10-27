@@ -973,6 +973,19 @@ export async function setDeployFilter(boardId: string): Promise<boolean> {
 }
 
 /**
+ * deployInPlace and mergeInPlace start the action of an environment from its panel, which shows
+ * the refusal under the button: they answer the message of the refusal, or null. The failure of
+ * GitHub comes later, as the state of the action.
+ */
+export function deployInPlace(repositoryId: string, position: number): Promise<string | null> {
+  return inPlace(() => api.deploy(repositoryId, position));
+}
+
+export function mergeInPlace(repositoryId: string, position: number): Promise<string | null> {
+  return inPlace(() => api.merge(repositoryId, position));
+}
+
+/**
  * startReview, askReviewAgain, publishReview and setReviewInstructions do not
  * swallow their failure: the dialog or the panel that asked shows it where the
  * user is.

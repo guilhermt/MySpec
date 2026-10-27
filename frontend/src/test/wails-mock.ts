@@ -137,6 +137,8 @@ export const api = {
   refreshDeploys: vi.fn<() => Promise<void>>(() => Promise.resolve()),
   refreshDeployRepository: vi.fn<(repositoryId: string) => Promise<void>>(() => Promise.resolve()),
   setDeployFilter: vi.fn<(boardId: string) => Promise<void>>(() => Promise.resolve()),
+  deploy: vi.fn<(repositoryId: string, position: number) => Promise<void>>(() => Promise.resolve()),
+  merge: vi.fn<(repositoryId: string, position: number) => Promise<void>>(() => Promise.resolve()),
   deploySettings: vi.fn<(boardId: string) => Promise<DeploySettings>>(() =>
     Promise.resolve(makeDeploySettings()),
   ),

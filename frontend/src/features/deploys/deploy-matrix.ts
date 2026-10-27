@@ -1,9 +1,11 @@
-import type {
-  DeployBoard,
-  DeployEnvironment,
-  DeployRepository,
-  DeployRun,
-  Deploys,
+import {
+  asDeployAvailable,
+  asDeployProblem,
+  type DeployBoard,
+  type DeployEnvironment,
+  type DeployRepository,
+  type DeployRun,
+  type Deploys,
 } from "@/lib/wails";
 import { age, ageLong, duration, readMoment } from "@/lib/when";
 
@@ -448,6 +450,41 @@ export function moveFocus(
     default:
       return null;
   }
+}
+
+/** NO_RUN_NOTICE is why O does nothing on a cell whose environment has never deployed. */
+export const NO_RUN_NOTICE = "No deploy run yet.";
+
+/** keyNotice is why D does nothing on an environment, null when it acts: the text of the KeyNotice. */
+export function keyNotice(env: DeployEnvironment): string | null {
+  if (env.position === 0) {
+    return "The first environment receives the pull requests of the tasks.";
+  }
+  if (asDeployProblem(env.problem) !== "") {
+    return "Fix the configuration in Settings › Boards first.";
+  }
+  if (env.state === "unread") {
+    return `${env.name} hasn't been read yet.`;
+  }
+  if (env.busy) {
+    return `A deploy action is running on ${env.name}.`;
+  }
+  if (asDeployAvailable(env.available) === "") {
+    return `Nothing to deploy to ${env.name}.`;
+  }
+  return null;
+}
+
+/**
+ * openUrl is where O goes from a slot: from a cell the last run, else the failed one; from a
+ * passage the deploy pull request, else the comparison. null when there is nowhere to go.
+ */
+export function openUrl(env: DeployEnvironment, kind: SlotKind): string | null {
+  const url =
+    kind === "cell"
+      ? (env.lastRun?.url ?? env.failedRun?.url ?? "")
+      : (env.promotion?.deployPr?.url ?? env.compareUrl);
+  return url === "" ? null : url;
 }
 
 /** phaseOf is the state of an environment for the comparison between two readings: the main state, or the phase of the action. */

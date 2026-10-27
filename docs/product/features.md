@@ -973,6 +973,67 @@ Um relatório limpo, ou uma passada em que nada foi aprovado, deixa o review pro
 - **Fim:** o review termina quando a pull request é mergeada ou fechada. A leitura de cada minuto percebe, e o produto encerra a sessão, remove a worktree e leva o review ao histórico, sem ação do usuário e sem notificar. Com o review aberto, o lugar dele dá vez à [página do item que saiu](#a-página-do-item-que-saiu). Uma leitura que falha deixa a faixa `Couldn't check GitHub` sob o cabeçalho, com a hora da primeira falha da sequência, a razão e **Try again**, que lê a pull request na hora; a faixa some na primeira leitura boa, e não aparece com a barra `Pass blocked`, que já diz a razão. A faixa não é situação: não notifica nem espera ninguém.
 - **Apagar:** **Delete review…** apaga o review a qualquer momento, ativo ou arquivado, depois da confirmação `Delete the review of <repo>#<N>?`, `The worktree, the conversation and the reports go away. What was published on GitHub stays.`, com o foco em **Cancel** e **Delete review** perigoso. O diálogo fica aberto até o apagar terminar: **Delete review** vira `Deleting…`, e **Cancel**, o `×` e `Esc` não fecham; uma falha fica no rodapé, `Couldn't delete the review: <mensagem>`, com a confirmação de volta, e o aviso do app não a recebe. Não há `Ctrl+Enter`: o gesto destrutivo não fica a um atalho. A pull request volta a ser uma pull request comum na lista e pode ter um review novo. Uma worktree que o git não conseguiu remover é listada num aviso, como ao apagar uma task. O item do `⋯` que abre o diálogo entrega o foco a ele, e fechar sem apagar o devolve ao `⋯`.
 
+## Deploys
+
+Deploys é um lugar global, como o Reviews, que promove o código entre os ambientes dos repositórios de um board: de Development para Staging, de Staging para Production e assim por diante. Cada ambiente é alimentado por uma branch, e o merge nela dispara um workflow do GitHub Actions, que é o deploy daquele ambiente. O lugar mostra de relance o estado de cada repositório em cada ambiente e o próximo passo, e dali o usuário cria a pull request de deploy, faz o merge e acompanha o run até saber se o deploy deu certo, sem ir ao GitHub. A feature é opcional, por board, e separada das tasks: uma task continua terminando no merge na branch base, e o deploy de Development que esse merge dispara só aparece aqui.
+
+### Configuração
+
+Os deploys de um board se configuram em Settings › Boards, pela ação **Deploys…** da linha do board (ver [Configurar os deploys de um board](#configurar-os-deploys-de-um-board)). Cada repositório gerenciado tem pelo menos dois ambientes em ordem, cada um com o nome, a branch que faz o deploy e o workflow do GitHub Actions que é o deploy dele. O deploy de um ambiente é só o run desse workflow, disparado pela branch do ambiente: um workflow de testes ou de lint que falha no mesmo push não é um deploy que falhou. O primeiro ambiente recebe as pull requests das tasks e não tem ação. Um board com os deploys desligados, ou sem repositório gerenciado, não aparece em Deploys, mas a configuração dele fica guardada. Sem nenhum board com deploys, o nó **Deploys** não existe na barra lateral.
+
+### A visão Deploys
+
+- **Cabeçalho.** O cabeçalho do lugar, com o título `Deploys`, a idade da leitura (`Read 2m ago`, com a hora no tooltip, ou `Reading…` durante uma leitura) e **Refresh**, que lê de novo e fica tracejado com `A reading is running.` enquanto uma leitura roda.
+- **Filtro.** O filtro é uma escolha única de board e só aparece com mais de um board ou com um board escolhido; o chip diz `Board: <título>`. A escolha é lembrada entre execuções. Um board que deixou de ter deploys, ou que foi removido, continua no filtro com `◇` e a razão no tooltip (`This board no longer has deploys.`, `This board was removed.`) até o usuário tirá-lo, e a tela diz `The board in the filter has no deploys.` (ou `was removed.`) com **Clear filter**. O filtro muda só a vista: a contagem do nó não depende dele.
+- **A matriz.** Cada board aparece numa seção, com o título e `N repositories`, e uma grade: os repositórios nas linhas, em ordem alfabética, e os ambientes nas colunas, na ordem da configuração. Cada **célula** diz o estado do repositório naquele ambiente com um glifo, uma palavra e uma segunda linha; cada **passagem** entre duas células é a promoção de um ambiente ao seguinte, acesa quando há o que promover (`3 commits`, `#88`), com o spinner e `Merging…` ou `Creating…` quando o app age, e tracejada enquanto o deploy roda. Repositórios com ambientes diferentes em número ou nome mostram cada um os seus, alinhados pela posição; quando os nomes de uma coluna diferem, a célula diz o nome do ambiente antes da segunda linha, e um repositório com menos ambientes deixa vazias as colunas que não tem. Abaixo de 48rem de largura da seção, o nome do repositório vai para uma linha própria e as passagens mostram só a seta e o número, sem cortar o estado de nenhuma célula. Uma célula que muda entre duas leituras pisca, e a mudança é anunciada ao leitor de tela numa frase só (`api · Staging is deploying`).
+- **O painel.** Uma célula ou uma passagem abre um painel ao lado da matriz (ou sobre ela, quando falta área), na largura e com o alargamento pela borda dos outros painéis; outra célula ou passagem troca o conteúdo, e o mesmo ambiente aberto de novo fecha. O título é `Deploy to Staging` (o nome do ambiente, no primeiro). De cima para baixo:
+  - o problema de configuração, quando há (`Branch staging doesn't exist on GitHub.`, `The workflow Deploy no longer exists.`), com **Edit the deploys in Settings…**, e a falha de leitura do repositório;
+  - a ação do momento, a única primária da tela, com a tecla `D`, e embaixo a falha, o aviso do ambiente anterior e, numa pull request pronta em draft, `This pull request is a draft. GitHub may refuse to merge it.`;
+  - **Changes**: `3 commits · waiting for 2 days`, o tempo contado desde que a mudança pendente mais antiga chegou ao ambiente anterior; com mais mudanças do que uma leitura lê, `Showing the pull requests of the first 100 of 240 commits.`; sem nenhuma, `Nothing to deploy.`;
+  - **Pull requests**: as que entram no deploy, com número, título e autor, cada uma abrindo no GitHub, sem as pull requests de deploy; sem nenhuma, `No pull requests in this deploy.`. O painel nunca lista os commits;
+  - **Deploy pull request**, quando existe: `#88 Deploy to Staging`, a etiqueta `Draft`, a idade e, havendo outras abertas, `2 more deploy pull requests are open.`;
+  - **Deploy run**: o estado do run (`Succeeded`, `Failed`, `Running`, `Queued`), quando começou e quanto durou (`Started 14:02 · 3m 12s`) ou há quanto roda (`Running for 1m 20s`), o run que falhou quando é outro, `No deploy run yet.` sem run, e o workflow como link;
+  - **On GitHub**: `Open the deploy pull request`, `Open the run` e `Compare staging...dev`.
+
+  O painel do primeiro ambiente tem só o título, o run e o GitHub, sem ação.
+- **Estados da tela.** Antes da primeira leitura, um esqueleto na forma da matriz. Uma leitura nunca apaga a última: a tela mostra a anterior enquanto a próxima corre. Sem board com deploys, `No board has deploys.` e **Open Settings**. Quando um repositório não pode ser lido, a linha dele mostra a última leitura boa, com o conteúdo em tinta mais fraca, e sob ela `Couldn't read api · 4m ago`, a razão e **Try again**; as outras linhas seguem normais. Quando a leitura inteira falha (`gh` ausente ou sem autenticação, rate limit), uma faixa no alto diz `Couldn't read the deploys · 4m ago`, com a razão e **Try again**, sobre a leitura guardada.
+
+### Estados de um ambiente
+
+A palavra da célula é o estado principal, o mais urgente nesta ordem: rodando, falhou, pull request pronta, pendente, em dia.
+
+| Célula | Quando | Segunda linha |
+|---|---|---|
+| `Deployed` | A branch tem tudo o que a anterior tem e o último run terminou bem | A idade do run |
+| `No deploy yet` | Nenhum run do workflow na branch do ambiente, sem mudanças pendentes. Não é falha | |
+| `Pending` | A branch anterior tem commits que a deste ambiente não tem, e não há pull request de deploy aberta | `3 commits · 2d` |
+| `Ready to merge` | Há uma pull request aberta da branch anterior para a deste ambiente, criada pelo app ou fora dele, inclusive em draft | `#88`, `#88 · draft` |
+| `Deploying` | O run está rodando ou na fila | A duração ao vivo, ou `Queued` |
+| `Failed` | O último run terminou sem sucesso (falha, cancelamento ou timeout) | A idade do run |
+| `Branch missing`, `Workflow missing` | A branch ou o workflow configurado não existe mais. Nunca em vermelho, e sem ação | O nome da branch ou do workflow |
+| `Reading…` | Ainda não lido | |
+
+Um deploy que falhou junto de mudanças a promover mostra a palavra das mudanças e um losango pequeno de erro depois dela (`Last deploy failed`). A falha deixa de valer quando um run posterior do mesmo workflow, na mesma branch, termina bem, venha ele de um merge do app, de um push ou de um re-run no GitHub; o usuário não a dispensa. O merge commit da própria promoção não conta como mudança. Havendo mais de uma pull request de deploy aberta, vale a mais recente, e o painel diz que há outras. Uma ação do app vence o estado na célula: `Creating the pull request…`, `Merging…`, `Waiting for the run…` (com `#88 merged`) e `Deploying`; a que falhou diz `Couldn't create the pull request` ou `Couldn't merge`, com `See the panel`.
+
+### Ações
+
+- **Deploy to <Ambiente>** vale num ambiente pendente. Cria no GitHub a pull request da branch do ambiente anterior para a do ambiente, com o título `Deploy to Staging` e a descrição listando as pull requests que entram, como estão no momento. O ambiente passa a `Ready to merge`.
+- **Merge** vale num ambiente com pull request pronta, em qualquer ambiente e em draft também, sem confirmação. Faz o merge pelo método merge commit, com o bypass de proteção da conta, sem pedir review, aprovação nem checks, e acompanha o run daquele merge, e não um anterior, até terminar: `Deploying` e depois `Deployed` ou `Failed`. Um merge feito no GitHub é percebido na leitura seguinte e segue o mesmo caminho.
+- **A tecla.** `D` age como o botão, com o foco numa célula, numa passagem ou dentro do painel. Onde não age, um aviso diz por quê: `The first environment receives the pull requests of the tasks.`, `Nothing to deploy to Staging.`, `A deploy action is running on Staging.`, `Fix the configuration in Settings › Boards first.` ou `Staging hasn't been read yet.`. A recusa que o Go devolve na hora aparece sob o botão, ou no aviso quando a tecla foi a origem.
+- **Ambiente anterior.** Quando o último deploy do anterior falhou ou ainda roda, a ação continua livre e o painel avisa ao lado dela (`Development's last deploy failed`, `Development is still deploying`).
+- **Andamento e falha.** Enquanto uma ação roda, a célula e a passagem mostram o andamento, e a ação fica ocupada, com o rótulo de carregamento (`Creating the pull request…`, `Merging…`, `Waiting for the run…`, `Deploying…`). Quando criar a pull request ou fazer o merge falha, a razão, a mensagem do GitHub, aparece sob a ação, com `role="alert"` quando chega com o painel aberto, e a ação volta a ficar disponível. Um merge que o GitHub recusa deixa o link da pull request à mão.
+- **Independência.** Cada ação age num só repositório e ambiente, e nenhuma bloqueia ou espera outra: o usuário dispara em vários repositórios seguidos. Uma ação em curso sobrevive a fechar o painel e a sair da tela.
+
+### Leitura e atualização
+
+Tudo é lido e feito no GitHub, pelo `gh` autenticado, sem depender do clone local. O estado é lido ao abrir o app, ao abrir a tela, por **Refresh**, a cada minuto com a tela aberta e a cada cinco minutos com ela fechada, para manter a contagem e a marca do nó. Um run em andamento, de qualquer ambiente gerenciado, é lido a cada poucos segundos até terminar, com a tela aberta ou fechada. A leitura fica em memória; a configuração é persistida. A falha de um repositório não esconde os outros nem afeta tasks, reviews ou boards. O custo cabe no rate limit da conta: com dez repositórios de três ambientes, uma consulta GraphQL e 30 chamadas REST por leitura.
+
+### Atenção e notificações
+
+- **O nó Deploys** da barra lateral, logo abaixo de **Reviews**, existe quando algum board tem deploys ligados e ao menos um repositório gerenciado. Mostra `N to deploy`, a soma dos ambientes pendentes e com pull request pronta de todos os boards, sem depender do filtro, e a marca de erro quando algum ambiente, o primeiro inclusive, tem o último deploy em falha. O nome acessível diz as duas (`Deploys, 3 to deploy, a deploy failed`).
+- **Notificações.** Só o fim de um run cujo merge o app fez notifica: do sistema, com a janela fora de foco, com o som do produto; um toast, com a janela em foco. `dev/api · Staging deployed` com `In 3m 12s`, ou `dev/api · Staging failed to deploy` com `After 3m 12s`, em erro. Clicar na notificação, ou em **Open in Deploys** no toast, traz a janela e abre Deploys no painel daquele repositório e ambiente. Um deploy pendente, uma pull request pronta e um run de um merge que não foi do app (o de Development depois do merge de uma task, um merge feito no GitHub) não notificam; a falha dele aparece só na célula e na marca do nó.
+- Deploys não são situações de [Depende de mim](#depende-de-mim): não entram na árvore como situação de item nem no `Ctrl+J`.
+
 ## Histórico
 
 O botão **History** no rodapé da barra lateral abre uma lista só dos itens arquivados (tasks, reviews de pull request e discussões), por dia de arquivamento, do mais recente ao mais antigo. O cabeçalho do lugar tem `←` e o título `History`; o corpo rola, com a coluna da lista centrada.
@@ -1224,6 +1285,10 @@ O foco segue a ida: `Alt+←`, `Alt+→`, um nível do breadcrumb, `Ctrl+J` e o 
 | `Ctrl+S` | Na edição de um prompt, salvar |
 | `Alt+↓` `Alt+↑` | Na tela de um review ou de uma task com o cartão de apontamentos, ou de uma discussão com o cartão de rascunhos, ir ao próximo e ao anterior por decidir, com volta, de qualquer ponto da tela, o compositor incluído |
 | `/` | No History, ir à busca; da busca, `↓` vai ao primeiro dia |
+| `←` `→` `↑` `↓` `Home` `End` `Ctrl+Home` `Ctrl+End` | Na matriz de Deploys: percorrer as células e as passagens, `←` `→` na linha, `↑` `↓` entre as linhas e os boards na mesma coluna, `Home` e `End` nas pontas da linha e, com `Ctrl`, nas da matriz |
+| `Enter` | Na matriz de Deploys, abrir o painel do ambiente sob o foco, ou fechá-lo quando é o aberto |
+| `O` | Na matriz de Deploys e no painel, abrir no GitHub o que o ambiente representa: da célula, o último run; da passagem, a pull request de deploy, senão a comparação das branches; sem destino, um aviso |
+| `D` | Na matriz de Deploys e no painel, **Deploy to <Ambiente>** ou **Merge**, a ação do momento; onde não age, um aviso diz por quê |
 | `↑` `↓` `Home` `End` `←` `→` `Enter` | Na lista do History: percorrer os dias e as linhas; numa linha, `←` vai ao dia dela e `Enter` abre o item; num dia, `→` vai à primeira linha, e `←` e `Enter` não fazem nada |
 | `Alt+←` | Voltar ao lugar anterior |
 | `Alt+→` | Avançar ao lugar seguinte |

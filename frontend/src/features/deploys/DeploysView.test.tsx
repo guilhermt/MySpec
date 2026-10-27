@@ -287,6 +287,57 @@ describe("DeploysView", () => {
       expect(passage).toHaveAttribute("aria-selected", "false");
     });
 
+    it("opens the panel of the environment on a click, and the passage switches its content to the same environment", async () => {
+      const { user } = matrix();
+      expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("gridcell", { name: /^api · Staging/ }));
+      const panel = screen.getByRole("complementary", { name: "Deploy api to Staging" });
+      expect(within(panel).getByRole("heading", { name: "Deploy to Staging" })).toBeInTheDocument();
+
+      await user.click(screen.getByRole("gridcell", { name: /^api · Development ·/ }));
+      expect(screen.getByRole("complementary", { name: "api · Development" })).toBeInTheDocument();
+      expect(
+        screen.queryByRole("complementary", { name: "Deploy api to Staging" }),
+      ).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("gridcell", { name: /^api · Development to Staging/ }));
+      expect(
+        screen.getByRole("complementary", { name: "Deploy api to Staging" }),
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Close" }));
+      expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+    });
+
+    it("closes the panel of an environment that leaves the state", async () => {
+      const { user } = matrix();
+      await user.click(screen.getByRole("gridcell", { name: /^api · Staging/ }));
+      expect(screen.getByRole("complementary")).toBeInTheDocument();
+
+      act(() =>
+        useAppStore.getState().applyState(
+          makeState({
+            deploys: makeDeploys({
+              readAt: READ_AT,
+              boards: [
+                makeDeployBoard({
+                  title: "Roadmap",
+                  repositories: [
+                    makeDeployRepository({
+                      ...REPO,
+                      environments: [REPO.environments[0] ?? makeDeployEnvironment()],
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          }),
+        ),
+      );
+
+      expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+    });
+
     it("flashes the cell that changed between two readings, and announces it", () => {
       vi.useFakeTimers();
       matrix();
@@ -326,6 +377,28 @@ describe("DeploysView", () => {
 
       act(() => vi.advanceTimersByTime(2_000));
       expect(staging()).not.toHaveClass("row-flash");
+    });
+
+    it("opens the panel of the target it arrives with and puts the focus on its cell", () => {
+      renderWithStore(<DeploysView />, {
+        ui: { location: { kind: "deploys", target: { repositoryId: "api", position: 1 } } },
+        state: makeState({
+          deploys: makeDeploys({
+            readAt: READ_AT,
+            boards: [
+              makeDeployBoard({
+                title: "Roadmap",
+                repositories: [makeDeployRepository(REPO)],
+              }),
+            ],
+          }),
+        }),
+      });
+
+      expect(
+        screen.getByRole("complementary", { name: "Deploy api to Staging" }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("gridcell", { name: /^api · Staging/ })).toHaveFocus();
     });
 
     it("neither flashes nor announces the first snapshot", () => {
