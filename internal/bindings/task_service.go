@@ -21,6 +21,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/newdiscussion"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
@@ -1322,6 +1323,10 @@ func failure(log *slog.Logger, method string, err error) error {
 	var boardRefusal *board.Refusal
 	if errors.As(err, &boardRefusal) {
 		return errors.New(boardRefusal.Message())
+	}
+	var draftRefusal *newdiscussion.Refusal
+	if errors.As(err, &draftRefusal) {
+		return errors.New(draftRefusal.Message())
 	}
 	// A reading of GitHub that failed says what to do about it; it is the
 	// user's environment, not a fault of the app.

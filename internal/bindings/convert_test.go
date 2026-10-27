@@ -22,6 +22,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/machine"
 	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/newdiscussion"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
@@ -4425,3 +4426,22 @@ func TestFromEntryCarriesTheDivergenceOfAMarker(t *testing.T) {
 
 // percent is a context percentage that was read.
 func percent(p int) *int { return &p }
+
+func TestFromNewDiscussionDraftsKeepsTheOrderAndIsNeverNil(t *testing.T) {
+	t.Parallel()
+
+	if got := bindings.FromNewDiscussionDrafts(nil); got == nil || len(got) != 0 {
+		t.Errorf("FromNewDiscussionDrafts(nil) = %#v, want an empty, non-nil list", got)
+	}
+
+	saved := time.Date(2026, time.October, 27, 10, 0, 0, 0, time.UTC)
+	got := bindings.FromNewDiscussionDrafts([]newdiscussion.Draft{
+		{ID: "a", BoardID: "board-1", Title: " T ", Text: "x\ny ", CreatedAt: saved.Add(-time.Hour), SavedAt: saved},
+	})
+	want := []bindings.NewDiscussionDraft{
+		{ID: "a", BoardID: "board-1", Title: " T ", Text: "x\ny ", SavedAt: "2026-10-27T10:00:00Z"},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("FromNewDiscussionDrafts() mismatch (-want +got):\n%s", diff)
+	}
+}

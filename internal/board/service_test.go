@@ -1086,6 +1086,19 @@ func TestUpdateReleasesTheRepositoriesLeftOut(t *testing.T) {
 	}
 }
 
+func TestRemoveTellsOnRemoveWhichBoardWentAway(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, board.Stored{})
+
+	if err := f.service.Remove(t.Context(), boardID); err != nil {
+		t.Fatalf("Remove() = %v, want nil", err)
+	}
+
+	if diff := cmp.Diff([]string{boardID}, f.removed); diff != "" {
+		t.Errorf("OnRemove calls (-want +got):\n%s", diff)
+	}
+}
+
 func TestRemoveReleasesEveryRepositoryOfTheBoard(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, board.Stored{})

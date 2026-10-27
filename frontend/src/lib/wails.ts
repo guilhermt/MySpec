@@ -70,6 +70,7 @@ import type {
   MigrationCase,
   MigrationTask,
   ModelCatalog,
+  NewDiscussionDraft,
   NewerData,
   PermissionEntry,
   Place,
@@ -104,6 +105,7 @@ import type {
   ReviewSummary,
   RunningTask,
   SaveBoardRequest,
+  SaveNewDiscussionDraftRequest,
   SessionTasks,
   Situation,
   SituationOpen,
@@ -211,6 +213,7 @@ export type {
   MigrationCase,
   MigrationTask,
   ModelCatalog,
+  NewDiscussionDraft,
   NewerData,
   PermissionEntry,
   Place,
@@ -245,6 +248,7 @@ export type {
   ReviewSummary,
   RunningTask,
   SaveBoardRequest,
+  SaveNewDiscussionDraftRequest,
   SessionTasks,
   Situation,
   SituationOpen,
@@ -1854,6 +1858,10 @@ export const api = {
 
   startDiscussion: (req: StartDiscussionRequest): Promise<string> =>
     DiscussionService.StartDiscussion(req),
+  saveNewDiscussionDraft: (req: SaveNewDiscussionDraftRequest): Promise<string> =>
+    DiscussionService.SaveNewDiscussionDraft(req),
+  deleteNewDiscussionDraft: (id: string): Promise<void> =>
+    DiscussionService.DeleteNewDiscussionDraft(id),
   checkAgainDiscussion: (id: string): Promise<void> => DiscussionService.CheckAgain(id),
   askAgainDiscussion: (id: string): Promise<void> => DiscussionService.AskAgain(id),
   discussionContext: (req: DiscussionContextRequest): Promise<string> =>

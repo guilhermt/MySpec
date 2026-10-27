@@ -24,6 +24,7 @@ import (
 	"github.com/guilhermt/myspec/internal/flow"
 	"github.com/guilhermt/myspec/internal/machine"
 	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/newdiscussion"
 	"github.com/guilhermt/myspec/internal/platform/chime"
 	"github.com/guilhermt/myspec/internal/platform/logging"
 	"github.com/guilhermt/myspec/internal/platform/notify"
@@ -67,37 +68,38 @@ const (
 // App holds the running application: the Wails handles and the domain services
 // they are wired to.
 type App struct {
-	log              *slog.Logger
-	dirs             xdg.Dirs
-	notificationIcon []byte             // the image the notifications show, copied to the data directory
-	services         *bindings.Services // the placeholders Wails holds, bound when the startup ends
-	startup          *startup
-	deps             attemptDeps // what an attempt reaches outside the data directory with
-	systemDark       bool        // what the desktop asked for before the window opened
-	repositories     *repository.Service
-	theme            *theme.Service
-	models           *models.Service
-	machine          *machine.Service
-	update           *update.Service
-	version          string // what main.version is: 0.4.0, or dev for a local build
-	reviewModes      *reviewmode.Service
-	tasks            *task.Service
-	boards           *board.Service
-	sessions         *session.Service
-	worktrees        *worktree.Service
-	review           *review.Service
-	flow             *flow.Service
-	pulls            *pulls.Service
-	prReviews        *prreview.Service
-	reviewFlow       *reviewflow.Service
-	discussions      *discussion.Service
-	discussionFlow   *discussionflow.Service
-	divergences      *divergence.Service
-	attention        *attention.Service
-	cardImages       *cardimages.Service
-	images           atomic.Pointer[imageFiles] // what the image middleware reads from; set once the services are up
-	notifier         *notify.Notifier           // nil when the desktop has no notification service
-	player           *chime.Player              // nil when there is no notifier or the chime could not be installed
+	log                 *slog.Logger
+	dirs                xdg.Dirs
+	notificationIcon    []byte             // the image the notifications show, copied to the data directory
+	services            *bindings.Services // the placeholders Wails holds, bound when the startup ends
+	startup             *startup
+	deps                attemptDeps // what an attempt reaches outside the data directory with
+	systemDark          bool        // what the desktop asked for before the window opened
+	repositories        *repository.Service
+	theme               *theme.Service
+	models              *models.Service
+	machine             *machine.Service
+	update              *update.Service
+	version             string // what main.version is: 0.4.0, or dev for a local build
+	reviewModes         *reviewmode.Service
+	tasks               *task.Service
+	boards              *board.Service
+	sessions            *session.Service
+	worktrees           *worktree.Service
+	review              *review.Service
+	flow                *flow.Service
+	pulls               *pulls.Service
+	prReviews           *prreview.Service
+	reviewFlow          *reviewflow.Service
+	discussions         *discussion.Service
+	newDiscussionDrafts *newdiscussion.Service
+	discussionFlow      *discussionflow.Service
+	divergences         *divergence.Service
+	attention           *attention.Service
+	cardImages          *cardimages.Service
+	images              atomic.Pointer[imageFiles] // what the image middleware reads from; set once the services are up
+	notifier            *notify.Notifier           // nil when the desktop has no notification service
+	player              *chime.Player              // nil when there is no notifier or the chime could not be installed
 
 	pollCtx  context.Context // ends when the app does; what runs in the background for as long as it runs
 	stopPoll context.CancelFunc

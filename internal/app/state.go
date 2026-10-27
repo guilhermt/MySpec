@@ -103,8 +103,9 @@ func (a *App) snapshot() bindings.State {
 			since(archivedDiscussions, start, func(d discussion.Discussion) time.Time { return d.ArchivedAt }),
 			a.discussions.Drafts, repositories,
 		),
-		HistorySummary: bindings.FromHistorySummary(archivedTasks, archivedReviews, archivedDiscussions, start),
-		CloneFolder:    a.repositories.CloneFolder(),
+		NewDiscussionDrafts: bindings.FromNewDiscussionDrafts(a.newDiscussionDrafts.List()),
+		HistorySummary:      bindings.FromHistorySummary(archivedTasks, archivedReviews, archivedDiscussions, start),
+		CloneFolder:         a.repositories.CloneFolder(),
 	}
 	for i := range state.Tasks {
 		state.Tasks[i].Running = bindings.RunningOf(state.Tasks[i].ID, summaries)

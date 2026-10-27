@@ -90,9 +90,10 @@ type Deps struct {
 	Counts       func(repositoryID string) (active, archived int)                    // task.Service.Counts; may be nil
 	TaskCards    func(boardID string) []string                                       // keys of the cards of the active tasks of the board; may be nil
 	Log          *slog.Logger
-	Now          func() time.Time // defaults to time.Now
-	NewID        func() string    // defaults to uuid.NewString
-	OnChange     func()           // after any change; may be nil
+	Now          func() time.Time     // defaults to time.Now
+	NewID        func() string        // defaults to uuid.NewString
+	OnChange     func()               // after any change; may be nil
+	OnRemove     func(boardID string) // after a board is removed; may be nil
 	// OnRead hands over what a reading saw of the cards, the reading's own and the
 	// extra ones, keyed by card key; may be nil.
 	OnRead func(boardID string, cards map[string]Card)
@@ -110,6 +111,7 @@ type Service struct {
 	now          func() time.Time
 	newID        func() string
 	onChange     func()
+	onRemove     func(boardID string)
 	onRead       func(boardID string, cards map[string]Card)
 
 	// saveMu serialises the writes of readings, so each one replaces the
@@ -157,6 +159,7 @@ func New(deps Deps) *Service {
 		now:          now,
 		newID:        newID,
 		onChange:     deps.OnChange,
+		onRemove:     deps.OnRemove,
 		onRead:       deps.OnRead,
 		stored:       map[string]Stored{},
 		reading:      map[string]bool{},
@@ -787,6 +790,9 @@ func (s *Service) Remove(ctx context.Context, id string) error {
 	s.mu.Unlock()
 
 	s.log.Info("board removed", "board", id, "title", b.Title, "released", len(releases))
+	if s.onRemove != nil {
+		s.onRemove(id)
+	}
 	s.changed()
 	return nil
 }

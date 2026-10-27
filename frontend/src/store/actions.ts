@@ -39,6 +39,7 @@ import type {
   ReviewMode,
   ReviewVerdict,
   SaveBoardRequest,
+  SaveNewDiscussionDraftRequest,
   SessionTasks,
   StartDiscussionRequest,
   StartReviewRequest,
@@ -1093,11 +1094,19 @@ export function approveRestOfFindings(id: string, pass: number): Promise<boolean
 }
 
 /**
- * startDiscussion and discussionContext do not swallow their failure: the
+ * startDiscussion, discussionContext, saveNewDiscussionDraft and deleteNewDiscussionDraft do not swallow their failure: the
  * dialog that creates a discussion shows it next to the form.
  */
 export function startDiscussion(req: StartDiscussionRequest): Promise<string> {
   return api.startDiscussion(req);
+}
+
+export function saveNewDiscussionDraft(req: SaveNewDiscussionDraftRequest): Promise<string> {
+  return api.saveNewDiscussionDraft(req);
+}
+
+export function deleteNewDiscussionDraft(id: string): Promise<void> {
+  return api.deleteNewDiscussionDraft(id);
 }
 
 export function discussionContext(req: DiscussionContextRequest): Promise<string> {

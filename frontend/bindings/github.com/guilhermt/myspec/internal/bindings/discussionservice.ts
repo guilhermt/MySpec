@@ -70,6 +70,13 @@ export function DeleteDiscussion(id: string): $CancellablePromise<void> {
 }
 
 /**
+ * DeleteNewDiscussionDraft deletes a draft of the New discussion dialog.
+ */
+export function DeleteNewDiscussionDraft(id: string): $CancellablePromise<void> {
+    return $Call.ByID(2743784081, id);
+}
+
+/**
  * DiscussionContext is the context a discussion would start with, built from
  * the stored reading of the board. It creates nothing: the dialog shows it
  * while the user is still choosing what to discuss, with no title yet.
@@ -107,6 +114,15 @@ export function RemoveDraftDependency(id: string, draftID: string, ref: string):
  */
 export function RetryPublish(id: string, draftID: string): $CancellablePromise<void> {
     return $Call.ByID(4258914070, id, draftID);
+}
+
+/**
+ * SaveNewDiscussionDraft saves the title and the text of a New discussion to
+ * finish later, and answers the id of the draft: a new one for an empty id,
+ * else the draft updated.
+ */
+export function SaveNewDiscussionDraft(req: $models.SaveNewDiscussionDraftRequest): $CancellablePromise<string> {
+    return $Call.ByID(1437823031, req);
 }
 
 /**

@@ -64,6 +64,10 @@ A rodada reúne os rascunhos de uma leitura do artefato e as revisões deles, e 
 
 O artefato no disco é do agente e o produto nunca o reescreve; tudo o que é do usuário ou do produto sobre ele fica nessas tabelas. Os passos de uma publicação são gravados um a um, porque é assim que **Retry** continua de onde parou sem criar nada duas vezes.
 
+### Rascunhos do diálogo New discussion
+
+`new_discussion_drafts` guarda um rascunho por linha do diálogo **New discussion**: o board, com chave estrangeira e `ON DELETE CASCADE`, que leva os rascunhos junto com ele, o título e o texto como o usuário os digitou, e quando o rascunho foi criado e quando foi salvo pela última vez. Não tem relação com `discussion_drafts`, os rascunhos de cards que o agente de uma discussão escreve.
+
 ### Prompts
 
 Os prompts padrão vivem no binário, em `internal/prompts/defaults/`. O diretório `prompts/` guarda apenas os que o usuário editou: `prd.md`, `tech_spec.md`, `plan.md`, `one_shot.md`, `step_review.md`, `commit.md`, `pr.md`, `pr_review.md`, `pr_fix.md` e `discussion.md`. Um prompt sem arquivo segue o padrão da versão que roda, e um arquivo idêntico ao padrão é removido quando o app inicia, para que um prompt restaurado volte a acompanhar as versões novas. O prompt é lido quando uma sessão começa. A hora de uma edição é a do arquivo (`EditedAt`), e a lista de prompts das configurações sai só dessas horas, sem ler nenhum texto (`prompts.List`). Cada prompt informa quantas linhas tem o texto e quantas tem o padrão, sem contar a quebra de linha final.

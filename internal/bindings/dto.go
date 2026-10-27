@@ -166,6 +166,9 @@ type State struct {
 	// DiscussionHistory are the discussions archived since
 	// HistorySummary.WindowStart, newest first; never nil.
 	DiscussionHistory []ArchivedDiscussion `json:"discussionHistory"`
+	// NewDiscussionDrafts are the drafts saved from the New discussion dialog,
+	// of every board, the most recently saved first; never nil.
+	NewDiscussionDrafts []NewDiscussionDraft `json:"newDiscussionDrafts"`
 	// HistorySummary is the whole History in numbers.
 	HistorySummary HistorySummary `json:"historySummary"`
 	// Quit is the close of the window the app held back; null without one.
@@ -2079,12 +2082,31 @@ type StartDiscussionRequest struct {
 	Cards   []string `json:"cards"` // the keys of the cards of the board
 	Model   string   `json:"model"`
 	Effort  string   `json:"effort"`
+	DraftID string   `json:"draftId"` // the draft the discussion starts from; "" for none
 	// Images are the images the user attached, in base64, in the order they
 	// reach the agent.
 	Images []string `json:"images"`
 	// CardImages are the images read from the cards and from their epics, as
 	// BoardService.CardImages gave them.
 	CardImages []CardImage `json:"cardImages"`
+}
+
+// NewDiscussionDraft is a New discussion the user saved to finish later.
+type NewDiscussionDraft struct {
+	ID      string `json:"id"`
+	BoardID string `json:"boardId"`
+	Title   string `json:"title"`   // as typed; "" for none
+	Text    string `json:"text"`    // as typed; "" for none
+	SavedAt string `json:"savedAt"` // RFC 3339
+}
+
+// SaveNewDiscussionDraftRequest is what the New discussion dialog saves as a
+// draft.
+type SaveNewDiscussionDraftRequest struct {
+	ID      string `json:"id"` // "" for a new draft
+	BoardID string `json:"boardId"`
+	Title   string `json:"title"`
+	Text    string `json:"text"`
 }
 
 // DiscussionContextRequest is what the dialog of a discussion shows the

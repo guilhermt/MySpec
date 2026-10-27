@@ -10,6 +10,7 @@ import {
   makeCardImage,
   makeCardImageFailure,
   makeDiscussion,
+  makeNewDiscussionDraft,
   makeRepository,
   makeState,
 } from "@/test/wails-mock";
@@ -206,6 +207,7 @@ describe("NewDiscussionDialog", () => {
         title: "Add the login screen",
         text: "Break it into cards",
         cards: ["dev/web#12"],
+        draftId: "",
         model: "claude-fable-5-1",
         effort: "high",
         images: [],
@@ -591,6 +593,259 @@ describe("NewDiscussionDialog", () => {
       await waitFor(() => expect(api.startDiscussion).toHaveBeenCalledOnce());
       expect(screen.queryByRole("button", { name: /^Remove image/ })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /late\.png/ })).not.toBeInTheDocument();
+    });
+  });
+
+  describe("drafts", () => {
+    const MINE = makeNewDiscussionDraft({
+      id: "draft-a",
+      title: "Billing rules",
+      text: "Invoices close monthly.",
+    });
+    const SECOND = makeNewDiscussionDraft({ id: "draft-b", title: "Refunds", text: "" });
+    const OTHER = makeNewDiscussionDraft({
+      id: "draft-c",
+      boardId: "beta",
+      title: "Docs plan",
+      text: "Outline.",
+    });
+    const NOTHING = "Write a title or what to discuss to save a draft.";
+
+    function openWith(
+      drafts: ReturnType<typeof makeNewDiscussionDraft>[],
+      cardKeys: string[] = [],
+      askBoard = false,
+    ) {
+      return renderWithStore(<NewDiscussionDialog />, {
+        state: makeState({
+          repositories: [makeRepository()],
+          boards: [
+            makeBoard({ cards: [LOGIN, RESET], repositoryIds: ["repo-1"] }),
+            makeBoard({ id: "beta", title: "Beta", repositoryIds: ["repo-1"] }),
+          ],
+          newDiscussionDrafts: drafts,
+        }),
+        ui: { newDiscussion: { boardId: "board-1", cardKeys, askBoard } },
+      });
+    }
+    const title = () => screen.getByLabelText("Title");
+    const what = () => screen.getByLabelText(/^What to discuss/);
+
+    it("has no Drafts button without drafts of the board", () => {
+      openWith([OTHER]);
+
+      expect(screen.queryByRole("button", { name: /^Drafts/ })).not.toBeInTheDocument();
+    });
+
+    it("counts the drafts of the board in the header and lists them", async () => {
+      const { user } = openWith([MINE, SECOND, OTHER]);
+
+      await user.click(screen.getByRole("button", { name: "Drafts 2" }));
+
+      const list = screen.getByRole("list", { name: "Drafts" });
+      expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+      expect(within(list).getByText("Billing rules")).toBeInTheDocument();
+      expect(within(list).queryByText("Docs plan")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
+    });
+
+    it("lists the drafts of every board, naming each, when the board is asked", async () => {
+      const { user } = openWith([MINE, OTHER], [], true);
+
+      await user.click(screen.getByRole("button", { name: "Drafts 2" }));
+
+      expect(screen.getByText(/Roadmap · Invoices close monthly\./)).toBeInTheDocument();
+      expect(screen.getByText("Beta · Outline.")).toBeInTheDocument();
+    });
+
+    it("fills the form with the draft picked, keeping the cards, and switches the board when asked", async () => {
+      const { user } = openWith([OTHER], ["dev/web#12"], true);
+
+      await user.click(screen.getByRole("button", { name: "Drafts 1" }));
+      await user.click(screen.getByRole("button", { name: /Docs plan/ }));
+
+      expect(title()).toHaveValue("Docs plan");
+      expect(what()).toHaveValue("Outline.");
+      expect(screen.getByRole("button", { name: "Board: Beta" })).toBeInTheDocument();
+      expect(screen.getByText("Add the login screen")).toBeInTheDocument();
+      await waitFor(() => expect(what()).toHaveFocus());
+    });
+
+    it("returns to the form with Back, keeping what was typed", async () => {
+      const { user } = openWith([MINE]);
+      await user.type(title(), "Half a title");
+
+      await user.click(screen.getByRole("button", { name: "Drafts 1" }));
+      await user.click(screen.getByRole("button", { name: "Back" }));
+
+      expect(title()).toHaveValue("Half a title");
+      await waitFor(() => expect(title()).toHaveFocus());
+    });
+
+    it("holds Save draft back, with its reason, until something is written", async () => {
+      const { user } = openWith([], ["dev/web#12"]);
+
+      const save = screen.getByRole("button", { name: "Save draft" });
+      expect(save).toHaveAttribute("aria-disabled", "true");
+      await user.hover(save);
+      expect((await screen.findAllByText(NOTHING)).length).toBeGreaterThan(0);
+
+      await user.type(what(), "Rules");
+      expect(screen.getByRole("button", { name: "Save draft" })).toBeEnabled();
+    });
+
+    it("saves the draft with the form, and closes", async () => {
+      const { user } = openWith([]);
+      await user.type(title(), "Billing");
+      await user.type(what(), "Rules");
+
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+      await waitFor(() => expect(useAppStore.getState().newDiscussion).toBeNull());
+      expect(api.saveNewDiscussionDraft).toHaveBeenCalledWith({
+        id: "",
+        boardId: "board-1",
+        title: "Billing",
+        text: "Rules",
+      });
+    });
+
+    it("keeps the dialog and shows why the draft was not saved", async () => {
+      vi.mocked(api.saveNewDiscussionDraft).mockRejectedValueOnce(
+        new Error("This board is no longer in the app."),
+      );
+      const { user } = openWith([]);
+      await user.type(what(), "Rules");
+
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "This board is no longer in the app.",
+      );
+      expect(useAppStore.getState().newDiscussion).not.toBeNull();
+    });
+
+    it("closes at once with nothing written, or with only the suggested title", async () => {
+      const { user, unmount } = openWith([], ["dev/web#12"]);
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(useAppStore.getState().newDiscussion).toBeNull();
+      unmount();
+
+      openWith([]);
+      await user.keyboard("{Escape}");
+      await waitFor(() => expect(useAppStore.getState().newDiscussion).toBeNull());
+    });
+
+    it("asks before closing what was written, and Keep editing returns", async () => {
+      const { user } = openWith([]);
+      await user.type(what(), "Rules");
+
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(
+        screen.getByRole("alertdialog", { name: "Save this discussion as a draft?" }),
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Keep editing" }));
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(useAppStore.getState().newDiscussion).not.toBeNull();
+      expect(what()).toHaveValue("Rules");
+    });
+
+    it("asks on Esc too, and Discard closes without saving", async () => {
+      const { user } = openWith([]);
+      await user.type(what(), "Rules");
+
+      await user.keyboard("{Escape}");
+      await user.click(await screen.findByRole("button", { name: "Discard" }));
+
+      await waitFor(() => expect(useAppStore.getState().newDiscussion).toBeNull());
+      expect(api.saveNewDiscussionDraft).not.toHaveBeenCalled();
+      expect(api.deleteNewDiscussionDraft).not.toHaveBeenCalled();
+    });
+
+    it("saves the draft from the confirmation and closes", async () => {
+      const { user } = openWith([]);
+      await user.type(title(), "Billing");
+
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      await user.click(await screen.findByRole("button", { name: "Save draft" }));
+
+      await waitFor(() => expect(useAppStore.getState().newDiscussion).toBeNull());
+      expect(api.saveNewDiscussionDraft).toHaveBeenCalledWith({
+        id: "",
+        boardId: "board-1",
+        title: "Billing",
+        text: "",
+      });
+    });
+
+    it("saves with Ctrl+Enter in the confirmation, and does not start the discussion", async () => {
+      const { user } = openWith([], ["dev/web#12"]);
+      await user.type(what(), "Rules");
+
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Keep editing" })).toHaveFocus(),
+      );
+      await user.keyboard("{Control>}{Enter}{/Control}");
+
+      await waitFor(() => expect(api.saveNewDiscussionDraft).toHaveBeenCalledOnce());
+      expect(api.startDiscussion).not.toHaveBeenCalled();
+    });
+
+    it("always asks on closing a resumed draft, saves it by its id and deletes it on Discard", async () => {
+      const { user, unmount } = openWith([MINE]);
+      await user.click(screen.getByRole("button", { name: "Drafts 1" }));
+      await user.click(screen.getByRole("button", { name: /Billing rules/ }));
+
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(await screen.findByText("Discard deletes this draft.")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      await waitFor(() => expect(useAppStore.getState().newDiscussion).toBeNull());
+      expect(api.saveNewDiscussionDraft).toHaveBeenCalledWith({
+        id: "draft-a",
+        boardId: "board-1",
+        title: "Billing rules",
+        text: "Invoices close monthly.",
+      });
+      unmount();
+
+      const second = openWith([MINE]);
+      await second.user.click(screen.getByRole("button", { name: "Drafts 1" }));
+      await second.user.click(screen.getByRole("button", { name: /Billing rules/ }));
+      await second.user.click(screen.getByRole("button", { name: "Cancel" }));
+      await second.user.click(await screen.findByRole("button", { name: "Discard" }));
+
+      await waitFor(() => expect(api.deleteNewDiscussionDraft).toHaveBeenCalledWith("draft-a"));
+      await waitFor(() => expect(useAppStore.getState().newDiscussion).toBeNull());
+    });
+
+    it("asks before replacing what was written with another draft, then loads it", async () => {
+      const { user } = openWith([MINE, SECOND]);
+      await user.type(what(), "Unsaved words");
+
+      await user.click(screen.getByRole("button", { name: "Drafts 2" }));
+      await user.click(screen.getByRole("button", { name: /Refunds/ }));
+      await user.click(await screen.findByRole("button", { name: "Discard" }));
+
+      await waitFor(() => expect(title()).toHaveValue("Refunds"));
+      expect(what()).toHaveValue("");
+      expect(api.saveNewDiscussionDraft).not.toHaveBeenCalled();
+      expect(useAppStore.getState().newDiscussion).not.toBeNull();
+    });
+
+    it("starts the discussion from a resumed draft with its id", async () => {
+      const { user } = openWith([MINE]);
+      await user.click(screen.getByRole("button", { name: "Drafts 1" }));
+      await user.click(screen.getByRole("button", { name: /Billing rules/ }));
+
+      await user.click(screen.getByRole("button", { name: /^Start discussion/ }));
+
+      await waitFor(() =>
+        expect(api.startDiscussion).toHaveBeenCalledWith(
+          expect.objectContaining({ draftId: "draft-a", title: "Billing rules" }),
+        ),
+      );
     });
   });
 });

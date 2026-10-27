@@ -15,11 +15,16 @@ import { Textarea } from "@/components/system/Textarea";
 import { useArrivedLater } from "@/components/system/useArrivedLater";
 import { useNow } from "@/features/attention/useNow";
 import { Markdown } from "@/features/chat/Markdown";
+import { NewDiscussionDrafts } from "@/features/discussion/NewDiscussionDrafts";
 import {
   BOARD_FIELD_HELP,
   boardLine,
   boardOptions,
   contextLine,
+  draftsFor,
+  hasWritten,
+  NOTHING_TO_SAVE,
+  saveReason,
   startReason,
   suggestedTitle,
   titleError,
@@ -27,6 +32,7 @@ import {
   unclonedRepositories,
   whatHint,
 } from "@/features/discussion/new-discussion";
+import { SaveDraftDialog } from "@/features/discussion/SaveDraftDialog";
 import { UnclonedRepository } from "@/features/discussion/UnclonedRepository";
 import { useDiscussionContext } from "@/features/discussion/useDiscussionContext";
 import { AttachedImages } from "@/features/images/AttachedImages";
@@ -37,7 +43,7 @@ import { pasteImages } from "@/features/images/pasteImages";
 import { useCardImages } from "@/features/images/useCardImages";
 import { useImageDrop } from "@/features/images/useImageDrop";
 import { ModelChip } from "@/features/models/ModelChip";
-import { issueLabel } from "@/lib/boards";
+import { findBoard, issueLabel } from "@/lib/boards";
 import { messageOf } from "@/lib/errors";
 import {
   type Attachment,
@@ -50,13 +56,14 @@ import {
 import { choiceOf, type ModelChoice } from "@/lib/models";
 import { sharedAmong, shortName } from "@/lib/repositories";
 import { cn } from "@/lib/utils";
-import type { Board, BoardCard, StageModel } from "@/lib/wails";
-import { startDiscussion } from "@/store/actions";
+import type { Board, BoardCard, NewDiscussionDraft, StageModel } from "@/lib/wails";
+import { deleteNewDiscussionDraft, saveNewDiscussionDraft, startDiscussion } from "@/store/actions";
 import {
   type NewDiscussionRef,
   useAppStore,
   useBoard,
   useNewDiscussion,
+  useNewDiscussionDrafts,
   useRepositories,
 } from "@/store/app-store";
 
@@ -126,6 +133,9 @@ function GoneBoard() {
   );
 }
 
+/** Leaving is what the user is asked about: closing the dialog, or resuming another draft over what was written. */
+type Leaving = { kind: "close" } | { kind: "resume"; draft: NewDiscussionDraft };
+
 interface NewDiscussionFormProps {
   board: Board;
   cardKeys: readonly string[];
@@ -147,8 +157,9 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
       (id) => repositories.find((repository) => repository.id === id)?.fullName ?? [],
     ),
   );
-  const now = useNow(60_000, askBoard);
   const boardTrigger = useRef<HTMLElement | null>(null);
+  const titleInput = useRef<HTMLInputElement>(null);
+  const textInput = useRef<HTMLTextAreaElement>(null);
 
   // A card that is no longer in the last reading of the board is left out
   // without a word: the discussion is about the ones that are.
@@ -157,13 +168,27 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
       .map((key) => (board.cards ?? []).find((card) => card.key === key))
       .filter((card): card is BoardCard => card !== undefined),
   );
-  const [title, setTitle] = useState(() => suggestedTitle(cards));
+  // The title the dialog opened with, which is not something the user wrote.
+  const [suggested] = useState(() => suggestedTitle(cards));
+  const [title, setTitle] = useState(suggested);
   const [text, setText] = useState("");
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [view, setView] = useState<"form" | "drafts">("form");
+  const [leaving, setLeaving] = useState<Leaving | null>(null);
+  const [saving, setSaving] = useState(false);
+  // The field to focus once the form is on the screen: after a resume, after Back.
+  const [focusing, setFocusing] = useState<"title" | "text" | null>(null);
   const [images, setImages] = useState<Attachment[]>([]);
   const [imageRefusal, setImageRefusal] = useState<string | null>(null);
   const [choice, setChoice] = useState<ModelChoice>(() => choiceOf(defaults, "discussion"));
   const [refusal, setRefusal] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const busy = starting || saving;
+  const drafts = draftsFor(useNewDiscussionDrafts(), board.id, askBoard);
+  const showingList = view === "drafts" && drafts.length > 0;
+  const now = useNow(60_000, askBoard || showingList);
+  const written = hasWritten({ title, text, suggested, draftId });
+  const toSave = saveReason({ title, text });
   const [showContext, setShowContext] = useState(false);
   const context = useDiscussionContext(board.id, text, cards);
   const failureArrived = useArrivedLater(context.failure !== null);
@@ -173,8 +198,21 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
     !context.refreshing,
   );
 
+  useEffect(() => {
+    if (focusing === null || showingList) {
+      return;
+    }
+    if (focusing === "title") {
+      titleInput.current?.focus();
+    } else if (textInput.current !== null) {
+      textInput.current.focus();
+      textInput.current.setSelectionRange(text.length, text.length);
+    }
+    setFocusing(null);
+  }, [focusing, showingList, text.length]);
+
   const attach = (files: File[]) => {
-    if (starting) {
+    if (busy) {
       return;
     }
     void readAttachments(files).then(({ attachments, refusals }) => {
@@ -183,7 +221,7 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
     });
   };
   const removeImage = (id: string) => {
-    if (starting) {
+    if (busy) {
       return;
     }
     revokeAttachments(images.filter((image) => image.id === id));
@@ -193,7 +231,7 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
   const held = useRef(images);
   held.current = images;
   useEffect(() => () => revokeAttachments(held.current), []);
-  const drop = useImageDrop(attach, !starting);
+  const drop = useImageDrop(attach, !busy);
 
   const reason = startReason({ board: board.id, title, text, cards: cards.length });
   const uncloned = unclonedRepositories(board, repositories);
@@ -202,8 +240,52 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
     return standard.model === choice.model && standard.effort === choice.effort;
   })();
 
+  const saveDraft = () =>
+    saveNewDiscussionDraft({ id: draftId ?? "", boardId: board.id, title, text });
+  const saveAndClose = () => {
+    setSaving(true);
+    setRefusal(null);
+    saveDraft()
+      .then(closeNewDiscussion)
+      .catch((failure: unknown) => {
+        setRefusal(messageOf(failure));
+        setSaving(false);
+      });
+  };
+  const resume = (draft: NewDiscussionDraft) => {
+    if (askBoard) {
+      onBoardChange(draft.boardId);
+    }
+    setTitle(draft.title);
+    setText(draft.text);
+    setDraftId(draft.id);
+    setView("form");
+    setFocusing("text");
+  };
+  const pick = (draft: NewDiscussionDraft) => {
+    if (draft.id === draftId) {
+      setView("form");
+    } else if (written) {
+      setLeaving({ kind: "resume", draft });
+    } else {
+      resume(draft);
+    }
+  };
+  const finishLeave = () => {
+    if (leaving?.kind === "resume") {
+      resume(leaving.draft);
+    } else {
+      closeNewDiscussion();
+    }
+    setLeaving(null);
+  };
+  const back = () => {
+    setView("form");
+    setFocusing("title");
+  };
+
   const start = () => {
-    if (reason !== null || starting) {
+    if (reason !== null || busy) {
       return;
     }
     setStarting(true);
@@ -216,6 +298,7 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
         title: title.trim(),
         text,
         cards: cards.map((card) => card.key),
+        draftId: draftId ?? "",
         model: choice.model,
         effort: choice.effort,
         images: await encodeImages(images),
@@ -240,218 +323,290 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open && !starting) {
+        if (open || busy) {
+          return;
+        }
+        if (written) {
+          setLeaving({ kind: "close" });
+        } else {
           closeNewDiscussion();
         }
       }}
       title="New discussion"
       size="wide"
-      closeDisabled={starting}
-      onConfirm={start}
+      closeDisabled={busy}
+      {...(showingList ? { subtitle: "Drafts" } : { onConfirm: start })}
+      {...(!showingList && drafts.length > 0
+        ? {
+            headerAction: (
+              <Button variant="ghost" size="xs" disabled={busy} onClick={() => setView("drafts")}>
+                Drafts <span className="font-normal text-ink-3">{drafts.length}</span>
+              </Button>
+            ),
+          }
+        : {})}
       {...(askBoard ? { initialFocus: boardTrigger } : {})}
     >
-      <DialogBody className="gap-(--space-4)">
-        {askBoard && app !== null ? (
-          // Asking the board, the focus starts on its field; otherwise on the Title.
-          <div
-            ref={(field) => {
-              boardTrigger.current = field?.querySelector("button") ?? null;
-            }}
+      {showingList ? (
+        <>
+          <DialogBody>
+            <NewDiscussionDrafts
+              drafts={drafts}
+              showBoard={askBoard}
+              boardTitle={(id) => findBoard(app, id)?.title ?? ""}
+              now={now}
+              onPick={pick}
+            />
+          </DialogBody>
+          <DialogFooter
+            back={
+              <Button variant="ghost" onClick={back}>
+                Back
+              </Button>
+            }
           >
-            <Field label="Board" help={BOARD_FIELD_HELP}>
-              <Select
-                label="Board"
-                value={board.id}
-                options={boardOptions(app, now)}
-                disabled={starting}
-                onValueChange={onBoardChange}
+            <DialogCancel />
+          </DialogFooter>
+        </>
+      ) : (
+        <>
+          <DialogBody className="gap-(--space-4)">
+            {askBoard && app !== null ? (
+              // Asking the board, the focus starts on its field; otherwise on the Title.
+              <div
+                ref={(field) => {
+                  boardTrigger.current = field?.querySelector("button") ?? null;
+                }}
+              >
+                <Field label="Board" help={BOARD_FIELD_HELP}>
+                  <Select
+                    label="Board"
+                    value={board.id}
+                    options={boardOptions(app, now)}
+                    disabled={busy}
+                    onValueChange={onBoardChange}
+                  />
+                </Field>
+              </div>
+            ) : (
+              <SunkenLine icon={ICONS.board}>
+                <span className="flex min-w-0 gap-(--space-2)">
+                  <span className="shrink-0 font-medium text-ink-1">{board.title}</span>
+                  <CutText text={boardLine(board, repositories)} className="text-ink-3" />
+                </span>
+              </SunkenLine>
+            )}
+
+            <Field
+              label="Title"
+              {...(problem !== null ? { error: problem } : help !== "" ? { help } : {})}
+            >
+              <Input
+                ref={titleInput}
+                value={title}
+                autoComplete="off"
+                disabled={busy}
+                onChange={(event) => setTitle(event.target.value)}
               />
             </Field>
-          </div>
-        ) : (
-          <SunkenLine icon={ICONS.board}>
-            <span className="flex min-w-0 gap-(--space-2)">
-              <span className="shrink-0 font-medium text-ink-1">{board.title}</span>
-              <CutText text={boardLine(board, repositories)} className="text-ink-3" />
-            </span>
-          </SunkenLine>
-        )}
 
-        <Field
-          label="Title"
-          {...(problem !== null ? { error: problem } : help !== "" ? { help } : {})}
-        >
-          <Input
-            value={title}
-            autoComplete="off"
-            disabled={starting}
-            onChange={(event) => setTitle(event.target.value)}
-          />
-        </Field>
-
-        <div className="relative flex flex-col gap-(--space-2)" {...drop.handlers}>
-          <Field
-            label="What to discuss"
-            complement={whatHint(cards.length)}
-            {...(imageRefusal !== null ? { error: imageRefusal } : {})}
-          >
-            <Textarea
-              rows={3}
-              value={text}
-              disabled={starting}
-              onChange={(event) => setText(event.target.value)}
-              onPaste={(event) => pasteImages(event, attach)}
-              // field-sizing-content ignores rows: the field holds three lines at least, nine at most.
-              className={cn(
-                "min-h-[calc(var(--leading-body)*3+var(--space-2)*2+var(--border)*2)] max-h-[calc(9*var(--leading-body)+var(--space-4))] field-sizing-content",
-                drop.dragging && "border-dashed border-focus",
-              )}
-            />
-          </Field>
-          {drop.dragging && <DropHint />}
-          {images.length > 0 && (
-            <AttachedImages attachments={images} {...(starting ? {} : { onRemove: removeImage })} />
-          )}
-        </div>
-
-        {cards.length > 0 && (
-          <div className="flex flex-col gap-(--space-1)">
-            <span className={SECTION_LABEL}>
-              Cards <span className="font-normal text-ink-3">{cards.length}</span>
-            </span>
-            <ul className="flex flex-col divide-y divide-line-1 rounded-sm border border-line-1">
-              {cards.map((card) => (
-                // The line under a row is outside its height, so the × stays centred on a whole pixel.
-                <li
-                  key={card.key}
-                  className="box-content flex min-h-(--size-control) items-center gap-(--space-2) pr-(--space-1) pl-(--space-3) text-(length:--text-ui) leading-(--leading-ui)"
-                >
-                  <span className="shrink-0 font-mono text-(length:--text-meta) text-ink-3">
-                    {issueLabel(card)}
-                  </span>
-                  <CutText text={card.title} className="flex-1 text-ink-1" />
-                  <span className="shrink-0 text-ink-3">
-                    {shared.has(shortName(card.repository).toLowerCase())
-                      ? card.repository
-                      : shortName(card.repository)}
-                  </span>
-                  <IconButton
-                    size="xs"
-                    icon={ICONS.close}
-                    label={`Remove ${issueLabel(card)} from the discussion`}
-                    disabled={starting}
-                    onClick={() =>
-                      setCards((current) => current.filter((item) => item.key !== card.key))
-                    }
-                  />
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <div className="flex flex-col gap-(--space-2)">
-          <LiveRegion kind="status" className="sr-only">
-            {context.refreshing && "Refreshing the cards…"}
-          </LiveRegion>
-          {context.refreshing ? (
-            <SunkenLine
-              action={
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  disabled
-                  disabledReason="The cards are being read again."
-                >
-                  Show
-                </Button>
-              }
-            >
-              <Shimmer>Refreshing the cards…</Shimmer>
-            </SunkenLine>
-          ) : (
-            <>
-              {context.failure !== null && (
-                <SunkenLine>
-                  <span {...(failureArrived ? { role: "alert" } : {})}>
-                    <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />
-                    {`Couldn't refresh the cards: ${context.failure}. The discussion will use the last reading.`}
-                  </span>
-                </SunkenLine>
-              )}
-              <SunkenLine
-                action={
-                  <Button
-                    size="xs"
-                    variant="ghost"
-                    aria-expanded={showContext}
-                    aria-controls={contextId}
-                    onClick={() => setShowContext((current) => !current)}
-                  >
-                    {showContext ? "Hide" : "Show"}
-                  </Button>
-                }
+            <div className="relative flex flex-col gap-(--space-2)" {...drop.handlers}>
+              <Field
+                label="What to discuss"
+                complement={whatHint(cards.length)}
+                {...(imageRefusal !== null ? { error: imageRefusal } : {})}
               >
-                {contextLine(cards, context.text) +
-                  imagesPart(cardImages.images.length + images.length, cardImages.reading)}
-              </SunkenLine>
-              <CardImageFailures failures={cardImages.failures} />
-            </>
-          )}
-          {showContext && (
-            <section
-              id={contextId}
-              aria-label="The context of the discussion"
-              // biome-ignore lint/a11y/noNoninteractiveTabindex: a box that scrolls is read with the keyboard
-              tabIndex={0}
-              className="max-h-[calc(9*var(--leading-body))] overflow-y-auto rounded-sm border border-line-1 px-(--space-3) py-(--space-2) text-(length:--text-body) leading-(--leading-body) text-ink-2 select-text focus-visible:focus-ring"
-            >
-              <Markdown images={{ kind: "omit" }}>{context.text ?? ""}</Markdown>
-              {cardImages.images.length + images.length > 0 && (
-                <ContextImages read={cardImages.images} attached={images} />
+                <Textarea
+                  ref={textInput}
+                  rows={3}
+                  value={text}
+                  disabled={busy}
+                  onChange={(event) => setText(event.target.value)}
+                  onPaste={(event) => pasteImages(event, attach)}
+                  // field-sizing-content ignores rows: the field holds three lines at least, nine at most.
+                  className={cn(
+                    "min-h-[calc(var(--leading-body)*3+var(--space-2)*2+var(--border)*2)] max-h-[calc(9*var(--leading-body)+var(--space-4))] field-sizing-content",
+                    drop.dragging && "border-dashed border-focus",
+                  )}
+                />
+              </Field>
+              {drop.dragging && <DropHint />}
+              {images.length > 0 && (
+                <AttachedImages attachments={images} {...(busy ? {} : { onRemove: removeImage })} />
               )}
-            </section>
-          )}
-        </div>
+            </div>
 
-        {uncloned.map((repository) => (
-          <UnclonedRepository key={repository.id} repository={repository} layout="strip" />
-        ))}
+            {cards.length > 0 && (
+              <div className="flex flex-col gap-(--space-1)">
+                <span className={SECTION_LABEL}>
+                  Cards <span className="font-normal text-ink-3">{cards.length}</span>
+                </span>
+                <ul className="flex flex-col divide-y divide-line-1 rounded-sm border border-line-1">
+                  {cards.map((card) => (
+                    // The line under a row is outside its height, so the × stays centred on a whole pixel.
+                    <li
+                      key={card.key}
+                      className="box-content flex min-h-(--size-control) items-center gap-(--space-2) pr-(--space-1) pl-(--space-3) text-(length:--text-ui) leading-(--leading-ui)"
+                    >
+                      <span className="shrink-0 font-mono text-(length:--text-meta) text-ink-3">
+                        {issueLabel(card)}
+                      </span>
+                      <CutText text={card.title} className="flex-1 text-ink-1" />
+                      <span className="shrink-0 text-ink-3">
+                        {shared.has(shortName(card.repository).toLowerCase())
+                          ? card.repository
+                          : shortName(card.repository)}
+                      </span>
+                      <IconButton
+                        size="xs"
+                        icon={ICONS.close}
+                        label={`Remove ${issueLabel(card)} from the discussion`}
+                        disabled={busy}
+                        onClick={() =>
+                          setCards((current) => current.filter((item) => item.key !== card.key))
+                        }
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
-        <div className="flex items-center gap-(--space-3)">
-          <span className={SECTION_LABEL}>Model</span>
-          <span inert={starting}>
-            <ModelChip
-              label="Discussion"
-              value={choice}
-              own={!byDefault}
-              followNote=""
-              onChange={setChoice}
-            />
-          </span>
-          {byDefault && (
-            <span className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
-              From Defaults
-            </span>
-          )}
-        </div>
-      </DialogBody>
-      <DialogFooter
-        {...(footerText !== null ? { reason: { id: reasonId, text: footerText } } : {})}
-        {...(refusal !== null ? { refusal } : {})}
-      >
-        <DialogCancel disabled={starting} />
-        <Button
-          variant="primary"
-          shortcut="Ctrl ↵"
-          {...(reason !== null ? { disabled: true, reasonId } : {})}
-          loading={starting}
-          loadingLabel="Starting…"
-          onClick={start}
-        >
-          Start discussion
-        </Button>
-      </DialogFooter>
+            <div className="flex flex-col gap-(--space-2)">
+              <LiveRegion kind="status" className="sr-only">
+                {context.refreshing && "Refreshing the cards…"}
+              </LiveRegion>
+              {context.refreshing ? (
+                <SunkenLine
+                  action={
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      disabled
+                      disabledReason="The cards are being read again."
+                    >
+                      Show
+                    </Button>
+                  }
+                >
+                  <Shimmer>Refreshing the cards…</Shimmer>
+                </SunkenLine>
+              ) : (
+                <>
+                  {context.failure !== null && (
+                    <SunkenLine>
+                      <span {...(failureArrived ? { role: "alert" } : {})}>
+                        <StateGlyph state="blocked" className="mr-(--space-1-5) align-middle" />
+                        {`Couldn't refresh the cards: ${context.failure}. The discussion will use the last reading.`}
+                      </span>
+                    </SunkenLine>
+                  )}
+                  <SunkenLine
+                    action={
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        aria-expanded={showContext}
+                        aria-controls={contextId}
+                        onClick={() => setShowContext((current) => !current)}
+                      >
+                        {showContext ? "Hide" : "Show"}
+                      </Button>
+                    }
+                  >
+                    {contextLine(cards, context.text) +
+                      imagesPart(cardImages.images.length + images.length, cardImages.reading)}
+                  </SunkenLine>
+                  <CardImageFailures failures={cardImages.failures} />
+                </>
+              )}
+              {showContext && (
+                <section
+                  id={contextId}
+                  aria-label="The context of the discussion"
+                  // biome-ignore lint/a11y/noNoninteractiveTabindex: a box that scrolls is read with the keyboard
+                  tabIndex={0}
+                  className="max-h-[calc(9*var(--leading-body))] overflow-y-auto rounded-sm border border-line-1 px-(--space-3) py-(--space-2) text-(length:--text-body) leading-(--leading-body) text-ink-2 select-text focus-visible:focus-ring"
+                >
+                  <Markdown images={{ kind: "omit" }}>{context.text ?? ""}</Markdown>
+                  {cardImages.images.length + images.length > 0 && (
+                    <ContextImages read={cardImages.images} attached={images} />
+                  )}
+                </section>
+              )}
+            </div>
+
+            {uncloned.map((repository) => (
+              <UnclonedRepository key={repository.id} repository={repository} layout="strip" />
+            ))}
+
+            <div className="flex items-center gap-(--space-3)">
+              <span className={SECTION_LABEL}>Model</span>
+              <span inert={busy}>
+                <ModelChip
+                  label="Discussion"
+                  value={choice}
+                  own={!byDefault}
+                  followNote=""
+                  onChange={setChoice}
+                />
+              </span>
+              {byDefault && (
+                <span className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
+                  From Defaults
+                </span>
+              )}
+            </div>
+          </DialogBody>
+          <DialogFooter
+            {...(footerText !== null ? { reason: { id: reasonId, text: footerText } } : {})}
+            {...(refusal !== null ? { refusal } : {})}
+          >
+            <DialogCancel disabled={busy} />
+            <Button
+              variant="secondary"
+              loading={saving}
+              loadingLabel="Saving…"
+              disabled={starting || !written || toSave !== null}
+              {...(!written || toSave !== null ? { disabledReason: NOTHING_TO_SAVE } : {})}
+              onClick={saveAndClose}
+            >
+              Save draft
+            </Button>
+            <Button
+              variant="primary"
+              shortcut="Ctrl ↵"
+              {...(reason !== null
+                ? { disabled: true, reasonId }
+                : saving
+                  ? { disabled: true }
+                  : {})}
+              loading={starting}
+              loadingLabel="Starting…"
+              onClick={start}
+            >
+              Start discussion
+            </Button>
+          </DialogFooter>
+        </>
+      )}
+      <SaveDraftDialog
+        open={leaving !== null}
+        resumed={draftId !== null}
+        saveReason={toSave}
+        onKeep={() => setLeaving(null)}
+        onSave={async () => {
+          await saveDraft();
+          finishLeave();
+        }}
+        onDiscard={async () => {
+          if (draftId !== null) {
+            await deleteNewDiscussionDraft(draftId);
+          }
+          setDraftId(null);
+          finishLeave();
+        }}
+      />
     </Dialog>
   );
 }

@@ -43,6 +43,7 @@ import type {
   Migration,
   ModelCatalog,
   ModelStage,
+  NewDiscussionDraft,
   PermissionDecision,
   PRCheck,
   PRReport,
@@ -66,6 +67,7 @@ import type {
   ReviewVerdict,
   RunningTask,
   SaveBoardRequest,
+  SaveNewDiscussionDraftRequest,
   Situation,
   SituationOpen,
   SituationStarted,
@@ -317,6 +319,10 @@ export const api = {
   startDiscussion: vi.fn<(req: StartDiscussionRequest) => Promise<string>>(() =>
     Promise.resolve("discussion-1"),
   ),
+  saveNewDiscussionDraft: vi.fn<(req: SaveNewDiscussionDraftRequest) => Promise<string>>(() =>
+    Promise.resolve("draft-1"),
+  ),
+  deleteNewDiscussionDraft: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   checkAgainDiscussion: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   askAgainDiscussion: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   discussionContext: vi.fn<(req: DiscussionContextRequest) => Promise<string>>(() =>
@@ -505,6 +511,7 @@ export function makeState(overrides: Partial<State> = {}): State {
     reviewHistory: [],
     discussions: [],
     discussionHistory: [],
+    newDiscussionDrafts: [],
     historySummary: makeHistorySummary(),
     cloneFolder: "",
     quit: null,
@@ -591,6 +598,19 @@ export function makeRepositoryCandidate(
     fullName: "dev/web",
     path: "/home/dev/projects/web",
     registered: false,
+    ...overrides,
+  };
+}
+
+export function makeNewDiscussionDraft(
+  overrides: Partial<NewDiscussionDraft> = {},
+): NewDiscussionDraft {
+  return {
+    id: "draft-1",
+    boardId: "board-1",
+    title: "Billing rules",
+    text: "Invoices are issued on the last day.",
+    savedAt: "2026-10-27T10:00:00Z",
     ...overrides,
   };
 }
@@ -1857,6 +1877,8 @@ export function resetWailsMock(): void {
   api.createTask.mockImplementation(() => Promise.resolve("task-1"));
   api.startReview.mockImplementation(() => Promise.resolve("review-1"));
   api.startDiscussion.mockImplementation(() => Promise.resolve("discussion-1"));
+  api.saveNewDiscussionDraft.mockImplementation(() => Promise.resolve("draft-1"));
+  api.deleteNewDiscussionDraft.mockImplementation(() => Promise.resolve());
   api.discussionContext.mockImplementation(() => Promise.resolve("## Board\n"));
   api.groupIntoEpic.mockImplementation(() => Promise.resolve("draft-epic"));
   api.readDiscussionArtifact.mockImplementation(() => Promise.resolve("# Discussion\n"));

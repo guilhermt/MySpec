@@ -2,7 +2,7 @@ import type { SelectOption } from "@/components/system/Select";
 import { findBoard } from "@/lib/boards";
 import { findRepository, shortName } from "@/lib/repositories";
 import { counted, listed } from "@/lib/situations";
-import type { Board, BoardCard, Repository, State } from "@/lib/wails";
+import type { Board, BoardCard, NewDiscussionDraft, Repository, State } from "@/lib/wails";
 import { age } from "@/lib/when";
 
 /** TITLE_MAX is how long the title of a discussion can be. */
@@ -14,6 +14,9 @@ export const TITLE_MAX = 120;
  */
 export const NOTHING_TO_DISCUSS = "Write what to discuss or select at least one card.";
 
+/** NOTHING_TO_SAVE says what a draft without a title and without text is missing. */
+export const NOTHING_TO_SAVE = "Write a title or what to discuss to save a draft.";
+
 /** READS_CLONES says why a discussion wants the repositories of the board cloned. */
 export const READS_CLONES = "The conversation reads the code of the cloned repositories only.";
 
@@ -23,6 +26,56 @@ export const READS_CLONES = "The conversation reads the code of the cloned repos
  */
 export function suggestedTitle(cards: readonly BoardCard[]): string {
   return cards.length === 1 ? (cards[0]?.title ?? "") : "";
+}
+
+/**
+ * hasWritten says whether the form holds something worth asking about on leaving: a resumed
+ * draft, a text, or a title the user changed from the suggested one.
+ */
+export function hasWritten(input: {
+  title: string;
+  text: string;
+  suggested: string;
+  draftId: string | null;
+}): boolean {
+  return (
+    input.draftId !== null ||
+    input.text.trim() !== "" ||
+    (input.title.trim() !== "" && input.title !== input.suggested)
+  );
+}
+
+/** saveReason is NOTHING_TO_SAVE when the title and the text are both blank, null when a draft can be saved. */
+export function saveReason(input: { title: string; text: string }): string | null {
+  return input.title.trim() === "" && input.text.trim() === "" ? NOTHING_TO_SAVE : null;
+}
+
+/** draftsFor are the drafts the dialog lists: all of them when it asks the board, else the board's. */
+export function draftsFor(
+  drafts: readonly NewDiscussionDraft[],
+  boardId: string,
+  askBoard: boolean,
+): NewDiscussionDraft[] {
+  return drafts.filter((draft) => askBoard || draft.boardId === boardId);
+}
+
+/** UNTITLED is the label of a draft saved with no title. */
+export const UNTITLED = "Untitled";
+
+/** draftLabel is the title of a draft, "Untitled" when it has none. */
+export function draftLabel(draft: NewDiscussionDraft): string {
+  const title = draft.title.trim();
+  return title === "" ? UNTITLED : title;
+}
+
+/** draftExcerpt is the first non-blank line of the text of a draft, "" for none. */
+export function draftExcerpt(text: string): string {
+  return (
+    text
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line !== "") ?? ""
+  );
 }
 
 /** codePoints counts a text as the Go side does: by code point. */

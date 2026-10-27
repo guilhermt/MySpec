@@ -65,6 +65,7 @@ type fixture struct {
 	tasks     map[string]int                 // the active tasks of each repository, by id
 	archived  map[string]int                 // the archived tasks of each repository, by id
 	ids       int                            // how many ids NewID gave
+	removed   []string                       // the ids OnRemove heard of
 }
 
 // newFixture registers the board "Roadmap" with the stored reading given, and
@@ -104,6 +105,7 @@ func newFixture(t *testing.T, stored board.Stored) *fixture {
 		Now:          func() time.Time { return base },
 		NewID:        f.newID,
 		OnChange:     f.changes.inc,
+		OnRemove:     func(id string) { f.removed = append(f.removed, id) },
 		OnRead:       f.reads.record,
 	})
 	if err := f.service.Sync(t.Context()); err != nil {

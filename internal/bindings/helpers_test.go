@@ -30,6 +30,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git/gittest"
 	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/newdiscussion"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
@@ -400,6 +401,7 @@ type fixture struct {
 	reviewFlow     *reviewflow.Service
 	discussions    *discussion.Service
 	discussionFlow *discussionflow.Service
+	drafts         *newdiscussion.Service
 	dataDir        string
 	picker         *fakePicker
 	scanRoot       string // the folder the repository scan starts at
@@ -593,8 +595,16 @@ func newFixture(t *testing.T) *fixture {
 	f.reviewSvc = bindings.NewReviewService(
 		f.reviewFlow, f.prReviews, f.pullRequests, f.worktrees, f.editor.open, log,
 	)
+	f.drafts = newdiscussion.New(newdiscussion.Deps{
+		Store: st,
+		HasBoard: func(id string) bool {
+			_, ok := f.boards.Get(id)
+			return ok
+		},
+		Log: log,
+	})
 	f.discussionSvc = bindings.NewDiscussionService(
-		f.discussionFlow, f.discussions, f.repositories, f.cardImages, log,
+		f.discussionFlow, f.discussions, f.drafts, f.repositories, f.cardImages, log,
 	)
 	return f
 }
@@ -968,6 +978,7 @@ func (f *fixture) snapshot() bindings.State {
 		ReviewHistory: bindings.FromArchivedReviews(
 			f.prReviews.ListArchived(), f.prReviews.Passes, repositories,
 		),
+		NewDiscussionDrafts: bindings.FromNewDiscussionDrafts(f.drafts.List()),
 		Discussions: bindings.FromDiscussions(
 			f.discussionStates(), nil, f.boards.Get, f.boards.Stored, repositories, f.repositories.Missing,
 		),

@@ -13,6 +13,7 @@ import (
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/images"
 	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/newdiscussion"
 	"github.com/guilhermt/myspec/internal/repository"
 )
 
@@ -28,6 +29,7 @@ type DiscussionService struct {
 	late         late[DiscussionService]
 	flow         *discussionflow.Service
 	discussions  *discussion.Service
+	drafts       *newdiscussion.Service
 	repositories *repository.Service
 	cardImages   *cardimages.Service
 	log          *slog.Logger
@@ -37,6 +39,7 @@ type DiscussionService struct {
 func NewDiscussionService(
 	flow *discussionflow.Service,
 	discussions *discussion.Service,
+	drafts *newdiscussion.Service,
 	repositories *repository.Service,
 	cardImages *cardimages.Service,
 	log *slog.Logger,
@@ -44,6 +47,7 @@ func NewDiscussionService(
 	return &DiscussionService{
 		flow:         flow,
 		discussions:  discussions,
+		drafts:       drafts,
 		repositories: repositories,
 		cardImages:   cardImages,
 		log:          log,
@@ -87,7 +91,56 @@ func (s *DiscussionService) StartDiscussion(req StartDiscussionRequest) (string,
 		}
 		return "", s.fail("StartDiscussion", err)
 	}
+	if req.DraftID != "" {
+		s.deleteStartedDraft(req.DraftID)
+	}
 	return id, nil
+}
+
+// deleteStartedDraft removes the draft a discussion started from. The
+// discussion is already started, so a failure is logged and goes no further.
+func (s *DiscussionService) deleteStartedDraft(draftID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.drafts.Delete(ctx, draftID); err != nil {
+		s.log.Warn("draft of a started discussion not deleted", "draft", draftID, "error", err)
+	}
+}
+
+// SaveNewDiscussionDraft saves the title and the text of a New discussion to
+// finish later, and answers the id of the draft: a new one for an empty id,
+// else the draft updated.
+func (s *DiscussionService) SaveNewDiscussionDraft(req SaveNewDiscussionDraftRequest) (string, error) {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return "", err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	d, err := s.drafts.Save(ctx, newdiscussion.SaveParams{
+		ID: req.ID, BoardID: req.BoardID, Title: req.Title, Text: req.Text,
+	})
+	if err != nil {
+		return "", s.fail("SaveNewDiscussionDraft", err)
+	}
+	return d.ID, nil
+}
+
+// DeleteNewDiscussionDraft deletes a draft of the New discussion dialog.
+func (s *DiscussionService) DeleteNewDiscussionDraft(id string) error {
+	s, err := s.late.resolve(s)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	if err := s.drafts.Delete(ctx, id); err != nil {
+		return s.fail("DeleteNewDiscussionDraft", err)
+	}
+	return nil
 }
 
 // DiscussionContext is the context a discussion would start with, built from
