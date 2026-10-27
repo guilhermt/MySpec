@@ -21,6 +21,8 @@ import type {
   CreateTaskRequest,
   DeletePreview,
   DeleteResult,
+  DeployRepositoryOptions,
+  DeploySettings,
   DiscussionCard,
   DiscussionContextRequest,
   DiscussionSummary,
@@ -66,6 +68,7 @@ import type {
   ReviewVerdict,
   RunningTask,
   SaveBoardRequest,
+  SaveDeploySettingsRequest,
   Situation,
   SituationOpen,
   SituationStarted,
@@ -125,6 +128,15 @@ export const api = {
     Promise.resolve(makeBoardRemoval()),
   ),
   removeBoard: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  deploySettings: vi.fn<(boardId: string) => Promise<DeploySettings>>(() =>
+    Promise.resolve(makeDeploySettings()),
+  ),
+  readDeployRepository: vi.fn<
+    (repositoryId: string, branches: string[]) => Promise<DeployRepositoryOptions>
+  >(() => Promise.resolve(makeDeployRepositoryOptions())),
+  saveDeploySettings: vi.fn<(req: SaveDeploySettingsRequest) => Promise<void>>(() =>
+    Promise.resolve(),
+  ),
   refreshBoard: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
   refreshCard: vi.fn<(boardId: string, key: string) => Promise<void>>(() => Promise.resolve()),
   cardContext: vi.fn<(boardId: string, key: string) => Promise<string>>(() =>
@@ -751,6 +763,16 @@ export function makeBoardRemoval(overrides: Partial<BoardRemoval> = {}): BoardRe
     deploys: 0,
     ...overrides,
   };
+}
+
+export function makeDeploySettings(overrides: Partial<DeploySettings> = {}): DeploySettings {
+  return { boardId: "board-1", configured: false, enabled: false, repositories: [], ...overrides };
+}
+
+export function makeDeployRepositoryOptions(
+  overrides: Partial<DeployRepositoryOptions> = {},
+): DeployRepositoryOptions {
+  return { workflows: [], branches: [], failure: "", ...overrides };
 }
 
 export function makeBoardPreview(overrides: Partial<BoardPreview> = {}): BoardPreview {
@@ -1871,6 +1893,8 @@ export function resetWailsMock(): void {
   api.previewEditBoard.mockImplementation(() => Promise.resolve(makeBoardPreview()));
   api.checkBoardRepository.mockImplementation(() => Promise.resolve(makeBoardRepositoryOption()));
   api.previewRemoveBoard.mockImplementation(() => Promise.resolve(makeBoardRemoval()));
+  api.deploySettings.mockImplementation(() => Promise.resolve(makeDeploySettings()));
+  api.readDeployRepository.mockImplementation(() => Promise.resolve(makeDeployRepositoryOptions()));
   api.cardContext.mockImplementation(() => Promise.resolve("### Card: Add the login screen\n"));
   api.cardImages.mockImplementation(() => Promise.resolve({ images: [], failures: [] }));
   api.createTask.mockImplementation(() => Promise.resolve("task-1"));

@@ -1,5 +1,6 @@
 import * as AttentionService from "@bindings/attentionservice";
 import * as BoardService from "@bindings/boardservice";
+import * as DeployService from "@bindings/deployservice";
 import * as DiscussionService from "@bindings/discussionservice";
 import * as HistoryService from "@bindings/historyservice";
 import type {
@@ -17,6 +18,7 @@ import type {
   BackgroundItem,
   Board,
   BoardCard,
+  BoardDeploys,
   BoardFailure,
   BoardPreview,
   BoardRemoval,
@@ -40,6 +42,13 @@ import type {
   CreateTaskRequest,
   DeletePreview,
   DeleteResult,
+  DeployBranchOption,
+  DeployEnvironmentSettings,
+  DeployRepositoryChoice,
+  DeployRepositoryOptions,
+  DeployRepositorySettings,
+  DeploySettings,
+  DeployWorkflow,
   DiscussionCard,
   DiscussionContextRequest,
   DiscussionRepository,
@@ -104,6 +113,7 @@ import type {
   ReviewSummary,
   RunningTask,
   SaveBoardRequest,
+  SaveDeploySettingsRequest,
   SessionTasks,
   Situation,
   SituationOpen,
@@ -158,6 +168,7 @@ export type {
   BackgroundItem,
   Board,
   BoardCard,
+  BoardDeploys,
   BoardFailure,
   BoardPreview,
   BoardRemoval,
@@ -181,6 +192,13 @@ export type {
   CreateTaskRequest,
   DeletePreview,
   DeleteResult,
+  DeployBranchOption,
+  DeployEnvironmentSettings,
+  DeployRepositoryChoice,
+  DeployRepositoryOptions,
+  DeployRepositorySettings,
+  DeploySettings,
+  DeployWorkflow,
   DiscussionCard,
   DiscussionContextRequest,
   DiscussionRepository,
@@ -245,6 +263,7 @@ export type {
   ReviewSummary,
   RunningTask,
   SaveBoardRequest,
+  SaveDeploySettingsRequest,
   SessionTasks,
   Situation,
   SituationOpen,
@@ -1697,6 +1716,14 @@ export const api = {
   previewRemoveBoard: (id: string): Promise<BoardRemoval> => BoardService.PreviewRemoveBoard(id),
   removeBoard: (id: string): Promise<void> => BoardService.RemoveBoard(id),
   refreshBoard: (id: string): Promise<void> => BoardService.RefreshBoard(id),
+  deploySettings: (boardId: string): Promise<DeploySettings> =>
+    DeployService.DeploySettings(boardId),
+  readDeployRepository: (
+    repositoryId: string,
+    branches: string[],
+  ): Promise<DeployRepositoryOptions> => DeployService.ReadDeployRepository(repositoryId, branches),
+  saveDeploySettings: (req: SaveDeploySettingsRequest): Promise<void> =>
+    DeployService.SaveDeploySettings(req),
   refreshCard: (boardId: string, key: string): Promise<void> =>
     BoardService.RefreshCard(boardId, key),
   cardContext: (boardId: string, key: string): Promise<string> =>

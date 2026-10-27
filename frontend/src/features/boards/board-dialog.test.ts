@@ -245,6 +245,16 @@ describe("consequence", () => {
     );
   });
 
+  it("says its deploy configuration is removed", () => {
+    expect(consequence({ ...moving, release: "leave", deploys: true }, null)).toBe(
+      "Leaves MySpec: it has no clone, tasks or reviews. Its deploy configuration is removed.",
+    );
+    expect(consequence({ ...moving, deploys: true }, makeRepository({ cloned: false }))).toBe(
+      "Moves to No board. Its deploy configuration is removed.",
+    );
+    expect(consequence({ ...moving, release: "", deploys: true }, null)).toBe("");
+  });
+
   it("says a repository without a clone, tasks or reviews leaves MySpec", () => {
     expect(consequence({ ...moving, release: "leave" }, null)).toBe(
       "Leaves MySpec: it has no clone, tasks or reviews.",
@@ -270,6 +280,23 @@ describe("footerSum", () => {
       "acme/docs moves to No board, and acme/billing leaves MySpec.",
     );
     expect(footerSum([options[2] as never], initially)).toBe("acme/billing leaves MySpec.");
+  });
+
+  it("tells the deploy configurations that go, in the singular for one repository", () => {
+    const withDeploys = (option: (typeof options)[number]) => ({ ...option, deploys: true });
+    expect(footerSum([withDeploys(options[2] as never)], initially)).toBe(
+      "acme/billing leaves MySpec. Its deploy configuration is removed.",
+    );
+    expect(footerSum([withDeploys(options[0] as never), options[1] as never], initially)).toBe(
+      "acme/docs and acme/web move to No board. Their deploy configurations are removed.",
+    );
+  });
+
+  it("does not tell the deploys of a repository that stays", () => {
+    const staying = { ...(options[3] as never as (typeof options)[number]), deploys: true };
+    expect(footerSum([staying, options[2] as never], initially)).toBe(
+      "acme/billing leaves MySpec.",
+    );
   });
 
   it("is empty with nothing unchecked", () => {

@@ -25,6 +25,8 @@ import type {
   BoardRepositoryOption,
   CardImages,
   CreateTaskRequest,
+  DeployRepositoryOptions,
+  DeploySettings,
   DiscussionContextRequest,
   DraftDecision,
   FindingDecision,
@@ -39,6 +41,7 @@ import type {
   ReviewMode,
   ReviewVerdict,
   SaveBoardRequest,
+  SaveDeploySettingsRequest,
   SessionTasks,
   StartDiscussionRequest,
   StartReviewRequest,
@@ -231,6 +234,26 @@ export function addRepositoryToBoard(
  */
 export function previewRemoveBoard(id: string): Promise<BoardRemoval> {
   return api.previewRemoveBoard(id);
+}
+
+/**
+ * readDeploySettings and readDeployRepository do not swallow their failure: the dialog that asked
+ * shows it where the configuration is. saveDeploySettings throws too, and the dialog shows the
+ * refusal in its footer.
+ */
+export function readDeploySettings(boardId: string): Promise<DeploySettings> {
+  return api.deploySettings(boardId);
+}
+
+export function readDeployRepository(
+  repositoryId: string,
+  branches: string[],
+): Promise<DeployRepositoryOptions> {
+  return api.readDeployRepository(repositoryId, branches);
+}
+
+export function saveDeploySettings(req: SaveDeploySettingsRequest): Promise<void> {
+  return api.saveDeploySettings(req);
 }
 
 /** refreshBoard starts a reading of a board; the result arrives with the state. */
