@@ -72,6 +72,12 @@
   --size-composer-min: 3.5rem; --size-composer-max: 15rem; --size-mark: 1.5rem; --size-mark-lg: 8rem; --size-more-below: 1.75rem;
   --size-menu-min: 14rem; --size-menu-max: calc(var(--space-16) * 5); --size-dialog: 30rem; --size-toast: 22rem; --size-popover: 22rem; --size-tooltip-max: 20rem;
 
+  /* The matrix of Deploys: --deploy-repo-column is the column of the name of a repository,
+     --deploy-cell-min the narrowest cell of an environment, --deploy-passage-min the narrowest
+     passage with its label and --deploy-passage-narrow the passage with only its arrow, below the
+     narrow limit of the board section. */
+  --deploy-repo-column: 12rem; --deploy-cell-min: 10rem; --deploy-passage-min: 7rem; --deploy-passage-narrow: 3rem;
+
   /* Icons and status glyphs. Glyphs are even so they center on a whole pixel. */
   --icon: 1rem; --icon-sm: 0.875rem; --icon-xs: 0.75rem; --icon-stroke: 1.5;
   --glyph: 0.625rem; --glyph-sm: 0.5rem; --glyph-diamond: 0.5rem; --glyph-bar: 0.1875rem;

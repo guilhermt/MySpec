@@ -30,6 +30,18 @@ function reviewsNode(overrides: Partial<Extract<TreeNode, { kind: "reviews" }>> 
   };
 }
 
+function deploysNode(overrides: Partial<Extract<TreeNode, { kind: "deploys" }>> = {}): TreeNode {
+  return {
+    kind: "deploys",
+    id: "deploys",
+    waiting: 0,
+    failed: false,
+    reading: false,
+    failure: null,
+    ...overrides,
+  };
+}
+
 function renderNode(node: TreeNode | EpicNode, props: Partial<TreeNodeRowProps> = {}) {
   return renderWithStore(
     <TreeNodeRow
@@ -192,5 +204,67 @@ describe("TreeNodeRow", () => {
     await user.click(screen.getByText("Login"));
 
     expect(useAppStore.getState().sidebarCollapsed.has("epic:board-1:login")).toBe(true);
+  });
+
+  describe("Deploys", () => {
+    it("opens Deploys from its title", async () => {
+      const { user } = renderNode(deploysNode());
+
+      await user.click(screen.getByText("Deploys"));
+
+      expect(useAppStore.getState().location).toEqual({ kind: "deploys" });
+    });
+
+    it("has no chevron and owns no group, so it is neither expanded nor collapsed", () => {
+      renderNode(deploysNode({ waiting: 3 }));
+
+      const node = screen.getByRole("treeitem", { name: "Deploys, 3 to deploy" });
+      expect(node).not.toHaveAttribute("aria-expanded");
+      expect(node).not.toHaveAttribute("aria-owns");
+      expect(screen.queryByRole("button", { name: /Collapse|Expand/ })).not.toBeInTheDocument();
+    });
+
+    it("tells what waits and a deploy that failed, in the name too", () => {
+      renderNode(deploysNode({ waiting: 3, failed: true }));
+
+      expect(
+        screen.getByRole("treeitem", { name: "Deploys, 3 to deploy, a deploy failed" }),
+      ).toHaveTextContent("3 to deploy");
+    });
+
+    it("tells a failed deploy with nothing waiting by the glyph alone", () => {
+      renderNode(deploysNode({ failed: true }));
+
+      expect(screen.getByRole("treeitem", { name: "Deploys, a deploy failed" })).toHaveTextContent(
+        /^Deploys$/,
+      );
+    });
+
+    it("tells Deploys reading", () => {
+      renderNode(deploysNode({ reading: true, waiting: 3 }));
+
+      expect(screen.getByRole("treeitem", { name: "Deploys, reading" })).toHaveTextContent(
+        "reading…",
+      );
+    });
+
+    it("tells a reading that failed, with the failure in the tooltip", async () => {
+      const { user } = renderNode(deploysNode({ failure: "gh is not signed in" }));
+
+      await user.hover(screen.getByText("Read failed"));
+
+      expect(await screen.findByRole("tooltip")).toHaveTextContent("gh is not signed in");
+      expect(
+        screen.getByRole("treeitem", { name: "Deploys, read failed: gh is not signed in" }),
+      ).toBeInTheDocument();
+    });
+
+    it("says nothing more of quiet Deploys, and marks it as the page when open", () => {
+      renderNode(deploysNode(), { current: true });
+
+      const node = screen.getByRole("treeitem", { name: "Deploys" });
+      expect(node).toHaveTextContent(/^Deploys$/);
+      expect(node).toHaveAttribute("aria-current", "page");
+    });
   });
 });

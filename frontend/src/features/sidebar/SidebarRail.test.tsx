@@ -8,6 +8,8 @@ import { useAppStore } from "@/store/app-store";
 import { renderWithStore } from "@/test/render";
 import {
   makeBoard,
+  makeDeployBoard,
+  makeDeploys,
   makeRepository,
   makeReviewCenter,
   makeReviewSummary,
@@ -158,6 +160,46 @@ describe("SidebarRail", () => {
     rail();
 
     expect(screen.getByText("4")).toBeInTheDocument();
+  });
+
+  it("puts the count and the error glyph of Deploys on its separator, named as its node", () => {
+    renderWithStore(<SidebarRail />, {
+      state: makeState({
+        ...state(),
+        deploys: makeDeploys({
+          boards: [makeDeployBoard()],
+          waiting: 3,
+          failed: true,
+        }),
+      }),
+    });
+
+    const separator = screen.getByRole("img", { name: "Deploys, 3 to deploy, a deploy failed" });
+    expect(separator).toHaveTextContent("3");
+  });
+
+  it("marks a failed reading of Deploys on its separator with the blocked glyph", () => {
+    renderWithStore(<SidebarRail />, {
+      state: makeState({
+        ...state(),
+        deploys: makeDeploys({
+          boards: [makeDeployBoard()],
+          failure: { reason: "gh_failed", message: "gh is not signed in", failedAt: "" },
+        }),
+      }),
+    });
+
+    expect(
+      screen.getByRole("img", { name: "Deploys, read failed: gh is not signed in" }),
+    ).toBeInTheDocument();
+  });
+
+  it("draws no separator for quiet Deploys", () => {
+    renderWithStore(<SidebarRail />, {
+      state: makeState({ ...state(), deploys: makeDeploys({ boards: [makeDeployBoard()] }) }),
+    });
+
+    expect(screen.queryByRole("img", { name: /^Deploys/ })).not.toBeInTheDocument();
   });
 
   it("expands the sidebar again", async () => {

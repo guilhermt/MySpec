@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
@@ -13,6 +14,8 @@ export interface ToastProps {
   text: string;
   /** detail is under the text, in the third ink, and wraps. */
   detail?: string;
+  /** tone is error for a toast about a failure: the error rail on its left edge and the icon in the error ink. */
+  tone?: "default" | "error";
   action: { label: string; onClick: () => void };
   onDismiss: () => void;
   /** duration is how long the toast stays, counted only while it has neither the pointer nor the focus. */
@@ -25,7 +28,15 @@ export interface ToastProps {
  * goes on with what was left when both are gone. It leaves by its exit, after its action, its ×
  * or its time, and tells onDismiss once the exit is over.
  */
-export function Toast({ icon, text, detail, action, onDismiss, duration = TOAST_MS }: ToastProps) {
+export function Toast({
+  icon,
+  text,
+  detail,
+  tone = "default",
+  action,
+  onDismiss,
+  duration = TOAST_MS,
+}: ToastProps) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -58,7 +69,12 @@ export function Toast({ icon, text, detail, action, onDismiss, duration = TOAST_
     <div
       ref={ref}
       {...(leaving ? { "data-leaving": "", inert: true } : {})}
-      className="toast flex max-w-(--size-toast) items-start gap-(--space-2-5) rounded-lg bg-surface-3 py-(--space-2-5) pr-(--space-2) pl-(--space-3) text-(length:--text-ui) leading-(--leading-ui) text-ink-1 shadow-(--shadow-float)"
+      className={cn(
+        "toast flex max-w-(--size-toast) items-start gap-(--space-2-5) rounded-lg bg-surface-3 py-(--space-2-5) pr-(--space-2) pl-(--space-3) text-(length:--text-ui) leading-(--leading-ui) text-ink-1",
+        tone === "error"
+          ? "shadow-[inset_var(--error-rail)_0_0_var(--state-error),var(--shadow-float)]"
+          : "shadow-(--shadow-float)",
+      )}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
       onFocusCapture={() => setFocused(true)}
@@ -70,7 +86,11 @@ export function Toast({ icon, text, detail, action, onDismiss, duration = TOAST_
       }}
     >
       <span className="inline-grid h-(--leading-ui) place-items-center">
-        <Icon icon={icon} tone="muted" />
+        <Icon
+          icon={icon}
+          tone="muted"
+          {...(tone === "error" ? { className: "text-state-error" } : {})}
+        />
       </span>
       <div className="flex min-w-0 flex-1 flex-col items-start gap-(--space-0-5)">
         <p className="min-w-0 break-words">{text}</p>

@@ -3,7 +3,7 @@ import { ICONS } from "@/components/system/icons";
 import { closeAttention } from "@/features/history/close-result";
 import { reviewName } from "@/lib/situations";
 import type { ArchivedReview } from "@/lib/wails";
-import { atMoment } from "@/lib/when";
+import { atMoment, deployDuration } from "@/lib/when";
 import type { Toast } from "@/store/app-store";
 
 /** ToastContent is what a toast says: its icon, its text and, under it, the result of what left. */
@@ -11,6 +11,8 @@ export interface ToastContent {
   icon: IconGlyph;
   text: string;
   detail: string | null;
+  /** tone is error for the end of a deploy that failed. */
+  tone: "default" | "error";
 }
 
 /** toastOf is what the toast of an item that was archived without being open says. */
@@ -21,6 +23,7 @@ export function toastOf(toast: Toast, now: number): ToastContent {
       const attention = close === null ? null : closeAttention(close);
       return {
         icon: ICONS.archive,
+        tone: "default",
         text: `“${toast.task.name}” was archived`,
         detail:
           close === null
@@ -33,6 +36,7 @@ export function toastOf(toast: Toast, now: number): ToastContent {
       const how = review.outcome === "merged" ? "merged" : "closed without a merge";
       return {
         icon: ICONS.merge,
+        tone: "default",
         text: `${reviewName(review)} was ${how}, and its review ended`,
         detail: lastPassLine(review, now),
       };
@@ -41,12 +45,26 @@ export function toastOf(toast: Toast, now: number): ToastContent {
       const { publishedCount } = toast.discussion;
       return {
         icon: ICONS.archive,
+        tone: "default",
         text: `“${toast.discussion.title}” was archived`,
         detail:
           publishedCount === 0
             ? "Nothing published"
             : `${publishedCount} ${publishedCount === 1 ? "card" : "cards"} published`,
       };
+    }
+    case "deploy": {
+      const { deploy } = toast;
+      const name = `${deploy.fullName} · ${deploy.environment}`;
+      const length = deployDuration(deploy.seconds);
+      return deploy.succeeded
+        ? { icon: ICONS.deploy, tone: "default", text: `${name} deployed`, detail: `In ${length}` }
+        : {
+            icon: ICONS.problem,
+            tone: "error",
+            text: `${name} failed to deploy`,
+            detail: `After ${length}`,
+          };
     }
   }
 }

@@ -119,7 +119,7 @@ export interface EpicNode {
   rows: ItemRow[];
 }
 
-/** TreeNode is a top node of the tree: Reviews, a board, or the items of no board. */
+/** TreeNode is a top node of the tree: Reviews, Deploys, a board, or the items of no board. */
 export type TreeNode =
   | {
       kind: "reviews";
@@ -129,6 +129,16 @@ export type TreeNode =
       pending: number;
       reading: boolean;
       failures: string[];
+    }
+  | {
+      kind: "deploys";
+      id: "deploys";
+      /** waiting is how many environments have something to deploy. */
+      waiting: number;
+      failed: boolean;
+      reading: boolean;
+      /** failure is why the whole reading failed, null when it did not. */
+      failure: string | null;
     }
   | {
       kind: "board";
@@ -175,6 +185,7 @@ export const TONE_RANK: Record<RowTone, number> = {
 };
 
 const REVIEWS_ID = "reviews";
+const DEPLOYS_ID = "deploys";
 const NO_BOARD_ID = "no-board";
 
 const boardNodeId = (boardId: string) => `board:${boardId}`;
@@ -980,9 +991,9 @@ function epicsOf(boardId: string, rows: readonly ItemRow[]): EpicNode[] {
 }
 
 /**
- * sidebarTree is the whole tree: Reviews first, then a node per board, then No
- * board when it holds anything. The filter keeps the tasks and the clone
- * notices of one repository, under its board; the reviews and the discussions
+ * sidebarTree is the whole tree: Reviews first, then Deploys when a board has them, then a node
+ * per board, then No board when it holds anything. The filter keeps the tasks and the clone
+ * notices of one repository, under its board; the reviews, the deploys and the discussions
  * always show.
  */
 export function sidebarTree(app: State, filter: string, now: number): TreeNode[] {
@@ -997,6 +1008,16 @@ export function sidebarTree(app: State, filter: string, now: number): TreeNode[]
       failures: (center.failures ?? []).map((failure) => failure.message),
     },
   ];
+  if ((app.deploys.boards ?? []).length > 0) {
+    nodes.push({
+      kind: "deploys",
+      id: DEPLOYS_ID,
+      waiting: app.deploys.waiting,
+      failed: app.deploys.failed,
+      reading: app.deploys.reading,
+      failure: app.deploys.failure?.message ?? null,
+    });
+  }
 
   const tasks = tasksInFilter(app.tasks ?? [], filter).map((task) => taskRow(app, task, now));
   const discussions = (app.discussions ?? []).map((discussion) => ({
@@ -1047,6 +1068,9 @@ export function sidebarTree(app: State, filter: string, now: number): TreeNode[]
 
 /** nodeRows is the rows under a node; a board counts its epics' rows too. */
 export function nodeRows(node: TreeNode | EpicNode): ItemRow[] {
+  if (node.kind === "deploys") {
+    return [];
+  }
   return node.kind === "board"
     ? [...node.epics.flatMap((epic) => epic.rows), ...node.rows]
     : node.rows;
@@ -1065,7 +1089,7 @@ export function visibleEntries(
   };
   for (const node of nodes) {
     entries.push({ kind: "node", id: node.id, level: 1, parentId: null, node });
-    if (collapsed.has(node.id)) {
+    if (node.kind === "deploys" || collapsed.has(node.id)) {
       continue;
     }
     if (node.kind !== "reviews") {
@@ -1096,7 +1120,7 @@ export function nodesOfItem(nodes: readonly TreeNode[], itemId: string): string[
         return [node.id, epic.id];
       }
     }
-    if (holds(node.rows)) {
+    if (node.kind !== "deploys" && holds(node.rows)) {
       return [node.id];
     }
   }
@@ -1159,6 +1183,19 @@ export function nodeStatus(node: TreeNode | EpicNode): string | null {
       return "reading";
     }
     return node.pending > 0 ? `${node.pending} pending` : null;
+  }
+  if (node.kind === "deploys") {
+    if (node.failure !== null) {
+      return `read failed: ${node.failure}`;
+    }
+    if (node.reading) {
+      return "reading";
+    }
+    const parts = [
+      ...(node.waiting > 0 ? [`${node.waiting} to deploy`] : []),
+      ...(node.failed ? ["a deploy failed"] : []),
+    ];
+    return parts.length > 0 ? parts.join(", ") : null;
   }
   if (node.kind === "board") {
     if (node.board.failure !== null) {

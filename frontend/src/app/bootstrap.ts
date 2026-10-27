@@ -5,6 +5,8 @@ import { announcement, FLASH_MS } from "@/lib/situations";
 import {
   api,
   asStartupPhase,
+  onDeployFinished,
+  onDeployOpen,
   onSituationOpen,
   onSituationStarted,
   onStartupChanged,
@@ -97,6 +99,19 @@ export async function connect(store: StoreApi<AppStore>): Promise<() => void> {
       store.getState().openSituation(event.taskId, event.place);
     }
   });
+  // The toast is announced by its live region.
+  const stopDeployFinished = onDeployFinished((event) => store.getState().pushDeployToast(event));
+  const stopDeployOpen = onDeployOpen((event) => {
+    if (!modalOpen()) {
+      store
+        .getState()
+        .openDeploys(
+          event.position >= 0
+            ? { repositoryId: event.repositoryId, position: event.position }
+            : undefined,
+        );
+    }
+  });
   const state = await api.getState();
   store.getState().applyState(state);
   // The theme chosen at the start goes now that the database answers.
@@ -110,5 +125,7 @@ export async function connect(store: StoreApi<AppStore>): Promise<() => void> {
     stopTranscript();
     stopStarted();
     stopOpen();
+    stopDeployFinished();
+    stopDeployOpen();
   };
 }

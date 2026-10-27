@@ -6,6 +6,8 @@ import { useAppStore } from "@/store/app-store";
 import { renderWithStore, type StoreOptions } from "@/test/render";
 import {
   makeBoard,
+  makeDeployBoard,
+  makeDeploys,
   makeRepository,
   makeReviewSummary,
   makeSituation,
@@ -318,6 +320,59 @@ describe("Tree", () => {
         "aria-expanded",
         "false",
       );
+    });
+  });
+
+  describe("Deploys", () => {
+    const withDeploys = () =>
+      state({
+        deploys: makeDeploys({ boards: [makeDeployBoard({ id: "board-1" })], waiting: 2 }),
+      });
+
+    it("sits right after Reviews, with no group and no empty text", () => {
+      renderTree({ state: withDeploys() });
+
+      const names = within(screen.getByRole("tree", { name: "Active items" }))
+        .getAllByRole("treeitem", { name: /^(Reviews|Deploys|Product)/ })
+        .map((item) => item.getAttribute("aria-label"));
+      expect(names.slice(0, 3)).toEqual(["Reviews", "Deploys, 2 to deploy", "Product"]);
+      expect(document.getElementById("deploys:group")).toBeNull();
+    });
+
+    it("is left out while no board has deploys", () => {
+      renderTree();
+
+      expect(screen.queryByRole("treeitem", { name: /^Deploys/ })).not.toBeInTheDocument();
+    });
+
+    it("shows Deploys open as the place on screen", () => {
+      renderTree({ state: withDeploys(), ui: { location: { kind: "deploys" } } });
+
+      expect(screen.getByRole("treeitem", { name: /^Deploys/ })).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+    });
+
+    it("lets the keyboard pass through it, without opening, expanding or collapsing it", async () => {
+      const { user } = renderTree({ state: withDeploys() });
+      const deploys = () => screen.getByRole("treeitem", { name: /^Deploys/ });
+
+      screen.getByRole("treeitem", { name: /^Reviews/ }).focus();
+      await user.keyboard("{ArrowDown}");
+      expect(deploys()).toHaveFocus();
+
+      await user.keyboard("{ArrowRight}{ArrowLeft}");
+      expect(deploys()).toHaveFocus();
+      expect(useAppStore.getState().sidebarCollapsed.has("deploys")).toBe(false);
+
+      await user.keyboard("{ArrowDown}");
+      expect(screen.getByRole("treeitem", { name: /^Product/ })).toHaveFocus();
+      await user.keyboard("{ArrowUp}");
+      expect(deploys()).toHaveFocus();
+
+      await user.keyboard("{Enter}");
+      expect(useAppStore.getState().location).toEqual({ kind: "deploys" });
     });
   });
 });

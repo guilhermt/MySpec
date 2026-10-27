@@ -72,6 +72,13 @@ describe("sameLocation", () => {
     ],
     ["two places without an id", HOME, { kind: "home" }, true],
     [
+      "two Deploys, whatever panel they open",
+      { kind: "deploys" },
+      { kind: "deploys", target: { repositoryId: "repo-1", position: 1 } },
+      true,
+    ],
+    ["Deploys and Reviews", { kind: "deploys" }, { kind: "reviews" }, false],
+    [
       "two pages of Settings",
       { kind: "settings", section: "defaults" },
       { kind: "settings", section: "prd" },
@@ -88,6 +95,7 @@ describe("locationExists", () => {
   it.each<[Location, boolean]>([
     [HOME, true],
     [{ kind: "reviews" }, true],
+    [{ kind: "deploys" }, true],
     [{ kind: "history" }, true],
     [{ kind: "settings", section: "boards" }, true],
     [{ kind: "board", id: "board-1" }, true],
@@ -114,6 +122,7 @@ describe("locationTitle", () => {
   it.each<[Location, string]>([
     [HOME, "Home"],
     [{ kind: "reviews" }, "Reviews"],
+    [{ kind: "deploys" }, "Deploys"],
     [{ kind: "history" }, "History"],
     [{ kind: "settings", section: "prd" }, "Settings"],
     [{ kind: "board", id: "board-1" }, "Roadmap"],
@@ -166,6 +175,7 @@ describe("breadcrumbOf", () => {
       { kind: "review", id: "review-1" },
       [{ label: "Reviews", location: { kind: "reviews" } }],
     ],
+    ["Deploys", { kind: "deploys" }, []],
     [
       "an archived task",
       { kind: "archived-task", id: "archived-1" },
@@ -210,6 +220,18 @@ describe("isLocation", () => {
   it.each<[string, unknown, boolean]>([
     ["Home", { kind: "home" }, true],
     ["a task", { kind: "task", id: "task-1" }, true],
+    ["Deploys", { kind: "deploys" }, true],
+    [
+      "Deploys on a panel",
+      { kind: "deploys", target: { repositoryId: "repo-1", position: 1 } },
+      true,
+    ],
+    [
+      "Deploys on a target without a position",
+      { kind: "deploys", target: { repositoryId: "r" } },
+      false,
+    ],
+    ["Deploys on a target that is not an object", { kind: "deploys", target: "repo-1" }, false],
     ["a page of Settings", { kind: "settings", section: "pr_review" }, true],
     ["the Machine page of Settings", { kind: "settings", section: "machine" }, true],
     ["an item that left", GONE, true],

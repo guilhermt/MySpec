@@ -6,6 +6,8 @@ import { api, onSituationOpen, onSituationStarted, type Place } from "@/lib/wail
 import { useAppStore } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
 import {
+  emitDeployFinished,
+  emitDeployOpen,
   emitSituationOpen,
   emitSituationStarted,
   emitStartup,
@@ -247,6 +249,70 @@ describe("connect", () => {
 
     expect(useAppStore.getState().location).toEqual({ kind: "home" });
     dialog.remove();
+  });
+});
+
+describe("connect and the deploys", () => {
+  const finished = {
+    repositoryId: "repo-1",
+    position: 1,
+    fullName: "dev/api",
+    environment: "Staging",
+    succeeded: true,
+    seconds: 80,
+    runUrl: "",
+  };
+
+  it("puts the end of a deploy on screen as a toast", async () => {
+    await connect(useAppStore);
+
+    emitDeployFinished(finished);
+
+    expect(useAppStore.getState().toasts).toEqual([
+      expect.objectContaining({ kind: "deploy", deploy: finished }),
+    ]);
+  });
+
+  it("opens Deploys on the environment of a notification the user clicked", async () => {
+    await connect(useAppStore);
+
+    emitDeployOpen({ repositoryId: "repo-1", position: 1 });
+
+    expect(useAppStore.getState().location).toEqual({
+      kind: "deploys",
+      target: { repositoryId: "repo-1", position: 1 },
+    });
+  });
+
+  it("opens Deploys with no panel when the notification names no environment", async () => {
+    await connect(useAppStore);
+
+    emitDeployOpen({ repositoryId: "repo-1", position: -1 });
+
+    expect(useAppStore.getState().location).toEqual({ kind: "deploys" });
+  });
+
+  it("leaves a modal dialog where it is when the user clicks the notification", async () => {
+    await connect(useAppStore);
+    const dialog = document.createElement("div");
+    dialog.setAttribute("data-slot", "dialog-content");
+    document.body.append(dialog);
+
+    emitDeployOpen({ repositoryId: "repo-1", position: 1 });
+
+    expect(useAppStore.getState().location).toEqual({ kind: "home" });
+    dialog.remove();
+  });
+
+  it("stops listening when the connection is stopped", async () => {
+    const stop = await connect(useAppStore);
+    stop();
+
+    emitDeployFinished(finished);
+    emitDeployOpen({ repositoryId: "repo-1", position: 1 });
+
+    expect(useAppStore.getState().toasts).toEqual([]);
+    expect(useAppStore.getState().location).toEqual({ kind: "home" });
   });
 });
 

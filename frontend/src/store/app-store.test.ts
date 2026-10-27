@@ -30,6 +30,7 @@ import {
   useBoard,
   useBoardCard,
   useBoards,
+  useDeploys,
   useDiscussion,
   useDiscussionHistory,
   useDiscussions,
@@ -76,6 +77,7 @@ import {
   makeArchivedTask,
   makeBoard,
   makeBoardCard,
+  makeDeploys,
   makeDiscussion,
   makeDraft,
   makeEntry,
@@ -1182,6 +1184,51 @@ describe("history", () => {
     useAppStore.getState().applyState(withTasks({ history: [ARCHIVED, OLDER] }));
 
     expect(location()).toEqual({ kind: "archived-task", id: ARCHIVED.id });
+  });
+});
+
+describe("the deploys", () => {
+  const finished = {
+    repositoryId: "repo-1",
+    position: 1,
+    fullName: "dev/api",
+    environment: "Staging",
+    succeeded: true,
+    seconds: 80,
+    runUrl: "",
+  };
+
+  it("opens Deploys, on the panel of an environment when it is given one", () => {
+    useAppStore.getState().openDeploys();
+    expect(useAppStore.getState().location).toEqual({ kind: "deploys" });
+
+    useAppStore.getState().openDeploys({ repositoryId: "repo-1", position: 1 });
+    expect(useAppStore.getState().location).toEqual({
+      kind: "deploys",
+      target: { repositoryId: "repo-1", position: 1 },
+    });
+  });
+
+  it("reads Deploys as an empty reading before the first snapshot, and from the snapshot after", () => {
+    const { result } = renderHook(() => useDeploys());
+    expect(result.current.boards).toEqual([]);
+
+    const read = makeDeploys({ readAt: "2026-09-24T15:00:00Z", waiting: 2 });
+    act(() => useAppStore.getState().applyState(makeState({ deploys: read })));
+
+    expect(result.current).toBe(read);
+  });
+
+  it("pushes the end of a deploy as a toast, three at most", () => {
+    for (const position of [1, 2, 3, 4]) {
+      useAppStore.getState().pushDeployToast({ ...finished, position });
+    }
+
+    const { toasts } = useAppStore.getState();
+    expect(toasts.map((toast) => toast.kind === "deploy" && toast.deploy.position)).toEqual([
+      2, 3, 4,
+    ]);
+    expect(toasts[0]?.id).toMatch(/^deploy:repo-1:2:\d+$/);
   });
 });
 

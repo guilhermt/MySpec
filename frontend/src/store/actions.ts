@@ -949,6 +949,29 @@ export async function setReviewFilters(filters: ReviewFilters): Promise<boolean>
   return stored;
 }
 
+/** refreshDeploys reads the deploys again; the result arrives with the state. */
+export async function refreshDeploys(): Promise<void> {
+  await run(fail("Couldn't refresh the deploys", GH), () => api.refreshDeploys());
+}
+
+/** refreshDeployRepository reads the environments of one repository again; name is how its failure is told. */
+export async function refreshDeployRepository(repositoryId: string, name: string): Promise<void> {
+  await run(fail(`Couldn't read ${name}`, GH), () => api.refreshDeployRepository(repositoryId));
+}
+
+/**
+ * setDeployFilter chooses the board Deploys shows, "" for all of them. It answers whether Go
+ * stored the choice, so the filter bar lets go of one that failed.
+ */
+export async function setDeployFilter(boardId: string): Promise<boolean> {
+  let stored = false;
+  await run(fail("Couldn't change the filter of Deploys", TRY), async () => {
+    await api.setDeployFilter(boardId);
+    stored = true;
+  });
+  return stored;
+}
+
 /**
  * startReview, askReviewAgain, publishReview and setReviewInstructions do not
  * swallow their failure: the dialog or the panel that asked shows it where the

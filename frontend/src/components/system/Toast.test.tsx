@@ -112,4 +112,29 @@ describe("Toast", () => {
     const text = screen.getByText("“add-login” was archived");
     expect(text.nextElementSibling).toBe(screen.getByRole("button", { name: "Open in History" }));
   });
+
+  it("draws the error rail and the error ink on the error tone only", () => {
+    const view = (tone?: "error") =>
+      renderWithStore(
+        <ToastRegion announcement={null}>
+          <Toast
+            icon={ICONS.problem}
+            text="dev/api · Staging failed to deploy"
+            {...(tone === undefined ? {} : { tone })}
+            action={{ label: "Open in Deploys", onClick: vi.fn() }}
+            onDismiss={vi.fn()}
+          />
+        </ToastRegion>,
+      );
+
+    const plain = view();
+    const body = () => screen.getByText("dev/api · Staging failed to deploy").closest(".toast");
+    expect(body()?.className).not.toContain("--error-rail");
+    expect(body()?.querySelector("svg")?.getAttribute("class")).not.toContain("text-state-error");
+    plain.unmount();
+
+    view("error");
+    expect(body()?.className).toContain("--error-rail");
+    expect(body()?.querySelector("svg")?.getAttribute("class")).toContain("text-state-error");
+  });
 });

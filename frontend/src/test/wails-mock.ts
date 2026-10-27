@@ -21,8 +21,14 @@ import type {
   CreateTaskRequest,
   DeletePreview,
   DeleteResult,
+  DeployBoard,
+  DeployEnvironment,
+  DeployFinished,
+  DeployOpen,
+  DeployRepository,
   DeployRepositoryOptions,
   DeploySettings,
+  Deploys,
   DiscussionCard,
   DiscussionContextRequest,
   DiscussionSummary,
@@ -128,6 +134,9 @@ export const api = {
     Promise.resolve(makeBoardRemoval()),
   ),
   removeBoard: vi.fn<(id: string) => Promise<void>>(() => Promise.resolve()),
+  refreshDeploys: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  refreshDeployRepository: vi.fn<(repositoryId: string) => Promise<void>>(() => Promise.resolve()),
+  setDeployFilter: vi.fn<(boardId: string) => Promise<void>>(() => Promise.resolve()),
   deploySettings: vi.fn<(boardId: string) => Promise<DeploySettings>>(() =>
     Promise.resolve(makeDeploySettings()),
   ),
@@ -382,6 +391,8 @@ let startupHandlers: ((startup: Startup) => void)[] = [];
 let stateHandlers: ((state: State) => void)[] = [];
 let transcriptHandlers: ((event: TranscriptEvent) => void)[] = [];
 let situationStartedHandlers: ((event: SituationStarted) => void)[] = [];
+let deployFinishedHandlers: ((event: DeployFinished) => void)[] = [];
+let deployOpenHandlers: ((event: DeployOpen) => void)[] = [];
 let situationOpenHandlers: ((event: SituationOpen) => void)[] = [];
 
 export const onStartupChanged = vi.fn((handler: (startup: Startup) => void): (() => void) => {
@@ -446,6 +457,20 @@ export function emitTranscript(event: TranscriptEvent): void {
   }
 }
 
+export const onDeployFinished = vi.fn((handler: (event: DeployFinished) => void): (() => void) => {
+  deployFinishedHandlers.push(handler);
+  return () => {
+    deployFinishedHandlers = deployFinishedHandlers.filter((registered) => registered !== handler);
+  };
+});
+
+export const onDeployOpen = vi.fn((handler: (event: DeployOpen) => void): (() => void) => {
+  deployOpenHandlers.push(handler);
+  return () => {
+    deployOpenHandlers = deployOpenHandlers.filter((registered) => registered !== handler);
+  };
+});
+
 /** emitSituationStarted delivers a situation:started event to every subscriber. */
 export function emitSituationStarted(event: SituationStarted): void {
   for (const handler of [...situationStartedHandlers]) {
@@ -456,6 +481,20 @@ export function emitSituationStarted(event: SituationStarted): void {
 /** emitSituationOpen delivers a situation:open event to every subscriber. */
 export function emitSituationOpen(event: SituationOpen): void {
   for (const handler of [...situationOpenHandlers]) {
+    handler(event);
+  }
+}
+
+/** emitDeployFinished delivers a deploy:finished event to every subscriber. */
+export function emitDeployFinished(event: DeployFinished): void {
+  for (const handler of [...deployFinishedHandlers]) {
+    handler(event);
+  }
+}
+
+/** emitDeployOpen delivers a deploy:open event to every subscriber. */
+export function emitDeployOpen(event: DeployOpen): void {
+  for (const handler of [...deployOpenHandlers]) {
     handler(event);
   }
 }
@@ -513,16 +552,7 @@ export function makeState(overrides: Partial<State> = {}): State {
     history: [],
     boards: [],
     reviewCenter: makeReviewCenter(),
-    deploys: {
-      boards: [],
-      readAt: "",
-      reading: false,
-      failure: null,
-      filter: { boardId: "", title: "" },
-      filterGone: "",
-      waiting: 0,
-      failed: false,
-    },
+    deploys: makeDeploys(),
     reviews: [],
     reviewHistory: [],
     discussions: [],
@@ -761,6 +791,68 @@ export function makeBoardRemoval(overrides: Partial<BoardRemoval> = {}): BoardRe
     toNoBoardNames: [],
     removedNames: [],
     deploys: 0,
+    ...overrides,
+  };
+}
+
+export function makeDeploys(overrides: Partial<Deploys> = {}): Deploys {
+  return {
+    boards: [],
+    readAt: "",
+    reading: false,
+    failure: null,
+    filter: { boardId: "", title: "" },
+    filterGone: "",
+    waiting: 0,
+    failed: false,
+    ...overrides,
+  };
+}
+
+export function makeDeployBoard(overrides: Partial<DeployBoard> = {}): DeployBoard {
+  return { id: "board-1", title: "Roadmap", shown: true, repositories: [], ...overrides };
+}
+
+export function makeDeployRepository(overrides: Partial<DeployRepository> = {}): DeployRepository {
+  return {
+    id: "repo-1",
+    owner: "dev",
+    name: "web",
+    fullName: "dev/web",
+    url: "https://github.com/dev/web",
+    reading: false,
+    readAt: "",
+    failure: null,
+    environments: [],
+    ...overrides,
+  };
+}
+
+export function makeDeployEnvironment(
+  overrides: Partial<DeployEnvironment> = {},
+): DeployEnvironment {
+  return {
+    position: 0,
+    name: "Development",
+    branch: "dev",
+    previousName: "",
+    previousBranch: "",
+    workflowName: "Deploy",
+    workflowUrl: "",
+    state: "up_to_date",
+    problem: "",
+    failed: false,
+    pending: false,
+    prReady: false,
+    running: false,
+    busy: false,
+    available: "",
+    previous: "",
+    lastRun: null,
+    failedRun: null,
+    promotion: null,
+    action: null,
+    compareUrl: "",
     ...overrides,
   };
 }
@@ -1875,6 +1967,8 @@ export function resetWailsMock(): void {
   transcriptHandlers = [];
   situationStartedHandlers = [];
   situationOpenHandlers = [];
+  deployFinishedHandlers = [];
+  deployOpenHandlers = [];
   entrySeq = 0;
   for (const fn of Object.values(api)) {
     fn.mockClear();
@@ -1884,6 +1978,8 @@ export function resetWailsMock(): void {
   onTranscriptChanged.mockClear();
   onSituationStarted.mockClear();
   onSituationOpen.mockClear();
+  onDeployFinished.mockClear();
+  onDeployOpen.mockClear();
   api.getStartup.mockImplementation(() => Promise.resolve(makeStartup()));
   api.getState.mockImplementation(() => Promise.resolve(makeState()));
   api.scanRepositories.mockImplementation(() => Promise.resolve([]));

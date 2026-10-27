@@ -42,12 +42,19 @@ import type {
   CreateTaskRequest,
   DeletePreview,
   DeleteResult,
+  DeployBoard,
   DeployBranchOption,
+  DeployEnvironment,
   DeployEnvironmentSettings,
+  DeployFailure,
+  DeployFinished,
+  DeployOpen,
+  DeployRepository,
   DeployRepositoryChoice,
   DeployRepositoryOptions,
   DeployRepositorySettings,
   DeploySettings,
+  Deploys,
   DeployWorkflow,
   DiscussionCard,
   DiscussionContextRequest,
@@ -192,12 +199,19 @@ export type {
   CreateTaskRequest,
   DeletePreview,
   DeleteResult,
+  DeployBoard,
   DeployBranchOption,
+  DeployEnvironment,
   DeployEnvironmentSettings,
+  DeployFailure,
+  DeployFinished,
+  DeployOpen,
+  DeployRepository,
   DeployRepositoryChoice,
   DeployRepositoryOptions,
   DeployRepositorySettings,
   DeploySettings,
+  Deploys,
   DeployWorkflow,
   DiscussionCard,
   DiscussionContextRequest,
@@ -649,6 +663,9 @@ export type PullRequestAction =
   | "clone"
   | "clone_missing"
   | "fork";
+
+/** DeployFilterGone is why the board of the filter of Deploys is no longer on the screen; "" when it is. */
+export type DeployFilterGone = "" | "no_deploys" | "removed";
 
 /** YourReviewState is the state of the last review the account of gh submitted on a pull request. */
 export type YourReviewState = "approved" | "changes_requested" | "commented" | "dismissed";
@@ -1569,6 +1586,17 @@ export function asPullRequestAction(value: string): PullRequestAction {
   }
 }
 
+export function asDeployFilterGone(value: string): DeployFilterGone {
+  switch (value) {
+    case "":
+    case "no_deploys":
+    case "removed":
+      return value;
+    default:
+      return "";
+  }
+}
+
 export function asYourReviewState(value: string): YourReviewState {
   switch (value) {
     case "approved":
@@ -1716,6 +1744,10 @@ export const api = {
   previewRemoveBoard: (id: string): Promise<BoardRemoval> => BoardService.PreviewRemoveBoard(id),
   removeBoard: (id: string): Promise<void> => BoardService.RemoveBoard(id),
   refreshBoard: (id: string): Promise<void> => BoardService.RefreshBoard(id),
+  refreshDeploys: (): Promise<void> => DeployService.RefreshDeploys(),
+  refreshDeployRepository: (repositoryId: string): Promise<void> =>
+    DeployService.RefreshDeployRepository(repositoryId),
+  setDeployFilter: (boardId: string): Promise<void> => DeployService.SetDeployFilter(boardId),
   deploySettings: (boardId: string): Promise<DeploySettings> =>
     DeployService.DeploySettings(boardId),
   readDeployRepository: (
@@ -1946,4 +1978,12 @@ export function onSituationStarted(handler: (event: SituationStarted) => void): 
 
 export function onSituationOpen(handler: (event: SituationOpen) => void): () => void {
   return Events.On("situation:open", (event) => handler(event.data));
+}
+
+export function onDeployFinished(handler: (event: DeployFinished) => void): () => void {
+  return Events.On("deploy:finished", (event) => handler(event.data));
+}
+
+export function onDeployOpen(handler: (event: DeployOpen) => void): () => void {
+  return Events.On("deploy:open", (event) => handler(event.data));
 }
