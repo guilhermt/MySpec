@@ -19,6 +19,8 @@ func TestRegisterEventsRegistersEveryEvent(t *testing.T) {
 		bindings.EventTranscriptChanged,
 		bindings.EventSituationStarted,
 		bindings.EventSituationOpen,
+		bindings.EventDeployFinished,
+		bindings.EventDeployOpen,
 	} {
 		t.Run(name, func(t *testing.T) {
 			defer func() {

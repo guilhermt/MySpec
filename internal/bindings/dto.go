@@ -154,6 +154,9 @@ type State struct {
 	// ReviewCenter is the Reviews view: the open pull requests of the
 	// registered repositories and the filters they are shown through.
 	ReviewCenter ReviewCenter `json:"reviewCenter"`
+	// Deploys is the Deploys view: the environments of the repositories the
+	// boards manage, as the last reading found them.
+	Deploys Deploys `json:"deploys"`
 	// Reviews are the active reviews of pull requests, in creation order;
 	// never nil.
 	Reviews []ReviewSummary `json:"reviews"`
@@ -1390,7 +1393,15 @@ type Board struct {
 	Cards         []BoardCard   `json:"cards"`  // never nil
 	// NewCardStatus is the option id of the Status field a card created by a
 	// discussion gets; "" for none.
-	NewCardStatus string `json:"newCardStatus"`
+	NewCardStatus string       `json:"newCardStatus"`
+	Deploys       BoardDeploys `json:"deploys"`
+}
+
+// BoardDeploys sums up the deploys of a board for its row in Settings.
+type BoardDeploys struct {
+	Configured   bool `json:"configured"` // the user saved its deploys once
+	Enabled      bool `json:"enabled"`
+	Repositories int  `json:"repositories"` // the managed ones still on the board
 }
 
 // CardIssue is an issue of GitHub a board shows.
@@ -1507,6 +1518,9 @@ type BoardRepositoryOption struct {
 	// State.Theme: where the repository goes when unchecked in an edit of its own
 	// board.
 	Release string `json:"release"`
+	// Deploys is set when the repository has a deploy configuration on this
+	// board; unchecking it erases the configuration.
+	Deploys bool `json:"deploys"`
 }
 
 // BoardPreview is what registering or editing a board shows before saving.
@@ -1552,6 +1566,9 @@ type BoardRemoval struct {
 	Removed        int      `json:"removed"`
 	ToNoBoardNames []string `json:"toNoBoardNames"` // owner/name, alphabetical; never nil
 	RemovedNames   []string `json:"removedNames"`   // never nil
+	// Deploys is how many repositories have a deploy configuration that goes
+	// with the board.
+	Deploys int `json:"deploys"`
 }
 
 // ReviewCenter is the Reviews view: the open pull requests of every registered
@@ -2133,4 +2150,222 @@ type ArchivedItem struct {
 	Task       *ArchivedTask       `json:"task"`
 	Review     *ArchivedReview     `json:"review"`
 	Discussion *ArchivedDiscussion `json:"discussion"`
+}
+
+// Deploys is the Deploys view and the node of the tree.
+type Deploys struct {
+	Boards  []DeployBoard  `json:"boards"` // never nil
+	ReadAt  string         `json:"readAt"` // "" before the first whole reading
+	Reading bool           `json:"reading"`
+	Failure *DeployFailure `json:"failure"` // the whole reading failed; nil otherwise
+	Filter  DeployFilter   `json:"filter"`
+	// FilterGone is "", no_deploys or removed, a string for the same reason as
+	// State.Theme.
+	FilterGone string `json:"filterGone"`
+	Waiting    int    `json:"waiting"` // pending and ready, over every board
+	Failed     bool   `json:"failed"`
+}
+
+// DeployFilter is the board the Deploys view shows.
+type DeployFilter struct {
+	BoardID string `json:"boardId"` // "" for every board
+	Title   string `json:"title"`
+}
+
+// DeployFailure is a reading of deploys that failed.
+type DeployFailure struct {
+	// Reason is gh_missing, gh_unauthenticated, missing_scope, not_found,
+	// rate_limited or failed, a string for the same reason as State.Theme.
+	Reason   string `json:"reason"`
+	Message  string `json:"message"`  // failure.Message()
+	FailedAt string `json:"failedAt"` // the first failing reading of the run
+}
+
+// DeployBoard is a board of the Deploys view.
+type DeployBoard struct {
+	ID           string             `json:"id"`
+	Title        string             `json:"title"`
+	Shown        bool               `json:"shown"`
+	Repositories []DeployRepository `json:"repositories"` // never nil
+}
+
+// DeployRepository is a row of the pipeline matrix.
+type DeployRepository struct {
+	ID           string              `json:"id"`
+	Owner        string              `json:"owner"`
+	Name         string              `json:"name"`
+	FullName     string              `json:"fullName"`
+	URL          string              `json:"url"` // https://github.com/owner/name
+	Reading      bool                `json:"reading"`
+	ReadAt       string              `json:"readAt"`
+	Failure      *DeployFailure      `json:"failure"`
+	Environments []DeployEnvironment `json:"environments"` // never nil
+}
+
+// DeployEnvironment is a cell of the pipeline matrix, with the passage before it.
+type DeployEnvironment struct {
+	Position       int    `json:"position"`
+	Name           string `json:"name"`
+	Branch         string `json:"branch"`
+	PreviousName   string `json:"previousName"` // "" for the first
+	PreviousBranch string `json:"previousBranch"`
+	WorkflowName   string `json:"workflowName"`
+	WorkflowURL    string `json:"workflowUrl"` // https://github.com/o/n/actions/workflows/<file name of WorkflowPath>
+	// State is problem, unread, running, failed, pr_ready, pending, up_to_date
+	// or no_deploy, a string for the same reason as State.Theme.
+	State string `json:"state"`
+	// Problem is "", branch_missing or workflow_missing, a string for the same
+	// reason as State.Theme.
+	Problem string `json:"problem"`
+	Failed  bool   `json:"failed"`
+	Pending bool   `json:"pending"`
+	PRReady bool   `json:"prReady"`
+	Running bool   `json:"running"`
+	Busy    bool   `json:"busy"`
+	// Available is "", deploy or merge, a string for the same reason as
+	// State.Theme.
+	Available string `json:"available"`
+	// Previous is "", deploying or failed, a string for the same reason as
+	// State.Theme.
+	Previous   string           `json:"previous"`
+	LastRun    *DeployRun       `json:"lastRun"`
+	FailedRun  *DeployRun       `json:"failedRun"` // LastCompleted when it failed and is not LastRun; nil otherwise
+	Promotion  *DeployPromotion `json:"promotion"` // nil for the first environment and while unread
+	Action     *DeployAction    `json:"action"`
+	CompareURL string           `json:"compareUrl"` // https://github.com/o/n/compare/<branch>...<previous>; "" for the first
+}
+
+// DeployRun is a run of the workflow of an environment.
+type DeployRun struct {
+	ID int64 `json:"id"`
+	// Status is queued, running, succeeded or failed, a string for the same
+	// reason as State.Theme.
+	Status     string `json:"status"`
+	Conclusion string `json:"conclusion"`
+	URL        string `json:"url"`
+	StartedAt  string `json:"startedAt"`
+	EndedAt    string `json:"endedAt"` // "" while it runs
+}
+
+// DeployPromotion is what the previous environment has that this one doesn't.
+type DeployPromotion struct {
+	Commits        int                 `json:"commits"`
+	Partial        bool                `json:"partial"`
+	Ahead          int                 `json:"ahead"`
+	PendingSince   string              `json:"pendingSince"` // "" with no commit waiting
+	PullRequests   []DeployPullRequest `json:"pullRequests"` // never nil
+	DeployPR       *DeployPR           `json:"deployPr"`
+	OtherDeployPRs int                 `json:"otherDeployPrs"` // open ones besides DeployPR
+}
+
+// DeployPullRequest is a pull request that enters a deploy.
+type DeployPullRequest struct {
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	URL    string `json:"url"`
+	Author string `json:"author"`
+}
+
+// DeployPR is an open pull request of deploy.
+type DeployPR struct {
+	Number    int    `json:"number"`
+	Title     string `json:"title"`
+	URL       string `json:"url"`
+	Draft     bool   `json:"draft"`
+	CreatedAt string `json:"createdAt"`
+}
+
+// DeployAction is an action of the app in flight on an environment.
+type DeployAction struct {
+	// Kind is deploy or merge; Phase is creating, merging, waiting_run, running
+	// or failed; strings for the same reason as State.Theme.
+	Kind    string `json:"kind"`
+	Phase   string `json:"phase"`
+	Failure string `json:"failure"` // phase failed: what GitHub said
+	PR      int    `json:"pr"`
+}
+
+// DeploySettings is the deploys of a board as the dialog edits them.
+type DeploySettings struct {
+	BoardID      string                     `json:"boardId"`
+	Configured   bool                       `json:"configured"`
+	Enabled      bool                       `json:"enabled"`
+	Repositories []DeployRepositorySettings `json:"repositories"` // the repositories of the board, by full name; never nil
+}
+
+// DeployRepositorySettings is the deploys of one repository of a board in the dialog.
+type DeployRepositorySettings struct {
+	RepositoryID string                      `json:"repositoryId"`
+	FullName     string                      `json:"fullName"`
+	Managed      bool                        `json:"managed"`
+	Environments []DeployEnvironmentSettings `json:"environments"` // the saved ones, or DefaultEnvironments; never nil
+}
+
+// DeployEnvironmentSettings is one environment as the dialog edits it.
+type DeployEnvironmentSettings struct {
+	Name         string `json:"name"`
+	Branch       string `json:"branch"`
+	WorkflowID   int64  `json:"workflowId"` // 0 for none chosen
+	WorkflowName string `json:"workflowName"`
+	WorkflowPath string `json:"workflowPath"`
+}
+
+// DeployRepositoryOptions is what GitHub offers the configuration of one repository.
+type DeployRepositoryOptions struct {
+	Workflows []DeployWorkflow     `json:"workflows"` // never nil
+	Branches  []DeployBranchOption `json:"branches"`  // never nil
+	Failure   string               `json:"failure"`   // why GitHub couldn't be read; "" otherwise
+}
+
+// DeployWorkflow is a workflow of GitHub Actions the dialog offers.
+type DeployWorkflow struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
+// DeployBranchOption is what GitHub says of a branch the dialog asked about.
+type DeployBranchOption struct {
+	Branch    string `json:"branch"`
+	Exists    bool   `json:"exists"`
+	Suggested int64  `json:"suggested"` // 0 for none
+}
+
+// SaveDeploySettingsRequest is what the user chose in the dialog. A repository
+// left out is not managed.
+type SaveDeploySettingsRequest struct {
+	BoardID      string                   `json:"boardId"`
+	Enabled      bool                     `json:"enabled"`
+	Repositories []DeployRepositoryChoice `json:"repositories"`
+}
+
+// DeployRepositoryChoice is a repository the user manages, with its environments.
+type DeployRepositoryChoice struct {
+	RepositoryID string                      `json:"repositoryId"`
+	Environments []DeployEnvironmentSettings `json:"environments"`
+}
+
+// EventDeployFinished carries a DeployFinished when a deploy the app merged
+// ends with the window in front.
+const EventDeployFinished = "deploy:finished"
+
+// DeployFinished is a deploy merged by the app that ended with the window in front.
+type DeployFinished struct {
+	RepositoryID string `json:"repositoryId"`
+	Position     int    `json:"position"` // -1 when the environment is gone
+	FullName     string `json:"fullName"`
+	Environment  string `json:"environment"`
+	Succeeded    bool   `json:"succeeded"`
+	Seconds      int    `json:"seconds"` // how long the run took
+	RunURL       string `json:"runUrl"`
+}
+
+// EventDeployOpen carries a DeployOpen when the user clicks the notification
+// of a deploy.
+const EventDeployOpen = "deploy:open"
+
+// DeployOpen is a click on the notification of a deploy: Deploys, on its panel.
+type DeployOpen struct {
+	RepositoryID string `json:"repositoryId"`
+	Position     int    `json:"position"` // -1: Deploys without a panel
 }

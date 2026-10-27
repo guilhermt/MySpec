@@ -4,6 +4,7 @@ import { readStoredPreference } from "@/features/theme/theme";
 import { boardOfRepository, findBoard } from "@/lib/boards";
 import { type Attachment, revokeAttachments } from "@/lib/images";
 import {
+  type DeployTarget,
   type FreshItem,
   type GoneLocation,
   goneOutcome,
@@ -45,6 +46,8 @@ import type {
   ArchivedTask,
   Board,
   BoardCard,
+  DeployFinished,
+  Deploys,
   DiscussionSummary,
   Draft,
   Entry,
@@ -94,7 +97,9 @@ export type PanelId = "artifacts" | "reports" | "documents" | "details" | "card"
 export type Toast =
   | { id: string; kind: "task"; task: ArchivedTask }
   | { id: string; kind: "review"; review: ArchivedReview }
-  | { id: string; kind: "discussion"; discussion: ArchivedDiscussion };
+  | { id: string; kind: "discussion"; discussion: ArchivedDiscussion }
+  /** deploy is the end of a deploy whose merge the app made. */
+  | { id: string; kind: "deploy"; deploy: DeployFinished };
 
 /** StepTab is the conversation of a step on screen: the agent that implements it, or the one that reviews it. */
 export type StepTab = "implementer" | "reviewer";
@@ -412,6 +417,8 @@ export interface AppStore {
   setPendingStart: (pending: PendingStart | null) => void;
   openBoard: (id: string) => void;
   openReviews: () => void;
+  /** openDeploys opens Deploys, on the panel of an environment when a target is given. */
+  openDeploys: (target?: DeployTarget) => void;
   openReview: (id: string) => void;
   openArchivedReview: (id: string) => void;
   /** openStartReview opens the dialog that starts a review of a pull request. */
@@ -466,6 +473,8 @@ export interface AppStore {
   setHistoryQuery: (query: string) => void;
   /** clearHistoryFocus says History took the focus it was asked to put. */
   clearHistoryFocus: () => void;
+  /** pushDeployToast puts the end of a deploy on screen as a toast. */
+  pushDeployToast: (event: DeployFinished) => void;
   /** dismissToast takes a toast off the screen. */
   dismissToast: (id: string) => void;
   /** dismissMachineNotice hides the notice of the machine until the next opening. */
@@ -1039,6 +1048,7 @@ function placeIn(
     }
     case "home":
     case "reviews":
+    case "deploys":
     case "history":
     case "settings":
     case "gone":
@@ -1278,6 +1288,9 @@ export const useAppStore = create<AppStore>()((set, get) => {
 
     openReviews: () => go({ kind: "reviews" }),
 
+    openDeploys: (target) =>
+      go({ kind: "deploys", ...(target ? { target } : {}) }, { focus: "title" }),
+
     openReview: (id) => go({ kind: "review", id }),
 
     openArchivedReview: (id) => go({ kind: "archived-review", id }),
@@ -1486,6 +1499,18 @@ export const useAppStore = create<AppStore>()((set, get) => {
     dismissMachineNotice: () => set({ machineNoticeDismissed: true }),
     deferUpdateRestart: () => set({ updateLater: true }),
 
+    pushDeployToast: (event) =>
+      set((state) => ({
+        toasts: [
+          ...state.toasts,
+          {
+            id: `deploy:${event.repositoryId}:${event.position}:${Date.now()}`,
+            kind: "deploy" as const,
+            deploy: event,
+          },
+        ].slice(-MAX_TOASTS),
+      })),
+
     dismissToast: (id) =>
       set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
 
@@ -1588,6 +1613,17 @@ const NO_REVIEW_CENTER: ReviewCenter = {
   pendingCount: 0,
   authors: [],
   labels: [],
+};
+// Deploys before the first snapshot: nothing configured, nothing read.
+const NO_DEPLOYS: Deploys = {
+  boards: [],
+  readAt: "",
+  reading: false,
+  failure: null,
+  filter: { boardId: "", title: "" },
+  filterGone: "",
+  waiting: 0,
+  failed: false,
 };
 const NO_REVIEW_HISTORY: readonly ArchivedReview[] = [];
 const NO_DISCUSSIONS: readonly DiscussionSummary[] = [];
@@ -1988,9 +2024,19 @@ export function useReviewCenter(): ReviewCenter {
   return useAppStore((state) => state.app?.reviewCenter ?? NO_REVIEW_CENTER);
 }
 
+/** useDeploys is the Deploys view: the boards with deploys, as the last reading left them. */
+export function useDeploys(): Deploys {
+  return useAppStore((state) => state.app?.deploys ?? NO_DEPLOYS);
+}
+
 /** useReview is an active review by id, null when none is. */
 export function useReview(id: string | null): ReviewSummary | null {
   return useAppStore((state) => findReview(state.app, id));
+}
+
+/** useDeploysOpen is the Deploys view being the main area. */
+export function useDeploysOpen(): boolean {
+  return useAppStore((state) => state.location.kind === "deploys");
 }
 
 /** useReviewsOpen is the Reviews view being the main area. */

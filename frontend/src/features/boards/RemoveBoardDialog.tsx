@@ -102,8 +102,9 @@ export function RemoveBoardDialog({
         {lines.length > 0 && (
           <SunkenLine>
             {lines.map(({ label, names }) => (
-              <span key={label} className="block">
-                <span className="font-medium">{label}</span> {names}
+              <span key={names} className="block">
+                {label !== "" && <span className="font-medium">{label} </span>}
+                {names}
               </span>
             ))}
           </SunkenLine>

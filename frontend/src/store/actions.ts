@@ -25,6 +25,8 @@ import type {
   BoardRepositoryOption,
   CardImages,
   CreateTaskRequest,
+  DeployRepositoryOptions,
+  DeploySettings,
   DiscussionContextRequest,
   DraftDecision,
   FindingDecision,
@@ -39,6 +41,7 @@ import type {
   ReviewMode,
   ReviewVerdict,
   SaveBoardRequest,
+  SaveDeploySettingsRequest,
   SessionTasks,
   StartDiscussionRequest,
   StartReviewRequest,
@@ -231,6 +234,26 @@ export function addRepositoryToBoard(
  */
 export function previewRemoveBoard(id: string): Promise<BoardRemoval> {
   return api.previewRemoveBoard(id);
+}
+
+/**
+ * readDeploySettings and readDeployRepository do not swallow their failure: the dialog that asked
+ * shows it where the configuration is. saveDeploySettings throws too, and the dialog shows the
+ * refusal in its footer.
+ */
+export function readDeploySettings(boardId: string): Promise<DeploySettings> {
+  return api.deploySettings(boardId);
+}
+
+export function readDeployRepository(
+  repositoryId: string,
+  branches: string[],
+): Promise<DeployRepositoryOptions> {
+  return api.readDeployRepository(repositoryId, branches);
+}
+
+export function saveDeploySettings(req: SaveDeploySettingsRequest): Promise<void> {
+  return api.saveDeploySettings(req);
 }
 
 /** refreshBoard starts a reading of a board; the result arrives with the state. */
@@ -924,6 +947,42 @@ export async function setReviewFilters(filters: ReviewFilters): Promise<boolean>
     stored = true;
   });
   return stored;
+}
+
+/** refreshDeploys reads the deploys again; the result arrives with the state. */
+export async function refreshDeploys(): Promise<void> {
+  await run(fail("Couldn't refresh the deploys", GH), () => api.refreshDeploys());
+}
+
+/** refreshDeployRepository reads the environments of one repository again; name is how its failure is told. */
+export async function refreshDeployRepository(repositoryId: string, name: string): Promise<void> {
+  await run(fail(`Couldn't read ${name}`, GH), () => api.refreshDeployRepository(repositoryId));
+}
+
+/**
+ * setDeployFilter chooses the board Deploys shows, "" for all of them. It answers whether Go
+ * stored the choice, so the filter bar lets go of one that failed.
+ */
+export async function setDeployFilter(boardId: string): Promise<boolean> {
+  let stored = false;
+  await run(fail("Couldn't change the filter of Deploys", TRY), async () => {
+    await api.setDeployFilter(boardId);
+    stored = true;
+  });
+  return stored;
+}
+
+/**
+ * deployInPlace and mergeInPlace start the action of an environment from its panel, which shows
+ * the refusal under the button: they answer the message of the refusal, or null. The failure of
+ * GitHub comes later, as the state of the action.
+ */
+export function deployInPlace(repositoryId: string, position: number): Promise<string | null> {
+  return inPlace(() => api.deploy(repositoryId, position));
+}
+
+export function mergeInPlace(repositoryId: string, position: number): Promise<string | null> {
+  return inPlace(() => api.merge(repositoryId, position));
 }
 
 /**

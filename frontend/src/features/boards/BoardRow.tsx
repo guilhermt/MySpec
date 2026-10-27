@@ -11,10 +11,12 @@ import { useNow } from "@/features/attention/useNow";
 import { BoardDialog } from "@/features/boards/BoardDialog";
 import {
   boardRowName,
+  deploysLine,
   finalsLine,
   projectRef,
   repositoriesLine,
 } from "@/features/boards/boards-page";
+import { DeploysDialog } from "@/features/boards/DeploysDialog";
 import { RemoveBoardDialog } from "@/features/boards/RemoveBoardDialog";
 import { SettingsRow } from "@/features/settings/SettingsList";
 import type { Board } from "@/lib/wails";
@@ -36,6 +38,7 @@ export interface BoardRowProps {
 export function BoardRow({ board, onRemoved }: BoardRowProps) {
   const repositories = useRepositories();
   const [editing, setEditing] = useState(false);
+  const [deploying, setDeploying] = useState(false);
   const [removing, setRemoving] = useState(false);
   const now = useNow(READING_CLOCK_MS, true);
   const failure = board.failure;
@@ -76,6 +79,7 @@ export function BoardRow({ board, onRemoved }: BoardRowProps) {
             </div>
             <CutText text={repositoriesText} className={`${META} text-ink-3`} />
             <span className={`${META} text-ink-3`}>{finalsLine(board)}</span>
+            <span className={`${META} text-ink-3`}>{deploysLine(board)}</span>
           </>
         }
         trailing={
@@ -94,6 +98,14 @@ export function BoardRow({ board, onRemoved }: BoardRowProps) {
               onClick={() => setEditing(true)}
             >
               Edit…
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-label={`Deploys of ${board.title}`}
+              onClick={() => setDeploying(true)}
+            >
+              Deploys…
             </Button>
             <Button
               variant="ghost"
@@ -142,6 +154,7 @@ export function BoardRow({ board, onRemoved }: BoardRowProps) {
         }
       />
       <BoardDialog mode="edit" boardId={board.id} open={editing} onOpenChange={setEditing} />
+      <DeploysDialog board={board} open={deploying} onOpenChange={setDeploying} />
       <RemoveBoardDialog
         board={board}
         open={removing}

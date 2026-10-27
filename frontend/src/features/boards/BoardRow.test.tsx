@@ -41,7 +41,9 @@ describe("BoardRow", () => {
     row();
 
     expect(
-      screen.getByRole("listitem", { name: "Roadmap, dev, 1 repository, read 2m ago" }),
+      screen.getByRole("listitem", {
+        name: "Roadmap, dev, 1 repository, read 2m ago, Deploys not set up",
+      }),
     ).toBeInTheDocument();
   });
 
@@ -53,6 +55,22 @@ describe("BoardRow", () => {
     expect(within(item).getByRole("link", { name: "dev/projects/3" })).toBeInTheDocument();
     expect(item).toHaveTextContent("Organization · 1 repository: web");
     expect(item).toHaveTextContent("Final: Done · New cards: Todo");
+  });
+
+  it("says what the deploys of the board are", () => {
+    at("2026-09-16T12:02:00Z");
+    row(makeBoard({ deploys: { configured: true, enabled: true, repositories: 2 } }));
+
+    expect(screen.getByRole("listitem")).toHaveTextContent("Deploys · 2 repositories");
+  });
+
+  it("opens the deploys of the board, reading their settings", async () => {
+    const { user } = row();
+
+    await user.click(screen.getByRole("button", { name: "Deploys of Roadmap" }));
+
+    expect(await screen.findByRole("dialog", { name: "Deploys of Roadmap" })).toBeInTheDocument();
+    expect(api.deploySettings).toHaveBeenCalledWith("board-1");
   });
 
   it("opens the project in the browser", async () => {

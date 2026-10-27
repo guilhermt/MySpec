@@ -26,6 +26,8 @@ export type Location =
   | { kind: "home" }
   | { kind: "board"; id: string }
   | { kind: "reviews" }
+  /** deploys may name the panel the place opens on: the one a notification or a toast brought it to. */
+  | { kind: "deploys"; target?: DeployTarget }
   /** history may name the item that was just archived: its row is drawn selected, and not kept in the places behind. */
   | { kind: "history"; fresh?: FreshItem }
   | { kind: "settings"; section: SettingsSection }
@@ -44,6 +46,12 @@ export type Location =
       boardId: string;
       pr?: GonePR | null;
     };
+
+/** DeployTarget is the environment of a repository whose panel Deploys opens on arrival. */
+export interface DeployTarget {
+  repositoryId: string;
+  position: number;
+}
 
 /** GonePR is the pull request a task had when it left, as the last reading of its state said. */
 export interface GonePR {
@@ -93,12 +101,14 @@ const FRESH_KINDS: readonly string[] = ["task", "review", "discussion"];
 
 const REVIEWS: Location = { kind: "reviews" };
 const HISTORY: Location = { kind: "history" };
+const DEPLOYS: Location = { kind: "deploys" };
 
 // The id a place is about, "" for the places that are about nothing in particular.
 function idOf(location: Location): string {
   switch (location.kind) {
     case "home":
     case "reviews":
+    case "deploys":
     case "history":
     case "settings":
       return "";
@@ -155,6 +165,7 @@ export function locationExists(
   switch (location.kind) {
     case "home":
     case "reviews":
+    case "deploys":
     case "history":
     case "settings":
       return true;
@@ -188,6 +199,8 @@ export function locationTitle(
       return "Home";
     case "reviews":
       return "Reviews";
+    case "deploys":
+      return "Deploys";
     case "history":
       return "History";
     case "settings":
@@ -248,6 +261,7 @@ export function breadcrumbOf(app: State | null, location: Location): Crumb[] {
     case "home":
     case "board":
     case "reviews":
+    case "deploys":
     case "history":
     case "settings":
     case "gone":
@@ -278,9 +292,24 @@ function isFresh(value: unknown): value is FreshItem {
   );
 }
 
-/** withoutFresh is the place as the places behind keep it: the History without the row it opened on. */
+/**
+ * withoutFresh is the place as the places behind keep it: the History without the row it opened on,
+ * Deploys without the panel it opened on.
+ */
 export function withoutFresh(location: Location): Location {
-  return location.kind === "history" && location.fresh !== undefined ? HISTORY : location;
+  if (location.kind === "history" && location.fresh !== undefined) {
+    return HISTORY;
+  }
+  if (location.kind === "deploys" && location.target !== undefined) {
+    return DEPLOYS;
+  }
+  return location;
+}
+
+function isDeployTarget(value: unknown): value is DeployTarget {
+  return (
+    isRecord(value) && typeof value.repositoryId === "string" && typeof value.position === "number"
+  );
 }
 
 function isGonePR(value: unknown): value is GonePR {
@@ -300,6 +329,8 @@ export function isLocation(value: unknown): value is Location {
     case "home":
     case "reviews":
       return true;
+    case "deploys":
+      return value.target === undefined || isDeployTarget(value.target);
     case "history":
       return value.fresh === undefined || isFresh(value.fresh);
     case "settings":

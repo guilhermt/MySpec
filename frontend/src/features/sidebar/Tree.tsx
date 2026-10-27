@@ -19,6 +19,7 @@ import { useTreeKeyboard } from "@/features/sidebar/useTreeKeyboard";
 import { nextWaiting } from "@/lib/situations";
 import {
   useAppStore,
+  useDeploysOpen,
   useFlashing,
   useOpenBoardId,
   useOpenItemId,
@@ -34,7 +35,7 @@ const EMPTY =
   "py-(--space-1) pr-(--space-2) pl-[calc(var(--tree-pad)+var(--icon)+var(--space-2-5))] text-(length:--text-meta) leading-(--leading-meta) text-ink-3";
 
 /**
- * Tree is the active items in their nodes: Reviews, a node per board with its
+ * Tree is the active items in their nodes: Reviews, Deploys, a node per board with its
  * clone notices and its epics, then No board. The item on screen shows open,
  * the one Ctrl+J opens next carries the mark, and a situation that just started
  * blinks its row, or the summary of the collapsed node holding it. The
@@ -50,6 +51,7 @@ export function Tree() {
   const openItemId = useOpenItemId();
   const openBoardId = useOpenBoardId();
   const reviewsOpen = useReviewsOpen();
+  const deploysOpen = useDeploysOpen();
   const now = useNow(60_000, true);
 
   const nodes = app === null ? [] : sidebarTree(app, filter, now);
@@ -84,6 +86,7 @@ export function Tree() {
     className?: string,
   ) => {
     const expanded = !collapsed.has(item.id);
+    const leaf = item.kind === "deploys";
     const under = nodeRows(item);
     return (
       <Fragment key={item.id}>
@@ -93,7 +96,8 @@ export function Tree() {
           expanded={expanded}
           current={
             (item.kind === "board" && item.board.id === openBoardId) ||
-            (item.kind === "reviews" && reviewsOpen)
+            (item.kind === "reviews" && reviewsOpen) ||
+            (item.kind === "deploys" && deploysOpen)
           }
           summary={expanded ? null : nodeSummary(under)}
           flash={
@@ -107,7 +111,7 @@ export function Tree() {
           groupId={groupIdOf(item.id)}
           tabIndex={tabIndexOf(item.id)}
         />
-        {expanded && (
+        {expanded && !leaf && (
           // biome-ignore lint/a11y/useSemanticElements: a fieldset is a form grouping, not a tree group
           <div role="group" id={groupIdOf(item.id)} className={className}>
             {children}
@@ -124,10 +128,17 @@ export function Tree() {
       onKeyDown={onKeyDown}
       onFocus={onFocus}
       onBlur={onBlur}
-      // The top nodes stand apart as sections: Reviews, each board, No board.
+      // The top nodes stand apart as sections: Reviews, Deploys, each board, No board.
       className="flex flex-col gap-(--section-gap) p-(--space-2)"
     >
       {nodes.map((top) => {
+        if (top.kind === "deploys") {
+          return (
+            <div key={top.id} role="none" className="flex flex-col">
+              {node(top, 1, null)}
+            </div>
+          );
+        }
         const epics = top.kind === "board" ? top.epics : [];
         const notices = top.kind === "reviews" ? [] : top.notices;
         const nothing = notices.length === 0 && epics.length === 0 && top.rows.length === 0;

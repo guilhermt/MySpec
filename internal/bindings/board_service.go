@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/cardimages"
+	"github.com/guilhermt/myspec/internal/deploys"
 	"github.com/guilhermt/myspec/internal/images"
 )
 
@@ -20,22 +22,25 @@ type BoardService struct {
 	boards     *board.Service
 	documents  func(owner, name string, number int) (string, bool)
 	cardImages *cardimages.Service
+	deploys    *deploys.Service
 	log        *slog.Logger
 }
 
 // NewBoardService builds the service over the board domain. documents is the
 // understanding of the discussion that wrote a card, which the context of the
-// card opens with; without it, no card has one.
+// card opens with; without it, no card has one. deploys tells what the preview
+// of an edit or a removal takes along.
 func NewBoardService(
 	boards *board.Service,
 	documents func(owner, name string, number int) (string, bool),
 	cardImages *cardimages.Service,
+	deploys *deploys.Service,
 	log *slog.Logger,
 ) *BoardService {
 	if documents == nil {
 		documents = func(string, string, int) (string, bool) { return "", false }
 	}
-	return &BoardService{boards: boards, documents: documents, cardImages: cardImages, log: log}
+	return &BoardService{boards: boards, documents: documents, cardImages: cardImages, deploys: deploys, log: log}
 }
 
 // PreviewBoard reads the board at url for registering it: its statuses, with
@@ -68,7 +73,15 @@ func (s *BoardService) PreviewEditBoard(id string) (BoardPreview, error) {
 	if err != nil {
 		return BoardPreview{}, s.fail("PreviewEditBoard", err)
 	}
-	return FromBoardPreview(preview), nil
+	converted := FromBoardPreview(preview)
+	if config, ok := s.deploys.Config(id); ok {
+		for i, option := range converted.Repositories {
+			converted.Repositories[i].Deploys = slices.ContainsFunc(config.Repositories, func(rc deploys.RepositoryConfig) bool {
+				return option.RepositoryID != "" && rc.RepositoryID == option.RepositoryID
+			})
+		}
+	}
+	return converted, nil
 }
 
 // CheckBoardRepository checks a repository the user typed as owner/name for the
@@ -128,7 +141,11 @@ func (s *BoardService) PreviewRemoveBoard(id string) (BoardRemoval, error) {
 	if err != nil {
 		return BoardRemoval{}, s.fail("PreviewRemoveBoard", err)
 	}
-	return FromRemoval(removal), nil
+	converted := FromRemoval(removal)
+	if config, ok := s.deploys.Config(id); ok {
+		converted.Deploys = len(config.Repositories)
+	}
+	return converted, nil
 }
 
 // RemoveBoard removes a board and releases every repository of it.

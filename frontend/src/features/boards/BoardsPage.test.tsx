@@ -42,8 +42,8 @@ describe("BoardsPage", () => {
       .getAllByRole("listitem")
       .map((item) => item.getAttribute("aria-label"));
     expect(names).toEqual([
-      "Alpha, dev, 1 repository, read 3m ago",
-      "Support, ana, 0 repositories, read 3m ago",
+      "Alpha, dev, 1 repository, read 3m ago, Deploys not set up",
+      "Support, ana, 0 repositories, read 3m ago, Deploys not set up",
     ]);
     expect(screen.getAllByRole("button", { name: "Add board" })).toHaveLength(1);
   });

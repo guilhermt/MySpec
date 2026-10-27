@@ -38,6 +38,7 @@ type Store struct {
 	Boards       *BoardsRepo
 	Reviews      *ReviewsRepo
 	Discussions  *DiscussionsRepo
+	Deploys      *DeploysRepo
 }
 
 // Open opens the database at path, creating its directory and applying the
@@ -92,6 +93,7 @@ func open(ctx context.Context, dsn, path string, log *slog.Logger, upgrade Upgra
 		Boards:       &BoardsRepo{db: db},
 		Reviews:      &ReviewsRepo{db: db},
 		Discussions:  &DiscussionsRepo{db: db},
+		Deploys:      &DeploysRepo{db: db},
 	}, nil
 }
 

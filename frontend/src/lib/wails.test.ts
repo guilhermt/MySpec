@@ -10,6 +10,7 @@ import {
   asCloseOutcome,
   asCloseSkipReason,
   asDependencyDrop,
+  asDeployFilterGone,
   asDiscussionStatus,
   asDivergenceKind,
   asDraftDecision,
@@ -457,6 +458,10 @@ describe("narrowing", () => {
     for (const mergeable of ["mergeable", "conflicting", "unknown", ""]) {
       expect(asMergeable(mergeable)).toBe(mergeable);
     }
+    for (const gone of ["", "no_deploys", "removed"]) {
+      expect(asDeployFilterGone(gone)).toBe(gone);
+    }
+    expect(asDeployFilterGone("something else")).toBe("");
     expect(asPullRequestOutcome("merged")).toBe("merged");
     expect(asPullRequestOutcome("closed")).toBe("closed");
     expect(asModelStage("discussion")).toBe("discussion");
@@ -812,6 +817,26 @@ describe("onSituationOpen", () => {
     registered?.({ name: "situation:open", data: event });
 
     expect(vi.mocked(Events.On).mock.calls[0]?.[0]).toBe("situation:open");
+    expect(handler).toHaveBeenCalledWith(event);
+    expect(stop).toBe(unsubscribe);
+  });
+});
+
+describe("onDeployFinished and onDeployOpen", () => {
+  it.each([
+    ["deploy:finished", wails.onDeployFinished],
+    ["deploy:open", wails.onDeployOpen],
+  ] as const)("hand the payload of %s to the handler and return the unsubscribe", (name, on) => {
+    const unsubscribe = vi.fn();
+    vi.mocked(Events.On).mockReturnValueOnce(unsubscribe);
+    const handler = vi.fn();
+    const event = { repositoryId: "repo-1", position: 1 } as never;
+
+    const stop = on(handler);
+    const registered = vi.mocked(Events.On).mock.calls[0]?.[1];
+    registered?.({ name, data: event });
+
+    expect(vi.mocked(Events.On).mock.calls[0]?.[0]).toBe(name);
     expect(handler).toHaveBeenCalledWith(event);
     expect(stop).toBe(unsubscribe);
   });

@@ -9,13 +9,14 @@ A arquitetura de informação e o modelo de navegação do MySpec: os lugares, a
   - Home;
   - a visão de um board;
   - Reviews, o centro de review;
+  - Deploys, as matrizes de deploy dos boards que os têm ligados;
   - History;
   - Settings;
   - um item aberto: task, review de PR ou discussão;
   - um item arquivado.
 
   Não há camadas nem modais de lugar. Os diálogos (criação de task, início de review, criação de discussão, publicação, cadastros, confirmações) continuam diálogos.
-- **Item aberto.** Abrir um item é ir a um lugar. A linha dele na árvore fica selecionada (`aria-current="page"`) e, se estava fora da vista, a árvore rola até ela e abre os nós que a escondiam. A visão de um board e Reviews marcam o nó delas do mesmo jeito.
+- **Item aberto.** Abrir um item é ir a um lugar. A linha dele na árvore fica selecionada (`aria-current="page"`) e, se estava fora da vista, a árvore rola até ela e abre os nós que a escondiam. A visão de um board, Reviews e Deploys marcam o nó delas do mesmo jeito.
 - **Histórico.** Toda ida a um lugar entra numa pilha. `←` e `→` no cabeçalho, ou `Alt+←` e `Alt+→`, percorrem a pilha. O `←` diz para onde volta, no tooltip, e o `→` só aparece quando há para onde avançar. Ir a um lugar novo limpa o que estava à frente. A pilha e o último item aberto são estado do frontend, lembrados entre execuções.
 - **Breadcrumb.** No cabeçalho, depois de `←` e `→`: `board / épico /`, `Reviews /`, ou `No board /`, seguido do título do lugar. Cada nível abre o seu lugar. Os níveis dobram num `…` com um menu: num lugar com o stepper, abaixo de 1660 px de área principal, para deixar espaço a ele; num lugar sem stepper, como um arquivado, só quando o título não cabe ao lado deles. O glifo de tipo e a referência do item (`repo#card`, `repo#PR`) não ficam no cabeçalho: estão na árvore e em `Details`.
 - **Settings e History** são lugares como os outros. Settings abre pelo rodapé ou por `Ctrl+,`, também nas boas-vindas, e abre em **Defaults**, ou na página do link que o trouxe (**Edit the board in Settings…** abre Boards). Fechar Settings (`Esc`, **Close**, `Ctrl+,` de novo, `←`) volta ao lugar anterior, nunca a Home.
@@ -48,9 +49,10 @@ A largura é contínua: `clamp(288px, 8vw + 200px, 380px)`.
 
 ### A árvore
 
-- **Ordem.** Primeiro **Reviews**, com `N pending` e os reviews ativos. Depois um nó por board, em ordem alfabética: os épicos primeiro, com as tasks dentro, depois as tasks sem épico, depois as discussões do board. Por último **No board**, só quando tem algo: as tasks livres, as de repositórios sem board, as discussões de um board removido e os avisos de clone desses repositórios. Dentro de cada nó, a ordem é a de criação. A árvore nunca reordena sozinha. Quem diz o que é mais urgente é a gravidade e a marca `Ctrl J`.
+- **Ordem.** Primeiro **Reviews**, com `N pending` e os reviews ativos. Depois **Deploys**, só quando algum board tem deploys configurados e ligados, sem filhos. Depois um nó por board, em ordem alfabética: os épicos primeiro, com as tasks dentro, depois as tasks sem épico, depois as discussões do board. Por último **No board**, só quando tem algo: as tasks livres, as de repositórios sem board, as discussões de um board removido e os avisos de clone desses repositórios. Dentro de cada nó, a ordem é a de criação. A árvore nunca reordena sozinha. Quem diz o que é mais urgente é a gravidade e a marca `Ctrl J`.
 - **Nó de board.** O título abre a visão do board. À direita, o nó mostra `reading…` durante uma leitura, ou `◇ Read failed` com a razão no tooltip. Um board sem itens mostra `No active items.`
 - **Nó Reviews.** Abre o lugar Reviews. A contagem é a das pendentes que passam pelos filtros de Reviews. Sem review ativo, mostra `No review in progress.`
+- **Nó Deploys.** Abre o lugar Deploys. Não tem filhos, chevron nem grupo: não expande nem recolhe, e `→` e `←` nele não fazem nada. A contagem é `N to deploy`, a dos ambientes com algo a promover, em tinta neutra, e a marca de erro (o losango vermelho) aparece quando um deploy falhou, sozinha quando nada espera. Durante uma leitura diz `reading…`, e quando a leitura inteira falhou, `◇ Read failed`, com a razão no tooltip. O filtro da lateral não o afeta. O nome acessível diz tudo: `Deploys, 3 to deploy, a deploy failed`.
 - **Aviso de clone inexistente.** É um item da árvore (`treeitem`), no topo do nó em que ficam as tasks do repositório: o nó do board dele, ou **No board** para um repositório sem board. A árvore não tem nó de repositório. O item mostra `◇ <repo> · clone missing`, e `Enter` muda o caminho. O `◇` marca o que bloqueia trabalho sem ser uma situação. Nunca se confunde com o erro de um item.
 - **Papel e teclado.** A árvore é `role="tree"`, com um só ponto de Tab (roving tabindex). ↑↓ percorrem o que está visível. `Home` e `End` vão às pontas. → expande um nó ou entra nele. ← recolhe o nó ou sobe ao pai. `Enter` abre.
 
@@ -186,7 +188,7 @@ Um nó recolhido mostra à direita um glifo e uma contagem por estado, do mais g
 - `+N` quando há mais de uma situação;
 - o trilho no erro.
 
-Entre os grupos, um separador leva o `◇` da falha de leitura ou do clone, e, em Reviews, a contagem de PRs pendentes. O nome acessível de cada bloco é o da linha inteira. O rodapé fica em coluna, com o sinal de versão nova acima de **Settings** quando há uma.
+Entre os grupos, um separador leva o `◇` da falha de leitura ou do clone, em Reviews a contagem de PRs pendentes e, em Deploys, a contagem de ambientes a promover e a marca de erro de um deploy que falhou; o nome acessível do separador é o do nó. O nome acessível de cada bloco é o da linha inteira. O rodapé fica em coluna, com o sinal de versão nova acima de **Settings** quando há uma.
 
 ### O filtro
 
@@ -345,6 +347,7 @@ Sob o cabeçalho, na medida da conversa, quando algo bloqueia sem ser a situaç�
 
 - **Board**: o cabeçalho tem a idade da leitura, **Refresh**, **New discussion** `N` e `⋯` (**Select cards to discuss**, **Open on GitHub**, **Edit the board in Settings…**). Não tem **Start task**: uma task começa de um card. Abaixo, a busca e os filtros (o chip **Assigned to me**, os filtros ativos como chips, o menu **Filter**), e a lista agrupada pelas seções de status do board, na ordem dele, com as finais recolhidas. A linha do card mostra só o que decide a escolha: o número, o título, o épico, a dependência não satisfeita e a task (com a situação real) ou a discussão do card; as teclas `S` e `D` aparecem na linha em foco. O card abre num painel ao lado da lista, que é o único lugar de **Start task** e **Discuss** fora das teclas; o repositório sem clone aparece lá (**Clone and continue**) e na Home. A seleção de cards para uma discussão é um modo, pelo `⋯` ou por `Space`. A falha de leitura é uma faixa no alto da lista, com **Try again**, sobre a leitura guardada.
 - **Reviews**: a lista das PRs abertas, agrupada em `Pending`, `In review`, `Reviewed` e `Yours and your tasks`, as duas últimas recolhidas. A linha mostra a referência, o título, o autor e o estado que importa; `R` inicia o review, abre o que existe ou a task dona. A PR abre num painel com a ação, os checks pelo nome, os fatos e a descrição. Os filtros ficam no menu **Filter** (Board, Repository, Author, Label). A falha de leitura de um repositório é uma faixa no alto da lista.
+- **Deploys**: uma seção por board com deploys ligados, cada uma com a matriz dos repositórios por ambientes. O cabeçalho tem a idade da leitura e **Refresh** (`Read the deploys again`, tracejado com `A reading is running.` durante uma leitura). O filtro, uma escolha única de board, só aparece com mais de um board ou com um board escolhido, e o chip diz `Board: <título>`. A tela lê o GitHub ao abrir e de minuto em minuto enquanto está aberta. A falha da leitura inteira é uma faixa no alto, `Couldn't read the deploys`, com a razão e **Try again**, sobre a leitura guardada.
 - **History**: uma lista só, por data de arquivamento, com os dias como seção, a busca no alto (onde o foco começa) e a contagem, e o filtro da lateral aplicado como chip removível. A linha tem o tipo, o nome, onde (card, PR ou board), o resultado e a hora. A linha recém-arquivada fica destacada quando se chega pela página do item que saiu. O arquivado é um lugar, com `← History`, o tipo, o título, a etiqueta e **Delete…** no `⋯`: a task com os fatos, o resultado do encerramento e as abas dos documentos (a aba **Pull request** com o rascunho e os relatórios do review), o review com cada passada, a discussão com o que publicou primeiro. Nada roda num arquivado, e apagá-lo volta ao History.
 - **Settings**: a navegação à esquerda com seis páginas, **Defaults** (os modos de review, dos steps e da pull request, e os modelos por etapa), **Boards**, **Repositories** (o que precisa de clone primeiro, depois os repositórios por board), **Prompts** (a lista dos dez, com `Default` ou `Edited`, e cada prompt aberto na mesma página, com a edição) e **Machine** (os seis itens do que o app precisa da máquina, em dois blocos, Claude Code e GitHub CLI, com **Check again**; o item leva `◇ N` quando algo falta) e **About** (a versão instalada e **Check for updates**; com uma versão nova, **Update to 0.5.0**, a ação primária do bloco da versão nova, e as notas das releases depois da instalada; o item leva a marca do sinal de versão nova). Cada página tem o título, uma frase do que ela serve e, quando há, a ação dela, secundária: Settings não pede nada, então não tem primária. A exceção é o bloco da versão nova em About, cujas ações (**Update to 0.5.0**, **Try again**, **Restart now**) são primárias, porque são o único pedido de Settings. Tudo em Defaults salva na hora. Não há página de aparência: o tema fica no rodapé da lateral. Abaixo de 820 px de área principal, a navegação vira uma linha acima da página.
 
@@ -361,8 +364,12 @@ Sob o cabeçalho, na medida da conversa, quando algo bloqueia sem ser a situaç�
 | `Enter` | Home | Abre **Continue** |
 | ↑↓ `Home` `End` | Lista (board, Reviews, History) | Percorrem as linhas e os cabeçalhos visíveis |
 | ←→ | Lista do board e de Reviews | Recolhem e expandem a seção |
+| ←→ ↑↓ `Home` `End` `Ctrl+Home` `Ctrl+End` | Matriz de Deploys | Percorrem as células e as passagens: ←→ na linha, ↑↓ entre as linhas e os boards, `Home` e `End` nas pontas da linha, com `Ctrl` nas da matriz |
 | ←→ | Borda de um painel | Alarga e estreita o painel |
 | `Enter` | Lista do board e de Reviews | Abre ou fecha o painel; num cabeçalho, recolhe ou expande |
+| `Enter` | Matriz de Deploys | Abre o painel do ambiente da célula ou da passagem com o foco, ou o fecha quando é o aberto |
+| `O` | Matriz de Deploys, painel de deploy | Abre no GitHub o que o ambiente representa: da célula, o último run (ou o que falhou); da passagem, a pull request de deploy, senão a comparação das branches. Sem destino, o aviso `No deploy run yet.` |
+| `D` | Matriz de Deploys, painel de deploy | Age como o botão do painel, **Deploy to <Ambiente>** ou **Merge**; onde não age, o aviso diz por quê |
 | `/` | Board, History | Foca a busca; `↓` volta à lista |
 | `S` | Linha do card | **Start task** ou **Clone and continue**; onde não age, diz por quê |
 | `D` | Lista do board | Discussão com a seleção, ou com o card do foco |
@@ -402,6 +409,7 @@ O design funciona de 1100 a 2600 px, sem pontos fixos de janela. Cada regra depe
 | Painéis do item | A regra da seção 3; o usuário os alarga pela borda |
 | Lista do board e de Reviews | 70rem centrada. Abaixo de 1040 px de lista, o que não é número, título e teclas desce para uma segunda linha; o título tem sempre um terço da linha. O painel da lista (`clamp(360px, 42%, 640px)`) fica ao lado enquanto a lista mantém 440 px, o que, na largura padrão, vale exatamente a partir de 800 px de área principal (a janela de 1100 px dá 812); o usuário o alarga pela borda |
 | Lista do History | As colunas até 860 px de lista; abaixo, onde e o resultado descem para a segunda linha |
+| Matriz de Deploys | A grade do board com o nome do repositório, as células e as passagens; abaixo de 48rem de largura da seção do board, o nome desce para uma linha acima das células e as passagens encolhem para a seta e o número |
 | Settings | A navegação à esquerda e a página de `--measure`; abaixo de 820 px de área principal, a navegação é uma linha acima da página; abaixo de 720 px, as ações de uma linha de Settings descem para baixo do texto |
 | Diálogos | O mínimo em 480 px (`--size-dialog`), o largo em 576 px (`--size-dialog-wide`), os dois a `8vh` do topo, crescendo para baixo, centrados na janela inteira; a tela cheia, a janela menos `--space-8` de cada lado |
 | Barras | Quebram em duas linhas antes de esconder uma ação |
@@ -415,8 +423,12 @@ O design funciona de 1100 a 2600 px, sem pontos fixos de janela. Cada regra depe
 | Nada cadastrado e nenhum item ativo | Boas-vindas, no lugar da Home, com **Add board** (com o foco) e **Add repository**, e o bloco `This machine` só quando falta algo na máquina (o Claude Code, o login e a versão dele, o `gh`, o login e os escopos dele), cada falta com o comando copiável, e **Check again**. A lateral só tem o topo e o rodapé: **New** tracejado com a razão, **History** tracejado quando nada está arquivado, o tema e **Settings** funcionando. Valem a Home, Settings e, com algo arquivado, History. Uma discussão ativa de um board removido deixa o app no shell normal |
 | Nenhum item ativo | Home com `Nothing in progress` e as ações de início |
 | Nada aberto | Home com **Continue** |
-| Primeira leitura do GitHub | A árvore local completa. `reading…` nos nós de board e em Reviews. `PR review · checking GitHub` na linha que depende dela. A Home e as listas dizem o que está sendo lido; uma lista nunca lida mostra o esqueleto |
+| Primeira leitura do GitHub | A árvore local completa. `reading…` nos nós de board, em Reviews e em Deploys. `PR review · checking GitHub` na linha que depende dela. A Home e as listas dizem o que está sendo lido; uma lista nunca lida mostra o esqueleto |
 | Falha de leitura | `◇ Read failed` no nó (razão no tooltip), a faixa no alto da lista com **Try again** sobre a leitura guardada, a linha na Home. Num review, `Couldn't check GitHub` sob o cabeçalho. Nunca uma situação, nunca vermelha |
+| Deploys nunca lidos | O esqueleto da matriz: uma barra de título e, por board, uma linha por repositório com a coluna do nome e três blocos. `Reading the deploys…` no nome acessível |
+| Falha de leitura de Deploys | A faixa `Couldn't read the deploys · 4m ago`, com a razão e **Try again**, no alto da tela, acima do filtro e da matriz |
+| Nenhum board com deploys | `No board has deploys.`, `Turn on the deploys of a board in Settings › Boards.` e **Open Settings** |
+| Filtro de Deploys sem resultado | O filtro fica, e a tela diz `The board in the filter has no deploys.` ou `The board in the filter was removed.`, com **Clear filter**. O chip leva `◇` e diz o motivo no tooltip |
 | Clone inexistente | O item `◇` na árvore, a faixa na task afetada, a Home, o filtro e Settings › Repositories |
 | Repositório sem clone | Onde uma task seria criada: o painel do card com **Clone and continue**, a Home, o filtro, Settings › Repositories |
 | Item esperando o usuário | A linha, a aba, a pílula e a barra do pedido. Ao nascer, a notificação ou a piscada, e o anúncio |

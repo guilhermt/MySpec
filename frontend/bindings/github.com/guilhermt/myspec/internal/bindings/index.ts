@@ -3,6 +3,7 @@
 
 import * as AttentionService from "./attentionservice.js";
 import * as BoardService from "./boardservice.js";
+import * as DeployService from "./deployservice.js";
 import * as DiscussionService from "./discussionservice.js";
 import * as HistoryService from "./historyservice.js";
 import * as RepositoryService from "./repositoryservice.js";
@@ -14,6 +15,7 @@ import * as TaskService from "./taskservice.js";
 export {
     AttentionService,
     BoardService,
+    DeployService,
     DiscussionService,
     HistoryService,
     RepositoryService,
@@ -39,6 +41,7 @@ export type {
     BackgroundItem,
     Board,
     BoardCard,
+    BoardDeploys,
     BoardFailure,
     BoardPreview,
     BoardRemoval,
@@ -62,6 +65,26 @@ export type {
     CreateTaskRequest,
     DeletePreview,
     DeleteResult,
+    DeployAction,
+    DeployBoard,
+    DeployBranchOption,
+    DeployEnvironment,
+    DeployEnvironmentSettings,
+    DeployFailure,
+    DeployFilter,
+    DeployFinished,
+    DeployOpen,
+    DeployPR,
+    DeployPromotion,
+    DeployPullRequest,
+    DeployRepository,
+    DeployRepositoryChoice,
+    DeployRepositoryOptions,
+    DeployRepositorySettings,
+    DeployRun,
+    DeploySettings,
+    DeployWorkflow,
+    Deploys,
     DiscussionCard,
     DiscussionContextRequest,
     DiscussionRepository,
@@ -126,6 +149,7 @@ export type {
     ReviewSummary,
     RunningTask,
     SaveBoardRequest,
+    SaveDeploySettingsRequest,
     SessionTasks,
     Situation,
     SituationOpen,

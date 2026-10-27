@@ -167,16 +167,24 @@ export function changedNote(preview: BoardPreview): string {
   return `${changed}${named}${preview.newCardStatusGone ? " New cards now start with no status." : ""}`;
 }
 
+const ITS_DEPLOYS = "Its deploy configuration is removed.";
+const THEIR_DEPLOYS = "Their deploy configurations are removed.";
+
 /**
  * consequence is "Moves to No board: it has a clone and 3 archived tasks. Its tasks keep working."
- * or "Leaves MySpec: it has no clone, tasks or reviews."; "" for a repository that stays or isn't
- * the board's own.
+ * or "Leaves MySpec: it has no clone, tasks or reviews.", each with " Its deploy configuration is
+ * removed." when it has one; "" for a repository that stays or isn't the board's own.
  */
 export function consequence(option: BoardRepositoryOption, repository: Repository | null): string {
   const release = asReleaseKind(option.release);
   if (option.checked || release === "") {
     return "";
   }
+  const deploys = option.deploys ? ` ${ITS_DEPLOYS}` : "";
+  return `${releaseConsequence(release, repository)}${deploys}`;
+}
+
+function releaseConsequence(release: "no_board" | "leave", repository: Repository | null): string {
   if (release === "leave") {
     return "Leaves MySpec: it has no clone, tasks or reviews.";
   }
@@ -228,5 +236,12 @@ export function footerSum(
       ? [`${listOf(leaving)} ${leaving.length === 1 ? "leaves" : "leave"} MySpec`]
       : []),
   ];
-  return clauses.length === 0 ? "" : `${clauses.join(", and ")}.`;
+  if (clauses.length === 0) {
+    return "";
+  }
+  const deploys = unchecked.some(
+    (option) => option.deploys && asReleaseKind(option.release) !== "",
+  );
+  const note = moving.length + leaving.length > 1 ? THEIR_DEPLOYS : ITS_DEPLOYS;
+  return `${clauses.join(", and ")}.${deploys ? ` ${note}` : ""}`;
 }

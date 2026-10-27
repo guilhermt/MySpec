@@ -14,6 +14,7 @@ type Services struct {
 	Discussion *DiscussionService
 	Attention  *AttentionService
 	History    *HistoryService
+	Deploy     *DeployService
 }
 
 // NewWaitingServices builds the placeholders, each answering startingMessage.
@@ -36,6 +37,8 @@ func NewWaitingServices() *Services {
 	attention.late.waiting = true
 	history := &HistoryService{}
 	history.late.waiting = true
+	deploy := &DeployService{}
+	deploy.late.waiting = true
 
 	return &Services{
 		State:      state,
@@ -47,6 +50,7 @@ func NewWaitingServices() *Services {
 		Discussion: discussion,
 		Attention:  attention,
 		History:    history,
+		Deploy:     deploy,
 	}
 }
 
@@ -80,6 +84,9 @@ func (s *Services) Bind(built Services) {
 	if built.History != nil {
 		s.History.late.bound.Store(built.History)
 	}
+	if built.Deploy != nil {
+		s.Deploy.late.bound.Store(built.Deploy)
+	}
 }
 
 // Wails are the placeholders as Wails services, in this order.
@@ -94,5 +101,6 @@ func (s *Services) Wails() []application.Service {
 		application.NewService(s.Discussion),
 		application.NewService(s.Attention),
 		application.NewService(s.History),
+		application.NewService(s.Deploy),
 	}
 }

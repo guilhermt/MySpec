@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -65,6 +66,8 @@ type fixture struct {
 	tasks     map[string]int                 // the active tasks of each repository, by id
 	archived  map[string]int                 // the archived tasks of each repository, by id
 	ids       int                            // how many ids NewID gave
+	links     atomic.Int32                   // how many times OnLinks was called
+	linksErr  error                          // what OnLinks answers
 }
 
 // newFixture registers the board "Roadmap" with the stored reading given, and
@@ -105,6 +108,7 @@ func newFixture(t *testing.T, stored board.Stored) *fixture {
 		NewID:        f.newID,
 		OnChange:     f.changes.inc,
 		OnRead:       f.reads.record,
+		OnLinks:      func(context.Context) error { f.links.Add(1); return f.linksErr },
 	})
 	if err := f.service.Sync(t.Context()); err != nil {
 		t.Fatalf("Sync() = %v, want nil", err)

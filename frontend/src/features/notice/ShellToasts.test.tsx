@@ -128,4 +128,56 @@ describe("ShellToasts", () => {
 
     expect(useAppStore.getState().toasts).toEqual([]);
   });
+
+  describe("a deploy", () => {
+    const deploy: Toast = {
+      id: "deploy:repo-1:1:0",
+      kind: "deploy",
+      deploy: {
+        repositoryId: "repo-1",
+        position: 1,
+        fullName: "dev/api",
+        environment: "Staging",
+        succeeded: true,
+        seconds: 80,
+        runUrl: "",
+      },
+    };
+
+    it("opens Deploys on the panel of the environment from its action", async () => {
+      const { user } = renderWithStore(<ShellToasts />, { ui: { toasts: [deploy] } });
+
+      expect(screen.getByRole("status")).toHaveTextContent("dev/api · Staging deployed");
+      await user.click(screen.getByRole("button", { name: "Open in Deploys" }));
+
+      expect(useAppStore.getState().location).toEqual({
+        kind: "deploys",
+        target: { repositoryId: "repo-1", position: 1 },
+      });
+      expect(useAppStore.getState().toasts).toEqual([]);
+    });
+
+    it("opens Deploys without a panel when the environment has no position", async () => {
+      const unplaced = { ...deploy, deploy: { ...deploy.deploy, position: -1 } } as Toast;
+      const { user } = renderWithStore(<ShellToasts />, { ui: { toasts: [unplaced] } });
+
+      await user.click(screen.getByRole("button", { name: "Open in Deploys" }));
+
+      expect(useAppStore.getState().location).toEqual({ kind: "deploys" });
+    });
+
+    it("draws a deploy that failed with the error rail, and one that succeeded without it", () => {
+      const failed = {
+        id: "deploy:repo-1:2:0",
+        kind: "deploy",
+        deploy: { ...deploy.deploy, position: 2, succeeded: false },
+      } as Toast;
+      renderWithStore(<ShellToasts />, { ui: { toasts: [deploy, failed] } });
+
+      const succeeded = screen.getByText("dev/api · Staging deployed").closest(".toast");
+      const broken = screen.getByText("dev/api · Staging failed to deploy").closest(".toast");
+      expect(broken?.className).toContain("--error-rail");
+      expect(succeeded?.className).not.toContain("--error-rail");
+    });
+  });
 });

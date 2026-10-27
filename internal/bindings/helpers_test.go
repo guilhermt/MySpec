@@ -21,6 +21,7 @@ import (
 	"github.com/guilhermt/myspec/internal/cardimages"
 	"github.com/guilhermt/myspec/internal/claude"
 	"github.com/guilhermt/myspec/internal/claude/claudetest"
+	"github.com/guilhermt/myspec/internal/deploys"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/divergence"
@@ -302,6 +303,34 @@ type fakeGitHub struct {
 	err  error
 }
 
+// fakeDeployGitHub is the gh of the deploys: every call fails with err, which a
+// test sets before it reads GitHub.
+type fakeDeployGitHub struct {
+	mu  sync.Mutex
+	err error
+}
+
+func (g *fakeDeployGitHub) fail(err error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	g.err = err
+}
+
+func (g *fakeDeployGitHub) GraphQL(context.Context, string, gh.Vars) (gh.Response, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	return gh.Response{}, g.err
+}
+
+func (g *fakeDeployGitHub) REST(context.Context, string, string, string) (string, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	return "", g.err
+}
+
 func (g *fakeGitHub) GraphQL(context.Context, string, gh.Vars) (gh.Response, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -380,6 +409,9 @@ type fixture struct {
 	settings       *bindings.SettingsService
 	tasks          *bindings.TaskService
 	boardService   *bindings.BoardService
+	deploySvc      *bindings.DeployService
+	deploys        *deploys.Service
+	deployGH       *fakeDeployGitHub
 	reviewSvc      *bindings.ReviewService
 	discussionSvc  *bindings.DiscussionService
 	repositories   *repository.Service
@@ -501,6 +533,13 @@ func newFixture(t *testing.T) *fixture {
 		Log:          log,
 	})
 
+	f.deployGH = &fakeDeployGitHub{}
+	f.deploys = deploys.New(deploys.Deps{
+		GitHub: f.deployGH, Store: st.Deploys, Settings: st.Settings,
+		Repositories: f.repositories.List, Boards: f.boards.List, Log: log,
+	})
+	t.Cleanup(f.deploys.Close)
+
 	f.worktrees = worktree.New(worktree.Deps{
 		Git:     git.New(git.Deps{Log: log, Env: gittest.Env(t)}),
 		Store:   st.Worktrees,
@@ -589,7 +628,8 @@ func newFixture(t *testing.T) *fixture {
 		f.taskSvc, f.sessions, f.flow, f.models, f.reviewModes, f.repositories, f.boards, f.cardImages, f.editor.open,
 		f.discussions.DocumentOfCard, f.unseenDraftImages, f.hasConversation, log,
 	)
-	f.boardService = bindings.NewBoardService(f.boards, f.discussions.DocumentOfCard, f.cardImages, log)
+	f.boardService = bindings.NewBoardService(f.boards, f.discussions.DocumentOfCard, f.cardImages, f.deploys, log)
+	f.deploySvc = bindings.NewDeployService(f.deploys, f.repositories.List, log)
 	f.reviewSvc = bindings.NewReviewService(
 		f.reviewFlow, f.prReviews, f.pullRequests, f.worktrees, f.editor.open, log,
 	)
@@ -838,6 +878,9 @@ func (f *fixture) load(t *testing.T) {
 	if err := f.worktrees.Sync(t.Context(), ids); err != nil {
 		t.Fatalf("worktrees.Sync() = %v, want nil", err)
 	}
+	if err := f.deploys.Sync(t.Context()); err != nil {
+		t.Fatalf("deploys.Sync() = %v, want nil", err)
+	}
 	if err := f.pullRequests.Sync(t.Context()); err != nil {
 		t.Fatalf("pulls.Sync() = %v, want nil", err)
 	}
@@ -957,8 +1000,9 @@ func (f *fixture) snapshot() bindings.State {
 		Boards: bindings.FromBoards(
 			f.boards.List(), f.boards.Stored, f.boards.Reading,
 			f.repositories.List(), f.repositories.Missing, f.taskSvc.CardTasks(),
-			f.discussions.CardWriters(),
+			f.discussions.CardWriters(), f.deploys.Configs(),
 		),
+		Deploys: bindings.FromDeploys(f.deploys.Overview()),
 		ReviewCenter: bindings.FromReviewCenter(
 			f.pullRequests.Readings(), f.pullRequests.Reading(), f.pullRequests.ReadAt(),
 			f.pullRequests.Viewer(), f.pullRequests.Filters(), repositories, nil,
