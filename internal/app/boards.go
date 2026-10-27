@@ -48,3 +48,9 @@ func (a *App) onBoardRead(boardID string, cards map[string]board.Card) {
 		a.log.Error("task cards not updated", "board", boardID, "error", err)
 	}
 }
+
+// onBoardRemoved drops the drafts of a removed board from what the New
+// discussion dialog lists: the database already lost them with the board.
+func (a *App) onBoardRemoved(boardID string) {
+	a.newDiscussionDrafts.ForgetBoard(boardID)
+}

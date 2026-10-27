@@ -298,6 +298,7 @@ export function largeBoardState(): State {
     reviewHistory: [],
     discussions: [],
     discussionHistory: [],
+    newDiscussionDrafts: [],
     historySummary: { tasks: 0, reviews: 0, discussions: 0, oldest: "", windowStart: "" },
     cloneFolder: "",
     quit: null,

@@ -24,6 +24,7 @@ import (
 	"github.com/guilhermt/myspec/internal/git"
 	"github.com/guilhermt/myspec/internal/machine"
 	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/newdiscussion"
 	"github.com/guilhermt/myspec/internal/platform/chime"
 	"github.com/guilhermt/myspec/internal/platform/notify"
 	"github.com/guilhermt/myspec/internal/prompts"
@@ -269,9 +270,17 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 		Store: st.Boards, GitHub: ghRunner, Repositories: repositories, Identify: identifier.Identify,
 		Counts:    a.itemCounts,
 		TaskCards: a.boardTaskCards,
-		Log:       log, OnChange: a.publish, OnRead: a.onBoardRead,
+		Log:       log, OnChange: a.publish, OnRead: a.onBoardRead, OnRemove: a.onBoardRemoved,
 		// Read when called, once a.deploys exists.
 		OnLinks: func(ctx context.Context) error { return a.deploys.Reload(ctx) },
+	})
+	newDiscussionDrafts := newdiscussion.New(newdiscussion.Deps{
+		Store: st,
+		HasBoard: func(id string) bool {
+			_, ok := boards.Get(id)
+			return ok
+		},
+		Log: log, OnChange: a.publish,
 	})
 	deploySvc := deploys.New(deploys.Deps{
 		GitHub: ghRunner, Store: st.Deploys, Settings: st.Settings,
@@ -363,6 +372,7 @@ func (a *App) attempt(ctx context.Context, p *progress) (err error) {
 	a.pulls, a.prReviews, a.reviewFlow = pullRequests, prReviews, reviewFlow
 	a.deploys = deploySvc
 	a.discussions, a.discussionFlow = discussions, discussionFlow
+	a.newDiscussionDrafts = newDiscussionDrafts
 	a.divergences = divergences
 	a.cardImages = cardImages
 
@@ -441,7 +451,7 @@ func (a *App) bound(
 		Review: bindings.NewReviewService(
 			a.reviewFlow, a.prReviews, a.pulls, a.worktrees, editor.Open, log,
 		),
-		Discussion: bindings.NewDiscussionService(a.discussionFlow, a.discussions, repositories, cardImages, log),
+		Discussion: bindings.NewDiscussionService(a.discussionFlow, a.discussions, a.newDiscussionDrafts, repositories, cardImages, log),
 		Attention:  bindings.NewAttentionService(a.attention),
 		History:    bindings.NewHistoryService(a.historySources(), log),
 		Deploy:     bindings.NewDeployService(a.deploys, repositories.List, log),
@@ -462,6 +472,7 @@ func (a *App) read(ctx context.Context) error {
 		{"deploys", a.deploys.Sync},
 		{"reviews", a.prReviews.Sync},
 		{"discussions", a.discussions.Sync},
+		{"discussion drafts", a.newDiscussionDrafts.Load},
 	}
 	for _, read := range reads {
 		if err := withTimeout(ctx, read.load); err != nil {

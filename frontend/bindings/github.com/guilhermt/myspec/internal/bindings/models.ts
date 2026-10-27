@@ -2503,6 +2503,29 @@ export interface ModelCatalog {
 }
 
 /**
+ * NewDiscussionDraft is a New discussion the user saved to finish later.
+ */
+export interface NewDiscussionDraft {
+    "id": string;
+    "boardId": string;
+
+    /**
+     * as typed; "" for none
+     */
+    "title": string;
+
+    /**
+     * as typed; "" for none
+     */
+    "text": string;
+
+    /**
+     * RFC 3339
+     */
+    "savedAt": string;
+}
+
+/**
  * NewerData is the data a newer version of the app changed: the schema version
  * it is at and the last one this version reads.
  */
@@ -3810,6 +3833,20 @@ export interface SaveDeploySettingsRequest {
 }
 
 /**
+ * SaveNewDiscussionDraftRequest is what the New discussion dialog saves as a
+ * draft.
+ */
+export interface SaveNewDiscussionDraftRequest {
+    /**
+     * "" for a new draft
+     */
+    "id": string;
+    "boardId": string;
+    "title": string;
+    "text": string;
+}
+
+/**
  * SessionTasks is what runs in one conversation of an item.
  */
 export interface SessionTasks {
@@ -3916,6 +3953,11 @@ export interface StartDiscussionRequest {
     "cards": string[] | null;
     "model": string;
     "effort": string;
+
+    /**
+     * the draft the discussion starts from; "" for none
+     */
+    "draftId": string;
 
     /**
      * Images are the images the user attached, in base64, in the order they
@@ -4156,6 +4198,12 @@ export interface State {
      * HistorySummary.WindowStart, newest first; never nil.
      */
     "discussionHistory": ArchivedDiscussion[] | null;
+
+    /**
+     * NewDiscussionDrafts are the drafts saved from the New discussion dialog,
+     * of every board, the most recently saved first; never nil.
+     */
+    "newDiscussionDrafts": NewDiscussionDraft[] | null;
 
     /**
      * HistorySummary is the whole History in numbers.

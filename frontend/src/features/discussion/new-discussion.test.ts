@@ -7,7 +7,13 @@ import {
   contextCharacters,
   contextLine,
   defaultDiscussionBoard,
+  draftExcerpt,
+  draftLabel,
+  draftsFor,
+  hasWritten,
   lastUsedBoard,
+  NOTHING_TO_SAVE,
+  saveReason,
   startReason,
   suggestedTitle,
   TITLE_MAX,
@@ -22,6 +28,7 @@ import {
   makeBoard,
   makeBoardCard,
   makeDiscussion,
+  makeNewDiscussionDraft,
   makeRepository,
   makeState,
 } from "@/test/wails-mock";
@@ -375,5 +382,57 @@ describe("the Board field", () => {
     expect(BOARD_FIELD_HELP).toBe(
       "The discussion reads the clones of the board's repositories and publishes its cards there.",
     );
+  });
+});
+
+describe("hasWritten", () => {
+  const form = { title: "", text: "", suggested: "", draftId: null };
+
+  it("is false for an empty form and for the suggested title", () => {
+    expect(hasWritten(form)).toBe(false);
+    expect(hasWritten({ ...form, title: "Add login", suggested: "Add login" })).toBe(false);
+    expect(hasWritten({ ...form, text: "  \n" })).toBe(false);
+  });
+
+  it("is true for a text, a changed title or a resumed draft", () => {
+    expect(hasWritten({ ...form, text: "Rules" })).toBe(true);
+    expect(hasWritten({ ...form, title: "Add login!", suggested: "Add login" })).toBe(true);
+    expect(hasWritten({ ...form, draftId: "draft-1" })).toBe(true);
+  });
+});
+
+describe("saveReason", () => {
+  it("holds a draft with neither title nor text", () => {
+    expect(saveReason({ title: " ", text: "\n" })).toBe(NOTHING_TO_SAVE);
+  });
+
+  it("lets a draft with one of them be saved", () => {
+    expect(saveReason({ title: "Rules", text: "" })).toBeNull();
+    expect(saveReason({ title: "", text: "Rules" })).toBeNull();
+  });
+});
+
+describe("draftsFor", () => {
+  const mine = makeNewDiscussionDraft({ id: "a", boardId: "board-1" });
+  const other = makeNewDiscussionDraft({ id: "b", boardId: "board-2" });
+
+  it("keeps the drafts of the board, in order", () => {
+    expect(draftsFor([other, mine], "board-1", false)).toEqual([mine]);
+  });
+
+  it("keeps all of them when the board is asked", () => {
+    expect(draftsFor([other, mine], "board-1", true)).toEqual([other, mine]);
+  });
+});
+
+describe("draftLabel and draftExcerpt", () => {
+  it("label the title trimmed, or Untitled", () => {
+    expect(draftLabel(makeNewDiscussionDraft({ title: "  Rules " }))).toBe("Rules");
+    expect(draftLabel(makeNewDiscussionDraft({ title: "  " }))).toBe("Untitled");
+  });
+
+  it("take the first non-blank line of the text", () => {
+    expect(draftExcerpt("\n  \n  First line \nsecond")).toBe("First line");
+    expect(draftExcerpt(" \n")).toBe("");
   });
 });

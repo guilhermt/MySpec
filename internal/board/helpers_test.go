@@ -66,6 +66,7 @@ type fixture struct {
 	tasks     map[string]int                 // the active tasks of each repository, by id
 	archived  map[string]int                 // the archived tasks of each repository, by id
 	ids       int                            // how many ids NewID gave
+	removed   []string                       // the ids OnRemove heard of
 	links     atomic.Int32                   // how many times OnLinks was called
 	linksErr  error                          // what OnLinks answers
 }
@@ -107,6 +108,7 @@ func newFixture(t *testing.T, stored board.Stored) *fixture {
 		Now:          func() time.Time { return base },
 		NewID:        f.newID,
 		OnChange:     f.changes.inc,
+		OnRemove:     func(id string) { f.removed = append(f.removed, id) },
 		OnRead:       f.reads.record,
 		OnLinks:      func(context.Context) error { f.links.Add(1); return f.linksErr },
 	})

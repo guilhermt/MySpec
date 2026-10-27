@@ -57,6 +57,7 @@ import type {
   MarkerType,
   Migration,
   ModelCatalog,
+  NewDiscussionDraft,
   Place,
   PromptStage,
   QuitRequest,
@@ -1630,6 +1631,7 @@ const NO_DISCUSSIONS: readonly DiscussionSummary[] = [];
 const NO_DISCUSSION_HISTORY: readonly ArchivedDiscussion[] = [];
 const NO_REPOSITORIES: readonly Repository[] = [];
 const NO_BOARDS: readonly Board[] = [];
+const NO_DRAFTS: readonly NewDiscussionDraft[] = [];
 
 /** NO_CATALOG is what the pickers offer before the state arrives: nothing, for no known reason. */
 const NO_CATALOG: ModelCatalog = { models: [], failure: "" };
@@ -1677,6 +1679,11 @@ const NO_UPDATE: Update = {
 /** useBoards is every registered board, by title. */
 export function useBoards(): readonly Board[] {
   return useAppStore((state) => state.app?.boards ?? NO_BOARDS);
+}
+
+/** useNewDiscussionDrafts are the drafts saved from the New discussion dialog, of every board. */
+export function useNewDiscussionDrafts(): readonly NewDiscussionDraft[] {
+  return useAppStore((state) => state.app?.newDiscussionDrafts ?? NO_DRAFTS);
 }
 
 /** useBoard is a registered board by id, null when none is. */

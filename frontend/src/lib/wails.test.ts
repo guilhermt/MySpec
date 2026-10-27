@@ -715,6 +715,7 @@ describe("api", () => {
       title: "Invoices",
       text: "Split the invoices screen.",
       cards: ["dev/web#12"],
+      draftId: "",
       model: "claude-fable-5-1",
       effort: "high",
       images: [],

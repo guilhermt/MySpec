@@ -16,8 +16,8 @@ import * as $models from "./models.js";
 
 /**
  * Deploy opens the pull request that promotes the previous environment into
- * the one at position, then merges it. It returns at once; the action arrives
- * as state.
+ * the one at position; merging it is Merge. It returns at once; the action
+ * arrives as state.
  */
 export function Deploy(repositoryID: string, position: number): $CancellablePromise<void> {
     return $Call.ByID(1427941811, repositoryID, position);

@@ -23,6 +23,7 @@ import (
 	"github.com/guilhermt/myspec/internal/gh"
 	"github.com/guilhermt/myspec/internal/machine"
 	"github.com/guilhermt/myspec/internal/models"
+	"github.com/guilhermt/myspec/internal/newdiscussion"
 	"github.com/guilhermt/myspec/internal/prompts"
 	"github.com/guilhermt/myspec/internal/prreport"
 	"github.com/guilhermt/myspec/internal/prreview"
@@ -2748,6 +2749,18 @@ func FromMachine(status machine.Status) Machine {
 		GHScopes:       append([]string{}, report.GHScopes...),
 		MissingScopes:  append([]string{}, report.MissingScopes...),
 	}
+}
+
+// FromNewDiscussionDrafts converts the drafts of the New discussion dialog; the
+// list is never nil.
+func FromNewDiscussionDrafts(list []newdiscussion.Draft) []NewDiscussionDraft {
+	out := make([]NewDiscussionDraft, len(list))
+	for i, d := range list {
+		out[i] = NewDiscussionDraft{
+			ID: d.ID, BoardID: d.BoardID, Title: d.Title, Text: d.Text, SavedAt: d.SavedAt.Format(time.RFC3339),
+		}
+	}
+	return out
 }
 
 // FromDeploys converts the Deploys view. The slices are always allocated so

@@ -518,3 +518,86 @@ func TestApprovingADraftWithoutATitleGetsItsSentence(t *testing.T) {
 		t.Error("a refusal the user can read was logged as a failure")
 	}
 }
+
+func TestSavingANewDiscussionDraftReachesTheStateAndDeletingItLeaves(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+	f.registerBoard(t, true, webCard(12))
+
+	id, err := f.discussionSvc.SaveNewDiscussionDraft(bindings.SaveNewDiscussionDraftRequest{
+		BoardID: testBoardID, Title: "Invoices", Text: "Bill them.",
+	})
+	if err != nil || id == "" {
+		t.Fatalf("SaveNewDiscussionDraft() = %q, %v, want an id and nil", id, err)
+	}
+	got := f.state.GetState().NewDiscussionDrafts
+	if len(got) != 1 || got[0].ID != id || got[0].BoardID != testBoardID || got[0].Title != "Invoices" || got[0].Text != "Bill them." {
+		t.Fatalf("NewDiscussionDrafts = %+v, want the draft saved", got)
+	}
+
+	if err = f.discussionSvc.DeleteNewDiscussionDraft(id); err != nil {
+		t.Fatalf("DeleteNewDiscussionDraft() = %v, want nil", err)
+	}
+	if got = f.state.GetState().NewDiscussionDrafts; len(got) != 0 {
+		t.Errorf("NewDiscussionDrafts = %+v, want none", got)
+	}
+}
+
+func TestSavingANewDiscussionDraftRefusedGetsItsSentence(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+	f.registerBoard(t, true, webCard(12))
+
+	tests := []struct {
+		name string
+		req  bindings.SaveNewDiscussionDraftRequest
+		want string
+	}{
+		{"nothing written", bindings.SaveNewDiscussionDraftRequest{BoardID: testBoardID, Title: " "}, "Write a title or what to discuss to save a draft."},
+		{"board gone", bindings.SaveNewDiscussionDraftRequest{BoardID: "gone", Title: "x"}, "This board is no longer in the app."},
+	}
+	for _, tt := range tests {
+		if _, err := f.discussionSvc.SaveNewDiscussionDraft(tt.req); err == nil || err.Error() != tt.want {
+			t.Errorf("%s: SaveNewDiscussionDraft() = %v, want %q", tt.name, err, tt.want)
+		}
+	}
+}
+
+func TestStartingADiscussionFromADraftDeletesIt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+	f.registerBoard(t, true, webCard(12))
+	kept, err := f.discussionSvc.SaveNewDiscussionDraft(bindings.SaveNewDiscussionDraftRequest{BoardID: testBoardID, Title: "Other"})
+	if err != nil {
+		t.Fatalf("SaveNewDiscussionDraft() = %v, want nil", err)
+	}
+	used, err := f.discussionSvc.SaveNewDiscussionDraft(bindings.SaveNewDiscussionDraftRequest{BoardID: testBoardID, Title: "Invoices"})
+	if err != nil {
+		t.Fatalf("SaveNewDiscussionDraft() = %v, want nil", err)
+	}
+	req := bindings.StartDiscussionRequest{
+		BoardID: testBoardID, Title: "Invoices", Text: "Bill them.", Model: "claude-opus-5-5[1m]", Effort: "high",
+	}
+
+	if _, err = f.discussionSvc.StartDiscussion(req); err != nil {
+		t.Fatalf("StartDiscussion() = %v, want nil", err)
+	}
+	if got := f.state.GetState().NewDiscussionDrafts; len(got) != 2 {
+		t.Errorf("drafts after a start without draftId = %+v, want both left alone", got)
+	}
+
+	req.DraftID = used
+	if _, err = f.discussionSvc.StartDiscussion(req); err != nil {
+		t.Fatalf("StartDiscussion(draft) = %v, want nil", err)
+	}
+	got := f.state.GetState().NewDiscussionDrafts
+	if len(got) != 1 || got[0].ID != kept {
+		t.Errorf("drafts after a start from %s = %+v, want only %s", used, got, kept)
+	}
+}

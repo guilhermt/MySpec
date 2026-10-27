@@ -64,6 +64,10 @@ A rodada reúne os rascunhos de uma leitura do artefato e as revisões deles, e 
 
 O artefato no disco é do agente e o produto nunca o reescreve; tudo o que é do usuário ou do produto sobre ele fica nessas tabelas. Os passos de uma publicação são gravados um a um, porque é assim que **Retry** continua de onde parou sem criar nada duas vezes.
 
+### Rascunhos do diálogo New discussion
+
+`new_discussion_drafts` guarda um rascunho por linha do diálogo **New discussion**: o board, com chave estrangeira e `ON DELETE CASCADE`, que leva os rascunhos junto com ele, o título e o texto como o usuário os digitou, e quando o rascunho foi criado e quando foi salvo pela última vez. Não tem relação com `discussion_drafts`, os rascunhos de cards que o agente de uma discussão escreve.
+
 ### Deploys
 
 `board_deploys` guarda, por board, se os deploys estão ligados (`enabled`), com `board_id` como chave e `ON DELETE CASCADE`. `deploy_repositories` guarda, por repositório gerenciado, o `board_id` a que a configuração pertence e os ambientes em JSON (`environments`: nome, branch e workflow de cada um, em ordem, dois no mínimo). Os ambientes só existem na ordem da lista, que define as promoções, então ficam numa linha só e nunca são consultados um a um. Um repositório que sai do board ou do app perde a linha (`applyReleases` e `applyLinks` a apagam), um que troca de board perde a configuração do antigo, e um board removido leva as duas tabelas pela chave estrangeira. A leitura dos deploys no GitHub não é guardada: vive em memória.

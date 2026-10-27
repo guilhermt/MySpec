@@ -1386,6 +1386,7 @@ describe("discussion actions shown in place", () => {
     title: "Invoices",
     text: "Split the invoices screen.",
     cards: ["dev/web#12"],
+    draftId: "",
     model: "claude-opus-5-5[1m]",
     effort: "high",
     images: [],

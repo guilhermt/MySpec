@@ -32,6 +32,8 @@ export interface DialogProps {
   initialFocus?: RefObject<HTMLElement | null>;
   /** closeDisabled draws the × disabled, while the dialog waits for a call. */
   closeDisabled?: boolean;
+  /** headerAction sits in the header, left of the ×. */
+  headerAction?: ReactNode;
   children: ReactNode;
 }
 
@@ -59,6 +61,8 @@ const TITLE =
  * - full: size="full", the size of the window less --space-8 around;
  * - in steps: subtitle with the step, a DialogFooter with back from the second step and refusal;
  * - destructive: alert, with the confirmation as a danger Button.
+ * headerAction is a small button in the header, left of the ×. Ctrl+Enter confirms only from the
+ * sheet of the dialog itself: a dialog nested in it confirms its own.
  * While the dialog waits for a call, closeDisabled and a disabled DialogCancel draw the ways out
  * dashed, and its onOpenChange ignores the close.
  * Without initialFocus, an alert opens on its DialogCancel and the others on the first field of the
@@ -74,6 +78,7 @@ export function Dialog({
   onConfirm,
   initialFocus,
   closeDisabled = false,
+  headerAction,
   children,
 }: DialogProps) {
   const popup = useRef<HTMLDivElement>(null);
@@ -83,6 +88,8 @@ export function Dialog({
     return sheet.querySelector<HTMLElement>(alert ? CANCEL : FIELD) ?? sheet;
   };
   const handleKeyDown = (event: KeyboardEvent) => {
+    // A nested dialog sits in a portal, and React bubbles its events to this one.
+    if (!popup.current?.contains(event.target as Node)) return;
     if (onConfirm !== undefined && event.ctrlKey && event.key === "Enter") {
       event.preventDefault();
       onConfirm();
@@ -104,6 +111,7 @@ export function Dialog({
       {...(subtitle !== undefined ? { subtitle } : {})}
       alert={alert === true}
       closeDisabled={closeDisabled}
+      {...(headerAction !== undefined ? { action: headerAction } : {})}
     />
   );
 
@@ -133,11 +141,13 @@ function DialogHeading({
   subtitle,
   alert,
   closeDisabled,
+  action,
 }: {
   title: string;
   subtitle?: string;
   alert: boolean;
   closeDisabled: boolean;
+  action?: ReactNode;
 }) {
   const Title = alert ? AlertDialogTitle : UIDialogTitle;
   const Close = alert ? BaseAlertDialog.Close : UIDialogClose;
@@ -151,6 +161,9 @@ function DialogHeading({
           </p>
         )}
       </div>
+      {action !== undefined && (
+        <div className="flex h-(--size-control-sm) shrink-0 items-center">{action}</div>
+      )}
       <Close
         render={
           <IconButton

@@ -161,3 +161,30 @@ describe("Dialog", () => {
     expect(screen.getByRole("button", { name: "Cancel" }).parentElement).toHaveClass("ml-auto");
   });
 });
+
+describe("Dialog header action", () => {
+  it("renders the action before the close button", () => {
+    renderWithStore(<Subject headerAction={<Button>Drafts</Button>} />);
+    const action = screen.getByRole("button", { name: "Drafts" });
+    const close = screen.getByRole("button", { name: "Close" });
+    expect(action.compareDocumentPosition(close) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("does not confirm on Ctrl+Enter inside a nested dialog", async () => {
+    const onConfirm = vi.fn();
+    const { user } = renderWithStore(
+      <Dialog open onOpenChange={() => {}} title="Outer" onConfirm={onConfirm}>
+        <DialogBody>Outer body.</DialogBody>
+        <Dialog open onOpenChange={() => {}} title="Inner" alert>
+          <DialogBody>Inner body.</DialogBody>
+          <DialogFooter>
+            <DialogCancel>Keep</DialogCancel>
+          </DialogFooter>
+        </Dialog>
+      </Dialog>,
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Keep" })).toHaveFocus());
+    await user.keyboard("{Control>}{Enter}{/Control}");
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+});
