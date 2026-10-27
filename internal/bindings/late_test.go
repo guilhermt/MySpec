@@ -24,6 +24,7 @@ func calls(s *bindings.Services) map[string]func() error {
 		"board":      func() error { return s.Board.RefreshBoard("nope") },
 		"review":     func() error { return s.Review.ApplyReview("nope") },
 		"discussion": func() error { return s.Discussion.ArchiveDiscussion("nope") },
+		"deploy":     func() error { return s.Deploy.Deploy("nope", 0) },
 		"history": func() error {
 			_, err := s.History.ListArchived(bindings.HistoryRequest{Before: "nope"})
 			return err
@@ -41,6 +42,7 @@ func builtServices(f *fixture) bindings.Services {
 		Board:      f.boardService,
 		Review:     f.reviewSvc,
 		Discussion: f.discussionSvc,
+		Deploy:     f.deploySvc,
 		History: bindings.NewHistoryService(bindings.HistorySources{
 			Tasks:       func() []bindings.ArchivedTask { return nil },
 			Reviews:     func() []bindings.ArchivedReview { return nil },
@@ -156,6 +158,7 @@ func TestWailsListsEveryPlaceholderInOrder(t *testing.T) {
 	want := []any{
 		services.State, services.Repository, services.Settings, services.Task,
 		services.Board, services.Review, services.Discussion, services.Attention, services.History,
+		services.Deploy,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("len(Wails()) = %d, want %d", len(got), len(want))

@@ -178,6 +178,26 @@ func TestPreviewRemoveBoardNamesTheRepositoriesThatGoToNoBoard(t *testing.T) {
 	}
 }
 
+func TestPreviewRemoveBoardCountsTheRepositoriesWithDeploys(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+	f.registerBoard(t, true)
+	f.deployGH.fail(gh.ErrNotAuthenticated)
+	if err := f.deploySvc.SaveDeploySettings(savedSettings()); err != nil {
+		t.Fatalf("SaveDeploySettings() = %v, want nil", err)
+	}
+
+	got, err := f.boardService.PreviewRemoveBoard(testBoardID)
+	if err != nil {
+		t.Fatalf("PreviewRemoveBoard() = %v, want nil", err)
+	}
+	if got.Deploys != 1 {
+		t.Errorf("PreviewRemoveBoard().Deploys = %d, want 1", got.Deploys)
+	}
+}
+
 func TestFromBoardPreviewCarriesTheStatusesAndTheRepositories(t *testing.T) {
 	t.Parallel()
 

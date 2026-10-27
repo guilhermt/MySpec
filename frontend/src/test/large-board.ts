@@ -216,6 +216,7 @@ export function largeBoardState(): State {
     viewer: "person0",
     cards,
     newCardStatus: "Backlog",
+    deploys: { configured: false, enabled: false, repositories: 0 },
   };
   return {
     migration: null,
@@ -264,6 +265,16 @@ export function largeBoardState(): State {
     tasks: cards.filter((each) => each.activeTaskId !== "").map(task),
     history: [],
     boards: [board],
+    deploys: {
+      boards: [],
+      readAt: "",
+      reading: false,
+      failure: null,
+      filter: { boardId: "", title: "" },
+      filterGone: "",
+      waiting: 0,
+      failed: false,
+    },
     reviewCenter: {
       pullRequests: [],
       failures: [],

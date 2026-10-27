@@ -4,7 +4,9 @@ import (
 	"cmp"
 	"crypto/sha256"
 	"fmt"
+	"net/url"
 	"os"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"github.com/guilhermt/myspec/internal/attention"
 	"github.com/guilhermt/myspec/internal/board"
 	"github.com/guilhermt/myspec/internal/claude"
+	"github.com/guilhermt/myspec/internal/deploys"
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/discussionflow"
 	"github.com/guilhermt/myspec/internal/divergence"
@@ -1116,7 +1119,8 @@ const (
 
 // FromBoards converts the registered boards with their stored readings, the
 // repositories each one manages and, for every card, the tasks created from it,
-// the discussion that wrote it and what Start task does for it. The slices are always allocated so the
+// the discussion that wrote it and what Start task does for it. configs are the
+// deploys of the boards that have them. The slices are always allocated so the
 // frontend never sees null.
 func FromBoards(
 	boards []board.Board,
@@ -1126,6 +1130,7 @@ func FromBoards(
 	missing func(id string) bool,
 	cardTasks map[string]task.CardTaskIDs,
 	writers map[string]discussion.Writer,
+	configs []deploys.BoardConfig,
 ) []Board {
 	boardsByID := make(map[string]board.Board, len(boards))
 	for _, b := range boards {
@@ -1134,6 +1139,11 @@ func FromBoards(
 	repositoriesByKey := make(map[string]repository.Repository, len(repositories))
 	for _, repo := range repositories {
 		repositoriesByKey[strings.ToLower(repo.FullName())] = repo
+	}
+
+	configsByBoard := make(map[string]deploys.BoardConfig, len(configs))
+	for _, c := range configs {
+		configsByBoard[c.BoardID] = c
 	}
 
 	converted := make([]Board, len(boards))
@@ -1158,6 +1168,9 @@ func FromBoards(
 			Failure:       fromBoardFailure(s.Failure, s.FailedAt),
 			Cards:         []BoardCard{},
 			NewCardStatus: b.NewCardStatus,
+		}
+		if c, ok := configsByBoard[b.ID]; ok {
+			converted[i].Deploys = BoardDeploys{Configured: true, Enabled: c.Enabled, Repositories: len(c.Repositories)}
 		}
 		if s.Reading == nil {
 			continue
@@ -2735,4 +2748,214 @@ func FromMachine(status machine.Status) Machine {
 		GHScopes:       append([]string{}, report.GHScopes...),
 		MissingScopes:  append([]string{}, report.MissingScopes...),
 	}
+}
+
+// FromDeploys converts the Deploys view. The slices are always allocated so
+// the frontend never sees null.
+func FromDeploys(o deploys.Overview) Deploys {
+	boards := make([]DeployBoard, len(o.Boards))
+	for i, b := range o.Boards {
+		repositories := make([]DeployRepository, len(b.Repositories))
+		for j, r := range b.Repositories {
+			repositories[j] = fromDeployRepository(r)
+		}
+		boards[i] = DeployBoard{ID: b.ID, Title: b.Title, Shown: b.Shown, Repositories: repositories}
+	}
+	return Deploys{
+		Boards:     boards,
+		ReadAt:     deployTime(o.ReadAt),
+		Reading:    o.Reading,
+		Failure:    fromDeployFailure(o.Failure),
+		Filter:     DeployFilter{BoardID: o.Filter.BoardID, Title: o.Filter.Title},
+		FilterGone: string(o.FilterGone),
+		Waiting:    o.Waiting,
+		Failed:     o.Failed,
+	}
+}
+
+// deployTime is t in RFC 3339, "" for the zero time.
+func deployTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format(time.RFC3339)
+}
+
+// fromDeployFailure converts why a reading of deploys failed, keeping nil for
+// one that did not.
+func fromDeployFailure(f *deploys.Failure) *DeployFailure {
+	if f == nil {
+		return nil
+	}
+	return &DeployFailure{Reason: string(f.Reason), Message: f.Message(), FailedAt: deployTime(f.FailedAt)}
+}
+
+// fromDeployRepository converts one row of the matrix.
+func fromDeployRepository(r deploys.RepositoryOverview) DeployRepository {
+	environments := make([]DeployEnvironment, len(r.Environments))
+	for i, e := range r.Environments {
+		previousBranch := ""
+		if i > 0 {
+			previousBranch = r.Environments[i-1].Environment.Branch
+		}
+		environments[i] = fromDeployEnvironment(r.Owner, r.Name, previousBranch, e)
+	}
+	return DeployRepository{
+		ID:           r.RepositoryID,
+		Owner:        r.Owner,
+		Name:         r.Name,
+		FullName:     r.Owner + "/" + r.Name,
+		URL:          deployRepositoryURL(r.Owner, r.Name),
+		Reading:      r.Reading,
+		ReadAt:       deployTime(r.ReadAt),
+		Failure:      fromDeployFailure(r.Failure),
+		Environments: environments,
+	}
+}
+
+// deployRepositoryURL is the page of owner/name on GitHub.
+func deployRepositoryURL(owner, name string) string {
+	return "https://github.com/" + owner + "/" + name
+}
+
+// fromDeployEnvironment converts one cell of the matrix of the repository
+// owner/name, whose previous environment has the branch previousBranch.
+func fromDeployEnvironment(owner, name, previousBranch string, e deploys.EnvironmentOverview) DeployEnvironment {
+	env := DeployEnvironment{
+		Position:       e.Position,
+		Name:           e.Environment.Name,
+		Branch:         e.Environment.Branch,
+		PreviousName:   e.PreviousName,
+		PreviousBranch: previousBranch,
+		WorkflowName:   e.Environment.WorkflowName,
+		WorkflowURL: deployRepositoryURL(owner, name) + "/actions/workflows/" +
+			path.Base(e.Environment.WorkflowPath),
+		State:     string(e.View.State),
+		Problem:   string(e.View.Problem),
+		Failed:    e.View.Failed,
+		Pending:   e.View.Pending,
+		PRReady:   e.View.PRReady,
+		Running:   e.View.Running,
+		Busy:      e.View.Busy,
+		Available: string(e.View.Available),
+		Previous:  string(e.View.Previous),
+	}
+	if previousBranch != "" {
+		env.CompareURL = deployRepositoryURL(owner, name) + "/compare/" +
+			url.PathEscape(e.Environment.Branch) + "..." + url.PathEscape(previousBranch)
+	}
+	if e.Action != nil {
+		env.Action = &DeployAction{
+			Kind: string(e.Action.Kind), Phase: string(e.Action.Phase), Failure: e.Action.Failure, PR: e.Action.PR,
+		}
+	}
+	if r := e.Reading; r != nil {
+		env.LastRun = fromDeployRun(r.LastRun)
+		if c := r.LastCompleted; c != nil && c.Status == deploys.RunFailed && (r.LastRun == nil || r.LastRun.ID != c.ID) {
+			env.FailedRun = fromDeployRun(c)
+		}
+		env.Promotion = fromDeployPromotion(r.Promotion)
+	}
+	return env
+}
+
+// fromDeployRun converts a run, keeping nil for none. EndedAt is the update of
+// a run that is over.
+func fromDeployRun(r *deploys.Run) *DeployRun {
+	if r == nil {
+		return nil
+	}
+	run := &DeployRun{
+		ID:         r.ID,
+		Status:     string(r.Status),
+		Conclusion: r.Conclusion,
+		URL:        r.URL,
+		StartedAt:  deployTime(r.StartedAt),
+	}
+	if r.Status == deploys.RunSucceeded || r.Status == deploys.RunFailed {
+		run.EndedAt = deployTime(r.UpdatedAt)
+	}
+	return run
+}
+
+// fromDeployPromotion converts what waits in the previous environment, keeping
+// nil for none.
+func fromDeployPromotion(p *deploys.Promotion) *DeployPromotion {
+	if p == nil {
+		return nil
+	}
+	requests := make([]DeployPullRequest, len(p.PullRequests))
+	for i, pr := range p.PullRequests {
+		requests[i] = DeployPullRequest{Number: pr.Number, Title: pr.Title, URL: pr.URL, Author: pr.Author}
+	}
+	promotion := &DeployPromotion{
+		Commits:        p.Commits,
+		Partial:        p.Partial,
+		Ahead:          p.Ahead,
+		PendingSince:   deployTime(p.PendingSince),
+		PullRequests:   requests,
+		OtherDeployPRs: max(p.OpenDeployPRs-1, 0),
+	}
+	if pr := p.DeployPR; pr != nil {
+		promotion.DeployPR = &DeployPR{
+			Number: pr.Number, Title: pr.Title, URL: pr.URL, Draft: pr.Draft, CreatedAt: deployTime(pr.CreatedAt),
+		}
+	}
+	return promotion
+}
+
+// FromDeployFinished converts a deploy of the app that ended.
+func FromDeployFinished(f deploys.Finished) DeployFinished {
+	return DeployFinished{
+		RepositoryID: f.RepositoryID,
+		Position:     f.Position,
+		FullName:     f.FullName,
+		Environment:  f.Environment,
+		Succeeded:    f.Succeeded,
+		Seconds:      int(f.Duration.Seconds()),
+		RunURL:       f.RunURL,
+	}
+}
+
+// fromDeployEnvironmentSettings converts the environments of a repository for
+// the dialog.
+func fromDeployEnvironmentSettings(envs []deploys.Environment) []DeployEnvironmentSettings {
+	converted := make([]DeployEnvironmentSettings, len(envs))
+	for i, e := range envs {
+		converted[i] = DeployEnvironmentSettings{
+			Name: e.Name, Branch: e.Branch,
+			WorkflowID: e.WorkflowID, WorkflowName: e.WorkflowName, WorkflowPath: e.WorkflowPath,
+		}
+	}
+	return converted
+}
+
+// fromDeployOptions converts what GitHub offers the configuration of a
+// repository. The slices are always allocated so the frontend never sees null.
+func fromDeployOptions(o deploys.Options) DeployRepositoryOptions {
+	workflows := make([]DeployWorkflow, len(o.Workflows))
+	for i, w := range o.Workflows {
+		workflows[i] = DeployWorkflow{ID: w.ID, Name: w.Name, Path: w.Path}
+	}
+	branches := make([]DeployBranchOption, len(o.Branches))
+	for i, b := range o.Branches {
+		branches[i] = DeployBranchOption{Branch: b.Branch, Exists: b.Exists, Suggested: b.Suggested}
+	}
+	return DeployRepositoryOptions{Workflows: workflows, Branches: branches}
+}
+
+// deployConfigOf converts what the user chose in the deploys dialog.
+func deployConfigOf(req SaveDeploySettingsRequest) deploys.BoardConfig {
+	repositories := make([]deploys.RepositoryConfig, len(req.Repositories))
+	for i, c := range req.Repositories {
+		environments := make([]deploys.Environment, len(c.Environments))
+		for j, e := range c.Environments {
+			environments[j] = deploys.Environment{
+				Name: e.Name, Branch: e.Branch,
+				WorkflowID: e.WorkflowID, WorkflowName: e.WorkflowName, WorkflowPath: e.WorkflowPath,
+			}
+		}
+		repositories[i] = deploys.RepositoryConfig{RepositoryID: c.RepositoryID, Environments: environments}
+	}
+	return deploys.BoardConfig{BoardID: req.BoardID, Enabled: req.Enabled, Repositories: repositories}
 }

@@ -11,4 +11,6 @@ func RegisterEvents() {
 	application.RegisterEvent[TranscriptEvent](EventTranscriptChanged)
 	application.RegisterEvent[SituationStarted](EventSituationStarted)
 	application.RegisterEvent[SituationOpen](EventSituationOpen)
+	application.RegisterEvent[DeployFinished](EventDeployFinished)
+	application.RegisterEvent[DeployOpen](EventDeployOpen)
 }

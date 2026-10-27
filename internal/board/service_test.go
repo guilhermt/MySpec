@@ -1114,6 +1114,36 @@ func TestRemoveReleasesEveryRepositoryOfTheBoard(t *testing.T) {
 	}
 }
 
+func TestUpdateAndRemoveTellOnLinksAfterSyncingTheRepositories(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, board.Stored{})
+	f.github.answer(structureMatch, "", structure("Roadmap"))
+
+	if err := f.service.Update(t.Context(), boardID, board.SaveParams{FinalStatuses: []string{done.ID}}); err != nil {
+		t.Fatalf("Update() = %v, want nil", err)
+	}
+	if got := f.links.Load(); got != 1 {
+		t.Errorf("OnLinks calls after Update() = %d, want 1", got)
+	}
+	if err := f.service.Remove(t.Context(), boardID); err != nil {
+		t.Fatalf("Remove() = %v, want nil", err)
+	}
+	if got := f.links.Load(); got != 2 {
+		t.Errorf("OnLinks calls after Remove() = %d, want 2", got)
+	}
+}
+
+func TestRemoveFailsWhenOnLinksFails(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, board.Stored{})
+	f.linksErr = errors.New("disk full")
+
+	err := f.service.Remove(t.Context(), boardID)
+	if err == nil || !errors.Is(err, f.linksErr) || !strings.Contains(err.Error(), "sync deploys") {
+		t.Errorf("Remove() = %v, want a sync deploys error wrapping the cause", err)
+	}
+}
+
 func TestCardOfPullRequestFindsTheCardTheReadingLinkedToIt(t *testing.T) {
 	t.Parallel()
 	linked := board.Card{

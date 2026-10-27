@@ -501,6 +501,16 @@ export function makeState(overrides: Partial<State> = {}): State {
     history: [],
     boards: [],
     reviewCenter: makeReviewCenter(),
+    deploys: {
+      boards: [],
+      readAt: "",
+      reading: false,
+      failure: null,
+      filter: { boardId: "", title: "" },
+      filterGone: "",
+      waiting: 0,
+      failed: false,
+    },
     reviews: [],
     reviewHistory: [],
     discussions: [],
@@ -616,6 +626,7 @@ export function makeBoard(overrides: Partial<Board> = {}): Board {
     viewer: "dev",
     cards: [],
     newCardStatus: "",
+    deploys: { configured: false, enabled: false, repositories: 0 },
     ...overrides,
   };
 }
@@ -726,12 +737,20 @@ export function makeBoardRepositoryOption(
     clones: [],
     otherBoard: "",
     release: "",
+    deploys: false,
     ...overrides,
   };
 }
 
 export function makeBoardRemoval(overrides: Partial<BoardRemoval> = {}): BoardRemoval {
-  return { toNoBoard: 0, removed: 0, toNoBoardNames: [], removedNames: [], ...overrides };
+  return {
+    toNoBoard: 0,
+    removed: 0,
+    toNoBoardNames: [],
+    removedNames: [],
+    deploys: 0,
+    ...overrides,
+  };
 }
 
 export function makeBoardPreview(overrides: Partial<BoardPreview> = {}): BoardPreview {

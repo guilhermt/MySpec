@@ -462,6 +462,7 @@ export interface Board {
      * discussion gets; "" for none.
      */
     "newCardStatus": string;
+    "deploys": BoardDeploys;
 }
 
 /**
@@ -559,6 +560,22 @@ export interface BoardCard {
 }
 
 /**
+ * BoardDeploys sums up the deploys of a board for its row in Settings.
+ */
+export interface BoardDeploys {
+    /**
+     * the user saved its deploys once
+     */
+    "configured": boolean;
+    "enabled": boolean;
+
+    /**
+     * the managed ones still on the board
+     */
+    "repositories": number;
+}
+
+/**
  * BoardFailure is why the last reading of a board failed.
  */
 export interface BoardFailure {
@@ -629,6 +646,12 @@ export interface BoardRemoval {
      * never nil
      */
     "removedNames": string[] | null;
+
+    /**
+     * Deploys is how many repositories have a deploy configuration that goes
+     * with the board.
+     */
+    "deploys": number;
 }
 
 /**
@@ -671,6 +694,12 @@ export interface BoardRepositoryOption {
      * board.
      */
     "release": string;
+
+    /**
+     * Deploys is set when the repository has a deploy configuration on this
+     * board; unchecking it erases the configuration.
+     */
+    "deploys": boolean;
 }
 
 /**
@@ -1012,6 +1041,387 @@ export interface DeleteResult {
      * nil when git removed everything
      */
     "leftover": Leftover | null;
+}
+
+/**
+ * DeployAction is an action of the app in flight on an environment.
+ */
+export interface DeployAction {
+    /**
+     * Kind is deploy or merge; Phase is creating, merging, waiting_run, running
+     * or failed; strings for the same reason as State.Theme.
+     */
+    "kind": string;
+    "phase": string;
+
+    /**
+     * phase failed: what GitHub said
+     */
+    "failure": string;
+    "pr": number;
+}
+
+/**
+ * DeployBoard is a board of the Deploys view.
+ */
+export interface DeployBoard {
+    "id": string;
+    "title": string;
+    "shown": boolean;
+
+    /**
+     * never nil
+     */
+    "repositories": DeployRepository[] | null;
+}
+
+/**
+ * DeployBranchOption is what GitHub says of a branch the dialog asked about.
+ */
+export interface DeployBranchOption {
+    "branch": string;
+    "exists": boolean;
+
+    /**
+     * 0 for none
+     */
+    "suggested": number;
+}
+
+/**
+ * DeployEnvironment is a cell of the pipeline matrix, with the passage before it.
+ */
+export interface DeployEnvironment {
+    "position": number;
+    "name": string;
+    "branch": string;
+
+    /**
+     * "" for the first
+     */
+    "previousName": string;
+    "previousBranch": string;
+    "workflowName": string;
+
+    /**
+     * https://github.com/o/n/actions/workflows/<file name of WorkflowPath>
+     */
+    "workflowUrl": string;
+
+    /**
+     * State is problem, unread, running, failed, pr_ready, pending, up_to_date
+     * or no_deploy, a string for the same reason as State.Theme.
+     */
+    "state": string;
+
+    /**
+     * Problem is "", branch_missing or workflow_missing, a string for the same
+     * reason as State.Theme.
+     */
+    "problem": string;
+    "failed": boolean;
+    "pending": boolean;
+    "prReady": boolean;
+    "running": boolean;
+    "busy": boolean;
+
+    /**
+     * Available is "", deploy or merge, a string for the same reason as
+     * State.Theme.
+     */
+    "available": string;
+
+    /**
+     * Previous is "", deploying or failed, a string for the same reason as
+     * State.Theme.
+     */
+    "previous": string;
+    "lastRun": DeployRun | null;
+
+    /**
+     * LastCompleted when it failed and is not LastRun; nil otherwise
+     */
+    "failedRun": DeployRun | null;
+
+    /**
+     * nil for the first environment and while unread
+     */
+    "promotion": DeployPromotion | null;
+    "action": DeployAction | null;
+
+    /**
+     * https://github.com/o/n/compare/<branch>...<previous>; "" for the first
+     */
+    "compareUrl": string;
+}
+
+/**
+ * DeployEnvironmentSettings is one environment as the dialog edits it.
+ */
+export interface DeployEnvironmentSettings {
+    "name": string;
+    "branch": string;
+
+    /**
+     * 0 for none chosen
+     */
+    "workflowId": number;
+    "workflowName": string;
+    "workflowPath": string;
+}
+
+/**
+ * DeployFailure is a reading of deploys that failed.
+ */
+export interface DeployFailure {
+    /**
+     * Reason is gh_missing, gh_unauthenticated, missing_scope, not_found,
+     * rate_limited or failed, a string for the same reason as State.Theme.
+     */
+    "reason": string;
+
+    /**
+     * failure.Message()
+     */
+    "message": string;
+
+    /**
+     * the first failing reading of the run
+     */
+    "failedAt": string;
+}
+
+/**
+ * DeployFilter is the board the Deploys view shows.
+ */
+export interface DeployFilter {
+    /**
+     * "" for every board
+     */
+    "boardId": string;
+    "title": string;
+}
+
+/**
+ * DeployFinished is a deploy merged by the app that ended with the window in front.
+ */
+export interface DeployFinished {
+    "repositoryId": string;
+
+    /**
+     * -1 when the environment is gone
+     */
+    "position": number;
+    "fullName": string;
+    "environment": string;
+    "succeeded": boolean;
+
+    /**
+     * how long the run took
+     */
+    "seconds": number;
+    "runUrl": string;
+}
+
+/**
+ * DeployOpen is a click on the notification of a deploy: Deploys, on its panel.
+ */
+export interface DeployOpen {
+    "repositoryId": string;
+
+    /**
+     * -1: Deploys without a panel
+     */
+    "position": number;
+}
+
+/**
+ * DeployPR is an open pull request of deploy.
+ */
+export interface DeployPR {
+    "number": number;
+    "title": string;
+    "url": string;
+    "draft": boolean;
+    "createdAt": string;
+}
+
+/**
+ * DeployPromotion is what the previous environment has that this one doesn't.
+ */
+export interface DeployPromotion {
+    "commits": number;
+    "partial": boolean;
+    "ahead": number;
+
+    /**
+     * "" with no commit waiting
+     */
+    "pendingSince": string;
+
+    /**
+     * never nil
+     */
+    "pullRequests": DeployPullRequest[] | null;
+    "deployPr": DeployPR | null;
+
+    /**
+     * open ones besides DeployPR
+     */
+    "otherDeployPrs": number;
+}
+
+/**
+ * DeployPullRequest is a pull request that enters a deploy.
+ */
+export interface DeployPullRequest {
+    "number": number;
+    "title": string;
+    "url": string;
+    "author": string;
+}
+
+/**
+ * DeployRepository is a row of the pipeline matrix.
+ */
+export interface DeployRepository {
+    "id": string;
+    "owner": string;
+    "name": string;
+    "fullName": string;
+
+    /**
+     * https://github.com/owner/name
+     */
+    "url": string;
+    "reading": boolean;
+    "readAt": string;
+    "failure": DeployFailure | null;
+
+    /**
+     * never nil
+     */
+    "environments": DeployEnvironment[] | null;
+}
+
+/**
+ * DeployRepositoryChoice is a repository the user manages, with its environments.
+ */
+export interface DeployRepositoryChoice {
+    "repositoryId": string;
+    "environments": DeployEnvironmentSettings[] | null;
+}
+
+/**
+ * DeployRepositoryOptions is what GitHub offers the configuration of one repository.
+ */
+export interface DeployRepositoryOptions {
+    /**
+     * never nil
+     */
+    "workflows": DeployWorkflow[] | null;
+
+    /**
+     * never nil
+     */
+    "branches": DeployBranchOption[] | null;
+
+    /**
+     * why GitHub couldn't be read; "" otherwise
+     */
+    "failure": string;
+}
+
+/**
+ * DeployRepositorySettings is the deploys of one repository of a board in the dialog.
+ */
+export interface DeployRepositorySettings {
+    "repositoryId": string;
+    "fullName": string;
+    "managed": boolean;
+
+    /**
+     * the saved ones, or DefaultEnvironments; never nil
+     */
+    "environments": DeployEnvironmentSettings[] | null;
+}
+
+/**
+ * DeployRun is a run of the workflow of an environment.
+ */
+export interface DeployRun {
+    "id": number;
+
+    /**
+     * Status is queued, running, succeeded or failed, a string for the same
+     * reason as State.Theme.
+     */
+    "status": string;
+    "conclusion": string;
+    "url": string;
+    "startedAt": string;
+
+    /**
+     * "" while it runs
+     */
+    "endedAt": string;
+}
+
+/**
+ * DeploySettings is the deploys of a board as the dialog edits them.
+ */
+export interface DeploySettings {
+    "boardId": string;
+    "configured": boolean;
+    "enabled": boolean;
+
+    /**
+     * the repositories of the board, by full name; never nil
+     */
+    "repositories": DeployRepositorySettings[] | null;
+}
+
+/**
+ * DeployWorkflow is a workflow of GitHub Actions the dialog offers.
+ */
+export interface DeployWorkflow {
+    "id": number;
+    "name": string;
+    "path": string;
+}
+
+/**
+ * Deploys is the Deploys view and the node of the tree.
+ */
+export interface Deploys {
+    /**
+     * never nil
+     */
+    "boards": DeployBoard[] | null;
+
+    /**
+     * "" before the first whole reading
+     */
+    "readAt": string;
+    "reading": boolean;
+
+    /**
+     * the whole reading failed; nil otherwise
+     */
+    "failure": DeployFailure | null;
+    "filter": DeployFilter;
+
+    /**
+     * FilterGone is "", no_deploys or removed, a string for the same reason as
+     * State.Theme.
+     */
+    "filterGone": string;
+
+    /**
+     * pending and ready, over every board
+     */
+    "waiting": number;
+    "failed": boolean;
 }
 
 /**
@@ -3390,6 +3800,16 @@ export interface SaveBoardRequest {
 }
 
 /**
+ * SaveDeploySettingsRequest is what the user chose in the dialog. A repository
+ * left out is not managed.
+ */
+export interface SaveDeploySettingsRequest {
+    "boardId": string;
+    "enabled": boolean;
+    "repositories": DeployRepositoryChoice[] | null;
+}
+
+/**
  * SessionTasks is what runs in one conversation of an item.
  */
 export interface SessionTasks {
@@ -3706,6 +4126,12 @@ export interface State {
      * registered repositories and the filters they are shown through.
      */
     "reviewCenter": ReviewCenter;
+
+    /**
+     * Deploys is the Deploys view: the environments of the repositories the
+     * boards manage, as the last reading found them.
+     */
+    "deploys": Deploys;
 
     /**
      * Reviews are the active reviews of pull requests, in creation order;
