@@ -113,10 +113,7 @@ func TestTheListIsTheMostRecentlySavedFirst(t *testing.T) {
 	f.save(t, newdiscussion.SaveParams{ID: a.ID, BoardID: boardID, Title: "a again"})
 	c := f.save(t, newdiscussion.SaveParams{ID: "draft-0", BoardID: boardID, Title: "c"})
 
-	want := []string{a.ID, c.ID, b.ID}
-	if a.ID > c.ID {
-		want = []string{c.ID, a.ID, b.ID}
-	}
+	want := []string{c.ID, a.ID, b.ID}
 	if diff := cmp.Diff(want, ids(f.service.List())); diff != "" {
 		t.Errorf("List() ids (-want +got):\n%s", diff)
 	}

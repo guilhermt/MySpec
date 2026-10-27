@@ -10,7 +10,7 @@ import (
 	"github.com/guilhermt/myspec/internal/store"
 )
 
-// newDraft builds a draft of a board, ready to put.
+// newNewDiscussionDraft builds a draft of a board, ready to put.
 func newNewDiscussionDraft(id, boardID string) newdiscussion.Draft {
 	return newdiscussion.Draft{
 		ID:        id,
