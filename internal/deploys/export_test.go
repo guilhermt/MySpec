@@ -1,6 +1,7 @@
 package deploys
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 )
@@ -24,7 +25,12 @@ var (
 	ReadRepositories = readRepositories
 	// BatchSize is batchSize.
 	BatchSize = batchSize
+	// RunWaitLimit is runWaitLimit.
+	RunWaitLimit = runWaitLimit
 )
+
+// Tick runs one turn of the fast loop, without waiting for its ticker.
+func (s *Service) Tick(ctx context.Context) { s.tick(ctx) }
 
 // PromotionOf is promotion over the commits written as the JSON GitHub
 // answers them.
