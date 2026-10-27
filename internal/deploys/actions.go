@@ -192,7 +192,12 @@ func (s *Service) begin(repositoryID string, position int, kind Kind) (begun, er
 
 // pullsEndpoint is the endpoint of the pull requests of owner/name.
 func pullsEndpoint(owner, name string) string {
-	return fmt.Sprintf("repos/%s/%s/pulls", url.PathEscape(owner), url.PathEscape(name))
+	return repoEndpoint(owner, name) + "/pulls"
+}
+
+// repoEndpoint is the endpoint of owner/name, its segments escaped.
+func repoEndpoint(owner, name string) string {
+	return fmt.Sprintf("repos/%s/%s", url.PathEscape(owner), url.PathEscape(name))
 }
 
 // runDeploy reads the repository again, so that the list of pull requests is
@@ -414,8 +419,12 @@ func (s *Service) tick(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
+	missing := s.readMissing(ctx, repos, runs)
+	if ctx.Err() != nil {
+		return
+	}
 
-	finished, changed := s.applyRuns(repos, runs)
+	finished, changed := s.applyRuns(repos, runs, missing)
 	for _, f := range finished {
 		s.log.Info("deploy finished", "repository", f.FullName, "environment", f.Environment, "succeeded", f.Succeeded, "run", f.RunID)
 		if s.onFinished != nil {
@@ -487,10 +496,52 @@ func (s *Service) readWatched(ctx context.Context, watches []runWatch) map[runWa
 	return runs
 }
 
+// readMissing reads by id the runs of the actions in progress that the page of
+// runs read left out: a run that ended skipped, was deleted or fell off the
+// page. A run that no longer counts or exists maps to nil; a read that failed
+// is left out of the result.
+func (s *Service) readMissing(ctx context.Context, repos []repository.Repository, runs map[runWatch][]Run) map[int64]*Run {
+	type lookup struct {
+		owner, name string
+		id          int64
+	}
+	var lookups []lookup
+	s.mu.Lock()
+	for key, action := range s.actions {
+		if action.Phase != PhaseRunning {
+			continue
+		}
+		repo, ok := repositoryOf(repos, key.RepositoryID)
+		if !ok {
+			continue
+		}
+		read, ok := runs[runWatch{repositoryID: key.RepositoryID, owner: repo.Owner, name: repo.Name, workflowID: action.workflowID, branch: key.To}]
+		if !ok || slices.ContainsFunc(read, func(r Run) bool { return r.ID == action.RunID }) {
+			continue
+		}
+		lookups = append(lookups, lookup{owner: repo.Owner, name: repo.Name, id: action.RunID})
+	}
+	s.mu.Unlock()
+
+	missing := make(map[int64]*Run, len(lookups))
+	for _, l := range lookups {
+		run, err := readRun(ctx, s.github, l.owner, l.name, l.id)
+		if err != nil {
+			if ctx.Err() == nil {
+				s.log.Warn("deploy run reading failed", "repository", l.owner+"/"+l.name, "run", l.id, "error", err)
+			}
+			continue
+		}
+		missing[l.id] = run
+	}
+	return missing
+}
+
 // applyRuns keeps the runs read in the readings and moves the actions that
-// wait for a run forward. It returns the runs that ended, started by a merge,
-// and whether anything changed.
-func (s *Service) applyRuns(repos []repository.Repository, runs map[runWatch][]Run) ([]Finished, bool) {
+// wait for a run forward. missing is the runs of actions in progress read by
+// id, nil for the ones gone. It returns the runs that ended, started by a
+// merge, and whether anything changed.
+func (s *Service) applyRuns(repos []repository.Repository, runs map[runWatch][]Run, missing map[int64]*Run) ([]Finished, bool) {
 	now := s.now()
 
 	s.mu.Lock()
@@ -548,11 +599,23 @@ func (s *Service) applyRuns(repos []repository.Repository, runs map[runWatch][]R
 		if action.Phase != PhaseRunning {
 			continue
 		}
-		i := slices.IndexFunc(read, func(r Run) bool { return r.ID == action.RunID })
-		if i < 0 || read[i].Active() {
+		var run Run
+		if i := slices.IndexFunc(read, func(r Run) bool { return r.ID == action.RunID }); i >= 0 {
+			run = read[i]
+		} else if found, ok := missing[action.RunID]; !ok {
+			continue
+		} else if found == nil {
+			// The run ended skipped or is gone: the cell follows the reading.
+			s.log.Warn("deploy run gone", "repository", repo.FullName(), "to", key.To, "run", action.RunID)
+			delete(s.actions, key)
+			changed = true
+			continue
+		} else {
+			run = *found
+		}
+		if run.Active() {
 			continue
 		}
-		run := read[i]
 		finished = append(finished, Finished{
 			RepositoryID: key.RepositoryID,
 			FullName:     repo.FullName(),

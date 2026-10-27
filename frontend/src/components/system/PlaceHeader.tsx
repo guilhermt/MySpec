@@ -262,7 +262,7 @@ export function PlaceHeader({
         <IconButton
           ref={forwardRef}
           label={`Forward to ${forward.title}`}
-          icon={ICONS.promote}
+          icon={ICONS.forward}
           shortcut="Alt+→"
           size="sm"
           onClick={forward.onClick}

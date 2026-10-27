@@ -109,7 +109,7 @@ describe("DeployPanel", () => {
 
   it("says when the reading is partial and when nothing waits", () => {
     const { unmount } = panel(
-      staging({ promotion: promotion({ commits: 100, ahead: 240, partial: true }) }),
+      staging({ promotion: promotion({ commits: 235, ahead: 240, partial: true }) }),
     );
     expect(
       screen.getByText("Showing the pull requests of the first 100 of 240 commits."),

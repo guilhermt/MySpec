@@ -53,8 +53,11 @@ export function DeployPanel({ repo, env, now, onClose }: DeployPanelProps) {
   const go = useAppStore((state) => state.go);
   const model = panelModel(repo, env, now);
   const action = actionModel(env);
-  // The refusal of a call that Go answers at once; the failure of GitHub arrives as the action.
-  const [refusal, setRefusal] = useState<string | null>(null);
+  // The refusal of a call that Go answers at once, kept for the environment as it was when refused:
+  // a reading that changes what it offers drops it. The failure of GitHub arrives as the action.
+  const offer = `${env.available}|${env.action?.kind ?? ""}|${env.action?.phase ?? ""}`;
+  const [refused, setRefused] = useState<{ offer: string; text: string } | null>(null);
+  const refusal = refused !== null && refused.offer === offer ? refused.text : null;
   const failure = refusal ?? action?.failure ?? null;
   const failureArrived = useArrivedLater(failure !== null);
   const problemArrived = useArrivedLater(model.problem !== null);
@@ -64,12 +67,13 @@ export function DeployPanel({ repo, env, now, onClose }: DeployPanelProps) {
     if (action === null) {
       return;
     }
-    setRefusal(null);
+    const at = offer;
+    setRefused(null);
     const message =
       action.kind === "merge"
         ? await mergeInPlace(repo.id, env.position)
         : await deployInPlace(repo.id, env.position);
-    setRefusal(message);
+    setRefused(message === null ? null : { offer: at, text: message });
   };
   const open = (url: string) => void openExternal(url);
   const { run } = model;

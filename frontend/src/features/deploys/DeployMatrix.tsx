@@ -12,6 +12,7 @@ import {
   type ColumnHeader,
   cellModel,
   environmentsOf,
+  neverRead,
   passageModel,
 } from "@/features/deploys/deploy-matrix";
 import type { DeployGridKeyboard } from "@/features/deploys/useDeployGridKeyboard";
@@ -72,7 +73,7 @@ function RepositoryRow({
   flashing,
   onActivate,
 }: RowProps) {
-  const environments = environmentsOf(repo);
+  const environments = neverRead(repo) ? [] : environmentsOf(repo);
   const failed = repo.failure !== null;
   return (
     <>

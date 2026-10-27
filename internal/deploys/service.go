@@ -422,6 +422,10 @@ func (s *Service) save(found map[string]RepositoryReading, targets []target, who
 			continue
 		}
 		before := s.readings[t.ID]
+		if !before.ReadAt.IsZero() && started.Before(before.ReadAt) {
+			// A reading of this repository that began later already ended.
+			continue
+		}
 		if reading.Failure != nil {
 			failure := *reading.Failure
 			failure.FailedAt = readAt

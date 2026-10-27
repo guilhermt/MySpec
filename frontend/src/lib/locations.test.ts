@@ -271,6 +271,12 @@ describe("withoutFresh", () => {
     expect(withoutFresh({ kind: "task", id: "t" })).toEqual({ kind: "task", id: "t" });
     expect(withoutFresh(HOME)).toBe(HOME);
   });
+
+  it("takes the panel off Deploys", () => {
+    expect(withoutFresh({ kind: "deploys", target: { repositoryId: "r", position: 1 } })).toEqual({
+      kind: "deploys",
+    });
+  });
 });
 
 describe("isLocationList", () => {

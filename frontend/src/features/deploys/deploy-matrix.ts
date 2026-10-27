@@ -1,10 +1,14 @@
 import {
+  asDeployActionKind,
   asDeployAvailable,
+  asDeployPhase,
   asDeployProblem,
+  asDeployState,
   type DeployBoard,
   type DeployEnvironment,
   type DeployRepository,
   type DeployRun,
+  type DeployState,
   type Deploys,
 } from "@/lib/wails";
 import { age, ageLong, duration, readMoment } from "@/lib/when";
@@ -83,6 +87,11 @@ export function environmentsOf(repo: DeployRepository): readonly DeployEnvironme
   return repo.environments ?? NO_ENVIRONMENTS;
 }
 
+/** neverRead reports a repository whose reading failed with nothing read before: its row has no cells. */
+export function neverRead(repo: DeployRepository): boolean {
+  return repo.failure !== null && repo.readAt === "";
+}
+
 /** cellKey and passageKey are the slots of an environment. */
 export function cellKey(repositoryId: string, position: number): string {
   return `${repositoryId}:${position}:cell`;
@@ -135,14 +144,15 @@ function failedRunOf(env: DeployEnvironment): DeployRun | null {
  * statusOf is the state a cell shows. A failed last deploy with changes that wait shows the changes
  * with the failure as a small mark: what there is to do is what the cell says first.
  */
-function statusOf(env: DeployEnvironment): { state: string; failedMark: boolean } {
-  if (env.state === "failed" && env.prReady) {
+function statusOf(env: DeployEnvironment): { state: DeployState; failedMark: boolean } {
+  const state = asDeployState(env.state);
+  if (state === "failed" && env.prReady) {
     return { state: "pr_ready", failedMark: true };
   }
-  if (env.state === "failed" && env.pending) {
+  if (state === "failed" && env.pending) {
     return { state: "pending", failedMark: true };
   }
-  return { state: env.state, failedMark: false };
+  return { state, failedMark: false };
 }
 
 interface Face {
@@ -158,7 +168,7 @@ function actionFace(env: DeployEnvironment, now: number): Face | null {
   if (action === null) {
     return null;
   }
-  switch (action.phase) {
+  switch (asDeployPhase(action.phase)) {
     case "creating":
       return {
         glyph: "work",
@@ -191,7 +201,10 @@ function actionFace(env: DeployEnvironment, now: number): Face | null {
       };
     }
     case "failed": {
-      const word = action.kind === "merge" ? "Couldn't merge" : "Couldn't create the pull request";
+      const word =
+        asDeployActionKind(action.kind) === "merge"
+          ? "Couldn't merge"
+          : "Couldn't create the pull request";
       return {
         glyph: "error",
         word,
@@ -205,7 +218,7 @@ function actionFace(env: DeployEnvironment, now: number): Face | null {
   }
 }
 
-function stateFace(env: DeployEnvironment, state: string, now: number): Face {
+function stateFace(env: DeployEnvironment, state: DeployState, now: number): Face {
   switch (state) {
     case "problem": {
       const workflow = env.problem === "workflow_missing";
@@ -303,7 +316,7 @@ export function cellModel(repo: DeployRepository, env: DeployEnvironment, now: n
   if (failedMark) {
     label += ", last deploy failed";
   }
-  if (stale) {
+  if (stale && repo.readAt !== "") {
     label += `, from the reading of ${readMoment(repo.readAt, now)}`;
   }
   return {
@@ -327,7 +340,7 @@ export function passageModel(repo: DeployRepository, env: DeployEnvironment): Pa
     return null;
   }
   const lit = env.pending || env.prReady;
-  const phase = env.action?.phase ?? "";
+  const phase = asDeployPhase(env.action?.phase ?? "");
   const busy = phase === "creating" || phase === "merging";
   const dashed = phase === "waiting_run" || phase === "running";
   const number = env.promotion?.deployPr?.number ?? 0;
@@ -388,6 +401,9 @@ export function gridSlots(boards: readonly DeployBoard[]): Slot[][] {
     .filter((board) => board.shown)
     .flatMap((board) =>
       (board.repositories ?? []).flatMap((repo) => {
+        if (neverRead(repo)) {
+          return [];
+        }
         const slots = environmentsOf(repo).flatMap((env): Slot[] => {
           const cell: Slot = {
             key: cellKey(repo.id, env.position),
@@ -463,7 +479,7 @@ export function keyNotice(env: DeployEnvironment): string | null {
   if (asDeployProblem(env.problem) !== "") {
     return "Fix the configuration in Settings › Boards first.";
   }
-  if (env.state === "unread") {
+  if (asDeployState(env.state) === "unread") {
     return `${env.name} hasn't been read yet.`;
   }
   if (env.busy) {
@@ -491,16 +507,17 @@ export function openUrl(env: DeployEnvironment, kind: SlotKind): string | null {
 function phaseOf(env: DeployEnvironment): string {
   const action = env.action;
   if (action === null) {
-    return env.state;
+    return asDeployState(env.state);
   }
-  switch (action.phase) {
+  const phase = asDeployPhase(action.phase);
+  switch (phase) {
     case "failed":
-      return `action_failed:${action.kind}`;
+      return `action_failed:${asDeployActionKind(action.kind)}`;
     case "waiting_run":
     case "running":
       return "running";
     default:
-      return `acting:${action.phase}`;
+      return `acting:${phase}`;
   }
 }
 

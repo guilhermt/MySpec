@@ -109,7 +109,7 @@ describe("panelModel", () => {
 
   it("says the reading is partial", () => {
     expect(
-      model(staging({ promotion: promotion({ commits: 100, ahead: 240, partial: true }) })).changes,
+      model(staging({ promotion: promotion({ commits: 235, ahead: 240, partial: true }) })).changes,
     ).toMatchObject({
       partial: "Showing the pull requests of the first 100 of 240 commits.",
     });

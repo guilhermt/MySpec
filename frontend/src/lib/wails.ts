@@ -675,6 +675,24 @@ export type DeployAvailable = "" | "deploy" | "merge";
 /** DeployHealth is what the environment before one is doing that is worth a warning; "" when nothing. */
 export type DeployHealth = "" | "deploying" | "failed";
 
+/** DeployState is the main state of an environment; "" for a value the app doesn't know. */
+export type DeployState =
+  | ""
+  | "problem"
+  | "unread"
+  | "running"
+  | "failed"
+  | "pr_ready"
+  | "pending"
+  | "up_to_date"
+  | "no_deploy";
+
+/** DeployActionKind is what an action of the app does on an environment. */
+export type DeployActionKind = "" | "deploy" | "merge";
+
+/** DeployPhase is where an action of the app stands; "" when there is none. */
+export type DeployPhase = "" | "creating" | "merging" | "waiting_run" | "running" | "failed";
+
 /** DeployRunStatus is where a deploy run stands. */
 export type DeployRunStatus = "queued" | "running" | "succeeded" | "failed";
 
@@ -1604,6 +1622,45 @@ export function asDeployProblem(value: string): DeployProblem {
   switch (value) {
     case "branch_missing":
     case "workflow_missing":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asDeployState(value: string): DeployState {
+  switch (value) {
+    case "problem":
+    case "unread":
+    case "running":
+    case "failed":
+    case "pr_ready":
+    case "pending":
+    case "up_to_date":
+    case "no_deploy":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asDeployActionKind(value: string): DeployActionKind {
+  switch (value) {
+    case "deploy":
+    case "merge":
+      return value;
+    default:
+      return "";
+  }
+}
+
+export function asDeployPhase(value: string): DeployPhase {
+  switch (value) {
+    case "creating":
+    case "merging":
+    case "waiting_run":
+    case "running":
+    case "failed":
       return value;
     default:
       return "";

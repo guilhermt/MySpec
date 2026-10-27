@@ -1,7 +1,9 @@
 import { keyNotice } from "@/features/deploys/deploy-matrix";
 import {
+  asDeployActionKind,
   asDeployAvailable,
   asDeployHealth,
+  asDeployPhase,
   asDeployProblem,
   asDeployRunStatus,
   type DeployEnvironment,
@@ -137,6 +139,9 @@ function runOf(env: DeployEnvironment, now: number): PanelRun {
   };
 }
 
+/** COMPARE_LIMIT is how many commits a reading compares, as the Go side reads them. */
+const COMPARE_LIMIT = 100;
+
 /** changesOf is the section Changes of an environment that has a previous one. */
 function changesOf(env: DeployEnvironment, now: number): PanelChanges {
   const promotion = env.promotion;
@@ -152,7 +157,7 @@ function changesOf(env: DeployEnvironment, now: number): PanelChanges {
         ? commits
         : `${commits} · waiting for ${since === "just now" ? "under a minute" : since}`,
     partial: promotion.partial
-      ? `Showing the pull requests of the first ${promotion.commits} of ${promotion.ahead} commits.`
+      ? `Showing the pull requests of the first ${COMPARE_LIMIT} of ${promotion.ahead} commits.`
       : null,
   };
 }
@@ -241,7 +246,7 @@ export interface ActionModel {
 }
 
 function busyLabel(env: DeployEnvironment): string | null {
-  switch (env.action?.phase) {
+  switch (asDeployPhase(env.action?.phase ?? "")) {
     case "creating":
       return "Creating the pull request…";
     case "merging":
@@ -282,9 +287,9 @@ export function actionModel(env: DeployEnvironment): ActionModel | null {
     busy: busyLabel(env),
     disabledReason: keyNotice(env),
     failure:
-      action?.phase === "failed"
+      action !== null && asDeployPhase(action.phase) === "failed"
         ? action.failure === ""
-          ? `Couldn't ${action.kind === "merge" ? "merge" : "create the pull request"}.`
+          ? `Couldn't ${asDeployActionKind(action.kind) === "merge" ? "merge" : "create the pull request"}.`
           : action.failure
         : null,
     warning,

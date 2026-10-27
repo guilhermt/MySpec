@@ -293,6 +293,15 @@ describe("cellModel", () => {
     expect(model.stale).toBe(true);
     expect(model.label).toMatch(/^api · Staging · deployed 2 hours ago, from the reading of /);
   });
+
+  it("names no reading when the row failed with nothing read", () => {
+    const model = cell(
+      staging(),
+      repo({ readAt: "", failure: { reason: "failed", message: "x", failedAt: "" } }),
+    );
+
+    expect(model.label).not.toContain("from the reading of");
+  });
 });
 
 describe("passageModel", () => {
@@ -412,7 +421,8 @@ describe("gridSlots and moveFocus", () => {
         repo({ id: "r3", environments: envs(3) }),
         repo({
           id: "r4",
-          environments: [],
+          environments: envs(2),
+          readAt: "",
           failure: { reason: "failed", message: "x", failedAt: "" },
         }),
       ],
@@ -420,7 +430,7 @@ describe("gridSlots and moveFocus", () => {
   ];
   const rows = gridSlots(boards);
 
-  it("lists the cells and the passages of the shown boards, and no row without environments", () => {
+  it("lists the cells and the passages of the shown boards, and no row that failed with nothing read", () => {
     expect(rows.map((row) => row.map((slot) => slot.key))).toEqual([
       ["r1:0:cell", "r1:1:passage", "r1:1:cell", "r1:2:passage", "r1:2:cell"],
       ["r2:0:cell", "r2:1:passage", "r2:1:cell"],

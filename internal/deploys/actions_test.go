@@ -3,6 +3,7 @@ package deploys_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -424,6 +425,43 @@ func TestARunThatNeverShowsUpLeavesAfterTheWaitLimitWithoutANotice(t *testing.T)
 	}
 	if !strings.Contains(f.logs.String(), "deploy run not found") {
 		t.Errorf("log = %q, want the line deploy run not found", f.logs.String())
+	}
+}
+
+func TestARunningRunThatLeavesThePageIsReadByIDAndEndsTheActionWhenSkipped(t *testing.T) {
+	t.Parallel()
+
+	f := readyFixture(t)
+	merged(t, f, "sha55")
+	f.github.answerREST(stagingRuns, runsJSON(t, runJSON(55, "in_progress", "", base)), nil)
+	f.service.Tick(t.Context())
+
+	f.github.answerREST(stagingRuns, runsJSON(t), nil)
+	run, _ := json.Marshal(runJSON(55, "completed", "skipped", base))
+	f.github.answerREST("actions/runs/55", string(run), nil)
+	f.service.Tick(t.Context())
+
+	if action := f.environment(t, apiID, 1).Action; action != nil {
+		t.Errorf("Action = %+v after the run ended skipped, want none", action)
+	}
+	if got := f.finished.all(); len(got) != 0 {
+		t.Errorf("finished = %+v, want no notice", got)
+	}
+}
+
+func TestARunningRunThatIsDeletedEndsTheActionWithoutANotice(t *testing.T) {
+	t.Parallel()
+
+	f := readyFixture(t)
+	merged(t, f, "sha55")
+	f.github.answerREST(stagingRuns, runsJSON(t, runJSON(55, "in_progress", "", base)), nil)
+	f.service.Tick(t.Context())
+
+	f.github.answerREST(stagingRuns, runsJSON(t), nil)
+	f.github.answerREST("actions/runs/55", "", fmt.Errorf("rest: %w", gh.ErrNoResource))
+	f.service.Tick(t.Context())
+	if action := f.environment(t, apiID, 1).Action; action != nil {
+		t.Errorf("Action = %+v after the run was deleted, want none", action)
 	}
 }
 

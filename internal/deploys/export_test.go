@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 // Target is a repository to read with its environments.
@@ -42,4 +43,10 @@ func PromotionOf(t *testing.T, prevTip string, ahead int, nodes string, envBranc
 		t.Fatalf("decode commits: %v", err)
 	}
 	return promotion(prevTip, ahead, commits, envBranches)
+}
+
+// SaveStarted keeps found for the repository id as a reading that began at
+// started.
+func (s *Service) SaveStarted(id string, found RepositoryReading, started time.Time) {
+	s.save(map[string]RepositoryReading{id: found}, []target{{ID: id}}, false, started, cost{})
 }

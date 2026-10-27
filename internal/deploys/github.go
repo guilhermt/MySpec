@@ -390,24 +390,27 @@ func decodeRepository(raw json.RawMessage, envs []Environment) ([]EnvironmentRea
 
 // runsResponse is the runs of a workflow as the REST call answers them.
 type runsResponse struct {
-	WorkflowRuns []struct {
-		ID           int64      `json:"id"`
-		WorkflowID   int64      `json:"workflow_id"`
-		Status       string     `json:"status"`
-		Conclusion   string     `json:"conclusion"`
-		HeadSHA      string     `json:"head_sha"`
-		HTMLURL      string     `json:"html_url"`
-		CreatedAt    time.Time  `json:"created_at"`
-		RunStartedAt *time.Time `json:"run_started_at"`
-		UpdatedAt    time.Time  `json:"updated_at"`
-	} `json:"workflow_runs"`
+	WorkflowRuns []runResponse `json:"workflow_runs"`
+}
+
+// runResponse is one run as the REST calls answer it.
+type runResponse struct {
+	ID           int64      `json:"id"`
+	WorkflowID   int64      `json:"workflow_id"`
+	Status       string     `json:"status"`
+	Conclusion   string     `json:"conclusion"`
+	HeadSHA      string     `json:"head_sha"`
+	HTMLURL      string     `json:"html_url"`
+	CreatedAt    time.Time  `json:"created_at"`
+	RunStartedAt *time.Time `json:"run_started_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 // readRuns is the runs of the workflow on the branch that count, the most
 // recent first. A workflow GitHub answers not found for is gh.ErrNoResource.
 func readRuns(ctx context.Context, github GitHub, owner, name string, workflowID int64, branch string) ([]Run, error) {
-	endpoint := fmt.Sprintf("repos/%s/%s/actions/workflows/%d/runs?branch=%s&per_page=%d&exclude_pull_requests=true",
-		owner, name, workflowID, url.QueryEscape(branch), runsPage)
+	endpoint := fmt.Sprintf("%s/actions/workflows/%d/runs?branch=%s&per_page=%d&exclude_pull_requests=true",
+		repoEndpoint(owner, name), workflowID, url.QueryEscape(branch), runsPage)
 	out, err := github.REST(ctx, methodGet, endpoint, "")
 	if err != nil {
 		return nil, fmt.Errorf("read runs of workflow %d: %w", workflowID, err)
@@ -418,20 +421,48 @@ func readRuns(ctx context.Context, github GitHub, owner, name string, workflowID
 	}
 	runs := make([]Run, 0, len(resp.WorkflowRuns))
 	for _, r := range resp.WorkflowRuns {
-		status, counts := statusOf(r.Status, r.Conclusion)
-		if !counts {
-			continue
+		if run, counts := r.run(); counts {
+			runs = append(runs, run)
 		}
-		run := Run{
-			ID: r.ID, Status: status, Conclusion: r.Conclusion, HeadSHA: r.HeadSHA, URL: r.HTMLURL,
-			CreatedAt: r.CreatedAt, StartedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
-		}
-		if r.RunStartedAt != nil && !r.RunStartedAt.IsZero() {
-			run.StartedAt = *r.RunStartedAt
-		}
-		runs = append(runs, run)
 	}
 	return runs, nil
+}
+
+// readRun is the run id of owner/name; nil when it no longer exists or ended
+// in a conclusion that does not count.
+func readRun(ctx context.Context, github GitHub, owner, name string, id int64) (*Run, error) {
+	out, err := github.REST(ctx, methodGet, fmt.Sprintf("%s/actions/runs/%d", repoEndpoint(owner, name), id), "")
+	if errors.Is(err, gh.ErrNoResource) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read run %d: %w", id, err)
+	}
+	var r runResponse
+	if err := json.Unmarshal([]byte(out), &r); err != nil {
+		return nil, fmt.Errorf("decode run %d: %w", id, err)
+	}
+	run, counts := r.run()
+	if !counts {
+		return nil, nil
+	}
+	return &run, nil
+}
+
+// run is r as a Run, and whether its conclusion counts.
+func (r runResponse) run() (Run, bool) {
+	status, counts := statusOf(r.Status, r.Conclusion)
+	if !counts {
+		return Run{}, false
+	}
+	run := Run{
+		ID: r.ID, Status: status, Conclusion: r.Conclusion, HeadSHA: r.HeadSHA, URL: r.HTMLURL,
+		CreatedAt: r.CreatedAt, StartedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+	}
+	if r.RunStartedAt != nil && !r.RunStartedAt.IsZero() {
+		run.StartedAt = *r.RunStartedAt
+	}
+	return run, true
 }
 
 // lastRuns are the most recent run and the most recent completed one of runs,
@@ -703,7 +734,7 @@ func ReadOptions(ctx context.Context, github GitHub, owner, name string, branche
 
 // readWorkflows are the active workflows of owner/name, by name ignoring case.
 func readWorkflows(ctx context.Context, github GitHub, owner, name string) ([]Workflow, error) {
-	out, err := github.REST(ctx, methodGet, fmt.Sprintf("repos/%s/%s/actions/workflows?per_page=%d", owner, name, workflowsPage), "")
+	out, err := github.REST(ctx, methodGet, fmt.Sprintf("%s/actions/workflows?per_page=%d", repoEndpoint(owner, name), workflowsPage), "")
 	if err != nil {
 		return nil, FailureOf(err)
 	}
@@ -771,7 +802,7 @@ func readBranches(ctx context.Context, github GitHub, owner, name string, branch
 // suggestWorkflow is the workflow that ran on the pushes to branch, among the
 // active ones; 0 when none did or more than one did.
 func suggestWorkflow(ctx context.Context, github GitHub, owner, name, branch string, active map[int64]bool) (int64, error) {
-	endpoint := fmt.Sprintf("repos/%s/%s/actions/runs?branch=%s&event=push&per_page=%d", owner, name, url.QueryEscape(branch), pushRunsPage)
+	endpoint := fmt.Sprintf("%s/actions/runs?branch=%s&event=push&per_page=%d", repoEndpoint(owner, name), url.QueryEscape(branch), pushRunsPage)
 	out, err := github.REST(ctx, methodGet, endpoint, "")
 	if err != nil {
 		return 0, fmt.Errorf("read pushes to %s: %w", branch, err)

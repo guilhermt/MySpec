@@ -278,6 +278,10 @@ export function DeploysView() {
     if (key === "enter" && slot !== undefined) {
       event.preventDefault();
       activate({ repositoryId: slot.repositoryId, position: slot.position, from: slot.kind });
+    } else if (key === "d" && slot === undefined && keyNotice(found.env) === null) {
+      // In the panel D with an action is its button: what it does and the refusal it shows.
+      event.preventDefault();
+      panel?.querySelector<HTMLButtonElement>("[data-panel-actions] [data-primary]")?.click();
     } else if (key === "d") {
       event.preventDefault();
       void act(found.repo, found.env, anchor);

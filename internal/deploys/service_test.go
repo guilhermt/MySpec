@@ -409,3 +409,21 @@ func TestOptionsOfAnUnknownRepositoryFailAsNotFound(t *testing.T) {
 		t.Errorf("Options(api) = %+v, %v, want its workflow", options, err)
 	}
 }
+
+func TestAReadingThatBeganBeforeTheLastOneOfARepositoryDoesNotReplaceIt(t *testing.T) {
+	t.Parallel()
+
+	f := pendingFixture(t)
+	readAt := f.repository(t, apiID).ReadAt
+	f.advance(time.Minute)
+
+	f.service.SaveStarted(apiID, deploys.RepositoryReading{}, readAt.Add(-time.Second))
+	if got := f.repository(t, apiID); !got.ReadAt.Equal(readAt) || len(got.Environments) == 0 {
+		t.Errorf("repository = %+v after an older reading, want the reading of %v kept", got, readAt)
+	}
+
+	f.service.SaveStarted(apiID, deploys.RepositoryReading{}, readAt)
+	if got := f.repository(t, apiID); got.ReadAt.Equal(readAt) {
+		t.Errorf("ReadAt = %v after a newer reading, want it replaced", got.ReadAt)
+	}
+}

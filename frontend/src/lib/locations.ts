@@ -101,6 +101,7 @@ const FRESH_KINDS: readonly string[] = ["task", "review", "discussion"];
 
 const REVIEWS: Location = { kind: "reviews" };
 const HISTORY: Location = { kind: "history" };
+const DEPLOYS: Location = { kind: "deploys" };
 
 // The id a place is about, "" for the places that are about nothing in particular.
 function idOf(location: Location): string {
@@ -291,9 +292,18 @@ function isFresh(value: unknown): value is FreshItem {
   );
 }
 
-/** withoutFresh is the place as the places behind keep it: the History without the row it opened on. */
+/**
+ * withoutFresh is the place as the places behind keep it: the History without the row it opened on,
+ * Deploys without the panel it opened on.
+ */
 export function withoutFresh(location: Location): Location {
-  return location.kind === "history" && location.fresh !== undefined ? HISTORY : location;
+  if (location.kind === "history" && location.fresh !== undefined) {
+    return HISTORY;
+  }
+  if (location.kind === "deploys" && location.target !== undefined) {
+    return DEPLOYS;
+  }
+  return location;
 }
 
 function isDeployTarget(value: unknown): value is DeployTarget {

@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { DeploysView } from "@/features/deploys/DeploysView";
 import { api, type DeployEnvironment } from "@/lib/wails";
@@ -281,6 +281,22 @@ describe("DeploysView keys", () => {
       await user.keyboard("d");
 
       expect(api.merge).toHaveBeenCalledExactlyOnceWith("api", 1);
+    });
+
+    it("says why D does nothing from inside the panel", async () => {
+      const { user } = acting();
+      await user.click(slot(/^api · Staging ·/));
+      screen.getByRole("button", { name: "Close" }).focus();
+
+      await user.keyboard("d");
+
+      expect(api.deploy).not.toHaveBeenCalled();
+      // The notice is the text on the tooltip surface, apart from the panel's own reason.
+      await waitFor(() =>
+        expect(document.body.querySelector(".text-tooltip-ink-2")).toHaveTextContent(
+          "Nothing to deploy to Staging.",
+        ),
+      );
     });
 
     it("says why D does nothing", async () => {

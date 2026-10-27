@@ -186,7 +186,7 @@ function DeploysForm({ board, onOpenChange }: DeploysFormProps) {
       title={`Deploys of ${board.title}`}
       subtitle="Promote code between the environments of the repositories of this board."
       closeDisabled={saving}
-      onConfirm={() => void save()}
+      onConfirm={() => void (settings.status === "failed" ? read() : save())}
     >
       <DialogBody>
         <LiveRegion kind="status" className="sr-only">
