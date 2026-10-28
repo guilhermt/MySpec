@@ -128,8 +128,8 @@ importers:
         specifier: 3.14.13
         version: 3.14.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@wailsio/runtime':
-        specifier: 3.0.0-beta.23
-        version: 3.0.0-beta.23
+        specifier: 3.0.0-beta.29
+        version: 3.0.0-beta.29
       class-variance-authority:
         specifier: 0.7.1
         version: 0.7.1
@@ -1374,8 +1374,8 @@ packages:
   '@vitest/spy@5.0.3':
     resolution: {integrity: sha512-XhFysQTB8AZ+P4gMi+Lpo99vg2AZi0qKpaB9yXQl37+CaMEAPO3iH/wGVnSyL5MPERiLezpqTVtrR6UZH5GCXg==}
 
-  '@wailsio/runtime@3.0.0-beta.23':
-    resolution: {integrity: sha512-Am9N7nvA9WBpVzOkrJ0PzTg/cgEFL72I97ksOfOuryLP4VOdnl7viP59+6Nx5zMoHJo207k85WINJaWfCY1CQQ==}
+  '@wailsio/runtime@3.0.0-beta.29':
+    resolution: {integrity: sha512-ZrYvyb2vJ8rAn9mdBBbpNsNRk8Yg5+0DCWhfIQbfoNyI329Lwu8irPYqRneFuNlttA39qsQ0a5mG4mbgBF8g3g==}
 
   accepts@2.0.0:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
@@ -4630,7 +4630,7 @@ snapshots:
 
   '@vitest/spy@5.0.3': {}
 
-  '@wailsio/runtime@3.0.0-beta.23': {}
+  '@wailsio/runtime@3.0.0-beta.29': {}
 
   accepts@2.0.0:
     dependencies:
