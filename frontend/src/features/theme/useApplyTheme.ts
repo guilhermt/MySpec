@@ -1,12 +1,23 @@
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import type { Mode } from "@/features/theme/theme";
-import { effectiveMode, paintMode, writeStoredPreference } from "@/features/theme/theme";
+import {
+  effectiveMode,
+  paintedMode,
+  paintMode,
+  subscribePaint,
+  writeStoredPreference,
+} from "@/features/theme/theme";
 import { useAppStore, useThemeState } from "@/store/app-store";
 
-/** useEffectiveMode is the mode the interface is painted in right now. */
+/** useEffectiveMode is the mode the state asks for, which useApplyTheme takes to the screen. */
 export function useEffectiveMode(): Mode {
   const { preference, systemDark } = useThemeState();
   return effectiveMode(preference, systemDark);
+}
+
+/** usePaintedMode is the mode on the screen, which before the first state may not be the mode of the state. */
+export function usePaintedMode(): Mode {
+  return useSyncExternalStore(subscribePaint, paintedMode);
 }
 
 /**

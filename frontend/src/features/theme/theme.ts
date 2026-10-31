@@ -3,8 +3,8 @@ import { asThemePreference, type ThemePreference } from "@/lib/wails";
 // The same key the inline script in index.html reads before the first paint.
 export const THEME_STORAGE_KEY = "myspec.theme";
 
-// THEME_PREFERENCE_KEY holds the preference of the last state, so the theme button of the start
-// shows and changes it before the app database is open.
+// THEME_PREFERENCE_KEY holds the preference of the last state, for the screen of a refused
+// migration, which has no theme of its own.
 export const THEME_PREFERENCE_KEY = "myspec.theme.preference";
 
 export type Mode = "light" | "dark";
@@ -35,6 +35,21 @@ export function writeStoredPreference(preference: ThemePreference): void {
   }
 }
 
+const paintListeners = new Set<() => void>();
+
+/** paintedMode is the mode on the screen, whoever painted it, index.html or paintMode. */
+export function paintedMode(): Mode {
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+
+/** subscribePaint calls the listener after every paintMode and returns the function that stops it. */
+export function subscribePaint(listener: () => void): () => void {
+  paintListeners.add(listener);
+  return () => {
+    paintListeners.delete(listener);
+  };
+}
+
 /** paintMode paints the interface in the mode and remembers it for the next start. */
 export function paintMode(mode: Mode): void {
   document.documentElement.dataset.theme = mode;
@@ -45,5 +60,8 @@ export function paintMode(mode: Mode): void {
     localStorage.setItem(THEME_STORAGE_KEY, mode);
   } catch {
     // Storage can be unavailable; the applied mode is what matters.
+  }
+  for (const listener of paintListeners) {
+    listener();
   }
 }
