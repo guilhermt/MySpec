@@ -47,6 +47,18 @@ describe("RelationList", () => {
     expect(within(group).getByRole("listitem")).toHaveTextContent("openNot satisfied");
   });
 
+  it("writes Not confirmed as the text of the item", () => {
+    const groups = [
+      {
+        label: "Dependencies",
+        items: [{ key: "d", number: "#9", title: "Waiting", meta: "Not confirmed", url: "u" }],
+      },
+    ];
+    renderWithStore(<RelationList groups={groups} onOpen={() => {}} />);
+    const group = screen.getByRole("region", { name: "Dependencies" });
+    expect(within(group).getByRole("listitem")).toHaveTextContent("Not confirmed");
+  });
+
   it("opens a relation through the caller", async () => {
     const onOpen = vi.fn();
     const { user } = renderWithStore(<RelationList groups={GROUPS} onOpen={onOpen} />);

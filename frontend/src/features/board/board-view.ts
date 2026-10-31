@@ -344,9 +344,11 @@ export function assigneesOf(board: Board): string[] {
   return [...logins].sort((a, b) => a.localeCompare(b));
 }
 
-/** unsatisfied is the dependencies of a card still open with no merged pull request. */
+/** unsatisfied is the dependencies of a card still open with no merged pull request; one no reading has confirmed warns of nothing. */
 export function unsatisfied(card: BoardCard): CardDependency[] {
-  return (card.dependencies ?? []).filter((dependency) => !dependency.satisfied);
+  return (card.dependencies ?? []).filter(
+    (dependency) => !dependency.satisfied && !dependency.unconfirmed,
+  );
 }
 
 /**

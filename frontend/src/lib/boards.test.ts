@@ -3,6 +3,7 @@ import {
   boardOfRepository,
   findBoard,
   issueLabel,
+  needsRereading,
   prStateLabel,
   repositoryByFullName,
   stateLabel,
@@ -65,5 +66,19 @@ describe("labels", () => {
     expect(prStateLabel("closed")).toBe("Closed");
     expect(stateLabel("open")).toBe("Open");
     expect(stateLabel("closed")).toBe("Closed");
+  });
+});
+
+describe("needsRereading", () => {
+  const recent = new Date().toISOString();
+  const old = new Date(Date.now() - 10 * 60_000).toISOString();
+
+  it("is false for a recent reading that is confirmed", () => {
+    expect(needsRereading({ readAt: recent, unconfirmed: false })).toBe(false);
+  });
+
+  it("is true for an old reading, or for relations that wait for confirmation", () => {
+    expect(needsRereading({ readAt: old, unconfirmed: false })).toBe(true);
+    expect(needsRereading({ readAt: recent, unconfirmed: true })).toBe(true);
   });
 });

@@ -536,6 +536,26 @@ describe("the relations", () => {
     });
   });
 
+  it("tells a dependency that is not confirmed, with no warning", () => {
+    const card = cardOf({
+      dependencies: [
+        {
+          ...sibling(464),
+          status: "",
+          pullRequests: [],
+          satisfied: false,
+          unconfirmed: true,
+        },
+      ],
+    });
+
+    const [group] = groups(card, [card]);
+
+    expect(group?.items.map(({ meta, warning }) => ({ meta, warning }))).toEqual([
+      { meta: "Not confirmed", warning: undefined },
+    ]);
+  });
+
   it("tells the dependencies with their state, the pull request that merged, and the warning", () => {
     const dependency = (number: number, overrides = {}) => ({
       ...sibling(number),

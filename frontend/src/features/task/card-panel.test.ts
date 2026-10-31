@@ -200,6 +200,31 @@ describe("relationsOf", () => {
     expect(items[0]).toMatchObject({ warning: "Not satisfied" });
     expect(items[1]).not.toHaveProperty("warning");
   });
+
+  it("says Not confirmed, with no warning, for a dependency no reading has confirmed", () => {
+    const card = makeBoardCard({
+      repository: REPO,
+      dependencies: [
+        {
+          key: "d1",
+          repository: REPO,
+          number: 1,
+          title: "Waiting",
+          url: "u",
+          state: "open",
+          status: "",
+          onBoard: false,
+          pullRequests: [],
+          satisfied: false,
+          unconfirmed: true,
+        },
+      ],
+    });
+
+    const [item] = group(card, "Dependencies")?.items ?? [];
+    expect(item).toMatchObject({ meta: "Not confirmed" });
+    expect(item).not.toHaveProperty("warning");
+  });
 });
 
 describe("cardViewOf", () => {
