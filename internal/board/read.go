@@ -73,20 +73,92 @@ func conventionsOf(owner string, cards []Card) []Convention {
 	return conventions
 }
 
+// readResult is what a reading found.
+type readResult struct {
+	reading Reading
+	extras  map[string]Card // by key: the extra cards, apart from the reading
+}
+
+// outcome is what a reading in the background came back with.
+type outcome[T any] struct {
+	value T
+	err   error
+}
+
+// inBackground runs fn in a goroutine. The channel holds one answer, so a
+// goroutine nobody waits for ends without leaking.
+func inBackground[T any](fn func() (T, error)) <-chan outcome[T] {
+	ch := make(chan outcome[T], 1)
+	go func() {
+		value, err := fn()
+		ch <- outcome[T]{value: value, err: err}
+	}()
+	return ch
+}
+
 // read reads the board b. extra are keys of cards that must be read even
 // when they fall outside the reading: the cards of active tasks. It returns
-// them apart from the reading, by key. It fails with a *Failure.
-func (s *Service) read(ctx context.Context, b Board, extra []string) (Reading, map[string]Card, error) {
+// them apart from the reading, by key. deliver is called with the first
+// delivery, the reading with the open cards read and the other cards as they
+// were stored, and how many cards at its start are open. It fails with a
+// *Failure.
+func (s *Service) read(ctx context.Context, b Board, extra []string, deliver func(Reading, int)) (readResult, error) {
 	now := s.now()
 	loc := locatorOf(b)
-	st, err := s.readStructure(ctx, loc)
-	if err != nil {
-		return Reading{}, nil, err
+	stored := s.Stored(b.ID).Reading
+
+	structureC := inBackground(func() (structure, error) { return s.readStructure(ctx, loc) })
+	openC := inBackground(func() (pages, error) {
+		items, truncated, err := s.readPages(ctx, loc, openQuery)
+		return pages{items: items, truncated: truncated}, err
+	})
+	closedC := inBackground(func() (pages, error) {
+		items, truncated, err := s.readPages(ctx, loc, closedQuery+now.Add(-closedWindow).Format(dateLayout))
+		return pages{items: items, truncated: truncated}, err
+	})
+
+	structured := <-structureC
+	if structured.err != nil {
+		return readResult{}, structured.err
+	}
+	st := structured.value
+	opened := <-openC
+	if opened.err != nil {
+		return readResult{}, opened.err
+	}
+	open := opened.value.items
+	if opened.value.truncated {
+		s.log.Warn("board reading truncated", "board", b.ID, "title", st.Title, "cards", maxCards)
 	}
 
-	nodes, err := s.readAllItems(ctx, loc, b.ID, st.Title, now)
-	if err != nil {
-		return Reading{}, nil, err
+	if stored != nil || len(open) > 0 {
+		deliver(firstDelivery(st, loc.Owner, stored, open, now), len(open))
+	}
+
+	closed := <-closedC
+	if closed.err != nil {
+		return readResult{}, closed.err
+	}
+	nodes := slices.Clone(open)
+	onBoard := make(map[string]bool, len(open))
+	for _, n := range open {
+		onBoard[n.key()] = true
+	}
+	room := maxCards - len(open)
+	for _, n := range closed.value.items {
+		if onBoard[n.key()] {
+			continue
+		}
+		if room == 0 {
+			closed.value.truncated = true
+			break
+		}
+		room--
+		onBoard[n.key()] = true
+		nodes = append(nodes, n)
+	}
+	if closed.value.truncated {
+		s.log.Warn("board reading truncated", "board", b.ID, "title", st.Title, "cards", maxCards)
 	}
 
 	reading := Reading{
@@ -99,10 +171,8 @@ func (s *Service) read(ctx context.Context, b Board, extra []string) (Reading, m
 		Module:        st.Module,
 		Cards:         make([]Card, 0, len(nodes)),
 	}
-	onBoard := map[string]bool{}
 	for _, n := range nodes {
 		reading.Cards = append(reading.Cards, baseCard(n, st, now))
-		onBoard[n.key()] = true
 	}
 
 	conventions := conventionsOf(loc.Owner, reading.Cards)
@@ -125,7 +195,7 @@ func (s *Service) read(ctx context.Context, b Board, extra []string) (Reading, m
 
 	index, err := s.readBatch(ctx, needs.refs)
 	if err != nil {
-		return Reading{}, nil, err
+		return readResult{}, err
 	}
 
 	a := newAssembly(st, &reading, conventions, index)
@@ -151,7 +221,13 @@ func (s *Service) read(ctx context.Context, b Board, extra []string) (Reading, m
 		}
 		extras[r.Key()] = c
 	}
-	return reading, extras, nil
+	return readResult{reading: reading, extras: extras}, nil
+}
+
+// pages is the items one query matched.
+type pages struct {
+	items     []itemCard
+	truncated bool // the list went past maxCards
 }
 
 // itemCard is an issue of the items with the values and the update time of its
@@ -162,38 +238,32 @@ type itemCard struct {
 	updatedAt string // the update time of the item
 }
 
-// readAllItems pages through the open issues, then the ones closed in the
-// closed window, up to maxCards, skipping what is not an issue and repeats.
-// boardID and title name the board in the log.
-func (s *Service) readAllItems(ctx context.Context, loc Locator, boardID, title string, now time.Time) ([]itemCard, error) {
-	queries := []string{openQuery, closedQuery + now.Add(-closedWindow).Format(dateLayout)}
-	var cards []itemCard
+// readPages pages through the items that match q, up to maxCards, skipping
+// what is not an issue and repeats. truncated reports a list that went past
+// maxCards.
+func (s *Service) readPages(ctx context.Context, loc Locator, q string) (items []itemCard, truncated bool, err error) {
 	seen := map[string]bool{}
-	for _, q := range queries {
-		cursor := ""
-		for {
-			page, err := s.readItems(ctx, loc, q, cursor)
-			if err != nil {
-				return nil, err
-			}
-			for _, item := range page.Items {
-				if item.Content == nil || item.Content.Typename != typeIssue || seen[item.Content.key()] {
-					continue
-				}
-				if len(cards) == maxCards {
-					s.log.Warn("board reading truncated", "board", boardID, "title", title, "cards", maxCards)
-					return cards, nil
-				}
-				seen[item.Content.key()] = true
-				cards = append(cards, itemCard{issueNode: item.Content.issueNode, values: item.FieldValues, updatedAt: item.UpdatedAt})
-			}
-			if !page.HasNextPage {
-				break
-			}
-			cursor = page.EndCursor
+	cursor := ""
+	for {
+		page, err := s.readItems(ctx, loc, q, cursor)
+		if err != nil {
+			return nil, false, err
 		}
+		for _, item := range page.Items {
+			if item.Content == nil || item.Content.Typename != typeIssue || seen[item.Content.key()] {
+				continue
+			}
+			if len(items) == maxCards {
+				return items, true, nil
+			}
+			seen[item.Content.key()] = true
+			items = append(items, itemCard{issueNode: item.Content.issueNode, values: item.FieldValues, updatedAt: item.UpdatedAt})
+		}
+		if !page.HasNextPage {
+			return items, false, nil
+		}
+		cursor = page.EndCursor
 	}
-	return cards, nil
 }
 
 // baseCard is what an issue says of itself as a card of the board st: no

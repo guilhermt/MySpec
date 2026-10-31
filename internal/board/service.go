@@ -317,9 +317,11 @@ func (s *Service) runRead(b Board) {
 	defer cancel()
 
 	started := s.now()
-	reading, extras, err := s.read(ctx, b, s.taskCards(b.ID))
+	result, err := s.read(ctx, b, s.taskCards(b.ID), func(reading Reading, open int) {
+		s.deliver(b, reading, open, started)
+	})
 	if err == nil {
-		err = s.save(b, reading, extras, started)
+		err = s.save(b, result, started)
 	}
 	if err != nil {
 		s.fail(b, err)
@@ -333,7 +335,8 @@ func (s *Service) runRead(b Board) {
 
 // save stores what the reading of b found, started at started, and hands its
 // cards to OnRead. A board no longer registered keeps nothing of it.
-func (s *Service) save(b Board, reading Reading, extras map[string]Card, started time.Time) error {
+func (s *Service) save(b Board, result readResult, started time.Time) error {
+	reading, extras := result.reading, result.extras
 	readAt := s.now()
 
 	s.saveMu.Lock()
@@ -373,6 +376,54 @@ func (s *Service) save(b Board, reading Reading, extras map[string]Card, started
 		s.onRead(b.ID, cards)
 	}
 	return nil
+}
+
+// deliver stores the first delivery of the reading of b, started at started,
+// which has open open cards at its start, keeping the failure of the board, and
+// hands the open cards to OnRead. A board no longer registered keeps nothing of
+// it, and a delivery that cannot be stored is left out: the reading goes on.
+func (s *Service) deliver(b Board, reading Reading, open int, started time.Time) {
+	s.saveMu.Lock()
+	if _, ok := s.Get(b.ID); !ok {
+		s.saveMu.Unlock()
+		return
+	}
+
+	readAt := s.Stored(b.ID).ReadAt
+	if readAt.IsZero() {
+		readAt = s.now()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), saveTimeout)
+	defer cancel()
+
+	if err := s.store.UpdateReading(ctx, b.ID, reading.Title, reading, readAt); err != nil {
+		s.saveMu.Unlock()
+		s.log.Error("board reading not saved", "board", b.ID, "title", b.Title, "error", err)
+		return
+	}
+
+	s.mu.Lock()
+	if i := s.index(b.ID); i >= 0 {
+		stored := s.stored[b.ID]
+		stored.Reading, stored.ReadAt = &reading, readAt
+		s.stored[b.ID] = stored
+		s.boards[i].Title = reading.Title
+		slices.SortStableFunc(s.boards, compare)
+	}
+	s.mu.Unlock()
+	s.saveMu.Unlock()
+	s.log.Info("board delivered", "board", b.ID, "title", reading.Title, "cards", len(reading.Cards),
+		"open", open, "first_delivery_ms", s.now().Sub(started).Milliseconds())
+
+	if s.onRead != nil {
+		cards := make(map[string]Card, open)
+		for _, c := range reading.Cards[:open] {
+			cards[c.Key()] = c
+		}
+		s.onRead(b.ID, cards)
+	}
+	s.changed()
 }
 
 // fail records a reading of b that failed with err, keeping the stored

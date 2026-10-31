@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -86,11 +87,17 @@ func TestRefreshStoresTheReadingAndHandsTheCardsToOnRead(t *testing.T) {
 		t.Errorf("Get().Title = %q, want the title the reading found", b.Title)
 	}
 	reads := f.reads.all()
-	if len(reads) != 1 {
-		t.Fatalf("OnRead was called %d times, want 1", len(reads))
+	if len(reads) != 2 {
+		t.Fatalf("OnRead was called %d times, want 2: the delivery and the conclusion", len(reads))
 	}
-	if diff := cmp.Diff(map[string]board.Card{"acme/web#1": want.Cards[0], "acme/web#2": want.Cards[1]}, reads[0]); diff != "" {
-		t.Errorf("OnRead cards (-want +got):\n%s", diff)
+	if diff := cmp.Diff(map[string]board.Card{"acme/web#1": want.Cards[0], "acme/web#2": want.Cards[1]}, reads[1]); diff != "" {
+		t.Errorf("OnRead cards at the conclusion (-want +got):\n%s", diff)
+	}
+	if got := slices.Sorted(maps.Keys(reads[0])); !slices.Equal(got, []string{"acme/web#1"}) {
+		t.Errorf("OnRead cards at the delivery = %v, want only the open card", got)
+	}
+	if !reads[0]["acme/web#1"].Unconfirmed {
+		t.Error("the open card of the delivery is confirmed, want Unconfirmed")
 	}
 	card, ok := f.service.Card(boardID, "Acme/Web#1")
 	if !ok || card.Title != "Issue 1" {
@@ -116,11 +123,16 @@ func TestTheReadingPagesThroughTheOpenIssuesThenTheOnesClosedInTheLastFourteenDa
 	for _, c := range calls {
 		got = append(got, c.vars)
 	}
+	// The open and the closed items are read at the same time: only the order
+	// within one query is fixed.
 	want := []gh.Vars{
+		{"owner": "acme", "number": 3, "q": closedQ},
 		{"owner": "acme", "number": 3, "q": openQ},
 		{"owner": "acme", "number": 3, "q": openQ, "cursor": "cursor-1"},
-		{"owner": "acme", "number": 3, "q": closedQ},
 	}
+	slices.SortStableFunc(got, func(a, b gh.Vars) int {
+		return strings.Compare(a["q"].(string), b["q"].(string))
+	})
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("items vars (-want +got):\n%s", diff)
 	}
@@ -412,9 +424,13 @@ func TestTheExtraCardOfATaskIsHandedOverWithoutBeingACardOfTheReading(t *testing
 		t.Errorf("the reading has %d cards, want only the one on the board", len(cards))
 	}
 	reads := f.reads.all()
-	if len(reads) != 1 {
-		t.Fatalf("OnRead was called %d times, want 1", len(reads))
+	if len(reads) != 2 {
+		t.Fatalf("OnRead was called %d times, want 2: the delivery and the conclusion", len(reads))
 	}
+	if _, ok := reads[0]["acme/web#99"]; ok {
+		t.Error("OnRead at the delivery has the extra card, want only the open ones")
+	}
+	reads = reads[1:]
 	want := board.Card{
 		Issue:        board.Issue{Owner: "acme", Name: "web", Number: 99, Title: "Issue 99", URL: issueURL("acme/web", 99), State: task.IssueClosed},
 		StatusID:     done.ID,

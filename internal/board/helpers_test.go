@@ -295,6 +295,10 @@ func (s *memStore) SaveReading(ctx context.Context, id, title string, r board.Re
 	if s.saveErr != nil {
 		return s.saveErr
 	}
+	r, err := roundTrip(r)
+	if err != nil {
+		return err
+	}
 	s.stored[id] = board.Stored{Reading: &r, ReadAt: readAt}
 	for i := range s.boards {
 		if s.boards[i].ID == id {
@@ -314,6 +318,10 @@ func (s *memStore) UpdateReading(ctx context.Context, id, title string, r board.
 	if s.saveErr != nil {
 		return s.saveErr
 	}
+	r, err := roundTrip(r)
+	if err != nil {
+		return err
+	}
 	stored := s.stored[id]
 	stored.Reading, stored.ReadAt = &r, readAt
 	s.stored[id] = stored
@@ -323,6 +331,17 @@ func (s *memStore) UpdateReading(ctx context.Context, id, title string, r board.
 		}
 	}
 	return nil
+}
+
+// roundTrip is r as the database keeps it: written as JSON and read back.
+func roundTrip(r board.Reading) (board.Reading, error) {
+	raw, err := json.Marshal(r)
+	if err != nil {
+		return board.Reading{}, err
+	}
+	var back board.Reading
+	err = json.Unmarshal(raw, &back)
+	return back, err
 }
 
 func (s *memStore) SaveFailure(ctx context.Context, id string, f board.Failure, failedAt time.Time) error {
