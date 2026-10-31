@@ -777,6 +777,7 @@ describe("NewTaskDialog", () => {
                 },
               ],
               satisfied: false,
+              unconfirmed: false,
             },
           ],
         }),

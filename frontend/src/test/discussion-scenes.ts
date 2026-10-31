@@ -394,6 +394,7 @@ function boardCard(spec: CardSpec, readAt: string): BoardCard {
         onBoard: true,
         pullRequests: [],
         satisfied: false,
+        unconfirmed: false,
       };
     }),
     readAt,

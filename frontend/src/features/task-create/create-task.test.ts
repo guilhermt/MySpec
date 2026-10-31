@@ -36,6 +36,7 @@ const dependency = (number: number) => ({
   ...related(number),
   pullRequests: [],
   satisfied: false,
+  unconfirmed: false,
 });
 
 describe("characterCount", () => {

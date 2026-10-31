@@ -753,6 +753,7 @@ function dependencyOf(number: number): CardDependency {
     onBoard: true,
     pullRequests: pullRequestsOf(spec),
     satisfied: false,
+    unconfirmed: false,
   };
 }
 

@@ -2210,7 +2210,11 @@ func TestFromBoardsCarriesTheCardWithItsRelationsAndTasks(t *testing.T) {
 			Issue: board.Issue{Owner: "acme", Name: "api", Number: 7, Title: "Tokens", URL: "https://d", State: task.IssueClosed},
 		},
 		Satisfied: true,
+	}, {
+		Related:     board.Related{Issue: board.Issue{Owner: "acme", Name: "api", Number: 8, URL: "https://u", State: task.IssueOpen}},
+		Unconfirmed: true,
 	}}
+	card.Unconfirmed = true
 	repositories := []repository.Repository{
 		{ID: "r-web", Owner: "acme", Name: "web", Path: "/src/web", BoardID: roadmap.ID},
 		{ID: "r-other", Owner: "acme", Name: "api", Path: "/src/api"},
@@ -2258,7 +2262,14 @@ func TestFromBoardsCarriesTheCardWithItsRelationsAndTasks(t *testing.T) {
 				}},
 				PullRequests: []bindings.CardPullRequest{},
 				Satisfied:    true,
+			}, {
+				CardRelated: bindings.CardRelated{CardIssue: bindings.CardIssue{
+					Key: "acme/api#8", Repository: "acme/api", Number: 8, URL: "https://u", State: "open",
+				}},
+				PullRequests: []bindings.CardPullRequest{},
+				Unconfirmed:  true,
 			}},
+			Unconfirmed:      true,
 			ReadAt:           "2026-09-16T12:00:00Z",
 			SuggestedName:    "12-add-the-login-screen",
 			RepositoryID:     "r-web",

@@ -753,6 +753,7 @@ export function makeBoardCard(overrides: Partial<BoardCard> = {}): BoardCard {
     siblings: [],
     dependencies: [],
     readAt: "2026-09-16T12:00:00Z",
+    unconfirmed: false,
     suggestedName: "12-add-the-login-screen",
     repositoryId: "repo-1",
     activeTaskId: "",

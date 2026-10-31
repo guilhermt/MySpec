@@ -202,8 +202,8 @@ describe("assigneesOf and unsatisfied", () => {
     };
     const card = makeBoardCard({
       dependencies: [
-        { ...dependency, satisfied: false },
-        { ...dependency, key: "dev/web#2", satisfied: true },
+        { ...dependency, satisfied: false, unconfirmed: false },
+        { ...dependency, key: "dev/web#2", satisfied: true, unconfirmed: false },
       ],
     });
 
@@ -653,6 +653,7 @@ describe("cardRowModel", () => {
     onBoard: true,
     pullRequests: [],
     satisfied: false,
+    unconfirmed: false,
     ...overrides,
   });
   const epicOf = {

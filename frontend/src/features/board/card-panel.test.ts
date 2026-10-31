@@ -274,6 +274,7 @@ describe("the head, the status and the dependencies", () => {
       onBoard: true,
       pullRequests: [],
       satisfied: false,
+      unconfirmed: false,
       ...overrides,
     });
     const notice = (overrides = {}) =>
@@ -541,6 +542,7 @@ describe("the relations", () => {
       status: "Backlog",
       pullRequests: [],
       satisfied: false,
+      unconfirmed: false,
       ...overrides,
     });
     const card = cardOf({
@@ -548,6 +550,7 @@ describe("the relations", () => {
         dependency(461),
         dependency(462, {
           satisfied: true,
+          unconfirmed: false,
           pullRequests: [{ repository: "acme/api", number: 88, url: "", state: "merged" }],
         }),
         dependency(463, { satisfied: true, state: "closed", status: "Done" }),

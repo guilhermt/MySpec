@@ -230,6 +230,32 @@ func TestUpdateCardsRewritesOnlyTheActiveTasksOfTheBoard(t *testing.T) {
 	}
 }
 
+func TestUpdateCardsKeepsTheEpicOfTheTaskWhenTheReadingHasNotConfirmedIt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	card := newCard(12)
+	card.Epic = &task.CardEpic{Owner: "Dev", Name: "Web", Number: 3, Title: "Auth", URL: "https://github.com/Dev/Web/issues/3"}
+	created := f.createWithCard(t, "add-login", card)
+
+	update := task.CardUpdate{Title: "Renamed", URL: card.URL, State: task.IssueOpen, ReadAt: base.Add(time.Hour), KeepEpic: true}
+	if err := f.service.UpdateCards(t.Context(), "board-1", map[string]task.CardUpdate{"dev/web#12": update}); err != nil {
+		t.Fatalf("UpdateCards() = %v, want nil", err)
+	}
+	got, _ := f.service.Get(created.ID)
+	if got.Card.Title != "Renamed" || got.Card.Epic == nil || got.Card.Epic.Number != 3 {
+		t.Errorf("card = %+v, want the new title and the epic it had", got.Card)
+	}
+
+	update.KeepEpic = false
+	if err := f.service.UpdateCards(t.Context(), "board-1", map[string]task.CardUpdate{"dev/web#12": update}); err != nil {
+		t.Fatalf("UpdateCards() = %v, want nil", err)
+	}
+	if got, _ = f.service.Get(created.ID); got.Card.Epic != nil {
+		t.Errorf("epic = %+v, want it cleared once the reading confirms there is none", got.Card.Epic)
+	}
+}
+
 func TestUpdateCardsFailsWhenTheCardCannotBeStored(t *testing.T) {
 	t.Parallel()
 

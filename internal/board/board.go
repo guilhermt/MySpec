@@ -113,6 +113,9 @@ type Dependency struct {
 	Related
 	PullRequests []PullRequest `json:"pullRequests"`
 	Satisfied    bool          `json:"satisfied"` // the issue is closed or a linked pull request merged
+	// Unconfirmed is a dependency the reading has not confirmed yet: it warns of
+	// nothing, and it is never Satisfied.
+	Unconfirmed bool `json:"unconfirmed"`
 }
 
 // Card is an issue of the board, with everything the reading found about it.
@@ -128,11 +131,16 @@ type Card struct {
 	Siblings     []Related     `json:"siblings"`
 	Dependencies []Dependency  `json:"dependencies"`
 	ReadAt       time.Time     `json:"readAt"`
+	// Unconfirmed is a card whose relations wait for the conclusion of a reading.
+	Unconfirmed bool `json:"unconfirmed"`
+	// EpicUnconfirmed is a card whose convention names an epic no reading has
+	// confirmed.
+	EpicUnconfirmed bool `json:"epicUnconfirmed"`
 }
 
-// Reading is what the last reading of a board that succeeded found. A reading
-// stored before the status field id and the module field were read has neither:
-// the next reading fills them in.
+// Reading is what the last reading of a board left stored, which can be a
+// first delivery. A reading stored before the status field id and the module
+// field were read has neither: the next reading fills them in.
 type Reading struct {
 	ProjectID     string       `json:"projectId"`
 	Title         string       `json:"title"`
@@ -170,8 +178,8 @@ func (r *Reading) StatusOption(id string) (Option, bool) {
 
 // Stored is a board's reading as the app holds it.
 type Stored struct {
-	Reading  *Reading // nil before a reading succeeded
-	ReadAt   time.Time
-	Failure  *Failure // the last reading failed; nil otherwise
+	Reading  *Reading  // nil before a first delivery
+	ReadAt   time.Time // the conclusion of the last complete reading, or the first delivery of a board that never had one
+	Failure  *Failure  // the last reading failed; nil otherwise
 	FailedAt time.Time
 }
