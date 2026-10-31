@@ -832,7 +832,7 @@ O board, o History e a conversa montam só as linhas que aparecem, as fixadas (a
 
 | | |
 |---|---|
-| Anatomia | Grupos com o título em caixa alta (`Epic`, `Cards of the epic · 6`, `Cards · 8`, `Dependencies`, `Pull requests`), uma linha por item (número, título, e à direita o status, o estado ou o progresso do épico, `2 of 8 finished`); `◇ Not satisfied` na dependência que falta |
+| Anatomia | Grupos com o título em caixa alta (`Epic`, `Cards of the epic · 6`, `Cards · 8`, `Dependencies`, `Pull requests`), uma linha por item (número, título, e à direita o status, o estado ou o progresso do épico, `2 of 8 finished`); `◇ Not satisfied` na dependência que falta; `Not confirmed` como meta da dependência que a leitura ainda não confirmou, sem `◇` e sem aviso |
 | Variantes | **Link externo**: o que não é card do board, com a seta externa, abre no GitHub. **Card do board**: o link sem a seta, que abre o card no painel da lista (no board) ou a visão do board com o card no painel (no painel `Card` da task) |
 
 ### Continue e linha de início · `Continue`, `StartRow`
