@@ -441,7 +441,7 @@ export interface Board {
     "repositoryIds": string[] | null;
 
     /**
-     * "" before a reading succeeded
+     * "" before a first delivery
      */
     "readAt": string;
     "reading": boolean;
@@ -519,6 +519,11 @@ export interface BoardCard {
      */
     "dependencies": CardDependency[] | null;
     "readAt": string;
+
+    /**
+     * its relations wait for the conclusion of a reading
+     */
+    "unconfirmed": boolean;
     "suggestedName": string;
 
     /**
@@ -761,6 +766,11 @@ export interface CardDependency {
      */
     "pullRequests": CardPullRequest[] | null;
     "satisfied": boolean;
+
+    /**
+     * the reading has not confirmed it yet
+     */
+    "unconfirmed": boolean;
 }
 
 /**

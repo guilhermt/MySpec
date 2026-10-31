@@ -2,6 +2,8 @@ package board
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -28,7 +30,7 @@ fragment values on ProjectV2Item { fieldValues(first: 30) { nodes { __typename
   ... on ProjectV2ItemFieldNumberValue { number field { ... on ProjectV2FieldCommon { name } } }
   ... on ProjectV2ItemFieldDateValue { date field { ... on ProjectV2FieldCommon { name } } }
   ... on ProjectV2ItemFieldIterationValue { title field { ... on ProjectV2FieldCommon { name } } } } } }
-fragment card on Issue { ...brief body
+fragment card on Issue { ...brief updatedAt body
   assignees(first: 10) { nodes { login avatarUrl } }
   parent { ...brief body }
   blockedBy(first: 20) { nodes { ...brief ...prs } }
@@ -42,14 +44,30 @@ const structureQuery = `query($owner: String!, $number: Int!) { viewer { login }
   owner: %s(login: $owner) { projectV2(number: $number) { id title url
     field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } }
     fields(first: 50) { nodes { ... on ProjectV2FieldCommon { name dataType }
-      ... on ProjectV2SingleSelectField { id options { id name } } } } } } }`
+      ... on ProjectV2SingleSelectField { id options { id name } }
+      ... on ProjectV2IterationField { configuration { iterations { id title } completedIterations { id title } } } } } } } }`
 
 // itemsQuery reads one page of the items of a board that match q. The %s is
 // the owner type.
 const itemsQuery = `query($owner: String!, $number: Int!, $q: String!, $cursor: String) {
   owner: %s(login: $owner) { projectV2(number: $number) {
     items(first: 100, after: $cursor, query: $q) { pageInfo { hasNextPage endCursor }
-      nodes { ...values content { __typename ... on Issue { ...card } } } } } } }`
+      nodes { updatedAt ...values content { __typename ... on Issue { ...card } } } } } } }`
+
+// stampFragments are the parts of the stamp queries.
+const stampFragments = `
+fragment prStamps on Issue { closedByPullRequestsReferences(first: 10, includeClosedPrs: true) { nodes { number state repository { nameWithOwner } } } }
+`
+
+// stampsQuery reads one page of what tells whether the items of a board that
+// match q changed: no content. The %s is the owner type.
+const stampsQuery = `query($owner: String!, $number: Int!, $q: String!, $cursor: String) {
+  owner: %s(login: $owner) { projectV2(number: $number) {
+    items(first: 100, after: $cursor, query: $q) { pageInfo { hasNextPage endCursor }
+      nodes { updatedAt content { __typename ... on Issue { number updatedAt repository { nameWithOwner }
+        parent { number repository { nameWithOwner } }
+        blockedBy(first: 20) { nodes { number repository { nameWithOwner } } }
+        ...prStamps } } } } } } }`
 
 // repositoriesQuery reads one page of the repositories of the items of a board
 // that match q. The %s is the owner type.
@@ -64,8 +82,16 @@ const repositoryQuery = `query($owner: String!, $name: String!) { repository(own
 // batchIssue reads one issue of a batch under an alias: the alias, the owner,
 // the name and the number.
 const batchIssue = `%s: repository(owner: %s, name: %s) { issue(number: %d) { ...card
-  subIssues(first: 50) { nodes { ...brief } }
-  projectItems(first: 20) { nodes { project { id } ...values } } } }
+  subIssues(first: 50) { nodes { ...brief updatedAt } }
+  projectItems(first: 20) { nodes { updatedAt project { id } ...values } } } }
+`
+
+// batchStamp reads what tells whether one issue of a batch changed, under an
+// alias: the alias, the owner, the name and the number.
+const batchStamp = `%s: repository(owner: %s, name: %s) { issue(number: %d) { number updatedAt repository { nameWithOwner }
+  subIssues(first: 50) { nodes { number updatedAt repository { nameWithOwner } } }
+  ...prStamps
+  projectItems(first: 20) { nodes { updatedAt project { id } } } } }
 `
 
 // The GraphQL names the reading tells apart.
@@ -94,6 +120,7 @@ type structure struct {
 	StatusFieldID string          // "" without a Status field
 	Module        *ModuleField    // nil without a module field
 	ValueFields   map[string]bool // the names of the fields whose values a card shows
+	Stamp         string          // tells whether the structure changed: the hash of what the query answered
 }
 
 type repositoryNode struct {
@@ -111,6 +138,7 @@ type briefNode struct {
 	Title      string         `json:"title"`
 	URL        string         `json:"url"`
 	State      string         `json:"state"`
+	UpdatedAt  string         `json:"updatedAt"`
 	Repository repositoryNode `json:"repository"`
 }
 
@@ -189,7 +217,8 @@ type fieldValuesNode struct {
 
 // projectItemNode is the item of an issue in a board.
 type projectItemNode struct {
-	Project struct {
+	UpdatedAt string `json:"updatedAt"`
+	Project   struct {
 		ID string `json:"id"`
 	} `json:"project"`
 	FieldValues fieldValuesNode `json:"fieldValues"`
@@ -216,17 +245,19 @@ type issueNode struct {
 	} `json:"projectItems"`
 }
 
-// valuesIn is the field values of the issue's item in the board projectID.
-func (n issueNode) valuesIn(projectID string) fieldValuesNode {
+// itemIn is the issue with the field values and the update time of its item in
+// the board projectID.
+func (n issueNode) itemIn(projectID string) itemCard {
 	for _, item := range n.ProjectItems.Nodes {
 		if item.Project.ID == projectID {
-			return item.FieldValues
+			return itemCard{issueNode: n, values: item.FieldValues, updatedAt: item.UpdatedAt}
 		}
 	}
-	return fieldValuesNode{}
+	return itemCard{issueNode: n}
 }
 
 type itemNode struct {
+	UpdatedAt   string          `json:"updatedAt"`
 	FieldValues fieldValuesNode `json:"fieldValues"`
 	Content     *struct {
 		Typename string `json:"__typename"`
@@ -285,7 +316,9 @@ func (s *Service) readStructure(ctx context.Context, loc Locator) (structure, er
 		return structure{}, &Failure{Reason: ReasonNotFound}
 	}
 	project := data.Owner.ProjectV2
+	sum := sha256.Sum256(resp.Data)
 	st := structure{
+		Stamp:       hex.EncodeToString(sum[:]),
 		ProjectID:   project.ID,
 		Title:       project.Title,
 		URL:         project.URL,
@@ -314,14 +347,18 @@ func (s *Service) readStructure(ctx context.Context, loc Locator) (structure, er
 	return st, nil
 }
 
-// readItems runs one page of the items query. cursor is "" on the first page.
-// It fails with a *Failure.
-func (s *Service) readItems(ctx context.Context, loc Locator, q, cursor string) (itemsPage, error) {
+// readItems runs one page of the items with the query template, itemsQuery or
+// stampsQuery. cursor is "" on the first page. It fails with a *Failure.
+func (s *Service) readItems(ctx context.Context, loc Locator, template, q, cursor string) (itemsPage, error) {
 	vars := gh.Vars{"owner": loc.Owner, "number": loc.Number, "q": q}
 	if cursor != "" {
 		vars["cursor"] = cursor
 	}
-	resp, err := s.github.GraphQL(ctx, fmt.Sprintf(itemsQuery, loc.OwnerType)+fragments, vars)
+	parts := fragments
+	if template == stampsQuery {
+		parts = stampFragments
+	}
+	resp, err := s.github.GraphQL(ctx, fmt.Sprintf(template, loc.OwnerType)+parts, vars)
 	if err != nil {
 		if gh.HasNotFound(resp.Errors) {
 			return itemsPage{}, &Failure{Reason: ReasonNotFound}
@@ -454,9 +491,22 @@ func (s *Service) readRepository(ctx context.Context, owner, name string) (ident
 // key. A reference to an issue that does not exist is left out. It fails with
 // a *Failure.
 func (s *Service) readBatch(ctx context.Context, refs []Ref) (map[string]issueNode, error) {
+	return s.readIssues(ctx, refs, batchQuery)
+}
+
+// readStamps reads what tells whether refs changed, in chunks of batchSize, and
+// returns the issues found by key, with only the fields of the stamps. It fails
+// with a *Failure.
+func (s *Service) readStamps(ctx context.Context, refs []Ref) (map[string]issueNode, error) {
+	return s.readIssues(ctx, refs, stampBatchQuery)
+}
+
+// readIssues reads refs in chunks of batchSize with the query that writes each
+// chunk, and returns the issues found by key. It fails with a *Failure.
+func (s *Service) readIssues(ctx context.Context, refs []Ref, query func([]Ref) string) (map[string]issueNode, error) {
 	index := map[string]issueNode{}
 	for chunk := range slices.Chunk(refs, batchSize) {
-		resp, err := s.github.GraphQL(ctx, batchQuery(chunk), gh.Vars{})
+		resp, err := s.github.GraphQL(ctx, query(chunk), gh.Vars{})
 		if err != nil {
 			return nil, failureOf(err)
 		}
@@ -492,6 +542,19 @@ func batchQuery(refs []Ref) string {
 	}
 	b.WriteString("rateLimit { cost } }\n")
 	b.WriteString(fragments)
+	return b.String()
+}
+
+// stampBatchQuery is the query that reads what tells whether refs changed, each
+// under its alias.
+func stampBatchQuery(refs []Ref) string {
+	var b strings.Builder
+	b.WriteString("query {\n")
+	for i, r := range refs {
+		fmt.Fprintf(&b, batchStamp, alias(i), strconv.Quote(r.Owner), strconv.Quote(r.Name), r.Number)
+	}
+	b.WriteString("}\n")
+	b.WriteString(stampFragments)
 	return b.String()
 }
 

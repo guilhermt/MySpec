@@ -1,9 +1,11 @@
 package board_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"maps"
 	"path/filepath"
 	"slices"
@@ -37,11 +39,13 @@ const (
 
 // The substrings that tell the queries apart.
 const (
-	structureMatch = "viewer { login }"
-	itemsMatch     = "items(first: 100"
-	batchMatch     = "rateLimit { cost }"
-	reposMatch     = "content { ... on Issue { repository { nameWithOwner } } }"
-	repoMatch      = "repository(owner: $owner, name: $name)"
+	structureMatch  = "viewer { login }"
+	itemsMatch      = "items(first: 100"
+	batchMatch      = "rateLimit { cost }"
+	reposMatch      = "content { ... on Issue { repository { nameWithOwner } } }"
+	repoMatch       = "repository(owner: $owner, name: $name)"
+	stampsMatch     = "nodes { updatedAt content { __typename"
+	stampBatchMatch = "projectItems(first: 20) { nodes { updatedAt project { id } } }"
 )
 
 // suggestQ is the item query of the repository suggestion.
@@ -61,6 +65,7 @@ type fixture struct {
 	reads     *readRecorder
 	repos     *memRepositories
 	changes   *changeCounter
+	logs      *logRecorder
 	taskCards []string                       // the keys TaskCards answers; set before a refresh
 	clones    map[string]repository.Identity // what Identify answers, by path
 	tasks     map[string]int                 // the active tasks of each repository, by id
@@ -94,6 +99,7 @@ func newFixture(t *testing.T, stored board.Stored) *fixture {
 		reads:    &readRecorder{},
 		repos:    &memRepositories{},
 		changes:  &changeCounter{},
+		logs:     &logRecorder{},
 		clones:   map[string]repository.Identity{},
 		tasks:    map[string]int{},
 		archived: map[string]int{},
@@ -106,6 +112,7 @@ func newFixture(t *testing.T, stored board.Stored) *fixture {
 		Counts:       func(id string) (int, int) { return f.tasks[id], f.archived[id] },
 		TaskCards:    func(string) []string { return f.taskCards },
 		Now:          func() time.Time { return base },
+		Log:          slog.New(slog.NewJSONHandler(f.logs, nil)),
 		NewID:        f.newID,
 		OnChange:     f.changes.inc,
 		OnRemove:     func(id string) { f.removed = append(f.removed, id) },
@@ -214,7 +221,7 @@ type memStore struct {
 	mu       sync.Mutex
 	boards   []board.Board
 	stored   map[string]board.Stored
-	saveErr  error           // what SaveReading fails with, when set
+	saveErr  error           // what SaveReading and UpdateReading fail with, when set
 	failures int             // how many failures were saved
 	left     []time.Duration // how long the context of each write had left
 	links    []board.Link    // the links of the last write
@@ -295,6 +302,10 @@ func (s *memStore) SaveReading(ctx context.Context, id, title string, r board.Re
 	if s.saveErr != nil {
 		return s.saveErr
 	}
+	r, err := roundTrip(r)
+	if err != nil {
+		return err
+	}
 	s.stored[id] = board.Stored{Reading: &r, ReadAt: readAt}
 	for i := range s.boards {
 		if s.boards[i].ID == id {
@@ -302,6 +313,42 @@ func (s *memStore) SaveReading(ctx context.Context, id, title string, r board.Re
 		}
 	}
 	return nil
+}
+
+func (s *memStore) UpdateReading(ctx context.Context, id, title string, r board.Reading, readAt time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.write(ctx); err != nil {
+		return err
+	}
+	if s.saveErr != nil {
+		return s.saveErr
+	}
+	r, err := roundTrip(r)
+	if err != nil {
+		return err
+	}
+	stored := s.stored[id]
+	stored.Reading, stored.ReadAt = &r, readAt
+	s.stored[id] = stored
+	for i := range s.boards {
+		if s.boards[i].ID == id {
+			s.boards[i].Title = title
+		}
+	}
+	return nil
+}
+
+// roundTrip is r as the database keeps it: written as JSON and read back.
+func roundTrip(r board.Reading) (board.Reading, error) {
+	raw, err := json.Marshal(r)
+	if err != nil {
+		return board.Reading{}, err
+	}
+	var back board.Reading
+	err = json.Unmarshal(raw, &back)
+	return back, err
 }
 
 func (s *memStore) SaveFailure(ctx context.Context, id string, f board.Failure, failedAt time.Time) error {
@@ -389,6 +436,51 @@ type rule struct {
 	match   string
 	q       string
 	replies []reply
+	answers func(query string) reply // when set, it answers instead of replies
+}
+
+// reset forgets every rule and every call.
+func (f *fakeGitHub) reset() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.rules, f.calls = nil, nil
+}
+
+// answerWith makes the queries that contain match and carry q answer by fn.
+func (f *fakeGitHub) answerWith(match, q string, fn func(query string) reply) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.rules = append(f.rules, &rule{match: match, q: q, answers: fn})
+}
+
+// logRecorder is where the logger of a fixture writes.
+type logRecorder struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (l *logRecorder) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	return l.buf.Write(p)
+}
+
+// last is the attributes of the last record whose message is msg.
+func (l *logRecorder) last(msg string) map[string]any {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	var found map[string]any
+	for line := range bytes.SplitSeq(l.buf.Bytes(), []byte("\n")) {
+		var record map[string]any
+		if json.Unmarshal(line, &record) == nil && record["msg"] == msg {
+			found = record
+		}
+	}
+	return found
 }
 
 // call is one query the fake GitHub received.
@@ -439,6 +531,9 @@ func (f *fakeGitHub) next(query string, vars gh.Vars) (reply, bool) {
 	q, _ := vars["q"].(string)
 	for _, r := range f.rules {
 		if strings.Contains(query, r.match) && r.q == q {
+			if r.answers != nil {
+				return r.answers(query), true
+			}
 			next := r.replies[0]
 			if len(r.replies) > 1 {
 				r.replies = r.replies[1:]

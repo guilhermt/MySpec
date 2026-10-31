@@ -7,7 +7,7 @@ import {
   unsatisfied,
 } from "@/features/board/board-view";
 import { referenceOf } from "@/features/task/card-panel";
-import { prStateLabel, stateLabel } from "@/lib/boards";
+import { NOT_CONFIRMED, prStateLabel, stateLabel } from "@/lib/boards";
 import { displayPath } from "@/lib/paths";
 import { findRepository } from "@/lib/repositories";
 import {
@@ -316,7 +316,7 @@ function boardRelations(card: BoardCard, ctx: CardPanelContext): BoardRelationGr
         const merged = (dependency.pullRequests ?? []).find((pr) => pr.state === "merged");
         const open = asIssueState(dependency.state) === "open";
         const meta = [
-          stateLabel(asIssueState(dependency.state)),
+          dependency.unconfirmed ? NOT_CONFIRMED : stateLabel(asIssueState(dependency.state)),
           ...(dependency.status === "" ? [] : [dependency.status]),
           ...(open && dependency.satisfied && merged !== undefined
             ? [`merged ${referenceOf(merged, dependency.repository)}`]
@@ -328,7 +328,7 @@ function boardRelations(card: BoardCard, ctx: CardPanelContext): BoardRelationGr
           title: dependency.title,
           meta,
           url: dependency.url,
-          ...(dependency.satisfied ? {} : { warning: "Not satisfied" }),
+          ...(dependency.satisfied || dependency.unconfirmed ? {} : { warning: "Not satisfied" }),
           ...withCard(dependency.key),
         };
       }),

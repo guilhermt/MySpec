@@ -20,9 +20,8 @@ func (a *App) boardTaskCards(boardID string) []string {
 	return keys
 }
 
-// onBoardRead records on the active tasks of a board what a reading saw of
-// their cards.
-func (a *App) onBoardRead(boardID string, cards map[string]board.Card) {
+// cardUpdates is what a reading saw of each card, as the active tasks take it.
+func cardUpdates(cards map[string]board.Card) map[string]task.CardUpdate {
 	updates := make(map[string]task.CardUpdate, len(cards))
 	for key, card := range cards {
 		var epic *task.CardEpic
@@ -31,15 +30,23 @@ func (a *App) onBoardRead(boardID string, cards map[string]board.Card) {
 			epic = &task.CardEpic{Owner: e.Owner, Name: e.Name, Number: e.Number, Title: e.Title, URL: e.URL}
 		}
 		updates[key] = task.CardUpdate{
-			Title:  card.Title,
-			Body:   card.Body,
-			URL:    card.URL,
-			Status: card.Status,
-			State:  card.State,
-			Epic:   epic,
-			ReadAt: card.ReadAt,
+			Title:    card.Title,
+			Body:     card.Body,
+			URL:      card.URL,
+			Status:   card.Status,
+			State:    card.State,
+			Epic:     epic,
+			ReadAt:   card.ReadAt,
+			KeepEpic: card.EpicUnconfirmed,
 		}
 	}
+	return updates
+}
+
+// onBoardRead records on the active tasks of a board what a reading saw of
+// their cards.
+func (a *App) onBoardRead(boardID string, cards map[string]board.Card) {
+	updates := cardUpdates(cards)
 
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()

@@ -30,6 +30,16 @@ describe("useCardRefresh", () => {
     expect(api.refreshCard).toHaveBeenCalledTimes(1);
   });
 
+  it("reads an unconfirmed card with a recent reading again once", async () => {
+    const card = makeBoardCard({ readAt: new Date().toISOString(), unconfirmed: true });
+
+    const { result } = renderHook(() => useCardRefresh("board-1", card));
+
+    expect(result.current.refreshing).toBe(true);
+    await waitFor(() => expect(result.current.refreshing).toBe(false));
+    expect(api.refreshCard).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the reason without its period when the refresh fails", async () => {
     vi.mocked(api.refreshCard).mockRejectedValue(new Error("GitHub rate limit reached."));
     const card = STALE();

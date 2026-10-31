@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { STALE_CARD_MS } from "@/lib/boards";
+import { needsRereading } from "@/lib/boards";
 import { messageOf } from "@/lib/errors";
 import type { BoardCard } from "@/lib/wails";
 import { discussionContext, refreshCard } from "@/store/actions";
@@ -30,9 +30,7 @@ export function useDiscussionContext(
 ): DiscussionContext {
   const [context, setContext] = useState<string | null>(null);
   // Stale cards are refreshing from the first render, so nothing is read from them before.
-  const [refreshing, setRefreshing] = useState(() =>
-    cards.some((card) => Date.now() - Date.parse(card.readAt) > STALE_CARD_MS),
-  );
+  const [refreshing, setRefreshing] = useState(() => cards.some(needsRereading));
   const [failure, setFailure] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const [debouncedText, setDebouncedText] = useState(text);
@@ -50,9 +48,7 @@ export function useDiscussionContext(
       return;
     }
     refreshStarted.current = true;
-    const stale = cardsAtMount.current.filter(
-      (card) => Date.now() - Date.parse(card.readAt) > STALE_CARD_MS,
-    );
+    const stale = cardsAtMount.current.filter(needsRereading);
     if (stale.length === 0) {
       return;
     }

@@ -274,6 +274,7 @@ describe("the head, the status and the dependencies", () => {
       onBoard: true,
       pullRequests: [],
       satisfied: false,
+      unconfirmed: false,
       ...overrides,
     });
     const notice = (overrides = {}) =>
@@ -535,12 +536,33 @@ describe("the relations", () => {
     });
   });
 
+  it("tells a dependency that is not confirmed, with no warning", () => {
+    const card = cardOf({
+      dependencies: [
+        {
+          ...sibling(464),
+          status: "",
+          pullRequests: [],
+          satisfied: false,
+          unconfirmed: true,
+        },
+      ],
+    });
+
+    const [group] = groups(card, [card]);
+
+    expect(group?.items.map(({ meta, warning }) => ({ meta, warning }))).toEqual([
+      { meta: "Not confirmed", warning: undefined },
+    ]);
+  });
+
   it("tells the dependencies with their state, the pull request that merged, and the warning", () => {
     const dependency = (number: number, overrides = {}) => ({
       ...sibling(number),
       status: "Backlog",
       pullRequests: [],
       satisfied: false,
+      unconfirmed: false,
       ...overrides,
     });
     const card = cardOf({
@@ -548,6 +570,7 @@ describe("the relations", () => {
         dependency(461),
         dependency(462, {
           satisfied: true,
+          unconfirmed: false,
           pullRequests: [{ repository: "acme/api", number: 88, url: "", state: "merged" }],
         }),
         dependency(463, { satisfied: true, state: "closed", status: "Done" }),

@@ -2,6 +2,7 @@ package board_test
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -70,6 +71,27 @@ Mind the dark theme.`
 
 	if diff := cmp.Diff(want, board.Context(card, "", "  Mind the dark theme.\n")); diff != "" {
 		t.Errorf("Context() (-want +got):\n%s", diff)
+	}
+}
+
+func TestContextSaysNotConfirmedForADependencyTheReadingHasNotConfirmed(t *testing.T) {
+	t.Parallel()
+
+	card := board.Card{
+		Issue: issue("acme", "web", 12, "Login screen", task.IssueOpen),
+		Dependencies: []board.Dependency{
+			{Related: board.Related{Issue: issue("acme", "api", 20, "Auth endpoint", task.IssueOpen)}, Unconfirmed: true},
+			{Related: board.Related{Issue: issue("acme", "api", 21, "", task.IssueOpen)}, Unconfirmed: true},
+		},
+	}
+
+	want := `### Dependencies
+
+- acme/api#20 Auth endpoint · Not confirmed
+- acme/api#21 · Not confirmed`
+
+	if got := board.Context(card, "", ""); !strings.Contains(got, want) {
+		t.Errorf("Context() = %q, want it to contain %q", got, want)
 	}
 }
 

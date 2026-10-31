@@ -94,6 +94,7 @@ describe("relationsOf", () => {
             onBoard: false,
             pullRequests: [],
             satisfied: false,
+            unconfirmed: false,
           },
         ],
       }),
@@ -131,8 +132,8 @@ describe("relationsOf", () => {
       epic: { key: "e", repository: REPO, number: 3, title: "Accounts", url: "u", state: "open" },
       siblings: [issue("s-in", true), issue("s-out", false), issue("s-off", true)],
       dependencies: [
-        { ...issue("d-in", true), pullRequests: [], satisfied: true },
-        { ...issue("d-out", false), pullRequests: [], satisfied: true },
+        { ...issue("d-in", true), pullRequests: [], satisfied: true, unconfirmed: false },
+        { ...issue("d-out", false), pullRequests: [], satisfied: true, unconfirmed: false },
       ],
     });
     const keys = new Set(["e", "s-in", "s-out", "d-in", "d-out"]);
@@ -177,6 +178,7 @@ describe("relationsOf", () => {
           onBoard: false,
           pullRequests: [],
           satisfied: false,
+          unconfirmed: false,
         },
         {
           key: "d2",
@@ -189,6 +191,7 @@ describe("relationsOf", () => {
           onBoard: false,
           pullRequests: [],
           satisfied: true,
+          unconfirmed: false,
         },
       ],
     });
@@ -196,6 +199,31 @@ describe("relationsOf", () => {
     const items = group(card, "Dependencies")?.items ?? [];
     expect(items[0]).toMatchObject({ warning: "Not satisfied" });
     expect(items[1]).not.toHaveProperty("warning");
+  });
+
+  it("says Not confirmed, with no warning, for a dependency no reading has confirmed", () => {
+    const card = makeBoardCard({
+      repository: REPO,
+      dependencies: [
+        {
+          key: "d1",
+          repository: REPO,
+          number: 1,
+          title: "Waiting",
+          url: "u",
+          state: "open",
+          status: "",
+          onBoard: false,
+          pullRequests: [],
+          satisfied: false,
+          unconfirmed: true,
+        },
+      ],
+    });
+
+    const [item] = group(card, "Dependencies")?.items ?? [];
+    expect(item).toMatchObject({ meta: "Not confirmed" });
+    expect(item).not.toHaveProperty("warning");
   });
 });
 

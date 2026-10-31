@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -53,6 +54,7 @@ func TestRefreshStoresTheReadingAndHandsTheCardsToOnRead(t *testing.T) {
 				Siblings:     []board.Related{},
 				Dependencies: []board.Dependency{},
 				ReadAt:       base,
+				Stamp:        "||acme/web#7:OPEN",
 			},
 			{
 				Issue:        board.Issue{Owner: "acme", Name: "web", Number: 2, Title: "Issue 2", URL: issueURL("acme/web", 2), State: task.IssueClosed},
@@ -64,6 +66,7 @@ func TestRefreshStoresTheReadingAndHandsTheCardsToOnRead(t *testing.T) {
 				Siblings:     []board.Related{},
 				Dependencies: []board.Dependency{},
 				ReadAt:       base,
+				Stamp:        "||",
 			},
 		},
 	}
@@ -71,6 +74,10 @@ func TestRefreshStoresTheReadingAndHandsTheCardsToOnRead(t *testing.T) {
 	if stored.Reading == nil {
 		t.Fatal("Stored().Reading = nil, want the reading")
 	}
+	if stored.Reading.StructureStamp == "" {
+		t.Error("Stored().Reading.StructureStamp = \"\", want the stamp of the structure")
+	}
+	want.StructureStamp, want.Index = stored.Reading.StructureStamp, map[string]board.IndexedIssue{}
 	if diff := cmp.Diff(want, *stored.Reading); diff != "" {
 		t.Errorf("Stored().Reading (-want +got):\n%s", diff)
 	}
@@ -84,11 +91,17 @@ func TestRefreshStoresTheReadingAndHandsTheCardsToOnRead(t *testing.T) {
 		t.Errorf("Get().Title = %q, want the title the reading found", b.Title)
 	}
 	reads := f.reads.all()
-	if len(reads) != 1 {
-		t.Fatalf("OnRead was called %d times, want 1", len(reads))
+	if len(reads) != 2 {
+		t.Fatalf("OnRead was called %d times, want 2: the delivery and the conclusion", len(reads))
 	}
-	if diff := cmp.Diff(map[string]board.Card{"acme/web#1": want.Cards[0], "acme/web#2": want.Cards[1]}, reads[0]); diff != "" {
-		t.Errorf("OnRead cards (-want +got):\n%s", diff)
+	if diff := cmp.Diff(map[string]board.Card{"acme/web#1": want.Cards[0], "acme/web#2": want.Cards[1]}, reads[1]); diff != "" {
+		t.Errorf("OnRead cards at the conclusion (-want +got):\n%s", diff)
+	}
+	if got := slices.Sorted(maps.Keys(reads[0])); !slices.Equal(got, []string{"acme/web#1"}) {
+		t.Errorf("OnRead cards at the delivery = %v, want only the open card", got)
+	}
+	if !reads[0]["acme/web#1"].Unconfirmed {
+		t.Error("the open card of the delivery is confirmed, want Unconfirmed")
 	}
 	card, ok := f.service.Card(boardID, "Acme/Web#1")
 	if !ok || card.Title != "Issue 1" {
@@ -114,11 +127,16 @@ func TestTheReadingPagesThroughTheOpenIssuesThenTheOnesClosedInTheLastFourteenDa
 	for _, c := range calls {
 		got = append(got, c.vars)
 	}
+	// The open and the closed items are read at the same time: only the order
+	// within one query is fixed.
 	want := []gh.Vars{
+		{"owner": "acme", "number": 3, "q": closedQ},
 		{"owner": "acme", "number": 3, "q": openQ},
 		{"owner": "acme", "number": 3, "q": openQ, "cursor": "cursor-1"},
-		{"owner": "acme", "number": 3, "q": closedQ},
 	}
+	slices.SortStableFunc(got, func(a, b gh.Vars) int {
+		return strings.Compare(a["q"].(string), b["q"].(string))
+	})
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("items vars (-want +got):\n%s", diff)
 	}
@@ -410,9 +428,13 @@ func TestTheExtraCardOfATaskIsHandedOverWithoutBeingACardOfTheReading(t *testing
 		t.Errorf("the reading has %d cards, want only the one on the board", len(cards))
 	}
 	reads := f.reads.all()
-	if len(reads) != 1 {
-		t.Fatalf("OnRead was called %d times, want 1", len(reads))
+	if len(reads) != 2 {
+		t.Fatalf("OnRead was called %d times, want 2: the delivery and the conclusion", len(reads))
 	}
+	if _, ok := reads[0]["acme/web#99"]; ok {
+		t.Error("OnRead at the delivery has the extra card, want only the open ones")
+	}
+	reads = reads[1:]
 	want := board.Card{
 		Issue:        board.Issue{Owner: "acme", Name: "web", Number: 99, Title: "Issue 99", URL: issueURL("acme/web", 99), State: task.IssueClosed},
 		StatusID:     done.ID,
@@ -424,6 +446,7 @@ func TestTheExtraCardOfATaskIsHandedOverWithoutBeingACardOfTheReading(t *testing
 		Siblings:     []board.Related{},
 		Dependencies: []board.Dependency{},
 		ReadAt:       base,
+		Stamp:        "||",
 	}
 	if diff := cmp.Diff(want, reads[0]["acme/web#99"]); diff != "" {
 		t.Errorf("OnRead extra card (-want +got):\n%s", diff)
@@ -463,6 +486,7 @@ func TestRefreshCardReplacesOneCardAndKeepsTheReadTime(t *testing.T) {
 		Siblings:     []board.Related{},
 		Dependencies: []board.Dependency{{Related: board.Related{Issue: second.Issue, Status: todo.Name, OnBoard: true}, PullRequests: []board.PullRequest{}}},
 		ReadAt:       base,
+		Stamp:        "||",
 	}
 	stored := f.service.Stored(boardID)
 	if diff := cmp.Diff([]board.Card{want, second}, stored.Reading.Cards); diff != "" {
@@ -479,6 +503,77 @@ func TestRefreshCardReplacesOneCardAndKeepsTheReadTime(t *testing.T) {
 	}
 	if previous.Cards[0].Title != "Issue 1" {
 		t.Error("RefreshCard changed the reading it replaced")
+	}
+}
+
+func TestRefreshCardOfAnUnconfirmedCardReadsItsDependenciesAndClearsTheMarks(t *testing.T) {
+	t.Parallel()
+
+	readAt := base.Add(-time.Hour)
+	waiting := board.Dependency{
+		Related:      board.Related{Issue: cardIssue("acme/web", 2), Status: todo.Name, OnBoard: true},
+		PullRequests: []board.PullRequest{},
+		Unconfirmed:  true,
+	}
+	first := board.Card{
+		Issue: cardIssue("acme/web", 1), Siblings: []board.Related{}, Dependencies: []board.Dependency{waiting},
+		Unconfirmed: true, EpicUnconfirmed: true, ReadAt: readAt,
+	}
+	second := board.Card{Issue: cardIssue("acme/web", 2), Status: todo.Name, StatusID: todo.ID, PullRequests: []board.PullRequest{}, ReadAt: readAt}
+	previous := &board.Reading{ProjectID: projectID, Title: "Roadmap", Statuses: []board.Option{todo, doing, done}, HasStatus: true, Cards: []board.Card{first, second}}
+	f := newFixture(t, board.Stored{Reading: previous, ReadAt: readAt})
+
+	fresh := with(issueNode("acme/web", 1), "body", "Depends on #2")
+	blocker := with(issueNode("acme/web", 2), "closedByPullRequestsReferences", nodes(pr("acme/web", 9, "MERGED")))
+	blocker["projectItems"] = nodes(projectItem(projectID, statusValue(doing)))
+	f.github.answer(structureMatch, "", structure("Roadmap"))
+	f.github.answer(batchMatch, "", batch(fresh), batch(blocker))
+
+	if err := f.service.RefreshCard(t.Context(), boardID, "acme/web#1"); err != nil {
+		t.Fatalf("RefreshCard() = %v, want nil", err)
+	}
+
+	got := f.service.Stored(boardID).Reading.Cards[0]
+	if got.Unconfirmed || got.EpicUnconfirmed {
+		t.Errorf("the card is unconfirmed = %v, epic unconfirmed = %v, want neither", got.Unconfirmed, got.EpicUnconfirmed)
+	}
+	wantDep := board.Dependency{
+		Related: board.Related{Issue: cardIssue("acme/web", 2), Status: doing.Name, OnBoard: true},
+		PullRequests: []board.PullRequest{{
+			Owner: "acme", Name: "web", Number: 9, URL: "https://github.com/acme/web/pull/9", State: board.PRMerged,
+		}},
+		Satisfied: true,
+	}
+	if diff := cmp.Diff([]board.Dependency{wantDep}, got.Dependencies); diff != "" {
+		t.Errorf("dependencies (-want +got):\n%s", diff)
+	}
+	if n := len(f.github.received(batchMatch)); n != 2 {
+		t.Errorf("%d batch queries, want 2: the card, then the dependency on the board", n)
+	}
+}
+
+func TestRefreshCardKeepsTheStoredFailure(t *testing.T) {
+	t.Parallel()
+
+	readAt := base.Add(-time.Hour)
+	failure := &board.Failure{Reason: board.ReasonRateLimited}
+	failedAt := base.Add(-time.Minute)
+	previous := &board.Reading{ProjectID: projectID, Title: "Roadmap", Cards: []board.Card{{Issue: cardIssue("acme/web", 1)}}}
+	f := newFixture(t, board.Stored{Reading: previous, ReadAt: readAt, Failure: failure, FailedAt: failedAt})
+	f.github.answer(structureMatch, "", structure("Roadmap"))
+	f.github.answer(batchMatch, "", batch(issueNode("acme/web", 1)))
+
+	if err := f.service.RefreshCard(t.Context(), boardID, "acme/web#1"); err != nil {
+		t.Fatalf("RefreshCard() = %v, want nil", err)
+	}
+
+	for name, stored := range map[string]board.Stored{"service": f.service.Stored(boardID), "store": f.store.get(boardID)} {
+		if stored.Failure == nil || stored.Failure.Reason != failure.Reason || !stored.FailedAt.Equal(failedAt) {
+			t.Errorf("the %s holds failure %v at %v, want %v at %v", name, stored.Failure, stored.FailedAt, failure, failedAt)
+		}
+		if !stored.ReadAt.Equal(readAt) {
+			t.Errorf("the %s holds a read time of %v, want %v", name, stored.ReadAt, readAt)
+		}
 	}
 }
 

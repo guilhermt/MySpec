@@ -1,11 +1,26 @@
 import { findRepository } from "@/lib/repositories";
-import type { Board, IssueState, PullRequestState, Repository, State } from "@/lib/wails";
+import type {
+  Board,
+  BoardCard,
+  IssueState,
+  PullRequestState,
+  Repository,
+  State,
+} from "@/lib/wails";
 
 /**
  * STALE_CARD_MS is how old the reading of a card can be before the creation
  * dialog refreshes it: five minutes.
  */
 export const STALE_CARD_MS = 5 * 60_000;
+
+/** NOT_CONFIRMED is what a dependency says while no reading has confirmed its state. */
+export const NOT_CONFIRMED = "Not confirmed";
+
+/** needsRereading tells whether a creation dialog reads a card again: its reading is old, or its relations wait for confirmation. */
+export function needsRereading(card: Pick<BoardCard, "readAt" | "unconfirmed">): boolean {
+  return card.unconfirmed || Date.now() - Date.parse(card.readAt) > STALE_CARD_MS;
+}
 
 const NO_BOARDS: readonly Board[] = [];
 
