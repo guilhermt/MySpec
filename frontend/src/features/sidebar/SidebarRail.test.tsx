@@ -220,7 +220,7 @@ describe("SidebarRail", () => {
       screen.getByRole("button", { name: "New task, review or discussion" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^History/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Theme: System" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Theme: Light" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
   });
 

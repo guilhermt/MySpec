@@ -196,7 +196,7 @@ Entre os grupos, um separador leva o `◇` da falha de leitura ou do clone, em R
 
 ### O rodapé
 
-**History**, com a contagem de tasks, reviews e discussões arquivados; o tema (System, Light, Dark, em ciclo), que só existe aqui; o sinal de versão nova, que só aparece quando há uma e abre **About**; e **Settings**. **History** e **Settings** ficam pressionados enquanto o lugar deles, ou um arquivado, está aberto.
+**History**, com a contagem de tasks, reviews e discussões arquivados; o tema (Light ou Dark, o da tela; o clique leva ao oposto), que só existe aqui; o sinal de versão nova, que só aparece quando há uma e abre **About**; e **Settings**. **History** e **Settings** ficam pressionados enquanto o lugar deles, ou um arquivado, está aberto.
 
 ## 3. Área principal com um item aberto
 

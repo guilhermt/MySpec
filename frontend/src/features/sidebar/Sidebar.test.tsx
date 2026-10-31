@@ -35,7 +35,7 @@ describe("Sidebar", () => {
     ).toBeInTheDocument();
     expect(within(work).getByRole("treeitem", { name: /^task add-login\./ })).toBeInTheDocument();
     expect(within(work).getByRole("button", { name: /^History/ })).toBeInTheDocument();
-    expect(within(work).getByRole("button", { name: "Theme: System" })).toBeInTheDocument();
+    expect(within(work).getByRole("button", { name: "Theme: Light" })).toBeInTheDocument();
     expect(within(work).getByRole("button", { name: "Settings" })).toBeInTheDocument();
   });
 

@@ -11,7 +11,7 @@ describe("StartSidebar", () => {
     expect(sidebar).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("group", { name: "Loading your work" })).toBeInTheDocument();
     expect(screen.getByText("MySpec")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Theme: System" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Theme: Light" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /New/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Collapse/ })).not.toBeInTheDocument();
   });
@@ -21,7 +21,7 @@ describe("StartSidebar", () => {
 
     expect(screen.getByRole("group", { name: "Loading your work" })).toBeInTheDocument();
     expect(screen.queryByText("MySpec")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Theme: System" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Theme: Light" })).toBeInTheDocument();
   });
 
   it.each([false, true])(
