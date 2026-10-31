@@ -3,6 +3,7 @@ package board
 import (
 	"context"
 	"encoding/json"
+	"time"
 )
 
 // The query templates and the functions of the reading that have no caller
@@ -75,4 +76,21 @@ func (i indexedIssue) IssueNode() IssueNode { return i.issueNode }
 func (s *Service) StructureStamp(ctx context.Context, b Board) (string, error) {
 	st, err := s.readStructure(ctx, locatorOf(b))
 	return st.Stamp, err
+}
+
+// FirstDelivery is firstDelivery, with the open cards of items.
+func FirstDelivery(st Structure, owner string, stored *Reading, open []ItemCard, now time.Time) Reading {
+	return firstDelivery(st, owner, stored, open, now)
+}
+
+// Structure is structure.
+type Structure = structure
+
+// ItemOf is the card an item decoded from raw holds.
+func ItemOf(raw []byte) (ItemCard, error) {
+	var n itemNode
+	if err := json.Unmarshal(raw, &n); err != nil {
+		return ItemCard{}, err
+	}
+	return itemCard{issueNode: n.Content.issueNode, values: n.FieldValues, updatedAt: n.UpdatedAt}, nil
 }

@@ -486,6 +486,77 @@ func TestRefreshCardReplacesOneCardAndKeepsTheReadTime(t *testing.T) {
 	}
 }
 
+func TestRefreshCardOfAnUnconfirmedCardReadsItsDependenciesAndClearsTheMarks(t *testing.T) {
+	t.Parallel()
+
+	readAt := base.Add(-time.Hour)
+	waiting := board.Dependency{
+		Related:      board.Related{Issue: cardIssue("acme/web", 2), Status: todo.Name, OnBoard: true},
+		PullRequests: []board.PullRequest{},
+		Unconfirmed:  true,
+	}
+	first := board.Card{
+		Issue: cardIssue("acme/web", 1), Siblings: []board.Related{}, Dependencies: []board.Dependency{waiting},
+		Unconfirmed: true, EpicUnconfirmed: true, ReadAt: readAt,
+	}
+	second := board.Card{Issue: cardIssue("acme/web", 2), Status: todo.Name, StatusID: todo.ID, PullRequests: []board.PullRequest{}, ReadAt: readAt}
+	previous := &board.Reading{ProjectID: projectID, Title: "Roadmap", Statuses: []board.Option{todo, doing, done}, HasStatus: true, Cards: []board.Card{first, second}}
+	f := newFixture(t, board.Stored{Reading: previous, ReadAt: readAt})
+
+	fresh := with(issueNode("acme/web", 1), "body", "Depends on #2")
+	blocker := with(issueNode("acme/web", 2), "closedByPullRequestsReferences", nodes(pr("acme/web", 9, "MERGED")))
+	blocker["projectItems"] = nodes(projectItem(projectID, statusValue(doing)))
+	f.github.answer(structureMatch, "", structure("Roadmap"))
+	f.github.answer(batchMatch, "", batch(fresh), batch(blocker))
+
+	if err := f.service.RefreshCard(t.Context(), boardID, "acme/web#1"); err != nil {
+		t.Fatalf("RefreshCard() = %v, want nil", err)
+	}
+
+	got := f.service.Stored(boardID).Reading.Cards[0]
+	if got.Unconfirmed || got.EpicUnconfirmed {
+		t.Errorf("the card is unconfirmed = %v, epic unconfirmed = %v, want neither", got.Unconfirmed, got.EpicUnconfirmed)
+	}
+	wantDep := board.Dependency{
+		Related: board.Related{Issue: cardIssue("acme/web", 2), Status: doing.Name, OnBoard: true},
+		PullRequests: []board.PullRequest{{
+			Owner: "acme", Name: "web", Number: 9, URL: "https://github.com/acme/web/pull/9", State: board.PRMerged,
+		}},
+		Satisfied: true,
+	}
+	if diff := cmp.Diff([]board.Dependency{wantDep}, got.Dependencies); diff != "" {
+		t.Errorf("dependencies (-want +got):\n%s", diff)
+	}
+	if n := len(f.github.received(batchMatch)); n != 2 {
+		t.Errorf("%d batch queries, want 2: the card, then the dependency on the board", n)
+	}
+}
+
+func TestRefreshCardKeepsTheStoredFailure(t *testing.T) {
+	t.Parallel()
+
+	readAt := base.Add(-time.Hour)
+	failure := &board.Failure{Reason: board.ReasonRateLimited}
+	failedAt := base.Add(-time.Minute)
+	previous := &board.Reading{ProjectID: projectID, Title: "Roadmap", Cards: []board.Card{{Issue: cardIssue("acme/web", 1)}}}
+	f := newFixture(t, board.Stored{Reading: previous, ReadAt: readAt, Failure: failure, FailedAt: failedAt})
+	f.github.answer(structureMatch, "", structure("Roadmap"))
+	f.github.answer(batchMatch, "", batch(issueNode("acme/web", 1)))
+
+	if err := f.service.RefreshCard(t.Context(), boardID, "acme/web#1"); err != nil {
+		t.Fatalf("RefreshCard() = %v, want nil", err)
+	}
+
+	for name, stored := range map[string]board.Stored{"service": f.service.Stored(boardID), "store": f.store.get(boardID)} {
+		if stored.Failure == nil || stored.Failure.Reason != failure.Reason || !stored.FailedAt.Equal(failedAt) {
+			t.Errorf("the %s holds failure %v at %v, want %v at %v", name, stored.Failure, stored.FailedAt, failure, failedAt)
+		}
+		if !stored.ReadAt.Equal(readAt) {
+			t.Errorf("the %s holds a read time of %v, want %v", name, stored.ReadAt, readAt)
+		}
+	}
+}
+
 func TestRefreshCardRefusesACardThatIsNotInTheReading(t *testing.T) {
 	t.Parallel()
 	previous := &board.Reading{ProjectID: projectID, Cards: []board.Card{{Issue: cardIssue("acme/web", 1)}}}

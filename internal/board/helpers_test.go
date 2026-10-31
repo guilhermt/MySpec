@@ -214,7 +214,7 @@ type memStore struct {
 	mu       sync.Mutex
 	boards   []board.Board
 	stored   map[string]board.Stored
-	saveErr  error           // what SaveReading fails with, when set
+	saveErr  error           // what SaveReading and UpdateReading fail with, when set
 	failures int             // how many failures were saved
 	left     []time.Duration // how long the context of each write had left
 	links    []board.Link    // the links of the last write
@@ -296,6 +296,27 @@ func (s *memStore) SaveReading(ctx context.Context, id, title string, r board.Re
 		return s.saveErr
 	}
 	s.stored[id] = board.Stored{Reading: &r, ReadAt: readAt}
+	for i := range s.boards {
+		if s.boards[i].ID == id {
+			s.boards[i].Title = title
+		}
+	}
+	return nil
+}
+
+func (s *memStore) UpdateReading(ctx context.Context, id, title string, r board.Reading, readAt time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.write(ctx); err != nil {
+		return err
+	}
+	if s.saveErr != nil {
+		return s.saveErr
+	}
+	stored := s.stored[id]
+	stored.Reading, stored.ReadAt = &r, readAt
+	s.stored[id] = stored
 	for i := range s.boards {
 		if s.boards[i].ID == id {
 			s.boards[i].Title = title

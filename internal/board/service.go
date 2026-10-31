@@ -54,6 +54,8 @@ type Store interface {
 	// SaveReading stores a reading that succeeded, clears the failure and sets
 	// the board's title.
 	SaveReading(ctx context.Context, boardID, title string, r Reading, readAt time.Time) error
+	// UpdateReading stores a reading and the board's title, keeping the failure.
+	UpdateReading(ctx context.Context, boardID, title string, r Reading, readAt time.Time) error
 	// SaveFailure stores a reading that failed, keeping the stored reading.
 	SaveFailure(ctx context.Context, boardID string, f Failure, failedAt time.Time) error
 }
@@ -437,8 +439,9 @@ func (s *Service) RefreshCard(ctx context.Context, boardID, key string) error {
 	if epic, _ := epicRef(n, convention); epic != nil {
 		needs.add(*epic)
 	}
+	old := stored.Reading.Cards[cardIndex(stored.Reading, key)]
 	for _, dep := range dependencyRefs(n, convention) {
-		if cardIndex(stored.Reading, dep.Key()) < 0 {
+		if old.Unconfirmed || cardIndex(stored.Reading, dep.Key()) < 0 {
 			needs.add(dep)
 		}
 	}
@@ -448,6 +451,7 @@ func (s *Service) RefreshCard(ctx context.Context, boardID, key string) error {
 	}
 	a := newAssembly(st, stored.Reading, conventionsOf(b.Owner, stored.Reading.Cards), index)
 	card = a.assembleCard(card, n, convention)
+	card.Unconfirmed, card.EpicUnconfirmed = false, false
 
 	// The card goes into the reading stored now, which a Refresh may have
 	// replaced while the card was read.
@@ -464,7 +468,7 @@ func (s *Service) RefreshCard(ctx context.Context, boardID, key string) error {
 	reading := *current.Reading
 	reading.Cards = slices.Clone(reading.Cards)
 	reading.Cards[i] = card
-	if err := s.store.SaveReading(ctx, boardID, reading.Title, reading, current.ReadAt); err != nil {
+	if err := s.store.UpdateReading(ctx, boardID, reading.Title, reading, current.ReadAt); err != nil {
 		s.saveMu.Unlock()
 		return fmt.Errorf("save reading of board %s: %w", b.Title, err)
 	}

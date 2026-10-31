@@ -2,6 +2,7 @@ package board
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -264,8 +265,7 @@ func (a *assembly) siblings(cardKey, epicKey string, epic issueNode, fromConvent
 // reading.
 func (a *assembly) related(issue Issue) Related {
 	if i, ok := a.onBoard[issue.Key()]; ok {
-		c := a.reading.Cards[i]
-		return Related{Issue: c.Issue, Status: c.Status, OnBoard: true}
+		return Related{Issue: issue, Status: a.reading.Cards[i].Status, OnBoard: true}
 	}
 	return Related{Issue: issue}
 }
@@ -274,20 +274,26 @@ func (a *assembly) related(issue Issue) Related {
 // batch with its status in this board.
 func (a *assembly) dependency(key string) (Dependency, bool) {
 	var d Dependency
-	if i, ok := a.onBoard[key]; ok {
+	if n, found := a.index[key]; found {
+		_, status := fieldsOf(n.itemIn(a.structure.ProjectID).values, a.structure)
+		_, onBoard := a.onBoard[key]
+		d = Dependency{Related: Related{Issue: n.issue(), Status: status.Name, OnBoard: onBoard}, PullRequests: n.ClosedByPullRequestsReferences.list()}
+	} else if i, ok := a.onBoard[key]; ok {
 		c := a.reading.Cards[i]
 		d = Dependency{Related: Related{Issue: c.Issue, Status: c.Status, OnBoard: true}, PullRequests: c.PullRequests}
-	} else if n, found := a.index[key]; found {
-		_, status := fieldsOf(n.itemIn(a.structure.ProjectID).values, a.structure)
-		d = Dependency{Related: Related{Issue: n.issue(), Status: status.Name}, PullRequests: n.ClosedByPullRequestsReferences.list()}
 	} else {
 		return Dependency{}, false
 	}
-	d.Satisfied = d.State == task.IssueClosed
-	for _, pr := range d.PullRequests {
-		d.Satisfied = d.Satisfied || pr.State == PRMerged
-	}
+	d.Satisfied = satisfied(d)
 	return d, true
+}
+
+// satisfied tells whether d is closed or has a merged pull request.
+func satisfied(d Dependency) bool {
+	if d.State == task.IssueClosed {
+		return true
+	}
+	return slices.ContainsFunc(d.PullRequests, func(pr PullRequest) bool { return pr.State == PRMerged })
 }
 
 // epicRef is the epic of an issue: its native parent, otherwise the epic of the
