@@ -74,6 +74,10 @@ func TestRefreshStoresTheReadingAndHandsTheCardsToOnRead(t *testing.T) {
 	if stored.Reading == nil {
 		t.Fatal("Stored().Reading = nil, want the reading")
 	}
+	if stored.Reading.StructureStamp == "" {
+		t.Error("Stored().Reading.StructureStamp = \"\", want the stamp of the structure")
+	}
+	want.StructureStamp, want.Index = stored.Reading.StructureStamp, map[string]board.IndexedIssue{}
 	if diff := cmp.Diff(want, *stored.Reading); diff != "" {
 		t.Errorf("Stored().Reading (-want +got):\n%s", diff)
 	}

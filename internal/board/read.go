@@ -2,6 +2,7 @@ package board
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -18,6 +19,9 @@ const (
 	maxSuggestionItems = 5000
 	// batchSize is how many issues one batch query reads.
 	batchSize = 50
+	// maxChangedClosed is the most closed cards a reading reads by key: past it,
+	// the pages of the closed items cost less.
+	maxChangedClosed = batchSize
 	// readTimeout bounds a whole reading.
 	readTimeout = 3 * time.Minute
 )
@@ -73,10 +77,13 @@ func conventionsOf(owner string, cards []Card) []Convention {
 	return conventions
 }
 
-// readResult is what a reading found.
+// readResult is what a reading found and what it took.
 type readResult struct {
-	reading Reading
-	extras  map[string]Card // by key: the extra cards, apart from the reading
+	reading       Reading
+	extras        map[string]Card // by key: the extra cards, apart from the reading
+	changedCards  int             // closed cards read by key
+	changedIssues int             // issues of the index read again
+	fullClosed    bool            // the closed cards were read page by page
 }
 
 // outcome is what a reading in the background came back with.
@@ -106,15 +113,28 @@ func (s *Service) read(ctx context.Context, b Board, extra []string, deliver fun
 	now := s.now()
 	loc := locatorOf(b)
 	stored := s.Stored(b.ID).Reading
+	// The stored reading says what the closed cards and the index were read
+	// under only when it carries the stamp of its structure.
+	incremental := stored != nil && stored.StructureStamp != ""
 
 	structureC := inBackground(func() (structure, error) { return s.readStructure(ctx, loc) })
 	openC := inBackground(func() (pages, error) {
-		items, truncated, err := s.readPages(ctx, loc, openQuery)
+		items, truncated, err := s.readPages(ctx, loc, itemsQuery, openQuery)
 		return pages{items: items, truncated: truncated}, err
 	})
-	closedC := inBackground(func() (pages, error) {
-		items, truncated, err := s.readPages(ctx, loc, closedQuery+now.Add(-closedWindow).Format(dateLayout))
-		return pages{items: items, truncated: truncated}, err
+	closedQ := closedQuery + now.Add(-closedWindow).Format(dateLayout)
+	closedC := inBackground(func() (pages, error) { return s.readClosed(ctx, loc, closedQ, incremental) })
+	stampsC := inBackground(func() (map[string]issueNode, error) {
+		if !incremental || len(stored.Index) == 0 {
+			return nil, nil
+		}
+		refs := make([]Ref, 0, len(stored.Index))
+		for _, key := range slices.Sorted(maps.Keys(stored.Index)) {
+			if r, ok := parseKey(key); ok {
+				refs = append(refs, r)
+			}
+		}
+		return s.readStamps(ctx, refs)
 	})
 
 	structured := <-structureC
@@ -139,69 +159,97 @@ func (s *Service) read(ctx context.Context, b Board, extra []string, deliver fun
 	if closed.err != nil {
 		return readResult{}, closed.err
 	}
-	nodes := slices.Clone(open)
-	onBoard := make(map[string]bool, len(open))
-	for _, n := range open {
-		onBoard[n.key()] = true
+	// What the stored reading kept holds only under the structure it was read
+	// under.
+	sameStructure := incremental && st.Stamp == stored.StructureStamp
+	settled, err := s.settleClosed(ctx, loc, st, stored, closedQ, closed.value, incremental, sameStructure, open, now)
+	if err != nil {
+		return readResult{}, err
 	}
-	room := maxCards - len(open)
-	for _, n := range closed.value.items {
-		if onBoard[n.key()] {
-			continue
-		}
-		if room == 0 {
-			closed.value.truncated = true
-			break
-		}
-		room--
-		onBoard[n.key()] = true
-		nodes = append(nodes, n)
-	}
-	if closed.value.truncated {
+	if settled.truncated {
 		s.log.Warn("board reading truncated", "board", b.ID, "title", st.Title, "cards", maxCards)
 	}
 
-	reading := Reading{
-		ProjectID:     st.ProjectID,
-		Title:         st.Title,
-		Viewer:        st.Viewer,
-		Statuses:      st.Statuses,
-		HasStatus:     st.HasStatus,
-		StatusFieldID: st.StatusFieldID,
-		Module:        st.Module,
-		Cards:         make([]Card, 0, len(nodes)),
+	bases := make([]Card, 0, len(open)+len(settled.cards))
+	nodes := make([]issueNode, 0, cap(bases))
+	for _, c := range open {
+		bases = append(bases, baseCard(c, st, now))
+		nodes = append(nodes, c.issueNode)
 	}
-	for _, n := range nodes {
-		reading.Cards = append(reading.Cards, baseCard(n, st, now))
+	bases = append(bases, settled.cards...)
+	nodes = append(nodes, settled.nodes...)
+	onBoard := make(map[string]bool, len(bases))
+	for _, c := range bases {
+		onBoard[c.Key()] = true
+	}
+
+	reading := Reading{
+		ProjectID:      st.ProjectID,
+		Title:          st.Title,
+		Viewer:         st.Viewer,
+		Statuses:       st.Statuses,
+		HasStatus:      st.HasStatus,
+		StatusFieldID:  st.StatusFieldID,
+		Module:         st.Module,
+		Cards:          bases,
+		StructureStamp: st.Stamp,
 	}
 
 	conventions := conventionsOf(loc.Owner, reading.Cards)
 	var needs refSet
 	for i, n := range nodes {
-		if epic, _ := epicRef(n.issueNode, conventions[i]); epic != nil {
+		if epic, _ := epicRef(n, conventions[i]); epic != nil {
 			needs.add(*epic)
 		}
-		for _, dep := range dependencyRefs(n.issueNode, conventions[i]) {
+		for _, dep := range dependencyRefs(n, conventions[i]) {
 			if !onBoard[dep.Key()] {
 				needs.add(dep)
 			}
 		}
 	}
+	// Only the issues the cards need are kept in the index.
+	cardNeeds := maps.Clone(needs.seen)
+	extraKeys := map[string]bool{}
 	for _, key := range extra {
 		if r, ok := parseKey(key); ok && !onBoard[r.Key()] {
+			extraKeys[r.Key()] = true
 			needs.add(r)
 		}
 	}
 
-	index, err := s.readBatch(ctx, needs.refs)
+	stamps := <-stampsC
+	if stamps.err != nil {
+		return readResult{}, stamps.err
+	}
+	index := make(map[string]issueNode, len(needs.refs))
+	kept := make(map[string]indexedIssue, len(needs.refs))
+	var reread []Ref
+	for _, r := range needs.refs {
+		key := r.Key()
+		if old, ok := stored.indexed(key); ok && sameStructure && !extraKeys[key] {
+			if n, found := stamps.value[key]; found && indexStamp(n, st.ProjectID) == old.Stamp {
+				index[key], kept[key] = old.issueNode, old
+				continue
+			}
+		}
+		reread = append(reread, r)
+	}
+	found, err := s.readBatch(ctx, reread)
 	if err != nil {
 		return readResult{}, err
 	}
+	for key, n := range found {
+		index[key] = n
+		if cardNeeds[key] {
+			kept[key] = indexedOf(n, st.ProjectID)
+		}
+	}
+	reading.Index = kept
 
 	a := newAssembly(st, &reading, conventions, index)
 	cards := make([]Card, len(nodes))
 	for i, n := range nodes {
-		cards[i] = a.assembleCard(reading.Cards[i], n.issueNode, conventions[i])
+		cards[i] = a.assembleCard(reading.Cards[i], n, conventions[i])
 	}
 	reading.Cards = cards
 
@@ -221,7 +269,139 @@ func (s *Service) read(ctx context.Context, b Board, extra []string, deliver fun
 		}
 		extras[r.Key()] = c
 	}
-	return readResult{reading: reading, extras: extras}, nil
+	return readResult{
+		reading:       reading,
+		extras:        extras,
+		changedCards:  settled.changed,
+		changedIssues: len(reread),
+		fullClosed:    settled.full,
+	}, nil
+}
+
+// indexed is the issue of key the reading kept in its index.
+func (r *Reading) indexed(key string) (indexedIssue, bool) {
+	if r == nil {
+		return indexedIssue{}, false
+	}
+	n, ok := r.Index[key]
+	return n, ok
+}
+
+// readClosed reads the closed items of the query q: their stamps when the stored
+// reading can tell what changed, otherwise the complete items.
+func (s *Service) readClosed(ctx context.Context, loc Locator, q string, minimal bool) (pages, error) {
+	template := itemsQuery
+	if minimal {
+		template = stampsQuery
+	}
+	items, truncated, err := s.readPages(ctx, loc, template, q)
+	return pages{items: items, truncated: truncated}, err
+}
+
+// closedCards are the closed cards of a reading, each with the issue its
+// relations come from.
+type closedCards struct {
+	cards     []Card
+	nodes     []issueNode
+	changed   int  // read by key
+	full      bool // read page by page
+	truncated bool // the list went past maxCards
+}
+
+// settleClosed turns the closed items of the query q into cards. When
+// listMinimal, the items are stamps: a card the stored reading holds with the
+// same stamp is kept, and the others are read by key, or page by page when the
+// structure changed or too many did. open are the open items.
+func (s *Service) settleClosed(ctx context.Context, loc Locator, st structure, stored *Reading, q string, closed pages, listMinimal, sameStructure bool, open []itemCard, now time.Time) (closedCards, error) {
+	openKeys := make(map[string]bool, len(open))
+	for _, n := range open {
+		openKeys[n.key()] = true
+	}
+	items, cut := limitClosed(closed.items, openKeys, maxCards-len(open))
+	out := closedCards{truncated: closed.truncated || cut}
+
+	unchanged := map[string]Card{}
+	var changed []itemCard
+	if listMinimal {
+		storedAt := make(map[string]int, len(stored.Cards))
+		for i, c := range stored.Cards {
+			storedAt[c.Key()] = i
+		}
+		for _, item := range items {
+			if i, ok := storedAt[item.key()]; ok && stored.Cards[i].Stamp != "" && stored.Cards[i].Stamp == cardStamp(item) {
+				unchanged[item.key()] = unchangedCard(stored.Cards[i], now)
+			} else {
+				changed = append(changed, item)
+			}
+		}
+		if !sameStructure || len(changed) > maxChangedClosed {
+			full, truncated, err := s.readPages(ctx, loc, itemsQuery, q)
+			if err != nil {
+				return closedCards{}, err
+			}
+			items, cut = limitClosed(full, openKeys, maxCards-len(open))
+			out.truncated = truncated || cut
+			listMinimal = false
+		}
+	}
+
+	if !listMinimal {
+		out.full = true
+		for _, item := range items {
+			out.cards = append(out.cards, baseCard(item, st, now))
+			out.nodes = append(out.nodes, item.issueNode)
+		}
+		return out, nil
+	}
+
+	refs := make([]Ref, len(changed))
+	for i, item := range changed {
+		owner, name := item.Repository.split()
+		refs[i] = Ref{Owner: owner, Name: name, Number: item.Number}
+	}
+	found, err := s.readBatch(ctx, refs)
+	if err != nil {
+		return closedCards{}, err
+	}
+	out.changed = len(changed)
+	for _, item := range items {
+		if c, ok := unchanged[item.key()]; ok {
+			out.cards = append(out.cards, c)
+			out.nodes = append(out.nodes, item.issueNode)
+		} else if n, ok := found[item.key()]; ok {
+			out.cards = append(out.cards, baseCard(n.itemIn(st.ProjectID), st, now))
+			out.nodes = append(out.nodes, n)
+		}
+	}
+	return out, nil
+}
+
+// limitClosed is the closed items that are not open, up to room. cut reports a
+// list that went past room.
+func limitClosed(items []itemCard, openKeys map[string]bool, room int) (kept []itemCard, cut bool) {
+	for _, n := range items {
+		if openKeys[n.key()] {
+			continue
+		}
+		if room == 0 {
+			return kept, true
+		}
+		room--
+		kept = append(kept, n)
+	}
+	return kept, false
+}
+
+// unchangedCard is the stored closed card c read again at now: its relations
+// are assembled anew.
+func unchangedCard(c Card, now time.Time) Card {
+	c.Epic = nil
+	c.Siblings = []Related{}
+	c.Dependencies = []Dependency{}
+	c.ReadAt = now
+	c.Unconfirmed = false
+	c.EpicUnconfirmed = false
+	return c
 }
 
 // pages is the items one query matched.
@@ -238,14 +418,14 @@ type itemCard struct {
 	updatedAt string // the update time of the item
 }
 
-// readPages pages through the items that match q, up to maxCards, skipping
-// what is not an issue and repeats. truncated reports a list that went past
-// maxCards.
-func (s *Service) readPages(ctx context.Context, loc Locator, q string) (items []itemCard, truncated bool, err error) {
+// readPages pages through the items that match q with the query template, up
+// to maxCards, skipping what is not an issue and repeats. truncated reports a
+// list that went past maxCards.
+func (s *Service) readPages(ctx context.Context, loc Locator, template, q string) (items []itemCard, truncated bool, err error) {
 	seen := map[string]bool{}
 	cursor := ""
 	for {
-		page, err := s.readItems(ctx, loc, q, cursor)
+		page, err := s.readItems(ctx, loc, template, q, cursor)
 		if err != nil {
 			return nil, false, err
 		}

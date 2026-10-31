@@ -347,14 +347,18 @@ func (s *Service) readStructure(ctx context.Context, loc Locator) (structure, er
 	return st, nil
 }
 
-// readItems runs one page of the items query. cursor is "" on the first page.
-// It fails with a *Failure.
-func (s *Service) readItems(ctx context.Context, loc Locator, q, cursor string) (itemsPage, error) {
+// readItems runs one page of the items with the query template, itemsQuery or
+// stampsQuery. cursor is "" on the first page. It fails with a *Failure.
+func (s *Service) readItems(ctx context.Context, loc Locator, template, q, cursor string) (itemsPage, error) {
 	vars := gh.Vars{"owner": loc.Owner, "number": loc.Number, "q": q}
 	if cursor != "" {
 		vars["cursor"] = cursor
 	}
-	resp, err := s.github.GraphQL(ctx, fmt.Sprintf(itemsQuery, loc.OwnerType)+fragments, vars)
+	parts := fragments
+	if template == stampsQuery {
+		parts = stampFragments
+	}
+	resp, err := s.github.GraphQL(ctx, fmt.Sprintf(template, loc.OwnerType)+parts, vars)
 	if err != nil {
 		if gh.HasNotFound(resp.Errors) {
 			return itemsPage{}, &Failure{Reason: ReasonNotFound}

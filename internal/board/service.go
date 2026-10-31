@@ -363,7 +363,8 @@ func (s *Service) save(b Board, result readResult, started time.Time) error {
 	s.mu.Unlock()
 	s.saveMu.Unlock()
 	s.log.Info("board read", "board", b.ID, "title", reading.Title, "cards", len(reading.Cards),
-		"duration_ms", readAt.Sub(started).Milliseconds())
+		"duration_ms", readAt.Sub(started).Milliseconds(),
+		"changed_cards", result.changedCards, "changed_issues", result.changedIssues, "full_closed", result.fullClosed)
 
 	if s.onRead != nil {
 		cards := make(map[string]Card, len(reading.Cards)+len(extras))

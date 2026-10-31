@@ -6,8 +6,7 @@ import (
 	"time"
 )
 
-// The query templates and the functions of the reading that have no caller
-// outside the tests yet.
+// The query templates the schema test validates.
 var (
 	// StructureQuery is structureQuery.
 	StructureQuery = structureQuery
@@ -37,9 +36,6 @@ type ItemCard = itemCard
 
 // IndexedIssue is indexedIssue.
 type IndexedIssue = indexedIssue
-
-// CardStamp is cardStamp.
-func CardStamp(c ItemCard) string { return cardStamp(c) }
 
 // IndexStamp is indexStamp.
 func IndexStamp(n IssueNode, projectID string) string { return indexStamp(n, projectID) }
