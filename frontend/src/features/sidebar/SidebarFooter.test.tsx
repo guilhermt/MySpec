@@ -96,7 +96,7 @@ describe("SidebarFooter", () => {
     const names = screen
       .getAllByRole("button")
       .map((button) => button.getAttribute("aria-label") ?? button.textContent);
-    expect(names).toEqual(["History 3", "Theme: System", "Settings"]);
+    expect(names).toEqual(["History 3", "Theme: Light", "Settings"]);
   });
 
   it("stacks the three as icon buttons on the strip, the count in the name only", async () => {
@@ -106,7 +106,7 @@ describe("SidebarFooter", () => {
       name: "History · 3 archived: 2 tasks, 1 review, 0 discussions",
     });
     expect(history).not.toHaveTextContent("3");
-    expect(screen.getByRole("button", { name: "Theme: System" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Theme: Light" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
 
@@ -145,7 +145,7 @@ describe("SidebarFooter", () => {
       .map((button) => button.getAttribute("aria-label") ?? button.textContent);
     expect(names).toEqual([
       "History",
-      "Theme: System",
+      "Theme: Light",
       "MySpec 0.5.0 is available. Open About.",
       "Settings",
     ]);
@@ -162,7 +162,7 @@ describe("SidebarFooter", () => {
 
     const names = screen.getAllByRole("button").map((button) => button.getAttribute("aria-label"));
     expect(names.slice(-3)).toEqual([
-      "Theme: System",
+      "Theme: Light",
       "MySpec 0.5.0 is available. Open About.",
       "Settings",
     ]);

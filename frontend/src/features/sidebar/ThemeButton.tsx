@@ -1,36 +1,34 @@
 import { Button } from "@/components/system/Button";
 import { Icon } from "@/components/system/Icon";
-import { ICONS } from "@/components/system/icons";
+import { ICONS, type IconGlyph } from "@/components/system/icons";
 import { Tooltip } from "@/components/system/Tooltip";
-import { effectiveMode, paintMode } from "@/features/theme/theme";
-import type { ThemePreference } from "@/lib/wails";
+import { type Mode, paintMode } from "@/features/theme/theme";
+import { usePaintedMode } from "@/features/theme/useApplyTheme";
 import { setTheme } from "@/store/actions";
-import { useAppStore, useThemeState } from "@/store/app-store";
+import { useAppStore } from "@/store/app-store";
 
 /** THEME_WORDS name each theme as the button says it. */
-const THEME_WORDS: Record<ThemePreference, string> = {
-  system: "System",
+const THEME_WORDS: Record<Mode, string> = {
   light: "Light",
   dark: "Dark",
 };
 
-/** NEXT_THEME is the cycle a click walks: System, Light, Dark, and System again. */
-const NEXT_THEME: Record<ThemePreference, ThemePreference> = {
-  system: "light",
-  light: "dark",
-  dark: "system",
+/** THEME_ICONS draw each theme: the sun for the light one, the moon for the dark one. */
+const THEME_ICONS: Record<Mode, IconGlyph> = {
+  light: ICONS.themeLight,
+  dark: ICONS.themeDark,
 };
 
 /**
- * ThemeButton is the one place of the theme: a fixed icon whose name and
- * tooltip say the theme, and a click that moves to the next one at once, before the first state
- * included.
+ * ThemeButton is the one place of the theme: an icon that shows the theme on the screen, with
+ * its name and tooltip, and a click that moves to the opposite one at once, before the first
+ * state included.
  */
 export function ThemeButton() {
-  const { preference, systemDark } = useThemeState();
+  const mode = usePaintedMode();
   const started = useAppStore((state) => state.app !== null);
   const chooseStartupTheme = useAppStore((state) => state.chooseStartupTheme);
-  const label = `Theme: ${THEME_WORDS[preference]}`;
+  const label = `Theme: ${THEME_WORDS[mode]}`;
 
   return (
     <Tooltip content={`${label} · click to change`}>
@@ -39,18 +37,18 @@ export function ThemeButton() {
         size="sm"
         aria-label={label}
         onClick={() => {
-          const next = NEXT_THEME[preference];
+          const next: Mode = mode === "dark" ? "light" : "dark";
           if (started) {
             void setTheme(next);
             return;
           }
           // The database is not open yet: the choice is painted now and sent with the first state.
           chooseStartupTheme(next);
-          paintMode(effectiveMode(next, systemDark));
+          paintMode(next);
         }}
         className="w-(--size-control-sm) px-0"
       >
-        <Icon icon={ICONS.theme} size="sm" />
+        <Icon icon={THEME_ICONS[mode]} size="sm" />
       </Button>
     </Tooltip>
   );
