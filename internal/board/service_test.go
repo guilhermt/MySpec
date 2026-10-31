@@ -53,6 +53,7 @@ func TestRefreshStoresTheReadingAndHandsTheCardsToOnRead(t *testing.T) {
 				Siblings:     []board.Related{},
 				Dependencies: []board.Dependency{},
 				ReadAt:       base,
+				Stamp:        "||acme/web#7:OPEN",
 			},
 			{
 				Issue:        board.Issue{Owner: "acme", Name: "web", Number: 2, Title: "Issue 2", URL: issueURL("acme/web", 2), State: task.IssueClosed},
@@ -64,6 +65,7 @@ func TestRefreshStoresTheReadingAndHandsTheCardsToOnRead(t *testing.T) {
 				Siblings:     []board.Related{},
 				Dependencies: []board.Dependency{},
 				ReadAt:       base,
+				Stamp:        "||",
 			},
 		},
 	}
@@ -424,6 +426,7 @@ func TestTheExtraCardOfATaskIsHandedOverWithoutBeingACardOfTheReading(t *testing
 		Siblings:     []board.Related{},
 		Dependencies: []board.Dependency{},
 		ReadAt:       base,
+		Stamp:        "||",
 	}
 	if diff := cmp.Diff(want, reads[0]["acme/web#99"]); diff != "" {
 		t.Errorf("OnRead extra card (-want +got):\n%s", diff)
@@ -463,6 +466,7 @@ func TestRefreshCardReplacesOneCardAndKeepsTheReadTime(t *testing.T) {
 		Siblings:     []board.Related{},
 		Dependencies: []board.Dependency{{Related: board.Related{Issue: second.Issue, Status: todo.Name, OnBoard: true}, PullRequests: []board.PullRequest{}}},
 		ReadAt:       base,
+		Stamp:        "||",
 	}
 	stored := f.service.Stored(boardID)
 	if diff := cmp.Diff([]board.Card{want, second}, stored.Reading.Cards); diff != "" {

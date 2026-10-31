@@ -131,6 +131,7 @@ type Card struct {
 	Siblings     []Related     `json:"siblings"`
 	Dependencies []Dependency  `json:"dependencies"`
 	ReadAt       time.Time     `json:"readAt"`
+	Stamp        string        `json:"stamp"` // tells whether the card changed since it was read; "" reads it again
 	// Unconfirmed is a card whose relations wait for the conclusion of a reading.
 	Unconfirmed bool `json:"unconfirmed"`
 	// EpicUnconfirmed is a card whose convention names an epic no reading has
@@ -150,6 +151,11 @@ type Reading struct {
 	StatusFieldID string       `json:"statusFieldId"` // "" without a Status field
 	Module        *ModuleField `json:"module"`        // nil without a module field
 	Cards         []Card       `json:"cards"`         // open ones in board order, then the closed ones in board order
+	// StructureStamp is the structure the cards were read under; "" reads every
+	// card again.
+	StructureStamp string `json:"structureStamp"`
+	// Index is the issues the batch read of the last complete reading, by key.
+	Index map[string]indexedIssue `json:"index"`
 }
 
 // ModuleOptionID is the id of the option of the module field named name,

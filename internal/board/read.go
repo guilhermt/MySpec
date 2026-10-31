@@ -100,7 +100,7 @@ func (s *Service) read(ctx context.Context, b Board, extra []string) (Reading, m
 	}
 	onBoard := map[string]bool{}
 	for _, n := range nodes {
-		reading.Cards = append(reading.Cards, baseCard(n.issueNode, n.values, st, now))
+		reading.Cards = append(reading.Cards, baseCard(n, st, now))
 		onBoard[n.key()] = true
 	}
 
@@ -144,7 +144,7 @@ func (s *Service) read(ctx context.Context, b Board, extra []string) (Reading, m
 		if !found {
 			continue
 		}
-		c := baseCard(n, n.valuesIn(st.ProjectID), st, now)
+		c := baseCard(n.itemIn(st.ProjectID), st, now)
 		if n.Parent != nil {
 			c.Epic = &Epic{Issue: n.Parent.issue(), Body: n.Parent.Body}
 		}
@@ -153,10 +153,12 @@ func (s *Service) read(ctx context.Context, b Board, extra []string) (Reading, m
 	return reading, extras, nil
 }
 
-// itemCard is an issue of the items with the values of its item.
+// itemCard is an issue of the items with the values and the update time of its
+// item.
 type itemCard struct {
 	issueNode
-	values fieldValuesNode
+	values    fieldValuesNode
+	updatedAt string // the update time of the item
 }
 
 // readAllItems pages through the open issues, then the ones closed in the
@@ -182,7 +184,7 @@ func (s *Service) readAllItems(ctx context.Context, loc Locator, boardID, title 
 					return cards, nil
 				}
 				seen[item.Content.key()] = true
-				cards = append(cards, itemCard{issueNode: item.Content.issueNode, values: item.FieldValues})
+				cards = append(cards, itemCard{issueNode: item.Content.issueNode, values: item.FieldValues, updatedAt: item.UpdatedAt})
 			}
 			if !page.HasNextPage {
 				break
@@ -195,8 +197,9 @@ func (s *Service) readAllItems(ctx context.Context, loc Locator, boardID, title 
 
 // baseCard is what an issue says of itself as a card of the board st: no
 // epic, siblings or dependencies yet.
-func baseCard(n issueNode, values fieldValuesNode, st structure, now time.Time) Card {
-	fields, status := fieldsOf(values, st)
+func baseCard(c itemCard, st structure, now time.Time) Card {
+	n := c.issueNode
+	fields, status := fieldsOf(c.values, st)
 	assignees := n.Assignees.Nodes
 	if assignees == nil {
 		assignees = []Assignee{}
@@ -212,6 +215,7 @@ func baseCard(n issueNode, values fieldValuesNode, st structure, now time.Time) 
 		Siblings:     []Related{},
 		Dependencies: []Dependency{},
 		ReadAt:       now,
+		Stamp:        cardStamp(c),
 	}
 }
 
@@ -274,7 +278,7 @@ func (a *assembly) dependency(key string) (Dependency, bool) {
 		c := a.reading.Cards[i]
 		d = Dependency{Related: Related{Issue: c.Issue, Status: c.Status, OnBoard: true}, PullRequests: c.PullRequests}
 	} else if n, found := a.index[key]; found {
-		_, status := fieldsOf(n.valuesIn(a.structure.ProjectID), a.structure)
+		_, status := fieldsOf(n.itemIn(a.structure.ProjectID).values, a.structure)
 		d = Dependency{Related: Related{Issue: n.issue(), Status: status.Name}, PullRequests: n.ClosedByPullRequestsReferences.list()}
 	} else {
 		return Dependency{}, false

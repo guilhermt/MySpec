@@ -431,7 +431,7 @@ func (s *Service) RefreshCard(ctx context.Context, boardID, key string) error {
 	}
 
 	now := s.now()
-	card := baseCard(n, n.valuesIn(st.ProjectID), st, now)
+	card := baseCard(n.itemIn(st.ProjectID), st, now)
 	convention := ReadConvention(card.Body, b.Owner, card.Owner, card.Name)
 	var needs refSet
 	if epic, _ := epicRef(n, convention); epic != nil {
