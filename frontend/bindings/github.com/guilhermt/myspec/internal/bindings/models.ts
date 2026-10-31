@@ -441,7 +441,7 @@ export interface Board {
     "repositoryIds": string[] | null;
 
     /**
-     * "" before a reading succeeded
+     * "" before a first delivery
      */
     "readAt": string;
     "reading": boolean;

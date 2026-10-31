@@ -520,8 +520,9 @@ func (a *assembly) related(issue Issue) Related {
 	return Related{Issue: issue}
 }
 
-// dependency resolves the issue of key from the reading, or else from the
-// batch with its status in this board.
+// dependency resolves the issue of key from the batch with its status in this
+// board, or else from the reading: what was just read wins over the stored
+// reading when a card is refreshed.
 func (a *assembly) dependency(key string) (Dependency, bool) {
 	var d Dependency
 	if n, found := a.index[key]; found {

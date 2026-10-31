@@ -1389,7 +1389,7 @@ type Board struct {
 	HasStatus     bool          `json:"hasStatus"`
 	Statuses      []BoardStatus `json:"statuses"`      // board order; never nil
 	RepositoryIDs []string      `json:"repositoryIds"` // never nil
-	ReadAt        string        `json:"readAt"`        // "" before a reading succeeded
+	ReadAt        string        `json:"readAt"`        // "" before a first delivery
 	Reading       bool          `json:"reading"`
 	Failure       *BoardFailure `json:"failure"`
 	Viewer        string        `json:"viewer"` // the login of gh at the last reading
