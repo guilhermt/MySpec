@@ -1389,7 +1389,7 @@ type Board struct {
 	HasStatus     bool          `json:"hasStatus"`
 	Statuses      []BoardStatus `json:"statuses"`      // board order; never nil
 	RepositoryIDs []string      `json:"repositoryIds"` // never nil
-	ReadAt        string        `json:"readAt"`        // "" before a reading succeeded
+	ReadAt        string        `json:"readAt"`        // "" before a first delivery
 	Reading       bool          `json:"reading"`
 	Failure       *BoardFailure `json:"failure"`
 	Viewer        string        `json:"viewer"` // the login of gh at the last reading
@@ -1438,6 +1438,7 @@ type CardDependency struct {
 	CardRelated
 	PullRequests []CardPullRequest `json:"pullRequests"` // never nil
 	Satisfied    bool              `json:"satisfied"`
+	Unconfirmed  bool              `json:"unconfirmed"` // the reading has not confirmed it yet
 }
 
 // CardField is a board field of a card with its value.
@@ -1467,6 +1468,7 @@ type BoardCard struct {
 	Siblings       []CardRelated     `json:"siblings"`     // never nil
 	Dependencies   []CardDependency  `json:"dependencies"` // never nil
 	ReadAt         string            `json:"readAt"`
+	Unconfirmed    bool              `json:"unconfirmed"` // its relations wait for the conclusion of a reading
 	SuggestedName  string            `json:"suggestedName"`
 	RepositoryID   string            `json:"repositoryId"`   // the registered repository of the card; "" when not registered
 	ActiveTaskID   string            `json:"activeTaskId"`   // "" without one

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { STALE_CARD_MS } from "@/lib/boards";
+import { needsRereading } from "@/lib/boards";
 import { messageOf } from "@/lib/errors";
 import type { BoardCard } from "@/lib/wails";
 import { refreshCard } from "@/store/actions";
@@ -13,25 +13,21 @@ export interface CardRefresh {
   version: number;
 }
 
-function isStale(readAt: string): boolean {
-  return Date.now() - Date.parse(readAt) > STALE_CARD_MS;
-}
-
 /**
- * useCardRefresh reads a card again when its reading is stale, once per opening of the dialog.
+ * useCardRefresh reads a card again when its reading is stale or its relations are not confirmed, once per opening of the dialog.
  * Without a card it does nothing.
  */
 export function useCardRefresh(boardId: string, card: BoardCard | null): CardRefresh {
   // A stale card is refreshing from the first render, so nothing is read from it before.
-  const [refreshing, setRefreshing] = useState(() => card !== null && isStale(card.readAt));
+  const [refreshing, setRefreshing] = useState(() => card !== null && needsRereading(card));
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const refreshStarted = useRef(false);
   const key = card?.key;
-  const readAt = card?.readAt;
+  const stale = card !== null && needsRereading(card);
 
   useEffect(() => {
-    if (key === undefined || readAt === undefined || refreshStarted.current || !isStale(readAt)) {
+    if (key === undefined || refreshStarted.current || !stale) {
       return;
     }
     refreshStarted.current = true;
@@ -43,7 +39,7 @@ export function useCardRefresh(boardId: string, card: BoardCard | null): CardRef
         setRefreshing(false);
         setVersion((current) => current + 1);
       });
-  }, [boardId, key, readAt]);
+  }, [boardId, key, stale]);
 
   return { refreshing, refreshError, version };
 }

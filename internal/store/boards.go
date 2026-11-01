@@ -167,6 +167,19 @@ func (r *BoardsRepo) ListReadings(ctx context.Context) (map[string]board.Stored,
 func (r *BoardsRepo) SaveReading(ctx context.Context, boardID, title string, reading board.Reading, readAt time.Time) error {
 	const stmt = `UPDATE board_readings SET reading = ?, read_at = ?, failure = '', failed_at = NULL
 		WHERE board_id = ?`
+	return r.writeReading(ctx, stmt, boardID, title, reading, readAt)
+}
+
+// UpdateReading stores a reading and sets the board's title, in one
+// transaction. The failure stays.
+func (r *BoardsRepo) UpdateReading(ctx context.Context, boardID, title string, reading board.Reading, readAt time.Time) error {
+	const stmt = `UPDATE board_readings SET reading = ?, read_at = ? WHERE board_id = ?`
+	return r.writeReading(ctx, stmt, boardID, title, reading, readAt)
+}
+
+// writeReading runs stmt, which takes the reading, its time and the board id,
+// then sets the board's title, in one transaction.
+func (r *BoardsRepo) writeReading(ctx context.Context, stmt, boardID, title string, reading board.Reading, readAt time.Time) error {
 	const titleStmt = `UPDATE boards SET title = ? WHERE id = ?`
 
 	encoded, err := json.Marshal(reading)

@@ -1233,6 +1233,7 @@ func fromBoardCard(
 		Siblings:         fromRelated(card.Siblings),
 		Dependencies:     fromDependencies(card.Dependencies),
 		ReadAt:           card.ReadAt.Format(time.RFC3339),
+		Unconfirmed:      card.Unconfirmed,
 		SuggestedName:    board.SuggestName(card.Number, card.Title),
 		ActiveTaskID:     ids.Active,
 		ArchivedTaskID:   ids.Archived,
@@ -1355,6 +1356,7 @@ func fromDependencies(dependencies []board.Dependency) []CardDependency {
 			CardRelated:  fromOneRelated(d.Related),
 			PullRequests: fromCardPullRequests(d.PullRequests),
 			Satisfied:    d.Satisfied,
+			Unconfirmed:  d.Unconfirmed,
 		}
 	}
 	return converted

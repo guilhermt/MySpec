@@ -228,6 +228,37 @@ func TestBoardsReadingIsSavedAndAFailureKeepsIt(t *testing.T) {
 	}
 }
 
+func TestUpdateReadingKeepsTheFailureAndSetsTheTitle(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+	b := newBoard("board-1", "Old title", 1)
+	insertBoard(t, s, b)
+
+	failedAt := time.Date(2026, time.September, 16, 12, 0, 0, 0, time.UTC)
+	failure := board.Failure{Reason: board.ReasonRateLimited, ResetAt: failedAt.Add(time.Minute)}
+	if err := s.Boards.SaveFailure(t.Context(), b.ID, failure, failedAt); err != nil {
+		t.Fatalf("SaveFailure() = %v, want nil", err)
+	}
+
+	readAt := failedAt.Add(time.Hour)
+	reading := board.Reading{
+		ProjectID: "project-1",
+		Title:     "New title",
+		Cards:     []board.Card{{Issue: board.Issue{Owner: "acme", Name: "web", Number: 1}, ReadAt: readAt}},
+	}
+	if err := s.Boards.UpdateReading(t.Context(), b.ID, reading.Title, reading, readAt); err != nil {
+		t.Fatalf("UpdateReading() = %v, want nil", err)
+	}
+
+	want := map[string]board.Stored{b.ID: {Reading: &reading, ReadAt: readAt, Failure: &failure, FailedAt: failedAt}}
+	if diff := cmp.Diff(want, listReadings(t, s)); diff != "" {
+		t.Errorf("ListReadings() mismatch (-want +got):\n%s", diff)
+	}
+	if got := listBoards(t, s)[0].Title; got != reading.Title {
+		t.Errorf("board title = %q, want %q", got, reading.Title)
+	}
+}
+
 func TestBoardsAreListedByTitleIgnoringCase(t *testing.T) {
 	t.Parallel()
 	s := newStore(t)

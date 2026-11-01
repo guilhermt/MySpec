@@ -68,7 +68,7 @@ describe("App", () => {
       await screen.findByRole("button", { name: "Repository filter: All repositories" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Start" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Theme: System" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Theme: Light" })).toBeInTheDocument();
   });
 
   it("renders the welcome inside the shell when nothing is registered", async () => {

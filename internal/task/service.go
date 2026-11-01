@@ -416,7 +416,9 @@ func applyCardUpdate(c Card, u CardUpdate) Card {
 	c.URL = u.URL
 	c.Status = u.Status
 	c.State = u.State
-	c.Epic = cloneEpic(u.Epic)
+	if !u.KeepEpic {
+		c.Epic = cloneEpic(u.Epic)
+	}
 	c.ReadAt = u.ReadAt
 	return c
 }

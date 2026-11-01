@@ -1,5 +1,5 @@
 import type { RelationGroup } from "@/components/system/RelationList";
-import { prStateLabel, stateLabel } from "@/lib/boards";
+import { NOT_CONFIRMED, prStateLabel, stateLabel } from "@/lib/boards";
 import {
   asIssueState,
   asPullRequestState,
@@ -81,9 +81,9 @@ export function relationsOf(card: BoardCard, boardCards: ReadonlySet<string>): R
         key: dependency.key,
         number: referenceOf(dependency, card.repository),
         title: dependency.title,
-        meta: stateLabel(asIssueState(dependency.state)),
+        meta: dependency.unconfirmed ? NOT_CONFIRMED : stateLabel(asIssueState(dependency.state)),
         url: dependency.url,
-        ...(dependency.satisfied ? {} : { warning: "Not satisfied" }),
+        ...(dependency.satisfied || dependency.unconfirmed ? {} : { warning: "Not satisfied" }),
         ...(dependency.onBoard && boardCards.has(dependency.key)
           ? { cardKey: dependency.key }
           : {}),

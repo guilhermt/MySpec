@@ -55,6 +55,7 @@ const READ_CARD = makeBoardCard({
       onBoard: false,
       pullRequests: [],
       satisfied: false,
+      unconfirmed: false,
     },
   ],
   pullRequests: [

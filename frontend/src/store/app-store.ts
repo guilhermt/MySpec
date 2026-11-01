@@ -1984,7 +1984,7 @@ export function useWelcomeMode(): boolean {
 }
 
 /**
- * useThemeState is the theme the interface shows. Before the first state it is the choice made at
+ * useThemeState is the theme the state asks for. Before the first state it is the choice made at
  * the start or the preference of the last state; a refused migration has no theme of its own.
  */
 export function useThemeState(): ThemeState {

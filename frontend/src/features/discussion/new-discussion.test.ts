@@ -151,6 +151,7 @@ describe("contextLine", () => {
     ...sibling(number),
     pullRequests: [],
     satisfied: false,
+    unconfirmed: false,
   });
   const card = (number: number, overrides: Partial<BoardCard> = {}) =>
     makeBoardCard({ key: `dev/web#${number}`, number, ...overrides });

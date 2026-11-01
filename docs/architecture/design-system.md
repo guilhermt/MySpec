@@ -14,6 +14,7 @@ O tema é o atributo `data-theme` do `documentElement`, `light` ou `dark`:
 
 - um script em `frontend/index.html` o escreve antes do primeiro render, a partir da preferência salva e do esquema do sistema, para a interface nunca piscar no tema errado;
 - `features/theme/useApplyTheme.ts` o mantém em dia quando a preferência ou o esquema do sistema mudam;
+- `usePaintedMode`, no mesmo arquivo, acompanha o `data-theme` que está na tela, quem quer que o tenha pintado, e é a referência do seletor de tema: antes do primeiro state ele pode diferir do modo calculado;
 - a variante `dark:` do Tailwind é `&:is([data-theme="dark"] *)`;
 - `backgroundFor`, em `internal/app/theme.go`, pinta atrás do webview o `--surface-1` de cada tema, em sRGB, e o primeiro frame da janela já tem a cor certa. `internal/app/theme_test.go` lê o `--surface-1` dos dois temas em `tokens.css`, o converte de OKLCH para sRGB e falha quando `backgroundFor` deixa de corresponder.
 

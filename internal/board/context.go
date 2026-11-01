@@ -9,15 +9,16 @@ import (
 
 // The text that stands in for what a card or an epic does not say.
 const (
-	emptyCardBody    = "_The card has no description._"
-	emptyEpicBody    = "_The epic has no description._"
-	noPullRequest    = "No pull request"
-	notCloned        = "Not cloned"
-	contextSeparator = " · "
-	cardHeading      = "### "
-	sectionHeading   = "## "
-	stateOpenLabel   = "Open"
-	stateClosedLabel = "Closed"
+	emptyCardBody     = "_The card has no description._"
+	emptyEpicBody     = "_The epic has no description._"
+	noPullRequest     = "No pull request"
+	notCloned         = "Not cloned"
+	notConfirmedLabel = "Not confirmed"
+	contextSeparator  = " · "
+	cardHeading       = "### "
+	sectionHeading    = "## "
+	stateOpenLabel    = "Open"
+	stateClosedLabel  = "Closed"
 )
 
 // Context is the initial context of a task created from a card: the card, its
@@ -175,6 +176,10 @@ func siblingsSection(siblings []Related, prefix string) string {
 func dependenciesSection(dependencies []Dependency, prefix string) string {
 	items := make([]string, len(dependencies))
 	for i, d := range dependencies {
+		if d.Unconfirmed {
+			items[i] = "- " + joinParts(strings.TrimSpace(reference(d.Issue)+" "+d.Title), notConfirmedLabel)
+			continue
+		}
 		items[i] = "- " + joinParts(reference(d.Issue)+" "+d.Title, stateLabel(d.State), d.Status,
 			pullRequests(d.PullRequests))
 	}

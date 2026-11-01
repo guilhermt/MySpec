@@ -1,7 +1,8 @@
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { THEME_PREFERENCE_KEY, THEME_STORAGE_KEY } from "@/features/theme/theme";
-import { useApplyTheme } from "@/features/theme/useApplyTheme";
+import { useApplyTheme, usePaintedMode } from "@/features/theme/useApplyTheme";
+import { useAppStore } from "@/store/app-store";
 import { resetAppStore } from "@/test/render";
 import { makeState } from "@/test/wails-mock";
 
@@ -39,5 +40,45 @@ describe("useApplyTheme", () => {
 
     expect(document.documentElement.dataset.theme).toBe("dark");
     expect(localStorage.getItem(THEME_PREFERENCE_KEY)).toBe("system");
+  });
+});
+
+describe("usePaintedMode", () => {
+  const paintedAfterApplyingTheme = () =>
+    renderHook(() => {
+      useApplyTheme();
+      return usePaintedMode();
+    });
+
+  it("reflects the data-theme that was on the screen before the first state", () => {
+    resetAppStore();
+
+    const { result } = paintedAfterApplyingTheme();
+
+    expect(result.current).toBe("dark");
+  });
+
+  it("follows the system when there is no saved choice", () => {
+    resetAppStore({ state: makeState({ theme: "system", systemDark: false }) });
+    const { result } = paintedAfterApplyingTheme();
+    expect(result.current).toBe("light");
+
+    act(() => {
+      useAppStore.getState().applyState(makeState({ theme: "system", systemDark: true }));
+    });
+
+    expect(result.current).toBe("dark");
+  });
+
+  it("keeps the saved choice when the system changes", () => {
+    resetAppStore({ state: makeState({ theme: "light", systemDark: false }) });
+    const { result } = paintedAfterApplyingTheme();
+    expect(result.current).toBe("light");
+
+    act(() => {
+      useAppStore.getState().applyState(makeState({ theme: "light", systemDark: true }));
+    });
+
+    expect(result.current).toBe("light");
   });
 });

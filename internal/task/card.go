@@ -109,4 +109,7 @@ type CardUpdate struct {
 	State  IssueState
 	Epic   *CardEpic
 	ReadAt time.Time
+	// KeepEpic is set when the reading has not confirmed the epic: the task
+	// keeps its own.
+	KeepEpic bool
 }

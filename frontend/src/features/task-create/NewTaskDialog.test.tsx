@@ -777,6 +777,7 @@ describe("NewTaskDialog", () => {
                 },
               ],
               satisfied: false,
+              unconfirmed: false,
             },
           ],
         }),
@@ -793,6 +794,30 @@ describe("NewTaskDialog", () => {
         "aria-disabled",
         "false",
       );
+    });
+
+    it("does not warn about a dependency no reading has confirmed", () => {
+      openCard(
+        makeBoardCard({
+          dependencies: [
+            {
+              key: "dev/api#3",
+              repository: "dev/api",
+              number: 3,
+              title: "Expose the session endpoint",
+              url: "https://github.com/dev/api/issues/3",
+              state: "open",
+              status: "",
+              onBoard: true,
+              pullRequests: [],
+              satisfied: false,
+              unconfirmed: true,
+            },
+          ],
+        }),
+      );
+
+      expect(screen.queryByText("Depends on dev/api#3")).not.toBeInTheDocument();
     });
 
     it("creates the task from the card with what the user added", async () => {

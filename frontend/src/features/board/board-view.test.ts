@@ -202,8 +202,9 @@ describe("assigneesOf and unsatisfied", () => {
     };
     const card = makeBoardCard({
       dependencies: [
-        { ...dependency, satisfied: false },
-        { ...dependency, key: "dev/web#2", satisfied: true },
+        { ...dependency, satisfied: false, unconfirmed: false },
+        { ...dependency, key: "dev/web#2", satisfied: true, unconfirmed: false },
+        { ...dependency, key: "dev/web#3", satisfied: false, unconfirmed: true },
       ],
     });
 
@@ -653,6 +654,7 @@ describe("cardRowModel", () => {
     onBoard: true,
     pullRequests: [],
     satisfied: false,
+    unconfirmed: false,
     ...overrides,
   });
   const epicOf = {
@@ -767,6 +769,16 @@ describe("cardRowModel", () => {
       ". depends on #461, not satisfied. depends on acme/gateway#462, not satisfied",
     );
     expect(row.label).not.toContain("#463");
+  });
+
+  it("says nothing of a dependency that is not confirmed", () => {
+    const row = cardRowModel(
+      card({ dependencies: [dependency(9, { satisfied: false, unconfirmed: true })] }),
+      context(),
+    );
+
+    expect(row.dependency).toBeNull();
+    expect(row.label).not.toContain("depends on");
   });
 
   it("writes only the number of a dependency of another repository, which the tooltip names", () => {

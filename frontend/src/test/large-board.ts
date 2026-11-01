@@ -68,6 +68,7 @@ function card(i: number, readAt: string): BoardCard {
     onBoard: true,
     pullRequests: [],
     satisfied: false,
+    unconfirmed: false,
   });
   return {
     key: `${repository}#${i}`,
@@ -97,6 +98,7 @@ function card(i: number, readAt: string): BoardCard {
     siblings: [],
     dependencies: dependsOn === null ? [] : [dependency(dependsOn)],
     readAt,
+    unconfirmed: false,
     suggestedName: `${i}-card`,
     repositoryId: `repo-${REPOSITORIES[i % REPOSITORIES.length]}`,
     activeTaskId: hasTask ? `task-${i}` : "",
