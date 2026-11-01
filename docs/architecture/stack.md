@@ -7,7 +7,7 @@ A stack do produto e a razão de cada escolha.
 | Camada | Escolha |
 |---|---|
 | Forma do app | Aplicação desktop para Linux e Windows 11 x64 |
-| Base desktop | Wails v3 (`v3.0.0-beta.23`), backend em Go 1.27, WebKitGTK 6.0 sobre GTK4 no Linux, WebView2 no Windows |
+| Base desktop | Wails v3 (`v3.0.0`), backend em Go 1.27, WebKitGTK 6.0 sobre GTK4 no Linux, WebView2 no Windows |
 | Frontend | React 19 com TypeScript em modo strict, Vite |
 | Estilo e componentes | Tailwind CSS 4, shadcn/ui sobre Base UI e o design system do MySpec, fontes Fira Sans e Fira Code, ícones Lucide |
 | Markdown e diagramas | Streamdown, com `@streamdown/code` e `@streamdown/mermaid` |
@@ -31,7 +31,7 @@ A stack do produto e a razão de cada escolha.
 
 O produto precisa ler clones locais, criar worktrees, iniciar processos e enviar notificações do sistema, e o nível de interface pretendido, com Markdown e mermaid, pede um motor web. Wails coloca uma interface web numa janela nativa com o webview do sistema, sem embutir um Chromium como o Electron. Tauri faria o mesmo com Rust; a escolha por Go, natural para gerenciar processos, ler um stream JSON, rodar git e observar arquivos, definiu o Wails.
 
-O v3 é a arquitetura para onde o Wails vai: services com bindings gerados por análise estática, eventos tipados, runtime por métodos e build por Taskfile. Ele ainda é pré-release, e duas partes do seu backend Linux não servem ao produto: o service de notificações e a leitura do tema do sistema. Nos dois casos o app fala com o D-Bus diretamente; ver [D-Bus](#d-bus).
+O v3 é a arquitetura para onde o Wails vai: services com bindings gerados por análise estática, eventos tipados, runtime por métodos e build por Taskfile. Duas partes do seu backend Linux não servem ao produto: o service de notificações e a leitura do tema do sistema. Nos dois casos o app fala com o D-Bus diretamente; ver [D-Bus](#d-bus).
 
 No Windows o Wails usa o WebView2, que o Windows 11 já traz, e o produto roda no Windows 11 x64. No Linux o Wails usa WebKitGTK. O padrão desde o v3 é GTK4 com WebKitGTK 6.0, que é o que o produto usa, exigindo `gtk4` e `webkitgtk-6.0` na máquina. A renderização foi verificada no Hyprland com GPU AMD sem nenhuma variável de ambiente; ver [target-machine.md](../development/target-machine.md).
 
