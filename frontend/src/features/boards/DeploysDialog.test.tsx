@@ -336,7 +336,9 @@ describe("DeploysDialog", () => {
       }),
     );
     const { user } = dialog();
-    await screen.findByRole("checkbox", { name: "dev/api" });
+    await waitFor(() =>
+      expect(screen.getByRole("checkbox", { name: /^Manage the deploys/ })).toHaveFocus(),
+    );
 
     await user.keyboard("{Control>}{Enter}{/Control}");
 
