@@ -93,6 +93,7 @@ func TestReadGivesTheDefaultOfEveryPrompt(t *testing.T) {
 		{prompts.StagePRReview, []string{"# Pull Request Review", "{{review_path}}", "{{pr_url}}", "status: clean", "AskUserQuestion", "## How to write the report", "Portuguese", "The summary is optional"}},
 		{prompts.StagePRFix, []string{"# Pull Request Review Fixes", "{{pr_url}}", "{{prd_path}}", "AskUserQuestion", "never by rebasing", "Never write or rewrite a review report"}},
 		{prompts.StageDiscussion, []string{"# Discussion", "{{drafts_path}}", "AskUserQuestion", "never repeats the shared context of the epic", "never shorter at the cost of the context"}},
+		{prompts.StageDiscussionRegister, []string{"# Register discussion", "{{drafts_path}}", "{{initial_context}}", "AskUserQuestion", "never copy their text word for word", "never says that it is only a registration"}},
 	}
 
 	dataDir := t.TempDir()
@@ -291,6 +292,9 @@ func TestPlaceholdersAreTheOnesTheDefaultUses(t *testing.T) {
 		{prompts.StageDiscussion, []string{
 			"{{task_name}}", "{{artifacts_dir}}", "{{initial_context}}", "{{drafts_path}}",
 		}},
+		{prompts.StageDiscussionRegister, []string{
+			"{{task_name}}", "{{artifacts_dir}}", "{{initial_context}}", "{{drafts_path}}",
+		}},
 	}
 
 	dataDir := t.TempDir()
@@ -317,7 +321,7 @@ func TestEditableListsThePromptsInWorkflowOrder(t *testing.T) {
 	want := []prompts.Stage{
 		prompts.StagePRD, prompts.StageTechSpec, prompts.StagePlan, prompts.StageOneShot,
 		prompts.StageStepReview, prompts.StageCommit, prompts.StagePR, prompts.StagePRReview,
-		prompts.StagePRFix, prompts.StageDiscussion,
+		prompts.StagePRFix, prompts.StageDiscussion, prompts.StageDiscussionRegister,
 	}
 	if diff := cmp.Diff(want, prompts.Editable); diff != "" {
 		t.Errorf("Editable mismatch (-want +got):\n%s", diff)
@@ -501,6 +505,10 @@ func TestRenderTheDefaultPromptsKeepNoPlaceholder(t *testing.T) {
 			"https://github.com/acme/api/pull/42", "`42`", "`acme/api`", "git merge origin/dev",
 		}},
 		{prompts.StageDiscussion, discussionVars(), []string{
+			"invoices", "/data/discussions/invoices", draftsPath,
+			"## Initial context\n\nthe invoices of the month",
+		}},
+		{prompts.StageDiscussionRegister, discussionVars(), []string{
 			"invoices", "/data/discussions/invoices", draftsPath,
 			"## Initial context\n\nthe invoices of the month",
 		}},
@@ -1159,13 +1167,43 @@ func TestTheReportFormatOfAReviewAsksForTheTitleOfEachFinding(t *testing.T) {
 // changes.
 const keepsItsID = "When you change a draft, keep its id; a new id is a new draft."
 
+// discussionStages are the two prompts of a discussion.
+var discussionStages = []prompts.Stage{prompts.StageDiscussion, prompts.StageDiscussionRegister}
+
+func TestIsDiscussion(t *testing.T) {
+	t.Parallel()
+
+	for _, stage := range discussionStages {
+		if !prompts.IsDiscussion(stage) {
+			t.Errorf("IsDiscussion(%s) = false, want true", stage)
+		}
+	}
+	for _, stage := range []prompts.Stage{prompts.StagePRD, prompts.StageOneShot, prompts.StagePR, prompts.StageStep} {
+		if prompts.IsDiscussion(stage) {
+			t.Errorf("IsDiscussion(%s) = true, want false", stage)
+		}
+	}
+}
+
 func TestRenderAppendsTheSectionsOfADiscussionInOrder(t *testing.T) {
 	t.Parallel()
 
-	dataDir := t.TempDir()
-	write(t, dataDir, prompts.StageDiscussion, "discuss it")
+	for _, stage := range discussionStages {
+		t.Run(string(stage), func(t *testing.T) {
+			t.Parallel()
 
-	got, err := prompts.Render(dataDir, prompts.StageDiscussion, discussionVars())
+			testDiscussionSectionsInOrder(t, stage)
+		})
+	}
+}
+
+func testDiscussionSectionsInOrder(t *testing.T, stage prompts.Stage) {
+	t.Helper()
+
+	dataDir := t.TempDir()
+	write(t, dataDir, stage, "discuss it")
+
+	got, err := prompts.Render(dataDir, stage, discussionVars())
 	if err != nil {
 		t.Fatalf("Render() = %v, want nil", err)
 	}
@@ -1205,20 +1243,23 @@ func TestRenderAppendsTheDraftsFormatOfADiscussionWithoutABoard(t *testing.T) {
 	t.Parallel()
 
 	dataDir := t.TempDir()
-	write(t, dataDir, prompts.StageDiscussion, "discuss it")
 	vars := discussionVars()
 	vars.Board = ""
 
-	got, err := prompts.Render(dataDir, prompts.StageDiscussion, vars)
-	if err != nil {
-		t.Fatalf("Render() = %v, want nil", err)
-	}
+	for _, stage := range discussionStages {
+		write(t, dataDir, stage, "discuss it")
 
-	if strings.Contains(got, "## Board") {
-		t.Errorf("Render() = %q, want no board section without a board", got)
-	}
-	if !strings.Contains(got, "\n\n## Drafts format\n\n") {
-		t.Errorf("Render() = %q, want the drafts format section all the same", got)
+		got, err := prompts.Render(dataDir, stage, vars)
+		if err != nil {
+			t.Fatalf("Render(%s) = %v, want nil", stage, err)
+		}
+
+		if strings.Contains(got, "## Board") {
+			t.Errorf("Render(%s) = %q, want no board section without a board", stage, got)
+		}
+		if !strings.Contains(got, "\n\n## Drafts format\n\n") {
+			t.Errorf("Render(%s) = %q, want the drafts format section all the same", stage, got)
+		}
 	}
 }
 
@@ -1249,19 +1290,21 @@ func TestRenderAppendsTheDiscussionSectionsOnlyToThePromptOfADiscussion(t *testi
 func TestRenderTheDefaultDiscussionPromptCarriesTheDraftsFormat(t *testing.T) {
 	t.Parallel()
 
-	got, err := prompts.Render(t.TempDir(), prompts.StageDiscussion, discussionVars())
-	if err != nil {
-		t.Fatalf("Render(discussion) = %v, want nil", err)
-	}
+	for _, stage := range discussionStages {
+		got, err := prompts.Render(t.TempDir(), stage, discussionVars())
+		if err != nil {
+			t.Fatalf("Render(%s) = %v, want nil", stage, err)
+		}
 
-	for _, want := range []string{
-		"\n\n## Board\n\n" + boardSection,
-		"## Draft: <id>",
-		"`Kind` is `new`, `update` or `epic`.",
-		keepsItsID,
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("rendered discussion prompt does not contain %q", want)
+		for _, want := range []string{
+			"\n\n## Board\n\n" + boardSection,
+			"## Draft: <id>",
+			"`Kind` is `new`, `update` or `epic`.",
+			keepsItsID,
+		} {
+			if !strings.Contains(got, want) {
+				t.Errorf("rendered %s prompt does not contain %q", stage, want)
+			}
 		}
 	}
 }

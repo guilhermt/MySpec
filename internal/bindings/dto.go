@@ -967,7 +967,8 @@ type MarkerEntry struct {
 	Title    string        `json:"title"`
 	Files    int           `json:"files"`
 	Problems []PlanProblem `json:"problems"`
-	// Model, Effort and Mode (publish or apply) belong to review_started;
+	// Model, Effort and Mode belong to review_started (publish or apply) and
+	// discussion_started (register, or empty for a Refine discussion);
 	// Approved and Discarded to findings_decided; Verdict, Inline, Body,
 	// Summary, Minimal and URL to review_published; Commits (never nil) and
 	// Count (-1 when the head before is not among the ones read) to
@@ -2093,6 +2094,7 @@ type StartDiscussionRequest struct {
 	BoardID string   `json:"boardId"`
 	Title   string   `json:"title"`
 	Text    string   `json:"text"`  // what to discuss; "" for none
+	Mode    string   `json:"mode"`  // refine or register; "" for refine
 	Cards   []string `json:"cards"` // the keys of the cards of the board
 	Model   string   `json:"model"`
 	Effort  string   `json:"effort"`

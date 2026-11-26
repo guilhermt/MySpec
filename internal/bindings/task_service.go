@@ -1289,6 +1289,7 @@ var userMessages = []struct {
 	{discussion.ErrTitleTooLong, "Use at most 120 characters in the title."},
 	{discussion.ErrNothingToDiscuss, "Write what to discuss or select at least one card."},
 	{discussion.ErrUnknownKind, "Unknown draft kind."},
+	{discussion.ErrUnknownMode, "Unknown discussion mode."},
 	{discussion.ErrUnknownDecision, "Unknown decision."},
 	{discussion.ErrUnknownArtifact, "Unknown artifact."},
 	{discussion.ErrDraftNotFound, "This draft is no longer one of the discussion."},

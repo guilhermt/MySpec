@@ -714,6 +714,7 @@ describe("api", () => {
       boardId: "board-1",
       title: "Invoices",
       text: "Split the invoices screen.",
+      mode: "refine",
       cards: ["dev/web#12"],
       draftId: "",
       model: "claude-fable-5-1",

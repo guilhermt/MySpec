@@ -7,6 +7,7 @@ import { IconButton } from "@/components/system/IconButton";
 import { Input } from "@/components/system/Input";
 import { ICONS } from "@/components/system/icons";
 import { LiveRegion } from "@/components/system/LiveRegion";
+import { SegmentedControl } from "@/components/system/SegmentedControl";
 import { Select } from "@/components/system/Select";
 import { Shimmer } from "@/components/system/Shimmer";
 import { StateGlyph } from "@/components/system/StateGlyph";
@@ -44,6 +45,7 @@ import { useCardImages } from "@/features/images/useCardImages";
 import { useImageDrop } from "@/features/images/useImageDrop";
 import { ModelChip } from "@/features/models/ModelChip";
 import { findBoard, issueLabel } from "@/lib/boards";
+import { DISCUSSION_MODES, discussionModeHint, discussionModeLabel } from "@/lib/discussion-modes";
 import { messageOf } from "@/lib/errors";
 import {
   type Attachment,
@@ -56,7 +58,7 @@ import {
 import { choiceOf, type ModelChoice } from "@/lib/models";
 import { sharedAmong, shortName } from "@/lib/repositories";
 import { cn } from "@/lib/utils";
-import type { Board, BoardCard, NewDiscussionDraft, StageModel } from "@/lib/wails";
+import type { Board, BoardCard, DiscussionMode, NewDiscussionDraft, StageModel } from "@/lib/wails";
 import { deleteNewDiscussionDraft, saveNewDiscussionDraft, startDiscussion } from "@/store/actions";
 import {
   type NewDiscussionRef,
@@ -68,6 +70,11 @@ import {
 } from "@/store/app-store";
 
 const NO_MODELS: readonly StageModel[] = [];
+
+/** HINT is the type of the line under a field that explains it. */
+const HINT = "text-(length:--text-meta) leading-(--leading-meta) text-ink-3";
+
+const MODE_FIXED = "Fixed once the discussion exists.";
 
 const GONE = "This board is no longer in the app.";
 
@@ -172,6 +179,8 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
   const [suggested] = useState(() => suggestedTitle(cards));
   const [title, setTitle] = useState(suggested);
   const [text, setText] = useState("");
+  // Not part of a draft, like the model: it starts at Refine and a resumed draft leaves it as it is.
+  const [mode, setMode] = useState<DiscussionMode>("refine");
   const [draftId, setDraftId] = useState<string | null>(null);
   const [view, setView] = useState<"form" | "drafts">("form");
   const [leaving, setLeaving] = useState<Leaving | null>(null);
@@ -297,6 +306,7 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
         boardId: board.id,
         title: title.trim(),
         text,
+        mode,
         cards: cards.map((card) => card.key),
         draftId: draftId ?? "",
         model: choice.model,
@@ -408,6 +418,21 @@ function NewDiscussionForm({ board, cardKeys, askBoard, onBoardChange }: NewDisc
                 disabled={busy}
                 onChange={(event) => setTitle(event.target.value)}
               />
+            </Field>
+
+            <Field label="Mode">
+              <SegmentedControl
+                label="Mode"
+                size="sm"
+                value={mode}
+                options={DISCUSSION_MODES.map((option) => ({
+                  value: option,
+                  label: discussionModeLabel(option),
+                }))}
+                onValueChange={setMode}
+                disabled={busy}
+              />
+              <p className={HINT}>{`${discussionModeHint(mode)} ${MODE_FIXED}`}</p>
             </Field>
 
             <div className="relative flex flex-col gap-(--space-2)" {...drop.handlers}>

@@ -363,7 +363,7 @@ type MarkerEntry struct {
 
 	Model     string         `json:"model"`     // review_started: the model of the session
 	Effort    string         `json:"effort"`    // review_started: its effort
-	Mode      string         `json:"mode"`      // review_started: publish or apply
+	Mode      string         `json:"mode"`      // review_started: publish or apply; discussion_started: register, or empty for a Refine discussion
 	Approved  int            `json:"approved"`  // findings_decided
 	Discarded int            `json:"discarded"` // findings_decided
 	Verdict   string         `json:"verdict"`   // review_published: approve, request_changes or comment

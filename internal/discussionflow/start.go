@@ -23,8 +23,9 @@ const noOption = "none."
 type StartParams struct {
 	BoardID string
 	Title   string
-	Text    string   // what the user wrote; "" for none
-	Cards   []string // the keys of the cards of the stored reading
+	Text    string          // what the user wrote; "" for none
+	Mode    discussion.Mode // "" for Refine
+	Cards   []string        // the keys of the cards of the stored reading
 	Choice  models.Choice
 	Images  []images.Upload // the images of the initial context, in the order they reach the agent
 }
@@ -46,6 +47,7 @@ func (s *Service) Start(ctx context.Context, p StartParams) (string, error) {
 		BoardNumber:    b.Number,
 		Title:          p.Title,
 		Text:           p.Text,
+		Mode:           p.Mode,
 		InitialContext: initial,
 		Cards:          inputCards(cards),
 		Images:         p.Images,
@@ -198,7 +200,7 @@ func (s *Service) info(d discussion.Discussion, choice models.Choice) session.Ta
 		Dir:            d.ArtifactsDir,
 		ArtifactsDir:   d.ArtifactsDir,
 		Stage:          session.DiscussionStage,
-		Prompt:         prompts.StageDiscussion,
+		Prompt:         promptOf(d.Mode),
 		InitialContext: d.InitialContext,
 		InitialImages:  d.InitialImages,
 		DraftsPath:     d.DraftsPath(),
@@ -207,6 +209,14 @@ func (s *Service) info(d discussion.Discussion, choice models.Choice) session.Ta
 		ExtraDirs:      clones,
 		Choice:         choice,
 	}
+}
+
+// promptOf is the prompt that opens the conversation of a discussion in a mode.
+func promptOf(mode discussion.Mode) prompts.Stage {
+	if mode == discussion.ModeRegister {
+		return prompts.StageDiscussionRegister
+	}
+	return prompts.StageDiscussion
 }
 
 // epicsOf are the epics of the cards, each once, as owner/name#number, in the

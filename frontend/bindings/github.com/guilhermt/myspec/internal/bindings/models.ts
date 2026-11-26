@@ -2351,7 +2351,8 @@ export interface MarkerEntry {
     "problems": PlanProblem[] | null;
 
     /**
-     * Model, Effort and Mode (publish or apply) belong to review_started;
+     * Model, Effort and Mode belong to review_started (publish or apply) and
+     * discussion_started (register, or empty for a Refine discussion);
      * Approved and Discarded to findings_decided; Verdict, Inline, Body,
      * Summary, Minimal and URL to review_published; Commits (never nil) and
      * Count (-1 when the head before is not among the ones read) to
@@ -3944,6 +3945,11 @@ export interface StartDiscussionRequest {
      * what to discuss; "" for none
      */
     "text": string;
+
+    /**
+     * refine or register; "" for refine
+     */
+    "mode": string;
 
     /**
      * the keys of the cards of the board

@@ -70,6 +70,40 @@ func TestCreatingADiscussionIsRefusedWithoutATitleOrSomethingToDiscuss(t *testin
 	}
 }
 
+func TestCreatingADiscussionKeepsItsMode(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		mode discussion.Mode
+		want discussion.Mode
+	}{
+		{"register", discussion.ModeRegister, discussion.ModeRegister},
+		{"refine", discussion.ModeRefine, discussion.ModeRefine},
+		{"empty", "", discussion.ModeRefine},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t)
+			d, err := f.service.Create(t.Context(), discussion.CreateParams{Title: "Invoices", Text: "Something", Mode: c.mode})
+			if err != nil {
+				t.Fatalf("Create() = %v, want nil", err)
+			}
+			if d.Mode != c.want {
+				t.Errorf("mode = %q, want %q", d.Mode, c.want)
+			}
+		})
+	}
+
+	f := newFixture(t)
+	_, err := f.service.Create(t.Context(), discussion.CreateParams{Title: "Invoices", Text: "Something", Mode: "other"})
+	if !errors.Is(err, discussion.ErrUnknownMode) {
+		t.Errorf("error = %v, want ErrUnknownMode", err)
+	}
+}
+
 func TestAFailedInsertTakesTheFolderWithIt(t *testing.T) {
 	t.Parallel()
 

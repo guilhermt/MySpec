@@ -17,7 +17,7 @@ function page(listings: PromptListing[] = makePromptListings()) {
 const rows = () => within(screen.getByRole("list", { name: "Prompts" })).getAllByRole("listitem");
 
 describe("PromptsPage", () => {
-  it("is the page Prompts, with its sentence and the ten prompts in workflow order", async () => {
+  it("is the page Prompts, with its sentence and the eleven prompts in workflow order", async () => {
     page();
 
     expect(screen.getByRole("heading", { level: 2, name: "Prompts" })).toBeInTheDocument();
@@ -37,6 +37,7 @@ describe("PromptsPage", () => {
       "PR revie",
       "PR revie",
       "Discussi",
+      "Register",
     ]);
     expect(within(rows()[0] as HTMLElement).getByRole("link")).toHaveTextContent(
       "Opens the PRD session of a task.",
@@ -49,13 +50,13 @@ describe("PromptsPage", () => {
 
     expect(api.listPrompts).toHaveBeenCalledTimes(1);
     expect(screen.queryByText("Default")).not.toBeInTheDocument();
-    expect(rows()).toHaveLength(10);
+    expect(rows()).toHaveLength(11);
   });
 
   it("says Default for a prompt that was never edited", async () => {
     page();
 
-    expect(await screen.findAllByText("Default")).toHaveLength(10);
+    expect(await screen.findAllByText("Default")).toHaveLength(11);
   });
 
   it("says when an edited prompt was edited, with the whole time in the tooltip", async () => {
@@ -66,7 +67,7 @@ describe("PromptsPage", () => {
     const { user } = page(listings);
 
     const label = await screen.findByText("Edited Sep 20, 2020");
-    expect(screen.getAllByText("Default")).toHaveLength(9);
+    expect(screen.getAllByText("Default")).toHaveLength(10);
     expect(label.closest("a")).toHaveTextContent("Plan");
 
     await user.hover(label);
@@ -116,6 +117,6 @@ describe("PromptsPage", () => {
 
     expect(api.listPrompts).toHaveBeenCalledTimes(2);
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
-    expect(await screen.findAllByText("Default")).toHaveLength(10);
+    expect(await screen.findAllByText("Default")).toHaveLength(11);
   });
 });

@@ -309,7 +309,12 @@ function startView(start: StartOf, prompt: UserEntry | null, ctx: MarkerContext)
       return line(
         "start",
         "Discussion started",
-        parts(modelLabel(start.model ?? ""), start.effort ?? "", start.board ?? ""),
+        parts(
+          start.mode === "register" ? "Register" : "",
+          modelLabel(start.model ?? ""),
+          start.effort ?? "",
+          start.board ?? "",
+        ),
       );
     default:
       return stageStart(start, prompt, ctx);

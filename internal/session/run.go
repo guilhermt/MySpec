@@ -641,7 +641,7 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 		// discussion, the instructions of a review pass, or what the implementer
 		// said last.
 		switch r.task.Prompt {
-		case prompts.StagePRD, prompts.StageOneShot, prompts.StageDiscussion:
+		case prompts.StagePRD, prompts.StageOneShot, prompts.StageDiscussion, prompts.StageDiscussionRegister:
 			vars.InitialContext = e.User.Text
 		case prompts.StagePRReview:
 			vars.PassInstructions = e.User.Text

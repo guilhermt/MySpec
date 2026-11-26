@@ -377,6 +377,21 @@ describe("startLineOf", () => {
       }),
     ],
     [
+      "a Register discussion, whose line puts the mode first",
+      markerEntry({
+        type: "discussion_started",
+        mode: "register",
+        model: "claude-opus-5-5[1m]",
+        effort: "high",
+        board: "Platform Roadmap",
+      }),
+      prompt({ text: "Should we cache the plans?" }),
+      ctx("discussion", { task: null }),
+      view("start", "Discussion started", {
+        complement: "Register · Opus 5.5 (1M) · high · Platform Roadmap",
+      }),
+    ],
+    [
       "a discussion started before the marker kept its model",
       markerEntry({ type: "discussion_started" }),
       prompt({ text: "Should we cache the plans?" }),

@@ -89,6 +89,10 @@ const ReviewStage = "review"
 // such an item has.
 const DiscussionStage = "discussion"
 
+// DiscussionModeRegister is the Mode of the discussion_started marker of a
+// discussion in Register mode; a Refine discussion leaves it empty.
+const DiscussionModeRegister = "register"
+
 // StepStage is the session key of a step, which is what the sessions table
 // records in its stage column.
 func StepStage(number int) string { return stepStagePrefix + strconv.Itoa(number) }

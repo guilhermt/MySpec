@@ -40,6 +40,30 @@ func ParseKind(value string) (Kind, error) {
 	return Kind(value), nil
 }
 
+// Mode is how the agent conducts a discussion.
+type Mode string
+
+// The modes of a discussion.
+const (
+	ModeRefine   Mode = "refine"   // asks until the demand is clear and writes structured cards
+	ModeRegister Mode = "register" // writes the card from what the user wrote, asking only what it must
+)
+
+// Modes lists the modes in the order the interface offers them.
+var Modes = []Mode{ModeRefine, ModeRegister}
+
+// ParseMode narrows a stored or received string to a mode. The empty string is
+// the default, ModeRefine.
+func ParseMode(value string) (Mode, error) {
+	if value == "" {
+		return ModeRefine, nil
+	}
+	if !slices.Contains(Modes, Mode(value)) {
+		return "", fmt.Errorf("parse discussion mode %q: %w", value, ErrUnknownMode)
+	}
+	return Mode(value), nil
+}
+
 // Source is who a draft came from.
 type Source string
 
@@ -312,6 +336,7 @@ type Discussion struct {
 	BoardTitle     string // as it was when the discussion was created
 	Title          string
 	Text           string // what the user wrote when creating it; "" for none
+	Mode           Mode   // Refine or Register, fixed at creation
 	InitialContext string
 	InitialImages  []images.Image // the images of the initial context, in the order they reach the agent
 	ArtifactsDir   string
@@ -372,6 +397,7 @@ var (
 	ErrTitleTooLong     = errors.New("discussion: the title is too long")
 	ErrNothingToDiscuss = errors.New("discussion: a text or at least one card is required")
 	ErrUnknownKind      = errors.New("discussion: unknown draft kind")
+	ErrUnknownMode      = errors.New("discussion: unknown discussion mode")
 	ErrUnknownDecision  = errors.New("discussion: unknown decision")
 	ErrUnknownArtifact  = errors.New("discussion: unknown artifact")
 	ErrDraftNotFound    = errors.New("discussion: the draft is not one of the discussion")
