@@ -74,7 +74,7 @@ Key decisions made during planning, with brief rationale. This helps the impleme
 - No over-engineering — implement exactly what's needed, nothing more
 - Use consistent naming with the rest of the codebase
 - Keep functions focused and small
-- Verify only what each change touches and what depends on it: the tests of the changed files and of the files that depend on them, and the static checks, such as lint and typecheck, that apply to them. Never run the full test suite in a step: it runs on the pull request, in its continuous integration or, without one, in the review of the pull request. What the repository documents about when to run each check, and on what scope, prevails over this. [Name the commands of this repository for this scope, or what its documentation says to run instead.]
+- Verify only what each change touches and what depends on it, never the full test suite, unless the repository documents otherwise: [name its commands]
 - [Add any project-specific standards identified during codebase analysis]
 ```
 
