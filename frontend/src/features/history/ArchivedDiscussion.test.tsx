@@ -1,7 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { ArchivedDiscussion } from "@/features/history/ArchivedDiscussion";
-import { ARTIFACT_MISSING } from "@/lib/errors";
 import { olderKey } from "@/lib/history";
 import { type ArchivedDiscussion as ArchivedDiscussionItem, api, type Entry } from "@/lib/wails";
 import { useAppStore } from "@/store/app-store";
@@ -114,42 +113,12 @@ describe("ArchivedDiscussion", () => {
     expect(api.openExternal).toHaveBeenCalledWith("https://github.com/dev/web/issues/31");
   });
 
-  it("opens the document the discussion wrote in place, with no way on to a panel", async () => {
-    const { user } = view();
-
-    await user.click(await screen.findByRole("button", { name: /^discussion\.md/ }));
-
-    await waitFor(() => {
-      expect(api.readDiscussionArtifact).toHaveBeenCalledWith("discussion-1", "discussion.md");
-    });
-    expect(await screen.findByText("# Discussion")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open in Documents" })).not.toBeInTheDocument();
-  });
-
-  it("says when no document was written, on a line that doesn't open", async () => {
-    vi.mocked(api.readDiscussionArtifact).mockRejectedValueOnce(
-      new Error(`${ARTIFACT_MISSING}: discussion.md`),
-    );
+  it("keeps the conversation under a section of its own, with no document", async () => {
     view();
 
-    expect(await screen.findByText("No document was written.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^No document/ })).not.toBeInTheDocument();
-  });
-
-  it("says a document it couldn't read, and reads it again on Try again", async () => {
-    vi.mocked(api.readDiscussionArtifact).mockRejectedValueOnce(
-      new Error("open /data/discussion-1/discussion.md: permission denied"),
-    );
-    const { user } = view();
-
-    expect(await screen.findByText("Couldn't read discussion.md")).toBeInTheDocument();
-    expect(screen.getByText(/permission denied/)).toBeInTheDocument();
-    expect(screen.queryByText("No document was written.")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Try again" }));
-
-    expect(await screen.findByRole("button", { name: /^discussion\.md/ })).toBeInTheDocument();
-    expect(screen.queryByText("Couldn't read discussion.md")).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Conversation" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^discussion\.md/ })).not.toBeInTheDocument();
+    expect(api.readDiscussionArtifact).not.toHaveBeenCalled();
   });
 
   it("links the cards it started from to GitHub", async () => {

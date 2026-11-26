@@ -743,7 +743,7 @@ describe("api", () => {
     await wails.api.retryPushReview("review-1");
     await wails.api.archiveDiscussion("discussion-1");
     await wails.api.deleteDiscussion("discussion-1");
-    await wails.api.readDiscussionArtifact("discussion-1", "discussion.md");
+    await wails.api.readDiscussionArtifact("discussion-1", "context.md");
 
     expect(Call.ByID).toHaveBeenCalledTimes(104);
     const ids = vi.mocked(Call.ByID).mock.calls.map(([id]) => id);

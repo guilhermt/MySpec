@@ -15,10 +15,7 @@ import { useAppStore } from "@/store/app-store";
 const LOADING_WIDTHS = ["w-1/2", "w-full", "w-3/4"];
 
 /** DOCUMENTS are the documents of a discussion, in the order of the list. */
-const DOCUMENTS = [
-  { name: "context.md", label: "Context" },
-  { name: "discussion.md", label: "Document" },
-] as const;
+const DOCUMENTS = [{ name: "context.md", label: "Context" }] as const;
 
 type DocumentName = (typeof DOCUMENTS)[number]["name"];
 
@@ -32,18 +29,14 @@ export interface DocumentsPanelProps {
 }
 
 /**
- * DocumentsPanel is what the discussion was given and what it has written, next to the conversation:
- * the list of the two documents and the one chosen, read. It opens on the document asked for, or on
- * the document of the agent once there is one and on the context before; open, it never changes the
- * choice by itself.
+ * DocumentsPanel is what the discussion was given, next to the conversation: the list of its
+ * documents and the one chosen, read. It opens on the document asked for, or on the context.
  */
 export function DocumentsPanel({ discussion }: DocumentsPanelProps) {
   const openPanel = useAppStore((state) => state.openPanel);
   const asked = useAppStore((state) => state.panelDocument);
   const clearPanelDocument = useAppStore((state) => state.clearPanelDocument);
-  const [chosen, setChosen] = useState<DocumentName>(
-    () => documentNamed(asked) ?? (discussion.hasDocument ? "discussion.md" : "context.md"),
-  );
+  const [chosen, setChosen] = useState<DocumentName>(() => documentNamed(asked) ?? "context.md");
   const [attempt, setAttempt] = useState(0);
 
   // A document asked for opens, also with the panel already open.
@@ -57,12 +50,7 @@ export function DocumentsPanel({ discussion }: DocumentsPanelProps) {
     }
   }, [asked, clearPanelDocument]);
 
-  const artifact = useDiscussionArtifact(
-    discussion.id,
-    chosen,
-    chosen === "discussion.md" ? discussion.documentRevision : 0,
-    attempt,
-  );
+  const artifact = useDiscussionArtifact(discussion.id, chosen, attempt);
 
   return (
     <AuxPanel id="documents" title="Documents" onClose={() => openPanel(null)}>
@@ -72,9 +60,8 @@ export function DocumentsPanel({ discussion }: DocumentsPanelProps) {
             <li key={document.name}>
               <PanelRow
                 glyph={<Icon icon={ICONS.file} size="sm" />}
-                {...(document.name === "discussion.md" && !discussion.hasDocument
-                  ? {}
-                  : { pressed: document.name === chosen, onClick: () => setChosen(document.name) })}
+                pressed={document.name === chosen}
+                onClick={() => setChosen(document.name)}
               >
                 {document.label}
               </PanelRow>

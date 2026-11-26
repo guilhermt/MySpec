@@ -130,14 +130,6 @@ type discussionLock struct {
 	// unreadable is why the drafts artifact could not be read; "" when the
 	// last reading of it worked.
 	unreadable string
-	// hasDocument says the agent has written the document of the discussion,
-	// and documentStamp is the modification time and the size it had when it
-	// was last looked at.
-	hasDocument   bool
-	documentStamp string
-	// documentRevision is bumped every time the document changes, so that the
-	// interface reads it again.
-	documentRevision int
 	// publishing says a run that writes on GitHub is under way, and running
 	// are the drafts of it.
 	publishing bool

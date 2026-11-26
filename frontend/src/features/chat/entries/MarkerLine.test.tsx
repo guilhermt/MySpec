@@ -466,28 +466,9 @@ describe("MarkerLine", () => {
   });
 
   describe("in a discussion", () => {
-    const discussion = { id: "discussion-1", documentRevision: 3, documents: true };
+    const discussion = { id: "discussion-1", documents: true };
     const inDiscussion = (marker: MarkerView) =>
       renderWithStore(<MarkerLine view={marker} createdAt={AT} discussion={discussion} />);
-
-    it("reads the document of the discussion once opened, with its size and the way to Documents", async () => {
-      vi.mocked(api.readDiscussionArtifact).mockResolvedValueOnce(
-        "# Discussion\n\nThe understanding.",
-      );
-      const { user } = inDiscussion(
-        view({
-          text: "Written discussion.md",
-          body: { kind: "discussionDocument", name: "discussion.md", text: null },
-        }),
-      );
-
-      await user.click(screen.getByRole("button", { name: /^Written discussion\.md/ }));
-
-      expect(await screen.findByText("32 characters")).toBeVisible();
-      expect(api.readDiscussionArtifact).toHaveBeenCalledWith("discussion-1", "discussion.md");
-      await user.click(screen.getByRole("button", { name: "Open in Documents" }));
-      expect(useAppStore.getState().panel).toBe("documents");
-    });
 
     it("shows the text it was given without reading anything", async () => {
       const { user } = inDiscussion(
@@ -501,21 +482,6 @@ describe("MarkerLine", () => {
 
       expect(await screen.findByText("12 characters")).toBeVisible();
       expect(api.readDiscussionArtifact).not.toHaveBeenCalled();
-    });
-
-    it("says when the document can't be read and tries again", async () => {
-      vi.mocked(api.readDiscussionArtifact).mockRejectedValueOnce(new Error("gone"));
-      const { user } = inDiscussion(
-        view({
-          text: "Updated discussion.md",
-          body: { kind: "discussionDocument", name: "discussion.md", text: null },
-        }),
-      );
-
-      await user.click(screen.getByRole("button", { name: /^Updated discussion\.md/ }));
-      await user.click(await screen.findByRole("button", { name: "Try again" }));
-
-      expect(api.readDiscussionArtifact).toHaveBeenCalledTimes(2);
     });
 
     it("lists the drafts with their state and links, and draws an error with its own time", async () => {

@@ -22,13 +22,9 @@ const (
 )
 
 // Context is the initial context of a task created from a card: the card, its
-// epic, its siblings and its dependencies, the document of the discussion the
-// card came from, then what the user added.
-func Context(card Card, discussion, additional string) string {
+// epic, its siblings and its dependencies, then what the user added.
+func Context(card Card, additional string) string {
 	sections := cardSections(card, cardHeading, false)
-	if document := strings.TrimSpace(discussion); document != "" {
-		sections = append(sections, cardHeading+"Discussion\n\n"+document)
-	}
 	if extra := strings.TrimSpace(additional); extra != "" {
 		sections = append(sections, cardHeading+"Additional context\n\n"+extra)
 	}

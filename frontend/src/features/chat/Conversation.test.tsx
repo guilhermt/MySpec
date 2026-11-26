@@ -964,7 +964,6 @@ describe("Conversation after", () => {
       drafts: [],
       text,
       cards: [],
-      documentRevision: 0,
       documents: true,
     });
 
@@ -1056,7 +1055,6 @@ describe("Conversation after", () => {
             drafts,
             text: "Cap the overage.",
             cards: [],
-            documentRevision: 0,
             documents: true,
           }}
         />,
@@ -1073,7 +1071,6 @@ describe("Conversation after", () => {
             board: "Roadmap",
           }),
           prompt(),
-          withMarker({ type: "discussion_document", first: true }),
           withMarker({ type: "drafts_written", round: 1, count: 2 }),
           withMarker({
             type: "drafts_revised",
@@ -1103,8 +1100,7 @@ describe("Conversation after", () => {
         "Cap the overage.",
       );
 
-      await user.click(within(feed).getByRole("button", { name: /^Written discussion\.md/ }));
-      expect(api.readDiscussionArtifact).toHaveBeenCalledWith("discussion-1", "discussion.md");
+      await user.click(within(feed).getByRole("button", { name: /^Context/ }));
       expect(await within(feed).findByRole("button", { name: "Open in Documents" })).toBeVisible();
 
       await user.click(within(feed).getByRole("button", { name: /^Drafts revised/ }));

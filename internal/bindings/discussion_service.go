@@ -369,7 +369,7 @@ func (s *DiscussionService) DeleteDiscussion(id string) error {
 }
 
 // ReadDiscussionArtifact returns the content of an artifact of a discussion by
-// file name: context.md, discussion.md or drafts.md.
+// file name: context.md or drafts.md.
 func (s *DiscussionService) ReadDiscussionArtifact(id, name string) (string, error) {
 	s, err := s.late.resolve(s)
 	if err != nil {

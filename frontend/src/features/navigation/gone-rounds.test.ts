@@ -16,13 +16,13 @@ describe("goneDiscussionText", () => {
     const archived = makeArchivedDiscussion({ archivedAt: LATE });
 
     expect(goneDiscussionText(archived, NOW)).toBe(
-      `The conversation ended${atMoment(LATE, NOW)}. The document, the drafts and what was published are in History; a task started from one of these cards gets the document in its context.`,
+      `The conversation ended${atMoment(LATE, NOW)}. The drafts and what was published are in History.`,
     );
   });
 
   it("leaves the time out when it wasn't kept", () => {
     expect(goneDiscussionText(makeArchivedDiscussion({ archivedAt: "" }), NOW)).toMatch(
-      /^The conversation ended\. The document/,
+      /^The conversation ended\. The drafts/,
     );
   });
 });
@@ -52,7 +52,7 @@ describe("goneRoundLines", () => {
 describe("DELETED_DISCUSSION_TEXT", () => {
   it("says what stays on GitHub", () => {
     expect(DELETED_DISCUSSION_TEXT).toBe(
-      "The conversation, the document and the drafts are gone. What was published on GitHub stays.",
+      "The conversation and the drafts are gone. What was published on GitHub stays.",
     );
   });
 });

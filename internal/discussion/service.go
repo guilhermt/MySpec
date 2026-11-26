@@ -738,13 +738,13 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 }
 
 // ReadArtifact reads one file of the artifact folder of a discussion: what was
-// to be discussed, the understanding the agent reached, or the drafts.
+// to be discussed, or the drafts.
 func (s *Service) ReadArtifact(id, name string) (string, error) {
 	d, ok := s.Lookup(id)
 	if !ok {
 		return "", fmt.Errorf("read artifact %s of discussion %s: %w", name, id, ErrNotFound)
 	}
-	if name != ContextFile && name != DocumentFile && name != DraftsFile {
+	if name != ContextFile && name != DraftsFile {
 		return "", fmt.Errorf("read artifact %s of discussion %s: %w", name, id, ErrUnknownArtifact)
 	}
 
@@ -800,8 +800,8 @@ func cardWriters(active, archived []Discussion, drafts map[string][]Draft) map[s
 	return writers
 }
 
-// CardWriters is, for each card key, the discussion that wrote the card,
-// with the same choice DocumentOfCard makes. It reads nothing from disk.
+// CardWriters is, for each card key, the discussion that wrote the card.
+// It reads nothing from disk.
 func (s *Service) CardWriters() map[string]Writer {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -812,24 +812,6 @@ func (s *Service) CardWriters() map[string]Writer {
 		converted[key] = Writer{ID: w.discussion.ID, Title: w.discussion.Title, Archived: w.archived}
 	}
 	return converted
-}
-
-// DocumentOfCard is the understanding of the discussion that wrote a card,
-// which is what a task created from it reads. The most recent publication of
-// the issue wins.
-func (s *Service) DocumentOfCard(owner, name string, number int) (string, bool) {
-	s.mu.Lock()
-	w, found := cardWriters(s.discussions, s.archived, s.drafts)[task.IssueKey(owner, name, number)]
-	s.mu.Unlock()
-
-	if !found {
-		return "", false
-	}
-	content, err := os.ReadFile(w.discussion.DocumentPath())
-	if err != nil {
-		return "", false
-	}
-	return string(content), true
 }
 
 // editDraft rewrites one draft of an active discussion with what the user

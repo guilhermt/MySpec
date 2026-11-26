@@ -129,7 +129,6 @@ Os artefatos de uma discussão ficam em `discussions/<dono do board>/<número do
 
 ```
 context.md          o contexto inicial, escrito pelo app quando a discussão nasce
-discussion.md       o documento do entendimento, escrito pelo agente
 drafts.md           os rascunhos de card, escritos pelo agente
 images/<id>.<ext>   as imagens do contexto inicial, das mensagens e as coladas na edição de um rascunho
 ```

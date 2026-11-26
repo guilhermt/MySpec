@@ -36,7 +36,7 @@ describe("DeleteDiscussionDialog", () => {
     expect(screen.getByRole("heading", { name: "Delete “Invoices”?" })).toBeInTheDocument();
     expect(
       screen.getByText(
-        "The conversation, the document and the drafts go away, and the discussion doesn't go to History. What was published on GitHub stays: 2 issues.",
+        "The conversation and the drafts go away, and the discussion doesn't go to History. What was published on GitHub stays: 2 issues.",
       ),
     ).toBeInTheDocument();
   });
@@ -48,18 +48,9 @@ describe("DeleteDiscussionDialog", () => {
   });
 
   it.each([
-    [
-      0,
-      "Nothing changes on GitHub. A task started from one of its cards loses the document in its context.",
-    ],
-    [
-      1,
-      "Nothing changes on GitHub: the issue it published stays. A task started from one of its cards loses the document in its context.",
-    ],
-    [
-      4,
-      "Nothing changes on GitHub: the 4 issues it published stay. A task started from one of its cards loses the document in its context.",
-    ],
+    [0, "Nothing changes on GitHub."],
+    [1, "Nothing changes on GitHub: the issue it published stays."],
+    [4, "Nothing changes on GitHub: the 4 issues it published stay."],
   ])(
     "says what the deletion of an archived discussion with %i published leaves",
     (published, line) => {
@@ -67,7 +58,7 @@ describe("DeleteDiscussionDialog", () => {
 
       expect(
         screen.getByText(
-          "This removes the archived discussion, its document, its drafts and its conversation from History. It can't be undone.",
+          "This removes the archived discussion, its drafts and its conversation from History. It can't be undone.",
         ),
       ).toBeInTheDocument();
       expect(screen.getByText(line)).toBeInTheDocument();

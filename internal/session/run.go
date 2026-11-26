@@ -633,9 +633,8 @@ func (s *Service) flushPendingLocked(ctx context.Context, r *run, n *notes) bool
 			ReviewOnly:        r.task.ReviewOnly,
 			DiscardedFindings: r.task.DiscardedFindings,
 
-			DocumentPath: r.task.DocumentPath,
-			DraftsPath:   r.task.DraftsPath,
-			Board:        r.task.Board,
+			DraftsPath: r.task.DraftsPath,
+			Board:      r.task.Board,
 		}
 		// The text of a prompt entry is what the app appends to the prompt: the
 		// initial context of the PRD, of the One-Shot planning and of a

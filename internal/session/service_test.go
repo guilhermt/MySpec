@@ -3087,19 +3087,6 @@ func TestMarkDiscussionRecordsEachMarkerOnce(t *testing.T) {
 		want []session.MarkerEntry
 	}{
 		{
-			name: "a document by its stamp",
-			mark: []session.MarkerEntry{
-				{Type: session.MarkerDiscussionDocument, Stamp: "a"},
-				{Type: session.MarkerDiscussionDocument, Stamp: "a"},
-				{Type: session.MarkerDiscussionDocument, Stamp: "b"},
-				{Type: session.MarkerDiscussionDocument, Stamp: "b"},
-			},
-			want: []session.MarkerEntry{
-				{Type: session.MarkerDiscussionDocument, Stamp: "a", First: true},
-				{Type: session.MarkerDiscussionDocument, Stamp: "b"},
-			},
-		},
-		{
 			name: "the drafts written by their round",
 			mark: []session.MarkerEntry{
 				{Type: session.MarkerDraftsWritten, Round: 1, Count: 3},
@@ -3200,15 +3187,12 @@ func TestMarkDiscussionSurvivesARestart(t *testing.T) {
 	info := atDiscussion(t, taskInfo(t, "d1"))
 	f.start(t, info)
 	f.waitIdle(t, info.Key())
-	document := session.MarkerEntry{Type: session.MarkerDiscussionDocument, Stamp: "a"}
 	written := session.MarkerEntry{Type: session.MarkerDraftsWritten, Round: 1, Count: 2}
-	f.service.MarkDiscussion(t.Context(), info.Key(), &document)
 	f.service.MarkDiscussion(t.Context(), info.Key(), &written)
 	want := f.discussionMarkers(t, info.Key())
 
 	next := f.restart(t)
 	next.open(t, info)
-	next.service.MarkDiscussion(t.Context(), info.Key(), &document)
 	next.service.MarkDiscussion(t.Context(), info.Key(), &written)
 
 	if diff := cmp.Diff(want, next.discussionMarkers(t, info.Key())); diff != "" {

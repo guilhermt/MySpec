@@ -341,7 +341,6 @@ export function discussionInputOf(discussion: DiscussionSummary): DiscussionInpu
     drafts: discussion.drafts ?? [],
     text: discussion.text,
     cards: discussion.cards ?? [],
-    documentRevision: discussion.documentRevision,
     documents: true,
   };
 }

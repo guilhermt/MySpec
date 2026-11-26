@@ -927,7 +927,7 @@ type MarkerEntry struct {
 	// step_review_written, review_started, discussion_started, stage_started,
 	// step_started, compacted, interrupted, retried, woke, committed, pr_opened,
 	// checks_read, draft_approved, changes_approved, paused, plan_invalid,
-	// background_stopped, background_lost, discussion_document,
+	// background_stopped, background_lost,
 	// drafts_written, drafts_revised, drafts_unreadable, drafts_published or
 	// divergence.
 	Type      string `json:"type"`
@@ -992,7 +992,6 @@ type MarkerEntry struct {
 	Board   string        `json:"board"`   // discussion_started
 	Epics   []string      `json:"epics"`   // discussion_started; never nil
 	Round   int           `json:"round"`   // drafts_*
-	First   bool          `json:"first"`   // discussion_document
 	Changed int           `json:"changed"` // drafts_revised
 	Added   int           `json:"added"`   // drafts_revised
 	Dropped int           `json:"dropped"` // drafts_revised
@@ -2024,10 +2023,6 @@ type DiscussionSummary struct {
 	// UnreadableDrafts is why the drafts artifact could not be read; ""
 	// otherwise.
 	UnreadableDrafts string `json:"unreadableDrafts"`
-	// HasDocument says the agent wrote the document of the discussion, and
-	// DocumentRevision changes every time it does.
-	HasDocument      bool `json:"hasDocument"`
-	DocumentRevision int  `json:"documentRevision"`
 	// ModuleField is the name of the module field of the board; "" without one.
 	ModuleField   string   `json:"moduleField"`
 	ModuleOptions []string `json:"moduleOptions"` // the names of the options; never nil

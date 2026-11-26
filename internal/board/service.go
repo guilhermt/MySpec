@@ -283,13 +283,13 @@ func (s *Service) CardOfPullRequest(owner, name string, number int) (boardID str
 }
 
 // Context is the initial context of a task created from the card of key, with
-// the document of the discussion the card came from and what the user added.
-func (s *Service) Context(boardID, key, discussion, additional string) (string, error) {
+// what the user added.
+func (s *Service) Context(boardID, key, additional string) (string, error) {
 	card, ok := s.Card(boardID, key)
 	if !ok {
 		return "", fmt.Errorf("context of card %s: %w", key, ErrCardNotFound)
 	}
-	return Context(card, discussion, additional), nil
+	return Context(card, additional), nil
 }
 
 // Refresh reads the board of id again, in the background: Reading reports it

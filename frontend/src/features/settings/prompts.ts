@@ -47,8 +47,7 @@ export const PROMPTS: readonly PromptMeta[] = [
   {
     stage: "discussion",
     name: "Discussion",
-    description:
-      "Opens the conversation of a discussion, which writes the document and the drafts of cards.",
+    description: "Opens the conversation of a discussion, which writes the drafts of cards.",
   },
 ];
 
@@ -84,9 +83,6 @@ export const PLACEHOLDERS: Readonly<Record<string, PlaceholderMeta>> = {
   "{{base_branch}}": { meaning: "The base branch of the worktree and the pull request" },
   "{{draft_path}}": { meaning: "The file the agent writes the pull request draft to" },
   "{{review_path}}": { meaning: "The file the agent writes the review report to" },
-  "{{document_path}}": {
-    meaning: "The file the agent writes the document of the discussion to",
-  },
   "{{drafts_path}}": { meaning: "The file the agent writes the drafts of cards to" },
   "{{pr_number}}": { meaning: "The number of the pull request" },
   "{{pr_url}}": { meaning: "The address of the pull request" },

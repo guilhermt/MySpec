@@ -3,7 +3,6 @@ import {
   contextLineOf,
   type DiscussionInput,
   type DraftRowView,
-  documentLineOf,
   publishedLineOf,
   type RoundFolds,
   revisedLineOf,
@@ -73,8 +72,7 @@ export type MarkerIcon =
  * message of the product); a document of the task or of the review, read on opening, with the panel
  * of its foot; the problems of a plan; the checks a pass started from; the findings a pass decided;
  * the commits that reached a pull request; or, in a discussion, a document of it (the context it
- * was given, or the one the agent wrote, which is read on opening) and a list of its drafts; or
- * a plain list of lines, the work in the background a marker names.
+ * was given) and a list of its drafts; or a plain list of lines, the work in the background a marker names.
  */
 export type MarkerBody =
   | { kind: "none" }
@@ -84,12 +82,7 @@ export type MarkerBody =
   | { kind: "checks"; reading: ChecksReading; summary: string }
   | { kind: "findings"; pass: number; findings: FindingView[] }
   | { kind: "commits"; commits: { sha: string; subject: string }[]; more: number }
-  | {
-      kind: "discussionDocument";
-      name: "context.md" | "discussion.md";
-      text: string | null;
-      images?: Image[];
-    }
+  | { kind: "discussionDocument"; name: "context.md"; text: string; images?: Image[] }
   | { kind: "drafts"; rows: DraftRowView[] }
   | { kind: "list"; items: string[] };
 
@@ -821,7 +814,6 @@ export function markerOf(
     case "review_started":
     case "discussion_started":
       return startView(marker, null, ctx);
-    case "discussion_document":
     case "drafts_written":
     case "drafts_revised":
     case "drafts_unreadable":
@@ -850,8 +842,6 @@ function discussionLineOf(
     return roundLineOf(round, discussion.drafts, folds.revisions.get(round) ?? 0);
   }
   switch (asMarkerType(marker.type)) {
-    case "discussion_document":
-      return documentLineOf(marker, entryId === folds.latestDocument);
     case "drafts_written":
       return writtenLineOf(marker);
     case "drafts_revised":

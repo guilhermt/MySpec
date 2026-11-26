@@ -3,17 +3,15 @@ package discussionflow
 import (
 	"context"
 	"errors"
-	"os"
-	"strconv"
 
 	"github.com/guilhermt/myspec/internal/discussion"
 	"github.com/guilhermt/myspec/internal/divergence"
 	"github.com/guilhermt/myspec/internal/session"
 )
 
-// evaluate keeps a discussion in step with its conversation: it notices the
-// document the agent writes, records the drafts of the artifact once the agent
-// rests, and sends to GitHub what is ready to go.
+// evaluate keeps a discussion in step with its conversation: it records the
+// drafts of the artifact once the agent rests, and sends to GitHub what is
+// ready to go.
 func (s *Service) evaluate(ctx context.Context, id string) {
 	if s.isClosed() {
 		return
@@ -23,7 +21,6 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 		return
 	}
 	l := s.lockOf(id)
-	s.stampDocument(ctx, l, stored)
 
 	// The conversation is opened by Start and by Sync: an evaluation never
 	// opens one, and reads the artifact only while it rests. A run writes the
@@ -39,43 +36,6 @@ func (s *Service) evaluate(ctx context.Context, id string) {
 	}
 	// What the user decided goes to GitHub whatever the conversation does.
 	s.publishDue(stored)
-}
-
-// stampDocument looks at the document of the discussion: the interface reads
-// it again every time it changes.
-func (s *Service) stampDocument(ctx context.Context, l *discussionLock, stored discussion.Discussion) {
-	stamp, has := documentStamp(stored.DocumentPath())
-
-	s.mu.Lock()
-	changed := l.hasDocument != has || l.documentStamp != stamp
-	if changed {
-		l.hasDocument, l.documentStamp = has, stamp
-		if has {
-			l.documentRevision++
-		}
-	}
-	s.mu.Unlock()
-
-	if changed {
-		s.notify(stored.ID)
-	}
-	if changed && has {
-		// A restart finds the same stamp and calls again: the session records
-		// the marker once.
-		s.sessions.MarkDiscussion(ctx, sessionKey(stored.ID), &session.MarkerEntry{
-			Type: session.MarkerDiscussionDocument, Stamp: stamp,
-		})
-	}
-}
-
-// documentStamp is how a document on disk is told apart from the last reading
-// of it: its modification time and its size.
-func documentStamp(path string) (string, bool) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return "", false
-	}
-	return strconv.FormatInt(info.ModTime().UnixNano(), 10) + "-" + strconv.FormatInt(info.Size(), 10), true
 }
 
 // readDrafts records the drafts of the artifact the agent wrote, reconciled

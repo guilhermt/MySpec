@@ -88,25 +88,17 @@ export function DeleteDiscussionDialog({
         {archived ? (
           <>
             <p>
-              This removes the archived discussion, its document, its drafts and its conversation
-              from History. It can't be undone.
+              This removes the archived discussion, its drafts and its conversation from History. It
+              can't be undone.
             </p>
-            <p className="text-ink-3">
-              {`${archivedStays(published)} A task started from one of its cards loses the document in its context.`}
-            </p>
+            <p className="text-ink-3">{archivedStays(published)}</p>
           </>
         ) : (
-          <>
-            <p>
-              The conversation, the document and the drafts go away, and the discussion doesn't go
-              to History.
-              {published > 0 &&
-                ` What was published on GitHub stays: ${counted(published, "issue")}.`}
-            </p>
-            <p className="text-ink-3">
-              A task started from one of its cards loses the document in its context.
-            </p>
-          </>
+          <p>
+            The conversation and the drafts go away, and the discussion doesn't go to History.
+            {published > 0 &&
+              ` What was published on GitHub stays: ${counted(published, "issue")}.`}
+          </p>
         )}
         {ended.length > 0 && (
           <>

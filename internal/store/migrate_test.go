@@ -34,24 +34,26 @@ import (
 // back the approval of the epics of the active discussions, roundsVersion the
 // one that brought the round of a draft, savedStatusesVersion the one that
 // brought the statuses saved with a board, prReviewFixesVersion the one that
-// brought the implementer of the review of a pull request, and latestVersion the version the
-// embedded migrations end at.
+// brought the implementer of the review of a pull request,
+// documentMarkersVersion the one that dropped the markers of the document of a
+// discussion, and latestVersion the version the embedded migrations end at.
 const (
-	stagesVersion        = 3
-	commitsVersion       = 5
-	prVersion            = 6
-	modelsVersion        = 9
-	reviewModeVersion    = 10
-	modeVersion          = 11
-	boardsVersion        = 14
-	itemsVersion         = 15
-	taskScreenVersion    = 19
-	reviewScreenVersion  = 21
-	chainVersion         = 23
-	roundsVersion        = 24
-	savedStatusesVersion = 25
-	prReviewFixesVersion = 26
-	latestVersion        = 31
+	stagesVersion          = 3
+	commitsVersion         = 5
+	prVersion              = 6
+	modelsVersion          = 9
+	reviewModeVersion      = 10
+	modeVersion            = 11
+	boardsVersion          = 14
+	itemsVersion           = 15
+	taskScreenVersion      = 19
+	reviewScreenVersion    = 21
+	chainVersion           = 23
+	roundsVersion          = 24
+	savedStatusesVersion   = 25
+	prReviewFixesVersion   = 26
+	documentMarkersVersion = 32
+	latestVersion          = 32
 )
 
 // upgradeTime is the instant the repositories of the fake upgrades are stamped
@@ -692,6 +694,31 @@ func TestTheConversationMigrationLeavesAPullRequestWithoutWhoMergedIt(t *testing
 	const query = `SELECT merged_by || merged_at FROM pr_runs WHERE task_id = 'task-1'`
 	if got := readOne(t, db, query); got != "" {
 		t.Errorf("merged_by, merged_at = %q, want them empty on a row recorded before the columns", got)
+	}
+}
+
+func TestTheDocumentMarkersMigrationDropsTheMarkersOfTheDiscussionDocument(t *testing.T) {
+	t.Parallel()
+
+	db := openAt(t, documentMarkersVersion-1)
+	seedRepositoryAndTask(t, db)
+	seedItemRecords(t, db, "task-1", "item_id")
+	const insertMarkers = `INSERT INTO transcript_entries (id, session_id, seq, turn_id, kind, payload, created_at)
+		VALUES ('marker-1', 'sess-1', 2, 'turn-1', 'marker', '{"type":"discussion_document"}', '2026-09-06T10:00:00Z'),
+			('marker-2', 'sess-1', 3, 'turn-1', 'marker', '{"type":"drafts_written"}', '2026-09-06T10:00:00Z')`
+	if _, err := db.ExecContext(t.Context(), insertMarkers); err != nil {
+		t.Fatalf("seed markers: %v", err)
+	}
+
+	if err := migrate(t.Context(), db, slog.New(slog.DiscardHandler), carryOver(t)); err != nil {
+		t.Fatalf("migrate() = %v, want nil", err)
+	}
+
+	const count = `SELECT count(*) FROM transcript_entries WHERE id = '%s'`
+	for id, want := range map[string]string{"marker-1": "0", "marker-2": "1", "entry-1": "1"} {
+		if got := readOne(t, db, fmt.Sprintf(count, id)); got != want {
+			t.Errorf("entries named %s = %s, want %s", id, got, want)
+		}
 	}
 }
 

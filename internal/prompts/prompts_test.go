@@ -92,7 +92,7 @@ func TestReadGivesTheDefaultOfEveryPrompt(t *testing.T) {
 		{prompts.StagePR, []string{"# Pull Request", "{{draft_path}}", "{{base_branch}}", "Never open the pull request and never push", "AskUserQuestion"}},
 		{prompts.StagePRReview, []string{"# Pull Request Review", "{{review_path}}", "{{pr_url}}", "status: clean", "AskUserQuestion", "## How to write the report", "Portuguese", "The summary is optional"}},
 		{prompts.StagePRFix, []string{"# Pull Request Review Fixes", "{{pr_url}}", "{{prd_path}}", "AskUserQuestion", "never by rebasing", "Never write or rewrite a review report"}},
-		{prompts.StageDiscussion, []string{"# Discussion", "{{document_path}}", "{{drafts_path}}", "AskUserQuestion", "never repeats the shared context of the epic", "never shorter at the cost of the context"}},
+		{prompts.StageDiscussion, []string{"# Discussion", "{{drafts_path}}", "AskUserQuestion", "never repeats the shared context of the epic", "never shorter at the cost of the context"}},
 	}
 
 	dataDir := t.TempDir()
@@ -289,7 +289,7 @@ func TestPlaceholdersAreTheOnesTheDefaultUses(t *testing.T) {
 			"{{base_branch}}", "{{pr_number}}", "{{pr_url}}",
 		}},
 		{prompts.StageDiscussion, []string{
-			"{{task_name}}", "{{artifacts_dir}}", "{{initial_context}}", "{{document_path}}", "{{drafts_path}}",
+			"{{task_name}}", "{{artifacts_dir}}", "{{initial_context}}", "{{drafts_path}}",
 		}},
 	}
 
@@ -442,9 +442,8 @@ func oneShotVars() prompts.Vars {
 	return vars
 }
 
-// The two files the agent of a discussion writes and the board it runs on.
+// The file the agent of a discussion writes and the board it runs on.
 const (
-	documentPath = "/data/discussions/invoices/discussion.md"
 	draftsPath   = "/data/discussions/invoices/drafts.md"
 	boardSection = "- Board: Platform\n- Repositories: `acme/api`"
 )
@@ -455,7 +454,6 @@ func discussionVars() prompts.Vars {
 		TaskName:       "invoices",
 		ArtifactsDir:   "/data/discussions/invoices",
 		InitialContext: "the invoices of the month",
-		DocumentPath:   documentPath,
 		DraftsPath:     draftsPath,
 		Board:          boardSection,
 	}
@@ -503,7 +501,7 @@ func TestRenderTheDefaultPromptsKeepNoPlaceholder(t *testing.T) {
 			"https://github.com/acme/api/pull/42", "`42`", "`acme/api`", "git merge origin/dev",
 		}},
 		{prompts.StageDiscussion, discussionVars(), []string{
-			"invoices", "/data/discussions/invoices", documentPath, draftsPath,
+			"invoices", "/data/discussions/invoices", draftsPath,
 			"## Initial context\n\nthe invoices of the month",
 		}},
 	}
@@ -1229,7 +1227,7 @@ func TestRenderAppendsTheDiscussionSectionsOnlyToThePromptOfADiscussion(t *testi
 
 	dataDir := t.TempDir()
 	vars := everyVar()
-	vars.Board, vars.DraftsPath, vars.DocumentPath = boardSection, draftsPath, documentPath
+	vars.Board, vars.DraftsPath = boardSection, draftsPath
 
 	for _, stage := range []prompts.Stage{
 		prompts.StagePRD, prompts.StageTechSpec, prompts.StagePlan, prompts.StageOneShot,

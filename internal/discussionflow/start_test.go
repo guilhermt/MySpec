@@ -49,7 +49,6 @@ func TestStartingADiscussionWritesTheInitialContextAndOpensTheConversation(t *te
 		Stage:          session.DiscussionStage,
 		Prompt:         prompts.StageDiscussion,
 		InitialContext: stored.InitialContext,
-		DocumentPath:   stored.DocumentPath(),
 		DraftsPath:     stored.DraftsPath(),
 		BoardTitle:     "Roadmap",
 		Board: strings.Join([]string{

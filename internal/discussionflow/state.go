@@ -86,10 +86,6 @@ type State struct {
 	// Divergence is what the app expected of the discussion and did not find;
 	// nil for none.
 	Divergence *divergence.Divergence
-	// HasDocument says the agent has written the document of the discussion,
-	// and DocumentRevision changes every time it does.
-	HasDocument      bool
-	DocumentRevision int
 	// Publishing says a run that writes on GitHub is under way.
 	Publishing bool
 	// CanArchive says the discussion can leave the list for the history, and
@@ -115,8 +111,6 @@ func (s *Service) State(id string) (State, bool) {
 		Session:          sum,
 		SessionOpen:      open,
 		UnreadableDrafts: l.unreadable,
-		HasDocument:      l.hasDocument,
-		DocumentRevision: l.documentRevision,
 		Publishing:       l.publishing,
 	}
 	running := maps.Clone(l.running)

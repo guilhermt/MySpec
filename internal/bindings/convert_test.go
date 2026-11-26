@@ -1321,10 +1321,6 @@ func TestFromEntryCarriesTheNewMarkerFields(t *testing.T) {
 				Board: "Roadmap", Epics: []string{"acme/web#1"},
 			}),
 		},
-		"discussion_document": {
-			marker: &session.MarkerEntry{Type: session.MarkerDiscussionDocument, First: true, Stamp: "1-2"},
-			want:   markerDTO(bindings.MarkerEntry{Type: "discussion_document", Findings: -1, First: true}),
-		},
 		"drafts_written": {
 			marker: &session.MarkerEntry{Type: session.MarkerDraftsWritten, Round: 2, Count: 3},
 			want:   markerDTO(bindings.MarkerEntry{Type: "drafts_written", Findings: -1, Round: 2, Count: 3}),
@@ -3421,7 +3417,6 @@ func TestFromDiscussionsCarriesTheBoardTheModuleAndTheSituations(t *testing.T) {
 	t.Parallel()
 
 	state := discussionState(discussionflow.StatusDeciding, discussionDrafts()...)
-	state.HasDocument, state.DocumentRevision = true, 3
 	situations := map[string][]attention.Situation{
 		"discussion-1": {{
 			ID: "s-1", TaskID: "discussion-1", Kind: attention.KindDrafts,
@@ -3442,9 +3437,8 @@ func TestFromDiscussionsCarriesTheBoardTheModuleAndTheSituations(t *testing.T) {
 		Drafts:         got.Drafts,
 		DraftsRead:     true,
 		DraftsRevision: 2,
-		HasDocument:    true, DocumentRevision: 3,
-		ModuleField:   "Módulo",
-		ModuleOptions: []string{"Auth", "Billing"},
+		ModuleField:    "Módulo",
+		ModuleOptions:  []string{"Auth", "Billing"},
 		Repositories: []bindings.DiscussionRepository{
 			{ID: "r-api", FullName: "acme/api", Cloned: true, Missing: true},
 			{ID: "r-web", FullName: "acme/web", Cloned: true},

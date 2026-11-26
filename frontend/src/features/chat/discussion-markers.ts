@@ -23,7 +23,6 @@ export interface DiscussionInput {
   drafts: readonly Draft[];
   text: string;
   cards: readonly DiscussionCard[];
-  documentRevision: number;
   /** documents is whether the screen has the Documents panel, which a document of the discussion opens in. */
   documents: boolean;
 }
@@ -42,8 +41,6 @@ export interface RoundFolds {
   cardAfter: string;
   /** revisions is how many Drafts revised each round has. */
   revisions: ReadonlyMap<number, number>;
-  /** latestDocument is the id of the latest discussion_document marker; "" without one. */
-  latestDocument: string;
   /** epics is the number of epics the start marker recorded; null for a discussion that recorded none. */
   epics: number | null;
 }
@@ -138,7 +135,6 @@ export function roundFolds(entries: readonly Entry[], drafts: readonly Draft[]):
     before,
     cardAfter: latestCard ?? END,
     revisions,
-    latestDocument: markersOf(entries, "discussion_document").at(-1)?.id ?? "",
     epics,
   };
 }
@@ -195,16 +191,6 @@ export function contextLineOf(
     "Context",
     `${from} · ${contextCharacters(prompt.text)}${imagesPart(images.length, false)}`,
     { kind: "discussionDocument", name: "context.md", text: prompt.text, images },
-  );
-}
-
-/** documentLineOf is the line of the document written or rewritten; only the latest opens it. */
-export function documentLineOf(marker: MarkerEntry, latest: boolean): MarkerView {
-  return line(
-    "file",
-    `${marker.first ? "Written" : "Updated"} discussion.md`,
-    "the understanding",
-    latest ? { kind: "discussionDocument", name: "discussion.md", text: null } : NONE,
   );
 }
 

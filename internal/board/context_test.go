@@ -69,7 +69,7 @@ _The epic has no description._
 
 Mind the dark theme.`
 
-	if diff := cmp.Diff(want, board.Context(card, "", "  Mind the dark theme.\n")); diff != "" {
+	if diff := cmp.Diff(want, board.Context(card, "  Mind the dark theme.\n")); diff != "" {
 		t.Errorf("Context() (-want +got):\n%s", diff)
 	}
 }
@@ -90,7 +90,7 @@ func TestContextSaysNotConfirmedForADependencyTheReadingHasNotConfirmed(t *testi
 - acme/api#20 Auth endpoint · Not confirmed
 - acme/api#21 · Not confirmed`
 
-	if got := board.Context(card, "", ""); !strings.Contains(got, want) {
+	if got := board.Context(card, ""); !strings.Contains(got, want) {
 		t.Errorf("Context() = %q, want it to contain %q", got, want)
 	}
 }
@@ -117,33 +117,7 @@ _The card has no description._
 
 The account epic.`
 
-	if diff := cmp.Diff(want, board.Context(card, "", " \n")); diff != "" {
-		t.Errorf("Context() (-want +got):\n%s", diff)
-	}
-}
-
-func TestContextCarriesTheDocumentOfTheDiscussionTheCardCameFrom(t *testing.T) {
-	t.Parallel()
-
-	card := board.Card{Issue: issue("acme", "web", 12, "Login screen", task.IssueOpen), Body: "Build the login screen."}
-
-	want := `### Card: Login screen
-
-- Issue: acme/web#12
-- Link: https://github.com/acme/web/issues/12
-
-Build the login screen.
-
-### Discussion
-
-What we agreed about accounts.
-
-### Additional context
-
-Mind the dark theme.`
-
-	got := board.Context(card, "\nWhat we agreed about accounts.\n", "Mind the dark theme.")
-	if diff := cmp.Diff(want, got); diff != "" {
+	if diff := cmp.Diff(want, board.Context(card, " \n")); diff != "" {
 		t.Errorf("Context() (-want +got):\n%s", diff)
 	}
 }

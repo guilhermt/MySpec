@@ -10,16 +10,13 @@ import { CutText } from "@/components/system/CutText";
 import { Icon } from "@/components/system/Icon";
 import { ICONS } from "@/components/system/icons";
 import { Link } from "@/components/system/Link";
-import { NoticeStrip } from "@/components/system/NoticeStrip";
 import { Skeleton, SkeletonBar } from "@/components/system/Skeleton";
 import { Tooltip } from "@/components/system/Tooltip";
 import { Conversation } from "@/features/chat/Conversation";
 import type { DiscussionInput } from "@/features/chat/discussion-markers";
-import { LINE, MarkerLine } from "@/features/chat/entries/MarkerLine";
-import type { MarkerView } from "@/features/chat/markers";
+import { LINE } from "@/features/chat/entries/MarkerLine";
 import { IDLE_SESSION } from "@/features/chat/session";
 import { DeleteDiscussionDialog } from "@/features/discussion/DeleteDiscussionDialog";
-import { useDiscussionArtifact } from "@/features/discussion/useDiscussionArtifact";
 import { ArchivedBody } from "@/features/history/ArchivedBody";
 import { ArchivedFacts } from "@/features/history/ArchivedFacts";
 import { ArchivedMarkers } from "@/features/history/ArchivedMarkers";
@@ -34,16 +31,12 @@ import {
 import { historyEntries, historyNeighbor } from "@/features/history/history-list";
 import { useArchivedItem } from "@/features/history/useArchivedItem";
 import { LocationHeader } from "@/features/navigation/LocationHeader";
-import { isMissingFile } from "@/lib/errors";
 import { olderKey } from "@/lib/history";
 import { counted } from "@/lib/situations";
 import { cn } from "@/lib/utils";
 import { DISCUSSION_STAGE } from "@/lib/wails";
 import { loadTranscript, openExternal } from "@/store/actions";
 import { useAppStore, useBoard, useTranscript } from "@/store/app-store";
-
-/** DOCUMENT_FILE is the document the agent wrote about the demand. */
-const DOCUMENT_FILE = "discussion.md";
 
 // PublishedLine is a draft of the discussion: its kind, its title and what became of it.
 function PublishedLine({ row }: { row: PublishedRow }) {
@@ -114,8 +107,8 @@ export interface ArchivedDiscussionProps {
 }
 
 /**
- * ArchivedDiscussion is a discussion that is over, as History keeps it: what it published, the
- * document it wrote and the whole conversation, read only. Nothing runs; going back and deleting are
+ * ArchivedDiscussion is a discussion that is over, as History keeps it: what it published and the
+ * whole conversation, read only. Nothing runs; going back and deleting are
  * what is left.
  */
 export function ArchivedDiscussion({ discussionId }: ArchivedDiscussionProps) {
@@ -127,16 +120,13 @@ export function ArchivedDiscussion({ discussionId }: ArchivedDiscussionProps) {
   const [deleting, setDeleting] = useState(false);
   const [neighbor, setNeighbor] = useState<string | null>(null);
   const [conversationOpen, setConversationOpen] = useState(false);
-  // The document never changes again, so it is read once, at revision zero, and again on Try again.
-  const [attempt, setAttempt] = useState(0);
-  const artifact = useDiscussionArtifact(discussionId, DOCUMENT_FILE, 0, attempt);
 
   // The conversation of a discussion of History is fetched when it opens; nothing arrives after that.
   useEffect(() => {
     void loadTranscript(discussionId, DISCUSSION_STAGE);
   }, [discussionId]);
 
-  // The rounds fold in the archived conversation too, and its document is the archived file.
+  // The rounds fold in the archived conversation too.
   const input = useMemo<DiscussionInput | null>(
     () =>
       discussion === null
@@ -146,7 +136,6 @@ export function ArchivedDiscussion({ discussionId }: ArchivedDiscussionProps) {
             drafts: discussion.drafts ?? [],
             text: discussion.text,
             cards: discussion.cards ?? [],
-            documentRevision: 0,
             documents: false,
           },
     [discussion],
@@ -169,27 +158,6 @@ export function ArchivedDiscussion({ discussionId }: ArchivedDiscussionProps) {
 
   const now = Date.now();
   const rows = publishedRows(discussion);
-  // A document that is not there, or empty, is a discussion that never wrote one; one that is there
-  // and cannot be read says the failure in place of its line.
-  const failed = artifact.status === "error" && !isMissingFile(artifact.error);
-  const written =
-    artifact.status === "loading" ||
-    (artifact.status === "ready" && artifact.content.trim() !== "");
-  const documentView: MarkerView = written
-    ? {
-        icon: "file",
-        text: DOCUMENT_FILE,
-        complement: "the understanding",
-        body: { kind: "discussionDocument", name: DOCUMENT_FILE, text: null },
-        timeHidden: true,
-      }
-    : {
-        icon: "file",
-        text: "No document was written.",
-        complement: "",
-        body: { kind: "none" },
-        timeHidden: true,
-      };
   const read = transcript?.status === "ready";
   const complement = read
     ? `${counted(transcript.entries.length, "message")}, read only`
@@ -246,28 +214,9 @@ export function ArchivedDiscussion({ discussionId }: ArchivedDiscussionProps) {
           </ArchivedSection>
         )}
 
-        <ArchivedSection title="Document and conversation">
-          {failed && (
-            <NoticeStrip
-              role="alert"
-              title={`Couldn't read ${DOCUMENT_FILE}`}
-              reason={artifact.error}
-              action={
-                <Button variant="ghost" size="sm" onClick={() => setAttempt((count) => count + 1)}>
-                  Try again
-                </Button>
-              }
-            />
-          )}
+        <ArchivedSection title="Conversation">
           <Collapsible open={conversationOpen} onOpenChange={setConversationOpen}>
-            <ArchivedMarkers label="Document and conversation">
-              {!failed && (
-                <MarkerLine
-                  view={documentView}
-                  createdAt=""
-                  discussion={{ id: discussion.id, documentRevision: 0, documents: false }}
-                />
-              )}
+            <ArchivedMarkers label="Conversation">
               <ConversationLine complement={complement} />
             </ArchivedMarkers>
             <CollapsibleContent>

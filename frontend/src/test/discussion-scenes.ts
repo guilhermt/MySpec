@@ -1309,12 +1309,12 @@ function talk(error: boolean): Entry[] {
 /** UNREADABLE is why drafts.md can't be read in the scene unreadable. */
 const UNREADABLE = "Draft invoice-overage: it has no ### Title.";
 
-// confirm is the answer, the plan of the drafts and their writing, up to the document of 14:27; the
+// confirm is the answer, the plan of the drafts and their writing, up to the drafts of 14:27; the
 // drafts that can't be read say so there.
 function confirm(ten: boolean, unreadable: boolean): Entry[] {
   const plan = ten
-    ? "I'd write the document and ten drafts: an epic, *Pricing tiers with metered overage*, with five cards, updates of #461 and #474, and two loose cards (the status page and a support view). Shall I write them?"
-    : "I'd write the document and five drafts: an epic, *Pricing tiers with metered overage*, with three new cards (the tier data, the invoice, the plan picker), and an update of #461 so it meters per API key. Shall I write them?";
+    ? "I'd write ten drafts: an epic, *Pricing tiers with metered overage*, with five cards, updates of #461 and #474, and two loose cards (the status page and a support view). Shall I write them?"
+    : "I'd write five drafts: an epic, *Pricing tiers with metered overage*, with three new cards (the tier data, the invoice, the plan picker), and an update of #461 so it meters per API key. Shall I write them?";
   const entries = [
     you("14:21", "a. grandfathering is another card, later"),
     speech(
@@ -1323,7 +1323,6 @@ function confirm(ten: boolean, unreadable: boolean): Entry[] {
     ),
     you("14:24", "yes"),
     ...group("14:24:10", 110, [
-      ["Write", "", "discussion.md"],
       ["Write", "", "drafts.md"],
       ["Bash", "Check the drafts' format", "cat drafts.md"],
     ]),
@@ -1331,8 +1330,7 @@ function confirm(ten: boolean, unreadable: boolean): Entry[] {
   if (unreadable) {
     return [
       ...entries,
-      speech("14:27", "Written. The document has the understanding; the drafts follow it."),
-      marker("14:27", "discussion_document", { first: true }),
+      speech("14:27", "Written. The drafts follow the understanding."),
       marker("14:27", "drafts_unreadable", { reason: UNREADABLE }),
     ];
   }
@@ -1340,9 +1338,8 @@ function confirm(ten: boolean, unreadable: boolean): Entry[] {
     ...entries,
     speech(
       "14:27",
-      `Written. The document has the understanding; the ${ten ? "ten" : "five"} drafts are below. The invoice card depends on the tier data and on #461, so it goes after both.`,
+      `Written. The ${ten ? "ten" : "five"} drafts are below. The invoice card depends on the tier data and on #461, so it goes after both.`,
     ),
-    marker("14:27", "discussion_document", { first: true }),
   ];
 }
 
@@ -1512,7 +1509,6 @@ interface Moment {
   situation: { kind: string; group: string; since: string } | null;
   draftsRevision: number;
   unreadable?: string;
-  hasDocument: boolean;
   publishing?: boolean;
   archiveHint?: string;
   contextPercent: number;
@@ -1535,7 +1531,6 @@ function momentOf(name: ScreenScene, flags: DiscussionFlags, now: string): Momen
     drafts,
     situation: { kind: "drafts", group: "waiting", since },
     draftsRevision,
-    hasDocument: true,
     archiveHint: WAITING_PUBLICATION,
     contextPercent: 31,
   });
@@ -1549,7 +1544,6 @@ function momentOf(name: ScreenScene, flags: DiscussionFlags, now: string): Momen
             ? { kind: "session_error", group: "error", since: "14:08" }
             : { kind: "reply", group: "waiting", since: "14:09" },
         draftsRevision: 0,
-        hasDocument: false,
         contextPercent: 18,
         error: flags.error === true,
       };
@@ -1560,7 +1554,6 @@ function momentOf(name: ScreenScene, flags: DiscussionFlags, now: string): Momen
         situation: { kind: "reply", group: "waiting", since: "14:27" },
         draftsRevision: 0,
         unreadable: UNREADABLE,
-        hasDocument: true,
         contextPercent: 31,
       };
     case "drafts":
@@ -1587,7 +1580,6 @@ function momentOf(name: ScreenScene, flags: DiscussionFlags, now: string): Momen
           }),
           situation: null,
           draftsRevision: 2,
-          hasDocument: true,
           publishing: true,
           archiveHint: "A publication is running.",
           contextPercent: 31,
@@ -1600,7 +1592,6 @@ function momentOf(name: ScreenScene, flags: DiscussionFlags, now: string): Momen
         drafts: round1({ approved: [1, 2, 3, 4, 5], published: publishedAt(5, 1, 2, 3, 4) }),
         situation: { kind: "ready_to_archive", group: "closing", since: "15:12" },
         draftsRevision: 2,
-        hasDocument: true,
         contextPercent: 31,
       };
     case "partial-fail":
@@ -1609,7 +1600,6 @@ function momentOf(name: ScreenScene, flags: DiscussionFlags, now: string): Momen
         drafts: round1({ approved: [1, 2, 3, 4, 5], published: publishedAt(5, 1, 2), failed: 3 }),
         situation: { kind: "publish_failed", group: "error", since: "15:11" },
         draftsRevision: 2,
-        hasDocument: true,
         archiveHint: "A publication failed: Retry it, or discard the draft.",
         contextPercent: 31,
       };
@@ -1620,7 +1610,6 @@ function momentOf(name: ScreenScene, flags: DiscussionFlags, now: string): Momen
         drafts: round1({ approved: [1, 2, 5], discarded: [3, 4], published: publishedAt(5) }),
         situation: { kind: "epic_cant_publish", group: "waiting", since: "14:39" },
         draftsRevision: 2,
-        hasDocument: true,
         archiveHint: "The epic can't publish: approve one more card, or discard the epic.",
         contextPercent: 31,
       };
@@ -1630,7 +1619,6 @@ function momentOf(name: ScreenScene, flags: DiscussionFlags, now: string): Momen
         drafts: round1({ approved: [2, 3, 5], discarded: [1, 4], published: publishedAt(5) }),
         situation: { kind: "epic_discarded", group: "waiting", since: "14:39" },
         draftsRevision: 2,
-        hasDocument: true,
         contextPercent: 31,
       };
     case "done":
@@ -1646,7 +1634,6 @@ function momentOf(name: ScreenScene, flags: DiscussionFlags, now: string): Momen
         ],
         situation: { kind: "ready_to_archive", group: "closing", since: "15:49" },
         draftsRevision: 4,
-        hasDocument: true,
         contextPercent: 46,
       };
   }
@@ -1672,8 +1659,6 @@ function discussionOf(moment: Moment): DiscussionSummary {
     draftsRead: round > 0,
     draftsRevision: moment.draftsRevision,
     unreadableDrafts: moment.unreadable ?? "",
-    hasDocument: moment.hasDocument,
-    documentRevision: moment.hasDocument ? 1 : 0,
     moduleField: "Module",
     moduleOptions: MODULES,
     repositories: PLATFORM_REPOSITORIES.map((name) => {

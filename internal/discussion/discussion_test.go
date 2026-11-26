@@ -139,9 +139,6 @@ func TestADiscussionNamesItsFolderAndTheArtifactsInIt(t *testing.T) {
 	}
 
 	d := discussion.Discussion{ArtifactsDir: dir}
-	if d.DocumentPath() != filepath.Join(dir, discussion.DocumentFile) {
-		t.Errorf("document = %q", d.DocumentPath())
-	}
 	if d.DraftsPath() != filepath.Join(dir, discussion.DraftsFile) {
 		t.Errorf("drafts = %q", d.DraftsPath())
 	}

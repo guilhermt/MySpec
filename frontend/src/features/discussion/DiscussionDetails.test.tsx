@@ -115,25 +115,13 @@ describe("DiscussionDetails", () => {
     expect(section("Rounds")).toHaveTextContent("No drafts yet");
   });
 
-  it("opens Documents at the document of a row, the Document one disabled before it exists", async () => {
+  it("opens Documents at the context", async () => {
     const { user } = details();
-    const documents = section("Documents");
 
-    expect(
-      within(documents).getByText("Document · written with the drafts").closest("li"),
-    ).toHaveAttribute("aria-disabled", "true");
-    await user.click(within(documents).getByRole("button", { name: "Context" }));
+    await user.click(within(section("Documents")).getByRole("button", { name: "Context" }));
 
     expect(useAppStore.getState().panel).toBe("documents");
     expect(useAppStore.getState().panelDocument).toBe("context.md");
-  });
-
-  it("opens the document once it is written", async () => {
-    const { user } = details({ hasDocument: true });
-
-    await user.click(screen.getByRole("button", { name: "Document · discussion.md" }));
-
-    expect(useAppStore.getState().panelDocument).toBe("discussion.md");
   });
 
   it("closes with ×", async () => {
