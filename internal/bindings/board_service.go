@@ -20,27 +20,20 @@ const boardCallTimeout = 3 * time.Minute
 type BoardService struct {
 	late       late[BoardService]
 	boards     *board.Service
-	documents  func(owner, name string, number int) (string, bool)
 	cardImages *cardimages.Service
 	deploys    *deploys.Service
 	log        *slog.Logger
 }
 
-// NewBoardService builds the service over the board domain. documents is the
-// understanding of the discussion that wrote a card, which the context of the
-// card opens with; without it, no card has one. deploys tells what the preview
-// of an edit or a removal takes along.
+// NewBoardService builds the service over the board domain. deploys tells what
+// the preview of an edit or a removal takes along.
 func NewBoardService(
 	boards *board.Service,
-	documents func(owner, name string, number int) (string, bool),
 	cardImages *cardimages.Service,
 	deploys *deploys.Service,
 	log *slog.Logger,
 ) *BoardService {
-	if documents == nil {
-		documents = func(string, string, int) (string, bool) { return "", false }
-	}
-	return &BoardService{boards: boards, documents: documents, cardImages: cardImages, deploys: deploys, log: log}
+	return &BoardService{boards: boards, cardImages: cardImages, deploys: deploys, log: log}
 }
 
 // PreviewBoard reads the board at url for registering it: its statuses, with
@@ -199,12 +192,10 @@ func (s *BoardService) CardContext(boardID, key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	card, ok := s.boards.Card(boardID, key)
-	if !ok {
+	if _, ok := s.boards.Card(boardID, key); !ok {
 		return "", s.fail("CardContext", fmt.Errorf("context of card %s: %w", key, board.ErrCardNotFound))
 	}
-	document, _ := s.documents(card.Owner, card.Name, card.Number)
-	text, err := s.boards.Context(boardID, key, document, "")
+	text, err := s.boards.Context(boardID, key, "")
 	if err != nil {
 		return "", s.fail("CardContext", err)
 	}

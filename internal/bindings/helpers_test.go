@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -628,9 +627,9 @@ func newFixture(t *testing.T) *fixture {
 	})
 	f.tasks = bindings.NewTaskService(
 		f.taskSvc, f.sessions, f.flow, f.models, f.reviewModes, f.repositories, f.boards, f.cardImages, f.editor.open,
-		f.discussions.DocumentOfCard, f.unseenDraftImages, f.hasConversation, log,
+		f.unseenDraftImages, f.hasConversation, log,
 	)
-	f.boardService = bindings.NewBoardService(f.boards, f.discussions.DocumentOfCard, f.cardImages, f.deploys, log)
+	f.boardService = bindings.NewBoardService(f.boards, f.cardImages, f.deploys, log)
 	f.deploySvc = bindings.NewDeployService(f.deploys, f.repositories.List, log)
 	f.reviewSvc = bindings.NewReviewService(
 		f.reviewFlow, f.prReviews, f.pullRequests, f.worktrees, f.editor.open, log,
@@ -1168,32 +1167,6 @@ func webDraft(id, title string) discussion.ParsedDraft {
 		Repository: "dev/web",
 		Title:      title,
 		Body:       "What the card asks for.",
-	}
-}
-
-// discussionDocument is the understanding a seeded discussion reached, which
-// a card it published carries into the task created from it.
-const discussionDocument = "# Invoices\n\nThe invoices of the month.\n"
-
-// seedPublication records that a draft of a discussion created an issue of
-// dev/web, with the document the discussion reached on disk, which is what a
-// task created from that card starts with.
-func (f *fixture) seedPublication(t *testing.T, d discussion.Discussion, draftID string, number int) {
-	t.Helper()
-
-	err := f.discussions.RecordPublication(t.Context(), d.ID, draftID, func(draft *discussion.Draft) {
-		draft.Published = discussion.Publication{
-			Outcome: discussion.OutcomeCreated,
-			Number:  number,
-			URL:     "https://github.com/dev/web/issues/" + strconv.Itoa(number),
-			At:      time.Now().UTC(),
-		}
-	})
-	if err != nil {
-		t.Fatalf("RecordPublication() = %v, want nil", err)
-	}
-	if err = os.WriteFile(d.DocumentPath(), []byte(discussionDocument), 0o600); err != nil {
-		t.Fatalf("WriteFile(%s) = %v, want nil", d.DocumentPath(), err)
 	}
 }
 

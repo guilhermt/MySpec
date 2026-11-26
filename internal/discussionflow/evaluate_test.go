@@ -292,9 +292,8 @@ func TestTheDraftsAreNotReadWhileAPublicationIsWritingThem(t *testing.T) {
 
 	// The agent rested with another artifact while the run writes on GitHub.
 	f.write(id, discussion.DraftsFile, laterArtifact)
-	f.write(id, discussion.DocumentFile, "# Invoices\n")
 	f.flow.Check(id)
-	f.waitFor(id, func(s discussionflow.State) bool { return s.HasDocument })
+	f.flow.WaitEvaluated(id)
 	if got := len(f.state(id).Drafts); got != 1 {
 		t.Errorf("the discussion has %d drafts, want the ones the run is writing", got)
 	}
@@ -369,15 +368,13 @@ func TestTheDraftsAreNotReadWhileMemoryHoldsAPublicationTheStoreCouldNot(t *test
 	}
 
 	// The agent rests with an artifact that drops the card, then with one that
-	// rewrites it, and then leaves both as they are. An evaluation stamps the
-	// document of the turn before it reads the artifact, and the evaluations
-	// of a discussion run one at a time, so the third revision says the
-	// reading of the second artifact is over.
-	for turn, artifact := range []string{withoutTheReportArtifact, rewrittenReportArtifact, rewrittenReportArtifact} {
+	// rewrites it, and then leaves both as they are. The evaluations of a
+	// discussion run one at a time, so the third one says the reading of the
+	// second artifact is over.
+	for _, artifact := range []string{withoutTheReportArtifact, rewrittenReportArtifact, rewrittenReportArtifact} {
 		f.write(id, discussion.DraftsFile, artifact)
-		f.write(id, discussion.DocumentFile, "# Invoices\n"+strings.Repeat(".", turn+1))
 		f.flow.Check(id)
-		f.waitFor(id, func(s discussionflow.State) bool { return s.DocumentRevision > turn })
+		f.flow.WaitEvaluated(id)
 	}
 
 	state := f.state(id)
@@ -403,28 +400,6 @@ func TestTheDraftsAreNotReadWhileMemoryHoldsAPublicationTheStoreCouldNot(t *test
 	if got := f.draftIn(after, "invoice-report").Title; got != held.Title {
 		t.Errorf("the published card says %q, want the text it went to GitHub with", got)
 	}
-}
-
-func TestTheDocumentTheAgentWritesIsNoticedEveryTimeItChanges(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	id := f.start(cardKey)
-
-	if state := f.state(id); state.HasDocument {
-		t.Fatalf("the discussion has a document before the agent wrote one")
-	}
-
-	f.write(id, discussion.DocumentFile, "# Invoices\n\nThe understanding.\n")
-	f.flow.Check(id)
-	first := f.waitFor(id, func(s discussionflow.State) bool { return s.HasDocument })
-	if first.DocumentRevision != 1 {
-		t.Errorf("the document is at revision %d, want 1", first.DocumentRevision)
-	}
-
-	f.write(id, discussion.DocumentFile, "# Invoices\n\nThe understanding, written again.\n")
-	f.flow.Check(id)
-	f.waitFor(id, func(s discussionflow.State) bool { return s.DocumentRevision == 2 })
 }
 
 func TestSyncOpensTheConversationOfEveryDiscussionThatHasOne(t *testing.T) {

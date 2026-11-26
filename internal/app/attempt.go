@@ -445,9 +445,9 @@ func (a *App) bound(
 			bindings.UpdateActions{Check: a.checkForUpdates, Install: a.installUpdate, Restart: a.restartForUpdate}, dataDir, log),
 		Task: bindings.NewTaskService(
 			tasks, sessions, flowSvc, modelsSvc, reviewModesSvc, repositories, boards, cardImages, editor.Open,
-			a.discussions.DocumentOfCard, a.discussionFlow.UnseenDraftImages, a.hasConversation, log,
+			a.discussionFlow.UnseenDraftImages, a.hasConversation, log,
 		),
-		Board: bindings.NewBoardService(boards, a.discussions.DocumentOfCard, cardImages, a.deploys, log),
+		Board: bindings.NewBoardService(boards, cardImages, a.deploys, log),
 		Review: bindings.NewReviewService(
 			a.reviewFlow, a.prReviews, a.pulls, a.worktrees, editor.Open, log,
 		),

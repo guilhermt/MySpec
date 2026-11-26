@@ -201,7 +201,7 @@ export interface DetailsRound {
 
 /** DetailsDocument is a document of the discussion Details opens in Documents. */
 export interface DetailsDocument {
-  name: "context.md" | "discussion.md";
+  name: "context.md";
   label: string;
   enabled: boolean;
 }
@@ -308,16 +308,7 @@ export function discussionDetails(
       started: startedTime(discussion.createdAt, now),
     },
     rounds: roundsOf(discussion.drafts ?? [], now),
-    documents: [
-      { name: "context.md", label: "Context", enabled: true },
-      {
-        name: "discussion.md",
-        label: discussion.hasDocument
-          ? "Document · discussion.md"
-          : "Document · written with the drafts",
-        enabled: discussion.hasDocument,
-      },
-    ],
+    documents: [{ name: "context.md", label: "Context", enabled: true }],
   };
 }
 

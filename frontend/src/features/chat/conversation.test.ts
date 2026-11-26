@@ -60,7 +60,6 @@ const MARKER: MarkerEntry = {
   board: "",
   epics: [],
   round: 0,
-  first: false,
   changed: 0,
   added: 0,
   dropped: 0,

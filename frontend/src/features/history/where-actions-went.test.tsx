@@ -10,7 +10,6 @@ import { ShellToasts } from "@/features/notice/ShellToasts";
 import { DeleteTaskDialog } from "@/features/task/DeleteTaskDialog";
 import { DiscardStepDialog } from "@/features/task/DiscardStepDialog";
 import { StageActionDialog } from "@/features/task/StageActionDialog";
-import { ARTIFACT_MISSING } from "@/lib/errors";
 import { olderKey } from "@/lib/history";
 import { api, type State } from "@/lib/wails";
 import type { AppStore } from "@/store/app-store";
@@ -581,23 +580,11 @@ const ARCHIVED_DISCUSSION: Row[] = [
   },
   {
     screen: "Archived discussion",
-    control: "the document, or No document was written.",
-    state: "with and without a document",
+    control: "the conversation line",
+    state: "under Conversation",
     draw: async () => {
       archivedDiscussion();
-      expect(await screen.findByRole("button", { name: /^discussion\.md/ })).toBeInTheDocument();
-    },
-  },
-  {
-    screen: "Archived discussion",
-    control: "No document was written.",
-    state: "no document",
-    draw: async () => {
-      vi.mocked(api.readDiscussionArtifact).mockRejectedValue(
-        new Error(`${ARTIFACT_MISSING}: discussion.md`),
-      );
-      archivedDiscussion();
-      expect(await screen.findByText("No document was written.")).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "Conversation" })).toBeInTheDocument();
     },
   },
   {

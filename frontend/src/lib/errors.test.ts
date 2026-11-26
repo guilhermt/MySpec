@@ -29,7 +29,7 @@ describe("noticeDetail", () => {
 
 describe("isMissingFile", () => {
   it("tells an artifact that was never written from a read that failed", () => {
-    expect(isMissingFile(`${ARTIFACT_MISSING}: discussion.md`)).toBe(true);
-    expect(isMissingFile("read artifact /d/discussion.md: permission denied")).toBe(false);
+    expect(isMissingFile(`${ARTIFACT_MISSING}: drafts.md`)).toBe(true);
+    expect(isMissingFile("read artifact /d/drafts.md: permission denied")).toBe(false);
   });
 });

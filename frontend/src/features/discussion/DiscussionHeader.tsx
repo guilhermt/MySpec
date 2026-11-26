@@ -20,7 +20,7 @@ const PANELS = [
   {
     id: "documents",
     label: "Documents",
-    tooltip: "The context and the document of the discussion",
+    tooltip: "The context of the discussion",
     icon: ICONS.file,
   },
 ] as const;

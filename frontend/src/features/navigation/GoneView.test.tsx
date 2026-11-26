@@ -297,9 +297,7 @@ describe("GoneView", () => {
     page(gone("discussion", "discussion-1", "Invoices", "board-9"), stateWith());
 
     expect(screen.getByText("Invoices was deleted")).toBeInTheDocument();
-    expect(
-      screen.getByText(/^The conversation, the document and the drafts are gone/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/^The conversation and the drafts are gone/)).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Rounds" })).not.toBeInTheDocument();
     expect(actions()).toEqual(["Next that needs you", "Back to Home"]);
   });

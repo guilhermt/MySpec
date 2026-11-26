@@ -1378,38 +1378,13 @@ const ROWS: Row[] = [
   // The panel of the documents.
   {
     origin: "DocumentsPanel",
-    control: "Context and Document",
-    state: "before the document",
+    control: "Context",
+    state: "the only document",
     draw: view(),
     steps: openDocuments,
     where: "documents",
     name: /^Context$/,
-    text: /Document/,
-    // The document the agent hasn't written yet is no choice.
-    check: (place) => expect(within(place).queryByRole("button", { name: "Document" })).toBeNull(),
-  },
-  {
-    origin: "DocumentsPanel",
-    control: "Context and Document",
-    state: "with the document",
-    draw: view({ hasDocument: true, documentRevision: 1 }),
-    steps: openDocuments,
-    where: "documents",
-    name: /^Document$/,
-    check: (place) =>
-      expect(within(place).getByRole("button", { name: "Document" })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      ),
-  },
-  {
-    origin: "DocumentsPanel",
-    control: "Context and Document",
-    state: "with the document",
-    draw: view({ hasDocument: true, documentRevision: 1 }),
-    steps: openDetails,
-    where: "details",
-    name: /^Document · discussion\.md$/,
+    text: /Documents/,
   },
   {
     origin: "DocumentsPanel",

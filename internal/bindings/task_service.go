@@ -62,7 +62,6 @@ type TaskService struct {
 	boards          *board.Service
 	cardImages      *cardimages.Service
 	editor          Editor
-	documents       func(owner, name string, number int) (string, bool)
 	draftImages     func(ctx context.Context, discussionID string) []images.Image
 	hasConversation func(id string) bool
 	log             *slog.Logger
@@ -71,9 +70,7 @@ type TaskService struct {
 // NewTaskService builds the service over the task, session and flow domains.
 // hasConversation says that an id is an item of another kind whose
 // conversation the frontend asks this service for, a review of a pull request
-// or a discussion; without it, only tasks have one. documents is the
-// understanding of the discussion that wrote a card, which the task created
-// from it starts with; without it, no card has one. draftImages are the images
+// or a discussion; without it, only tasks have one. draftImages are the images
 // the user put in the drafts of a discussion that the agent hasn't seen, which
 // go with the next message of the discussion; without it, none go.
 func NewTaskService(
@@ -86,14 +83,10 @@ func NewTaskService(
 	boards *board.Service,
 	cardImages *cardimages.Service,
 	editor Editor,
-	documents func(owner, name string, number int) (string, bool),
 	draftImages func(ctx context.Context, discussionID string) []images.Image,
 	hasConversation func(id string) bool,
 	log *slog.Logger,
 ) *TaskService {
-	if documents == nil {
-		documents = func(string, string, int) (string, bool) { return "", false }
-	}
 	if hasConversation == nil {
 		hasConversation = func(string) bool { return false }
 	}
@@ -107,7 +100,6 @@ func NewTaskService(
 		boards:          boards,
 		cardImages:      cardImages,
 		editor:          editor,
-		documents:       documents,
 		draftImages:     draftImages,
 		hasConversation: hasConversation,
 		log:             log,
@@ -153,8 +145,7 @@ func (s *TaskService) CreateTask(req CreateTaskRequest) (string, error) {
 			return "", s.fail("CreateTask", &board.Refusal{Reason: board.RefusalNotManaged, Repository: card.FullName()})
 		}
 		repositoryID = managed.ID
-		document, _ := s.documents(card.Owner, card.Name, card.Number)
-		initialContext = board.Context(card, document, req.InitialContext)
+		initialContext = board.Context(card, req.InitialContext)
 		taskCard = &task.Card{
 			BoardID: req.Card.BoardID,
 			Owner:   card.Owner,

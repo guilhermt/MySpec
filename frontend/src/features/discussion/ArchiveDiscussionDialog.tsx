@@ -67,14 +67,8 @@ export function ArchiveDiscussionDialog({
       onConfirm={() => void archive()}
     >
       <DialogBody>
-        <p>
-          The conversation ends. The document, the drafts and what was published stay in History.
-        </p>
+        <p>The conversation ends. The drafts and what was published stay in History.</p>
         <SunkenLine>{archiveSummary(discussion.drafts)}</SunkenLine>
-        <p className="text-ink-3">
-          A task started from one of these cards gets the document in its context, also after the
-          archive.
-        </p>
         {ended.length > 0 && (
           <>
             <p>This also stops what runs in the background. It won't resume.</p>

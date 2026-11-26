@@ -555,14 +555,9 @@ describe("discussionDetails", () => {
     expect(model.rounds).toEqual([{ text: "Round 1 · 2 drafts · nothing published", time: "" }]);
   });
 
-  it("offers Context, and the Document once the agent wrote it", () => {
+  it("offers Context", () => {
     expect(discussionDetails(discussion(), board, NOW).documents).toEqual([
       { name: "context.md", label: "Context", enabled: true },
-      { name: "discussion.md", label: "Document · written with the drafts", enabled: false },
-    ]);
-    expect(discussionDetails(discussion({ hasDocument: true }), board, NOW).documents).toEqual([
-      { name: "context.md", label: "Context", enabled: true },
-      { name: "discussion.md", label: "Document · discussion.md", enabled: true },
     ]);
   });
 });

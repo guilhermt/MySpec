@@ -15,7 +15,6 @@ import { Chevron } from "@/features/chat/entries/Chevron";
 import { Markdown, type MarkdownImages } from "@/features/chat/Markdown";
 import type { MarkerIcon, MarkerView } from "@/features/chat/markers";
 import { contextCharacters } from "@/features/discussion/new-discussion";
-import { useDiscussionArtifact } from "@/features/discussion/useDiscussionArtifact";
 import { StoredImages } from "@/features/images/StoredImages";
 import { useReviewArtifact } from "@/features/reviews/useReviewArtifact";
 import { useArtifact } from "@/features/task/useArtifact";
@@ -276,7 +275,7 @@ export interface MarkerLineProps {
   /** review is the review whose documents an artifact body reads; null outside a review. */
   review?: ReviewSummary | null;
   /** discussion is the discussion whose documents a body of it reads; null outside one. */
-  discussion?: { id: string; documentRevision: number; documents: boolean } | null;
+  discussion?: { id: string; documents: boolean } | null;
   /** archived is the archived task or review whose documents an artifact body reads, with no way on to a panel: History has none. */
   archived?: { kind: "task" | "review"; id: string } | null;
   /** requested opens the line and gives it the focus, once: the request bar asked for it. */
@@ -328,15 +327,6 @@ export function MarkerLine({
     open && body.kind === "artifact" && reviewId !== null ? body.name : null,
     passRevision + attempt,
   );
-  const discussionDocument = body.kind === "discussionDocument" ? body : null;
-  const discussionArtifact = useDiscussionArtifact(
-    discussion?.id ?? "",
-    open && discussionDocument !== null && discussionDocument.text === null && discussion !== null
-      ? discussionDocument.name
-      : null,
-    discussion?.documentRevision ?? 0,
-    attempt,
-  );
   const artifact = reviewId === null ? taskArtifact : reviewArtifact;
   const time = view.timeText ?? clockTime(createdAt, Date.now());
   const lead = view.lead === undefined ? view.text : `${view.lead} ${view.text}`;
@@ -358,9 +348,7 @@ export function MarkerLine({
 
   // An error draws the rail of an error on the edge of its line.
   const railOf = view.tone === "error" ? ERROR_RAIL : "";
-  const reading =
-    (body.kind === "artifact" && artifact.status === "loading") ||
-    (discussionDocument?.text === null && discussionArtifact.status === "loading");
+  const reading = body.kind === "artifact" && artifact.status === "loading";
   const cells = (
     <>
       {opens ? <Chevron open={open} /> : <span aria-hidden="true" className="w-(--icon-xs)" />}
@@ -464,54 +452,37 @@ export function MarkerLine({
     case "list":
       content = <ListBody items={body.items} />;
       break;
-    case "discussionDocument": {
-      const text =
-        body.text ?? (discussionArtifact.status === "ready" ? discussionArtifact.content : null);
-      content =
-        body.text === null && discussionArtifact.status === "error" ? (
-          <ReadFailed
-            name={body.name}
-            reason={discussionArtifact.error}
-            onRetry={() => {
-              toggleRef.current?.focus();
-              setAttempt(attempt + 1);
-            }}
-          />
-        ) : text === null ? (
-          <div data-slot="marker-body" className={SUNKEN}>
-            <Shimmer>Reading…</Shimmer>
+    case "discussionDocument":
+      content = (
+        <div data-slot="marker-body" className={SUNKEN}>
+          <div className="select-text">
+            <Markdown cutCode className="ui-headings" {...omitImages(body.images)}>
+              {body.text}
+            </Markdown>
           </div>
-        ) : (
-          <div data-slot="marker-body" className={SUNKEN}>
-            <div className="select-text">
-              <Markdown cutCode className="ui-headings" {...omitImages(body.images)}>
-                {text}
-              </Markdown>
+          {body.images !== undefined && body.images.length > 0 && (
+            <div className="mt-(--space-2)">
+              <StoredImages images={body.images} size="md" captions />
             </div>
-            {body.images !== undefined && body.images.length > 0 && (
-              <div className="mt-(--space-2)">
-                <StoredImages images={body.images} size="md" captions />
-              </div>
+          )}
+          <div className="mt-(--space-2) flex items-center gap-(--space-3)">
+            <span className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
+              {contextCharacters(body.text)}
+            </span>
+            {discussion?.documents === false ? null : (
+              <Button
+                variant="ghost"
+                size="xs"
+                icon={ICONS.file}
+                onClick={() => openPanelAt("documents", body.name)}
+              >
+                Open in Documents
+              </Button>
             )}
-            <div className="mt-(--space-2) flex items-center gap-(--space-3)">
-              <span className="text-(length:--text-meta) leading-(--leading-meta) text-ink-3">
-                {contextCharacters(text)}
-              </span>
-              {discussion?.documents === false ? null : (
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  icon={ICONS.file}
-                  onClick={() => openPanelAt("documents", body.name)}
-                >
-                  Open in Documents
-                </Button>
-              )}
-            </div>
           </div>
-        );
+        </div>
+      );
       break;
-    }
     case "artifact": {
       const foot = FOOTS[body.openIn];
       content =

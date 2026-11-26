@@ -500,45 +500,11 @@ func TestReadingAnArtifactOfTheDiscussionRefusesAFileItDoesNotOwn(t *testing.T) 
 		t.Errorf("context = %q, want the initial context", got)
 	}
 
-	if _, err = f.service.ReadArtifact(d.ID, "notes.md"); !errors.Is(err, discussion.ErrUnknownArtifact) {
+	if _, err = f.service.ReadArtifact(d.ID, "discussion.md"); !errors.Is(err, discussion.ErrUnknownArtifact) {
 		t.Errorf("error = %v, want ErrUnknownArtifact", err)
 	}
 	if _, err = f.service.ReadArtifact("missing", discussion.ContextFile); !errors.Is(err, discussion.ErrNotFound) {
 		t.Errorf("error = %v, want ErrNotFound", err)
-	}
-}
-
-func TestTheDocumentOfACardIsTheOneOfTheDiscussionThatPublishedItLast(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	first, second := f.create(), f.create()
-	for i, d := range []discussion.Discussion{first, second} {
-		f.record(d.ID, artifactOf(draftOf("one", "Kind: new", "Repository: acme/web")))
-		if err := os.WriteFile(d.DocumentPath(), []byte("document "+string(rune('a'+i))), 0o600); err != nil {
-			t.Fatalf("write document: %v", err)
-		}
-	}
-
-	ctx := t.Context()
-	publish := func(d discussion.Discussion) {
-		t.Helper()
-		if err := f.service.RecordPublication(ctx, d.ID, "one", func(draft *discussion.Draft) {
-			draft.Published.Outcome, draft.Published.Number = discussion.OutcomeCreated, 31
-			draft.Published.At = f.now()
-		}); err != nil {
-			t.Fatalf("record publication: %v", err)
-		}
-	}
-	publish(second)
-	publish(first)
-
-	got, ok := f.service.DocumentOfCard("ACME", "Web", 31)
-	if !ok || got != "document a" {
-		t.Errorf("document = %q, ok = %v, want the one published last", got, ok)
-	}
-	if _, ok = f.service.DocumentOfCard("acme", "web", 99); ok {
-		t.Error("a card nobody published has a document")
 	}
 }
 
@@ -625,11 +591,6 @@ func writerFixture(t *testing.T, scenario int) (f *fixture, chosen map[string]di
 	f = newFixture(t)
 	older, newer := f.create(), f.create()
 	chosen = map[string]discussion.Discussion{"older": older, "newer": newer}
-	for _, d := range []discussion.Discussion{older, newer} {
-		if err := os.WriteFile(d.DocumentPath(), []byte("document of "+d.ID), 0o600); err != nil {
-			t.Fatalf("write document: %v", err)
-		}
-	}
 	sc.publish(f, older, newer)
 	for _, name := range sc.archive {
 		if _, err := f.service.Archive(t.Context(), chosen[name].ID); err != nil {
@@ -668,28 +629,6 @@ func TestCardWritersIsTheDiscussionOfTheMostRecentPublication(t *testing.T) {
 	}
 }
 
-func TestDocumentOfCardReadsTheDocumentOfTheCardWriter(t *testing.T) {
-	t.Parallel()
-
-	for i, sc := range writerScenarios {
-		t.Run(sc.name, func(t *testing.T) {
-			t.Parallel()
-
-			f, chosen := writerFixture(t, i)
-			got, ok := f.service.DocumentOfCard("ACME", "Web", 31)
-			if sc.want == "" {
-				if ok {
-					t.Errorf("DocumentOfCard() = %q, want none", got)
-				}
-				return
-			}
-			if want := "document of " + chosen[sc.want].ID; !ok || got != want {
-				t.Errorf("DocumentOfCard() = %q, %v, want %q", got, ok, want)
-			}
-		})
-	}
-}
-
 func TestCardWritersDoesNotDistinguishTheCaseOfTheRepository(t *testing.T) {
 	t.Parallel()
 
@@ -700,33 +639,6 @@ func TestCardWritersDoesNotDistinguishTheCaseOfTheRepository(t *testing.T) {
 	got := f.service.CardWriters()
 	if _, ok := got["acme/web#31"]; !ok || len(got) != 1 {
 		t.Errorf("CardWriters() = %+v, want one writer under acme/web#31", got)
-	}
-}
-
-func TestTheDocumentOfACardIsReadFromTheHistoryToo(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	d := f.create()
-	f.record(d.ID, artifactOf(draftOf("one", "Kind: new", "Repository: acme/web")))
-	if err := os.WriteFile(d.DocumentPath(), []byte("the understanding"), 0o600); err != nil {
-		t.Fatalf("write document: %v", err)
-	}
-
-	ctx := t.Context()
-	if err := f.service.RecordPublication(ctx, d.ID, "one", func(draft *discussion.Draft) {
-		draft.Published.Outcome, draft.Published.Number = discussion.OutcomeCreated, 31
-		draft.Published.At = f.now()
-	}); err != nil {
-		t.Fatalf("record publication: %v", err)
-	}
-	if _, err := f.service.Archive(ctx, d.ID); err != nil {
-		t.Fatalf("archive: %v", err)
-	}
-
-	got, ok := f.service.DocumentOfCard("acme", "web", 31)
-	if !ok || got != "the understanding" {
-		t.Errorf("document = %q, ok = %v, want the one of the archived discussion", got, ok)
 	}
 }
 

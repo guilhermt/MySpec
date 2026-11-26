@@ -428,13 +428,13 @@ func TestReadingAnArtifactADiscussionNeverWroteSaysItIsMissing(t *testing.T) {
 	f.registerBoard(t, true)
 	d := f.seedDiscussion(t)
 
-	_, err := f.discussionSvc.ReadDiscussionArtifact(d.ID, "discussion.md")
+	_, err := f.discussionSvc.ReadDiscussionArtifact(d.ID, "drafts.md")
 
 	if !errors.Is(err, bindings.ErrArtifactMissing) {
-		t.Fatalf("ReadDiscussionArtifact(discussion.md) = %v, want ErrArtifactMissing", err)
+		t.Fatalf("ReadDiscussionArtifact(drafts.md) = %v, want ErrArtifactMissing", err)
 	}
-	if want := "artifact missing: discussion.md"; err.Error() != want {
-		t.Errorf("ReadDiscussionArtifact(discussion.md) = %q, want %q", err.Error(), want)
+	if want := "artifact missing: drafts.md"; err.Error() != want {
+		t.Errorf("ReadDiscussionArtifact(drafts.md) = %q, want %q", err.Error(), want)
 	}
 }
 
@@ -453,51 +453,6 @@ func TestTheConversationOfADiscussionThatHasNotOpenedYetIsEmpty(t *testing.T) {
 
 	if transcript.TaskID != d.ID || len(transcript.Entries) != 0 || transcript.Entries == nil {
 		t.Errorf("transcript = %+v, want an empty conversation of the discussion", transcript)
-	}
-}
-
-func TestTheContextOfACardOpensWithTheDocumentOfTheDiscussionThatWroteIt(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	f.register(t, t.TempDir())
-	f.registerBoard(t, true, webCard(12))
-	d := f.seedDiscussion(t, webDraft("export-invoices", "Export the invoices"))
-	f.seedPublication(t, d, "export-invoices", 12)
-	card := webCard(12)
-
-	got, err := f.boardService.CardContext(testBoardID, "dev/web#12")
-	if err != nil {
-		t.Fatalf("CardContext() = %v, want nil", err)
-	}
-
-	if want := board.Context(card, discussionDocument, ""); got != want {
-		t.Errorf("context = %q, want %q", got, want)
-	}
-}
-
-func TestATaskCreatedFromACardStartsWithTheDocumentOfItsDiscussion(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	f.register(t, t.TempDir())
-	card := webCard(12)
-	f.registerBoard(t, true, card)
-	d := f.seedDiscussion(t, webDraft("export-invoices", "Export the invoices"))
-	f.seedPublication(t, d, "export-invoices", 12)
-
-	id, err := f.tasks.CreateTask(cardTask("12-add-the-login-screen", 12))
-	if err != nil {
-		t.Fatalf("CreateTask() = %v, want nil", err)
-	}
-	f.waitForStatus(t, id, "waiting")
-
-	created, ok := f.taskSvc.Get(id)
-	if !ok {
-		t.Fatalf("task %s was not created", id)
-	}
-	if want := board.Context(card, discussionDocument, "Keep the form short."); created.InitialContext != want {
-		t.Errorf("initial context = %q, want %q", created.InitialContext, want)
 	}
 }
 

@@ -323,13 +323,13 @@ O que cada um mostra:
 - **`Details`** mostra os fatos do item e o que ficou para trás:
   - task: os steps (commitados com o SHA, as conversas e os relatórios de cada um; o atual; os não iniciados com os seletores de modo e de modelo), as conversas do planejamento, a PR (o modo do review com a rodada, as conversas do rascunho, do revisor e do implementador, o número, a base, os checks pelo nome, a última leitura), e os fatos da task (repositório com o clone, card, épico, modo, **Review mode** e **Models**, branch, base, worktree, início);
   - review: a PR, os checks lidos antes de cada passada, as passadas com o estado, e o modo, o modelo e a worktree;
-  - discussão: o board, os cards de entrada, os repositórios lidos, as rodadas e os documentos.
+  - discussão: o board, os cards de entrada, os repositórios lidos, as rodadas e o contexto.
 
   Nunca repete o stepper nem a barra do pedido.
 - **`Artifacts`**: o PRD e o tech spec (ou o documento One-Shot), os arquivos de step e o rascunho da PR, cada um renderizado.
 - **`Card`**: o card do board, com o épico, as dependências e os irmãos.
 - **`Reports`**: `Context` e os relatórios de todas as passadas, com o veredito e o link do que foi publicado.
-- **`Documents`**: `Context` e o documento da discussão.
+- **`Documents`**: `Context`.
 
 **Regra de largura.** O painel vira coluna quando a coluna de leitura ainda cabe inteira ao lado dele:
 

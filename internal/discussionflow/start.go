@@ -201,7 +201,6 @@ func (s *Service) info(d discussion.Discussion, choice models.Choice) session.Ta
 		Prompt:         prompts.StageDiscussion,
 		InitialContext: d.InitialContext,
 		InitialImages:  d.InitialImages,
-		DocumentPath:   d.DocumentPath(),
 		DraftsPath:     d.DraftsPath(),
 		Board:          section,
 		BoardTitle:     d.BoardTitle,

@@ -1542,13 +1542,6 @@ export interface DiscussionSummary {
     "unreadableDrafts": string;
 
     /**
-     * HasDocument says the agent wrote the document of the discussion, and
-     * DocumentRevision changes every time it does.
-     */
-    "hasDocument": boolean;
-    "documentRevision": number;
-
-    /**
      * ModuleField is the name of the module field of the board; "" without one.
      */
     "moduleField": string;
@@ -2306,7 +2299,7 @@ export interface MarkerEntry {
      * step_review_written, review_started, discussion_started, stage_started,
      * step_started, compacted, interrupted, retried, woke, committed, pr_opened,
      * checks_read, draft_approved, changes_approved, paused, plan_invalid,
-     * background_stopped, background_lost, discussion_document,
+     * background_stopped, background_lost,
      * drafts_written, drafts_revised, drafts_unreadable, drafts_published or
      * divergence.
      */
@@ -2392,11 +2385,6 @@ export interface MarkerEntry {
      * drafts_*
      */
     "round": number;
-
-    /**
-     * discussion_document
-     */
-    "first": boolean;
 
     /**
      * drafts_revised

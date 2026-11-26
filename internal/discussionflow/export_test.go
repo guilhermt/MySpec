@@ -1,6 +1,10 @@
 package discussionflow
 
-import "github.com/guilhermt/myspec/internal/discussion"
+import (
+	"runtime"
+
+	"github.com/guilhermt/myspec/internal/discussion"
+)
 
 // ChainView is what the chain says about a list of drafts, for the external
 // tests: what the next run writes, in order, what holds each draft, which
@@ -47,4 +51,21 @@ func StateOf(drafts []discussion.Draft, publishing bool) State {
 	state := State{Discussion: discussion.Discussion{DraftsRead: true}, Publishing: publishing}
 	settle(&state, drafts, nil)
 	return state
+}
+
+// WaitEvaluated returns once the evaluation Check queued for a discussion has
+// ended.
+func (s *Service) WaitEvaluated(id string) {
+	l := s.lockOf(id)
+	for {
+		s.mu.Lock()
+		queued := l.queued
+		s.mu.Unlock()
+		if !queued {
+			break
+		}
+		runtime.Gosched()
+	}
+	l.mu.Lock()
+	l.mu.Unlock() //nolint:staticcheck // waits for the evaluation that holds the lock
 }

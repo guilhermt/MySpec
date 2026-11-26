@@ -3,7 +3,6 @@ import {
   contextLineOf,
   type DiscussionInput,
   type DraftRowView,
-  documentLineOf,
   publishedLineOf,
   type RoundFolds,
   revisedLineOf,
@@ -103,7 +102,6 @@ const MARKER: MarkerEntry = {
   board: "",
   epics: [],
   round: 0,
-  first: false,
   changed: 0,
   added: 0,
   dropped: 0,
@@ -1365,7 +1363,6 @@ const input = (overrides: Partial<DiscussionInput> = {}): DiscussionInput => ({
   drafts: [],
   text: "",
   cards: [],
-  documentRevision: 0,
   documents: true,
   ...overrides,
 });
@@ -1377,7 +1374,6 @@ const NO_FOLDS: RoundFolds = {
   before: new Map(),
   cardAfter: "end",
   revisions: new Map(),
-  latestDocument: "",
   epics: null,
 };
 
@@ -1532,24 +1528,6 @@ describe("discussionOpeningOf", () => {
       message: "",
       images: [],
     });
-  });
-});
-
-describe("documentLineOf", () => {
-  it.each([
-    [true, true, "Written discussion.md", true],
-    [false, true, "Updated discussion.md", true],
-    [true, false, "Written discussion.md", false],
-    [false, false, "Updated discussion.md", false],
-  ])("first %s, latest %s: %s, opens %s", (first, latest, text, opens) => {
-    expect(documentLineOf(marker({ type: "discussion_document", first }), latest)).toEqual(
-      view("file", text, {
-        complement: "the understanding",
-        body: opens
-          ? { kind: "discussionDocument", name: "discussion.md", text: null }
-          : { kind: "none" },
-      }),
-    );
   });
 });
 
@@ -2179,7 +2157,6 @@ describe("roundFolds", () => {
       entry("w1", { type: "drafts_written", round: 1 }),
       entry("r1", { type: "drafts_revised", round: 1 }),
       entry("r2", { type: "drafts_revised", round: 1 }),
-      entry("document", { type: "discussion_document", first: true }),
     ];
 
     expect(roundFolds(entries, [draftOf("d1", { round: 1 })]).cardAfter).toBe("r2");
@@ -2187,10 +2164,8 @@ describe("roundFolds", () => {
 
   it("puts the card at the end without either marker", () => {
     expect(
-      roundFolds(
-        [entry("document", { type: "discussion_document" })],
-        [draftOf("d1", { round: 1 })],
-      ).cardAfter,
+      roundFolds([entry("started", { type: "discussion_started" })], [draftOf("d1", { round: 1 })])
+        .cardAfter,
     ).toBe("end");
   });
 
@@ -2218,16 +2193,6 @@ describe("roundFolds", () => {
       [1, 2],
       [2, 1],
     ]);
-  });
-
-  it("finds the latest document", () => {
-    const entries = [
-      entry("d1", { type: "discussion_document", first: true }),
-      entry("d2", { type: "discussion_document" }),
-    ];
-
-    expect(roundFolds(entries, []).latestDocument).toBe("d2");
-    expect(roundFolds([], []).latestDocument).toBe("");
   });
 
   it.each([
@@ -2259,22 +2224,19 @@ describe("markerOf in a discussion", () => {
   const dctx = (folds: Partial<RoundFolds> = {}, drafts: Draft[] = []) =>
     discussionCtx(drafts, { current: 2, ...folds });
 
-  it.each([
-    "discussion_document",
-    "drafts_written",
-    "drafts_revised",
-    "drafts_unreadable",
-    "drafts_published",
-  ])("draws nothing for %s outside a discussion", (type) => {
-    expect(markerOf(marker({ type, round: 1 }), ctx("prd"), "e", NOW)).toBeNull();
-    expect(
-      markerOf(marker({ type, round: 1 }), ctx("discussion", { task: null }), "e", NOW),
-    ).toBeNull();
-  });
+  it.each(["drafts_written", "drafts_revised", "drafts_unreadable", "drafts_published"])(
+    "draws nothing for %s outside a discussion",
+    (type) => {
+      expect(markerOf(marker({ type, round: 1 }), ctx("prd"), "e", NOW)).toBeNull();
+      expect(
+        markerOf(marker({ type, round: 1 }), ctx("discussion", { task: null }), "e", NOW),
+      ).toBeNull();
+    },
+  );
 
   it("draws the lines of the markers of the drafts", () => {
     const drafts = [onGitHub("d1", 479, { round: 2 })];
-    const context = dctx({ latestDocument: "doc" }, drafts);
+    const context = dctx({}, drafts);
 
     expect(
       markerOf(marker({ type: "drafts_written", round: 2, count: 1 }), context, "w", NOW)?.text,
@@ -2290,19 +2252,6 @@ describe("markerOf in a discussion", () => {
     ).toMatchObject({
       text: "Published",
       complement: "round 2 · 1 created",
-    });
-  });
-
-  it("opens the document only on the latest marker", () => {
-    const context = dctx({ latestDocument: "doc2" });
-
-    expect(
-      markerOf(marker({ type: "discussion_document", first: true }), context, "doc1", NOW)?.body,
-    ).toEqual({ kind: "none" });
-    expect(markerOf(marker({ type: "discussion_document" }), context, "doc2", NOW)?.body).toEqual({
-      kind: "discussionDocument",
-      name: "discussion.md",
-      text: null,
     });
   });
 

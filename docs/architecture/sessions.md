@@ -132,7 +132,7 @@ Uma leitura bem-sucedida substitui o catálogo em memória e é gravada como a �
 
 ## Prompts
 
-O prompt de cada tipo de sessão é renderizado no início dela a partir do texto padrão embutido no binário ou do arquivo editado pelo usuário, com os placeholders preenchidos: `{{task_name}}`, `{{prd_path}}`, `{{tech_spec_path}}`, `{{steps_dir}}`, `{{step_path}}`, `{{one_shot_path}}`, `{{artifacts_dir}}`, `{{initial_context}}`, `{{repository}}`, `{{branch}}`, `{{base_branch}}`, `{{draft_path}}`, `{{review_path}}`, `{{pr_number}}`, `{{pr_url}}`, `{{what_to_commit}}`, `{{push}}`, `{{document_path}}` e `{{drafts_path}}`. Os prompts padrão são os mesmos para tasks e reviews de pull request: o que um review precisa a mais entra por seções que `prompts.Render` acrescenta, descritas em [O prompt do review de uma pull request](#o-prompt-do-review-de-uma-pull-request). O prompt de commit é enviado como mensagem do app dentro da sessão do step, da do implementador do review da pull request de uma task ou da do review, para que quem commite seja o agente que escreveu o código, nunca o revisor.
+O prompt de cada tipo de sessão é renderizado no início dela a partir do texto padrão embutido no binário ou do arquivo editado pelo usuário, com os placeholders preenchidos: `{{task_name}}`, `{{prd_path}}`, `{{tech_spec_path}}`, `{{steps_dir}}`, `{{step_path}}`, `{{one_shot_path}}`, `{{artifacts_dir}}`, `{{initial_context}}`, `{{repository}}`, `{{branch}}`, `{{base_branch}}`, `{{draft_path}}`, `{{review_path}}`, `{{pr_number}}`, `{{pr_url}}`, `{{what_to_commit}}`, `{{push}}` e `{{drafts_path}}`. Os prompts padrão são os mesmos para tasks e reviews de pull request: o que um review precisa a mais entra por seções que `prompts.Render` acrescenta, descritas em [O prompt do review de uma pull request](#o-prompt-do-review-de-uma-pull-request). O prompt de commit é enviado como mensagem do app dentro da sessão do step, da do implementador do review da pull request de uma task ou da do review, para que quem commite seja o agente que escreveu o código, nunca o revisor.
 
 O contexto inicial entra nos prompts que abrem uma task, o de PRD e o de planejamento One-Shot, e no de discussão, e aparece na conversa como a primeira mensagem do usuário; as imagens do contexto inicial (`TaskInfo.InitialImages`) vão com o prompt nesses mesmos três e ficam na entrada do prompt, e um arquivo que sumiu fica de fora sem impedir o envio das outras; um prompt editado que perdeu `{{initial_context}}` o recebe ao fim. `{{repository}}` é o `dono/nome` do repositório da task, preenchido em todas as sessões de uma task e de um review; uma discussão pertence a um board, não a um repositório, e não o carrega. O contexto inicial de uma task criada de um card é montado pelo app na criação, por `board.Context`, a partir da leitura guardada do board, e gravado como o contexto inicial da task; as sessões de PRD e de planejamento One-Shot o recebem como qualquer outro.
 
@@ -170,7 +170,7 @@ No modo aplicar do centro de review, os apontamentos aprovados vão ao agente nu
 
 ## A conversa de uma discussão
 
-A sessão de uma discussão roda na pasta de artefatos dela, onde o agente escreve `discussion.md` e `drafts.md` sem pedir permissão, e recebe por `--add-dir` o caminho de cada repositório do board que tem clone: é assim que ela lê o código sem worktree e sem nada em que escrever. Os clones são lidos do board a cada abertura da conversa, então um repositório clonado depois entra na próxima. `prompts.Vars.DocumentPath` e `prompts.Vars.DraftsPath` preenchem `{{document_path}}` e `{{drafts_path}}`, os dois arquivos que o agente escreve, e o contexto inicial montado por `board.DiscussionContext` aparece como a primeira mensagem do usuário.
+A sessão de uma discussão roda na pasta de artefatos dela, onde o agente escreve `drafts.md` sem pedir permissão, e recebe por `--add-dir` o caminho de cada repositório do board que tem clone: é assim que ela lê o código sem worktree e sem nada em que escrever. Os clones são lidos do board a cada abertura da conversa, então um repositório clonado depois entra na próxima. `prompts.Vars.DraftsPath` preenche `{{drafts_path}}`, o arquivo que o agente escreve, e o contexto inicial montado por `board.DiscussionContext` aparece como a primeira mensagem do usuário.
 
 `prompts.Render` acrescenta ao prompt de discussão, nesta ordem:
 
@@ -179,15 +179,14 @@ A sessão de uma discussão roda na pasta de artefatos dela, onde o agente escre
 
 Como as seções do review, nenhuma depende de placeholder, então um prompt editado as recebe também.
 
-Os marcos da discussão, além de `discussion_started`, são cinco, gravados por `discussionflow` com `session.Service.MarkDiscussion`:
+Os marcos da discussão, além de `discussion_started`, são quatro, gravados por `discussionflow` com `session.Service.MarkDiscussion`:
 
-- `discussion_document`, com o carimbo do `discussion.md` (data de modificação e tamanho) e `first` no primeiro da conversa; o carimbo não vai ao frontend;
 - `drafts_written`, a primeira leitura legível de uma rodada que tem rascunhos, com a rodada e quantos rascunhos ela tem;
 - `drafts_revised`, uma leitura que mudou a rodada, com a rodada, quantos rascunhos mudaram, quantos entraram e quantos saíram, e a rodada como estava antes (`before`): uma linha por rascunho, com título, tipo, decisão, resultado, a referência no GitHub, os campos que a leitura mudou, e se saiu, entrou ou perdeu a aprovação;
 - `drafts_unreadable`, com a razão (`discussion.Reason`, a regra que o arquivo quebra, sem o caminho) e a rodada;
 - `drafts_published`, o primeiro rascunho de uma rodada que chegou ao GitHub ou falhou ao ir, com a rodada.
 
-A deduplicação mora na sessão, que tem a conversa, e por isso um reinício não repete nada: o documento é gravado uma vez por carimbo (comparado ao do último marco de documento), `drafts_published` uma vez por rodada, `drafts_written` só quando o último marco que escreveu ou revisou os rascunhos (`drafts_written` ou `drafts_revised`) não é um `drafts_written` da mesma rodada, para que uma rodada que o agente esvaziou volte escrita, `drafts_unreadable` uma vez por razão contra o último marco de rascunhos (`drafts_written`, `drafts_revised` ou `drafts_unreadable`), e `drafts_revised` sempre. Uma sessão fechada ou ausente não grava nada.
+A deduplicação mora na sessão, que tem a conversa, e por isso um reinício não repete nada: `drafts_published` uma vez por rodada, `drafts_written` só quando o último marco que escreveu ou revisou os rascunhos (`drafts_written` ou `drafts_revised`) não é um `drafts_written` da mesma rodada, para que uma rodada que o agente esvaziou volte escrita, `drafts_unreadable` uma vez por razão contra o último marco de rascunhos (`drafts_written`, `drafts_revised` ou `drafts_unreadable`), e `drafts_revised` sempre. Uma sessão fechada ou ausente não grava nada.
 
 ## Correções automáticas
 

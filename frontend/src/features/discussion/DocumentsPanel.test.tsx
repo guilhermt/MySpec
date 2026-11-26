@@ -18,79 +18,29 @@ function panel(
 }
 
 describe("DocumentsPanel", () => {
-  it("opens on the context while the agent has written no document", async () => {
+  it("opens on the context, the only document", async () => {
     panel();
 
     await waitFor(() => {
       expect(api.readDiscussionArtifact).toHaveBeenCalledWith("discussion-1", "context.md");
     });
     expect(screen.getByRole("button", { name: "Context" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.queryByRole("button", { name: "Document" })).not.toBeInTheDocument();
-  });
-
-  it("opens on the document when there is one", async () => {
-    panel({ hasDocument: true, documentRevision: 1 });
-
-    await waitFor(() => {
-      expect(api.readDiscussionArtifact).toHaveBeenCalledWith("discussion-1", "discussion.md");
-    });
-    expect(await screen.findByTestId("markdown")).toHaveTextContent("# Discussion");
-    expect(screen.getByRole("button", { name: "Document" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
   });
 
   it("opens on the document it was asked for and forgets the request", async () => {
-    panel({ hasDocument: true }, { panelDocument: "context.md" });
+    panel({}, { panelDocument: "context.md" });
 
     await waitFor(() => {
       expect(api.readDiscussionArtifact).toHaveBeenCalledWith("discussion-1", "context.md");
     });
     expect(useAppStore.getState().panelDocument).toBeNull();
-    expect(api.readDiscussionArtifact).not.toHaveBeenCalledWith("discussion-1", "discussion.md");
   });
 
-  it("changes the choice to the document asked for with the panel open", async () => {
-    panel({ hasDocument: true });
-    await screen.findByTestId("markdown");
+  it("shows the context as Markdown", async () => {
+    panel();
 
-    useAppStore.getState().openPanelAt("documents", "context.md");
-
-    await waitFor(() => {
-      expect(api.readDiscussionArtifact).toHaveBeenCalledWith("discussion-1", "context.md");
-    });
-    expect(screen.getByRole("button", { name: "Context" })).toHaveAttribute("aria-pressed", "true");
-  });
-
-  it("does not move to the document the moment the agent writes it", async () => {
-    const { rerender } = panel();
-    await waitFor(() => {
-      expect(api.readDiscussionArtifact).toHaveBeenCalledWith("discussion-1", "context.md");
-    });
-
-    rerender(
-      <DocumentsPanel discussion={makeDiscussion({ hasDocument: true, documentRevision: 1 })} />,
-    );
-
-    expect(screen.getByRole("button", { name: "Context" })).toHaveAttribute("aria-pressed", "true");
-    expect(api.readDiscussionArtifact).not.toHaveBeenCalledWith("discussion-1", "discussion.md");
-  });
-
-  it("goes to the document the user picks, and back to the context", async () => {
-    const { user } = panel({ hasDocument: true, documentRevision: 1 });
-    await screen.findByTestId("markdown");
-
-    await user.click(screen.getByRole("button", { name: "Context" }));
-    await waitFor(() => {
-      expect(api.readDiscussionArtifact).toHaveBeenCalledWith("discussion-1", "context.md");
-    });
-
-    await user.click(screen.getByRole("button", { name: "Document" }));
-    expect(screen.getByRole("button", { name: "Document" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(await screen.findByTestId("markdown")).toBeInTheDocument();
   });
 
   it("shows the failure of a read and reads again with Try again", async () => {

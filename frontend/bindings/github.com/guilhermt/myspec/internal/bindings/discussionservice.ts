@@ -95,7 +95,7 @@ export function GroupIntoEpic(id: string, draftIDs: string[] | null, title: stri
 
 /**
  * ReadDiscussionArtifact returns the content of an artifact of a discussion by
- * file name: context.md, discussion.md or drafts.md.
+ * file name: context.md or drafts.md.
  */
 export function ReadDiscussionArtifact(id: string, name: string): $CancellablePromise<string> {
     return $Call.ByID(3201103609, id, name);

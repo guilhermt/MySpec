@@ -88,7 +88,6 @@ const (
 	prURLPlaceholder          = "{{pr_url}}"
 	whatToCommitPlaceholder   = "{{what_to_commit}}"
 	pushPlaceholder           = "{{push}}"
-	documentPathPlaceholder   = "{{document_path}}"
 	draftsPathPlaceholder     = "{{drafts_path}}"
 )
 
@@ -98,7 +97,7 @@ var placeholderOrder = []string{
 	stepsDirPlaceholder, stepPathPlaceholder, oneShotPathPlaceholder,
 	initialContextPlaceholder, repositoryPlaceholder, branchPlaceholder, baseBranchPlaceholder,
 	draftPathPlaceholder, reviewPathPlaceholder, prNumberPlaceholder, prURLPlaceholder,
-	whatToCommitPlaceholder, pushPlaceholder, documentPathPlaceholder, draftsPathPlaceholder,
+	whatToCommitPlaceholder, pushPlaceholder, draftsPathPlaceholder,
 }
 
 // Prompt is a prompt as the settings show it.
@@ -560,11 +559,10 @@ type Vars struct {
 	// FixRequest is StagePRFix only: the first request of the app, appended to
 	// the prompt.
 	FixRequest string
-	// The discussion sessions: the two files the agent writes and the board the
+	// The discussion sessions: the file the agent writes and the board the
 	// discussion runs on.
-	DocumentPath string
-	DraftsPath   string
-	Board        string // the section that describes the board, appended to the prompt
+	DraftsPath string
+	Board      string // the section that describes the board, appended to the prompt
 }
 
 // commitInstruction is what {{what_to_commit}} becomes: every change of the
@@ -633,7 +631,6 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 		prURLPlaceholder, vars.PRURL,
 		whatToCommitPlaceholder, commitInstruction(vars.CommitAll),
 		pushPlaceholder, "",
-		documentPathPlaceholder, vars.DocumentPath,
 		draftsPathPlaceholder, vars.DraftsPath,
 	).Replace(text)
 
@@ -677,7 +674,6 @@ func discussionSections(vars Vars) string {
 	}
 	b.WriteString(draftsFormatHeading + strings.NewReplacer(
 		draftsPathPlaceholder, vars.DraftsPath,
-		documentPathPlaceholder, vars.DocumentPath,
 	).Replace(draftsFormatNote))
 	return b.String()
 }

@@ -90,52 +90,6 @@ func TestAStartRecordsTheEpicsOfItsCards(t *testing.T) {
 	}
 }
 
-func TestTheDocumentIsMarkedByItsStamp(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t)
-	id := f.start(cardKey)
-
-	f.replace(id, discussion.DocumentFile, "# Invoices\n\nThe understanding.\n")
-	f.flow.Check(id)
-	first := f.waitMarkers(session.MarkerDiscussionDocument, 1)
-	f.flow.Check(id)
-	f.flow.Check(id)
-
-	f.replace(id, discussion.DocumentFile, "# Invoices\n\nThe understanding, written again.\n")
-	f.flow.Check(id)
-	both := f.waitMarkers(session.MarkerDiscussionDocument, 2)
-	f.flow.Check(id)
-
-	f.waitFor(id, func(s discussionflow.State) bool { return s.DocumentRevision == 2 })
-	got := f.sessions.markersOf(session.MarkerDiscussionDocument)
-	if len(got) != 2 {
-		t.Fatalf("the document was marked %d times, want once per stamp: %v", len(got), got)
-	}
-	if first[0].Stamp == "" || both[1].Stamp == "" || first[0].Stamp == both[1].Stamp {
-		t.Errorf("the stamps are %q and %q, want two different ones", first[0].Stamp, both[1].Stamp)
-	}
-
-	// The next run of the app finds the same file and marks it with the same
-	// stamp, which the session knows.
-	restarted := discussionflow.New(discussionflow.Deps{
-		Discussions:  f.discussions,
-		Divergences:  f.divergences,
-		Sessions:     f.sessions,
-		Boards:       f.boards,
-		Repositories: f.repositories,
-		GH:           f.gh,
-		Now:          f.now,
-		OnChange:     f.onChange,
-	})
-	t.Cleanup(restarted.Close)
-	restarted.Sync(t.Context())
-	got = f.waitMarkers(session.MarkerDiscussionDocument, 3)
-	if got[2].Stamp != both[1].Stamp {
-		t.Errorf("the restart marked the stamp %q, want %q", got[2].Stamp, both[1].Stamp)
-	}
-}
-
 func TestAReadingMarksTheDrafts(t *testing.T) {
 	t.Parallel()
 

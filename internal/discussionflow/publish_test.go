@@ -655,9 +655,8 @@ func TestAPublicationNoWriteHeldIsRetriedIntoTheStoreBeforeItGoesOn(t *testing.T
 	// The card has a failure of its own, so no run takes it: an evaluation
 	// that finds it writes nothing more for it.
 	made := len(f.gh.made())
-	f.write(id, discussion.DocumentFile, "# Invoices\n")
 	f.flow.Check(id)
-	f.waitFor(id, func(s discussionflow.State) bool { return s.HasDocument })
+	f.flow.WaitEvaluated(id)
 	if got := len(f.gh.made()); got != made {
 		t.Errorf("the card was sent to GitHub again: %v", f.gh.made())
 	}

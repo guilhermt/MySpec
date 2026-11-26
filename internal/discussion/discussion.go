@@ -329,9 +329,6 @@ type Discussion struct {
 // Archived reports whether the discussion left the list for the history.
 func (d Discussion) Archived() bool { return !d.ArchivedAt.IsZero() }
 
-// DocumentPath is the understanding the agent wrote.
-func (d Discussion) DocumentPath() string { return filepath.Join(d.ArtifactsDir, DocumentFile) }
-
 // DraftsPath is the artifact of the drafts the app reads.
 func (d Discussion) DraftsPath() string { return filepath.Join(d.ArtifactsDir, DraftsFile) }
 
@@ -340,9 +337,8 @@ func (d Discussion) ContextPath() string { return filepath.Join(d.ArtifactsDir, 
 
 // The files of the artifact folder of a discussion.
 const (
-	DocumentFile = "discussion.md"
-	DraftsFile   = "drafts.md"
-	ContextFile  = "context.md"
+	DraftsFile  = "drafts.md"
+	ContextFile = "context.md"
 )
 
 // discussionsDirName is the folder of the artifacts of every discussion inside

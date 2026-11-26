@@ -36,7 +36,7 @@ func TestTheStateOfADiscussionInRoundTwoTellsTheDraftsAndTheUnreadableOnes(t *te
 		State: discussionflow.State{
 			Discussion: discussion.Discussion{ID: "x1", Title: "Cache plan", BoardTitle: "Roadmap", ArtifactsDir: "/disc/x1"},
 			Status:     discussionflow.StatusDiverged,
-			Drafts:     drafts, Round: 2, HasDocument: true,
+			Drafts:     drafts, Round: 2,
 			UnreadableDrafts: "drafts.md has no cards",
 			ArchiveHint:      "a draft is still to decide",
 			Divergence: &divergence.Divergence{
@@ -54,7 +54,7 @@ func TestTheStateOfADiscussionInRoundTwoTellsTheDraftsAndTheUnreadableOnes(t *te
 		"Discussion: Cache plan · board Roadmap",
 		"This conversation: Discussion agent (discussion)",
 		"Status: Not as expected · round 2",
-		"Documents: discussion.md /disc/x1/discussion.md (written); drafts.md /disc/x1/drafts.md",
+		"Documents: drafts.md /disc/x1/drafts.md",
 		"Drafts unreadable: drafts.md has no cards",
 		"Drafts of round 2:",
 		"- d2 · new card in acme/app · New card · Approved",
@@ -92,7 +92,7 @@ func TestTheStateOfADiscussionWithoutDraftsIsDiscussing(t *testing.T) {
 		"Discussion: Idea · board Roadmap",
 		"This conversation: Discussion agent (discussion)",
 		"Status: Discussing",
-		"Documents: discussion.md /disc/x2/discussion.md (not written yet); drafts.md /disc/x2/drafts.md",
+		"Documents: drafts.md /disc/x2/drafts.md",
 		"Drafts: none yet",
 		"Ready to archive: yes",
 		"Conversations: none open",

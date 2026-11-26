@@ -24,16 +24,12 @@ func Discussion(in DiscussionInput) string {
 	if s.Round > 0 {
 		status += fmt.Sprintf(" · round %d", s.Round)
 	}
-	written := "not written yet"
-	if s.HasDocument {
-		written = "written"
-	}
 	lines := []string{
 		header("discussion", in.Now),
 		fmt.Sprintf("Discussion: %s · board %s", d.Title, d.BoardTitle),
 		fmt.Sprintf("This conversation: %s (%s)", conversationName(in.Stage), in.Stage),
 		status,
-		fmt.Sprintf("Documents: discussion.md %s (%s); drafts.md %s", d.DocumentPath(), written, d.DraftsPath()),
+		"Documents: drafts.md " + d.DraftsPath(),
 	}
 	if s.UnreadableDrafts != "" {
 		lines = append(lines, "Drafts unreadable: "+s.UnreadableDrafts)
