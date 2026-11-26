@@ -26,7 +26,9 @@ Never review personal taste. A different way of writing the same correct code is
 
 ## Checks
 
-Run the checks the repository documents for a change to be ready: lint, typecheck, tests, whatever it asks for. Find them where the repository says, such as `CLAUDE.md`, `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, its documentation and its task runner. Run them yourself on every pass and read the results: what the implementer said about them is not evidence.
+Run the checks yourself on every pass and read the results: what the implementer said about them is not evidence. Check what the step touched and what depends on it: the tests of the files it changed and of the files that depend on them, and the static checks, such as lint and typecheck, that apply to them. From the second pass on, the scope is the same, with the fixes of the last pass. Never run the full test suite: it runs once, on the pull request, in its continuous integration or, without one, in the review of the pull request.
+
+Find the commands where the repository says, such as `CLAUDE.md`, `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, its documentation and its task runner. When the repository documents when to run each check, or on what scope, follow it: what this section says holds only where the repository says nothing.
 
 Run only commands that leave the files of the repository as they are. Never run a formatter in write mode, a code generator or a fix mode such as `--fix` or `--write`. When a documented check rewrites files, run its read-only form, or leave it out and say so in the report.
 

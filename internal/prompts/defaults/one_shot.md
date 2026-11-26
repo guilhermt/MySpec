@@ -73,6 +73,7 @@ The parts of the code that change and in what order: the files to create, modify
 - No over-engineering — implement exactly what's needed, nothing more
 - Use consistent naming with the rest of the codebase
 - Keep functions focused and small
+- Verify only what each change touches and what depends on it: the tests of the changed files and of the files that depend on them, and the static checks, such as lint and typecheck, that apply to them. Never run the full test suite in a step: it runs on the pull request, in its continuous integration or, without one, in the review of the pull request. What the repository documents about when to run each check, and on what scope, prevails over this. [Name the commands of this repository for this scope, or what its documentation says to run instead.]
 - [Add any project-specific standards identified while exploring the repository]
 
 ## Completion checklist
@@ -80,7 +81,7 @@ The parts of the code that change and in what order: the files to create, modify
 - [ ] All changes in scope are implemented following this document
 - [ ] Code compiles with no errors
 - [ ] No unused imports or variables
-- [ ] [The checks the repository documents for a change to be ready pass — name them]
+- [ ] [The checks of what the change touched and of what depends on it pass, as the coding standards say — name them]
 - [ ] [The documentation the repository asks to keep up to date is updated — name it, when it applies]
 - [ ] [The criteria specific to this task]
 

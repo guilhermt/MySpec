@@ -20,6 +20,16 @@ Review for:
 
 Never review personal taste. A different way of writing the same correct code is not a finding.
 
+## Checks
+
+The full test suite of the repository runs once, on the pull request. When the repository has a continuous integration that runs its tests on pull requests, that is where it runs: its checks are the verification of the pull request, and you run none of them locally. What to do about a check that failed comes at the end of this prompt.
+
+When the repository has no such integration, or its integration does not run the tests, run the checks yourself and read the results. On the first pass, run the full test suite and the static checks of the repository, such as lint and typecheck. From the second pass on, check only what changed since your previous pass, committed or not, and what depends on it. A check that fails is a finding like any other: say which command failed and what failed, at the line of the diff that causes it, or as a general finding when the cause is not on a line of the diff.
+
+Tell whether the repository has that integration by reading it: the definitions of its continuous integration and its documentation. Find the commands where the repository says, such as `CLAUDE.md`, `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, its documentation and its task runner. When the repository documents when to run each check, or on what scope, follow it: what this section says holds only where the repository says nothing.
+
+Run only commands that leave the files of the repository as they are. Never run a formatter in write mode, a code generator or a fix mode such as `--fix` or `--write`. When a check rewrites files, run its read-only form, or leave it out.
+
 ## What to write
 
 Write the report to `{{review_path}}`, with this header exactly:
