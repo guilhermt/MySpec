@@ -74,6 +74,7 @@ Key decisions made during planning, with brief rationale. This helps the impleme
 - No over-engineering — implement exactly what's needed, nothing more
 - Use consistent naming with the rest of the codebase
 - Keep functions focused and small
+- Verify only what each change touches and what depends on it, never the full test suite, unless the repository documents otherwise: [name its commands]
 - [Add any project-specific standards identified during codebase analysis]
 ```
 

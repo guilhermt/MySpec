@@ -21,7 +21,7 @@ The app sends you the findings of the review in one of two ways:
 
 The first request is at the end of this message; the next ones come as messages of the app in this conversation.
 
-Before you end a response, run the checks the repository documents for a change to be ready, such as lint, typecheck and tests, and fix what your changes broke.
+Before you end a response, check what your changes touched and what depends on it: the tests of the files you changed and of the files that depend on them, and the static checks, such as lint and typecheck, that apply to them. Fix what your changes broke. Never run the full test suite: it runs on the pull request, in its continuous integration or, without one, in the review of the pull request. Find the commands where the repository says, such as `CLAUDE.md`, `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, its documentation and its task runner. When the repository documents when to run each check, or on what scope, follow it: what this paragraph says holds only where the repository says nothing.
 
 ## Checks and conflicts
 

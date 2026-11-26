@@ -73,6 +73,7 @@ The parts of the code that change and in what order: the files to create, modify
 - No over-engineering — implement exactly what's needed, nothing more
 - Use consistent naming with the rest of the codebase
 - Keep functions focused and small
+- Verify only what each change touches and what depends on it, never the full test suite, unless the repository documents otherwise: [name its commands]
 - [Add any project-specific standards identified while exploring the repository]
 
 ## Completion checklist
@@ -80,7 +81,7 @@ The parts of the code that change and in what order: the files to create, modify
 - [ ] All changes in scope are implemented following this document
 - [ ] Code compiles with no errors
 - [ ] No unused imports or variables
-- [ ] [The checks the repository documents for a change to be ready pass — name them]
+- [ ] [The checks of what the change touched and of what depends on it pass, as the coding standards say — name them]
 - [ ] [The documentation the repository asks to keep up to date is updated — name it, when it applies]
 - [ ] [The criteria specific to this task]
 
