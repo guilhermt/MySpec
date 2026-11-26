@@ -206,6 +206,7 @@ describe("NewDiscussionDialog", () => {
         boardId: "board-1",
         title: "Add the login screen",
         text: "Break it into cards",
+        mode: "refine",
         cards: ["dev/web#12"],
         draftId: "",
         model: "claude-fable-5-1",
@@ -216,6 +217,40 @@ describe("NewDiscussionDialog", () => {
     });
     expect(useAppStore.getState().location).toEqual({ kind: "discussion", id: "discussion-1" });
     expect(useAppStore.getState().newDiscussion).toBeNull();
+  });
+
+  it("starts at Refine, with the hint of the mode and that it is fixed", () => {
+    open(["dev/web#12"]);
+
+    const modes = screen.getByRole("radiogroup", { name: "Mode" });
+    expect(within(modes).getByRole("radio", { name: "Refine" })).toBeChecked();
+    expect(
+      screen.getByText(
+        "The agent asks until the demand is clear and writes structured cards. Fixed once the discussion exists.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("starts the discussion in Register mode when it is chosen", async () => {
+    const { user } = open(["dev/web#12"]);
+
+    await user.click(
+      within(screen.getByRole("radiogroup", { name: "Mode" })).getByRole("radio", {
+        name: "Register",
+      }),
+    );
+    expect(
+      screen.getByText(
+        "The agent writes the card from what you wrote and the cards, asking only what it must. Fixed once the discussion exists.",
+      ),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Start discussion" }));
+
+    await waitFor(() => {
+      expect(api.startDiscussion).toHaveBeenCalledWith(
+        expect.objectContaining({ mode: "register" }),
+      );
+    });
   });
 
   it("keeps the dialog open and shows why the discussion did not start", async () => {
@@ -593,6 +628,10 @@ describe("NewDiscussionDialog", () => {
       await waitFor(() => expect(api.startDiscussion).toHaveBeenCalledOnce());
       expect(screen.queryByRole("button", { name: /^Remove image/ })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /late\.png/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("radiogroup", { name: "Mode" })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
     });
   });
 

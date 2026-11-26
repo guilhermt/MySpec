@@ -187,6 +187,7 @@ type CreateParams struct {
 	BoardNumber    int
 	Title          string
 	Text           string
+	Mode           Mode // "" for ModeRefine
 	InitialContext string
 	Cards          []InputCard
 	Images         []images.Upload // the images of the initial context, in the order they reach the agent
@@ -206,6 +207,10 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Discussion, error
 	if text == "" && len(p.Cards) == 0 {
 		return Discussion{}, fmt.Errorf("create discussion: %w", ErrNothingToDiscuss)
 	}
+	mode, modeErr := ParseMode(string(p.Mode))
+	if modeErr != nil {
+		return Discussion{}, fmt.Errorf("create discussion: %w", modeErr)
+	}
 	for i, u := range p.Images {
 		if _, err := images.Check(u.Data); err != nil {
 			return Discussion{}, fmt.Errorf("create discussion: image %d: %w", i+1, err)
@@ -219,6 +224,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (Discussion, error
 		BoardTitle:     p.BoardTitle,
 		Title:          title,
 		Text:           text,
+		Mode:           mode,
 		InitialContext: p.InitialContext,
 		Cards:          slices.Clone(p.Cards),
 		CreatedAt:      now,

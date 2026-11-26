@@ -40,7 +40,16 @@ const (
 	StagePRReview   Stage = "pr_review"
 	StagePRFix      Stage = "pr_fix" // the implementer of the review of the pull request of a task
 	StageDiscussion Stage = "discussion"
+	// StageDiscussionRegister is the discussion in Register mode.
+	StageDiscussionRegister Stage = "discussion_register"
 )
+
+// IsDiscussion reports whether a prompt opens the conversation of a discussion.
+// The two prompts of a discussion, Refine and Register, get the same treatment
+// wherever the app tests for one.
+func IsDiscussion(stage Stage) bool {
+	return stage == StageDiscussion || stage == StageDiscussionRegister
+}
 
 // StageStep is the prompt of a step session: the step file itself.
 const StageStep Stage = "step"
@@ -49,7 +58,7 @@ const StageStep Stage = "step"
 // workflow order. The prompt of a step is a file of the plan, not one of them.
 var Editable = []Stage{
 	StagePRD, StageTechSpec, StagePlan, StageOneShot, StageStepReview, StageCommit, StagePR, StagePRReview,
-	StagePRFix, StageDiscussion,
+	StagePRFix, StageDiscussion, StageDiscussionRegister,
 }
 
 // ErrUnknownStage is a prompt the app does not have.
@@ -637,7 +646,7 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 	if !strings.Contains(text, initialContextPlaceholder) && vars.InitialContext != "" {
 		rendered += contextHeading + vars.InitialContext
 	}
-	if stage == StageDiscussion {
+	if IsDiscussion(stage) {
 		rendered += discussionSections(vars)
 	}
 	if stage == StageCommit && !strings.Contains(text, whatToCommitPlaceholder) {
@@ -663,8 +672,8 @@ func Render(dataDir string, stage Stage, vars Vars) (string, error) {
 	return rendered, nil
 }
 
-// discussionSections are the sections the app appends to the prompt of a
-// discussion: the board it runs on, when there is one, and the format the file
+// discussionSections are the sections the app appends to each of the two
+// prompts of a discussion: the board it runs on, when there is one, and the format the file
 // of drafts has to follow, always. Like the others, they depend on no
 // placeholder, so an edited prompt receives them too.
 func discussionSections(vars Vars) string {

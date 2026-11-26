@@ -66,6 +66,10 @@ func (s *DiscussionService) StartDiscussion(req StartDiscussionRequest) (string,
 	if err != nil {
 		return "", s.fail("StartDiscussion", err)
 	}
+	mode, err := discussion.ParseMode(req.Mode)
+	if err != nil {
+		return "", s.fail("StartDiscussion", err)
+	}
 
 	uploads, err := creationUploads(s.cardImages, s.log, req.CardImages, req.Images)
 	if err != nil {
@@ -80,6 +84,7 @@ func (s *DiscussionService) StartDiscussion(req StartDiscussionRequest) (string,
 		BoardID: req.BoardID,
 		Title:   req.Title,
 		Text:    req.Text,
+		Mode:    mode,
 		Cards:   req.Cards,
 		Choice:  choice,
 		Images:  uploads,

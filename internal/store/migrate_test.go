@@ -53,7 +53,7 @@ const (
 	savedStatusesVersion   = 25
 	prReviewFixesVersion   = 26
 	documentMarkersVersion = 32
-	latestVersion          = 32
+	latestVersion          = 33
 )
 
 // upgradeTime is the instant the repositories of the fake upgrades are stamped

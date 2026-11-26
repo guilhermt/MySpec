@@ -303,13 +303,42 @@ func TestStartingADiscussionIsRefusedBeforeItSaysAnything(t *testing.T) {
 		t.Errorf("StartDiscussion(no title) = %v, want the sentence about the title", err)
 	}
 
-	req.Title, req.Text = "Invoices", ""
+	req.Title, req.Mode = "Invoices", "other"
+	if _, err := f.discussionSvc.StartDiscussion(req); err == nil || err.Error() != "Unknown discussion mode." {
+		t.Errorf("StartDiscussion(unknown mode) = %v, want the sentence about the mode", err)
+	}
+
+	req.Mode, req.Text = "", ""
 	_, err := f.discussionSvc.StartDiscussion(req)
 	if want := "Write what to discuss or select at least one card."; err == nil || err.Error() != want {
 		t.Errorf("StartDiscussion(nothing to discuss) = %v, want %q", err, want)
 	}
 	if discussions := f.state.GetState().Discussions; len(discussions) != 0 {
 		t.Errorf("discussions = %+v, want none created", discussions)
+	}
+}
+
+func TestStartingADiscussionPassesItsModeToTheFlow(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.register(t, t.TempDir())
+	f.registerBoard(t, true, webCard(12))
+
+	for _, tt := range []struct {
+		mode string
+		want discussion.Mode
+	}{{"register", discussion.ModeRegister}, {"", discussion.ModeRefine}} {
+		id, err := f.discussionSvc.StartDiscussion(bindings.StartDiscussionRequest{
+			BoardID: testBoardID, Title: "Invoices", Text: "Bill them.", Mode: tt.mode,
+			Model: "claude-opus-5-5[1m]", Effort: "high",
+		})
+		if err != nil {
+			t.Fatalf("StartDiscussion(%q) = %v, want nil", tt.mode, err)
+		}
+		if d, ok := f.discussions.Lookup(id); !ok || d.Mode != tt.want {
+			t.Errorf("mode of the discussion started with %q = %q, want %q", tt.mode, d.Mode, tt.want)
+		}
 	}
 }
 

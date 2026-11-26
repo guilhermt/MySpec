@@ -21,6 +21,7 @@ func newDiscussion(id, boardID string, created time.Time, cards ...discussion.In
 		BoardTitle:     "Roadmap",
 		Title:          "The board of the week",
 		Text:           "what the user wrote",
+		Mode:           discussion.ModeRefine,
 		InitialContext: "context of " + id,
 		ArtifactsDir:   "/data/discussions/dev/1/" + id,
 		Cards:          cards,
@@ -120,6 +121,20 @@ func TestDiscussionsInsertAndListActiveWithTheirCards(t *testing.T) {
 
 	if diff := cmp.Diff([]discussion.Discussion{want}, listActiveDiscussions(t, s)); diff != "" {
 		t.Errorf("ListActive() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestADiscussionKeepsItsMode(t *testing.T) {
+	t.Parallel()
+	s := newStore(t)
+
+	want := newDiscussion("discussion-1", "board-1", fixedTime)
+	want.Mode = discussion.ModeRegister
+	insertDiscussion(t, s, want)
+
+	got := listActiveDiscussions(t, s)
+	if len(got) != 1 || got[0].Mode != discussion.ModeRegister {
+		t.Errorf("ListActive() = %+v, want one discussion in Register mode", got)
 	}
 }
 

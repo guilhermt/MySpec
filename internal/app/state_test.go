@@ -69,7 +69,7 @@ func TestTheStateCarriesTheHistoryFromTheStartOfTheWindowAndCountsTheWholeOfIt(t
 		}
 		for id, archivedAt := range map[string]time.Time{"discussion-first": start, "discussion-before": before} {
 			archived := discussion.Discussion{
-				ID: id, Title: id, Cards: []discussion.InputCard{{Owner: "acme", Name: "web", Number: 7, Title: "Pricing"}},
+				ID: id, Title: id, Mode: discussion.ModeRefine, Cards: []discussion.InputCard{{Owner: "acme", Name: "web", Number: 7, Title: "Pricing"}},
 				ArchivedAt: archivedAt, CreatedAt: before.Add(-time.Hour), UpdatedAt: archivedAt,
 			}
 			if err := st.Discussions.Insert(t.Context(), archived); err != nil {
@@ -174,7 +174,7 @@ func TestTheStateCarriesTheTaskAndTheDiscussionThatWroteACardOfABoard(t *testing
 		if err := st.Tasks.Insert(ctx, fromCard); err != nil {
 			t.Fatalf("insert the task: %v", err)
 		}
-		writer := discussion.Discussion{ID: "discussion-1", Title: "Pricing", CreatedAt: at, UpdatedAt: at}
+		writer := discussion.Discussion{ID: "discussion-1", Title: "Pricing", Mode: discussion.ModeRefine, CreatedAt: at, UpdatedAt: at}
 		if err := st.Discussions.Insert(ctx, writer); err != nil {
 			t.Fatalf("insert the discussion: %v", err)
 		}

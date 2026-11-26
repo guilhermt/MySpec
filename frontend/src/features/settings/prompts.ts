@@ -49,6 +49,12 @@ export const PROMPTS: readonly PromptMeta[] = [
     name: "Discussion",
     description: "Opens the conversation of a discussion, which writes the drafts of cards.",
   },
+  {
+    stage: "discussion_register",
+    name: "Register discussion",
+    description:
+      "Opens the conversation of a discussion in Register mode, which writes the card from what you wrote and the cards.",
+  },
 ];
 
 /** promptMeta is the name and the description of a prompt. */

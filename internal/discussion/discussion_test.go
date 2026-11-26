@@ -57,6 +57,27 @@ func TestARefNamesWhatItPointsAt(t *testing.T) {
 	}
 }
 
+func TestParseModeNarrowsWhatItIsGiven(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		value   string
+		want    discussion.Mode
+		wantErr error
+	}{
+		{"", discussion.ModeRefine, nil},
+		{"refine", discussion.ModeRefine, nil},
+		{"register", discussion.ModeRegister, nil},
+		{"other", "", discussion.ErrUnknownMode},
+	}
+	for _, c := range cases {
+		got, err := discussion.ParseMode(c.value)
+		if got != c.want || !errors.Is(err, c.wantErr) {
+			t.Errorf("ParseMode(%q) = %q, %v; want %q, %v", c.value, got, err, c.want, c.wantErr)
+		}
+	}
+}
+
 func TestParseKindAndParseDecisionNarrowWhatTheyAreGiven(t *testing.T) {
 	t.Parallel()
 

@@ -1324,7 +1324,7 @@ export function makePrompt(overrides: Partial<Prompt> = {}): Prompt {
   };
 }
 
-/** makePromptListings are the ten prompts of the list, in workflow order, none edited. */
+/** makePromptListings are the eleven prompts of the list, in workflow order, none edited. */
 export function makePromptListings(): PromptListing[] {
   return [
     "prd",
@@ -1337,6 +1337,7 @@ export function makePromptListings(): PromptListing[] {
     "pr_review",
     "pr_fix",
     "discussion",
+    "discussion_register",
   ].map((stage) => ({ stage, modified: false, editedAt: "" }));
 }
 

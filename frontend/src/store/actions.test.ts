@@ -963,7 +963,7 @@ describe("task actions", () => {
   });
 
   it("lists the prompts and lets the failure through", async () => {
-    expect(await listPrompts()).toHaveLength(10);
+    expect(await listPrompts()).toHaveLength(11);
 
     vi.mocked(api.listPrompts).mockRejectedValueOnce(new Error("no prompts"));
 
@@ -1385,6 +1385,7 @@ describe("discussion actions shown in place", () => {
     boardId: "board-1",
     title: "Invoices",
     text: "Split the invoices screen.",
+    mode: "refine",
     cards: ["dev/web#12"],
     draftId: "",
     model: "claude-opus-5-5[1m]",

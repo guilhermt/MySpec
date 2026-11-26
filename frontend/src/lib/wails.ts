@@ -319,6 +319,8 @@ export type {
 export type ThemePreference = "system" | "light" | "dark";
 /** TaskMode is how a task is conducted: the structured flow, or One-Shot. */
 export type TaskMode = "structured" | "one_shot";
+/** DiscussionMode is how the agent conducts a discussion: it refines the demand, or registers it as a card. */
+export type DiscussionMode = "refine" | "register";
 export type TaskStage = "prd" | "tech_spec" | "plan" | "one_shot" | "implementation" | "pr";
 
 /** ModelStage is a stage that carries a model and an effort of its own. */
@@ -348,7 +350,8 @@ export type PromptStage =
   | "pr"
   | "pr_review"
   | "pr_fix"
-  | "discussion";
+  | "discussion"
+  | "discussion_register";
 
 export type StepStatus =
   | "not_started"
@@ -920,6 +923,10 @@ export function asInstallFailureKind(value: string): InstallFailureKind {
   }
 }
 
+export function asDiscussionMode(value: string): DiscussionMode {
+  return value === "register" ? "register" : "refine";
+}
+
 export function asTaskMode(value: string): TaskMode {
   switch (value) {
     case "structured":
@@ -985,6 +992,7 @@ export function asPromptStage(value: string): PromptStage {
     case "pr_review":
     case "pr_fix":
     case "discussion":
+    case "discussion_register":
       return value;
     default:
       return "prd";

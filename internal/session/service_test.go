@@ -3200,6 +3200,49 @@ func TestMarkDiscussionSurvivesARestart(t *testing.T) {
 	}
 }
 
+func TestStartOfARegisterDiscussionSendsItsPromptAndMarksTheMode(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := atDiscussion(t, taskInfo(t, "d1"))
+	info.Prompt = prompts.StageDiscussionRegister
+	f.start(t, info)
+	f.waitIdle(t, info.Key())
+
+	tr := f.transcript(t, info.Key())
+	if tr.Stage != session.DiscussionStage {
+		t.Errorf("transcript stage = %q, want %q", tr.Stage, session.DiscussionStage)
+	}
+	if got := tr.Entries[0].Marker.Mode; got != session.DiscussionModeRegister {
+		t.Errorf("marker mode = %q, want %q", got, session.DiscussionModeRegister)
+	}
+	if got := tr.Entries[1].User.Text; got != info.InitialContext {
+		t.Errorf("prompt entry = %q, want the initial context", got)
+	}
+	rendered, _ := renderPrompt(prompts.StageDiscussionRegister, prompts.Vars{
+		TaskName:       info.Name,
+		ArtifactsDir:   info.ArtifactsDir,
+		PRDPath:        info.PRDPath,
+		InitialContext: info.InitialContext,
+	})
+	if got := tr.Entries[2].Assistant.Text; got != rendered {
+		t.Errorf("prompt sent = %q, want %q", got, rendered)
+	}
+}
+
+func TestStartOfARefineDiscussionLeavesTheModeOfTheMarkerEmpty(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "echo")
+	info := atDiscussion(t, taskInfo(t, "d1"))
+	f.start(t, info)
+	f.waitIdle(t, info.Key())
+
+	if got := f.entriesOf(t, info.Key(), session.KindMarker)[0].Marker.Mode; got != "" {
+		t.Errorf("marker mode = %q, want empty", got)
+	}
+}
+
 func TestStartOfADiscussionCarriesTheModelTheBoardAndTheEpics(t *testing.T) {
 	t.Parallel()
 

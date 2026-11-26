@@ -63,6 +63,42 @@ func TestStartingADiscussionWritesTheInitialContextAndOpensTheConversation(t *te
 	}
 }
 
+func TestStartingARegisterDiscussionOpensItsConversationWithTheRegisterPrompt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id, err := f.flow.Start(t.Context(), discussionflow.StartParams{
+		BoardID: boardID, Title: "Invoices", Text: "Export invoices", Mode: discussion.ModeRegister,
+	})
+	if err != nil {
+		t.Fatalf("start discussion: %v", err)
+	}
+
+	stored, ok := f.discussions.Get(id)
+	if !ok || stored.Mode != discussion.ModeRegister {
+		t.Errorf("stored discussion = %+v, %v; want one in Register mode", stored, ok)
+	}
+	if got := f.sessions.info(id); got.Prompt != prompts.StageDiscussionRegister || got.Stage != session.DiscussionStage {
+		t.Errorf("conversation opened with prompt %q on stage %q, want %q on %q",
+			got.Prompt, got.Stage, prompts.StageDiscussionRegister, session.DiscussionStage)
+	}
+}
+
+func TestStartingADiscussionWithoutAModeKeepsTheDiscussionPrompt(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	id := f.start()
+
+	stored, _ := f.discussions.Get(id)
+	if stored.Mode != discussion.ModeRefine {
+		t.Errorf("mode = %q, want %q", stored.Mode, discussion.ModeRefine)
+	}
+	if got := f.sessions.info(id).Prompt; got != prompts.StageDiscussion {
+		t.Errorf("prompt = %q, want %q", got, prompts.StageDiscussion)
+	}
+}
+
 func TestTheContextOfADiscussionIsBuiltFromTheBoardWithoutCreatingAnything(t *testing.T) {
 	t.Parallel()
 

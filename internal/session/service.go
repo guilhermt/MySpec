@@ -145,7 +145,8 @@ func artifactOf(stage prompts.Stage) ArtifactKind {
 		return ArtifactPlan
 	case prompts.StageOneShot:
 		return ArtifactOneShot
-	case prompts.StageStep, prompts.StageStepReview, prompts.StagePR, prompts.StagePRReview, prompts.StagePRFix, prompts.StageDiscussion:
+	case prompts.StageStep, prompts.StageStepReview, prompts.StagePR, prompts.StagePRReview, prompts.StagePRFix, prompts.StageDiscussion,
+		prompts.StageDiscussionRegister:
 		// A step file, the PR prompts and a discussion produce no artifact of the
 		// planning: what they write is the work itself, not a document of a stage.
 		return ""
@@ -522,6 +523,9 @@ func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 			Type: MarkerDiscussionStarted, Model: string(r.rec.Choice.Model), Effort: string(r.rec.Choice.Effort),
 			Board: t.BoardTitle, Epics: slices.Clone(t.Epics),
 		}
+		if t.Prompt == prompts.StageDiscussionRegister {
+			marker.Mode = DiscussionModeRegister
+		}
 	case t.Prompt == prompts.StageStepReview:
 		marker = MarkerEntry{Type: MarkerStepReviewStarted, Step: t.Step}
 	case t.Step > 0:
@@ -536,15 +540,15 @@ func (s *Service) Start(ctx context.Context, t TaskInfo, restarted bool) error {
 	// reads the artifacts of the ones before it. What the implementer said
 	// reaches the reviewer from the app, and reads as such.
 	entry := &UserEntry{Prompt: true}
-	switch t.Prompt {
-	case prompts.StagePRD, prompts.StageOneShot, prompts.StageDiscussion:
+	switch {
+	case t.Prompt == prompts.StagePRD, t.Prompt == prompts.StageOneShot, prompts.IsDiscussion(t.Prompt):
 		entry.Text = t.InitialContext
 		entry.Images = slices.Clone(t.InitialImages)
-	case prompts.StageStepReview:
+	case t.Prompt == prompts.StageStepReview:
 		entry.Text, entry.App = t.ImplementerReply, true
-	case prompts.StagePRReview:
+	case t.Prompt == prompts.StagePRReview:
 		entry.Text = t.PassInstructions
-	case prompts.StagePRFix:
+	case t.Prompt == prompts.StagePRFix:
 		entry.Text, entry.App, entry.AppKind = t.Request.Text, true, t.Request.Kind
 		entry.AppPass, entry.AppRound, entry.AppRounds, entry.AppCount =
 			t.Request.Pass, t.Request.Round, t.Request.Rounds, t.Request.Count
