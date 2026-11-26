@@ -800,7 +800,7 @@ func cardWriters(active, archived []Discussion, drafts map[string][]Draft) map[s
 	return writers
 }
 
-// CardWriters is, for each card key, the discussion that wrote the card,
+// CardWriters is, for each card key, the discussion that wrote the card.
 // It reads nothing from disk.
 func (s *Service) CardWriters() map[string]Writer {
 	s.mu.Lock()
