@@ -693,7 +693,7 @@ A confirmação, **Discard step** (numa One-Shot, **Discard the implementation**
 
 ## Pull request
 
-Com o último step commitado a task entra na etapa de PR. Ela é uma só, como a task: uma conversa que escreve o rascunho e duas que revisam a pull request, a do revisor e a do implementador. O que a pull request pede ao usuário aparece na barra do pedido, entre a conversa, ou o lugar da etapa sem conversa, e o campo de mensagem; o que se pode fazer a ela a qualquer momento fica no grupo `Pull request` do `⋯` do cabeçalho, que passa a `Pull request #N` quando ela existe no GitHub; e **Pause** ou **Resume** da sessão da etapa fica no cabeçalho, como nas outras etapas. Uma task abre exatamente uma pull request.
+Com todos os steps commitados a task entra na etapa de PR. Ela é uma só, como a task: uma conversa que escreve o rascunho e duas que revisam a pull request, a do revisor e a do implementador. O que a pull request pede ao usuário aparece na barra do pedido, entre a conversa, ou o lugar da etapa sem conversa, e o campo de mensagem; o que se pode fazer a ela a qualquer momento fica no grupo `Pull request` do `⋯` do cabeçalho, que passa a `Pull request #N` quando ela existe no GitHub; e **Pause** ou **Resume** da sessão da etapa fica no cabeçalho, como nas outras etapas. Uma task abre exatamente uma pull request.
 
 ### Rascunho e abertura
 

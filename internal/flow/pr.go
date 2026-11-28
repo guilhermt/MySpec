@@ -405,7 +405,7 @@ func lastReport(art task.PRArtifacts) (task.ReviewReport, bool) {
 	return art.Reports[len(art.Reports)-1], true
 }
 
-// beginPR moves a task whose last step is committed to the PR stage and puts it
+// beginPR moves a task whose steps are all committed to the PR stage and puts it
 // under preparation. The caller holds the lock of the task.
 func (s *Service) beginPR(ctx context.Context, t task.Task) error {
 	if _, err := s.tasks.SetStage(ctx, t.ID, task.StagePR, false); err != nil {
