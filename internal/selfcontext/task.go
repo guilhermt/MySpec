@@ -52,13 +52,11 @@ func Task(in TaskInput) string {
 	return block(append(lines, divergenceLines(in.Divergence)...))
 }
 
-// currentStep is the step the task is on: the first that is not done; nil
+// currentStep is the step the task is on, the one that runs or runs next; nil
 // when every step is done or there are none.
 func currentStep(steps []flow.StepState) *flow.StepState {
-	for i := range steps {
-		if steps[i].Status != flow.StepDone {
-			return &steps[i]
-		}
+	if i := flow.CurrentIndex(steps); i >= 0 {
+		return &steps[i]
 	}
 	return nil
 }

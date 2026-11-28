@@ -119,8 +119,8 @@ func (s *Service) Steps(id string) []StepState {
 	a, _ := s.tasks.Artifacts(id)
 	runs := s.tasks.StepRuns(id)
 	phase := s.phaseOf(id)
-	// A divergence belongs to the step the user is on, which is the first one
-	// without a commit; every other step is either done or still to come.
+	// A divergence belongs to the step the user is on, the one that runs or runs
+	// next; every other step is either done or still to come.
 	current, _ := currentStep(a.Plan, runs)
 	d, diverged := s.divergences.Get(id)
 
@@ -231,16 +231,32 @@ func (s *Service) WorktreePath(id string) string {
 	return wt.Path
 }
 
-// currentStep is the step of a plan that runs or runs next: the first one
-// that has not been committed.
+// currentStep is the step of a plan that runs or runs next, as task.NextStep
+// picks it from the steps committed so far.
 func currentStep(plan task.Plan, runs []task.StepRun) (task.Step, bool) {
-	for _, step := range plan.Steps {
-		if index := indexOfRun(runs, step.Number); index >= 0 && runs[index].CommitSHA != "" {
-			continue
-		}
-		return step, true
+	index := task.NextStep(plan.Steps, func(number int) bool {
+		i := indexOfRun(runs, number)
+		return i >= 0 && runs[i].CommitSHA != ""
+	})
+	if index < 0 {
+		return task.Step{}, false
 	}
-	return task.Step{}, false
+	return plan.Steps[index], true
+}
+
+// CurrentIndex is the index of the step that runs or runs next among the
+// states of a plan, by the rule of task.NextStep over the steps that are
+// done; -1 when every step is done or there are none.
+func CurrentIndex(states []StepState) int {
+	steps := make([]task.Step, len(states))
+	for i, state := range states {
+		steps[i] = state.Step
+	}
+	return task.NextStep(steps, func(number int) bool {
+		return slices.ContainsFunc(states, func(state StepState) bool {
+			return state.Step.Number == number && state.Status == StepDone
+		})
+	})
 }
 
 // beginStep records the first step of a task that has just reached
@@ -605,7 +621,7 @@ func (s *Service) commitMissed(
 }
 
 // completeStep records the commit a step produced, closes its session and
-// starts the next one. A task whose last step is committed moves on to the PR
+// starts the next one. A task whose steps are all committed moves on to the PR
 // stage. Any commit past the one the step started on completes it, the one the
 // user allowed in a deviation included, and ends the divergence the step had.
 func (s *Service) completeStep(
@@ -634,7 +650,7 @@ func (s *Service) completeStep(
 		s.log.Error("close step review session failed", "task", t.ID, "step", step.Number, "error", err)
 	}
 
-	next, ok := nextStep(plan, step.Number)
+	next, ok := currentStep(plan, s.tasks.StepRuns(t.ID))
 	if !ok {
 		s.log.Info("implementation complete", "task", t.ID, "steps", len(plan.Steps))
 		if err := s.beginPR(ctx, t); err != nil {
@@ -647,15 +663,6 @@ func (s *Service) completeStep(
 		return
 	}
 	s.spawnPrepare(t.ID, prepareOptions{})
-}
-
-// nextStep is the step after number, if the plan has one.
-func nextStep(plan task.Plan, number int) (task.Step, bool) {
-	index := slices.IndexFunc(plan.Steps, func(step task.Step) bool { return step.Number == number })
-	if index < 0 || index+1 >= len(plan.Steps) {
-		return task.Step{}, false
-	}
-	return plan.Steps[index+1], true
 }
 
 // stepInfo is what the session of a step needs to know: the worktree it runs

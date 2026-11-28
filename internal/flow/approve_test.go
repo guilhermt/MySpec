@@ -451,3 +451,81 @@ func TestAskingAgainRefusesWhatHasNoRequestToTheAgent(t *testing.T) {
 	wantErrIs(t, f.service.AskAgain(t.Context(), "task-1"), flow.ErrNotAskable)
 	wantErrIs(t, f.service.Adopt(t.Context(), "task-1", ""), flow.ErrNotAdoptable)
 }
+
+// graphPlan is a plan whose first step waits for the second.
+func graphPlan() task.Plan {
+	return task.Plan{
+		Present: true,
+		Steps: []task.Step{
+			{Number: 1, File: "1-first.md", Title: "First", DependsOn: []int{2}},
+			{Number: 2, File: "2-second.md", Title: "Second"},
+		},
+	}
+}
+
+func TestStepsRunInTheOrderOfTheDependencyGraphThroughToThePRStage(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	f.worktrees.setStatus(git.Status{Head: startCommit})
+	f.reviews.setSnapshot(review.Snapshot{Head: startCommit})
+	implementing(f, "task-1", graphPlan())
+	f.service.Sync(t.Context())
+
+	// The step that waits for another does not start first.
+	f.waitStep(t, "task-1", 2, flow.StepImplementing)
+	f.waitStepSession(t, "task-1", 2)
+	if state := f.stepState(t, "task-1", 1); state.Status != flow.StepNotStarted {
+		t.Fatalf("step 1 status = %q, want %q while step 2 is not committed", state.Status, flow.StepNotStarted)
+	}
+
+	f.reviews.setSnapshot(review.Snapshot{Head: commitSHA})
+	f.sessions.goIdleSession(session.Key{TaskID: "task-1", Stage: session.StepStage(2)})
+	f.service.Check("task-1")
+
+	f.waitStep(t, "task-1", 2, flow.StepDone)
+	f.waitStep(t, "task-1", 1, flow.StepImplementing)
+	f.waitStepSession(t, "task-1", 1)
+
+	f.reviews.setSnapshot(review.Snapshot{Head: commitSHA})
+	f.sessions.goIdleSession(session.Key{TaskID: "task-1", Stage: session.StepStage(1)})
+	f.service.Check("task-1")
+
+	f.waitStep(t, "task-1", 1, flow.StepDone)
+	f.waitStage(t, "task-1", task.StagePR)
+}
+
+func TestCurrentIndexIsTheStepThatRunsNext(t *testing.T) {
+	t.Parallel()
+
+	step := func(number int, status flow.StepStatus, dependsOn ...int) flow.StepState {
+		return flow.StepState{Step: task.Step{Number: number, DependsOn: dependsOn}, Status: status}
+	}
+	tests := []struct {
+		name   string
+		states []flow.StepState
+		want   int
+	}{
+		{"no steps", nil, -1},
+		{"states without dependencies give the first one not done", []flow.StepState{
+			step(1, flow.StepDone), step(2, flow.StepImplementing), step(3, flow.StepNotStarted),
+		}, 1},
+		{"a step that waits for a later one gives way to it", []flow.StepState{
+			step(1, flow.StepNotStarted, 2), step(2, flow.StepNotStarted),
+		}, 1},
+		{"a step whose dependencies are done is the one", []flow.StepState{
+			step(1, flow.StepDone), step(2, flow.StepNotStarted, 3), step(3, flow.StepNotStarted, 1),
+		}, 2},
+		{"every step done", []flow.StepState{step(1, flow.StepDone), step(2, flow.StepDone, 1)}, -1},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := flow.CurrentIndex(test.states); got != test.want {
+				t.Errorf("CurrentIndex() = %d, want %d", got, test.want)
+			}
+		})
+	}
+}

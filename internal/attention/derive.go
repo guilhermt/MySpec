@@ -2,7 +2,6 @@ package attention
 
 import (
 	"cmp"
-	"slices"
 	"strings"
 
 	"github.com/guilhermt/myspec/internal/divergence"
@@ -105,10 +104,10 @@ func stageSituation(in Input) (Found, bool) {
 }
 
 // stepSituations are the situations of a task in implementation, the ones of
-// its current step, the first one that is not done: the step and its reviewer
+// its current step, the one that runs or runs next: the step and its reviewer
 // are places of their own, each with one situation at most.
 func stepSituations(in Input) []Found {
-	index := slices.IndexFunc(in.Steps, func(state flow.StepState) bool { return state.Status != flow.StepDone })
+	index := flow.CurrentIndex(in.Steps)
 	if index < 0 {
 		return nil
 	}
