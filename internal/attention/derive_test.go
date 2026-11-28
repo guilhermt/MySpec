@@ -886,3 +886,26 @@ func TestKindsBelongToTheirGroup(t *testing.T) {
 		}
 	}
 }
+
+func TestDeriveTheStepTheDependencyGraphRunsNext(t *testing.T) {
+	t.Parallel()
+
+	// Step 1 waits for step 2, which is the one under review.
+	in := stepInput(
+		flow.StepState{Status: flow.StepAwaitingReview, Review: &review.Snapshot{Total: 3}},
+		summary(session.StatusWaiting, true),
+	)
+	in.Steps[0] = flow.StepState{
+		Step:   task.Step{Number: 1, File: "1-session-api.md", Title: "Session API", DependsOn: []int{2}},
+		Status: flow.StepNotStarted,
+	}
+
+	want := []attention.Found{{
+		TaskID: taskID, Place: attention.Place{Kind: attention.PlaceStep, Step: 2},
+		Kind: attention.KindStepReview, Form: attention.FormReview, Title: taskName,
+		Body: "Step 2 is ready for your review. 3 files changed.",
+	}}
+	if diff := cmp.Diff(want, attention.Derive(in)); diff != "" {
+		t.Errorf("Derive() mismatch (-want +got):\n%s", diff)
+	}
+}

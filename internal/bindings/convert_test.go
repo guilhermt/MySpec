@@ -4638,3 +4638,26 @@ func TestFromDeployFinishedCarriesTheEndOfARun(t *testing.T) {
 		t.Errorf("FromDeployFinished() mismatch (-want +got):\n%s", diff)
 	}
 }
+
+func TestTheCurrentStepFollowsTheDependencyGraph(t *testing.T) {
+	t.Parallel()
+
+	states := []flow.StepState{
+		{Step: task.Step{Number: 1, DependsOn: []int{2}}, Status: flow.StepNotStarted},
+		{Step: task.Step{Number: 2}, Status: flow.StepImplementing},
+	}
+	got := bindings.FromTasks(
+		[]task.Task{{ID: "task-1", Stage: task.StageImplementation}},
+		func(string) task.Artifacts { return task.Artifacts{} },
+		func(string) []flow.StepState { return states },
+		noPR,
+		noWorktree,
+		noConversations,
+		repoOf,
+		nil,
+		nil,
+	)
+	if got[0].CurrentStep != 2 {
+		t.Errorf("currentStep = %d, want 2", got[0].CurrentStep)
+	}
+}

@@ -184,3 +184,37 @@ func TestTheRelationOfAConversationToTheTaskFollowsItsStage(t *testing.T) {
 		})
 	}
 }
+
+func TestTheStateMarksAsCurrentTheStepTheDependencyGraphRunsNext(t *testing.T) {
+	t.Parallel()
+
+	got := selfcontext.Task(selfcontext.TaskInput{
+		Task:  task.Task{ID: "t1", Name: "login", Mode: task.ModeStructured, Stage: task.StageImplementation, ArtifactsDir: "/tasks/t1"},
+		Stage: "step:2",
+		Artifacts: task.Artifacts{
+			Plan: task.Plan{Present: true, Steps: []task.Step{{Number: 1}, {Number: 2}}},
+		},
+		Steps: []flow.StepState{
+			{Step: task.Step{Number: 1, Title: "Wiring", DependsOn: []int{2}}, Status: flow.StepNotStarted, ReviewMode: reviewmode.Manual},
+			{Step: task.Step{Number: 2, Title: "Models"}, Status: flow.StepImplementing, ReviewMode: reviewmode.Agent},
+		},
+		Sessions: sessionsOf(sessionOf("t1", "step:2", session.StatusWorking)),
+		Now:      readAt,
+	})
+
+	want := stateOf(
+		headerOf("task"),
+		"Task: login · Structured",
+		"This conversation: Implementer of step 2 (step:2) · its step is the current one",
+		"Stage: Implementation · step 2 of 2",
+		"Documents: Plan /tasks/t1/steps (2 steps)",
+		"Steps:",
+		"- 1 · Wiring · Not started",
+		"- 2 · Models · Implementing · current · review Agent",
+		"Conversations: Implementer of step 2 · working · this conversation",
+		"Divergence: none",
+	)
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("state mismatch (-want +got):\n%s", diff)
+	}
+}

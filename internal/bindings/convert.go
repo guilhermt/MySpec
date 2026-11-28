@@ -814,14 +814,11 @@ func fromBlock(block *task.StepBlock) *StepBlock {
 	return &StepBlock{Reason: string(block.Reason), Detail: block.Detail, Files: block.Files}
 }
 
-// currentStep is the number of the step that runs or runs next: the first one
-// that is not done. It is 0 for a task with no steps and for one whose steps
-// are all committed.
+// currentStep is the number of the step that runs or runs next. It is 0 for a
+// task with no steps and for one whose steps are all committed.
 func currentStep(states []flow.StepState) int {
-	for _, state := range states {
-		if state.Status != flow.StepDone {
-			return state.Step.Number
-		}
+	if i := flow.CurrentIndex(states); i >= 0 {
+		return states[i].Step.Number
 	}
 	return 0
 }
