@@ -580,6 +580,20 @@ func TestThePlanPromptAsksForNoRepositoryHeader(t *testing.T) {
 	}
 }
 
+func TestThePlanPromptTeachesTheDependsOnLine(t *testing.T) {
+	t.Parallel()
+
+	text := readPrompt(t, t.TempDir(), prompts.StagePlan).Text
+	for _, want := range []string{"Depends on: none", "Depends on: 2, 3"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the plan prompt does not teach %q", want)
+		}
+	}
+	if strings.Contains(text, "Previous steps (1 through") {
+		t.Error("the plan prompt still describes the plan as a sequence")
+	}
+}
+
 func TestRenderAppendsNoContextSectionWhenThereIsNoContext(t *testing.T) {
 	t.Parallel()
 
